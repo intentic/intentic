@@ -19,6 +19,7 @@ import { DESKTOP_DOWNLOADS, desktopSetupLink, desktopVersion, openDesktopLink } 
 import { environment } from "../environments/environment";
 import { bashCommand, psCommand } from "../environments/scriptCommand";
 import SetupCompose from "./SetupCompose.vue";
+import SetupHandoff from "./SetupHandoff.vue";
 import SetupRunDetails from "./SetupRunDetails.vue";
 import type { ComposeArgs } from "./setupCompose";
 import { type AttachOutcome, daemonUrlProblem, nameFromDaemonUrl, normalizeDaemonUrl, probeDaemon } from "./setupAttach";
@@ -326,6 +327,11 @@ const copied = ref(false);
 // can observe before the machine takes over. Without it, pressing the one button on the card left the footer
 // still reading "Nothing is running yet" for as long as it takes the app to claim.
 const launched = ref(false);
+// A link back to this screen is in the user's inbox (the phone's handoff — SetupHandoff.vue). Deliberately NOT
+// part of `handoff` below: that state machine tracks the COMMAND's journey to a machine, and posting yourself a
+// bookmark does not advance it by a step. What it does change is what the stuck-wait nudge should say, because
+// for this user the next move is on a laptop that hasn't been opened yet rather than in a terminal.
+const emailed = ref(false);
 // Server-side proof the command ran somewhere: when a machine last redeemed THIS code. Minting clears the
 // stamp server-side, so a value here always describes the command currently on screen.
 const claimedAt = ref<string | null>(null);
@@ -358,7 +364,10 @@ watch(commandReady, (ready) => {
 // sitting on a clipboard. Long enough to walk to another machine; short enough to catch someone who has
 // settled in to watch this page. The compose path is a file to paste into an editor and edited there, so the
 // same nudge on that tab would fire at somebody doing exactly the right thing.
-const nudgeAfterMs = computed(() => (composeShown.value ? 3 * 60_000 : 40_000));
+// A phone gets the same long fuse, for the same reason in a different shape: the step is a walk to another
+// machine BY CONSTRUCTION there, and the handoff above says so before the command is even reached — so forty
+// seconds would fire at someone who has understood perfectly and is halfway to their desk.
+const nudgeAfterMs = computed(() => (composeShown.value || mobile.value ? 3 * 60_000 : 40_000));
 // And when it stops assuming the command was never run, and starts helping the person whose terminal errored.
 const STALLED_MS = 3 * 60_000;
 // A claimed code with no daemon behind it yet: the first image pull is genuinely slow, so this waits much
@@ -374,9 +383,21 @@ const slowBuild = computed(
 
 // Copying is the last thing this browser can observe before the user leaves for a terminal, so it is also the
 // most informative funnel milestone between "was shown a command" and "ran one".
+// `mobile` rides along because the same event means opposite things on the two devices: a copy on a desktop is
+// a step towards a terminal that is right there, and a copy on a phone writes to a clipboard no terminal can
+// read. Without the split those two average into one meaningless conversion rate — which is why nobody could
+// see this screen failing on phones from the funnel alone.
 const onCopied = (): void => {
     copied.value = true;
-    track(`sandbox_command_copied`, { tab: runTab.value, sync: syncEnabled.value });
+    track(`sandbox_command_copied`, { tab: runTab.value, sync: syncEnabled.value, mobile: mobile.value });
+};
+
+// The phone's handoff landed. Its own milestone rather than a flavour of `copied`: it is the first thing this
+// screen has ever been able to observe a phone doing that leads somewhere, so the drop-off after it is the
+// number worth watching.
+const onEmailed = (): void => {
+    emailed.value = true;
+    track(`sandbox_setup_link_emailed`, { resuming: resuming.value });
 };
 
 // LOCAL DEV ONLY: connect.{sh,ps1} redeems the setup code against PLATFORM_URL (host-side; the container never
@@ -1276,32 +1297,55 @@ watch(commandReady, (ready) => {
                                 </button>
                             </template>
 
+                            <!-- On a phone, the step's actual next move — see SetupHandoff.vue. It goes ABOVE the
+                                 command because the command is the thing it is redirecting people away from, and a
+                                 correction printed underneath what it corrects is read second or not at all. -->
+                            <SetupHandoff
+                                v-if="mobile && commandVisible && created"
+                                :sandbox-id="created.id"
+                                :email="user?.email ?? ``"
+                                @sent="onEmailed"
+                            />
+
                             <div v-if="commandVisible" class="flex flex-col gap-2">
                                 <!-- One line, because the title already gave the instruction and nobody reads the second
                              sentence of a step they are trying to get through. All this adds is the bit the title
                              can't: WHICH machine — which is why it belongs to the COMMAND and not to the step, and
                              why it is no longer above a button whose whole selling point is that there is no
-                             terminal. On a phone, and in the app (where this computer already has a button of its
-                             own), the machine that runs this is by construction not the one reading it. -->
+                             terminal. In the app (where this computer already has a button of its own) the machine
+                             that runs this is by construction not the one reading it.
+                             On a phone the handoff above has already said which machine, so this line stops
+                             repeating it and does the one job left: naming who copying is still FOR. Phones drive
+                             servers — Termius, Blink, a tmux session someone never closed — and for that reader
+                             the clipboard lands exactly where it should. -->
                                 <p class="flex items-start gap-2.5 text-xs text-muted">
                                     <Icon name="terminal" class="mt-0.5 shrink-0 text-link" />
                                     <span class="min-w-0">
-                                        <template v-if="mobile || desktop"
+                                        <template v-if="mobile"
+                                            >Or, if you have an SSH session open on this phone, copy it and paste it there.</template
+                                        >
+                                        <template v-else-if="desktop"
                                             >Copy it, then paste it into a terminal on the machine that will host your sandbox.</template
                                         >
                                         <template v-else>Paste it into a terminal — this computer, or any server you have a shell on.</template>
                                     </span>
                                 </p>
-                                <!-- On a phone the picker and the copy button each take a full row: three pill tabs
-                             sharing a 340px line wrapped every label to two lines, and the copy chip that
-                             trailed them is the one control this step exists for. -->
+                                <!-- On a phone the picker takes a full row of its own: three pill tabs sharing a
+                             340px line wrapped every label to two lines.
+                             The copy button no longer does. It used to be `stretch` — full width, the loudest
+                             control on the card — on the reasoning that copying is the whole task on a phone.
+                             That is what turned out to be wrong: the clipboard it writes to is not the one the
+                             command has to be pasted from, so the most emphatic affordance in the flow was
+                             pointing at a dead end. It keeps `cta`, which is touch-sized without claiming the
+                             row, and the emphasis moved to the handoff above. -->
                                 <div class="flex flex-col gap-2 md:flex-row md:flex-wrap md:items-center md:justify-between">
                                     <Segmented v-model="runTab" :options="runTabOptions" :stretch="mobile" />
                                     <CopyButton
                                         v-if="runTab !== `compose`"
+                                        class="self-start md:self-auto"
                                         :text="selectedCommand"
                                         :label="mobile ? `Copy command` : `Copy`"
-                                        :stretch="mobile"
+                                        :cta="mobile"
                                         @copied="onCopied"
                                     />
                                 </div>
@@ -1396,8 +1440,15 @@ watch(commandReady, (ready) => {
                                  already installed (the OS routes the link), and one download away if it isn't.
                                  Deliberately the quietest thing on the card — the command above is the path that
                                  works on every machine, and this is an offer, not a redirect. Compose declares its
-                                 own shape and is chosen by people who want a file, so it is left alone. -->
-                            <div v-if="!desktop && runTab !== `compose`" class="flex flex-col gap-1 border-t border-line pt-3 text-2xs text-subtle">
+                                 own shape and is chosen by people who want a file, so it is left alone.
+                                 Never on a phone: every link here is a Windows or Linux installer, and a phone
+                                 that follows one downloads a .msi it cannot open. The app is worth offering to
+                                 this person — just on the machine they are about to open the emailed link on,
+                                 where this same block is waiting and the download actually runs. -->
+                            <div
+                                v-if="!desktop && !mobile && runTab !== `compose`"
+                                class="flex flex-col gap-1 border-t border-line pt-3 text-2xs text-subtle"
+                            >
                                 <span>
                                     Rather not use a terminal? The
                                     <button type="button" class="text-link hover:underline" @click="runHere">Intentic desktop app</button>
@@ -1473,7 +1524,15 @@ watch(commandReady, (ready) => {
                                     <!-- The correction only holds where the command is the path. In the app the button
                                          IS the path, so the same sentence would send someone to a terminal the step
                                          above just told them they don't need. -->
-                                    <span v-if="commandVisible" class="min-w-0">
+                                    <!-- A phone that has already sent itself the link does not need to be told
+                                         where the command runs — it needs the one thing it hasn't done, which is
+                                         open the mail on the other machine. Telling that reader to find a
+                                         terminal is the same wrong advice this screen used to give by default. -->
+                                    <span v-if="mobile && emailed" class="min-w-0">
+                                        <span class="font-medium">Still nothing.</span> Open the link we emailed you on the computer that will host
+                                        your sandbox — the command is waiting there.
+                                    </span>
+                                    <span v-else-if="commandVisible" class="min-w-0">
                                         <span class="font-medium">Still nothing.</span> This has to be pasted into a terminal on the machine that will
                                         run your sandbox.
                                     </span>
@@ -1492,9 +1551,11 @@ watch(commandReady, (ready) => {
                                 </p>
                                 <!-- `cta`, because in this banner copying again IS the way out — the quiet chip
                                      that suits a copy-beside-content read as the dimmest thing in the loudest
-                                     box on the card. self-start, or the column flex stretches it edge to edge. -->
+                                     box on the card. self-start, or the column flex stretches it edge to edge.
+                                     Except on a phone that has mailed itself the link, where copying again is
+                                     not the way out of anything: the clipboard was never the blocked step. -->
                                 <CopyButton
-                                    v-if="commandVisible && runTab !== `compose`"
+                                    v-if="commandVisible && runTab !== `compose` && !(mobile && emailed)"
                                     class="ml-6 self-start"
                                     :text="selectedCommand"
                                     label="Copy again"

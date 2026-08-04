@@ -8,6 +8,7 @@ import { decryptSecret, encryptSecret } from "../crypto.js";
 import { requireOwnedSandbox, requireUser } from "../guards.js";
 import { CloudflareTokenError, deleteSandboxTunnel, listZoneNames, provisionSandboxTunnel, sandboxHostname } from "./cloudflare.js";
 import { claimReserved, topUp } from "./sandbox-pool.js";
+import { sendSetupLinkEmail } from "./setup-email.js";
 
 const os = implement(apiContract).$context<OrpcContext>();
 
@@ -236,6 +237,20 @@ export const sandboxRoutes = {
             },
         });
         return { code, hostname, expiresAt: expiresAt.toISOString() };
+    }),
+    /* Mail the owner a link back to this sandbox's setup screen. Owner-only and self-addressed: the recipient is
+     * the SESSION's email, never an input, so this can only ever put a link in the requester's own inbox and is
+     * no use to anyone as a way to send mail to someone else. What it carries is in setup-email.ts, and the short
+     * version is that it carries nothing — the code, the command and the connect token all stay off it.
+     *
+     * Deliberately NOT plan-gated and NOT rate-limited beyond that: it is the escape hatch on the step where the
+     * funnel loses people, its blast radius is one mail to the sender's own address, and the mail costs nothing
+     * to ignore. */
+    emailSetupLink: os.sandbox.emailSetupLink.handler(async ({ context, input }) => {
+        const user = requireUser(context);
+        const sandbox = await requireOwnedSandbox(context, input.sandboxId);
+        await sendSetupLinkEmail(context.config, context.logger, { to: user.email, sandboxName: sandbox.name, sandboxId: sandbox.id });
+        return { ok: true };
     }),
     // Record where a sandbox the user ALREADY runs is reachable — the owner-asserted counterpart to the daemon's
     // POST /sandbox/announce, for a daemon that never phones home (no PLATFORM_URL, or a network that can't

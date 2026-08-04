@@ -31,7 +31,10 @@ export const meContract = {
 // the Cloudflare zones a pasted token can see so the picker can choose one before the install command is revealed
 // — the token is used for that one call and discarded (never persisted/logged). `setupCode` mints the short-lived
 // code the install one-liner carries (a pure DB write — the intentic tunnel is provisioned lazily at claim time);
-// the connect script redeems it at the public POST /setup/claim. `attach` is the mirror image of the daemon's
+// the connect script redeems it at the public POST /setup/claim. `emailSetupLink` mails the OWNER a link back to
+// that command's own setup screen, which is how a phone — where the command cannot be run and the clipboard
+// reaches no terminal — gets the step onto a machine that can finish it; it carries no code and no command, only
+// the address of a session-gated page. `attach` is the mirror image of the daemon's
 // announce for a sandbox the user already runs behind a domain of their own: the OWNER asserts where it lives,
 // after their BROWSER verified it answers (the platform never calls into a sandbox). `leave` drops the
 // caller's own membership. Inviting/managing teammates lives in inviteContract below. Every sandbox-scoped route
@@ -59,6 +62,10 @@ export const sandboxContract = {
         .route({ method: "POST", path: "/sandbox/setup-code" })
         .input(z.object({ sandboxId: z.string(), target: SetupCodeTargetSchema }))
         .output(SetupCodeSchema),
+    emailSetupLink: oc
+        .route({ method: "POST", path: "/sandbox/email-setup-link" })
+        .input(sandboxIdInput)
+        .output(z.object({ ok: z.boolean() })),
     attach: oc
         .route({ method: "POST", path: "/sandbox/attach" })
         .input(z.object({ sandboxId: z.string(), daemonUrl: DaemonUrlSchema }))

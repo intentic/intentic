@@ -127,6 +127,7 @@ describe(`sandbox routes`, () => {
             call(sandboxRoutes.attach, { sandboxId: `s1`, daemonUrl: `https://sandbox.example.com` }, { context: context({ prisma }) }),
             `NOT_FOUND`,
         );
+        await expectOrpcCode(call(sandboxRoutes.emailSetupLink, { sandboxId: `s1` }, { context: context({ prisma }) }), `NOT_FOUND`);
     });
 
     it(`attach records the owner-asserted URL and stamps lastSeenAt like an announce`, async () => {
@@ -196,6 +197,46 @@ describe(`sandbox routes`, () => {
 
         expect(deleteMany).toHaveBeenCalledWith({ where: { sandboxId: `s1`, email: `guest@example.com` } });
         expect(result).toEqual({ ok: true });
+    });
+
+    /* The phone's handoff. Two properties are the whole point of the route and both are worth pinning: it can
+     * only mail the CALLER (there is no recipient input to abuse), and what it mails is an address, not a
+     * credential — the setup code and the connect token must never ride a channel we hand to a mail provider. */
+    it(`emailSetupLink mails the caller's own address a link that resumes this sandbox`, async () => {
+        const prisma = fakePrisma({ sandbox: { findFirst: vi.fn().mockResolvedValue({ ...sandboxRow, setupCode: `s3cr3t-code` }) } });
+        const sent = vi.fn().mockResolvedValue(new Response(`{}`));
+        vi.stubGlobal(`fetch`, (_url: string, init?: RequestInit) => sent(JSON.parse(String(init?.body))));
+        const config = { ...context().config, email: { apiKey: `re_test`, from: `intentic <no-reply@intentic.dev>` } };
+
+        const result = await call(sandboxRoutes.emailSetupLink, { sandboxId: `s1` }, { context: context({ prisma, config }) });
+
+        expect(result).toEqual({ ok: true });
+        const [mail] = sent.mock.calls[0] as [{ to: string; html: string }];
+        expect(mail.to).toBe(`owner@example.com`);
+        expect(mail.html).toContain(`https://app.test/setup?sandbox=s1`);
+        // The sandbox's own secrets stay off the wire — a mail is stored and forwarded by people we have no
+        // relationship with, and the page behind this link is session-gated anyway.
+        expect(mail.html).not.toContain(`s3cr3t-code`);
+        expect(mail.html).not.toContain(sandboxRow.token);
+    });
+
+    it(`emailSetupLink logs the link instead of sending when email is unconfigured`, async () => {
+        const prisma = fakePrisma({ sandbox: { findFirst: vi.fn().mockResolvedValue(sandboxRow) } });
+        const warn = vi.fn();
+        vi.stubGlobal(`fetch`, () => {
+            throw new Error(`must not send`);
+        });
+
+        await call(
+            sandboxRoutes.emailSetupLink,
+            { sandboxId: `s1` },
+            { context: context({ prisma, logger: { warn } as unknown as OrpcContext[`logger`] }) },
+        );
+
+        expect(warn).toHaveBeenCalledWith(
+            { to: `owner@example.com`, link: `https://app.test/setup?sandbox=s1` },
+            expect.stringContaining(`unconfigured`),
+        );
     });
 
     it(`setupCode 404s the intentic target when intentic-provided sandboxes are not configured`, async () => {

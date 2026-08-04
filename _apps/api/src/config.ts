@@ -51,9 +51,10 @@ const configSchema = z.object({
             proPriceId: z.string().default(``), // STRIPE_PRO_PRICE_ID (price_…)
         })
         .prefault({}),
-    // Transactional email (Resend) for sandbox invites — the only mail the platform sends. `apiKey` is the Resend
-    // API key (re_…); `from` is the verified sender (e.g. "intentic <invites@your-domain>"). Unset → invites are
-    // still created but the link is logged server-side instead of emailed (dev only; main.ts warns).
+    // Transactional email (Resend) — sandbox invites, and the setup link a phone sends itself to finish on a
+    // real machine (mail.ts). `apiKey` is the Resend API key (re_…); `from` is the verified sender (e.g.
+    // "intentic <invites@your-domain>"). Unset → both are still accepted but the link is logged server-side
+    // instead of emailed (dev only; main.ts warns).
     email: z
         .object({
             apiKey: z.string().default(``).meta({ secret: true }), // EMAIL_API_KEY (re_…)
