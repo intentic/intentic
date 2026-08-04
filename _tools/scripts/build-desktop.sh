@@ -40,7 +40,11 @@ DOWNLOADS="https://github.com/radarsu/intentic/releases/download/v${VERSION}"
 
 echo "==> desktop release build v${VERSION}"
 
-# --- toolchain (idempotent; the release job's node:24 bookworm container runs as root) ---
+# --- toolchain: the FALLBACK path (idempotent; runs as root) ---
+# In CI none of this executes — _tools/ci-desktop bakes every tool below into the image the desktop jobs run in,
+# because installing them per job cost 2m53s (apt) + 41s (rustup) in release job 15686372011 and repeated in
+# desktop:check and desktop:verify. What is left here is what a developer machine needs, and it is what keeps
+# `build-desktop.sh <version>` a command anyone can run.
 # xdg-utils is not a compiler dep but a bundle INPUT: the `intentic://` deep-link scheme in tauri.conf.json makes
 # the AppImage bundler copy the host's /usr/bin/xdg-mime into the AppDir verbatim (it is what registers the scheme
 # on first run), and a host without it aborts the bundle — `failed to bundle project: xdg-mime binary not found`.
@@ -63,13 +67,20 @@ if ! command -v makensis >/dev/null 2>&1 || ! command -v xdg-mime >/dev/null 2>&
         build-essential libssl-dev pkg-config nsis lld llvm clang xdg-utils file \
         p7zip-full rpm
 fi
+# Make an already-installed toolchain visible BEFORE deciding to install one. This probe used to run first and
+# the env file was sourced after it, so it could never see the cargo that rustup had put in $CARGO_HOME/bin —
+# whose bin/ is not on a fresh job's PATH — and every run re-downloaded a toolchain it already had (41s, "info:
+# downloading 3 components", release job 15686372011).
+if [ -f "${CARGO_HOME:-$HOME/.cargo}/env" ]; then
+    # shellcheck disable=SC1091
+    source "${CARGO_HOME:-$HOME/.cargo}/env"
+fi
 if ! command -v cargo >/dev/null 2>&1; then
     echo "==> installing rust"
     curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain stable --profile minimal
+    # shellcheck disable=SC1091
+    source "${CARGO_HOME:-$HOME/.cargo}/env"
 fi
-# rustup writes its env file into CARGO_HOME when overridden (the CI jobs do, for caching).
-# shellcheck disable=SC1091
-source "${CARGO_HOME:-$HOME/.cargo}/env"
 if [ "$LINUX_ONLY" -eq 0 ]; then
     rustup target add x86_64-pc-windows-msvc >/dev/null
     if ! command -v cargo-xwin >/dev/null 2>&1; then
@@ -82,12 +93,20 @@ rm -rf "$OUT"
 mkdir -p "$OUT"
 cd "$APP"
 
+# The launcher UI, once. tauri.conf.json's beforeBuildCommand would build it per `tauri build` invocation, and
+# this script invokes tauri twice against ONE frontendDist — so the Windows pass re-ran vue-tsc + vite over
+# bytes the Linux pass had already produced (34s + 14s, release job 15686372011). Built here instead, and
+# switched off in the config below for both passes; an empty beforeBuildCommand is how tauri is told to skip it.
+echo "==> building the launcher UI"
+pnpm --filter @intentic/desktop-app build
+
 # A configured pubkey + createUpdaterArtifacts makes `tauri build` demand the private key — so when the CI
 # variable is absent, updater artifacts must be switched off for the build to succeed at all.
+NO_BEFORE_BUILD='"build":{"beforeBuildCommand":""}'
 if [ -n "${TAURI_SIGNING_PRIVATE_KEY:-}" ]; then
-    CONFIG="{\"version\":\"${VERSION}\"}"
+    CONFIG="{\"version\":\"${VERSION}\",${NO_BEFORE_BUILD}}"
 else
-    CONFIG="{\"version\":\"${VERSION}\",\"bundle\":{\"createUpdaterArtifacts\":false}}"
+    CONFIG="{\"version\":\"${VERSION}\",${NO_BEFORE_BUILD},\"bundle\":{\"createUpdaterArtifacts\":false}}"
 fi
 
 # The AppImage bundler runs linuxdeploy (itself an AppImage), which FUSE-mounts by default — CI containers

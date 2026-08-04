@@ -131,10 +131,17 @@ would need the fetch made race-safe first.
   is the supported cleanup, but it removes anything not referenced by a currently-installed project and is
   **not safe to run while jobs are installing**. Run it by hand in a quiet window, not from CI.
 - **cargo** — `/ci-cache/cargo` (the shared registry) grows like the pnpm store. The build directories do not:
-  `desktop-target` (desktop:verify + release) and `desktop-check-target` (desktop:check) are separate on
-  purpose, because cargo locks a target directory exclusively for a whole build and those jobs run at the same
-  time. Each is a few GB of rebuildable objects; `rm -rf` either one in a quiet window and the next job repays
-  it once.
+  `desktop-target` (release), `desktop-verify-target` (desktop:verify) and `desktop-check-target`
+  (desktop:check) are **one per job** on purpose, for two reasons. Cargo locks a target directory exclusively
+  for a whole build, so jobs sharing one serialize; and a build's fingerprint includes the stamped version, so
+  the release (a new version every time) and desktop:verify (always `0.0.0`) each invalidated the other's leaf
+  crate and paid a fresh LTO for it. Measured on the desktop crate: bumping the version recompiles exactly one
+  crate in 20s, rebuilding the same version is a 1s no-op. Each dir is a few GB of rebuildable objects;
+  `rm -rf` any of them in a quiet window and the next job repays it once.
+- **xwin** — `/ci-cache/xwin` holds the MSVC CRT + Windows SDK that cargo-xwin splats for the release's Windows
+  cross-build (~1.1 GB). Same deal as the registry: downloaded once, read by every run, never modified. It is
+  here rather than at its default under `$HOME/.cache` because that dies with the container, which cost every
+  release a 2m40s re-download. It only changes when the pinned MSVC/SDK version does.
 
 Concurrent access itself is fine: the pnpm store is built for many projects sharing one store, turbo's
 entries are content-addressed files written via atomic rename, and cargo's registry is designed for many

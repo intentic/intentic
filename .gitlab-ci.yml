@@ -21,6 +21,10 @@ variables:
   GIT_CLEAN_FLAGS: -ffdx -e node_modules
   # The prebaked job image every job below runs in (built by the `ci-base` job from _tools/ci-base).
   CI_BASE_IMAGE: $CI_REGISTRY_IMAGE/ci-base:latest
+  # ci-base plus the Rust/Tauri/NSIS toolchain, for the three jobs that compile the desktop app (built by the
+  # `ci-desktop` job from _tools/ci-desktop). Its own image rather than more layers on ci-base: it is ~2 GB that
+  # test, mirror:verify, images and images:platform have no use for.
+  CI_DESKTOP_IMAGE: $CI_REGISTRY_IMAGE/ci-desktop:latest
   # CI builds the site but never deploys it, so IndexNow submission is pure waste here — it polls the LIVE
   # site for the key file (90s timeout) and then retries a 403 five times, ~2 min per build. Submit from
   # wherever the site actually deploys.
@@ -158,6 +162,55 @@ ci-base:
         echo "merge request — image built for validation only, tag not moved"
       fi
 
+# ci-base + the desktop toolchain, for desktop:check, desktop:verify and release. Same job shape and the same
+# push rule as ci-base above; what it deletes is the per-job toolchain install those three jobs opened with —
+# 2m53s of apt and 41s of rustup, measured in release job 15686372011 and paid again by every desktop job in
+# every pipeline. The tools are unchanged, only their moment: build-desktop.sh still installs them when they are
+# missing, which is now the developer-machine path.
+#
+# It rebuilds when EITHER dir changes, because its FROM is ci-base's mutable `latest` — a ci-base bump that
+# didn't rebuild this image would leave the desktop jobs on a stale base. `needs` orders it after that rebuild
+# and is optional so a pipeline without a ci-base job still runs this one.
+#
+# FIRST LANDING: the desktop jobs pull this by tag, so it has to exist before they can start. A main pipeline
+# creates it in `prebuild`, ahead of their stage. On the merge request that introduces it the tag is not there
+# yet and those jobs cannot pull — push it once by hand from a main checkout, or land this and let the main
+# pipeline mint it.
+ci-desktop:
+  extends: .dind
+  stage: prebuild
+  interruptible: true
+  image: docker:27-cli@sha256:851f91d241214e7c6db86513b270d58776379aacc5eb9c4a87e5b47115e3065c
+  before_script: []
+  cache: []
+  needs:
+    - job: ci-base
+      optional: true
+  # 3.75 GB unpacked and a ~200-crate cargo-xwin compile inside it, so it gets room beyond the 1h default.
+  timeout: 90m
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "main" && $CI_PIPELINE_SOURCE != "schedule"'
+      changes: &ci-desktop-changes
+        - _tools/ci-desktop/**/*
+        - _tools/ci-base/**/*
+      variables:
+        PUSH_DESKTOP: "1"
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+      changes: *ci-desktop-changes
+      variables:
+        PUSH_DESKTOP: "0"
+  script:
+    # The login is unconditional here, unlike ci-base: FROM is the private ci-base:latest, so even a
+    # validation-only build has to authenticate to pull it.
+    - docker login -u "$CI_REGISTRY_USER" -p "$CI_REGISTRY_PASSWORD" "$CI_REGISTRY"
+    - docker build -t "$CI_DESKTOP_IMAGE" _tools/ci-desktop
+    - |
+      if [ "$PUSH_DESKTOP" = "1" ]; then
+        docker push "$CI_DESKTOP_IMAGE"
+      else
+        echo "merge request — image built for validation only, tag not moved"
+      fi
+
 # Build + test every product (turbo runs across intentic/, platform/, site/): the MR gate, and on main the
 # verify step the images + release stages wait on via stage ordering — a red build publishes nothing.
 # Interruptible on main too: a superseded pipeline's verify is safely canceled (the release job itself is not
@@ -218,6 +271,9 @@ mirror:verify:
 # per-job zip archive is worst at. Absent volume ⇒ cold but never broken.
 desktop:check:
   stage: test
+  # The toolchain image, not ci-base: rustup + rustfmt + clippy + webkit2gtk's dev headers are baked (see the
+  # ci-desktop job), so this job's before_script is the plain install again.
+  image: $CI_DESKTOP_IMAGE
   interruptible: true
   rules:
     - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
@@ -229,23 +285,20 @@ desktop:check:
     - if: '$CI_COMMIT_BRANCH == "main"'
       changes: *desktop-changes
   variables:
+    # The registry, shared. Overriding CARGO_HOME does not hide the baked toolchain: rustup's proxies live in the
+    # image's own /usr/local/cargo/bin, which is on PATH, and they find toolchains through RUSTUP_HOME — so
+    # `cargo`, `clippy` and `cargo-xwin` all still resolve while the downloads land in /ci-cache. Verified by
+    # running the release's Windows cross-build in the image with exactly this override.
     CARGO_HOME: /ci-cache/cargo
-    # A target dir of this job's OWN, not the /ci-cache/desktop-target that desktop:verify and release share:
-    # cargo holds an EXCLUSIVE file lock on a target directory for the length of a build, so jobs pointed at one
-    # directory serialize instead of running beside each other — and these three routinely overlap. Splitting
-    # costs nothing: clippy and test build the DEV profile while the other two build RELEASE, so they never
-    # shared an artifact, only the lock. CARGO_HOME stays shared — the registry is built for concurrent readers
-    # and is where the reuse actually is (jobs still queue briefly on its package-cache lock; pipeline
-    # 2726820001 logged one such wait in each desktop job).
+    # A target dir per job, never one shared: cargo holds an EXCLUSIVE file lock on a target directory for the
+    # length of a build, so two jobs pointed at one directory serialize instead of running beside each other.
+    # There is a second reason beyond the lock — a build's fingerprint includes the stamped version, and the
+    # desktop crate's is what every run of this app's build changes, so jobs sharing a directory invalidate each
+    # other's leaf crate and each pays a fresh LTO. Measured: version 0.0.0 → 1.180.2 recompiles exactly 1 crate
+    # in 20s, and rebuilding the SAME version is a 1s no-op. CARGO_HOME stays shared — the registry is built for
+    # concurrent readers and is where the reuse actually is (jobs still queue briefly on its package-cache lock;
+    # pipeline 2726820001 logged one such wait in each desktop job).
     CARGO_TARGET_DIR: /ci-cache/desktop-check-target
-  before_script:
-    - !reference [.pnpm-setup, script]
-    - apt-get update -qq && apt-get install -y -qq --no-install-recommends
-      libwebkit2gtk-4.1-dev libgtk-3-dev libayatana-appindicator3-dev librsvg2-dev patchelf
-      build-essential libssl-dev pkg-config
-    - command -v cargo || curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain stable --profile minimal --component rustfmt,clippy
-    # rustup writes its env file into CARGO_HOME, which is overridden above for caching.
-    - source "${CARGO_HOME}/env"
   script:
     # The launcher UI first: `tauri build` would run it anyway, and a Vue error is worth failing on in seconds
     # rather than after a cargo build.
@@ -279,6 +332,7 @@ desktop:check:
 desktop:verify:
   extends: .dind
   stage: test
+  image: $CI_DESKTOP_IMAGE
   interruptible: true
   rules:
     - if: '$CI_COMMIT_BRANCH == "main"'
@@ -286,7 +340,10 @@ desktop:verify:
     - if: '$CI_PIPELINE_SOURCE == "schedule"'
   variables:
     CARGO_HOME: /ci-cache/cargo
-    CARGO_TARGET_DIR: /ci-cache/desktop-target
+    # Its own directory, not the release's: this job always builds version 0.0.0 and the release always builds a
+    # new one, so sharing meant each run invalidated the other's leaf crate and paid a fresh LTO for it (~4 min).
+    # Apart is how this job gets to rebuild only when its OWN inputs changed.
+    CARGO_TARGET_DIR: /ci-cache/desktop-verify-target
     # Prebuilt where available; both scripts fall back to building their context locally.
     INTENTIC_HOST_IMAGE: "$CI_REGISTRY_IMAGE/dind-host:latest"
     SANDBOX_E2E_IMAGE: "$CI_REGISTRY_IMAGE/sandbox:latest"
@@ -429,6 +486,9 @@ images:platform:
 release:
   extends: .dind
   stage: release
+  # The desktop toolchain image: prepareCmd runs build-desktop.sh, which is a Rust build like desktop:check's.
+  # Everything ci-base carries comes with it, so nothing else in this job changes.
+  image: $CI_DESKTOP_IMAGE
   # test AND mirror:verify — deliberately NOT the images job. The release builds its own sandbox tree because semantic-release's
   # prepareCmd stamps the release version into every package.json first, and the sandbox READS that at runtime
   # (src/version.ts; ensure-intent's dependencySpec switches `link:` → `~<version>` on it). The images job's
@@ -465,6 +525,13 @@ release:
     # build-desktop.sh cross-builds the Tauri app here too; same shared cargo store as desktop:check.
     CARGO_HOME: /ci-cache/cargo
     CARGO_TARGET_DIR: /ci-cache/desktop-target
+    # cargo-xwin's MSVC CRT + Windows SDK (~1.1 GB), on the shared volume for the same reason the cargo registry
+    # is: a content-addressed download that every run reads and none modifies. Its default lives under
+    # $HOME/.cache, which dies with the container, so every release re-downloaded it — "✅ Downloaded MSVC CRT in
+    # 2m 40s" (job 15686372011) and 2m 44s the release before. Verified by running the cross-build twice in the
+    # ci-desktop image with this variable pointed at a directory that outlives the container: the first run
+    # downloads, the second logs no download at all.
+    XWIN_CACHE_DIR: /ci-cache/xwin
   # GITHUB_TOKEN (masked CI variable) is the only credential this job needs for the public side: a fine-grained
   # PAT on radarsu/intentic with Contents read+write, which publish-github.sh uses to push the snapshot commit,
   # the tag, and the Release with its installers. There is NO npm credential here any more — the packages are
