@@ -1470,8 +1470,10 @@ const replayStoredSession = async (conversation: Conversation): Promise<boolean>
     return true;
 };
 
-// Hydrate a tab once, holding the mark only while (and after) the daemon actually answered.
-const hydrateOnce = (conversation: Conversation): void => {
+// Hydrate a tab once, holding the mark only while (and after) the daemon actually answered. Exported for the
+// pane's fleet watcher (ChatPane), which calls it whenever the fleet settles or starts something about a
+// conversation this tab did not stream itself.
+export const hydrateOnce = (conversation: Conversation): void => {
     hydrating.add(conversation);
     void hydrate(conversation).then((current) => {
         if (!current) {
@@ -1518,21 +1520,19 @@ export const openAgentConversation = (agent: {
             existing.registered.value = true;
             existing.isolated.value = agent.branch !== undefined;
         }
-        // An earlier probe may legitimately have found no transcript yet (the external runtime had not minted
-        // its replacement SDK session). Opening the card is an explicit request to look again, not merely focus
-        // the empty result that the restore sweep cached.
-        if (existing.messages.value.length === 0 && !existing.streaming.value) {
+        /* Opening the card is an explicit request to look again, however much the tab already shows. What it
+         * shows may be a STUB: an attach that engaged and then died mid-turn (a closed pop-out, a dropped
+         * stream) persists whatever had arrived — for a workflow step opened at run start, one user bubble —
+         * and a tab was only ever re-read while it was EMPTY, so the stub was the one state that could never
+         * heal: the reattach probe 404s once the turn is over, and nothing else asked the record again.
+         * hydrate covers every case in order — a live turn attaches (and a tab already streaming returns from
+         * the probe immediately), a settled one is reconciled against the daemon's own record, and a daemon
+         * with nothing to say leaves the transcript as it stands (replayStoredSession paints only a non-empty
+         * replay). Skipped while streaming: this tab is the stream, and rewriting under it is the one thing a
+         * focus click must not do. */
+        if (!existing.streaming.value) {
             hydrateOnce(existing);
-            return existing;
         }
-        /* A tab that already has a transcript keeps it — but the turn it shows may have been superseded by one the
-         * DAEMON started since: an auth renewal, an outage resume, a boot resume, or simply another device. Only an
-         * attach can tell this window that, and until it did, opening such a chat showed the frame it died on while
-         * the board reported the same agent working. The probe 404s harmlessly when nothing is live, and returns
-         * immediately when this tab is already streaming — unlike hydrateOnce it never rewrites the transcript, so
-         * a chat with local notices in it does not lose them to a round-trip.
-         */
-        void existing.reattach();
         return existing;
     }
     const conversation = new Conversation(agent.id);

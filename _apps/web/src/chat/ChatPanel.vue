@@ -25,7 +25,7 @@ import ChatTabsMobile from "./ChatTabsMobile.vue";
  * the resize handle disappears. Popped out the panel turns on its side: the strip becomes a left rail, and the
  * panes stand side by side in the room that leaves. */
 
-const { active, activeId, conversations, panes, setActive, closePane, closeTabs, openConversation } = useChat();
+const { active, activeId, conversations, panes, setActive, closePane, closeTabs, openConversation, tabReveal } = useChat();
 const layout = useLayout();
 const { poppedOut, fit } = useChatPopout();
 const { mobile } = useDevice();
@@ -80,7 +80,11 @@ watch([() => activeId.value, paneIds], () => {
  * at keeps up with the run under it instead of freezing at the moment they clicked.
  */
 const { runs } = useWorkflowRuns();
-const shownRun = computed(() => (poppedOut.value && !mobile.value ? runs.value.find((run) => run.runId === chatRun.value?.runId) : undefined));
+// The run chatRun names, wherever the panel is — the exit rule below runs on it. `shownRun` is the narrower
+// question ("is the run's UI on screen"), and gating the exit on THAT was the bug: docked, it never held, so
+// a run picked on the board stayed `chatRun` — and wore the card's ring — through every session opened after.
+const trackedRun = computed(() => runs.value.find((run) => run.runId === chatRun.value?.runId));
+const shownRun = computed(() => (poppedOut.value && !mobile.value ? trackedRun.value : undefined));
 /* WHEN THE DIAGRAM IS WHAT IS ON SCREEN, and `live` is the mode that answers this two different ways over its
  * own lifetime. Asked for outright (`graph`) it is the diagram, full stop. Following the run, it is the diagram
  * only while there is nothing to follow — the seconds between a start and the first step opening its
@@ -92,10 +96,16 @@ const showingGraph = computed(() => showingRunGraph(shownRun.value, chatRun.valu
 /* THE WAY OUT of the diagram, and the reason it is a watch here rather than a rule inside `setActive`:
  * `useChat` owns tabs and panes, and which workflow a conversation came out of is not its business. The rule
  * itself is runOnFocus, which says at length why a focus change is an exit at all.
+ *
+ * It runs on every focus GESTURE, not merely on the id moving: `tabReveal` is the counter setActive bumps for
+ * exactly the ask an id watch cannot see (the card of the chat you are already in, clicked again), and that
+ * click is as much "show me this chat" as any other. And it runs on `trackedRun`, whatever the panel's form —
+ * gated on the popped-out `shownRun` it was dead while docked, which left `chatRun` (and the board ring it
+ * draws) latched to a run the user had long since clicked away from.
  */
-watch(activeId, (id) => {
-    if (shownRun.value !== undefined && chatRun.value !== undefined) {
-        chatRun.value = runOnFocus(shownRun.value, id, chatRun.value.mode);
+watch([activeId, tabReveal], () => {
+    if (trackedRun.value !== undefined && chatRun.value !== undefined) {
+        chatRun.value = runOnFocus(trackedRun.value, activeId.value, chatRun.value.mode);
     }
 });
 

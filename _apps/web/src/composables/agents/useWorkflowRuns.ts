@@ -134,13 +134,22 @@ export function useWorkflowRuns() {
      * recorded `pending` — so the caller can put its conversations on screen without waiting for the poll to
      * come round, which is the difference between "it started" and a board that looks unchanged for six
      * seconds after you pressed the button.
+     *
+     * The ack is SEEDED into the runs cache, not merely invalidated past: every surface that follows a run —
+     * the panel's follow watch, the board's card, the run bar — looks the run up in this cache by id, so until
+     * the refetch landed the run it was told about did not exist anywhere it could see, and the press sat on a
+     * dead beat exactly when the user is watching hardest. The invalidate still runs; the ledger confirms what
+     * the ack promised.
      */
     const start = useMutation({
         mutationFn: async ({ id, request }: { id: string; request?: string }): Promise<WorkflowRun> =>
             WorkflowRunSchema.parse(
                 await sandboxJson(`/workflows/${encodeURIComponent(id)}/run`, jsonBody(`POST`, request === undefined ? {} : { request })),
             ),
-        onSuccess: invalidate,
+        onSuccess: (run) => {
+            queryClient.setQueryData<WorkflowRun[]>(runsKey, (held) => [run, ...(held ?? []).filter((entry) => entry.runId !== run.runId)]);
+            return invalidate();
+        },
     });
 
     /* Ask a run to stop. No step that has not started will start, and the steps in flight are CUT OFF where

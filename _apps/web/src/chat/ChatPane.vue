@@ -3,6 +3,7 @@ import { AnchoredOverlay, BottomSheet, Icon, useDevice } from "@intentic/ui";
 import { computed, nextTick, onBeforeUnmount, provide, reactive, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { type AgentCommand, providerLabel, type Workflow } from "@intentic/sandbox-contract";
+import { turnInFlight } from "../composables/agents/agentStatus";
 import { useAgents } from "../composables/agents/useAgents";
 import { useWorkflowRuns } from "../composables/agents/useWorkflowRuns";
 import { openRunInChat } from "../composables/chat/openRun";
@@ -16,7 +17,7 @@ import { formatReset, formatUtilization, formatWait, planHeadroom, SPENT_PERCENT
 import { withShortcut } from "../composables/commands/useCommands";
 import { errorMessage } from "../composables/useAsyncAction";
 import { useLoadingReveal } from "../composables/loadingReveal";
-import { conversationView, PANE_VIEW, useChat } from "../composables/chat/useChat";
+import { conversationView, hydrateOnce, PANE_VIEW, useChat } from "../composables/chat/useChat";
 import { useSandboxSettings } from "../composables/sandbox/useSandboxSettings";
 import { useChatPopout } from "../composables/chat/useChatPopout";
 import { useSpeechInput } from "../composables/chat/useSpeechInput";
@@ -254,6 +255,49 @@ watch(
 const activeArchived = computed(() => {
     const agent = agentById(props.conversation.conversationId);
     return agent?.archivedAt === undefined ? undefined : agent;
+});
+
+/* THE PANE FOLLOWS THE FLEET — the missing half of "the chats fill a second later" (chatRun's promise about a
+ * workflow's derived conversation ids). A run's panes open on conversations the daemon has not created yet,
+ * and every read such a tab makes is one-shot: the transcript fetch 404s, the attach probe finds no run, and
+ * nothing ever asks again — so a pane that lost that race stayed blank while the daemon streamed the whole
+ * step into a record nobody re-read. The roster rides the /events stream, so it answers in real time what the
+ * one-shot reads cannot: this conversation now exists, its turn began, its turn settled. Any change in that
+ * answer, for a pane that is not itself streaming, means the daemon knows something this tab does not — bring
+ * the tab up to date (hydrate attaches to a live turn and reconciles a settled one against the record).
+ *
+ * Primitive-valued, so the roster's full-snapshot republishing only fires the watch on an actual transition.
+ * `undefined` (not on the roster) changes nothing a read could improve and touches nothing: an agent swept off
+ * the roster is still an agent, and a pane must not react to the sweep. */
+const fleetTurn = computed<boolean | undefined>(() => {
+    const agent = agentById(props.conversation.conversationId);
+    return agent === undefined ? undefined : turnInFlight(agent);
+});
+// Whether this tab itself streamed the turn the roster will settle next — its transcript already holds the
+// result then, and reconciling against the record would only repaint what is on screen.
+let streamedTurn = false;
+watch(streaming, (live) => {
+    if (live) {
+        streamedTurn = true;
+    }
+});
+watch(fleetTurn, (now, before) => {
+    if (before === true && now === false && streamedTurn) {
+        streamedTurn = false;
+        return;
+    }
+    if (now === undefined || streaming.value) {
+        return;
+    }
+    if (now) {
+        // A turn this tab is not streaming just began — whatever the flag remembers is about an older one.
+        streamedTurn = false;
+    }
+    // The roster listing this conversation IS the registration fact — heal a tab whose early probe took the
+    // daemon's "unknown agent" for a final answer (replayStoredSession's unlatch), asked before the run's
+    // first turn created the entry.
+    props.conversation.registered.value = true;
+    hydrateOnce(props.conversation);
 });
 
 /* THE LOOP CONTROL. A loop is started from the conversation it will drive and nowhere else — see LoopDialog on
