@@ -29,6 +29,9 @@ import {
     sessionKeyFromLog,
 } from "./cleaners.mjs";
 
+// Lines a trim must drop before the footer carries the retrieval handle as well as the counts (see below).
+const RETRIEVAL_MIN_DROPPED = 20;
+
 /* Returns what the model sees AND what each mechanism removed to get there (`stages`, in pipeline order), so
  * the savings report can attribute tokens to mechanisms instead of counting how often each one fired.
  *
@@ -82,9 +85,19 @@ export const filterOutput = (raw, command, exitCode, durationS, logPath, enabled
         return emitted(body === "" ? body : `${body}\n`, "footer");
     }
     const kept = body === "(no notable output)" ? 0 : lines.length;
-    // Point at the reversible retrieval command (lossy display, lossless storage) — a ready-to-run handle like
-    // iq's `--after <cursor>` continuation. `retrieve-output` greps the full pane log, budget-capped.
-    const log = logPath !== undefined && logPath !== "" ? ` · full: retrieve-output ${logPath} [pattern]` : "";
+    /* Point at the reversible retrieval command (lossy display, lossless storage) — a ready-to-run handle like
+     * iq's `--after <cursor>` continuation. `retrieve-output` greps the full pane log, budget-capped.
+     *
+     * Gated on the trim being big enough that retrieval is a plausible thing to want. The handle is ~100 of the
+     * footer's ~124 bytes, and it rode every trim however small: over one ledger window 551 pointers cost 17k
+     * tokens — 15.7% of everything the cleaners saved on those same commands — while 289 of them explained a
+     * trim of under 300 bytes, and across 10,446 agent commands `retrieve-output` was invoked exactly zero
+     * times. Nobody retrieves three elided lines of pnpm progress.
+     *
+     * The COUNTS stay on every trim regardless. They are ~24 bytes and they are the part that carries meaning:
+     * "you are not looking at all of it" is what stops a truncated result being read as a complete one. */
+    const dropped = rawCount - kept;
+    const log = dropped >= RETRIEVAL_MIN_DROPPED && logPath !== undefined && logPath !== "" ? ` · full: retrieve-output ${logPath} [pattern]` : "";
     const withFooter = `${body}\n--- [exit ${exitCode}, ${durationS}s] ${rawCount} lines filtered to ${kept}${log}\n`;
     // The pointer costs ~120 bytes and is only worth them when it explains a trim bigger than itself. Dropping
     // one `total 48` header buys ten bytes and used to buy a 122-byte footer with them, which is how `ls` came

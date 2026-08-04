@@ -16,13 +16,22 @@ describe("filterOutput", () => {
         expect(run(raw)).toBe(raw);
     });
 
-    it("drops pnpm progress noise on success and appends the footer with the log path", () => {
+    it("drops pnpm progress noise on success and appends the footer counts", () => {
         const noise = Array.from({ length: 6 }, (_, i) => `Progress: resolved ${i}00, reused ${i}00, downloaded 0, added 0`);
         const raw = `${[...noise, "added 100 packages in 2s"].join("\n")}\n`;
         const out = run(raw, { command: "pnpm install", log: "/logs/terminals/agent-abc-%1.log" });
         expect(out).toContain("added 100 packages in 2s");
         expect(out).not.toContain("Progress:");
-        expect(out).toContain("--- [exit 0, 1s] 7 lines filtered to 1 · full: retrieve-output /logs/terminals/agent-abc-%1.log [pattern]");
+        expect(out).toContain("--- [exit 0, 1s] 7 lines filtered to 1");
+        // Six lines of progress spam is not something anyone goes back for; the handle is priced separately.
+        expect(out).not.toContain("retrieve-output");
+    });
+
+    it("appends the retrieval handle once the trim is big enough to be worth following", () => {
+        const noise = Array.from({ length: 40 }, (_, i) => `Progress: resolved ${i}00, reused ${i}00, downloaded 0, added 0`);
+        const raw = `${[...noise, "added 100 packages in 2s"].join("\n")}\n`;
+        const out = run(raw, { command: "pnpm install", log: "/logs/terminals/agent-abc-%1.log" });
+        expect(out).toContain("--- [exit 0, 1s] 41 lines filtered to 1 · full: retrieve-output /logs/terminals/agent-abc-%1.log [pattern]");
     });
 
     it("keeps pnpm progress lines on failure", () => {

@@ -37,7 +37,15 @@ cost the model real information:
   matches against is the LAUNCHER line (`nsenter … bash -c '…'`), not the shell statement — so it is anchored on
   a non-word character rather than a statement start. Anchored the other way it recognised `cd x && cat y` and
   missed a bare `cat y`, which over one day misread 88 of 93 shell reads as logs and gutted the middle out of,
-  among others, five reads of the workspace README.
+  among others, five reads of the workspace README. Git's global options sit *between* the two words, so the
+  verb is matched past them (`git\s+(?:-\S+\s+)*diff`): `git --no-pager diff` is the spelling this workspace's
+  own instructions ask for, and without that it read as a log and came back as 81 lines of a 274-line diffstat.
+- **A LINE is not a unit of size.** The cap has a byte budget beside the line count — `LOG_MAX_BYTES` 16k,
+  `READ_MAX_BYTES` 96k — because counting lines alone left a hole big enough to see in the ledger: **8.2% of one
+  window's entire raw volume** arrived in commands *under* the 100-line limit, so the cap never looked at them.
+  `grep -rn --include=*.css` over minified CSS returns sixty lines and 130 KB; a `curl` of a JSON API returns
+  one. The budgets are set so ordinary output never meets them (the 80-line log cap is ~6 KB of normal text),
+  which is what keeps this from becoming a second, stricter cap on everything.
 - **A number is never a credential.** The value has to look like one too: a known issuer prefix (`sk-`, `ghp_`,
   `AKIA`, `eyJ`…) at any length, or letters-and-digits together, longer than a human types by hand, and not a
   path, a `${template}` or a SCREAMING_SNAKE variable name. A plain "≥6 characters with a digit" rule masked 182
@@ -93,6 +101,23 @@ itself: dropping one `total 48` header bought ten bytes and used to buy a 122-by
 longer than what came in, the raw capture goes out instead and the stages sum to zero, so no future cleaner can
 make a result worse than not running. Over the session corpus this took results-made-bigger from 193 to 0.
 
+**`guard` firing constantly is a bug report, not a safety net working.** It reverts the WHOLE pipeline for that
+command, so a cleaner that keeps tripping it throws away every other cleaner's work alongside its own. Read the
+two together on the ledger: `cache` once showed −17,980 tokens against `guard` +20,045, which is not two
+mechanisms but one — 78 of 90 collapses reverted, and the pair netting ~+2k from the 12 that survived. A stage
+whose number is mirrored by `guard` is a stage firing where it should not. (Its counterpart on the ledger is the
+1-byte-per-command `footer: -1` from re-adding a trailing newline — an accounting artifact, not a footer: over
+one window 8,136 of 8,687 "footer added bytes" rows were that, and reading them as pointers overstates the
+pointer's cost by an order of magnitude.)
+
+**`cache` has a floor** (`CACHE_MIN_BYTES`, 512) because a body has to be worth more than the pointer replacing
+it, and small ones never are — the marker is ~130 bytes before it names anything, so collapsing a four-byte "OK"
+produced a result 400 bytes *longer*. The floor is not only an accounting fix: short bodies **collide** across
+commands with nothing to do with each other, and the cross-command back-reference then names one of them, which
+is how a desktop-install verification came back as "identical to the output of `sleep 90; cat
+/tmp/smoke-run1.log`". A pointer the reader cannot act on is worth less than the bytes it saved. The named
+command is truncated (`CACHE_COMMAND_MAX`) so the back-reference cannot balloon the marker it lives in.
+
 **Offline bench:** `pnpm --filter @intentic/sandbox bench:cleaners` replays a fixture corpus through named configs
 (off / all / no-cap / …) and reports Δtokens per config — deterministic, no agent (mirrors iq-bench).
 
@@ -110,6 +135,19 @@ savings and high-volume commands that matched **no** cleaner — i.e. where to a
 Trimming is lossy display, lossless storage: the full output stays in the persistent pane log. The filter footer
 prints a ready-to-run command — `… full: retrieve-output <log> [pattern]` — and `retrieve-output` greps that log
 (case-insensitive, literal fallback), budget-capped to ~2000 tokens so retrieval never re-floods context.
+
+**The two halves of the footer are priced separately, because they are worth different things.** The counts
+(`--- [exit 0, 4s] 120 lines filtered to 81`) ride every trim: ~24 bytes, and they are what stops a trimmed
+result being read as a complete one. The retrieval HANDLE is gated on `RETRIEVAL_MIN_DROPPED` (20 lines),
+because it is ~100 of the footer's ~124 bytes and it used to ride every trim however small. Measured over one
+two-day window: 551 handles cost 17k tokens — 15.7% of everything the cleaners saved on those same commands —
+**86% of them explained a trim of under twenty lines**, and across 10,446 agent commands `retrieve-output` was
+invoked **zero times**. Nobody goes back for three elided lines of pnpm progress. The gate recovers ~10.4k
+tokens per window and spends at most ~1.8k of it back, because a counts-only footer is small enough to fit
+under the never-worse rule on trims where the full one did not.
+
+Note the corpus replay is the WRONG instrument for this one and says it is a wash: its inputs are transcript
+tool-results, which already carry the footers the live filter wrote. Ledger and transcripts, not the corpus.
 
 ## Output-side reduction — `terseOutput`
 

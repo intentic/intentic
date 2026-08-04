@@ -343,6 +343,17 @@ const TAIL = 50;
 const MAX = 100;
 const FAIL_TAIL = 500;
 
+/* A LINE is not a unit of size, and counting them was a blind spot big enough to see in the ledger: 8.2% of all
+ * raw bytes arrived in commands under the 100-line limit that the cap therefore never looked at. `grep -rn
+ * --include=*.css` over minified CSS returns sixty lines and 130 KB; a `curl` of a JSON API returns one. The
+ * budgets below are the same two policies as the line caps, priced in bytes — generous enough that ordinary
+ * output never meets them (the 80-line log cap is ~6 KB of normal text, well under LOG_MAX_BYTES), so this
+ * fires only on the long-line shapes the line cap cannot see. */
+const LOG_MAX_BYTES = 16_000;
+const READ_MAX_BYTES = 96_000;
+// Head/tail split of a byte budget mirrors the line cap's 30/50 bias toward the end, where a log's signal is.
+const BYTE_HEAD_SHARE = 0.375;
+
 // A deliberate read is not a log. `cat`, `sed -n 40,80p`, `awk NR>=…`, `git diff/show` on a path: the agent
 // named the exact bytes it wants, and a build log's shape (noise at both ends, signal at the end) does not
 // apply. Capping those at 100 lines is what makes reading a file through the shell WORSE than the Read tool,
@@ -363,8 +374,59 @@ const READ_MAX = 2000;
  * not the `cat` command — while accepting the quote, the `--`, and the statement start alike. The remaining
  * false positive is `<a log> | cat`, which grants a build log the read ceiling instead of the log cap. That
  * trade is deliberate: over-keeping a log costs tokens once, while gutting a file read costs the read AND the
- * re-read that follows it. */
-const READ_COMMAND = /(?<![\w.-])(?:cat|bat|sed\s+-n|awk|git\s+(?:diff|show)\b|git\s+log\s+(?:[^;&|]*\s)?-p)\b/;
+ * re-read that follows it.
+ *
+ * `git\s+(?:-\S+\s+)*` before the verb because git's global options sit between the two words: `git --no-pager
+ * diff` is the form the agent instructions here ask for, and without this it read as a log and had its middle
+ * gutted — a 274-line diffstat came back as 81 lines. */
+const READ_COMMAND = /(?<![\w.-])(?:cat|bat|sed\s+-n|awk|git\s+(?:-\S+\s+)*(?:diff|show)\b|git\s+(?:-\S+\s+)*log\s+(?:[^;&|]*\s)?-p)\b/;
+
+// Whole lines from the front of `source` until `budget` bytes are spent — a partial line would misrepresent the
+// output it came from, so the budget is spent in line-sized steps or not at all.
+const takeWithinBudget = (source, budget) => {
+    const kept = [];
+    let spent = 0;
+    for (const line of source) {
+        spent += line.length + 1;
+        if (spent > budget) {
+            break;
+        }
+        kept.push(line);
+    }
+    return kept;
+};
+
+/* The cap as one decision: too many lines OR too many bytes, under whichever policy the command earned. Returns
+ * the same array when nothing is over budget, so the caller can tell "did not fire" from "fired and removed
+ * nothing" — the distinction the stage ledger is built on. */
+const capOutput = (lines, command) => {
+    const isRead = READ_COMMAND.test(command);
+    const maxLines = isRead ? READ_MAX : MAX;
+    const maxBytes = isRead ? READ_MAX_BYTES : LOG_MAX_BYTES;
+    // Lines first: it is the cheaper test and the one whose elision marker reads best.
+    if (lines.length > maxLines) {
+        return isRead
+            ? [...lines.slice(0, maxLines), `… ${lines.length - maxLines} more lines elided — narrow the range or use the Read tool …`]
+            : [...lines.slice(0, HEAD), `… ${lines.length - HEAD - TAIL} lines elided …`, ...lines.slice(-TAIL)];
+    }
+    if (bodyBytes(lines) <= maxBytes) {
+        return lines;
+    }
+    // Over budget on bytes inside the line limit ⇒ long lines. Take whole lines until the budget is spent, from
+    // the end for a read (where a file read naturally stops) and from both ends for a log.
+    if (isRead) {
+        const head = takeWithinBudget(lines, maxBytes);
+        return [...head, `… ${lines.length - head.length} more lines elided (${bodyBytes(lines)} bytes) — narrow the range or use the Read tool …`];
+    }
+    const head = takeWithinBudget(lines, Math.round(maxBytes * BYTE_HEAD_SHARE));
+    const tail = takeWithinBudget(lines.toReversed(), maxBytes - bodyBytes(head)).toReversed();
+    // A single line longer than the whole budget leaves both ends empty; keep the head of that one line rather
+    // than emitting nothing but a marker.
+    if (head.length === 0 && tail.length === 0) {
+        return [`${lines[0].slice(0, maxBytes)}… line truncated at ${maxBytes} bytes …`];
+    }
+    return [...head, `… ${lines.length - head.length - tail.length} lines elided (${bodyBytes(lines)} bytes) …`, ...tail];
+};
 
 // The gated cleaning pipeline over already-split, ANSI/\r-cleaned lines. Exit-code-asymmetric: on success run the
 // matching command cleaners then the cap; on failure keep everything but a generous tail. `enabled` gates each id.
@@ -398,12 +460,9 @@ export const cleanLines = (lines, { command, exitCode, enabled }) => {
             ran("dedup", dedupeRuns(out));
         }
         if (enabled.has("cap")) {
-            if (READ_COMMAND.test(command)) {
-                if (out.length > READ_MAX) {
-                    ran("cap", [...out.slice(0, READ_MAX), `… ${out.length - READ_MAX} more lines elided — narrow the range or use the Read tool …`]);
-                }
-            } else if (out.length > MAX) {
-                ran("cap", [...out.slice(0, HEAD), `… ${out.length - HEAD - TAIL} lines elided …`, ...out.slice(-TAIL)]);
+            const capped = capOutput(out, command);
+            if (capped !== out) {
+                ran("cap", capped);
             }
         }
     } else {
@@ -446,6 +505,19 @@ export const matchedCleaners = (command, enabled) =>
 // identical body), and attribution keys on what they share.
 export const CACHE_MARKER = "(output identical to ";
 
+/* A body has to be worth more than the pointer that replaces it, and small ones never are. The marker is ~130
+ * bytes before it names anything, so collapsing a four-byte "OK" produced a result 400 bytes LONGER than the
+ * output — over one ledger window that happened on 78 of 90 collapses, every one of them reverted by `guard`
+ * (which throws away the rest of the pipeline's work with it).
+ *
+ * The floor is not only an accounting fix. Short bodies COLLIDE: "", "0", a bare status line are emitted by
+ * commands with nothing to do with each other, and the cross-command back-reference then names one of them,
+ * which is how a desktop-install verification came back as "identical to the output of `sleep 90; cat
+ * /tmp/smoke-run1.log`". A pointer the reader cannot act on is worse than the bytes it saved. */
+const CACHE_MIN_BYTES = 512;
+// The back-reference carries the earlier command; a long one balloons the very marker that is meant to be small.
+const CACHE_COMMAND_MAX = 120;
+
 const hashText = (text) => createHash("sha1").update(text).digest("hex");
 
 // The per-session key: every command in one SDK session runs in a new tmux window (new pane id), so the pane-log
@@ -487,6 +559,11 @@ export const openCacheStore = (terminalsDir, sessionKey) => {
 // Pure given `store` (an object with lookup/record): on a hit return the collapse marker, else record and pass the
 // body through. Tests inject an in-memory Map-backed store to stay deterministic.
 export const collapseCached = (body, command, store, logPath) => {
+    // Below the floor there is nothing worth collapsing and nothing worth remembering: recording a colliding
+    // short body is what lets it be named as the "earlier command" for an unrelated one later.
+    if (body.length < CACHE_MIN_BYTES) {
+        return { body, cached: false };
+    }
     const commandHash = `c:${hashText(command)}`;
     const bodyKey = `b:${hashText(body)}`;
     const bodyHash = hashText(body);
@@ -504,7 +581,8 @@ export const collapseCached = (body, command, store, logPath) => {
      * with the command named, the marker is a pointer into the transcript the model can actually follow. */
     const earlier = store.lookup(bodyKey);
     if (earlier !== undefined && earlier !== command) {
-        return { body: `${CACHE_MARKER}the output of \`${earlier}\` earlier this session${handle})`, cached: true };
+        const named = earlier.length > CACHE_COMMAND_MAX ? `${earlier.slice(0, CACHE_COMMAND_MAX)}…` : earlier;
+        return { body: `${CACHE_MARKER}the output of \`${named}\` earlier this session${handle})`, cached: true };
     }
     store.record(commandHash, bodyHash);
     // First writer of a body wins the back-reference: the earliest command is the one furthest up the

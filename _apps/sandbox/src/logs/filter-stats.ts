@@ -28,7 +28,60 @@ interface StatRow {
 
 const tokens = (bytes: number): number => Math.round(bytes / 4);
 const sumBytes = (rows: StatRow[], key: "rawBytes" | "emittedBytes"): number => rows.reduce((total, row) => total + (row[key] ?? 0), 0);
-const avgBytes = (rows: StatRow[], key: "rawBytes" | "emittedBytes"): number => (rows.length === 0 ? 0 : sumBytes(rows, key) / rows.length);
+const sortedBytes = (rows: StatRow[], key: "rawBytes" | "emittedBytes"): number[] => rows.map((row) => row[key] ?? 0).toSorted((a, b) => a - b);
+const median = (sorted: number[]): number => sorted[sorted.length >> 1] ?? 0;
+
+/* Mann-Whitney U as a z-score, tie-corrected; both arms must already be sorted ascending. Distribution-free and
+ * one merge over the two arms, which is what makes it affordable on a route the settings page polls.
+ *
+ * It is here because the holdout comparison needs a significance bar and a heavy-tailed one cannot borrow the
+ * usual t-shaped machinery. See `measuredSavedPct` below for what it is gating and why. */
+const mannWhitneyZ = (first: number[], second: number[]): number => {
+    const n1 = first.length;
+    const n2 = second.length;
+    const total = n1 + n2;
+    if (n1 === 0 || n2 === 0) {
+        return 0;
+    }
+    const merged = [...first.map((value) => ({ value, isFirst: true })), ...second.map((value) => ({ value, isFirst: false }))].toSorted(
+        (left, right) => left.value - right.value,
+    );
+    /* Ranks are 1-based and averaged within each tie group, and the tie correction is what keeps the variance
+     * honest — output sizes tie constantly (every empty result is 0 bytes), and an uncorrected variance would
+     * report significance that is not there. One forward scan: a group spans [start, end) and its members all
+     * take the same average rank. */
+    let rankSum = 0;
+    let tieCorrection = 0;
+    let start = 0;
+    let firstsInGroup = 0;
+    let previous: number | undefined;
+    const closeGroup = (end: number): void => {
+        const tied = end - start;
+        if (tied > 1) {
+            tieCorrection += tied ** 3 - tied;
+        }
+        rankSum += firstsInGroup * ((start + end + 1) / 2);
+    };
+    merged.forEach((entry, position) => {
+        if (previous !== undefined && entry.value !== previous) {
+            closeGroup(position);
+            start = position;
+            firstsInGroup = 0;
+        }
+        previous = entry.value;
+        if (entry.isFirst) {
+            firstsInGroup++;
+        }
+    });
+    closeGroup(total);
+    const u = rankSum - (n1 * (n1 + 1)) / 2;
+    const deviation = Math.sqrt(((n1 * n2) / 12) * (total + 1 - tieCorrection / (total * (total - 1))));
+    return deviation === 0 ? 0 : (u - (n1 * n2) / 2) / deviation;
+};
+
+// Arms smaller than this cannot say anything, the same floor `terseHoldout` publishes under.
+const MIN_HELD_COMMANDS = 30;
+const Z_95 = 1.96;
 
 const parseRows = (text: string): StatRow[] =>
     text
@@ -108,11 +161,29 @@ export const readInputSavings = async (historyRoot: string, window: DayWindowQue
         .map(([id, entry]) => ({ id, commands: entry.commands, savedTokens: tokens(entry.bytes) }))
         .toSorted((a, b) => b.savedTokens - a.savedTokens);
 
-    // Measured saving: avg emitted tokens on cleaned commands vs avg raw tokens on the held-out control (a random
-    // sample of the same command stream) — a real reduction, not a per-command estimate. Absent without a holdout.
-    const avgRawHeld = avgBytes(held, "rawBytes");
-    const avgEmittedCleaned = avgBytes(cleaned, "emittedBytes");
-    const measuredSavedPct = held.length > 0 && avgRawHeld > 0 ? Math.round((1 - avgEmittedCleaned / avgRawHeld) * 100) : undefined;
+    /* Measured saving: emitted bytes on cleaned commands against raw bytes on the held-out control (a random
+     * sample of the same command stream) — the whole-pipeline counterfactual, and the only figure in this
+     * report that is an ESTIMATE. `savedPct` above is exact: it is each command's own raw against its own
+     * emitted, so it needs no control and carries no sampling error.
+     *
+     * Two things this got wrong for a while, and both made it print an alarming number pointing the wrong way:
+     *
+     * - It compared MEANS of a heavy-tailed quantity. Output is median ~680 bytes with a p99 of 11 KB and a
+     *   long tail past 200 KB, so a mean over a 10% arm is decided by which few huge captures happened to land
+     *   in it. On one window the two arms' INPUTS differed by 9.5% — arms that are by construction the same
+     *   command stream — and the estimator published −6% while the exact paired count said +3%.
+     * - It published whatever it computed. A between-arm comparison this noisy has to clear a significance bar
+     *   before it means anything, exactly as `terseHoldout` does; an interval straddling zero is not a
+     *   measurement, and rendering it as a percentage invites someone to switch off a mechanism that works.
+     *
+     * So the median ratio is the figure (robust to the tail) and Mann-Whitney is the gate. Below the bar
+     * nothing is published — and note that a 10% holdout over a two-day window does NOT clear it for an effect
+     * this size (z ≈ −1.8, directionally right and short of significance), which is a fact about the sample,
+     * not about the cleaners. `holdout.cleaned`/`heldOut` still go out so the reader can see the arms. */
+    const heldRaw = sortedBytes(held, "rawBytes");
+    const cleanedEmittedSorted = sortedBytes(cleaned, "emittedBytes");
+    const measurable = held.length >= MIN_HELD_COMMANDS && median(heldRaw) > 0 && Math.abs(mannWhitneyZ(cleanedEmittedSorted, heldRaw)) > Z_95;
+    const measuredSavedPct = measurable ? Math.round((1 - median(cleanedEmittedSorted) / median(heldRaw)) * 100) : undefined;
 
     const gaps = summarizeGaps(cleaned);
 

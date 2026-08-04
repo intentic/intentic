@@ -28,10 +28,44 @@ test("summarizeStats: held-out rows form the measured control and never count as
     const report = summarizeStats(rows);
     expect(report.holdout.cleaned).toBe(1);
     expect(report.holdout.heldOut).toBe(1);
-    // avg emitted cleaned (1000) vs avg raw held (10000) ⇒ 90% measured.
-    expect(report.holdout.measuredSavedPct).toBe(90);
+    // One command per arm cannot measure anything, however large the gap between them looks.
+    expect(report.holdout.measuredSavedPct).toBeUndefined();
     // the held-out row has no cleaner match but must NOT be reported as a gap.
     expect(report.gaps).toEqual([]);
+});
+
+/* The holdout is the only estimate in this report, and it publishes nothing it cannot support. The mean-based
+ * version it replaced printed −6% on a window where the exact paired count said +3%, because output size is
+ * heavy-tailed and a mean over a 10% arm reports which few huge captures happened to land in it. */
+test("summarizeStats: a separated holdout publishes the median saving", () => {
+    const rows = [
+        ...Array.from({ length: 200 }, (_, i) => ({ command: "c", rawBytes: 2000 + i, emittedBytes: 1000 + i, matched: ["x"], heldOut: false })),
+        ...Array.from({ length: 60 }, (_, i) => ({ command: "c", rawBytes: 2000 + i, emittedBytes: 2000 + i, matched: [], heldOut: true })),
+    ];
+    // median emitted cleaned 1100 against median raw held 2030 ⇒ ~46%.
+    expect(summarizeStats(rows).holdout.measuredSavedPct).toBe(46);
+});
+
+test("summarizeStats: a holdout the cleaners did not separate publishes no number at all", () => {
+    // The two arms are the same distribution — which is what an ineffective config looks like, and also what a
+    // real one looks like on a window too short to tell. Either way the honest report is silence.
+    const rows = [
+        ...Array.from({ length: 200 }, (_, i) => ({
+            command: "c",
+            rawBytes: 2000 + (i % 60),
+            emittedBytes: 2000 + (i % 60),
+            matched: ["x"],
+            heldOut: false,
+        })),
+        ...Array.from({ length: 60 }, (_, i) => ({
+            command: "c",
+            rawBytes: 2000 + (i % 60),
+            emittedBytes: 2000 + (i % 60),
+            matched: [],
+            heldOut: true,
+        })),
+    ];
+    expect(summarizeStats(rows).holdout.measuredSavedPct).toBeUndefined();
 });
 
 test("summarizeStats: high-volume cleaned commands with no cleaner surface as gaps, grouped by command", () => {
