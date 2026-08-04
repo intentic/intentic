@@ -72,19 +72,33 @@ const sizeLabel = (bytes: number): string => {
         </div>
 
         <template v-if="isOwner">
-            <div class="flex items-start justify-between gap-4 rounded-lg border border-line p-3">
-                <div>
-                    <p class="text-xs font-medium text-content">Include secrets</p>
-                    <p class="text-2xs text-subtle">
-                        Capability credentials, the CI webhook secret, extension settings, ssh keys and the agent's AI logins. Leave this off and the
-                        bundle is safe to hand to someone else — the restore then lists what to re-enter.
-                    </p>
-                    <p v-if="withSecrets" class="mt-1 text-2xs text-warning">
-                        The exported file will contain credentials in the clear. Store it like a password.
-                    </p>
-                </div>
+            <!-- THE ONE DECISION THIS CARD ASKS FOR, on the card's own surface. It used to sit in its own boxed
+                 inset, which read as a second card inside the first for a border that said nothing the hairline
+                 doesn't. The lock is the state at a glance — it opens and goes warning-coloured the moment the
+                 bundle stops being safe to hand over, so the danger is legible before the sentence is read. -->
+            <label
+                class="flex items-start justify-between gap-4 border-t border-line pt-4"
+                :class="packing === undefined ? `cursor-pointer` : `cursor-default`"
+            >
+                <span class="flex min-w-0 items-start gap-2.5">
+                    <Icon
+                        :name="withSecrets ? `unlock` : `lock`"
+                        class="mt-0.5 shrink-0 text-lg"
+                        :class="withSecrets ? `text-warning` : `text-muted`"
+                    />
+                    <span class="min-w-0">
+                        <span class="block text-xs font-medium leading-tight text-content">Include secrets</span>
+                        <span class="mt-0.5 block text-2xs text-subtle">
+                            Capability credentials, the CI webhook secret, extension settings, ssh keys and the agent's AI logins. Leave this off and
+                            the bundle is safe to hand to someone else — the restore then lists what to re-enter.
+                        </span>
+                        <span v-if="withSecrets" class="mt-1 block text-2xs text-warning">
+                            The exported file will contain credentials in the clear. Store it like a password.
+                        </span>
+                    </span>
+                </span>
                 <ToggleSwitch v-model="withSecrets" :disabled="packing !== undefined" class="mt-0.5 shrink-0" />
-            </div>
+            </label>
 
             <div class="flex flex-wrap items-center gap-2">
                 <!-- Disabled while one is packing rather than queueing a second: two concurrent packs would
