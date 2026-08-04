@@ -16,8 +16,11 @@
      The copies this replaces disagreed at exactly the point that matters: two tracked failures in a reactive
      Set the CALLER had to own and never cleared, and two others (the automation source and recipe rows) had no
      error handler at all, so a dead slug left an empty box that reads as a rendering bug rather than as a
-     thing. Here the tier underneath is already painted and the image sits OVER it, so a load that fails
-     reveals the answer instead of a hole — no caller state, nothing to reset, and nothing to forget.
+     thing. Here the tier underneath is painted first and the image covers it only once it has really loaded,
+     so a load that fails reveals the answer instead of a hole — no caller state, nothing to reset, nothing to
+     forget. EXACTLY ONE TIER IS EVER ON SCREEN: a simple-icons mark is a transparent single-colour SVG, so a
+     fallback left underneath a loaded one is read THROUGH it, and the elephant with a lightning bolt across it
+     is not a fallback anybody recognises as one.
 
      DECORATIVE, always: the mark is `aria-hidden` and carries no label, because unlike an avatar in a stack it
      is never the only representation of the thing — every surface that draws one draws the name beside it, so a
@@ -27,7 +30,7 @@
      that works on all three tiers: a brand logo is full-colour and would otherwise keep shouting from a row
      whose every other element has gone quiet. -->
 <script setup lang="ts">
-import { computed } from "vue";
+import { computed, ref, watch } from "vue";
 import { isIconName } from "../icons/iconSets.js";
 import { initialsOf } from "../format.js";
 import Icon from "./Icon.vue";
@@ -60,11 +63,16 @@ const initials = computed(() => initialsOf(name));
 // simply never renders the <img>.
 const logoUrl = computed(() => (logo === undefined ? undefined : `https://cdn.simpleicons.org/${logo}`));
 
-// A dead slug degrades to the tier underneath. Hiding the element rather than clearing the URL keeps this a
-// pure DOM effect — a re-render must not retry forever, and the caller's data is not ours to correct.
-const hideBrokenImage = (event: Event): void => {
-    (event.target as HTMLImageElement).style.display = `none`;
-};
+// How far the top tier has got. The image is allowed to fail, so the tier under it stays painted until the
+// load actually succeeds — but only until then: a simple-icons mark is a transparent single-colour SVG, so a
+// glyph left underneath one shows through its holes and reads as a deformed logo rather than as a fallback.
+// `failed` also stops the retry a re-render would otherwise mount, and the caller's slug is not ours to correct.
+const logoState = ref<`pending` | `loaded` | `failed`>(`pending`);
+// A mark can be re-pointed while mounted (a recycled list row). The new slug has its own load to do, so the
+// tier underneath comes back until it answers.
+watch(logoUrl, () => {
+    logoState.value = `pending`;
+});
 </script>
 
 <template>
@@ -74,20 +82,24 @@ const hideBrokenImage = (event: Event): void => {
         :style="{ width: `${size}px`, height: `${size}px` }"
         aria-hidden="true"
     >
-        <Icon v-if="glyph !== undefined" :name="glyph" :style="{ fontSize: `${size * 0.5}px` }" />
-        <span v-else-if="initials !== undefined" class="font-semibold leading-none" :style="{ fontSize: `${Math.max(7, size * 0.375)}px` }">
-            {{ initials }}
-        </span>
-        <!-- Over the fallback, never instead of it. no-referrer because an icon CDN has no business learning
-             which sandbox is looking at it, nor which of its brands that sandbox has installed. -->
+        <template v-if="logoState !== `loaded`">
+            <Icon v-if="glyph !== undefined" :name="glyph" :style="{ fontSize: `${size * 0.5}px` }" />
+            <span v-else-if="initials !== undefined" class="font-semibold leading-none" :style="{ fontSize: `${Math.max(7, size * 0.375)}px` }">
+                {{ initials }}
+            </span>
+        </template>
+        <!-- Over the fallback until it has loaded, in place of it once it has. no-referrer because an icon CDN
+             has no business learning which sandbox is looking at it, nor which of its brands that sandbox has
+             installed. -->
         <img
-            v-if="logoUrl !== undefined"
+            v-if="logoUrl !== undefined && logoState !== `failed`"
             :src="logoUrl"
             alt=""
             referrerpolicy="no-referrer"
             class="absolute object-contain"
             :style="{ width: `${size * 0.625}px`, height: `${size * 0.625}px` }"
-            @error="hideBrokenImage"
+            @load="logoState = `loaded`"
+            @error="logoState = `failed`"
         />
     </span>
 </template>
