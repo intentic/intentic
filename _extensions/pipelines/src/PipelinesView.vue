@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import type { CiRepo, PipelineRun } from "@intentic/sandbox-contract";
+import type { CiHost, CiRepo, PipelineRun } from "@intentic/sandbox-contract";
 import { cmp, CountBar, type CountItem, Icon, InfoHint, Page, PageAction, PageHeader, ProgressRing, RowGroup } from "@intentic/extension-ui";
 import { computed, onMounted, ref } from "vue";
 import { markPipelinesSeen } from "./ciAttention";
@@ -46,7 +46,11 @@ const superseded = computed(() => supersededBy(runs.value));
 /* The "open the thing this view is about" link, matching Deployments' Open Komodo. Pipelines needs a list
  * rather than one link, because a workspace can span both vendors — and the GitLab entry has to be DERIVED
  * from a project url rather than assumed, since a self-hosted instance is whatever host the capability points
- * at. A url the URL parser refuses simply contributes nothing. */
+ * at. A url the URL parser refuses simply contributes nothing.
+ *
+ * `host` rides along beside the label because it is also the vendor's glyph: these are the one header in the
+ * app that can hold TWO outbound links, and drawn as icons a shared generic arrow would make them the same
+ * control twice. */
 const hostOrigin = (url: string): string | undefined => {
     try {
         return new URL(url).origin;
@@ -55,11 +59,11 @@ const hostOrigin = (url: string): string | undefined => {
     }
 };
 const hosts = computed(() => {
-    const byOrigin = new Map<string, { label: string; url: string }>();
+    const byOrigin = new Map<string, { host: CiHost; label: string; url: string }>();
     for (const repo of repos.value) {
         const origin = hostOrigin(repo.url);
         if (origin !== undefined && !byOrigin.has(origin)) {
-            byOrigin.set(origin, { label: repo.host === `github` ? `GitHub` : `GitLab`, url: origin });
+            byOrigin.set(origin, { host: repo.host, label: repo.host === `github` ? `GitHub` : `GitLab`, url: origin });
         }
     }
     return [...byOrigin.values()];
@@ -150,7 +154,7 @@ const fixRun = async (run: PipelineRun): Promise<void> => {
                     </InfoHint>
                 </template>
                 <template #actions>
-                    <PageAction v-for="host in hosts" :key="host.url" icon="arrow-up-right" :label="`Open ${host.label}`" :href="host.url" />
+                    <PageAction v-for="entry in hosts" :key="entry.url" :icon="entry.host" :label="`Open ${entry.label}`" :href="entry.url" />
                 </template>
             </PageHeader>
 

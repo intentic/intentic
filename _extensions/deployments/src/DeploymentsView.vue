@@ -240,7 +240,7 @@ const setLink = async (repo: string, stack: string): Promise<void> => {
                     </InfoHint>
                 </template>
                 <template #actions>
-                    <PageAction v-if="board?.komodoUrl" icon="arrow-up-right" label="Open Komodo" :href="board.komodoUrl" />
+                    <PageAction v-if="board?.komodoUrl" icon="external-link" label="Open Komodo" :href="board.komodoUrl" />
                 </template>
             </PageHeader>
 

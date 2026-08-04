@@ -111,7 +111,7 @@ const toggleAccessReveal = async (key: string): Promise<void> => {
                     <StatusBadge v-if="convergence" :variant="convergence.variant" :label="convergence.label" dot />
                 </template>
                 <template #actions>
-                    <PageAction icon="refresh" label="Refresh" hint="Re-read the live cluster state" :disabled="loading" @click="refresh" />
+                    <PageAction quiet icon="refresh" label="Refresh" hint="Re-read the live cluster state" :disabled="loading" @click="refresh" />
                 </template>
             </PageHeader>
 

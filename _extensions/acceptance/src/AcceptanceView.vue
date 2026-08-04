@@ -384,6 +384,7 @@ const run = async (model: PickedModel): Promise<void> =>
                      are, and a panel started from Preview while this was open is exactly the staleness someone
                      presses this to clear. -->
                 <PageAction
+                    quiet
                     icon="refresh"
                     label="Refresh"
                     hint="Re-read the stories and the dev-server states"

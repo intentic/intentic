@@ -209,7 +209,7 @@ const onStart = (verdict: ChoreVerdict): void => {
                     { label: `Everything`, value: `all`, title: `Every chore in the book, including the clear and the unmeasured` },
                 ]"
             />
-            <PageAction icon="refresh" label="Refresh" hint="Re-read the evidence" :disabled="busy" @click="void refresh()" />
+            <PageAction quiet icon="refresh" label="Refresh" hint="Re-read the evidence" :disabled="busy" @click="void refresh()" />
         </template>
 
         <template #strips>
