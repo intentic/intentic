@@ -1,7 +1,13 @@
 #!/bin/sh
 # intentic dev-sandbox recreate — swap the running sandbox container over to a freshly built
 # `intentic-sandbox:dev` image, WITHOUT re-running connect.sh's tunnel/auth wizard. Called by the watch loop
-# (the sibling dev-sandbox.mjs) after each `pnpm build:sandbox`, and usable by hand.
+# (the sibling dev-sandbox.mjs) after each `pnpm build:sandbox`, and usable by hand:
+#
+#   sh dev-sandbox.sh            # the one sandbox on this machine
+#   sh dev-sandbox.sh <slug>     # THAT sandbox, when this machine runs several
+#
+# The image (`pnpm build:sandbox`) is shared by every dev sandbox here; only the container swap is per-sandbox,
+# which is what the slug names.
 #
 # A thin wrapper: the recreate itself — env replay, overlay re-base, the run command the image emits — is
 # recreate.sh's dev mode (one flow with rebuild/update, which is exactly what this script used to duplicate;
@@ -26,4 +32,4 @@ if command -v node >/dev/null 2>&1; then
 fi
 export INTENTIC_DEV_MOUNTS
 
-exec sh "$SCRIPT_DIR/../../site/public/scripts/recreate.sh" --dev
+exec sh "$SCRIPT_DIR/../../site/public/scripts/recreate.sh" --dev "$@"

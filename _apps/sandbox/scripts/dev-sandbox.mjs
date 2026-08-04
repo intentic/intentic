@@ -5,6 +5,10 @@
 //   1. SANDBOX_IMAGE=intentic-sandbox:dev bash _apps/site/public/scripts/connect.sh   (builds the dev image if missing; establishes tunnel + auth once)
 //   2. pnpm dev:sandbox                                                               (this script — leave it running)
 //
+// `pnpm dev:sandbox <slug>` watches for the NAMED sandbox — the slug rides through to both swap paths below.
+// Without one they detect the single sandbox on this machine and refuse to guess between several, so a machine
+// running two of them (a branch beside main) needs the slug or the loop stops at every rebuild.
+//
 // Then every edit under the watched paths rebuilds intentic-sandbox:dev and recreates the running
 // sandbox container against its existing tunnel/auth/volumes (the sibling dev-sandbox.sh). The daemon is
 // baked into the image (Dockerfile COPY --from=build /out/sandbox), so a rebuild is the only way a
@@ -25,6 +29,9 @@ import { watch } from "chokidar";
 const SCRIPT_DIR = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = resolve(SCRIPT_DIR, "../../..");
 const DEBOUNCE_MS = 500;
+// Which sandbox this loop drives, forwarded verbatim to both swap scripts. Empty means "the one on this
+// machine", which is what they detect for themselves.
+const SLUG_ARGS = process.argv.slice(2);
 
 const WATCH_PATHS = [
     join(REPO_ROOT, "_apps/sandbox/src"),
@@ -79,7 +86,7 @@ const cycle = async (fullRebuild) => {
         console.log("\nintentic: change detected — pnpm build:sandbox…");
         const buildCode = await run("pnpm", ["build:sandbox"]);
         if (buildCode === 0) {
-            await run("bash", [join(SCRIPT_DIR, "dev-sandbox.sh")]);
+            await run("bash", [join(SCRIPT_DIR, "dev-sandbox.sh"), ...SLUG_ARGS]);
         } else {
             console.error("intentic: build failed — the running sandbox is untouched. Fix the error and save again.");
         }
@@ -87,7 +94,7 @@ const cycle = async (fullRebuild) => {
         // The fast path: compile into the mounted dists and restart the daemon in place. It refuses (with an
         // explanation) if this container predates the mounts, so a stale run can't masquerade as a reload.
         console.log("\nintentic: change detected — reloading the daemon…");
-        await run("sh", [join(SCRIPT_DIR, "dev-reload.sh")]);
+        await run("sh", [join(SCRIPT_DIR, "dev-reload.sh"), ...SLUG_ARGS]);
     }
     building = false;
     if (pending !== undefined) {
@@ -114,4 +121,6 @@ const schedule = (path) => {
 
 watch(WATCH_PATHS, { ignored, ignoreInitial: true }).on("all", (_event, path) => schedule(path));
 
-console.log("intentic: watching sandbox sources — source edits reload in seconds; Dockerfile/bin/skills/deps rebuild the image. Ctrl-C to stop.");
+console.log(
+    `intentic: watching sandbox sources for ${SLUG_ARGS[0] ?? "this machine's sandbox"} — source edits reload in seconds; Dockerfile/bin/skills/deps rebuild the image. Ctrl-C to stop.`,
+);

@@ -20,19 +20,28 @@ if ! command -v docker >/dev/null 2>&1; then
     exit 1
 fi
 
-# Same single-container detection as dev-sandbox.sh: never guess which sandbox to touch.
-matches="$(docker ps --filter "name=^${ORIGIN_HOST_PREFIX}" --format '{{.Names}}' | grep -v -- '-tunnel-' || true)"
-count="$(printf '%s\n' "$matches" | grep -c . || true)"
-if [ "$count" -eq 0 ]; then
-    echo "error: no running sandbox container — run 'sh _apps/sandbox/scripts/dev-sandbox.sh' first." >&2
+# Same targeting as dev-sandbox.sh: an optional slug names the sandbox, and only its absence falls back to
+# detecting the single one — never guess which sandbox to touch when the machine runs several.
+SLUG="${1:-}"
+if [ -z "$SLUG" ]; then
+    matches="$(docker ps --filter "name=^${ORIGIN_HOST_PREFIX}" --format '{{.Names}}' | grep -v -- '-tunnel-' || true)"
+    count="$(printf '%s\n' "$matches" | grep -c . || true)"
+    if [ "$count" -eq 0 ]; then
+        echo "error: no running sandbox container — run 'sh _apps/sandbox/scripts/dev-sandbox.sh' first." >&2
+        exit 1
+    fi
+    if [ "$count" -gt 1 ]; then
+        echo "error: this machine runs more than one sandbox — name the one to reload, 'dev-reload.sh <slug>':" >&2
+        printf '%s\n' "$matches" | sed "s/^${ORIGIN_HOST_PREFIX}/  /" >&2
+        exit 1
+    fi
+    SLUG="${matches#$ORIGIN_HOST_PREFIX}"
+fi
+CONTAINER="${ORIGIN_HOST_PREFIX}${SLUG}"
+if ! docker inspect "$CONTAINER" >/dev/null 2>&1; then
+    echo "error: no sandbox container ${CONTAINER} on this machine." >&2
     exit 1
 fi
-if [ "$count" -gt 1 ]; then
-    echo "error: more than one running sandbox container — refusing to guess which to reload:" >&2
-    printf '  %s\n' $matches >&2
-    exit 1
-fi
-CONTAINER="$matches"
 
 # Does this container actually read the working tree? Without the dist mount a restart would just re-run the
 # baked code, which reads as "my change did nothing" — the exact confusion this whole path exists to remove.

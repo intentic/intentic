@@ -5,7 +5,7 @@
 #
 #   curl -fsSL https://intentic.dev/rebuild | sh -s -- <SLUG> <SHA256>   # rebuild: the owner-approved overlay
 #   curl -fsSL https://intentic.dev/update  | sh -s -- <SLUG>            # update: the fresh :stable base
-#   sh recreate.sh --dev                                                 # dev: the locally-built dev image
+#   sh recreate.sh --dev [SLUG]                                          # dev: the locally-built dev image
 #
 # Optional env: INTENTIC_SET_ENV — NAME=VALUE lines to change in the recreated container (see below).
 #
@@ -43,12 +43,19 @@ SLUG=""
 WANT_HASH=""
 WANT_CHANNEL=""
 case "${1:-}" in
-    --dev) MODE="dev" ;;
+    --dev)
+        MODE="dev"
+        # The slug is OPTIONAL here and required nowhere else: a dev machine usually runs exactly one sandbox, so
+        # the auto-detect below is the ergonomic default — but a machine running several (dogfooding a branch
+        # beside main) has no other way to say WHICH one this swap is for, and guessing would recreate somebody
+        # else's session out from under it.
+        SLUG="${2:-}"
+        ;;
     "")
         echo "usage: recreate.sh <slug> [sha256-of-approved-overlay]" >&2
         echo "       recreate.sh <slug> --channel <tag>   # move onto a release channel and stay there" >&2
         echo "       recreate.sh <slug> --rollback        # back to the image this sandbox came from" >&2
-        echo "       recreate.sh --dev" >&2
+        echo "       recreate.sh --dev [slug]             # slug optional while this machine runs one sandbox" >&2
         exit 1
         ;;
     *)
@@ -81,7 +88,7 @@ if ! command -v docker >/dev/null 2>&1; then
     exit 1
 fi
 
-if [ "$MODE" = "dev" ]; then
+if [ "$MODE" = "dev" ] && [ -z "$SLUG" ]; then
     # Auto-detect the single sandbox container (exclude the tunnel sidecar); refuse to guess between several.
     # `ps -a`, not `ps`: the dogfood loop's whole point is replacing a daemon that just broke, and a daemon that
     # broke badly enough (a missing dependency, a bad overlay) left its container EXITED. Requiring it to be
@@ -89,15 +96,18 @@ if [ "$MODE" = "dev" ]; then
     matches="$(docker ps -a --filter 'name=^intentic-sandbox-' --format '{{.Names}}' | grep -v -- '-tunnel-' || true)"
     count="$(printf '%s\n' "$matches" | grep -c . || true)"
     if [ "$count" -ne 1 ]; then
-        [ "$count" -eq 0 ] && echo "error: no sandbox container found — run connect.sh first." >&2
-        [ "$count" -gt 1 ] && { echo "error: more than one sandbox — refusing to guess:" >&2; printf '  %s\n' $matches >&2; }
+        if [ "$count" -eq 0 ]; then
+            echo "error: no sandbox container found — run connect.sh first." >&2
+        else
+            # Named, not numbered: the answer is to re-run this with one of these slugs, so print what to type.
+            echo "error: this machine runs more than one sandbox — name the one to swap, 'recreate.sh --dev <slug>':" >&2
+            printf '%s\n' "$matches" | sed 's/^intentic-sandbox-/  /' >&2
+        fi
         exit 1
     fi
-    CONTAINER="$matches"
-    SLUG="${CONTAINER#intentic-sandbox-}"
-else
-    CONTAINER="intentic-sandbox-${SLUG}"
+    SLUG="${matches#intentic-sandbox-}"
 fi
+CONTAINER="intentic-sandbox-${SLUG}"
 if ! docker inspect "$CONTAINER" >/dev/null 2>&1; then
     echo "error: sandbox container ${CONTAINER} does not exist on this machine — re-run connect first." >&2
     exit 1

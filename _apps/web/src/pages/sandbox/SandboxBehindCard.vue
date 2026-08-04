@@ -2,6 +2,7 @@
 import { Card, Code, StatusBadge } from "@intentic/ui";
 import { computed } from "vue";
 import { daemonBehind, missingRoutes } from "../../composables/sandbox/useDaemonRoutes";
+import { useEnvironment } from "../../composables/sandbox/useEnvironment";
 
 /* "This sandbox predates some features" — the specific companion to SandboxUpdateCard.
  *
@@ -21,7 +22,14 @@ import { daemonBehind, missingRoutes } from "../../composables/sandbox/useDaemon
 const groups = computed(() => [...new Set(missingRoutes.value.map((name) => name.split(`.`)[0]))].toSorted());
 // The developer's remedy is the one the dev loop already documents; a user's is the update card's path.
 const isDev = import.meta.env.DEV;
-const rebuildCommand = `pnpm build:sandbox && sh _apps/sandbox/scripts/dev-sandbox.sh`;
+const { slug } = useEnvironment();
+// Named, not detected. The image build is machine-wide, but the swap after it is one container's — and a dev
+// machine running a branch sandbox beside main is exactly where an unnamed command either recreates the wrong
+// one or (as recreate.sh does) refuses to move at all. This card knows which sandbox it is looking at, so it
+// says so; the slug is omitted only while /environment hasn't answered yet, where the detect is right anyway.
+const rebuildCommand = computed(
+    () => `pnpm build:sandbox && sh _apps/sandbox/scripts/dev-sandbox.sh${slug.value === undefined ? `` : ` ${slug.value}`}`,
+);
 </script>
 
 <template>
