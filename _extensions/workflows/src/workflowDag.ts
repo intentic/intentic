@@ -109,6 +109,33 @@ export const workflowDag = (workflow: Pick<Workflow, "steps">, run?: WorkflowRun
     return { nodes, edges };
 };
 
+/* THE SAME GRAPH AS ONE COLUMN PER GENERATION — what a list card draws instead of the canvas.
+ *
+ * Third consumer, same module, and for the reason the module exists: the picture in the list and the picture in
+ * the designer have to be the same picture. A card cannot afford dagre, a viewport and a node component, but it
+ * can afford columns — steps that wait on nothing, then everything they unblock — and that is enough to see a
+ * fan-out as a fan-out.
+ *
+ * A CYCLE CANNOT HANG IT. Nothing being ready means every remaining step waits on another one, which the save
+ * route refuses — but a template is authored by hand, and a page that spins forever over a typo is not a
+ * trade worth taking. What is left goes in one last column.
+ */
+export const workflowLayers = (steps: readonly WorkflowStep[]): WorkflowStep[][] => {
+    const ids = new Set(steps.map((step) => step.id));
+    const placed = new Set<string>();
+    const layers: WorkflowStep[][] = [];
+    let waiting = [...steps];
+    while (waiting.length > 0) {
+        // A `needs` naming nothing is dropped rather than waited on, exactly as the graph above drops the edge.
+        const ready = waiting.filter((step) => step.needs.every((need) => !ids.has(need) || placed.has(need)));
+        const layer = ready.length > 0 ? ready : waiting;
+        layer.forEach((step) => placed.add(step.id));
+        layers.push(layer);
+        waiting = waiting.filter((step) => !placed.has(step.id));
+    }
+    return layers;
+};
+
 /* One line under a node's title: who runs it, what it produces, and what gates it — in the fewest words that
  * still say which.
  *

@@ -55,12 +55,15 @@ Dashed arrows are development-only — needed to build or test, not to run.
   ] }
 ```
 
-## One graph derivation, two screens
+## One graph derivation, three screens
 
-The designer and the run view draw the same picture from the same module. That is deliberate and it
-is the reason `workflowDag.ts` exists rather than two components' worth of computed properties: a
-designer whose preview lays out differently from the run would be worse than no preview, because you
-would trust it. Whether a node carries run state is what tells the shared card which mode it is in.
+The designer, the run view and the list all draw the same picture from the same module. That is
+deliberate and it is the reason `workflowDag.ts` exists rather than three components' worth of
+computed properties: a designer whose preview lays out differently from the run would be worse than
+no preview, because you would trust it. Whether a node carries run state is what tells the shared
+card which mode it is in. The list cannot afford a canvas, so it takes the same graph as one column
+per generation — steps that wait on nothing, then everything they unblock — which is enough for a
+fan-out to look like a fan-out at the size of a card.
 
 Workflows are native to every sandbox — there is no capability to enable — so the rail tile appears
 unconditionally. Its state is two files under `.intentic/`, declared in the manifest, so a run

@@ -7,7 +7,7 @@
     },
     {
       "path": "_extensions/workflows/src/workflowDag.ts",
-      "what": "The one graph derivation the designer and the run view share."
+      "what": "The one graph derivation the designer, the run view and the list card share."
     },
     {
       "path": "_extensions/workflows/src/WorkflowDesigner.vue",

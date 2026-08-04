@@ -1,29 +1,53 @@
 <script setup lang="ts">
-import { Button, cmp, ConfirmDialog, Icon, InfoHint, Page, PageAction, PageHeader, RowGroup, timeAgo } from "@intentic/extension-ui";
+import {
+    Button,
+    cmp,
+    ConfirmDialog,
+    Icon,
+    InfoHint,
+    Page,
+    PageAction,
+    PageHeader,
+    RowGroup,
+    StatusBadge,
+    type StatusVariant,
+    timeAgo,
+} from "@intentic/extension-ui";
 import type { Workflow, WorkflowRun, WorkflowSummary } from "@intentic/sandbox-contract";
 import { computed, ref, shallowRef } from "vue";
+import WorkflowCard from "./WorkflowCard.vue";
 import WorkflowDesigner from "./WorkflowDesigner.vue";
 import WorkflowRunPage from "./WorkflowRunPage.vue";
 import { host } from "./host";
 import { WORKFLOW_TEMPLATES, type WorkflowTemplate } from "./templates";
+import { STEP_TONE } from "./workflowDag";
 import { useWorkflows } from "./useWorkflows";
 
 /* WORKFLOWS: designed graphs of agent sessions, each producing a declared output.
  *
  * The third driver, and the page says which by what it does NOT have. An automation has an enabled switch,
  * because something fires it. A loop has no page at all, because it is started against a conversation and then
- * it is history. A workflow has neither: it is a DESIGN you keep, edit and run — so this page is a list of
+ * it is history. A workflow has neither: it is a DESIGN you keep, edit and run — so this page is a gallery of
  * designs with a Run button, and everything about watching one lives behind that button.
+ *
+ * A GALLERY OF CARDS RATHER THAN A LIST OF ROWS, which is the one place this page departs from every other
+ * list in the product. A row is right for a thing whose identity is its NAME and whose interest is its STATE —
+ * an automation, a secret, a file. A workflow's identity is its shape, and a shape needs two dimensions: the
+ * row this replaced spent its width on a name, a shape described in three words, a description truncated to
+ * whatever was left, a status and three controls, all on one line and all in the same grey. Nothing on it was
+ * legible except the buttons. The card gives the graph a picture, the description two lines, and the controls
+ * one loud one (Run) with the rest under the pointer.
  *
  * THE TEMPLATE IS UNDER THE LIST, not in the create dialog, and that is the one deliberate difference from the
  * automations page. Automation recipes are prefill for a form whose shape you already understand; a workflow
  * template is the only way most people will learn what shapes are POSSIBLE — that a reviewer should be a
  * different session, that two steps can run on two different models, that a step can be made to produce data
- * the next one consumes. So it stays visible on the page rather than hiding one level in, and it sells its
- * SHAPE rather than its topic.
+ * the next one consumes. So it stays visible on the page rather than hiding one level in — and it is drawn as
+ * the SAME card as a saved workflow, dashed, because "one of those, ready-made" is the whole proposition and
+ * the old bare-bordered box under a bare "Start from" label said none of it.
  */
 
-const { workflows, runs, runsLoaded, error: listError, remove, start } = useWorkflows();
+const { workflows, runs, runsLoaded, error: listError, remove } = useWorkflows();
 
 /* WHICH OF THE THREE SCREENS THIS IS, and it is read from the URL rather than held in a ref.
  *
@@ -77,7 +101,6 @@ const past = computed(() => runs.value.filter((run) => run.state !== `running`).
  * old one first. Somebody watching the template change and their own run not change has no way to connect the
  * two. Picking it still costs nothing: it opens the DESIGNER prefilled, and nothing is written until Save.
  */
-const available = computed(() => WORKFLOW_TEMPLATES);
 const savedAlready = (template: WorkflowTemplate): boolean => workflows.value.some((workflow) => workflow.id === template.workflow.id);
 
 // A saved workflow opens by id; anything unsaved is parked in `drafted` first and opens as `new`.
@@ -141,37 +164,31 @@ const removeWorkflow = async (): Promise<void> => {
     }
 };
 
+const doneSteps = (run: WorkflowRun): number => run.steps.filter((step) => step.state === `done`).length;
+const spentOn = (run: WorkflowRun): number => run.steps.reduce((total, step) => total + (step.costUsd ?? 0), 0);
+
 // A run's headline: how far it got, and what it cost. Both numbers, because "3 of 7" and "$4.10" answer the
-// two different questions a person has about a run they were not watching.
+// two different questions a person has about a run they were not watching. WHEN it ran is not in here — it gets
+// a column of its own, because a date only scans when it lines up with the one above it.
 const runLine = (run: WorkflowRun): string =>
-    [
-        `${run.steps.filter((step) => step.state === `done`).length}/${run.steps.length} steps`,
-        run.steps.reduce((total, step) => total + (step.costUsd ?? 0), 0) > 0
-            ? `$${run.steps.reduce((total, step) => total + (step.costUsd ?? 0), 0).toFixed(2)}`
-            : ``,
-        timeAgo(run.startedAt),
-    ]
-        .filter((part) => part !== ``)
-        .join(` · `);
+    [`${doneSteps(run)}/${run.steps.length} steps`, spentOn(run) > 0 ? `$${spentOn(run).toFixed(2)}` : ``].filter((part) => part !== ``).join(` · `);
 
-const RUN_TONE: Record<WorkflowRun["state"], string> = {
-    running: `text-link`,
-    done: `text-success`,
-    failed: `text-danger`,
-    stopped: `text-subtle`,
-    overspent: `text-warning`,
-    error: `text-danger`,
-};
-
-const shapeOf = (workflow: Workflow): string => {
-    const roots = workflow.steps.filter((step) => step.needs.length === 0).length;
-    const widest = Math.max(1, ...workflow.steps.map((step) => workflow.steps.filter((other) => other.needs.includes(step.id)).length));
-    const count = `${workflow.steps.length} step${workflow.steps.length === 1 ? `` : `s`}`;
-    // A single step has no shape to describe — "1 step in a line" is a sentence about nothing.
-    if (workflow.steps.length === 1) {
-        return count;
-    }
-    return roots > 1 || widest > 1 ? `${count}, branching` : `${count} in a line`;
+/* One vocabulary for run state, everywhere it is shown, and it is a <StatusBadge> rather than a tinted word.
+ *
+ * The word alone was doing two jobs it could not do at once: on a card it had to survive sitting between a
+ * description and a Run button, and in the history it had to be scannable down a column. A pill is the app's
+ * answer to both, and using it means "failed" reads the same here as it does on every other surface.
+ *
+ * `stopped` IS NOT AN ERROR COLOUR — the user did that on purpose (the same rule the graph's step tones keep).
+ * `running` takes the brand tint rather than a status colour, because it is not an outcome, it is a live thing.
+ */
+const RUN_VARIANT: Record<WorkflowRun["state"], StatusVariant> = {
+    running: `primary`,
+    done: `success`,
+    failed: `danger`,
+    stopped: `neutral`,
+    overspent: `warning`,
+    error: `danger`,
 };
 </script>
 
@@ -220,88 +237,156 @@ const shapeOf = (workflow: Workflow): string => {
         </div>
 
         <div class="flex flex-col gap-6">
-            <!-- Runs in flight sit at the top, above the designs: while something is going, that is the page. -->
+            <!-- Runs in flight sit at the top, above the designs: while something is going, that is the page.
+                 It carries a PROGRESS BAR rather than a sentence, because the question asked of a live run is
+                 never "what is it" — the name answers that — it is "how far, and is it still moving". One
+                 segment per step in the workflow's own order, tinted by the same table the graph uses, so the
+                 strip here and the canvas behind it are the same reading at two sizes. -->
             <section v-if="live.length > 0">
                 <div class="mb-2 flex items-center gap-2 px-0.5">
                     <Icon name="spinner" class="animate-spin text-2xs text-link" />
                     <span :class="cmp.sectionLabel('text-link')">Running now</span>
                 </div>
-                <div class="divide-y divide-line overflow-hidden rounded-lg border border-link/40 bg-card">
+                <div class="flex flex-col gap-2">
                     <button
                         v-for="run in live"
                         :key="run.runId"
                         type="button"
-                        class="flex w-full cursor-pointer items-center gap-2 px-2.5 py-2 text-left hover:bg-canvas"
+                        class="ui-row-select flex w-full flex-col gap-2 rounded-lg border border-link/40 bg-card px-3 py-2.5 text-left"
                         @click="watchRun(run.runId)"
                     >
-                        <span class="truncate text-xs font-medium text-content">{{ run.workflow.name }}</span>
-                        <span class="flex-1 truncate text-2xs text-subtle">{{ runLine(run) }}</span>
-                        <Icon name="chevron-right" class="shrink-0 text-2xs text-subtle" />
+                        <span class="flex w-full items-center gap-2">
+                            <span class="min-w-0 truncate text-sm font-medium text-content">{{ run.workflow.name }}</span>
+                            <span class="ml-auto shrink-0 text-2xs tabular-nums text-subtle">{{ runLine(run) }} · {{ timeAgo(run.startedAt) }}</span>
+                            <Icon name="chevron-right" class="shrink-0 text-2xs text-subtle" />
+                        </span>
+                        <span class="flex w-full gap-0.5">
+                            <span
+                                v-for="step in run.steps"
+                                :key="step.stepId"
+                                class="h-1 flex-1 rounded-full"
+                                :class="[STEP_TONE[step.state].bar, step.state === `running` ? `animate-pulse` : ``]"
+                            ></span>
+                        </span>
+                        <!-- What this run was ASKED to do. The design is a shape; the sentence is the job, and it
+                             is the only thing that tells two runs of the same workflow apart. -->
+                        <span v-if="run.request" class="w-full truncate text-2xs text-muted">{{ run.request }}</span>
                     </button>
                 </div>
             </section>
 
-            <RowGroup v-if="workflows.length > 0" label="Your workflows" :count="workflows.length">
-                <div v-for="workflow in workflows" :key="workflow.id" class="flex flex-wrap items-center gap-x-2 gap-y-1 px-2.5 py-2">
-                    <span class="shrink-0 text-xs font-medium text-content">{{ workflow.name }}</span>
-                    <span class="shrink-0 text-2xs text-subtle">{{ shapeOf(workflow) }}</span>
-                    <span v-if="workflow.description" class="min-w-0 flex-1 truncate text-2xs text-subtle">{{ workflow.description }}</span>
-                    <span v-else class="flex-1"></span>
-                    <!-- The last run, as a state word and nothing else. The row is a design, not a run; clicking
-                         through is how you read one. -->
-                    <button
-                        v-if="workflow.runs[0]"
-                        type="button"
-                        class="shrink-0 cursor-pointer text-2xs hover:underline"
-                        :class="RUN_TONE[workflow.runs[0].state]"
-                        @click="watchRun(workflow.runs[0].runId)"
-                    >
-                        {{ workflow.runs[0].state }} {{ timeAgo(workflow.runs[0].startedAt) }}
-                    </button>
-                    <Button label="Run" size="small" :disabled="start.isPending.value" @click="runNow(workflow)">
-                        <template #icon><Icon name="play" /></template>
-                    </Button>
-                    <button type="button" :class="cmp.iconButton()" aria-label="Edit" @click="openSaved(workflow.id)"><Icon name="pencil" /></button>
-                    <button type="button" :class="cmp.iconButton('text-danger')" aria-label="Delete" @click="confirmRemoveId = workflow.id">
-                        <Icon name="trash" />
-                    </button>
-                </div>
-            </RowGroup>
-
-            <div v-else :class="cmp.emptyState('py-5')">No workflows yet — start from the shape below.</div>
-
-            <!-- The gallery, which is one card wide on purpose (templates.ts says why). So it is laid out as a
-                 full-width row rather than as a lonely cell in a grid of three: a card sized for a set it is
-                 not part of reads as a gallery that failed to load, and the summary it has to sell its SHAPE
-                 with is a sentence that wants the measure. -->
-            <section v-if="available.length > 0">
+            <section v-if="workflows.length > 0">
                 <div class="mb-2 flex items-center gap-2 px-0.5">
-                    <span :class="cmp.sectionLabel()">Start from</span>
-                    <span class="text-2xs text-subtle"
-                        >Opens the designer with a real workflow in it — nothing runs until you save and press Run.</span
-                    >
+                    <span :class="cmp.sectionLabel()">Your workflows</span>
+                    <span class="text-2xs font-medium text-subtle">{{ workflows.length }}</span>
                 </div>
-                <button
-                    v-for="template in available"
-                    :key="template.workflow.id"
-                    type="button"
-                    class="flex w-full cursor-pointer flex-col gap-1 rounded-lg border border-line bg-card p-3 text-left hover:border-line-strong"
-                    @click="fromTemplate(template)"
-                >
-                    <span class="flex items-center gap-2">
-                        <Icon :name="template.icon" class="shrink-0 text-xs text-subtle" />
-                        <span class="text-xs font-medium text-content">{{ template.workflow.name }}</span>
+                <div class="flex flex-col gap-3">
+                    <WorkflowCard
+                        v-for="workflow in workflows"
+                        :key="workflow.id"
+                        :workflow="workflow"
+                        :description="workflow.description"
+                        @open="openSaved(workflow.id)"
+                    >
+                        <!-- ONE LOUD CONTROL PER CARD. Run is what the page is for and is always there; edit and
+                             delete come up under the pointer, because reading the gallery is the common act and
+                             three buttons of equal weight is what made the old row unreadable. They stay put
+                             below `md`, where there is no hover to reveal them. -->
+                        <template #actions>
+                            <Button
+                                label="Run"
+                                size="small"
+                                v-tooltip.top="`Opens a session with this design picked — nothing runs until you send`"
+                                @click="runNow(workflow)"
+                            >
+                                <template #icon><Icon name="play" /></template>
+                            </Button>
+                            <button
+                                type="button"
+                                :class="cmp.iconButton('md:opacity-0 md:group-hover/card:opacity-100 md:focus-visible:opacity-100')"
+                                :aria-label="`Edit ${workflow.name}`"
+                                v-tooltip.top="`Edit`"
+                                @click="openSaved(workflow.id)"
+                            >
+                                <Icon name="pencil" />
+                            </button>
+                            <button
+                                type="button"
+                                :class="cmp.iconButton('hover:text-danger md:opacity-0 md:group-hover/card:opacity-100 md:focus-visible:opacity-100')"
+                                :aria-label="`Delete ${workflow.name}`"
+                                v-tooltip.top="`Delete`"
+                                @click="confirmRemoveId = workflow.id"
+                            >
+                                <Icon name="trash" />
+                            </button>
+                        </template>
+                        <!-- The last run, as a FACT in the meta line rather than as a fourth control competing
+                             with Run. The card is a design, not a run; clicking through is how you read one. -->
+                        <template #meta>
+                            <button
+                                v-if="workflow.runs[0]"
+                                type="button"
+                                class="flex cursor-pointer items-center gap-1.5 hover:underline"
+                                @click="watchRun(workflow.runs[0].runId)"
+                            >
+                                <span>Last run</span>
+                                <StatusBadge :variant="RUN_VARIANT[workflow.runs[0].state]" size="xs" :label="workflow.runs[0].state" />
+                                <span>{{ timeAgo(workflow.runs[0].startedAt) }}</span>
+                            </button>
+                            <span v-else>Never run</span>
+                        </template>
+                    </WorkflowCard>
+                </div>
+            </section>
+
+            <!-- THE GALLERY, drawn as the same card as a saved workflow and dashed. That is the whole fix: the
+                 old block was a bare box under the words "Start from", which named neither what it held nor what
+                 pressing it would do — and it sat under a list whose items looked nothing like it, so there was
+                 no reading in which the two were the same kind of thing.
+                 One card wide on purpose (templates.ts says why): a lone card sized for a grid of three reads as
+                 a gallery that failed to load. -->
+            <section>
+                <div class="mb-2 flex flex-wrap items-center gap-x-2 gap-y-1 px-0.5">
+                    <span :class="cmp.sectionLabel()">Start from a template</span>
+                    <span class="min-w-0 text-2xs text-subtle">
+                        {{
+                            workflows.length > 0
+                                ? `A ready-made design, opened in the designer — nothing is saved or spent until you say so.`
+                                : `Nothing saved yet. Open a ready-made design and edit it — nothing is saved or spent until you say so.`
+                        }}
+                    </span>
+                    <button type="button" :class="cmp.linkButton('ml-auto text-2xs text-muted hover:text-content')" @click="blank()">
+                        or start from blank
+                    </button>
+                </div>
+                <div class="flex flex-col gap-3">
+                    <WorkflowCard
+                        v-for="template in WORKFLOW_TEMPLATES"
+                        :key="template.workflow.id"
+                        :workflow="template.workflow"
+                        :description="template.summary"
+                        dashed
+                        @open="fromTemplate(template)"
+                    >
+                        <template #badges>
+                            <StatusBadge variant="neutral" size="xs">
+                                <Icon :name="template.icon" class="text-2xs" />
+                                Template
+                            </StatusBadge>
+                        </template>
+                        <template #actions>
+                            <Button label="Use this template" size="small" severity="secondary" :outlined="true" @click="fromTemplate(template)">
+                                <template #icon><Icon name="plus" /></template>
+                            </Button>
+                        </template>
                         <!-- You already have one of these. Said plainly, because a card that looks like "add a
                              new thing" while it is really "take the current version of a thing you forked" is
                              the difference between a save you meant and one you did not. -->
-                        <span v-if="savedAlready(template)" class="shrink-0 rounded-full bg-overlay px-1.5 py-px text-2xs text-muted">saved</span>
-                        <span class="ml-auto shrink-0 text-2xs text-subtle">{{ shapeOf(template.workflow) }}</span>
-                    </span>
-                    <span class="text-2xs leading-snug text-subtle">{{ template.summary }}</span>
-                    <span v-if="savedAlready(template)" class="text-2xs leading-snug text-muted">
-                        Your saved copy was forked from an older version of this. Opening it here shows the current one — saving replaces yours.
-                    </span>
-                </button>
+                        <template v-if="savedAlready(template)" #meta>
+                            <span class="text-warning">You have a copy — saving from here replaces it.</span>
+                        </template>
+                    </WorkflowCard>
+                </div>
             </section>
 
             <RowGroup v-if="past.length > 0" label="Earlier runs" :count="past.length">
@@ -309,12 +394,17 @@ const shapeOf = (workflow: Workflow): string => {
                     v-for="run in past"
                     :key="run.runId"
                     type="button"
-                    class="flex w-full cursor-pointer items-center gap-2 px-2.5 py-1.5 text-left hover:bg-canvas"
+                    class="ui-row-select flex w-full items-center gap-2 px-2.5 py-1.5 text-left"
                     @click="watchRun(run.runId)"
                 >
+                    <StatusBadge :variant="RUN_VARIANT[run.state]" size="xs" :label="run.state" class="w-20 shrink-0 justify-center" />
                     <span class="shrink-0 truncate text-xs text-content">{{ run.workflow.name }}</span>
-                    <span class="shrink-0 text-2xs font-medium" :class="RUN_TONE[run.state]">{{ run.state }}</span>
-                    <span class="min-w-0 flex-1 truncate text-2xs text-subtle">{{ runLine(run) }}</span>
+                    <!-- What it was asked to do, which is the only thing telling two runs of one design apart —
+                         and the first question anybody has of a row in a history. -->
+                    <span v-if="run.request" class="min-w-0 flex-1 truncate text-2xs text-muted">{{ run.request }}</span>
+                    <span v-else class="flex-1"></span>
+                    <span class="shrink-0 text-2xs tabular-nums text-subtle">{{ runLine(run) }}</span>
+                    <span class="w-16 shrink-0 text-right text-2xs tabular-nums text-subtle">{{ timeAgo(run.startedAt) }}</span>
                     <Icon name="chevron-right" class="shrink-0 text-2xs text-subtle" />
                 </button>
             </RowGroup>
