@@ -74,7 +74,7 @@ curl -fsSL https://github.com/actions/runner/releases/latest/download/actions-ru
 ./config.sh --url https://github.com/intentic/intentic \
             --token <registration-token> \
             --name worker-$N \
-            --labels self-hosted,linux,x64,intentic \
+            --labels intentic,desktop \
             --work /srv/actions/work-$N \
             --unattended --replace
 sudo ./svc.sh install && sudo ./svc.sh start
@@ -83,9 +83,27 @@ sudo ./svc.sh install && sudo ./svc.sh start
 Get `<registration-token>` from **Settings → Actions → Runners → New self-hosted runner** (it expires in an
 hour), or mint one from the API.
 
-Give at least two of the six the extra label `desktop` — `desktop-check`, `desktop-verify` and `release` are
-the jobs that need the Rust/Tauri/NSIS toolchain image, and pinning them to a subset keeps that ~3.75 GB image
-off every host.
+### The two labels, and why every runner gets both
+
+`runs-on` is an AND over labels, and the workflows use exactly two sets:
+
+| `runs-on` | Jobs |
+| --- | --- |
+| `[self-hosted, intentic]` | changes, preflight, ci-base, ci-desktop, e2e-hermetic, images, images-platform, verify ×3, nightly e2e, npm publish |
+| `[self-hosted, intentic, desktop]` | desktop-check, desktop-verify, release, nightly desktop-setup |
+
+Only `intentic` and `desktop` go in `--labels`. **`self-hosted`, `Linux` and `X64` are applied by the runner
+itself** — naming them again just adds lowercase duplicates that nothing matches on.
+
+`desktop` is a superset, so a runner carrying both labels can take any job in the file — which is why the
+command above gives every instance both. **On a single host that is strictly better than partitioning.** The
+usual reason to pin the desktop jobs to a subset is to keep the ~3.75 GB `ci-desktop` image off the other
+machines, and here there are no other machines: six runner processes share one Docker daemon, so the image is
+pulled once whatever the labels say. Partitioning would buy nothing and cost a real failure mode — `release`
+also needs `desktop`, so with only two such runners a `desktop-check` and a `desktop-verify` running together
+leave the release queued while four idle runners watch.
+
+Split the labels when the desktop jobs move to their own machine. Until then, both on all six.
 
 ### The shared cache and the same-filesystem rule
 
