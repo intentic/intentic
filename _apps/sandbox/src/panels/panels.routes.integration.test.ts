@@ -33,7 +33,9 @@ test("panels.list enumerates every repo with its operator panel + runtime status
         // The zone comes from the public URL, the hostname's sandbox id from the connect token
         // (sha256("token")[0:12] = 3c469e9d6c58) — both are needed for a previewUrl to be advertised.
         config: { ...testConfig, connectToken: "token", sandbox: { ...testConfig.sandbox, publicUrl: "https://sandbox-abc.example.com" } },
-        // "app" is running on a dead port (probe fails ⇒ healthy false); "desired-state" isn't running.
+        // "app" is running on a dead port (nothing answers it in either scheme ⇒ no servers ⇒ healthy false);
+        // "desired-state" isn't running. Neither repo is a temp dir any real listener was launched from, so the
+        // procfs attribution finds nothing for them either.
         processes: fakeProcesses({ app: 1 }),
     });
     const facts = { deployConfig: false, desiredState: false, directoryUi: false, monorepo: false, vitest: false, userStories: false };
@@ -44,6 +46,7 @@ test("panels.list enumerates every repo with its operator panel + runtime status
                 hasPanel: true,
                 running: true,
                 healthy: false,
+                servers: [],
                 port: 1,
                 role: "app",
                 ...facts,
@@ -54,6 +57,7 @@ test("panels.list enumerates every repo with its operator panel + runtime status
                 hasPanel: false,
                 running: false,
                 healthy: false,
+                servers: [],
                 role: "desired-state",
                 ...facts,
                 previewUrl: "https://preview-desired-state-3c469e9d6c58.example.com",
@@ -80,6 +84,7 @@ test("panels.list reports the content facts extensions detect on", async () => {
                 hasPanel: false,
                 running: false,
                 healthy: false,
+                servers: [],
                 deployConfig: true,
                 desiredState: true,
                 directoryUi: true,
@@ -103,6 +108,7 @@ test("panels.list advertises no previewUrl without a connect token (loopback —
                 hasPanel: true,
                 running: false,
                 healthy: false,
+                servers: [],
                 role: "app",
                 deployConfig: false,
                 desiredState: false,

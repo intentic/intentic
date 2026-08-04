@@ -24,6 +24,7 @@ const repo = (repo: string, facts: Partial<Omit<PanelSummary, `repo`>>): PanelSu
     hasPanel: false,
     running: false,
     healthy: false,
+    servers: [],
     deployConfig: false,
     desiredState: false,
     directoryUi: false,

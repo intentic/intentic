@@ -7,15 +7,19 @@ import { bindHost } from "./host";
 import { aimOf, useTargets } from "./useTargets";
 
 /* THE DISTINCTION THIS SUITE EXISTS FOR: `running` means the daemon spawned the dev server's tmux session,
- * `healthy` means its port answers. The command behind a start installs dependencies first, so the gap between
+ * `servers` is what actually answered. The command behind a start installs dependencies first, so the gap between
  * them is routinely minutes. A surface that treats `running` as "serving" hides its Start button, reports
- * success, and points a fan-out of agent sessions at a socket nobody is listening on. */
+ * success, and points a fan-out of agent sessions at a socket nobody is listening on.
+ *
+ * And the second distinction, which the first one's fix exposed: a repo serving THREE apps has no single address,
+ * so the repo answers for no group until each says which app it walks. */
 
 // Every field the contract requires, so the parse below is a real check rather than a shape this file invented.
 const panel = (over: Partial<PanelSummary> & { repo: string }): PanelSummary => ({
     hasPanel: true,
     running: false,
     healthy: false,
+    servers: [],
     deployConfig: false,
     desiredState: false,
     directoryUi: false,
@@ -24,6 +28,14 @@ const panel = (over: Partial<PanelSummary> & { repo: string }): PanelSummary => 
     userStories: true,
     ...over,
 });
+
+// The intentic repo as the daemon reports it: one `pnpm dev`, a turbo fan-out, three pinned ports and two
+// schemes. The case that made the panel spin "Starting…" forever.
+const MONOREPO = [
+    { url: `https://localhost:47145`, dir: `_apps/web` },
+    { url: `https://localhost:6480`, dir: `_apps/api` },
+    { url: `http://localhost:4321`, dir: `_apps/site` },
+];
 
 const hostFor = (panels: readonly PanelSummary[]): IntenticApi =>
     ({
@@ -76,8 +88,31 @@ describe(`useTargets`, () => {
         expect(localUrl(`app`)).toBeUndefined();
     });
 
-    it(`offers the loopback address only once the port actually answers`, async () => {
-        const { stateOf, localUrl } = await read([panel({ repo: `app`, running: true, healthy: true, port: 5173 })]);
+    it(`offers the loopback address only once something actually answers`, async () => {
+        const { stateOf, localUrl } = await read([
+            panel({ repo: `app`, running: true, healthy: true, port: 5173, servers: [{ url: `http://localhost:5173` }] }),
+        ]);
+
+        expect(stateOf(`app`)).toBe(`ready`);
+        expect(localUrl(`app`)).toBe(`http://localhost:5173`);
+    });
+
+    /* THE PORT THE DAEMON ASSIGNED IS NOT THE PORT THE APP BOUND. A repo that pins its own ports — a committed
+     * dev cert's origin, a CORS allowlist, an OAuth client's authorized redirect — ignores the injected PORT, so
+     * the address comes from what the daemon FOUND listening, scheme and all. */
+    it(`takes the address from what is serving, not from the port the daemon handed out`, async () => {
+        const { stateOf, localUrl } = await read([
+            panel({ repo: `app`, running: true, healthy: true, port: 39481, servers: [{ url: `https://localhost:47145`, dir: `_apps/web` }] }),
+        ]);
+
+        expect(stateOf(`app`)).toBe(`ready`);
+        expect(localUrl(`app`)).toBe(`https://localhost:47145`);
+    });
+
+    // A dev server someone started in their own terminal is exactly as walkable, and offering Start for it would
+    // collide on the very ports it pinned.
+    it(`counts a dev server the daemon never spawned as ready`, async () => {
+        const { stateOf, localUrl } = await read([panel({ repo: `app`, running: false, servers: [{ url: `http://localhost:5173` }] })]);
 
         expect(stateOf(`app`)).toBe(`ready`);
         expect(localUrl(`app`)).toBe(`http://localhost:5173`);
@@ -91,6 +126,38 @@ describe(`useTargets`, () => {
         // Still booting behind the tunnel is the same 502, and the same non-answer.
         const starting = await read([panel({ repo: `app`, running: true, healthy: false, previewUrl: `https://preview-app-abc.example.dev` })]);
         expect(starting.localUrl(`app`)).toBeUndefined();
+    });
+
+    /* THE CASE THAT BLOCKED A REAL RUN. Three apps behind one `pnpm dev`: the repo is plainly up, and there is
+     * still no address to give a group until it says which app its stories belong to. */
+    it(`gives a repo serving several apps no repo-level address, and lets each group pick one`, async () => {
+        const targets = await read([panel({ repo: `intentic`, running: true, healthy: true, servers: MONOREPO })]);
+
+        expect(targets.stateOf(`intentic`)).toBe(`ready`);
+        expect(targets.serversOf(`intentic`)).toHaveLength(3);
+        // No guess at which of the three a group meant — the gate holds until someone says.
+        expect(targets.localUrl(`intentic`)).toBeUndefined();
+        expect(targets.addressOf(`intentic`, `01-arrive`)).toBeUndefined();
+
+        targets.aimAt(`intentic`, `01-arrive`, `http://localhost:4321`);
+        targets.aimAt(`intentic`, `02-setup`, `https://localhost:47145`);
+        expect(targets.addressOf(`intentic`, `01-arrive`)).toBe(`http://localhost:4321`);
+        expect(targets.addressOf(`intentic`, `02-setup`)).toBe(`https://localhost:47145`);
+    });
+
+    // Picked once, not once per run: the address rides the run manifests back as `remembered`, and a loopback
+    // memory that is still one of the repo's live servers is a pick, not the stale port the gate guards against.
+    it(`keeps a group aimed at the app it was last run against, across a restart of the dev server`, async () => {
+        const targets = await read([panel({ repo: `intentic`, running: true, healthy: true, servers: MONOREPO })], {
+            "intentic/01-arrive": `http://localhost:4321`,
+        });
+
+        expect(targets.addressOf(`intentic`, `01-arrive`)).toBe(`http://localhost:4321`);
+        // And a memory whose port is no longer among them is a dead socket, not a pick.
+        const moved = await read([panel({ repo: `intentic`, running: true, healthy: true, servers: [MONOREPO[0]!, MONOREPO[1]!] })], {
+            "intentic/01-arrive": `http://localhost:4321`,
+        });
+        expect(moved.addressOf(`intentic`, `01-arrive`)).toBeUndefined();
     });
 
     it(`reports a repo the daemon runs nothing for as having no dev server at all`, async () => {
@@ -112,7 +179,7 @@ describe(`useTargets`, () => {
      * is shared and the addresses are not — which is what the list draws as one chip on the repo's heading and a
      * second one on the group's row. */
     it(`aims each of a repo's groups separately while they share its one dev server`, async () => {
-        const targets = await read([panel({ repo: `site`, running: true, healthy: true, port: 5173 })], {
+        const targets = await read([panel({ repo: `site`, running: true, healthy: true, servers: [{ url: `http://localhost:5173` }] })], {
             "site/marketing": `https://staging.example.dev`,
         });
 
@@ -123,7 +190,7 @@ describe(`useTargets`, () => {
     });
 
     it(`hands a group back to the dev server when its typed address is cleared`, async () => {
-        const targets = await read([panel({ repo: `app`, running: true, healthy: true, port: 5173 })]);
+        const targets = await read([panel({ repo: `app`, running: true, healthy: true, servers: [{ url: `http://localhost:5173` }] })]);
 
         targets.aimAt(`app`, ``, `https://preview.example.dev`);
         expect(targets.addressOf(`app`, ``)).toBe(`https://preview.example.dev`);
@@ -141,45 +208,63 @@ describe(`useTargets`, () => {
  * to spend an agent session per story. Tested against the pure function rather than through the query, because
  * every interesting case is a combination of four inputs and none of them is about HTTP. */
 describe(`aimOf`, () => {
+    const ONE = [`http://localhost:5173`];
+    const THREE = MONOREPO.map((server) => server.url);
+
     it(`sends a group at its repo's dev server, which is what almost every group means`, () => {
-        expect(aimOf({ typed: undefined, remembered: undefined, state: `ready`, localUrl: `http://localhost:5173` })).toBe(`http://localhost:5173`);
+        expect(aimOf({ typed: undefined, remembered: undefined, state: `ready`, servers: ONE })).toBe(`http://localhost:5173`);
     });
 
     it(`offers nothing while that server is stopped or still starting — the gate the run waits on`, () => {
-        expect(aimOf({ typed: undefined, remembered: undefined, state: `stopped`, localUrl: undefined })).toBeUndefined();
-        expect(aimOf({ typed: undefined, remembered: undefined, state: `starting`, localUrl: undefined })).toBeUndefined();
+        expect(aimOf({ typed: undefined, remembered: undefined, state: `stopped`, servers: [] })).toBeUndefined();
+        expect(aimOf({ typed: undefined, remembered: undefined, state: `starting`, servers: [] })).toBeUndefined();
     });
 
-    /* THE BUG THIS RULE EXISTS TO CLOSE. The old derivation compared the remembered address against `localUrl`,
-     * which is undefined precisely when the server is down — so a remembered `http://localhost:5173` "differed
-     * from" nothing, was read as a deliberate elsewhere, and let a fan-out be aimed at a dead port. */
+    // Three answering apps are three answers, and the rule refuses to invent one. The cost of guessing is a
+    // fan-out of agent sessions walking marketing stories through the app's sign-in screen.
+    it(`refuses to choose for a repo serving several apps, however plainly up it is`, () => {
+        expect(aimOf({ typed: undefined, remembered: undefined, state: `ready`, servers: THREE })).toBeUndefined();
+    });
+
+    /* THE BUG THIS RULE EXISTS TO CLOSE. The old derivation compared the remembered address against the repo's
+     * single address, which is undefined precisely when the server is down — so a remembered
+     * `http://localhost:5173` "differed from" nothing, was read as a deliberate elsewhere, and let a fan-out be
+     * aimed at a dead port. */
     it(`does not resurrect a remembered loopback address once its dev server has stopped`, () => {
-        expect(aimOf({ typed: undefined, remembered: `http://localhost:5173`, state: `stopped`, localUrl: undefined })).toBeUndefined();
-        expect(aimOf({ typed: undefined, remembered: `http://127.0.0.1:5173`, state: `starting`, localUrl: undefined })).toBeUndefined();
+        expect(aimOf({ typed: undefined, remembered: `http://localhost:5173`, state: `stopped`, servers: [] })).toBeUndefined();
+        expect(aimOf({ typed: undefined, remembered: `http://127.0.0.1:5173`, state: `starting`, servers: [] })).toBeUndefined();
+    });
+
+    // …but a loopback memory that is STILL being served names one of this repo's apps, which is a pick worth
+    // keeping. Without this, a monorepo's groups would have to be re-aimed every single run.
+    it(`keeps a remembered loopback address while it is still one of the repo's servers`, () => {
+        expect(aimOf({ typed: undefined, remembered: `http://localhost:4321`, state: `ready`, servers: THREE })).toBe(`http://localhost:4321`);
+        // The same memory once that app is no longer among them is the dead port again.
+        expect(aimOf({ typed: undefined, remembered: `http://localhost:4321`, state: `ready`, servers: ONE })).toBe(`http://localhost:5173`);
     });
 
     it(`keeps aiming a group at the elsewhere it was last run against, so it is typed once and not once per run`, () => {
         // The marketing-site case: this group is a second app, and the repo's own dev server is not it.
-        expect(aimOf({ typed: undefined, remembered: `https://staging.example.dev`, state: `ready`, localUrl: `http://localhost:5173` })).toBe(
+        expect(aimOf({ typed: undefined, remembered: `https://staging.example.dev`, state: `ready`, servers: ONE })).toBe(
             `https://staging.example.dev`,
         );
         // And it is still the answer while that repo's dev server is down — nothing about this group needs it.
-        expect(aimOf({ typed: undefined, remembered: `https://staging.example.dev`, state: `stopped`, localUrl: undefined })).toBe(
+        expect(aimOf({ typed: undefined, remembered: `https://staging.example.dev`, state: `stopped`, servers: [] })).toBe(
             `https://staging.example.dev`,
         );
     });
 
     it(`falls back to the remembered address for a repo the daemon runs nothing for`, () => {
-        expect(aimOf({ typed: undefined, remembered: `http://localhost:4321`, state: `none`, localUrl: undefined })).toBe(`http://localhost:4321`);
+        expect(aimOf({ typed: undefined, remembered: `http://localhost:4321`, state: `none`, servers: [] })).toBe(`http://localhost:4321`);
         // With no dev server and nothing remembered there is genuinely no answer, and the run says so.
-        expect(aimOf({ typed: undefined, remembered: undefined, state: `none`, localUrl: undefined })).toBeUndefined();
+        expect(aimOf({ typed: undefined, remembered: undefined, state: `none`, servers: [] })).toBeUndefined();
     });
 
     it(`lets a typed address win over both, and a typed blank mean blank`, () => {
-        expect(
-            aimOf({ typed: `  https://preview.example.dev  `, remembered: `https://old.example.dev`, state: `ready`, localUrl: `http://x:1` }),
-        ).toBe(`https://preview.example.dev`);
+        expect(aimOf({ typed: `  https://preview.example.dev  `, remembered: `https://old.example.dev`, state: `ready`, servers: ONE })).toBe(
+            `https://preview.example.dev`,
+        );
         // An emptied field is "not there", not "surprise me" — it must not snap back to a server or a memory.
-        expect(aimOf({ typed: ``, remembered: `https://staging.example.dev`, state: `ready`, localUrl: `http://localhost:5173` })).toBeUndefined();
+        expect(aimOf({ typed: ``, remembered: `https://staging.example.dev`, state: `ready`, servers: ONE })).toBeUndefined();
     });
 });

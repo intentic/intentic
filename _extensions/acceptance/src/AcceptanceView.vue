@@ -175,18 +175,22 @@ const canRun = computed(() => chosen.value.length > 0 && blockedGroups.value.len
 /* WHAT IS ACTUALLY WRONG, counted in problems rather than in blocked groups. A monorepo's six groups blocked by
  * one stopped dev server are ONE problem with one remedy, and reporting "(+5 more)" for them reads as six things
  * to go and fix. So a stopped or starting server keys on its REPO (the daemon runs one, and Start is per repo)
- * and a missing address keys on its GROUP (each is typed separately). Named for the reason too: "is still
+ * and a missing address keys on its GROUP (each is aimed separately). Named for the reason too: "is still
  * starting" and "needs an address" call for different moves, and a note that gave only a name made the user work
- * out which of the two it was. */
+ * out which of the two it was.
+ *
+ * THE SERVER'S STATE IS ONLY THE STORY WHEN IT IS THE PROBLEM. A repo that is serving — several apps, none of
+ * them yet chosen for this group — is blocked on an address, and saying "isn't running" about a dev server the
+ * user is watching output from is how a surface loses their trust in everything else it says. */
 const problems = computed<readonly string[]>(() => {
     const found = new Map<string, string>();
     for (const story of blockedGroups.value) {
         const state = targets.stateOf(story.repo);
-        if (state === `none`) {
-            found.set(targetKeyOf(story), `${targetKeyOf(story)} needs an address`);
+        if (state === `starting` || state === `stopped`) {
+            found.set(story.repo, `${story.repo}'s dev server ${state === `starting` ? `is still starting` : `isn't running`}`);
             continue;
         }
-        found.set(story.repo, `${story.repo}'s dev server ${state === `starting` ? `is still starting` : `isn't running`}`);
+        found.set(targetKeyOf(story), `${targetKeyOf(story)} needs an address`);
     }
     return [...found.values()];
 });
@@ -197,10 +201,12 @@ const blockedNote = computed<string | undefined>(() => {
 });
 
 /* THE REPOS A RUN IN SCOPE IS WAITING ON — the same gate, projected onto repositories so that the heading
- * carrying the remedy is the thing that lights up. Repos with no dev server at all are excluded: those are
- * blocked on an ADDRESS, which is the group chip's business, and Start would be no answer there. */
+ * carrying the remedy is the thing that lights up. Only the repos whose SERVER is the remedy: a repo with no dev
+ * server, and a repo already serving an app this group hasn't been pointed at, are both blocked on an ADDRESS —
+ * the group chip's business — and tinting a heading whose only control is Start would aim the user at the wrong
+ * row. */
 const stalled = computed<ReadonlySet<string>>(
-    () => new Set(blockedGroups.value.filter((story) => targets.stateOf(story.repo) !== `none`).map((story) => story.repo)),
+    () => new Set(blockedGroups.value.filter((story) => [`starting`, `stopped`].includes(targets.stateOf(story.repo))).map((story) => story.repo)),
 );
 
 const setSelected = (group: readonly string[], on: boolean): void => {

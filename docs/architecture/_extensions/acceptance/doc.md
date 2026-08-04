@@ -19,6 +19,8 @@ A story is one markdown file in a repository's `docs/user-stories/`, and a subdi
 
 Everything happens in that one list. A story is written by expanding its row; a run is composed by ticking rows and pressing Run in the page header, with nothing ticked meaning every story. Which model those sessions spend is a chip beside that button, and the chip opens the shell's own model picker (`api.models`) rather than a control of this package's own — a run fans out one frontier session per story, so the list it offers has to know which providers this sandbox can actually reach. Whether each repository's dev server is up — the precondition a run is refused without, since a story pointed at nothing costs an agent session to discover the app is down — is stated on the repository's own heading, beside the stories it gates.
 
+What "up" means is the daemon's answer, not a guess from this package: `/panels` reports the dev servers it can attribute to the repository, each already probed for whether it speaks http or https. A repository serving exactly one of them is that address, and every group under it aims there without being asked. A repository serving several — the ordinary shape of a monorepo whose one `dev` script fans a turbo run out across its packages — has no repository-level address to inherit, so its heading shows the count and each group says which of them its stories belong to. That choice is refused rather than guessed, because guessing costs a fan-out of agent sessions walking marketing stories through the app's sign-in screen; and it rides the run manifests back, so it is a question answered once rather than once per run.
+
 ```dag
 { "title": "Its neighbours",
   "direction": "LR",

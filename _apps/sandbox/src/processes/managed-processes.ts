@@ -39,7 +39,6 @@ export interface ProcessRunner {
     readonly kill: (session: string) => void;
     readonly states: () => Promise<Map<string, string>>;
 }
-export type HealthProbe = (port: number) => Promise<boolean>;
 
 // How often the manager sweeps pane liveness while anything is tracked. The `-d` tmux client exits the moment
 // the session is created, so there is no child "exit" event — session state is only observable by asking tmux.
@@ -135,17 +134,6 @@ const defaultRunner: ProcessRunner = {
         }
         return states;
     },
-};
-
-// Healthy means the panel answered at all (even a 404) — only a refused/failed connection is unhealthy, since a
-// watch server is "up" before it has routes.
-export const probePort: HealthProbe = async (port) => {
-    try {
-        await fetch(`http://127.0.0.1:${port}/`);
-        return true;
-    } catch {
-        return false;
-    }
 };
 
 // Sessions outlive a daemon restart (the tmux server is container-scoped, not daemon-scoped) — kill leftovers

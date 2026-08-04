@@ -1,5 +1,4 @@
-import http from "node:http";
-import https from "node:https";
+import { detectScheme, type PortScheme } from "./port-probe.js";
 import type { LoopbackHost } from "./port-scan.js";
 
 // The forward table behind the port-<slot>-<sandboxId>.<zone> hostnames: a fixed pool of slots mapped to
@@ -10,8 +9,6 @@ import type { LoopbackHost } from "./port-scan.js";
 //
 // The slot NAMES are injected rather than imported: they are derived from the connect token
 // (portSlotsFromToken), so this table has no opinion about them beyond their count and their order.
-
-export type PortScheme = "http" | "https";
 
 export interface PortTarget {
     readonly port: number;
@@ -30,35 +27,9 @@ export interface PortForwards {
     readonly targetOf: (slot: string) => PortTarget | undefined;
 }
 
-// Whether `scheme` answers on the port at all (any HTTP status counts, like the panel health probe). Dev certs
-// are self-signed, so TLS verification is off — the dial never leaves the sandbox's own netns.
-const answers = (scheme: PortScheme, port: number, host: LoopbackHost): Promise<boolean> =>
-    new Promise((resolve) => {
-        const request = (scheme === "https" ? https : http).request(
-            { host, port, method: "GET", path: "/", timeout: 1500, rejectUnauthorized: false },
-            (response) => {
-                response.resume();
-                resolve(true);
-            },
-        );
-        request.on("timeout", () => request.destroy());
-        request.on("error", () => resolve(false));
-        request.end();
-    });
-
-// A TLS upstream rejects a plaintext request at the socket and vice versa, so the two probes discriminate
-// cleanly (the vite in a scaffolded app serves https on its random port). Neither answering — a server still
-// booting, or WebSocket-only — defaults to http; the proxy 502s until the server responds anyway.
-const detectScheme = async (port: number, host: LoopbackHost): Promise<PortScheme> => {
-    if (await answers("http", port, host)) {
-        return "http";
-    }
-    return (await answers("https", port, host)) ? "https" : "http";
-};
-
 export const createPortForwards = (
     slots: readonly string[],
-    probe: (port: number, host: LoopbackHost) => Promise<PortScheme> = detectScheme,
+    probe: (port: number, host: LoopbackHost) => Promise<PortScheme | undefined> = detectScheme,
 ): PortForwards => {
     const assigned = new Map<string, { port: number; host: LoopbackHost; scheme: PortScheme; lastUsedAt: number }>();
 
@@ -86,7 +57,9 @@ export const createPortForwards = (
                 scheme: assigned.get(slot)?.port === port ? assigned.get(slot)!.scheme : "http",
                 lastUsedAt: Date.now(),
             });
-            const scheme = await probe(port, host);
+            // Nothing answering — a server still booting, or WebSocket-only — forwards as http; the proxy 502s
+            // until the server responds anyway, and the next forward re-probes.
+            const scheme = (await probe(port, host)) ?? "http";
             const entry = assigned.get(slot);
             // Only apply if the slot still maps this port — an eviction/re-forward may have won meanwhile.
             if (entry?.port === port) {

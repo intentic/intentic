@@ -14,7 +14,11 @@ import type { useTargets } from "./useTargets";
  * What is left is the exception, stated only when it is true: a group aimed somewhere else reads its address, and
  * a repo the daemon runs nothing for reads an invitation to give it one. Aiming a group elsewhere costs a click on
  * an affordance that appears under the pointer — an exception should cost a gesture, not a permanent line of chrome
- * on every group in the workspace. */
+ * on every group in the workspace.
+ *
+ * A REPO SERVING SEVERAL APPS MAKES EVERY GROUP THE EXCEPTION, which is the point: there is no repo-level address
+ * to inherit, so each group states which app it walks. Those addresses arrive as CHOICES rather than as something
+ * to retype from the terminal — the daemon already knows the ports and which package bound each. */
 
 const { repo, group, targets } = defineProps<{
     repo: string;
@@ -64,6 +68,30 @@ const stated = (): boolean => targets.isElsewhere(repo, group) || targets.stateO
     <Popover ref="popover">
         <div class="flex w-80 flex-col gap-2 p-1">
             <p class="text-sm font-medium text-content">Where does this group's app answer?</p>
+            <!-- The repo's own apps, offered by name. Only when there are several: a repo serving one thing has
+                 already handed that address to this group, and a list of one choice is a question with an
+                 obvious answer. -->
+            <template v-if="targets.serversOf(repo).length > 1">
+                <button
+                    v-for="server in targets.serversOf(repo)"
+                    :key="server.url"
+                    type="button"
+                    :class="[
+                        `flex items-baseline gap-2 rounded px-2 py-1 text-left hover:bg-subtle`,
+                        targets.addressOf(repo, group) === server.url ? `bg-subtle` : ``,
+                    ]"
+                    @click="targets.aimAt(repo, group, server.url)"
+                >
+                    <Icon
+                        :name="targets.addressOf(repo, group) === server.url ? `check` : `arrow-right`"
+                        class="shrink-0 translate-y-[1px]"
+                        :class="targets.addressOf(repo, group) === server.url ? `text-success` : `text-subtle`"
+                    />
+                    <span class="font-mono text-2xs text-content">{{ server.url }}</span>
+                    <span v-if="server.dir" class="ml-auto font-mono text-2xs text-subtle">{{ server.dir }}</span>
+                </button>
+                <p class="text-2xs text-subtle">…or an address of your own:</p>
+            </template>
             <!-- Typed straight into the aiming state, so the chip, the gate and the run's manifest all read one
                  value. Clearing it is meaningful: on a repo with a dev server it hands the group back, and on one
                  without it leaves the group with nowhere to point, which the header then says out loud. -->
@@ -76,6 +104,11 @@ const stated = (): boolean => targets.isElsewhere(repo, group) || targets.stateO
             <p v-if="targets.stateOf(repo) === `none`" class="text-2xs text-subtle">
                 The daemon runs no dev server for <span class="font-mono">{{ repo }}</span> — start the app yourself in a terminal, or point at a
                 deployment. The agents reach it from inside the sandbox, so a localhost address is the direct route.
+            </p>
+            <!-- With several apps there is no "leave it to the repo" to offer: the choice above IS the answer,
+                 and the run remembers it so this is asked once rather than once per run. -->
+            <p v-else-if="targets.serversOf(repo).length > 1" class="text-2xs text-subtle">
+                Pick the app these stories belong to. The next run against this group starts here, so this is a question you answer once.
             </p>
             <template v-else>
                 <p class="text-2xs text-subtle">

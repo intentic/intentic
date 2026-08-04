@@ -7,8 +7,9 @@ import { implement, ORPCError } from "@orpc/server";
 import { REPO_ROLES, type RepoRole } from "@intentic/scaffold";
 import type { Services } from "../composition.js";
 import type { OrpcContext } from "../context.js";
-import { discoverPanels, panelKey, panelRunDir } from "./panels.js";
-import { probePort } from "../processes/managed-processes.js";
+import { discoverPanels, listenerDir, listenersByRepo, oneServerPerDir, panelKey, panelRunDir } from "./panels.js";
+import { detectScheme } from "../ports/port-probe.js";
+import { type ListeningPort, scanListeningPorts } from "../ports/port-scan.js";
 
 // The per-repository panel routes. `list` enumerates every repo with its runtime status + the content FACTS
 // the web app's extensions detect on (role, marker files — evidence, not identity); `start`/`stop` drive the
@@ -25,6 +26,39 @@ const USER_STORIES_DIR = join("docs", "user-stories");
 
 export type PanelsRoutesDeps = Pick<Services, "config" | "ensurePreviewRoutes" | "panelToken" | "processes" | "workspace">;
 
+// The repo's answering dev servers, each probed for the scheme it speaks and named by the package that bound it.
+// The panel's ASSIGNED port is probed alongside the attributed ones even when the scan didn't claim it: a dev
+// server that honors PORT is the ordinary case, and a cwd procfs wouldn't give up must not turn a serving app
+// into a dead one. Ordered by port so the list is stable across polls.
+const detectServers = async (
+    workspaceRoot: string,
+    repo: string,
+    listeners: readonly ListeningPort[],
+    assigned: number | undefined,
+): Promise<{ url: string; dir?: string }[]> => {
+    const candidates =
+        assigned === undefined || listeners.some((listener) => listener.port === assigned)
+            ? listeners
+            : [...listeners, { port: assigned, host: "127.0.0.1" as const, forwardable: true }];
+    const probed = await Promise.all(
+        candidates
+            .toSorted((a, b) => a.port - b.port)
+            .map(async (listener) => {
+                const scheme = await detectScheme(listener.port, listener.host);
+                if (scheme === undefined) {
+                    return undefined;
+                }
+                // `localhost`, not the address the daemon dialed: the dev cert is issued for that name and an
+                // app's CORS allowlist and auth origin are written with it, so handing out 127.0.0.1 would fail
+                // the very checks a story walks through. The family the scan recorded is for OUR dial only.
+                const url = `${scheme}://localhost:${listener.port}`;
+                const dir = listenerDir(listener, workspaceRoot, repo);
+                return dir === undefined ? { url } : { url, dir };
+            }),
+    );
+    return oneServerPerDir(probed.filter((server) => server !== undefined));
+};
+
 export const createPanelsRoutes = (services: PanelsRoutesDeps) => {
     const i = implement(panelsContract).$context<OrpcContext>();
     const zone = services.config.zone !== "" ? services.config.zone : zoneFromUrl(services.config.sandbox.publicUrl);
@@ -33,19 +67,32 @@ export const createPanelsRoutes = (services: PanelsRoutesDeps) => {
     return {
         list: i.list.handler(async () => {
             const discovered = await discoverPanels(services.workspace);
+            // ONE procfs walk for the whole list: the scan is a per-sandbox fact, and asking it per repo would
+            // re-read every process's fd table once per repository.
+            const attributed = listenersByRepo(
+                await scanListeningPorts(),
+                services.workspace.root,
+                discovered.map(({ repo }) => repo),
+            );
             const panels = await Promise.all(
                 discovered.map(async ({ repo, hasPanel }) => {
                     const key = panelKey(repo);
                     const port = key !== undefined ? services.processes.portOf(key) : undefined;
                     const url = key !== undefined ? previewUrl(key, zone, sandboxId) : undefined;
                     const dir = join(services.workspace.root, repo);
+                    const servers = await detectServers(services.workspace.root, repo, attributed.get(repo) ?? [], port);
                     // Content facts, computed in one pass so the browser never N+1-scans /work: each extension
                     // decides its own presence from this evidence (see the web app's extensions/extension.ts).
                     const summary = {
                         repo,
                         hasPanel,
                         running: port !== undefined,
-                        healthy: port !== undefined && (await probePort(port)),
+                        // Something the repo owns is answering — which a repo whose dev server someone started
+                        // in their own terminal also satisfies, deliberately: the acceptance run only needs an
+                        // address that responds, and offering Start for an app already serving would collide on
+                        // the very ports it pinned.
+                        healthy: servers.length > 0,
+                        servers,
                         deployConfig: existsSync(join(dir, CONFIG_FILE)),
                         desiredState: existsSync(join(dir, ARTIFACT_FILE)),
                         directoryUi: existsSync(join(dir, ".intentic", "ui", "index.html")),

@@ -3802,10 +3802,19 @@ export const PanelSummarySchema = z.object({
     // Whether the repo ships a runnable dev server (a package.json `dev` script at operator/ or the root).
     hasPanel: z.boolean(),
     running: z.boolean(),
-    // A plain probe of the running panel's port; false when not running.
+    // Whether anything this repo owns is answering — see `servers`. Not the same question as `running`: a panel
+    // whose install is still going is running and not yet healthy, and a dev server someone started in their own
+    // terminal is healthy without the daemon running it.
     healthy: z.boolean(),
-    // The dev server's OS-assigned port; absent when not running.
+    // The dev server's OS-assigned port; absent when not running. What the daemon TOLD the repo to bind (the
+    // preview proxy forwards it) — `servers` is what the repo actually bound, which for a repo that pins its own
+    // ports is a different number entirely.
     port: z.number().optional(),
+    // Every dev server the repo is really serving, discovered from the sandbox's listening sockets and probed for
+    // the scheme each speaks (a Vite on a committed dev cert serves https). One entry for the ordinary repo; a
+    // monorepo whose `dev` fans out across packages has one per app, which is why `dir` is here — `_apps/web` vs
+    // `_apps/site` is the only thing that tells them apart. Empty when nothing answers.
+    servers: z.array(z.object({ url: z.string(), dir: z.string().optional() })),
     // https://preview-<repo>-<sandboxId>.<zone>; absent when the sandbox has no zone or connect token (loopback/tests).
     previewUrl: z.string().optional(),
     // The workspace role this repo dir occupies (the three fixed dirs); absent for extra clones.

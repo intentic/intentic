@@ -6,7 +6,7 @@ import { implement, ORPCError } from "@orpc/server";
 import type { Services } from "../composition.js";
 import type { OrpcContext } from "../context.js";
 import { repoGitDir } from "../history/history.js";
-import { probePort } from "../processes/managed-processes.js";
+import { detectScheme } from "../ports/port-probe.js";
 import { shellQuote } from "../terminal/terminal-run.js";
 import { appPanelKey, buildAppSpec, discoverApps } from "./app-previews.js";
 import { classifyWorkspace } from "./classify.js";
@@ -303,7 +303,10 @@ export const createWorkspaceRoutes = (services: Services) => {
             const apps = await Promise.all(
                 discoverApps(repoDir, manifest).map(async ({ app, kind }) => {
                     const port = services.processes.portOf(appPanelKey(repo, app));
-                    const healthy = port !== undefined && (await probePort(port));
+                    // An app preview's port IS the one the daemon assigned (buildAppSpec mirrors it into the
+                    // app's own var), so the probe only has to settle which scheme answers on it — a Vite
+                    // serving https on a dev cert is up, and used to read as down.
+                    const healthy = port !== undefined && (await detectScheme(port)) !== undefined;
                     const url = previewUrl(appPanelKey(repo, app), zone, sandboxId);
                     // `kind` and `previewUrl` are both optional on the wire — an app whose type nothing
                     // identified, and a loopback sandbox with no preview host, each just omit theirs.

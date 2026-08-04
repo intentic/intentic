@@ -25,8 +25,14 @@ import { targetKeyOf } from "./stories";
  *
  * RUNNING IS NOT SERVING. `POST /panels/:repo/start` returns as soon as it has spawned the tmux session; the
  * command behind it is `test -d node_modules || pnpm install && pnpm dev`, so a first start can take minutes.
- * `running` says the process exists, `healthy` says the port answers, and only the second one means a test can
- * be pointed at it. Conflating them is what made "Start" look like it had done nothing. */
+ * `running` says the process exists, `servers` says what is answering, and only the second one means a test can
+ * be pointed at it. Conflating them is what made "Start" look like it had done nothing.
+ *
+ * AND SERVING IS NOT ONE THING. The daemon reports every dev server it can attribute to the repo, so a repo whose
+ * `pnpm dev` fans a turbo run out across packages arrives here as three addresses, not one. One server is the
+ * repo's address and every group under it aims there unasked; several is not an ambiguity to resolve by picking
+ * the lowest port, because the cost of guessing wrong is a fan-out of agent sessions walking marketing stories
+ * through a sign-in screen. So several means each group says which, once — and the run manifests remember it. */
 
 // While a start is in flight — and only then. Once every panel has settled (healthy, or never started) there is
 // no transition left to watch, and this composable lives on a view that stays open.
@@ -38,9 +44,10 @@ export type PanelState =
     | "none"
     // It has one and it is not running. The offer is a Start button.
     | "stopped"
-    // Spawned, port not answering yet: installing, compiling, or wedged. Not a target.
+    // Spawned, nothing answering yet: installing, compiling, or wedged. Not a target.
     | "starting"
-    // The port answers. This is the only state that yields an address.
+    // Something is answering. The only state that yields an address — though a repo serving several apps yields
+    // one per GROUP rather than one for the repo.
     | "ready";
 
 /* THE TMUX SESSION THE DEV SERVER RUNS IN. `panel-<key>`, where the key is the repo id with its slashes
@@ -61,15 +68,20 @@ const LOOPBACK = /^https?:\/\/(?:localhost|127\.0\.0\.1|\[::1\])(?::|\/|$)/i;
  * With nothing typed the group's own history is consulted before the dev server, which is what saves a marketing
  * site's group from being re-aimed every run.
  *
- * BUT ONLY A NON-LOOPBACK MEMORY COUNTS AS ELSEWHERE. A remembered `http://localhost:5173` is this repo's dev
- * server, and it is worth nothing while that server is stopped. Comparing the memory against `localUrl` instead —
- * which is undefined precisely when the server is down — read "differs from nothing" as a deliberate elsewhere and
- * let a fan-out be aimed at a dead port, the exact failure this gate exists to prevent. */
+ * A REPO SERVING ONE THING ANSWERS FOR EVERY GROUP UNDER IT; a repo serving three answers for none of them, and
+ * each group carries its own pick. That is why the whole server LIST comes in rather than a single address.
+ *
+ * AND A REMEMBERED LOOPBACK ADDRESS IS ONLY WORTH KEEPING WHILE IT IS STILL BEING SERVED. `http://localhost:5173`
+ * remembered from a past run names a port, not a place: if it is one of the addresses this repo is serving right
+ * now it is the marketing site's own port, picked once and rightly not asked about again — and if it is not, it
+ * is a dead socket, and pointing a fan-out at it is the exact failure this gate exists to prevent. (The rule used
+ * to compare the memory against the repo's single address, which is undefined precisely when the server is down,
+ * so "differs from nothing" read as a deliberate elsewhere and the fan-out went to the dead port anyway.) */
 export const aimOf = (input: {
     readonly typed: string | undefined;
     readonly remembered: string | undefined;
     readonly state: PanelState;
-    readonly localUrl: string | undefined;
+    readonly servers: readonly string[];
 }): string | undefined => {
     if (input.typed !== undefined) {
         return input.typed.trim() === `` ? undefined : input.typed.trim();
@@ -78,7 +90,12 @@ export const aimOf = (input: {
         // There is no dev server, so the only address this group has ever had is one somebody typed.
         return input.remembered;
     }
-    return input.remembered !== undefined && !LOOPBACK.test(input.remembered) ? input.remembered : input.localUrl;
+    // The repo's own address, when it has exactly one thing to offer.
+    const only = input.servers.length === 1 ? input.servers[0] : undefined;
+    if (input.remembered === undefined) {
+        return only;
+    }
+    return !LOOPBACK.test(input.remembered) || input.servers.includes(input.remembered) ? input.remembered : only;
 };
 
 export function useTargets(
@@ -108,30 +125,45 @@ export function useTargets(
 
     const panelOf = (repo: string): PanelSummary | undefined => query.data.value?.find((entry) => entry.repo === repo);
 
+    // What the repo is actually serving, in the daemon's order (by port). Empty is the honest answer for a repo
+    // that is stopped, still installing, or has no panel at all.
+    const serversOf = (repo: string): readonly { url: string; dir?: string }[] => panelOf(repo)?.servers ?? [];
+
+    /* Answering beats spawned, in both directions. A repo with something serving is `ready` even when the daemon
+     * did not start it — a dev server run by hand in a terminal is exactly as walkable, and offering Start for it
+     * would collide on the very ports it pinned. A repo the daemon spawned that is serving nothing yet is
+     * `starting`, however long its install takes. */
     const stateOf = (repo: string): PanelState => {
         const panel = panelOf(repo);
         if (panel?.hasPanel !== true) {
             return `none`;
         }
-        if (!panel.running) {
-            return `stopped`;
+        if (serversOf(repo).length > 0) {
+            return `ready`;
         }
-        return panel.healthy ? `ready` : `starting`;
+        return panel.running ? `starting` : `stopped`;
     };
 
-    // The dev server's address, or undefined when there is nothing serving to point at.
+    // THE REPO's address — the one every group under it inherits without being asked. Defined only when the repo
+    // serves exactly one thing; with several there is no repo-level answer to give, and each group states its own.
     const localUrl = (repo: string): string | undefined => {
-        const panel = panelOf(repo);
-        return stateOf(repo) === `ready` && panel?.port !== undefined ? `http://localhost:${panel.port}` : undefined;
+        const found = serversOf(repo);
+        return found.length === 1 ? found[0]?.url : undefined;
     };
 
     const addressOf = (repo: string, group: string): string | undefined => {
         const target = targetKeyOf({ repo, group });
-        return aimOf({ typed: aimed.value[target], remembered: remembered.value[target], state: stateOf(repo), localUrl: localUrl(repo) });
+        return aimOf({
+            typed: aimed.value[target],
+            remembered: remembered.value[target],
+            state: stateOf(repo),
+            servers: serversOf(repo).map((server) => server.url),
+        });
     };
 
     return {
         stateOf,
+        serversOf,
         localUrl,
         addressOf,
         // What a group's chip shows: nothing when it points at the repo's own dev server, because the heading

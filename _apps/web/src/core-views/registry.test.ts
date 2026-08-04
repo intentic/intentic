@@ -34,6 +34,7 @@ const panel = (over: Partial<PanelSummary> & { repo: string }): PanelSummary => 
     hasPanel: false,
     running: false,
     healthy: false,
+    servers: [],
     deployConfig: false,
     desiredState: false,
     directoryUi: false,
