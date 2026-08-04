@@ -193,6 +193,14 @@ export const CapabilityFieldSchema = z.object({
     // value takes effect). The card's `hint` speaks for the whole card; this one is bound to the field it
     // qualifies, which is where a per-option caveat has to sit to be read at all.
     hint: z.string().optional(),
+    /* This field's value only takes effect after the sandbox is REBUILT — it rides the environment overlay
+     * rather than something the daemon can act on now. Rendered as a chip beside the label.
+     *
+     * The one fact a user needs before touching a control, and the one the form cannot infer: two switches
+     * side by side, identical in every visible way, can cost five seconds and five minutes. The docker card
+     * has exactly that pair (its GPU option is baked into the image; its engine options are a file dockerd
+     * rereads), and without this flag the only way to find out which you pressed is to press it. */
+    rebuild: z.boolean().optional(),
     default: z.string().optional(),
     options: z.array(z.object({ value: z.string(), label: z.string() })).optional(),
     when: z.object({ key: z.string(), value: z.string() }).optional(),

@@ -176,7 +176,8 @@ overlay="$(mktemp)"
 envdump="$(mktemp)"
 envmerged="$(mktemp)"
 run_command="$(mktemp)"
-trap 'rm -f "$overlay" "$envdump" "$envmerged" "$run_command"' EXIT
+probes="$(mktemp)"
+trap 'rm -f "$overlay" "$envdump" "$envmerged" "$run_command" "$probes"' EXIT
 ENV_HASH=""
 
 case "$MODE" in
@@ -342,24 +343,32 @@ if [ -n "${INTENTIC_DEV_MOUNTS:-}" ]; then
 }${INTENTIC_DEV_MOUNTS}"
 fi
 RUNTIME_LINES="$(grep '^# intentic:runtime ' "$overlay" || true)"
-# THE ONE DIRECTIVE THIS HOST MAY BE UNABLE TO HONOUR. `docker run --gpus` fails the whole launch when no
-# nvidia runtime is registered ("could not select device driver \"nvidia\" with capabilities: [[gpu]]") — and
-# unlike tun or --privileged, whose absence kills the capability that asked for them, a sandbox without GPUs is
-# an ordinary working sandbox. So ask this docker before betting the launch on it, and tell the image to leave
-# the flag off when the answer is no: the sandbox comes back either way, and SANDBOX_GPU records which happened
-# so the daemon can say "this host has no nvidia runtime" instead of "rebuild required" forever.
-NO_GPU=""
-case "$RUNTIME_LINES" in
-*--gpus=all*)
-    if docker info --format '{{json .Runtimes}}' 2>/dev/null | grep -q '"nvidia"'; then
-        echo "intentic: nvidia container runtime found — the sandbox gets --gpus=all."
-    else
-        NO_GPU=1
-        echo "intentic: this host's Docker has no nvidia runtime — starting the sandbox WITHOUT GPU access." >&2
-        echo "          Install nvidia-container-toolkit on this machine, then rebuild to turn it on." >&2
+# THE ASKS THIS HOST MAY BE UNABLE TO HONOUR. `docker run` refuses the WHOLE container over one flag it can't
+# satisfy — `--gpus` on a host with no nvidia runtime dies with "could not select device driver". For most
+# directives that is correct: without tun the VPN is dead, without --privileged dockerd is, and a launch that
+# limps on would be a lie. A few are extras the sandbox works fine without, and trading someone's entire
+# sandbox for one of those is the wrong trade — so those get asked about first and dropped if refused.
+#
+# WHICH ones, and what to ask, comes from the IMAGE (`sandbox host-probes`), not from this script: the list
+# lives in the run contract, and a copy here is the hand-sync that this whole "ask the image" design exists to
+# end. One TSV line per ask — token, probe kind, target — and this loop only has to know the two kinds.
+UNSUPPORTED=""
+if [ -n "$RUNTIME_LINES" ]; then
+    if docker run -i --rm --entrypoint intentic "$TARGET_IMAGE" sandbox host-probes --runtime "$RUNTIME_LINES" >"$probes" 2>>"$LOG"; then
+        while IFS="$(printf '\t')" read -r token kind target; do
+            [ -n "$token" ] || continue
+            case "$kind" in
+            runtime) docker info --format '{{json .Runtimes}}' 2>/dev/null | grep -q "\"${target}\"" && continue ;;
+            device) [ -e "$target" ] && continue ;;
+            # An image newer than this script: it knows a probe kind this loop doesn't. Treat as unsupported —
+            # the sandbox starts without the extra and says so, which beats guessing yes and failing the launch.
+            *) echo "intentic: unknown host probe '${kind}' — treating ${token} as unavailable." >&2 ;;
+            esac
+            UNSUPPORTED="${UNSUPPORTED:+${UNSUPPORTED} }${token}"
+            echo "intentic: this host cannot provide ${token} — the sandbox starts without it." >&2
+        done <"$probes"
     fi
-    ;;
-esac
+fi
 # The resolvers the container was created with (connect.sh's SANDBOX_DNS). The hand-written recreates silently
 # DROPPED these on every swap — a restricted-network sandbox lost its split-horizon config the first time its
 # owner rebuilt it; replaying them through the contract is what fixes that class.
@@ -374,9 +383,17 @@ set -- --slug "$SLUG" --image "$TARGET_IMAGE" --base-image "$BASE_IMAGE" --chann
 [ -n "$DNS_SERVERS" ] && set -- "$@" --dns "$DNS_SERVERS"
 [ -n "$ENV_HASH" ] && set -- "$@" --environment-hash "$ENV_HASH"
 [ -n "$RUNTIME_LINES" ] && set -- "$@" --runtime "$RUNTIME_LINES"
-[ -n "$NO_GPU" ] && set -- "$@" --no-gpu
 [ -n "$MOUNTS" ] && set -- "$@" --mounts "$MOUNTS"
-if ! docker run -i --rm --entrypoint intentic "$TARGET_IMAGE" sandbox run-command "$@" <"$envdump" >"$run_command" 2>>"$LOG" || ! [ -s "$run_command" ]; then
+# `--unsupported` stays OUT of "$@" though every other flag is in it: the retry below passes a wider list, and
+# two of the same flag on one command line is a question about which one wins that nobody should have to ask.
+#
+# `--unsupported=…`, attached, and omitted entirely when empty. Its values ARE docker flags, and a CLI reading
+# `--unsupported --gpus=all` sees a flag it has never heard of rather than a value — it refuses the whole verb,
+# which this flow then reports as "could not produce its run command". The attached form has no such ambiguity.
+UNSUPPORTED_FLAG=""
+[ -n "$UNSUPPORTED" ] && UNSUPPORTED_FLAG="--unsupported=${UNSUPPORTED}"
+if ! docker run -i --rm --entrypoint intentic "$TARGET_IMAGE" sandbox run-command "$@" ${UNSUPPORTED_FLAG:+"$UNSUPPORTED_FLAG"} <"$envdump" >"$run_command" 2>>"$LOG" ||
+    ! [ -s "$run_command" ]; then
     tail -n 5 "$LOG" >&2
     echo "error: ${TARGET_IMAGE} could not produce its run command (an unsupported runtime directive, or an image" >&2
     echo "       too old to carry the run contract — run the update flow first). Log: ${LOG}" >&2
@@ -424,16 +441,20 @@ mkdir -p "$(dirname "$RECORD")"
 docker rm -f "$CONTAINER" >/dev/null
 echo "== run command ==" >>"$LOG"
 cat "$run_command" >>"$LOG"
-# The two parts of the run that may fail WITHOUT the sandbox being broken, dropped together on the retry:
-# the loopback shortcut (127.0.0.1:<port derived from the sandbox id>:8787, which lets a browser on this
-# machine skip the tunnel — docker refuses the whole launch when that port is already held) and the GPU flag
-# the preflight above cleared but the daemon can still refuse (a driver/toolkit version mismatch answers `docker
-# info` and then fails the run). Everything else fails both attempts and reports below. Dropping GPU here is the
-# same trade as the preflight, one layer later: a sandbox that comes back saying it has no GPU beats no sandbox.
+# Everything the run can lose WITHOUT the sandbox being broken comes off together on the retry: the loopback
+# shortcut (127.0.0.1:<port derived from the sandbox id>:8787, which lets a browser on this machine skip the
+# tunnel — docker refuses the whole launch when that port is already held) and EVERY optional directive, even
+# the ones whose probe passed. A probe answers a question docker answers again at run time, and it can answer
+# differently: an nvidia runtime registered against a mismatched driver satisfies `docker info` and then fails
+# the container. Same trade as the preflight, one layer later — a sandbox that comes back saying it has no GPU
+# beats no sandbox. Everything else fails both attempts and reports below.
 # The failed attempt leaves a created-but-stopped container holding the name.
+ALL_OPTIONAL="$(cut -f1 <"$probes" | tr '\n' ' ')"
+ALL_OPTIONAL_FLAG=""
+[ -n "$(printf '%s' "$ALL_OPTIONAL" | tr -d ' ')" ] && ALL_OPTIONAL_FLAG="--unsupported=${ALL_OPTIONAL}"
 if ! sh "$run_command" >/dev/null 2>>"$LOG"; then
     docker rm -f "$CONTAINER" >/dev/null 2>&1 || true
-    if ! docker run -i --rm --entrypoint intentic "$TARGET_IMAGE" sandbox run-command "$@" --no-local-publish --no-gpu <"$envdump" >"$run_command" 2>>"$LOG" ||
+    if ! docker run -i --rm --entrypoint intentic "$TARGET_IMAGE" sandbox run-command "$@" --no-local-publish ${ALL_OPTIONAL_FLAG:+"$ALL_OPTIONAL_FLAG"} <"$envdump" >"$run_command" 2>>"$LOG" ||
         ! [ -s "$run_command" ] || ! sh "$run_command" >/dev/null 2>>"$LOG"; then
         tail -n 5 "$LOG" >&2
         echo "error: starting the recreated sandbox failed (a runtime flag the host rejects, e.g. --privileged or /dev/net/tun?)." >&2

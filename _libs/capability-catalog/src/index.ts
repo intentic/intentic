@@ -240,16 +240,41 @@ export const CAPABILITY_CATALOG: readonly CapabilityCatalogEntry[] = [
         logo: "docker",
         description: "Run containers inside your sandbox — its own isolated Docker Engine + Compose for dev databases, stacks and builds.",
         singleton: true,
-        // The engine takes no configuring; what is here is the one thing about it a user chooses. `--privileged`
-        // is deliberately NOT a field: dockerd does not run without it, so a switch would offer a broken
-        // sandbox as an option. It stays disclosed by the effects panel and the hint below instead.
+        /* The engine itself takes no configuring; these are the things a user chooses about it, in the two
+         * families DockerConfigSchema defines — and the `rebuild` chip is what tells them apart on sight,
+         * because the first costs a rebuild and the rest cost a dockerd restart.
+         *
+         * `--privileged` is deliberately NOT a field: dockerd does not run without it, so a switch would offer
+         * a broken sandbox as an option. It stays disclosed by the effects panel and the hint below. */
         fields: [
             {
                 key: "gpu",
                 label: "GPU access",
                 boolean: true,
                 default: "off",
+                rebuild: true,
                 hint: "Passes the host's NVIDIA GPUs into the engine, for CUDA images and GPU compose stacks. The host needs an NVIDIA GPU and nvidia-container-toolkit — checked when the sandbox is rebuilt, and the sandbox still starts (without GPUs) if it can't.",
+            },
+            {
+                key: "registryMirror",
+                label: "Registry mirror",
+                optional: true,
+                placeholder: "https://registry.example.internal",
+                hint: "A pull-through cache for Docker Hub — worth setting on a slow, metered or air-gapped link, since this engine starts with an empty image store.",
+            },
+            {
+                key: "insecureRegistries",
+                label: "Insecure registries",
+                optional: true,
+                placeholder: "registry.lan:5000",
+                hint: "Registries reachable over plain http or with a self-signed certificate. Space- or comma-separated.",
+            },
+            {
+                key: "addressPool",
+                label: "Container address pool",
+                optional: true,
+                placeholder: "10.201.0.0/16",
+                hint: "The subnet this engine carves container networks from. Change it when Docker's default (172.17.0.0/16) collides with your VPN or LAN — the symptom is internal hosts going unreachable while everything else keeps working.",
             },
         ],
         hint: "One-time rebuild required — the sandbox restarts privileged with its own isolated Docker Engine (your machine's Docker is never shared).",

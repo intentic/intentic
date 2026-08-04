@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { GPU_DIRECTIVE, runtimeDirectivesOf, sandboxNames, sandboxRunCommand } from "@intentic/sandbox-run";
+import { OPTIONAL_DIRECTIVES, runtimeDirectivesOf, sandboxNames, sandboxRunCommand } from "@intentic/sandbox-run";
 import type { Provider, ResolvedInputs } from "@intentic/engine";
 import { z } from "zod";
 import { hasPendingRef, parseInputs, sshSchema, sshTarget } from "../core/inputs.js";
@@ -151,15 +151,21 @@ export const createWorkspaceProvider = (executor: SshExecutor = sshExecutor): Pr
                 }
             }
             await session.exec(`docker network inspect ${parsed.network} >/dev/null 2>&1 || docker network create ${parsed.network}`);
-            // Ask this host's docker whether it can honour a GPU directive before betting the launch on it —
-            // the SSH-side twin of recreate.sh's preflight, and the same trade: --gpus is the one allowlisted
-            // directive whose absence leaves a working sandbox, so a server without the nvidia runtime gets a
-            // GPU-less sandbox rather than a failed `intentic deploy apply`. Only asked when something asked
-            // for it; every other overlay skips the round-trip.
-            const gpuSupported =
-                !runtime.includes(GPU_DIRECTIVE) || (await session.exec(`docker info --format '{{json .Runtimes}}'`)).stdout.includes(`"nvidia"`);
-            if (!gpuSupported) {
-                ctx.log(`workspace "${ctx.id}": host Docker has no nvidia runtime — starting without GPU access (install nvidia-container-toolkit)`);
+            /* Ask this host about the overlay's OPTIONAL asks before betting the launch on them — the SSH-side
+             * twin of recreate.sh's preflight, reading the same table (OPTIONAL_DIRECTIVES) so neither flow
+             * knows a token by name. The trade is the same: a server missing the nvidia runtime gets a
+             * GPU-less sandbox rather than a failed `intentic deploy apply`, because the sandbox is the point
+             * and the extra is not. Nothing optional asked ⇒ no round-trip. */
+            const unsupported: string[] = [];
+            for (const directive of OPTIONAL_DIRECTIVES.filter((entry) => runtime.includes(entry.token))) {
+                const probe =
+                    directive.probe.kind === "runtime"
+                        ? (await session.exec(`docker info --format '{{json .Runtimes}}'`)).stdout.includes(`"${directive.probe.name}"`)
+                        : (await session.exec(`test -e ${directive.probe.path}`)).code === 0;
+                if (!probe) {
+                    unsupported.push(directive.token);
+                    ctx.log(`workspace "${ctx.id}": host cannot provide ${directive.token} — starting without ${directive.name}`);
+                }
             }
             const digest = toolsDigest(parsed.tools);
             /* The run command comes from the shared contract (@intentic/sandbox-run) — this provider adds only
@@ -182,7 +188,7 @@ export const createWorkspaceProvider = (executor: SshExecutor = sshExecutor): Pr
                 baseImage: parsed.image,
                 ...(parsed.dockerfile !== undefined ? { environmentHash: environmentDigest(parsed.dockerfile) } : {}),
                 runtime,
-                gpuSupported,
+                unsupported,
                 init: false,
                 alias: false,
                 history: false,

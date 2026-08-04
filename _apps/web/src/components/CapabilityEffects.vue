@@ -38,6 +38,8 @@ const describe = (effect: CapabilityEffect): EffectRow => {
                 : { icon: `shield`, label: `Requires network-admin container access` };
         case "gpu":
             return { icon: `bolt`, label: `Claims every NVIDIA GPU on the host machine — needs its container toolkit installed`, warn: true };
+        case "restart":
+            return { icon: `refresh`, label: `Applies without a rebuild by restarting ${effect.process} — anything it is running stops` };
         case "process":
             return { icon: `play`, label: `Runs background process${effect.names.length === 1 ? `` : `es`}: ${effect.names.join(`, `)}` };
         case "mcp":

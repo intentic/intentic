@@ -54,8 +54,10 @@ flowchart TB
   `# intentic:runtime` directives in the owner-approved overlay, applied by the allowlisted rebuild executors
   (the `docker` capability's `--privileged` wakes the image-baked, otherwise-dormant isolated Docker Engine so
   `pnpm db:up` / `docker compose` work in the workspace, and its optional GPU switch adds `--gpus=all` plus the
-  container toolkit that nested engine needs — the one directive a host may be unable to honour, so the creation
-  flows preflight it and start the sandbox without it rather than failing the launch; the HOST's Docker socket is
+  container toolkit that nested engine needs. A directive on the run contract's OPTIONAL list — the ones whose
+  absence leaves a working sandbox — is probed on the host first and dropped rather than failing the launch; its
+  engine settings (registry mirror, address pool) are a different family again, living in `daemon.json` and
+  costing a dockerd restart instead of a rebuild. The HOST's Docker socket is
   never mounted, so the agent's containers can only live inside the sandbox's own engine; its cloudflared runs as
   a separate sidecar container). Runs the coding agents (Claude via the agent
   SDK, Codex, Grok, Kimi Code, Gemini — spawned per turn, not resident) and the `intentic` CLI over the three repos

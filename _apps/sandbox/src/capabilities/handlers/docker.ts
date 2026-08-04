@@ -1,5 +1,5 @@
 import { execFile } from "node:child_process";
-import { readFile } from "node:fs/promises";
+import { readFile, writeFile } from "node:fs/promises";
 import { setTimeout as delay } from "node:timers/promises";
 import { promisify } from "node:util";
 import type { CapabilityStatus, DockerConfig, IntenticLine } from "@intentic/sandbox-contract";
@@ -52,6 +52,73 @@ RUN nvidia-ctk runtime configure --runtime=docker
 // actually happened to the ask is SANDBOX_GPU (see gpuState).
 const gpuAsked = (config: unknown): boolean => (config as DockerConfig | undefined)?.gpu === "on";
 
+/* ——— The ENGINE family: options dockerd reads, not the image ————————————————————————————————————————————
+ *
+ * These land in /etc/docker/daemon.json and take effect on a dockerd restart — seconds, no rebuild, no new
+ * image. That is the whole reason they are a separate family from `gpu` (DockerConfigSchema explains the
+ * split): asking someone to rebuild a container for a registry mirror would be charging five minutes for a
+ * value the daemon re-reads every time it starts.
+ *
+ * MERGED into whatever is already in the file, never written over it. The GPU fragment's `nvidia-ctk runtime
+ * configure` writes its `runtimes.nvidia` entry into this same file at BUILD time, so a wholesale write here
+ * would silently un-register the nvidia runtime — turning the GPU option off from inside, with no diff and no
+ * message, the first time somebody set a registry mirror. Owning exactly our keys is also what makes clearing
+ * a field work: a key we no longer want is deleted rather than left behind to outlive the form. */
+const DAEMON_JSON = "/etc/docker/daemon.json";
+
+/* One CIDR → docker's `default-address-pools` entry. `size` is the prefix each container network gets carved
+ * at, and 24 (254 usable addresses) is docker's own default shape; a pool declared smaller than that carves at
+ * its own prefix instead, so a /26 yields one network rather than an impossible request. Undefined for
+ * anything that isn't a CIDR — the form validates, but a manifest edited by hand must not take dockerd down. */
+export const addressPoolOf = (cidr: string | undefined): { base: string; size: number } | undefined => {
+    const match = /^(\d{1,3}(?:\.\d{1,3}){3})\/(\d{1,2})$/.exec((cidr ?? "").trim());
+    if (match?.[1] === undefined || match[2] === undefined) {
+        return undefined;
+    }
+    const prefix = Number(match[2]);
+    if (prefix < 8 || prefix > 30 || match[1].split(".").some((octet) => Number(octet) > 255)) {
+        return undefined;
+    }
+    return { base: `${match[1]}/${prefix}`, size: Math.max(prefix, 24) };
+};
+
+// Registries arrive as one field because people paste them as a list; commas and whitespace both separate.
+const registryList = (value: string | undefined): string[] => (value ?? "").split(/[\s,]+/).filter((entry) => entry !== "");
+
+/* The daemon.json this config wants, given what the file already holds. Pure, so the merge rules — ours win,
+ * ours disappear when cleared, everything else is untouched — are testable without a docker daemon. */
+export const withEngineSettings = (current: Record<string, unknown>, config: unknown): Record<string, unknown> => {
+    const docker = config as DockerConfig | undefined;
+    const next = { ...current };
+    const insecure = registryList(docker?.insecureRegistries);
+    const pool = addressPoolOf(docker?.addressPool);
+    const settings: Record<string, unknown> = {
+        "registry-mirrors": docker?.registryMirror === undefined || docker.registryMirror === "" ? undefined : [docker.registryMirror],
+        "insecure-registries": insecure.length === 0 ? undefined : insecure,
+        "default-address-pools": pool === undefined ? undefined : [pool],
+    };
+    for (const [key, value] of Object.entries(settings)) {
+        if (value === undefined) {
+            delete next[key];
+            continue;
+        }
+        next[key] = value;
+    }
+    return next;
+};
+
+// A daemon.json that is missing, empty or corrupt reads as {} — the merge then writes a clean file, which is
+// the only useful response to any of the three.
+const readDaemonJson = async (): Promise<Record<string, unknown>> => {
+    const raw = await readFile(DAEMON_JSON, "utf8").catch(() => "");
+    try {
+        const parsed: unknown = JSON.parse(raw);
+        return typeof parsed === "object" && parsed !== null ? (parsed as Record<string, unknown>) : {};
+    } catch {
+        return {};
+    }
+};
+
 // `docker info` succeeds only when dockerd is up and answering.
 const dockerUp = async (): Promise<boolean> =>
     exec("docker", ["info"]).then(
@@ -97,6 +164,31 @@ const startDockerd = async (ctx: CapabilityCtx): Promise<boolean> => {
     return false;
 };
 
+/* Bring /etc/docker/daemon.json in line with the engine options, and restart dockerd if that changed anything.
+ * Returns what to tell the user, or undefined when the file already said what the config says — the ordinary
+ * case on every apply that only touched the GPU switch, and the reason this compares instead of always
+ * writing: restarting dockerd stops whatever the agent has running on it, which is far too rude to do on an
+ * apply that changed nothing.
+ *
+ * Best-effort by design. dockerd not running yet (pre-rebuild, or mid-boot) is not a failure: the file is what
+ * matters, and the next start reads it. */
+const applyEngineSettings = async (ctx: CapabilityCtx, config: unknown): Promise<string | undefined> => {
+    const current = await readDaemonJson();
+    const next = withEngineSettings(current, config);
+    if (JSON.stringify(next) === JSON.stringify(current)) {
+        return undefined;
+    }
+    // node's writeFile, not ctx.files: that service is the WORKSPACE's, and /etc is not the workspace.
+    await writeFile(DAEMON_JSON, `${JSON.stringify(next, null, 4)}\n`);
+    if (!(await dockerUp())) {
+        return "Engine settings saved — they apply when the Docker Engine starts.";
+    }
+    ctx.panels.stop(DOCKER_PANEL_KEY);
+    return (await startDockerd(ctx))
+        ? "Engine settings applied — the Docker Engine restarted, so anything it was running has stopped."
+        : "Engine settings saved, but dockerd did not come back within 30s — check the panel-docker terminal.";
+};
+
 /* WHAT BECAME OF THE GPU ASK — the runner's answer, stamped as SANDBOX_GPU by the run contract, because from
  * in here the three outcomes are one missing device:
  *   undefined     the running container predates the ask — the overlay carrying it hasn't been built yet.
@@ -116,41 +208,61 @@ const gpuVisible = async (): Promise<boolean> =>
         () => false,
     );
 
-/* The GPU option's contribution to the capability's status, or undefined when it has nothing to say. Split out
- * because it answers a different question from the engine's own state and the two are independent: an engine
- * can be up with a GPU missing, and the honest card has to say which of the two is wrong.
+/* WHAT THE OPTIONS HAVE TO SAY, each naming itself. The engine's own state is a separate question, answered
+ * separately below: an engine can be up with a GPU missing, and a card that says only "active" or only
+ * "dockerd not running" leaves the user to find out which of the two they're in.
  *
- * "unsupported" is the state this whole option exists to make legible, and it is deliberately `error`, not
+ * A LIST rather than one answer, because options are independent and the honest report of two broken things
+ * is two sentences. `status` picks the worst to put on its single line — but it prefixes the option's name, so
+ * "which one" is answerable without opening anything. Every entry names its option first for that reason.
+ *
+ * "unsupported" is the state this whole design exists to make legible, and it is deliberately `error`, not
  * `pending`: pending renders as a spinner and a rebuild button, and no amount of rebuilding puts a GPU in a
  * machine that has none. */
-const gpuStatus = async (config: unknown): Promise<CapabilityStatus | undefined> => {
+const optionStatuses = async (config: unknown): Promise<CapabilityStatus[]> => {
     if (!gpuAsked(config)) {
-        return undefined;
+        return [];
     }
     const state = gpuState();
     if (state === undefined) {
-        return { state: "pending", detail: "rebuild required for GPU access" };
+        return [{ state: "pending", detail: "GPU access: rebuild required" }];
     }
     if (state === "unsupported") {
-        return { state: "error", detail: "this host's Docker has no nvidia runtime — install nvidia-container-toolkit on it" };
+        return [{ state: "error", detail: "GPU access: this host's Docker has no nvidia runtime — install nvidia-container-toolkit on it" }];
     }
-    return (await gpuVisible()) ? undefined : { state: "error", detail: "GPU passed through but no device answers — check the host's driver" };
+    return (await gpuVisible()) ? [] : [{ state: "error", detail: "GPU access: passed through but no device answers — check the host's driver" }];
 };
 
-// The GPU sentence an apply owes the user, on EVERY path where the engine is up — including the one where the
-// engine was already running, which is the ordinary path for someone who just turned the switch on and whose
+// An error outranks a pending: of two things to say on one line, the one that will never fix itself wins.
+const worst = (statuses: readonly CapabilityStatus[]): CapabilityStatus | undefined =>
+    statuses.find((status) => status.state === "error") ?? statuses[0];
+
+// What an apply owes the user about the options, on EVERY path where the engine is up — including the one
+// where it was already running, which is the ordinary path for someone who just changed a switch and whose
 // only feedback would otherwise be "the Docker Engine is already running".
-const reportGpu = async function* (config: unknown): AsyncGenerator<IntenticLine> {
-    const gpu = await gpuStatus(config);
-    if (gpu !== undefined) {
-        yield { kind: "log", message: `GPU access: ${gpu.detail}.` };
+const reportOptions = async function* (config: unknown): AsyncGenerator<IntenticLine> {
+    for (const status of await optionStatuses(config)) {
+        yield { kind: "log", message: `${status.detail}.` };
     }
 };
 
 export const dockerHandler: CapabilityHandler = {
-    // The ask, not the outcome — a summary field is what the browser may see of the config, and `gpuStatus`
-    // is where what became of it belongs.
-    echo: (config) => ({ gpu: gpuAsked(config) }),
+    // The ASKS, not their outcomes — a summary field is what the browser may see of the config, and what
+    // became of an ask belongs in `optionStatuses`. The engine options echo as present/absent rather than by
+    // value: nothing here is a secret, but a card that re-opens knowing WHICH fields are set is all the
+    // instance strip needs, and the form re-reads the values from the manifest anyway.
+    echo: (config) => {
+        const docker = config as DockerConfig | undefined;
+        return {
+            gpu: gpuAsked(config),
+            registryMirror: docker?.registryMirror ?? "",
+            insecureRegistries: docker?.insecureRegistries ?? "",
+            addressPool: docker?.addressPool ?? "",
+        };
+    },
+    // ONLY the image family may be read here: a fragment is the thing whose hash decides whether the owner is
+    // asked to rebuild, so an engine option leaking into it would charge a rebuild for a value dockerd rereads
+    // on restart (DockerConfigSchema makes the argument).
     fragment: (config) => (gpuAsked(config) ? `${DOCKER_FRAGMENT}\n${GPU_FRAGMENT}` : DOCKER_FRAGMENT),
     apply: async function* (ctx, id, config) {
         if (await cliMissing()) {
@@ -159,31 +271,39 @@ export const dockerHandler: CapabilityHandler = {
         }
         if (await dockerUp()) {
             yield { kind: "log", message: "The Docker Engine is already running." };
-            yield* reportGpu(config);
+            // Before the option report, because this is the branch that can CHANGE what the options say.
+            const engine = await applyEngineSettings(ctx, config);
+            if (engine !== undefined) {
+                yield { kind: "log", message: engine };
+            }
+            yield* reportOptions(config);
             return;
         }
         // Pre-rebuild bootstrap: the add must still land in the manifest (that's what puts the directive into
-        // the overlay), so an unprivileged container is a soft outcome, not a failure.
+        // the overlay), so an unprivileged container is a soft outcome, not a failure. The engine settings are
+        // still written — the file outlives this container, and the dockerd that eventually starts reads it.
         if (!(await privileged())) {
+            await applyEngineSettings(ctx, config);
             yield {
                 kind: "log",
                 message: `Stored ${id} — this sandbox isn't running privileged yet. Rebuild it from the Environment card; the Docker Engine starts automatically when it restarts.`,
             };
             return;
         }
+        await applyEngineSettings(ctx, config);
         yield { kind: "log", message: "Starting the Docker Engine (its output is in the panel-docker terminal)…" };
         if (await startDockerd(ctx)) {
             yield { kind: "log", message: "Docker Engine up — docker and docker compose now work in the workspace." };
-            yield* reportGpu(config);
+            yield* reportOptions(config);
             return;
         }
         yield { kind: "log", message: "dockerd did not become ready within 30s — check the panel-docker terminal." };
     },
-    // The engine's own state first — a GPU caveat on a card that reads "active" is a caveat; on one that reads
-    // "dockerd not running" it is noise in front of the thing actually broken.
+    // The engine's own state first — an option caveat on a card that reads "active" is a caveat; on one that
+    // reads "dockerd not running" it is noise in front of the thing actually broken.
     status: async (ctx, _id, config) => {
         if (await dockerUp()) {
-            return (await gpuStatus(config)) ?? { state: "active" };
+            return worst(await optionStatuses(config)) ?? { state: "active" };
         }
         if (!(await privileged())) {
             return { state: "pending", detail: "rebuild required" };

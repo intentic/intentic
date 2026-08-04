@@ -74,11 +74,55 @@ export const SANDBOX_CAPABILITIES = ["SYS_ADMIN", "SYS_PTRACE"] as const;
 // stray word — the allowlist would have to permit a bare `all` for every flag on the list.
 export const RUNTIME_DIRECTIVE_PREFIX = "# intentic:runtime ";
 export const RUNTIME_DIRECTIVES = ["--device=/dev/net/tun", "--cap-add=NET_ADMIN", "--privileged", "--gpus=all"] as const;
-// The one directive a host may be unable to honour, and the only one whose absence leaves a WORKING sandbox:
-// missing tun or --privileged means the capability that asked for it is dead, but a GPU-less sandbox is an
-// ordinary sandbox. So the creation paths preflight it and drop it rather than failing the launch — see
-// recreate.sh's NO_GPU and the workspace provider's gpuSupported.
-export const GPU_DIRECTIVE = "--gpus=all";
+
+/* ——— Directives a HOST may not be able to honour ————————————————————————————————————————————————————————
+ *
+ * Most directives are all-or-nothing: without tun the VPN capability is dead, without --privileged dockerd is,
+ * so a host that refuses them has broken the thing that asked and the launch should fail loudly. A few are not
+ * like that — the sandbox without them is an ordinary working sandbox, just missing one extra. Those must be
+ * PREFLIGHTED and dropped instead, because `docker run` refuses the whole container over one flag it can't
+ * satisfy, and trading a person's entire sandbox for a GPU they might not even be using is the wrong trade.
+ *
+ * This table is that list, as DATA, because the preflight has to happen in four dialects: recreate.sh, the
+ * SSH provider, and whatever comes next. The first version of this hard-coded one token across five files —
+ * a constant, a boolean input, a CLI flag, and two hand-written probes — which is precisely the per-flow
+ * duplication this whole module exists to end. Now a new one is a row here plus a fragment that emits it.
+ *
+ * `probe` is a small closed vocabulary, not shell: the host-side flows include a curl|sh script, and a table
+ * that could inject arbitrary commands into it would be a table worth attacking. Two kinds cover what a host
+ * can be asked:
+ *   - "runtime": docker's own runtime list names it (the nvidia container runtime registering itself).
+ *   - "device":  a device node exists on the host.
+ * A THIRD kind is a change to every host-side interpreter, which is the point at which one should ask whether
+ * the directive is really optional or the flow should just fail.
+ *
+ * Note what is NOT here, and why the list is one row rather than four: under --privileged the container gets
+ * the host's /dev wholesale, so /dev/kvm, /dev/dri and /dev/fuse need no directive at all in a sandbox that
+ * runs the docker capability. GPU is the exception because --gpus is not device exposure — it is the nvidia
+ * runtime injecting the host's driver LIBRARIES (libcuda, libnvidia-ml) and registering itself, which
+ * privilege alone never does. A future capability that needs a device on an UNPRIVILEGED sandbox (an emulator
+ * wanting /dev/kvm) is the row that joins it. */
+export interface OptionalDirective {
+    // The allowlisted token, exactly as it appears in RUNTIME_DIRECTIVES.
+    readonly token: string;
+    // What to call it when telling a person it was dropped.
+    readonly name: string;
+    // The container env var stamping what became of the ask: "all" when the flag rode, "unsupported" when the
+    // host could not. Absent entirely when nothing asked — which is a third state, not a synonym for "no".
+    readonly env: string;
+    readonly probe: { readonly kind: "runtime"; readonly name: string } | { readonly kind: "device"; readonly path: string };
+}
+
+export const OPTIONAL_DIRECTIVES: readonly OptionalDirective[] = [
+    {
+        token: "--gpus=all",
+        name: "NVIDIA GPU access",
+        env: "SANDBOX_GPU",
+        probe: { kind: "runtime", name: "nvidia" },
+    },
+];
+
+export const optionalDirective = (token: string): OptionalDirective | undefined => OPTIONAL_DIRECTIVES.find((entry) => entry.token === token);
 
 // The allowlisted runtime tokens of an overlay, or a throw naming the first token that is not — an unknown
 // directive is either a typo'd capability fragment or an escape attempt, and both must stop the recreate
@@ -222,16 +266,16 @@ export interface SandboxRun {
     // Publish the loopback shortcut. Default true wherever a `sandboxId` is known; set false to retry a launch
     // that docker refused because the derived port was already allocated (see localDaemonPort).
     readonly localPublish?: boolean;
-    /* Whether the HOST's docker can honour the GPU directive, when the overlay carries one — the creation
-     * flows' preflight answer, since they are the only code that can ask that docker anything. False drops the
-     * flag and starts the sandbox anyway (GPU_DIRECTIVE explains why that is the right trade).
+    /* Which OPTIONAL_DIRECTIVES this host failed its probe for — the creation flows' preflight answer, since
+     * they are the only code that can ask a host anything. Each named token is dropped from the run and the
+     * sandbox starts without it (see OPTIONAL_DIRECTIVES for why that beats failing the launch).
      *
-     * Either way the ASKED-FOR state is stamped as SANDBOX_GPU, which is what makes the daemon's story honest:
-     * from inside the container, "the overlay hasn't been built yet" and "this host has no nvidia runtime"
-     * are the same absent device, and only the runner can tell them apart. Not in REPLAY_ENV for the reason
-     * SANDBOX_IMAGE isn't — the runner decides it per run, and replaying it would pin a sandbox to the answer
-     * its first host gave. */
-    readonly gpuSupported?: boolean;
+     * Either way the ASK is stamped as the directive's env var, which is what makes the daemon's story honest:
+     * from inside the container "the overlay hasn't been built yet" and "this host cannot" are the same absent
+     * hardware, and only the runner can tell them apart. Those vars stay out of REPLAY_ENV for the reason
+     * SANDBOX_IMAGE does — the runner decides per run, and replaying would pin a sandbox to the answer its
+     * first host gave, so a machine that later grows a GPU could never say so. */
+    readonly unsupported?: readonly string[];
     // The hosted provider runs without a /history volume, --init, or the network alias (no tunnel sidecar
     // shares its network); every local flow has all three. Defaults are the local shape.
     readonly history?: boolean;
@@ -243,11 +287,12 @@ export interface SandboxRun {
 // every dialect: sh consumers quote it (sandboxRunCommand), PowerShell splats it as an array, the provider
 // joins it into its SSH line.
 export const sandboxRunArgv = (run: SandboxRun): string[] => {
-    // The GPU ask and its fate, resolved once: a caller passes the directives it read and the answer its
-    // preflight got, and never has to filter the token or stamp the env itself. Doing it here is the same
-    // choice the rest of this module makes — a shape every flow must get identical belongs in one place.
-    const askedForGpu = (run.runtime ?? []).includes(GPU_DIRECTIVE);
-    const gpuDropped = askedForGpu && run.gpuSupported === false;
+    /* Each optional ask and its fate, resolved once from the two things the caller already has: the directives
+     * it read out of the overlay, and the tokens its preflight came back unhappy about. No flow filters a
+     * token or stamps an env var itself — the same choice the rest of this module makes, for the same reason.
+     * A directive not in the table is untouched: everything else is all-or-nothing and stays that way. */
+    const asked = OPTIONAL_DIRECTIVES.filter((entry) => (run.runtime ?? []).includes(entry.token));
+    const dropped = new Set(asked.filter((entry) => (run.unsupported ?? []).includes(entry.token)).map((entry) => entry.token));
     return [
         "run",
         "-d",
@@ -268,7 +313,7 @@ export const sandboxRunArgv = (run: SandboxRun): string[] => {
         "--log-opt",
         "max-file=3",
         ...SANDBOX_CAPABILITIES.map((cap) => `--cap-add=${cap}`),
-        ...(run.runtime ?? []).filter((token) => !(gpuDropped && token === GPU_DIRECTIVE)),
+        ...(run.runtime ?? []).filter((token) => !dropped.has(token)),
         ...(run.ports ?? []).flatMap((port) => ["-p", port]),
         ...(run.sandboxId !== undefined && run.localPublish !== false ? ["-p", `127.0.0.1:${localDaemonPort(run.sandboxId)}:${LOCAL_PORT}`] : []),
         "-v",
@@ -286,7 +331,7 @@ export const sandboxRunArgv = (run: SandboxRun): string[] => {
         ...(run.environmentHash === undefined ? [] : ["-e", `SANDBOX_ENVIRONMENT_HASH=${run.environmentHash}`]),
         ...(run.channel === undefined ? [] : ["-e", `SANDBOX_CHANNEL=${run.channel}`]),
         ...(run.previousImage === undefined ? [] : ["-e", `SANDBOX_PREVIOUS_IMAGE=${run.previousImage}`]),
-        ...(askedForGpu ? ["-e", `SANDBOX_GPU=${gpuDropped ? "unsupported" : "all"}`] : []),
+        ...asked.flatMap((entry) => ["-e", `${entry.env}=${dropped.has(entry.token) ? "unsupported" : "all"}`]),
         ...(run.env ?? []).flatMap(([name, value]) => ["-e", `${name}=${value}`]),
         run.image,
     ];

@@ -2401,17 +2401,41 @@ export const IpsecVpnConfigSchema = z.object({
 });
 export const VpnConfigSchema = z.discriminatedUnion("provider", [WireguardVpnConfigSchema, FortinetVpnConfigSchema, IpsecVpnConfigSchema]);
 /* What is OPTIONAL about the in-sandbox Docker Engine. The engine itself takes no configuring — the capability
- * either runs dockerd or it doesn't — so this holds only the things a user chooses, and the bar for landing
- * here is that the sandbox works without it.
+ * either runs dockerd or it doesn't — so this holds only what a user chooses, and the bar for landing here is
+ * that the sandbox works without it. (`--privileged` therefore is not here and never will be: dockerd does not
+ * run without it, so a switch would offer a broken sandbox as a choice.)
  *
- * `gpu` passes the host's NVIDIA GPUs into the nested engine (the toolkit in the fragment, `--gpus=all` on the
- * run). Off by default and never inferred: `--gpus=all` claims EVERY GPU on that machine, which is somebody's
- * running inference on a shared box, and a host without the nvidia container runtime cannot honour it at all —
- * a fact no code inside this container can check, so it stays the user's assertion rather than our guess.
+ * TWO FAMILIES, and which one an option belongs to is the most consequential thing about it, because it is the
+ * difference between a five-second change and a five-minute one:
  *
- * "on"/"off" rather than a boolean, matching the vpn's pfs/aggressive: the capability form carries strings, and
- * one spelling of a two-state config across the manifest beats a second one for the same shape. */
-export const DockerConfigSchema = z.object({ gpu: z.enum(["on", "off"]).default("off") });
+ *   IMAGE (`gpu`) — rides the environment overlay. Changing it recomposes the Dockerfile, so it costs an
+ *     owner-approved rebuild and a container recreate. Only `fragment()` may read these.
+ *   ENGINE (everything below it) — /etc/docker/daemon.json, which dockerd reads at start. Changing one
+ *     rewrites the file and restarts dockerd: no rebuild, no new image, but it DOES stop whatever containers
+ *     the engine is running, which is why it is disclosed rather than silently applied.
+ *
+ * Keep the split honest in both directions: an engine option that leaked into the fragment would demand a
+ * rebuild for a value dockerd re-reads anyway, and an image option applied by rewriting a file would silently
+ * do nothing. The card badges the difference per field (CapabilityField.rebuild).
+ *
+ * Flat rather than nested, and "on"/"off" rather than booleans, because the capability form carries a flat
+ * bag of strings — one spelling of a two-state config across the manifest (the vpn's pfs/aggressive) beats a
+ * second one for the same shape. */
+export const DockerConfigSchema = z.object({
+    gpu: z.enum(["on", "off"]).default("off"),
+    /* A pull-through cache or mirror, for a slow, metered or air-gapped link. The nested engine starts with an
+     * empty image store, so the first `docker compose up` in a workspace pulls everything from scratch. */
+    registryMirror: z.url().optional(),
+    // Registries reachable over plain http or with a self-signed certificate — a LAN registry, or the one a
+    // homelab runs beside the sandbox. Space- or comma-separated host:port entries.
+    insecureRegistries: z.string().optional(),
+    /* The subnet the nested engine carves its container networks out of. Docker's default (172.17/16 and the
+     * 172.16/12 pools around it) is the single most common collision with a corporate VPN or a homelab LAN,
+     * and the failure it produces is unusually cruel: the sandbox keeps working, dockerd keeps working, and
+     * exactly the internal hosts the user was reaching for become unreachable — routed into a bridge instead
+     * of down the tunnel. One CIDR, and the pool is carved from it. */
+    addressPool: z.string().optional(),
+});
 // A logged-in browser session the AGENT drives via Playwright MCP tools — for social platforms whose APIs can't
 // cover "all the actions" (X reads are paywalled; X community-join and YouTube community-posts have no API). No
 // secret in the manifest: the session lives in a persisted Chromium profile under .intentic/browser/<platform>,

@@ -30,7 +30,7 @@ export const sandboxRunCommandCli = buildCommand<{
     dns?: string;
     format?: string;
     noLocalPublish: boolean;
-    noGpu: boolean;
+    unsupported?: string;
 }>({
     docs: { brief: "Print the canonical docker-run command for a sandbox container (used by connect.sh/recreate.sh)" },
     parameters: {
@@ -83,9 +83,11 @@ export const sandboxRunCommandCli = buildCommand<{
                 kind: "boolean",
                 brief: "Drop the loopback shortcut's -p — what a flow re-asks for when docker refused the derived port",
             },
-            noGpu: {
-                kind: "boolean",
-                brief: "The host's docker has no nvidia runtime — drop the overlay's --gpus and record why (SANDBOX_GPU)",
+            unsupported: {
+                kind: "parsed",
+                parse: String,
+                optional: true,
+                brief: "Optional directive tokens this host failed its probe for (see `sandbox host-probes`) — dropped, and why recorded",
             },
         },
     },
@@ -102,7 +104,7 @@ export const sandboxRunCommandCli = buildCommand<{
             baseImage: flags.baseImage,
             ...(sandboxId !== undefined ? { sandboxId } : {}),
             localPublish: flags.noLocalPublish !== true,
-            gpuSupported: flags.noGpu !== true,
+            unsupported: (flags.unsupported ?? "").split(/\s+/).filter((token) => token !== ""),
             ...(flags.environmentHash !== undefined && flags.environmentHash !== "" ? { environmentHash: flags.environmentHash } : {}),
             ...(flags.channel !== undefined && flags.channel !== "" ? { channel: flags.channel } : {}),
             ...(flags.previousImage !== undefined && flags.previousImage !== "" ? { previousImage: flags.previousImage } : {}),

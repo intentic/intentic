@@ -68,14 +68,23 @@ the rebuild, the new tools are not available — say so instead of retrying. A c
 image (VPN, Discord voice) composes its own fragment automatically — never propose an overlay for those,
 just point the owner at the same rebuild.
 
-## GPU
+## Docker Engine problems are the Docker capability's options, not an overlay
 
-`could not select device driver "nvidia" with capabilities: [[gpu]]` means this sandbox has no GPU access — a
-container here asked for one and the engine has none to give. Do NOT propose an overlay for it, and do NOT
-edit the user's compose file to make the error go away: deleting a `driver: nvidia` reservation "works", runs
-everything on CPU, and hides that it did. It is a switch on the **Docker capability** (`/capabilities` →
-Docker → GPU access) plus a rebuild, and it needs an NVIDIA GPU and nvidia-container-toolkit on the machine
-the sandbox runs on. Say that, and say which parts of the task stay CPU-bound meanwhile.
+Some failures inside the nested engine look like missing tooling and are not — they are switches on the
+**Docker capability** (`/capabilities` → Docker). Never propose an overlay for these, and never edit the
+user's files to route around them:
+
+- `could not select device driver "nvidia" with capabilities: [[gpu]]` → **GPU access**. Needs an NVIDIA GPU
+  and nvidia-container-toolkit on the machine the sandbox runs on, plus a rebuild. Do NOT delete a
+  `driver: nvidia` reservation from their compose file to make the error go away: it "works", runs everything
+  on CPU, and hides that it did.
+- pulls failing or crawling on a metered/air-gapped link → **Registry mirror**.
+- `http: server gave HTTP response to HTTPS client` from a LAN registry → **Insecure registries**.
+- containers up, but internal/VPN hosts unreachable from them → **Container address pool**. Docker's default
+  subnet collides with the route, and the giveaway is that everything else still works.
+
+The last three apply on a dockerd restart — seconds, no rebuild — but the restart stops whatever the engine is
+running, so tell the user rather than assuming it's free. Say which parts of the task are blocked meanwhile.
 
 For a SERVER-managed sandbox, also wire the approved overlay into the intent so `intentic deploy apply` builds it:
 in `intent/deploy.config.ts`, pass

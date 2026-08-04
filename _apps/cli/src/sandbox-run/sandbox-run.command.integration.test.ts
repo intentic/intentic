@@ -20,6 +20,8 @@ const CLI = join(packageRoot, "src", "cli.ts");
 /* A failed spawn must never look like a verb that legitimately refused: `code` distinguishes the two and
  * `stderr` carries the reason, so an ENOENT or an unbuilt dependency reads as itself instead of as an empty
  * stdout the assertions then misattribute. */
+const runProbes = async (args: string[]): Promise<{ stdout: string }> => exec(TSX, [CLI, "sandbox", "host-probes", ...args]);
+
 const runVerb = async (args: string[], stdin: string): Promise<{ stdout: string; stderr: string; code: number }> => {
     const child = exec(TSX, [CLI, "sandbox", "run-command", ...args]);
     child.child.stdin?.end(stdin);
@@ -78,21 +80,38 @@ test("--no-local-publish drops only the shortcut, so a port docker refused can't
     expect(stdout).toContain("-v intentic-workspace-s5:/work");
 }, 30_000);
 
-/* The GPU ask is the ONE directive a flow is allowed to answer "no" to, and this is the protocol it does it
- * over: recreate.sh asks the host's docker, passes --no-gpu when the answer is no, and the emitted command
- * comes back without the flag but WITH the reason. Anything less and the daemon inside would have to guess
- * whether a missing GPU means "not rebuilt yet" or "this machine cannot", which are opposite instructions. */
-test("--no-gpu drops the gpu flag and records why, leaving the rest of the run intact", async () => {
+/* The two halves of the preflight protocol, end to end through the real bin — this is how a creation flow
+ * negotiates an optional directive without knowing any token's name:
+ *   1. `host-probes` says WHAT to ask this host (the table, shipped as data).
+ *   2. `run-command --unsupported` takes the answer and emits a run without the flag but WITH the reason.
+ * Anything less and the daemon inside would have to guess whether missing hardware means "not rebuilt yet" or
+ * "this machine cannot", which are opposite instructions to give a person. */
+test("host-probes names what to ask the host, and only for what the overlay asked", async () => {
+    const { stdout } = await runProbes(["--runtime", "# intentic:runtime --privileged --gpus=all"]);
+    expect(stdout.trim().split("\n")).toEqual(["--gpus=all\truntime\tnvidia"]);
+    // --privileged is all-or-nothing: there is nothing to ask, because a host that refuses it has broken the
+    // capability and the launch should fail rather than limp.
+    expect((await runProbes(["--runtime", "# intentic:runtime --privileged"])).stdout).toBe("");
+}, 30_000);
+
+test("--unsupported drops those directives and records why, leaving the rest of the run intact", async () => {
     const args = ["--slug", "s6", "--image", "i", "--base-image", "i", "--runtime", "# intentic:runtime --privileged --gpus=all"];
     const honoured = await runVerb(args, "");
     expect(honoured.stdout).toContain("--gpus=all");
     expect(honoured.stdout).toContain("SANDBOX_GPU=all");
 
-    const { stdout } = await runVerb([...args, "--no-gpu"], "");
+    // ATTACHED, and this test is the reason the flows write it that way: the values are themselves docker
+    // flags, so the detached spelling makes the parser read `--gpus=all` as a flag of ours that doesn't exist.
+    const { stdout } = await runVerb([...args, "--unsupported=--gpus=all"], "");
     expect(stdout).not.toContain("--gpus");
     expect(stdout).toContain("SANDBOX_GPU=unsupported");
-    // The privilege the nested engine actually needs is not collateral damage — only the GPU comes off.
+    // The privilege the nested engine actually needs is not collateral damage — only the optional one comes off.
     expect(stdout).toContain("--privileged");
+
+    // Detached, it is refused outright rather than silently ignored — a flow that regresses to it prints
+    // nothing, and every caller here treats an empty run command as a hard failure.
+    const detached = await runVerb([...args, "--unsupported", "--gpus=all"], "");
+    expect(detached.stdout).toBe("");
 }, 30_000);
 
 test("an unallowlisted runtime directive fails the whole verb — never a command minus a privilege", async () => {

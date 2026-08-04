@@ -1,10 +1,10 @@
 import { expect, test } from "vitest";
 import {
-    GPU_DIRECTIVE,
     HEALTH,
     localDaemonPort,
     localDaemonUrl,
     localDaemonUrlInsecure,
+    OPTIONAL_DIRECTIVES,
     ORIGIN_HOST,
     parseNulEnv,
     replayableEnv,
@@ -120,37 +120,51 @@ test("runtime directives: allowlisted tokens pass, anything else stops the recre
     expect(runtimeDirectivesOf("FROM base\nRUN true")).toEqual([]);
 });
 
-// The `=` spelling is load-bearing, not style: directive lines are split on whitespace, so `--gpus all` would
-// arrive as two tokens and the allowlist would have to accept a bare `all` — next to every other flag on it.
-test("the gpu directive is allowlisted only in the single-token spelling", () => {
-    expect(runtimeDirectivesOf(`# intentic:runtime ${GPU_DIRECTIVE}`)).toEqual([GPU_DIRECTIVE]);
+/* Every optional directive must be allowlisted, or the preflight would clear an ask the run then refuses. The
+ * `=` spelling is load-bearing rather than style: directive lines split on whitespace, so `--gpus all` would
+ * arrive as two tokens and the allowlist would have to accept a bare `all` — next to every flag on it. */
+test("every optional directive is allowlisted, and only in its single-token spelling", () => {
+    for (const entry of OPTIONAL_DIRECTIVES) {
+        expect(runtimeDirectivesOf(`# intentic:runtime ${entry.token}`)).toEqual([entry.token]);
+        expect(entry.token).not.toContain(" ");
+    }
     expect(() => runtimeDirectivesOf("# intentic:runtime --gpus all")).toThrowError(/--gpus/);
 });
 
-/* The GPU ask is the one an overlay can make that the HOST may refuse, and the trade this pins is that the
- * refusal costs the GPU rather than the sandbox: the flag comes off, the container still starts, and
- * SANDBOX_GPU carries the reason inward. Without that stamp the daemon cannot tell "not rebuilt yet" from
- * "this machine has no nvidia runtime" — the same missing device from inside — and would offer a rebuild that
- * can never work. */
-test("a host that cannot honour the gpu directive loses the flag, not the sandbox", () => {
-    const supported = sandboxRunArgv({ names, image: "i", baseImage: "i", runtime: [GPU_DIRECTIVE] });
-    expect(supported).toContain(GPU_DIRECTIVE);
-    expect(supported.join(" ")).toContain("SANDBOX_GPU=all");
+/* The trade the whole table exists for: a host's refusal costs the EXTRA, not the sandbox. The flag comes off,
+ * the container still starts, and the env stamp carries the reason inward — without which the daemon cannot
+ * tell "not rebuilt yet" from "this machine cannot", the same absent hardware from inside, and would offer a
+ * rebuild that can never work. Driven off the table so a second row is covered the day it is added. */
+test("a host that cannot honour an optional directive loses the flag, not the sandbox", () => {
+    for (const entry of OPTIONAL_DIRECTIVES) {
+        const supported = sandboxRunArgv({ names, image: "i", baseImage: "i", runtime: [entry.token] });
+        expect(supported).toContain(entry.token);
+        expect(supported.join(" ")).toContain(`${entry.env}=all`);
 
-    const dropped = sandboxRunArgv({ names, image: "i", baseImage: "i", runtime: ["--privileged", GPU_DIRECTIVE], gpuSupported: false });
-    expect(dropped).not.toContain(GPU_DIRECTIVE);
-    // The rest of the posture is untouched — only the optional directive comes off.
-    expect(dropped).toContain("--privileged");
-    expect(dropped.join(" ")).toContain("SANDBOX_GPU=unsupported");
+        const dropped = sandboxRunArgv({ names, image: "i", baseImage: "i", runtime: ["--privileged", entry.token], unsupported: [entry.token] });
+        expect(dropped).not.toContain(entry.token);
+        // The rest of the posture is untouched — only the optional directive comes off.
+        expect(dropped).toContain("--privileged");
+        expect(dropped.join(" ")).toContain(`${entry.env}=unsupported`);
 
-    // Nothing asked ⇒ nothing stamped: a sandbox that never wanted a GPU must not read as one denied a GPU.
-    expect(sandboxRunArgv({ names, image: "i", baseImage: "i", gpuSupported: false }).join(" ")).not.toContain("SANDBOX_GPU");
+        // Nothing asked ⇒ nothing stamped: a sandbox that never wanted the extra must not read as one denied it.
+        expect(sandboxRunArgv({ names, image: "i", baseImage: "i", unsupported: [entry.token] }).join(" ")).not.toContain(entry.env);
+    }
 });
 
-// Replaying it from the old container would pin a sandbox to the answer its FIRST host gave — a machine that
-// grows a GPU (or moves to one) could never report otherwise.
-test("SANDBOX_GPU is runner-set, never replayed", () => {
-    expect(replayableEnv([["SANDBOX_GPU", "all"]]).map(([name]) => name)).not.toContain("SANDBOX_GPU");
+// A directive NOT in the table is all-or-nothing — naming it unsupported must not quietly strip a privilege
+// the capability that asked for it cannot work without. Those failures belong at the launch, loudly.
+test("only table directives can be dropped; the rest ride whatever the caller claims", () => {
+    const argv = sandboxRunArgv({ names, image: "i", baseImage: "i", runtime: ["--privileged"], unsupported: ["--privileged"] });
+    expect(argv).toContain("--privileged");
+});
+
+// Replaying a stamp from the old container would pin a sandbox to the answer its FIRST host gave — a machine
+// that grows a GPU (or moves to one) could never report otherwise.
+test("the optional-directive stamps are runner-set, never replayed", () => {
+    for (const entry of OPTIONAL_DIRECTIVES) {
+        expect(replayableEnv([[entry.env, "all"]]).map(([name]) => name)).not.toContain(entry.env);
+    }
 });
 
 test("the health gate is one definition: daemon port, bounded patience", () => {

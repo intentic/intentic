@@ -38,6 +38,11 @@ export type CapabilityEffect =
      * sandboxes actually run on, that is somebody's inference job. A user reading "requires GPU access" would
      * assume the polite thing was happening; this member exists so the panel can say the impolite one. */
     | { readonly kind: "gpu" }
+    /* Settings applied by RESTARTING a long-running process rather than by rebuilding anything (docker's
+     * engine options → /etc/docker/daemon.json → dockerd). The good news is the cheap half — no rebuild — and
+     * saying only that would be the misleading half: a restart takes every container the agent had running
+     * down with it. Named so the panel can put both halves in one line. */
+    | { readonly kind: "restart"; readonly process: string }
     // Runs long-lived background processes in the sandbox (an extension's declared processes).
     | { readonly kind: "process"; readonly names: readonly string[] }
     // Registers an mcp__<id>__ server the agent connects to next turn.
@@ -77,6 +82,9 @@ const filled = (value: string | number | boolean | undefined): boolean => typeof
 // A token either typed into the form (`token`) or echoed as present on an installed instance (`hasToken`).
 const hasToken = (config: CapabilityEffectInput["config"]): boolean => filled(config["token"]) || config["hasToken"] === true;
 const cloneUrl = (config: CapabilityEffectInput["config"]): string | undefined => (filled(config["url"]) ? String(config["url"]) : undefined);
+// The docker config keys that live in daemon.json rather than the image (DockerConfigSchema's engine family) —
+// setting any of them is what makes an apply bounce dockerd.
+const ENGINE_OPTIONS = ["registryMirror", "insecureRegistries", "addressPool"] as const;
 
 const KIND_EFFECTS: Record<CapabilityKind, (input: CapabilityEffectInput) => readonly CapabilityEffect[]> = {
     devops: () => [{ kind: "scaffold", repos: ["intent", "desired-state"] }],
@@ -139,6 +147,10 @@ const KIND_EFFECTS: Record<CapabilityKind, (input: CapabilityEffectInput) => rea
         { kind: "image" },
         { kind: "runtime", level: "privileged" },
         ...(input.config["gpu"] === "on" || input.config["gpu"] === true ? [{ kind: "gpu" } as const] : []),
+        // The engine family (DockerConfigSchema): any of them set means the apply rewrites daemon.json and
+        // bounces dockerd. Config-derived like every other conditional effect here — the panel shows it while
+        // the user is still typing the value that causes it.
+        ...(ENGINE_OPTIONS.some((key) => filled(input.config[key])) ? [{ kind: "restart", process: "dockerd" } as const] : []),
         { kind: "process", names: ["dockerd"] },
     ],
     browser: (input) => {

@@ -14,6 +14,7 @@ import { monorepoCommand } from "./monorepo/monorepo.command.js";
 import { planCommand } from "./plan/plan.command.js";
 import { resolveCommand } from "./resolve/resolve.command.js";
 import { restore } from "./restore/restore.command.js";
+import { hostProbesCli } from "./sandbox-run/host-probes.command.js";
 import { sandboxRunCommandCli } from "./sandbox-run/sandbox-run.command.js";
 import { sandboxTunnel } from "./sandbox-tunnel/sandbox-tunnel.command.js";
 import { secretsCommand } from "./secrets/secrets.command.js";
@@ -64,10 +65,12 @@ const deploy = buildRouteMap({
 });
 
 // The image speaking its own run contract (see sandbox-run.command.ts): connect.sh/recreate.sh execute what
-// this prints instead of hand-copying the docker-run shape.
+// this prints instead of hand-copying the docker-run shape. `hostProbes` is the same road in the other
+// direction — what the flow must ask its host before running the command.
 const sandbox = buildRouteMap({
     routes: {
         runCommand: sandboxRunCommandCli,
+        hostProbes: hostProbesCli,
     },
     docs: { brief: "The sandbox container's own run contract — print the canonical docker-run command" },
 });

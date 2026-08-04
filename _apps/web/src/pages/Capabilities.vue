@@ -9,7 +9,7 @@ import {
     contributionCard,
 } from "@intentic-app/capability-catalog";
 import { type CapabilitySummary, type Marketplace } from "@intentic-app/api-contract";
-import { BrandMark, cmp, ConfirmDialog, type IconName, Page, PageHeader, RowGroup, Segmented } from "@intentic/ui";
+import { BrandMark, cmp, ConfirmDialog, type IconName, Page, PageHeader, RowGroup, Segmented, StatusBadge } from "@intentic/ui";
 import { type CapabilityField, contributionDiscriminator } from "@intentic/extension-api";
 import { isShaPinned, OFFICIAL_REGISTRY_URL, type RegistryEntry } from "@intentic/registry";
 import { type CapabilityKind, type ForticlientConnection, isForticlientCiphertext } from "@intentic/sandbox-contract";
@@ -1084,6 +1084,7 @@ const submitLabel = computed(() =>
                     <label v-if="field.boolean" class="flex items-start justify-between gap-4">
                         <span class="min-w-0">
                             <span class="ui-field-label">{{ field.label }}</span>
+                            <StatusBadge v-if="field.rebuild" variant="neutral" size="xs" label="needs rebuild" class="ml-1.5 align-middle" />
                             <span v-if="field.hint" class="mt-0.5 block text-2xs text-muted">{{ field.hint }}</span>
                         </span>
                         <ToggleSwitch
@@ -1094,7 +1095,10 @@ const submitLabel = computed(() =>
                         />
                     </label>
                     <label v-else class="ui-field">
-                        <span class="ui-field-label">{{ field.label }}{{ field.optional ? " (optional)" : "" }}</span>
+                        <span class="ui-field-label">
+                            {{ field.label }}{{ field.optional ? " (optional)" : "" }}
+                            <StatusBadge v-if="field.rebuild" variant="neutral" size="xs" label="needs rebuild" class="ml-1.5 align-middle" />
+                        </span>
                         <Segmented
                             v-if="field.options"
                             :model-value="values[field.key] ?? ''"
