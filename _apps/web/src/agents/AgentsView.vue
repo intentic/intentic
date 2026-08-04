@@ -819,8 +819,12 @@ const grabCard = (event: PointerEvent, agent: FleetAgent, card: HTMLElement): vo
             </button>
         </div>
         <!-- The scroller carries no padding of its own: the stacked board's lane headers pin to `top-0`, and a
-             padded scrollport would leave a strip above them for the cards to scroll through. -->
-        <div v-else class="scrollbar-thin min-h-0 flex-1 overflow-auto">
+             padded scrollport would leave a strip above them for the cards to scroll through.
+             It is one of the few `.scrollbar-stable` boxes in the app: a lane filling past the fold is ordinary
+             traffic here, and without the gutter three columns re-flow sideways the moment the bar appears. The
+             shell's own route scroller deliberately has no gutter, so this is the only strip on the board's
+             right edge rather than the third of three. -->
+        <div v-else class="scrollbar-thin scrollbar-stable min-h-0 flex-1 overflow-auto">
             <!-- Stacked, the lanes are rows of one grid that is still `h-full` (so a lane keeps a drop target
                  when the board is empty) — `content-start` is what stops those rows from stretching to fill it
                  and leaving a lane's cards floating a hundred pixels above the next header. -->

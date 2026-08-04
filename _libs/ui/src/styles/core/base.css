@@ -15,10 +15,12 @@
         min-height: 100%;
         font-family: var(--font-sans);
         color-scheme: light dark;
-        /* Reserve the scrollbar's strip whether or not the page is long enough to scroll, so a view
-         * doesn't jump sideways the moment its scrollbar appears (or a scroll-lock removes it). No-op
-         * where scrollbars overlay content (macOS, mobile); unsupported engines ignore it outright. */
-        scrollbar-gutter: stable;
+        /* Deliberately NO `scrollbar-gutter: stable` here. The app shell is `h-screen overflow-hidden`, so the
+         * document cannot scroll on any route it owns — a reserved strip is one the viewport can never fill, and
+         * it showed as ~15px of dead canvas down the right of every view (with the shell's own scrollers
+         * reserving more inside it). The standalone pages that DO scroll the document (login, setup, invite)
+         * scroll far enough to keep a real scrollbar, so there is no appearing-scrollbar jump to prevent.
+         * A box that genuinely gains and loses a scrollbar opts in with `.scrollbar-stable`. */
     }
 
     body {

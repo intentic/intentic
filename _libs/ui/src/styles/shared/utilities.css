@@ -1,12 +1,21 @@
 /* Custom utilities — thin scrollbars, loading placeholders and entrance animations, themed via role tokens. */
 @layer utilities {
-    /* `scrollbar-gutter: stable` reserves the (thin) scrollbar's strip even when the box isn't
-     * overflowing, so content doesn't reflow sideways when the scrollbar appears — the gutter
-     * tracks the drawn scrollbar's width exactly, and inline-only per spec, so `overflow: auto`
-     * boxes that scroll horizontally get no dead strip at the bottom. */
+    /* The thin scrollbar's LOOK, and nothing else — reserving space is `.scrollbar-stable` below. The two were
+     * one class, and that made every scroller pay for a gutter most of them can never fill: these boxes NEST.
+     * The shell wraps every route in a `.scrollbar-thin` scroller, a full-height view (the fleet board, the
+     * workspace) puts its own inside that, and neither the wrapper nor the viewport around it can ever overflow
+     * — so the strips stacked at the window's right edge, measured at 35px of dead canvas on /agents. */
     .scrollbar-thin {
         scrollbar-width: thin;
         scrollbar-color: var(--color-line-strong) transparent;
+    }
+
+    /* Reserve the scrollbar's strip even while the box isn't overflowing, so its content doesn't reflow sideways
+     * the moment the scrollbar appears. For the scrollers whose content actually crosses the fold under the user
+     * — a lane filling up, a list being filtered — and for nothing else: on a box that cannot overflow, this is
+     * simply a strip of dead space. The gutter tracks the drawn scrollbar's width exactly, and is inline-only
+     * per spec, so a box that scrolls horizontally gets no dead strip along its bottom. */
+    .scrollbar-stable {
         scrollbar-gutter: stable;
     }
 
@@ -111,8 +120,9 @@
     .ui-softscroll {
         scrollbar-width: thin;
         scrollbar-color: color-mix(in srgb, var(--color-content) 10%, transparent) transparent;
-        /* Same anti-jank gutter as .scrollbar-thin — here it is what lets the whisper stay a
-         * whisper: the column keeps its width whether or not a scrollbar is showing. */
+        /* The .scrollbar-stable gutter, baked in rather than opted into — here it is what lets the
+         * whisper stay a whisper: the column keeps its width whether or not a scrollbar is showing,
+         * and a 16rem index is exactly the width where 10px of reflow is unmissable. */
         scrollbar-gutter: stable;
         transition: scrollbar-color 0.15s ease-out;
     }
