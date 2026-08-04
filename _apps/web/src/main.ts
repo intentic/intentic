@@ -7,6 +7,8 @@ import { installPerfConsole } from "./composables/perf";
 import { queryClient } from "./composables/queryPersistence";
 // Registers the module-level watch that re-scopes chat / editor / file-action state on sandbox switch.
 import "./composables/sandbox/sandboxScope";
+// …and the one that remembers each sandbox's screen, so a switch lands where that sandbox was left.
+import "./composables/sandbox/sandboxScreen";
 // Publishes the app's vue + extension-api instances for extension bundles (see the import map in index.html).
 import "./extension-host/hostModules";
 import { router } from "./router";

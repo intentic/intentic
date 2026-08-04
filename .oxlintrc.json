@@ -10,7 +10,15 @@
         "typescript/no-extraneous-class": ["error", { "allowWithDecorator": true }],
         "import/no-unassigned-import": [
             "error",
-            { "allow": ["**/*.css", "**/composables/sandbox/sandboxScope", "**/extension-host/hostModules", "**/popout-keeper"] }
+            {
+                "allow": [
+                    "**/*.css",
+                    "**/composables/sandbox/sandboxScope",
+                    "**/composables/sandbox/sandboxScreen",
+                    "**/extension-host/hostModules",
+                    "**/popout-keeper"
+                ]
+            }
         ],
         "no-underscore-dangle": [
             "error",

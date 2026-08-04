@@ -122,7 +122,9 @@ const refresh = withConcurrency<void, SandboxSummary[]>(
     { mode: `singleFlight`, key: () => `sandbox.list` },
 );
 
-// Point the workspace at a different sandbox (persisted). Liveness re-probes the new daemon on the next tick.
+// Point the workspace at a different sandbox (persisted). Liveness re-probes the new daemon on the next tick,
+// sandboxScope re-scopes the client-side state, and sandboxScreen lands on the screen this window last had
+// open there.
 const select = (id: string): void => {
     persistActive(id);
 };
