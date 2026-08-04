@@ -13,7 +13,8 @@ import type { ForwardExecutor } from "./mirror.js";
 process.env["HOME"] = mkdtempSync(join(tmpdir(), "sync-mirror-"));
 process.env["USERPROFILE"] = process.env["HOME"];
 const { mirrorPidPath } = await import("./config.js");
-const { fetchWorkspacePorts, reconcileForwards, readLiveWatcherPid, retirePairingMirror, stopWatcher, SyncAuthError } = await import("./mirror.js");
+const { fetchWorkspacePorts, reconcileForwards, readLiveWatcherPid, retirePairingMirror, runMirrorWatch, stopWatcher, SyncAuthError } =
+    await import("./mirror.js");
 const { forwardSessionName, mutagenForwardArgs } = await import("./mutagen.js");
 // setup() creates ~/.intentic/sync when it writes the state; the pidfile test writes there directly, so make it first.
 await mkdir(dirname(mirrorPidPath), { recursive: true });
@@ -167,6 +168,34 @@ describe("readLiveWatcherPid", () => {
         await expect(readLiveWatcherPid()).resolves.toBe(process.pid);
         await writeFile(mirrorPidPath, "not-a-pid");
         await expect(readLiveWatcherPid()).resolves.toBeUndefined();
+    });
+});
+
+/* Two watchers do real damage, not merely waste a process: each reconciles the same forwards from its own
+ * baseline, so they take turns tearing down and recreating each other's sessions and drop live connections on a
+ * loop. Only `startMirrorWatcher` used to check the pidfile, so every path that runs the loop DIRECTLY — a systemd
+ * unit, a LaunchAgent, a hand-run `mirror --watch` — could stack one on top of a resident copy. */
+describe("runMirrorWatch single-holder guard", () => {
+    it("refuses when a live watcher already holds the pidfile, before touching Mutagen", async () => {
+        const other = spawn(process.execPath, ["-e", "setInterval(() => {}, 1000)"], { detached: true, stdio: "ignore" });
+        const pid = other.pid;
+        if (pid === undefined) {
+            throw new Error("the stand-in watcher didn't start");
+        }
+        try {
+            await writeFile(mirrorPidPath, String(pid));
+            const said: string[] = [];
+
+            // Returning here is what proves the guard runs FIRST: everything past it calls ensureMutagen(), which
+            // would try to download a release in a unit test.
+            await runMirrorWatch((message) => said.push(message));
+
+            expect(said.join("\n")).toContain(`already running (pid ${pid})`);
+            // The incumbent keeps the pidfile — a refusing watcher must not stamp its own pid over it.
+            expect((await readFile(mirrorPidPath, "utf8")).trim()).toBe(String(pid));
+        } finally {
+            other.kill("SIGKILL");
+        }
     });
 });
 

@@ -223,9 +223,22 @@ const dropRevokedPairing = async (mutagen: string, sandboxId: string, log: Log):
     retireOrphanSessions(mutagen, (await readState()).pairings, log);
 };
 
-// The watcher loop — one resident process per machine, serving every pairing. Started detached by
-// `startMirrorWatcher`; also runnable in the foreground (`mirror --watch`) to watch it live.
+/* The watcher loop — one resident process per machine, serving every pairing. Started detached by
+ * `startMirrorWatcher`; also runnable in the foreground (`mirror --watch`) to watch it live, which is what
+ * supervisors run too (a systemd user unit, a launchd LaunchAgent).
+ *
+ * It claims the pidfile before doing anything, and REFUSES if a live watcher already holds it. Only
+ * `startMirrorWatcher` used to check, so every path that runs the loop directly would start a second one on top of
+ * the first — and two of these do real damage rather than merely wasting a process: both reconcile the same
+ * forwards from their own baseline and both write mirroredPorts, so they take turns tearing down and recreating
+ * each other's sessions, dropping live connections on a loop. Observed in the field the moment a supervisor
+ * started one while a hand-started copy was still resident. */
 export const runMirrorWatch = async (log: Log): Promise<void> => {
+    const holder = await readLiveWatcherPid();
+    if (holder !== undefined && holder !== process.pid) {
+        log(`a mirror watcher is already running (pid ${holder}) — leaving it alone. Stop it with \`intentic-sync mirror --stop\` first.`);
+        return;
+    }
     await writeSecretFile(mirrorPidPath, baseDir, String(process.pid));
     // Stop polling on signal, but leave the forwards up — Mutagen's daemon holds them, so a watcher restart
     // never drops the user's connections. Only `--stop`/`uninstall` tear the forwards down.
