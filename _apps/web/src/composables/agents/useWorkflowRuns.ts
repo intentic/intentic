@@ -52,11 +52,47 @@ export const laneOfRun = (run: WorkflowRun, needsYou = false): FleetLane => {
 export const runsNeedingYou = (fleet: readonly FleetAgent[]): Set<string> =>
     new Set(fleet.flatMap((agent) => (blocked(agent) && agent.workflow !== undefined ? [agent.workflow.runId] : [])));
 
+/* A STEP IS NEVER A CARD OF ITS OWN — the one rule behind the grouping, asked by every surface that lists
+ * conversations: the fleet board's lanes, the board's archive, and the popped-out rail.
+ *
+ * It is answered from the LEDGER, not from which runs a surface happens to be drawing, and that is the whole
+ * correction. Gating on "is the run's row on screen right now" meant every reason a row was not — a filter
+ * narrowing the board, a finished run past the lane's window, the archive being open — released that run's
+ * conversations as loose cards. So one job reported itself as five agents the moment you typed into the
+ * filter, and stopping or dismissing a run scattered its steps across the lanes.
+ *
+ * The ledger holding the run is the honest test, because a run in the ledger always HAS a row somewhere: on
+ * the board while it is live, in the archive once it is filed away. A run that has rolled off the end
+ * (RUNS_KEPT, or an emptied archive) has no row anywhere, and its conversations go back to being the ordinary
+ * agents they are — hiding work that nothing else is showing is the one outcome worse than showing it twice.
+ */
+export const runIdsInLedger = (runs: readonly WorkflowRun[]): Set<string> => new Set(runs.map((run) => run.runId));
+
+export const insideRun = (agent: FleetAgent, ledger: ReadonlySet<string>): boolean =>
+    agent.workflow !== undefined && ledger.has(agent.workflow.runId);
+
+/* WHETHER A RUN ANSWERS THE QUERY, since its steps can no longer answer for themselves. A filtered board used
+ * to drop the run rows and list the matching steps instead, which is the grouping coming apart at exactly the
+ * moment the user is looking for something; now the run is what a hit surfaces as.
+ *
+ * Three ways to match, in the order they cost: the run's NAME, the REQUEST it was pointed at (the sentence the
+ * user typed, which is the most likely thing they remember), and any of its STEPS — asked through the board's
+ * own agent predicate, so a step found by the daemon's transcript search counts exactly as it would have when
+ * the step had a card.
+ */
+export const runMatches = (run: WorkflowRun, needle: string, fleet: readonly FleetAgent[], agentMatches: (agent: FleetAgent) => boolean): boolean =>
+    run.workflow.name.toLowerCase().includes(needle) ||
+    run.request?.toLowerCase().includes(needle) === true ||
+    fleet.some((agent) => agent.workflow?.runId === run.runId && agentMatches(agent));
+
 /* The runs a lane holds, for the two surfaces that draw lanes — the fleet board and the chat rail, which are
  * the same list at two widths and must not disagree about where a run belongs.
  *
  * Finished is capped for the reason the agents' own Finished lane is: that lane confirms what just completed,
  * and the run HISTORY is the workflows page, which keeps the last fifty and draws each as the graph it was.
+ * The cap is the CALLER'S, because a capped run now takes its steps into hiding with it — so the surface that
+ * lifts the window for its agents (a filter, the "N earlier" row) has to lift it here in the same breath, and
+ * count what is left behind into the row that offers it back.
  */
 export const runsInLane = (runs: readonly WorkflowRun[], lane: FleetLane, window: number, needing: ReadonlySet<string>): WorkflowRun[] => {
     const inLane = runs.filter((run) => laneOfRun(run, needing.has(run.runId)) === lane);
@@ -124,22 +160,35 @@ export function useWorkflowRuns() {
         onSuccess: invalidate,
     });
 
-    /* Take an ended run off the board. The lane's own exit, and the reason it needs one: nothing about a run
-     * transitions once it is over, so a failed run sits in Attention until fifty more have rolled it off the
-     * ledger. Only the RECORD goes — the steps' chats, branches and transcripts are untouched, which is what
-     * makes this a dismissal rather than a delete and why it does not stop to ask.
+    /* Take an ended run off the board, WITH ITS SESSIONS. The lane's own exit, and the reason it needs one:
+     * nothing about a run transitions once it is over, so a failed run sits in Attention until fifty more have
+     * rolled it off the ledger.
+     *
+     * IT IS THE AGENT CARD'S ARCHIVE, applied to a whole graph, and it is what makes a run behave like the
+     * single session it stands in for. It used to drop the record alone, which read as tidy and was not: the
+     * steps have no cards of their own, so the press that said "I am done with this job" was the press that
+     * scattered its conversations across the lanes. Lossless on the same terms as an agent's — branches,
+     * transcripts and counters all stay, and Restore in the archive puts run and sessions back together —
+     * which is why, like the agent card's, it does not stop to ask.
      */
-    const forget = useMutation({
-        mutationFn: (runId: string) => sandboxJson(`/workflows/runs/${encodeURIComponent(runId)}`, { method: `DELETE` }),
+    const archive = useMutation({
+        mutationFn: (runId: string) => sandboxJson(`/workflows/runs/${encodeURIComponent(runId)}/archive`, { method: `POST` }),
+        onSuccess: invalidate,
+    });
+
+    const unarchive = useMutation({
+        mutationFn: (runId: string) => sandboxJson(`/workflows/runs/${encodeURIComponent(runId)}/unarchive`, { method: `POST` }),
         onSuccess: invalidate,
     });
 
     return {
-        // Every run the ledger holds, newest first — the caller decides which of them its surface draws.
+        // Every run the ledger holds, newest first, archived ones included — the caller decides which of them
+        // its surface draws, and the archive is a surface.
         runs: computed<WorkflowRun[]>(() => runsQuery.data.value ?? []),
         designs: computed<Workflow[]>(() => designsQuery.data.value ?? []),
         start,
         stop,
-        forget,
+        archive,
+        unarchive,
     };
 }

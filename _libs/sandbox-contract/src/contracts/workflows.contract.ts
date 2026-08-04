@@ -57,10 +57,20 @@ export const workflowsContract = {
      * could not work, a step count that would never move, and no way off the board.
      */
     stopRun: oc.route({ method: "POST", path: "/workflows/runs/{runId}/stop" }).input(WorkflowRunIdParamSchema).output(OkSchema),
-    /* Drop an ENDED run from the ledger — the board's exit for one it has finished with, since nothing about
-     * a run transitions once it is over and a failed one would otherwise sit in Attention until fifty more
-     * had rolled it off. Nothing durable goes: the record is a scheduling artifact, while the work is the
-     * steps' conversations, branches and transcripts, which it does not touch. Refused while the run is going.
+    /* Take an ENDED run off the board — the run's half of `agents.archive`, and the same bargain: nothing is
+     * lost, the checkouts are reclaimed, and `unarchiveRun` puts it all back. It needs an exit of its own
+     * because nothing about a run transitions once it is over, so a failed one would sit in Attention until
+     * fifty more had rolled it off the ledger. Refused while the run is going.
+     *
+     * IT ARCHIVES THE STEPS WITH THE RUN, which is what makes it an archive rather than a dismissal. A step
+     * has no card of its own — the run's row stands for it — so merely dropping the record released the run's
+     * conversations onto the board as loose cards at the exact moment the user said they were done with the
+     * job. Every step that ran is archived, on the same terms as pointing `agents.archive` at those ids: that
+     * route archives what the user named without re-litigating whether each one was ready to go, and a run the
+     * user has archived is exactly that gesture made once for the whole graph.
      */
-    forgetRun: oc.route({ method: "DELETE", path: "/workflows/runs/{runId}" }).input(WorkflowRunIdParamSchema).output(OkSchema),
+    archiveRun: oc.route({ method: "POST", path: "/workflows/runs/{runId}/archive" }).input(WorkflowRunIdParamSchema).output(OkSchema),
+    // Put an archived run and its sessions back on the board, the inverse of the above and the run's half of
+    // `agents.unarchive`.
+    unarchiveRun: oc.route({ method: "POST", path: "/workflows/runs/{runId}/unarchive" }).input(WorkflowRunIdParamSchema).output(OkSchema),
 };

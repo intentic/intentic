@@ -316,9 +316,21 @@ export const createAgentsRoutes = (services: Services) => {
                 rev: services.agents.revision(),
             };
         }),
-        // The archive's own exit, and the destructive one: everything filed away is deleted outright, branches
-        // included. Answers with the ids that actually went — a teardown that fails on one agent leaves that one
-        // in the archive rather than failing the press (see purgeArchived).
-        purge: i.purge.handler(async () => ({ removed: await purgeArchived(services) })),
+        /* The archive's own exit, and the destructive one: everything filed away is deleted outright, branches
+         * included. Answers with the ids that actually went — a teardown that fails on one agent leaves that one
+         * in the archive rather than failing the press (see purgeArchived).
+         *
+         * The ARCHIVED RUN RECORDS go with them, because an archived run is the row the archive lists its steps
+         * under: leaving it behind would draw a workflow in an emptied archive whose sessions no longer exist,
+         * and clicking it would open nothing. Only archived runs — a run still on the board is not in the pile
+         * this press is about, even if the retention sweep filed some of its steps away on their own.
+         */
+        purge: i.purge.handler(async () => {
+            const removed = await purgeArchived(services);
+            for (const run of (await services.workflowRuns.list()).filter((candidate) => candidate.archivedAt !== undefined)) {
+                await services.workflowRuns.forget(run.runId);
+            }
+            return { removed };
+        }),
     });
 };

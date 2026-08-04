@@ -22,7 +22,7 @@ import { liveSessions } from "../composables/chat/chatRun";
  */
 
 const { run } = defineProps<{ run: WorkflowRun; selected?: boolean; needsYou?: boolean; stopping?: boolean }>();
-const emit = defineEmits<{ open: []; stop: []; graph: []; forget: [] }>();
+const emit = defineEmits<{ open: []; stop: []; graph: []; archive: []; restore: [] }>();
 
 const lane = computed(() => laneOfRun(run));
 const live = computed(() => liveSessions(run));
@@ -91,18 +91,36 @@ const TONE: Record<WorkflowRun["state"], string> = {
                 <Icon name="external-link" class="text-2xs" />
             </button>
             <!-- The ENDED run's exit, in the slot Stop occupies while it is going and on the agent card's own
-                 hover-action terms. The lane needs one: nothing about a run transitions once it is over, so a
-                 failed run sits in Attention until fifty more roll it off the ledger. Only the record goes —
-                 the steps' chats, branches and transcripts stay — which is what earns the missing dialog. -->
+                 hover-action terms — because it IS the agent card's Archive, aimed at a whole graph. The lane
+                 needs one: nothing about a run transitions once it is over, so a failed run sits in Attention
+                 until fifty more roll it off the ledger.
+                 It takes the run's SESSIONS with it, which is what makes it an archive rather than the
+                 dismissal it used to be: the steps have no cards of their own, so dropping the record alone
+                 was the press that scattered a finished job's conversations back across the lanes. Lossless on
+                 the agent card's terms — branches, transcripts and counters stay, and Restore below is
+                 permanent rather than a receipt that has to still be on screen — which is what earns the
+                 missing dialog. -->
             <button
-                v-if="run.state !== `running`"
+                v-if="run.state !== `running` && run.archivedAt === undefined"
                 type="button"
-                aria-label="Dismiss this run"
-                v-tooltip.top="`Dismiss — takes the run off the board. Its sessions, branches and transcripts stay.`"
+                aria-label="Archive this run"
+                v-tooltip.top="`Archive — takes the run and its sessions off the board. Branches and transcripts are kept.`"
                 class="shrink-0 rounded p-1 text-subtle opacity-0 transition-opacity hover:bg-overlay hover:text-content focus-visible:opacity-100 group-hover:opacity-100"
-                @click.stop="emit(`forget`)"
+                @click.stop="emit(`archive`)"
             >
-                <Icon name="times" class="text-2xs" />
+                <Icon name="box" class="text-2xs" />
+            </button>
+            <!-- The way back, on the row the archive draws. Permanent and per-row, exactly as the archived
+                 agent card's is: an undo that lives on the card cannot expire. -->
+            <button
+                v-if="run.archivedAt !== undefined"
+                type="button"
+                aria-label="Restore this run"
+                v-tooltip.top="`Put the run and its sessions back on the board`"
+                class="shrink-0 rounded p-1 text-subtle opacity-0 transition-opacity hover:bg-overlay hover:text-content focus-visible:opacity-100 group-hover:opacity-100"
+                @click.stop="emit(`restore`)"
+            >
+                <Icon name="undo" class="text-2xs" />
             </button>
             <!-- Stop is on the card and not behind a hover, unlike the agent card's Archive: it is the one
                  thing a person opens this board to do to a run that is going wrong, and a control you have to
@@ -129,7 +147,10 @@ const TONE: Record<WorkflowRun["state"], string> = {
             <span :class="TONE[run.state]">{{ run.state === `running` ? `${live.length} live` : run.state }}</span>
             <span>{{ done }}/{{ run.steps.length }} steps</span>
             <span v-if="spent > 0">${{ spent.toFixed(2) }}</span>
-            <span>{{ timeAgo(run.startedAt) }}</span>
+            <!-- An archived row dates itself by the filing rather than the start, the archived agent card's
+                 own rule: in that column "when did this happen" means "when did I put it away". -->
+            <span v-if="run.archivedAt !== undefined">Archived {{ timeAgo(run.archivedAt) }}</span>
+            <span v-else>{{ timeAgo(run.startedAt) }}</span>
         </div>
 
         <!-- Which part of the design is actually burning money right now. The step COUNT above answers "how

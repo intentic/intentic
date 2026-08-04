@@ -1,4 +1,4 @@
-import type { AgentSummary } from "@intentic/sandbox-contract";
+import type { AgentSummary, WorkflowRun } from "@intentic/sandbox-contract";
 import { cardProjection } from "../agents/card-projection.js";
 
 /* WHAT THE FLEET CARD SAYS ABOUT A WORKFLOW STEP — which run this conversation belongs to, and where in it.
@@ -15,3 +15,17 @@ import { cardProjection } from "../agents/card-projection.js";
 export type WorkflowProjection = NonNullable<AgentSummary["workflow"]>;
 
 export const workflowProjection = cardProjection<WorkflowProjection>();
+
+/* THE CONVERSATIONS A RUN OWNS — every step that actually took a turn, deduped.
+ *
+ * Deduped because a `continue` step runs on its predecessor's conversation, so a four-step run can own two
+ * chats; archiving the run must not name the same id twice.
+ *
+ * `pending` and `skipped` are excluded, and the distinction is the one the run view learned the hard way: a
+ * step's conversation id is DERIVED (wf-<run>-<step>) and written into the record before anything starts, so
+ * those ids exist as strings for chats that were never created. Handing them to the registry would be asking
+ * it to archive agents that do not exist.
+ */
+export const runConversations = (run: WorkflowRun): string[] => [
+    ...new Set(run.steps.filter((step) => step.state !== "pending" && step.state !== "skipped").map((step) => step.conversationId)),
+];

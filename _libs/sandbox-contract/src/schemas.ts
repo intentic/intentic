@@ -3230,6 +3230,16 @@ export const WorkflowRunSchema = z.object({
     // One entry per step, in the workflow's own order. Written at start with every step `pending`, so the graph
     // is complete from the first frame and a node's absence never has to mean two things.
     steps: z.array(WorkflowStepRunSchema),
+    /* When the run was ARCHIVED (ms epoch) — off the board, exactly as an agent's `archivedAt` takes a card off
+     * it, and the same promise: the run record stays readable in the history and every step's branch,
+     * transcript and counters are untouched. Absent ⇒ live on the board.
+     *
+     * A RUN AND ITS STEPS ARCHIVE AS ONE, which is the whole reason this field exists rather than the record
+     * simply being dropped. A run's steps have no card of their own — the run's row is what stands for them —
+     * so deleting the record was releasing five loose conversations back onto the board at the moment the user
+     * said they were finished with the job. Archiving the run archives its sessions with it and unarchiving
+     * brings both back, so "done with this" means the same thing for a workflow as it does for an agent. */
+    archivedAt: z.number().optional(),
 });
 export type WorkflowRun = z.infer<typeof WorkflowRunSchema>;
 

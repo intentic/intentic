@@ -30,7 +30,15 @@ import { useChat } from "../composables/chat/useChat";
 import { useChatPopout } from "../composables/chat/useChatPopout";
 import { chatRun, showingRunGraph } from "../composables/chat/chatRun";
 import { openRunInChat } from "../composables/chat/openRun";
-import { runsInLane, runningTitles, runsNeedingYou, useWorkflowRuns } from "../composables/agents/useWorkflowRuns";
+import {
+    insideRun,
+    runIdsInLedger,
+    runMatches,
+    runsInLane,
+    runningTitles,
+    runsNeedingYou,
+    useWorkflowRuns,
+} from "../composables/agents/useWorkflowRuns";
 import { commandShortcut } from "../composables/commands/useCommands";
 import { viewersOfSession } from "../composables/usePresence";
 import PresenceAvatars from "../presence/PresenceAvatars.vue";
@@ -135,10 +143,26 @@ const {
  * attention, the rest finished), for as long as the ledger holds them. `chatRun` decides only which row reads
  * as SELECTED, which is the same job the active conversation does for the rows below. */
 const { runs: workflowRuns } = useWorkflowRuns();
-// The same lane rule the board uses, including a step's question putting its RUN in Attention — two lists
-// that disagreed about where a run belongs would be the resemblance breaking exactly where it matters.
+/* The Finished lane's cap, declared here because the RUNS obey it too — see the long note on the window below,
+ * which is where the rest of the reasoning lives. Lifted by a filter and by the row's own expand. */
+const showAllFinished = ref(false);
+const windowed = computed(() => !filtering.value && !showAllFinished.value);
+/* The same lane rule the board uses, including a step's question putting its RUN in Attention — two lists that
+ * disagreed about where a run belongs would be the resemblance breaking exactly where it matters.
+ *
+ * A QUERY NARROWS THE RUNS, it no longer drops them: a run answers for its steps now (runMatches), so dropping
+ * the rows would take the whole workflow off a filtered rail with nothing left standing for it. An ARCHIVED
+ * run is off this list outright — the rail lists what is open, and the archive is the board's column.
+ */
 const runsIn = (lane: FleetLane): WorkflowRun[] =>
-    filtering.value ? [] : runsInLane(workflowRuns.value, lane, FINISHED_WINDOW, runsNeedingYou(fleet.value));
+    runsInLane(
+        workflowRuns.value.filter(
+            (run) => run.archivedAt === undefined && (!filtering.value || runMatches(run, needle.value, fleet.value, agentMatches)),
+        ),
+        lane,
+        windowed.value ? FINISHED_WINDOW : Number.POSITIVE_INFINITY,
+        runsNeedingYou(fleet.value),
+    );
 // A run's row reads as selected only while its DIAGRAM is the thing on screen. In the run's sessions the
 // focused chat's own row wears that, and two rows claiming it would be the list contradicting itself. The
 // panel's own predicate rather than a second reading of the mode: a run being FOLLOWED draws its diagram too,
@@ -168,17 +192,17 @@ const tabMatches = (entry: OpenChat): boolean => {
  * The steps are still OPEN (the run's own row put them on screen, and the panes are showing them); what they
  * are not is separately listed. The run's row is how you get back to them, through its diagram.
  *
- * Gated on the run being drawn, exactly as the board gates it: while filtering, or once a run has rolled off
- * the ledger, nothing stands for those chats and they list themselves again. Hiding a chat nothing else shows
- * would be worse than showing it twice.
+ * Gated on the LEDGER, exactly as the board gates it (insideRun says why): a run's row is somewhere for as
+ * long as the ledger holds it, and every other reading — "is it drawn", "did the query keep it" — turned a
+ * filtered rail back into five loose chats. Only a run that has rolled off the ledger releases them, because
+ * then nothing stands for them and hiding a chat nothing else shows is worse than showing it twice.
  */
 const lanes = computed<Record<FleetLane, OpenChat[]>>(() => {
     const grouped: Record<FleetLane, OpenChat[]> = { attention: [], active: [], finished: [] };
-    // The three lane keys spelled out rather than read off LANES, which is declared below this.
-    const drawnRuns = new Set(([`attention`, `active`, `finished`] as const).flatMap((lane) => runsIn(lane)).map((run) => run.runId));
+    const ledger = runIdsInLedger(workflowRuns.value);
     for (const conversation of conversations.value) {
         const agent = agentById(conversation.conversationId);
-        if (agent?.workflow !== undefined && drawnRuns.has(agent.workflow.runId)) {
+        if (agent !== undefined && insideRun(agent, ledger)) {
             continue;
         }
         grouped[laneOfTab(conversation, agent)].push({ conversation, agent });
@@ -233,13 +257,24 @@ const occupiedLanes = computed(() => LANES.filter((lane) => lanes.value[lane.key
  * would be the list deciding which of the user's own matches they meant) and by the row's own expand. The
  * ACTIVE chat is pinned in whatever its age, exactly as the board pins the card it has selected: this list is
  * the switcher for the panel beside it, and a switcher that drops the row for the thing it is showing reads as
- * having lost the conversation. */
-const showAllFinished = ref(false);
-const windowed = computed(() => !filtering.value && !showAllFinished.value);
+ * having lost the conversation. The two refs it is made of are declared up beside the runs, which cap on the
+ * same switch. */
 const finishedWindow = computed(() =>
     windowFinished(lanes.value.finished, windowed.value ? activeId.value : undefined, (entry) => entry.conversation.conversationId),
 );
-const hiddenFinished = computed(() => finishedWindow.value.hidden);
+// The runs the same window capped are part of this number, because a hidden run now takes its chats into
+// hiding with it — leaving a whole workflow behind a row that does not count it is the one thing a browsing
+// cap must never do.
+const hiddenRuns = computed(
+    () =>
+        runsInLane(
+            workflowRuns.value.filter((run) => run.archivedAt === undefined),
+            `finished`,
+            Number.POSITIVE_INFINITY,
+            runsNeedingYou(fleet.value),
+        ).length - runsIn(`finished`).length,
+);
+const hiddenFinished = computed(() => finishedWindow.value.hidden + hiddenRuns.value);
 
 // A lane's visible chats, and how many of its own it is showing. Same `n of m` the board's lane headers carry,
 // for the same reason: a lane that silently shrinks is a lane that has stopped saying anything. The denominator
@@ -248,8 +283,18 @@ const cardsIn = (lane: FleetLane): OpenChat[] => {
     const source = lane === `finished` && windowed.value ? finishedWindow.value.shown : lanes.value[lane];
     return source.filter(tabMatches);
 };
+// A run counts as the one ROW it is, on both sides — its steps are inside that row, not beside it, and a lane
+// reading "0 of 3" with a workflow drawn under the header is the count calling the row beneath it a mistake.
+const heldIn = (lane: FleetLane): number =>
+    lanes.value[lane].length +
+    runsInLane(
+        workflowRuns.value.filter((run) => run.archivedAt === undefined),
+        lane,
+        Number.POSITIVE_INFINITY,
+        runsNeedingYou(fleet.value),
+    ).length;
 const countIn = (lane: FleetLane): string =>
-    filtering.value ? `${cardsIn(lane).length} of ${lanes.value[lane].length}` : String(lanes.value[lane].length);
+    filtering.value ? `${cardsIn(lane).length + runsIn(lane).length} of ${heldIn(lane)}` : String(heldIn(lane));
 
 /* The card's status glyph, in the trailing slot of the title row — AgentCard's slot for it, at AgentCard's
  * size. Fleet-carded chats read the agent's own status (the richer machine: landed, conflict…); a plain chat

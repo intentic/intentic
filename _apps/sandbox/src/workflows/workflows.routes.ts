@@ -1,16 +1,38 @@
 import { randomBytes } from "node:crypto";
-import { type Workflow, workflowFaults, workflowRunFaults, workflowsContract, type WorkflowSummary } from "@intentic/sandbox-contract";
+import {
+    type Workflow,
+    workflowFaults,
+    workflowRunFaults,
+    type WorkflowRun,
+    workflowsContract,
+    type WorkflowSummary,
+} from "@intentic/sandbox-contract";
 import { implement, ORPCError } from "@orpc/server";
 import { streamAgent } from "../agent/agent.routes.js";
+import { archiveAgents } from "../agents/archive.js";
 import type { Services } from "../composition.js";
 import type { OrpcContext } from "../context.js";
 import { abandonRun, openRun, runWorkflow, stopWorkflowRun, workflowRunning } from "./workflow-runner.js";
+import { runConversations } from "./workflow-state.js";
 
 /* The workflow routes. The manifest half is an ordinary CRUD store; the run half acks and walks away, because
  * a run outlives its request by minutes or hours and there is nothing useful for a handler to await.
  */
 export const createWorkflowsRoutes = (services: Services) => {
     const i = implement(workflowsContract).$context<OrpcContext>();
+    // The run the archive routes are addressing, or the reason they cannot. Both are moves on an ENDED run and
+    // both would corrupt a live one — archiving pulls the worktrees out from under turns that are still writing
+    // to them — so the guard is the pair's, not each route's.
+    const endedRun = async (runId: string): Promise<WorkflowRun> => {
+        const run = await services.workflowRuns.get(runId);
+        if (run === undefined) {
+            throw new ORPCError("NOT_FOUND", { message: "No run with that id." });
+        }
+        if (workflowRunning(runId)) {
+            throw new ORPCError("BAD_REQUEST", { message: "That run is still going — stop it first." });
+        }
+        return run;
+    };
     return {
         list: i.list.handler(async () => {
             const [workflows, runs] = await Promise.all([services.workflows.list(), services.workflowRuns.list()]);
@@ -89,15 +111,29 @@ export const createWorkflowsRoutes = (services: Services) => {
             }
             return { ok: true as const };
         }),
-        /* Drop a run from the ledger. The board's exit for a run it has finished with — an `attention` lane
-         * holding a failed run from two hours ago has no other way to empty, since nothing about a run ever
-         * transitions once it has ended. Refuses while the run is going: that is what Stop is for, and
-         * forgetting a live run would leave the scheduler writing to a record nobody can see. */
-        forgetRun: i.forgetRun.handler(async ({ input }) => {
-            if (workflowRunning(input.runId)) {
-                throw new ORPCError("BAD_REQUEST", { message: "That run is still going — stop it first." });
-            }
-            await services.workflowRuns.forget(input.runId);
+        /* File a run away, WITH ITS SESSIONS. The board's exit for a run it has finished with — an `attention`
+         * lane holding a failed run from two hours ago has no other way to empty, since nothing about a run
+         * ever transitions once it has ended.
+         *
+         * The steps go first and the run's own marker last, so a teardown that throws leaves a run still ON the
+         * board with some of its checkouts reclaimed, rather than a run the board has archived whose sessions
+         * are loose on it — archiveAgents already drops a failing agent from its batch and keeps the rest.
+         *
+         * Refuses while the run is going: that is what Stop is for, and archiving a live run would pull the
+         * worktrees out from under turns that are still writing to them.
+         */
+        archiveRun: i.archiveRun.handler(async ({ input }) => {
+            const run = await endedRun(input.runId);
+            await archiveAgents(services, runConversations(run), Date.now());
+            await services.workflowRuns.setArchived(input.runId, Date.now());
+            return { ok: true as const };
+        }),
+        // Back onto the board, run and sessions together. No worktree restore for the steps — the next turn's
+        // ensure() rebuilds a checkout from the branch, exactly as `agents.unarchive` relies on.
+        unarchiveRun: i.unarchiveRun.handler(async ({ input }) => {
+            const run = await endedRun(input.runId);
+            await services.agents.clearArchived(runConversations(run));
+            await services.workflowRuns.setArchived(input.runId, undefined);
             return { ok: true as const };
         }),
     };

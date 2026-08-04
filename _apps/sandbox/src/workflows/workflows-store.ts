@@ -73,12 +73,20 @@ export interface WorkflowRunsStore {
     // one write rather than one per node.
     readonly markSteps: (runId: string, stepIds: readonly string[], state: WorkflowStepState, detail?: string) => Promise<void>;
     readonly settle: (runId: string, state: WorkflowRunState, now: number, detail?: string) => Promise<void>;
-    /* Drop a run from the ledger outright — the board's way of clearing a finished one it has done with.
+    /* File an ended run away, or bring it back — `now` stamps the archive, `undefined` clears it. The run stays
+     * in the ledger either way, which is the difference between this and `forget` below: an archived run is
+     * still the thing that stands for its steps' conversations, and a record that had gone could not be
+     * restored or draw the row the archive lists them under.
+     */
+    readonly setArchived: (runId: string, at: number | undefined) => Promise<void>;
+    /* Drop a run from the ledger outright — what emptying the archive does to the runs in it, alongside the
+     * agents it deletes.
      *
-     * Nothing durable goes with it: a run record is a SCHEDULING artifact (which step ran where, and how it
-     * ended), while the work itself is the steps' conversations, their branches and their transcripts, none of
-     * which this touches. The ledger is already transient by design — it keeps the last RUNS_KEPT and rolls
-     * the rest off — so forgetting one early is the same event happening on purpose.
+     * A run record is a SCHEDULING artifact (which step ran where, and how it ended); the work itself is the
+     * steps' conversations, their branches and their transcripts, which this does not touch. Purging deletes
+     * those separately and for its own reasons — this is only the row that pointed at them. The ledger is
+     * already transient by design (it keeps the last RUNS_KEPT and rolls the rest off), so dropping one early
+     * is the same event happening on purpose.
      */
     readonly forget: (runId: string) => Promise<void>;
     // Count one boot-time resume against the run, so a workflow whose step reliably kills the daemon cannot be
@@ -115,6 +123,7 @@ export const fileWorkflowRunsStore = (path: string): WorkflowRunsStore => {
             return amendSteps(runId, (step) => (wanted.has(step.stepId) ? { ...step, state, ...(detail !== undefined ? { detail } : {}) } : step));
         },
         settle: (runId, state, now, detail) => amend(runId, (run) => ({ ...run, state, endedAt: now, ...(detail !== undefined ? { detail } : {}) })),
+        setArchived: (runId, at) => amend(runId, ({ archivedAt: _was, ...run }) => (at === undefined ? run : { ...run, archivedAt: at })),
         forget: async (runId) => {
             await file.update((runs) => runs.filter((run) => run.runId !== runId));
         },

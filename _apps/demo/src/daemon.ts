@@ -402,6 +402,15 @@ const ROUTES: readonly (readonly [string, string, Handler])[] = [
     [`DELETE`, `/workflows/{id}`, () => refuse(`This is the demo workspace — designs are read-only here.`)],
     [`POST`, `/workflows/{id}/run`, () => refuse(`This is the demo workspace — running a workflow starts several agent sessions on a real tree.`)],
     [`POST`, `/workflows/runs/{runId}/stop`, () => refuse(`This is the demo workspace — nothing is really running to stop.`)],
+    // Archiving a run takes its step SESSIONS off the board with it, and this fixture's archive is a one-way
+    // disappearance rather than a list you can open — so it refuses, in the demo's own voice, instead of
+    // swallowing four conversations the visitor could never get back.
+    [
+        `POST`,
+        `/workflows/runs/{runId}/archive`,
+        () => refuse(`This is the demo workspace — the archive here has no way back, so a run stays on the board.`),
+    ],
+    [`POST`, `/workflows/runs/{runId}/unarchive`, () => refuse(`This is the demo workspace — nothing has been archived to restore.`)],
 
     /* Memory: what the agent carries between sessions, readable and — the point of the surface — editable. The
      * red pen writes into the fixture, so an edit and a forget both hold until the tab is reloaded. */

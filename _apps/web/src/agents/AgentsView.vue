@@ -12,7 +12,7 @@ import { useAgentDrag } from "../composables/agents/useAgentDrag";
 import { useAgentFilter } from "../composables/agents/useAgentFilter";
 import type { FleetLane } from "../composables/agents/agentStatus";
 import { FINISHED_WINDOW, type FleetAgent, useAgents, windowFinished } from "../composables/agents/useAgents";
-import { laneOfRun, runsInLane, runsNeedingYou, useWorkflowRuns } from "../composables/agents/useWorkflowRuns";
+import { insideRun, laneOfRun, runIdsInLedger, runMatches, runsInLane, runsNeedingYou, useWorkflowRuns } from "../composables/agents/useWorkflowRuns";
 import { relativeTime } from "../composables/chat/catalog";
 import { chatRun, showingRunGraph } from "../composables/chat/chatRun";
 import { openRunInChat } from "../composables/chat/openRun";
@@ -146,42 +146,61 @@ const filterField = ref<InstanceType<typeof FilterField> | undefined>(undefined)
 // is being looked at, and a second surface opening the fleet should not inherit a scroll-position-like choice.
 const showAllFinished = ref(false);
 const archiveOpen = ref(false);
+// The Finished window is only in force while the lane is BROWSING its own recent tail. The archive is a
+// different list entirely, and both a filter and an explicit expand lift the cap outright — see cardsFor.
+const windowed = computed(() => !archiveOpen.value && !filtering.value && !showAllFinished.value);
 
-const { runs: workflowRuns, stop: stopWorkflowRun, forget: forgetWorkflowRun } = useWorkflowRuns();
+const { runs: workflowRuns, stop: stopWorkflowRun, archive: archiveWorkflowRun, unarchive: unarchiveWorkflowRun } = useWorkflowRuns();
 // Which runs have a step waiting on the user. Read from the fleet, because "blocked" is a live fact about a
 // conversation and the run ledger only knows what the scheduler wrote.
 const needingYou = computed(() => runsNeedingYou(fleet.value));
+// A run under a query answers for its steps, since they no longer have cards to answer with (runMatches).
+const runKept = (run: WorkflowRun): boolean => !filtering.value || runMatches(run, needle.value, fleet.value, matches);
+// The two halves of the ledger, on the board's own terms: an archived run is off the board exactly as an
+// archived agent is, and the Finished lane's archive view is where it turns up instead. Each half is kept in
+// both its forms because the counts need them — a `n of m` whose denominator was itself filtered says nothing.
+const boardRunRows = computed(() => workflowRuns.value.filter((run) => run.archivedAt === undefined));
+const liveRuns = computed(() => boardRunRows.value.filter(runKept));
+const archivedRunRows = computed(() => workflowRuns.value.filter((run) => run.archivedAt !== undefined));
+const archivedRuns = computed(() => archivedRunRows.value.filter(runKept));
 const runsFor = (lane: FleetLane): WorkflowRun[] => {
-    // The archive is a different list wearing the Finished lane's shape, and a live run has no place in it.
-    // Filtering is the same argument the drag makes: a lane under a query is a result set, and a row the query
-    // never looked at would be the board answering a question it was not asked.
-    if ((lane === `finished` && archiveOpen.value) || filtering.value) {
-        return [];
+    // The archive is a different list wearing the Finished lane's shape: the runs in it are the archived ones,
+    // and the other two lanes have nothing to say while it is open.
+    if (archiveOpen.value) {
+        return lane === `finished` ? archivedRuns.value : [];
     }
-    return runsInLane(workflowRuns.value, lane, FINISHED_WINDOW, needingYou.value);
+    // The window caps Finished while it is being browsed and is lifted by a filter or the lane's own expand —
+    // the agents' rule, and it has to be the runs' too now that a capped run takes its steps into hiding.
+    return runsInLane(liveRuns.value, lane, windowed.value ? FINISHED_WINDOW : Number.POSITIVE_INFINITY, needingYou.value);
 };
 
-/* THE STEPS OF A DRAWN RUN ARE NOT ALSO CARDS — they are inside the run's card, which is the whole claim that
- * card makes. A five-step workflow was arriving as a run card AND five agent cards for the same work, so the
- * board reported one job six times and the run's own row was the least informative of them.
+/* THE STEPS OF A RUN ARE NOT ALSO CARDS — they are inside the run's row, which is the whole claim that row
+ * makes. A five-step workflow was arriving as a run card AND five agent cards for the same work, so the board
+ * reported one job six times and the run's own row was the least informative of them.
  *
- * Gated on the run actually being DRAWN: while filtering, or once a run has rolled off the ledger, no card
- * stands for those sessions and they go back to being ordinary agents — hiding work that nothing else is
- * showing is the one outcome worse than showing it twice.
+ * Gated on the LEDGER rather than on the run being drawn (insideRun says why at length): every reason a row
+ * was not on screen — a filter, the Finished window, the archive being open — used to release that run's
+ * conversations onto the board as loose cards.
  */
 const BOARD_LANES = [`attention`, `active`, `finished`] as const;
-const drawnRunIds = computed(() => new Set(BOARD_LANES.flatMap((lane) => runsFor(lane)).map((run) => run.runId)));
+const ledgerRunIds = computed(() => runIdsInLedger(workflowRuns.value));
 const boardLanes = computed<Record<FleetLane, FleetAgent[]>>(() => {
-    if (drawnRunIds.value.size === 0) {
+    if (ledgerRunIds.value.size === 0) {
         return lanes.value;
     }
-    const outside = (agent: FleetAgent): boolean => agent.workflow === undefined || !drawnRunIds.value.has(agent.workflow.runId);
+    const outside = (agent: FleetAgent): boolean => !insideRun(agent, ledgerRunIds.value);
     return {
         attention: lanes.value.attention.filter(outside),
         active: lanes.value.active.filter(outside),
         finished: lanes.value.finished.filter(outside),
     };
 });
+// The archive obeys the same rule, and needs to: a run's steps are filed away WITH it, so without this the
+// pile the archive shows would be one run row and the five conversations it already stands for.
+const archivedCards = computed(() => archived.value.filter((agent) => !insideRun(agent, ledgerRunIds.value)));
+// How big the archive READS — the rows it would draw, which is what the door promising to open it and the
+// header counting it are both about. A run filed away with its four steps is one row there, not five.
+const archiveSize = computed(() => archivedCards.value.length + archivedRunRows.value.length);
 
 // The run's DESIGN, on the workflows page — a different question from "what is it doing", and the only one
 // this board cannot answer: editing the graph belongs where the graph is authored.
@@ -217,9 +236,6 @@ const runGraphUp = computed(
         ),
 );
 const highlightId = computed(() => flashId.value ?? (mobile.value || runGraphUp.value ? undefined : active.value.conversationId));
-// The Finished window is only in force while the lane is BROWSING its own recent tail. The archive is a
-// different list entirely, and both a filter and an explicit expand lift the cap outright — see cardsFor.
-const windowed = computed(() => !archiveOpen.value && !filtering.value && !showAllFinished.value);
 const finishedWindow = computed(() => windowFinished(boardLanes.value.finished, windowed.value ? highlightId.value : undefined, (agent) => agent.id));
 // The lane's visible cards. Finished shows its window (or the archive, when open); the other two lanes are
 // self-emptying and show everything.
@@ -232,32 +248,50 @@ const cardsFor = (lane: FleetLane): FleetAgent[] => {
         lane !== `finished`
             ? boardLanes.value[lane]
             : archiveOpen.value
-              ? archived.value
+              ? archivedCards.value
               : windowed.value
                 ? finishedWindow.value.shown
                 : boardLanes.value.finished;
     return filtering.value ? source.filter(matches) : source;
 };
-// How many of the lane's agents the filter kept, against how many it holds — the `3 of 12` on its header. The
-// denominator is the lane, not the window: while filtering the window is lifted anyway, and a count that
-// disagreed with the cards under it would be worse than none.
+/* How many of the lane's ROWS the filter kept, against how many it holds — the `3 of 12` on its header. The
+ * denominator is the lane, not the window: while filtering the window is lifted anyway, and a count that
+ * disagreed with the cards under it would be worse than none.
+ *
+ * A run counts as the ONE row it is, on both sides, for exactly that reason: a query that a workflow answers
+ * left the lane reading "0 of 3" with the run sitting under the header saying so, which is the count calling
+ * the row beneath it a mistake. Its steps are not counted at all — they are inside that row.
+ */
 const laneCount = (lane: FleetLane): string => {
-    const total = archiveOpen.value && lane === `finished` ? archived.value.length : boardLanes.value[lane].length;
-    return filtering.value ? `${cardsFor(lane).length} of ${total}` : `${total}`;
+    const held =
+        archiveOpen.value && lane === `finished`
+            ? archiveSize.value
+            : boardLanes.value[lane].length + runsInLane(boardRunRows.value, lane, Number.POSITIVE_INFINITY, needingYou.value).length;
+    return filtering.value ? `${cardsFor(lane).length + runsFor(lane).length} of ${held}` : `${held}`;
 };
-// What the tail row collapses — the window's own count, so a card pinned into the lane is counted out of it
-// rather than being both on screen and reported as hidden.
-const hiddenFinished = computed(() => finishedWindow.value.hidden);
+/* What the tail row collapses: the window's own count, so a card pinned into the lane is counted out of it
+ * rather than being both on screen and reported as hidden — PLUS the runs the same window capped.
+ *
+ * The runs have to be in this number now that a hidden run hides its steps with it. Counting only the agents
+ * would leave a whole workflow behind a row that does not know it is there, which is the one thing the window
+ * is not allowed to do: it caps browsing, it never closes anything.
+ */
+const hiddenRuns = computed(
+    () => runsInLane(liveRuns.value, `finished`, Number.POSITIVE_INFINITY, needingYou.value).length - runsFor(`finished`).length,
+);
+const hiddenFinished = computed(() => finishedWindow.value.hidden + hiddenRuns.value);
 // What a query found that the board isn't showing: agents in the archive, and conversations no agent owns
 // (a plain chat, or one whose registry entry is long gone). Without this the filter would answer "nothing"
-// for something sitting one click away, which is the failure a search is least forgiven for.
-const beyondCount = computed(() => archivedMatches.value.length + sessionMatches.value.length);
+// for something sitting one click away, which is the failure a search is least forgiven for. Steps are left
+// out on the board's own rule — the archived run row they belong to is what the archive lists them under.
+const archivedHits = computed(() => archivedMatches.value.filter((agent) => !insideRun(agent, ledgerRunIds.value)));
+const beyondCount = computed(() => archivedHits.value.length + sessionMatches.value.length);
 // Suppressed while the archive is the Finished column: those cards are already on screen there.
 const beyondVisible = computed(() => filtering.value && !archiveOpen.value && beyondCount.value > 0);
 const beyondLabel = computed(() => {
     const parts: string[] = [];
-    if (archivedMatches.value.length > 0) {
-        parts.push(`${archivedMatches.value.length} in the archive`);
+    if (archivedHits.value.length > 0) {
+        parts.push(`${archivedHits.value.length} in the archive`);
     }
     if (sessionMatches.value.length > 0) {
         parts.push(`${sessionMatches.value.length} in earlier chats`);
@@ -537,11 +571,13 @@ const LANES: readonly { key: FleetLane; label: string; dot: string; empty: strin
     { key: `active`, label: `Active`, dot: `bg-success`, empty: `No agents working. Start one and delegate.` },
     { key: `finished`, label: `Finished`, dot: `bg-line-strong`, empty: `Finished agents land their work in your workspace.` },
 ];
-// The board's own total, so it counts what is on screen: a run's steps are inside its card, not beside it.
-const total = computed(() => LANES.reduce((sum, lane) => sum + boardLanes.value[lane.key].length, 0));
-// The header's tally. Summed over the same cardsFor the lanes render, so it can never disagree with the
-// `n of m` counts under it.
-const kept = computed(() => LANES.reduce((sum, lane) => sum + cardsFor(lane.key).length, 0));
+/* The board's own total, so it counts WHAT IS ON SCREEN: a run's steps are inside its row, not beside it, so
+ * they are counted once — as the row. Without the run half a board showing a workflow and nothing else read
+ * "0 of 0" and then told the user their query matched nothing, with the match sitting above the sentence. */
+const total = computed(() => LANES.reduce((sum, lane) => sum + boardLanes.value[lane.key].length, 0) + boardRunRows.value.length);
+// The header's tally. Summed over the same cardsFor and runsFor the lanes render, so it can never disagree
+// with the `n of m` counts under it.
+const kept = computed(() => LANES.reduce((sum, lane) => sum + cardsFor(lane.key).length + runsFor(lane.key).length, 0));
 const matchTally = computed(() => `${kept.value} of ${total.value}`);
 // Nothing on the board AND nothing beyond it — the filter's own empty state, which is a different thing from
 // an empty fleet (there ARE agents; none of them is this one).
@@ -667,11 +703,14 @@ const stopRun = async (run: WorkflowRun): Promise<void> => {
         forgetStopping(run.runId);
     }
 };
-// Take an ended run off the board. No confirmation and no undo row, on the archive's own argument: the record
-// is a scheduling artifact and everything the run actually produced — the branches, the transcripts, the
-// chats — is untouched and still on the board in its own right.
-const forgetRun = async (run: WorkflowRun): Promise<void> => {
-    await forgetWorkflowRun.mutateAsync(run.runId).catch(() => undefined);
+// File an ended run away, sessions and all, and put one back. No confirmation on the agent card's own
+// argument: archiving is lossless — the branches, the transcripts and the counters all stay — and the way back
+// is the archive itself, permanently, rather than a receipt that has to still be on screen.
+const archiveRun = async (run: WorkflowRun): Promise<void> => {
+    await archiveWorkflowRun.mutateAsync(run.runId).catch(() => undefined);
+};
+const restoreRun = async (run: WorkflowRun): Promise<void> => {
+    await unarchiveWorkflowRun.mutateAsync(run.runId).catch(() => undefined);
 };
 // The mark is held until the LEDGER says the run is no longer going, not until the request returns: the
 // request acks the ask, and steps in flight are still finishing the round they are on for minutes after it.
@@ -770,13 +809,13 @@ const grabCard = (event: PointerEvent, agent: FleetAgent, card: HTMLElement): vo
             <!-- Clearing the last lane lands the user here, so the empty state carries the pulse too — it is
                  the only archive affordance left on screen once the board is bare. -->
             <button
-                v-if="archived.length > 0"
+                v-if="archiveSize > 0"
                 type="button"
                 class="inline-flex items-center gap-1 rounded px-1 py-px text-2xs text-link transition-colors hover:underline"
                 :class="pulsing ? 'bg-primary-600/25 ring-1 ring-primary-500/50' : ''"
                 @click="toggleArchive"
             >
-                <Icon name="history" class="text-2xs" />{{ archived.length }} archived agent{{ archived.length === 1 ? "" : "s" }}
+                <Icon name="history" class="text-2xs" />{{ archiveSize }} archived agent{{ archiveSize === 1 ? "" : "s" }}
             </button>
         </div>
         <!-- The scroller carries no padding of its own: the stacked board's lane headers pin to `top-0`, and a
@@ -831,9 +870,9 @@ const grabCard = (event: PointerEvent, agent: FleetAgent, card: HTMLElement): vo
                                  already look to get it back. Its tooltip is where the reassurance the old
                                  strip repeated on every press now lives, read once and on demand. -->
                             <button
-                                v-if="archived.length > 0"
+                                v-if="archiveSize > 0"
                                 type="button"
-                                :aria-label="`Open the archive (${archived.length})`"
+                                :aria-label="`Open the archive (${archiveSize})`"
                                 v-tooltip.bottom="'Taken off the board — branches and conversations are kept'"
                                 class="inline-flex shrink-0 items-center gap-1 rounded px-1 py-px text-2xs transition-colors"
                                 :class="
@@ -843,7 +882,7 @@ const grabCard = (event: PointerEvent, agent: FleetAgent, card: HTMLElement): vo
                                 "
                                 @click="toggleArchive"
                             >
-                                <Icon name="history" class="text-2xs" />{{ archived.length }}
+                                <Icon name="history" class="text-2xs" />{{ archiveSize }}
                             </button>
                             <!-- Gone while filtering, for the reason the drag is (grabCard): "Clear" archives
                                  the WHOLE lane, and offering it above a lane showing "1 of 12" is offering a
@@ -864,9 +903,12 @@ const grabCard = (event: PointerEvent, agent: FleetAgent, card: HTMLElement): vo
                              hover, so a column of retired agents doesn't read as a hazard while you browse it;
                              the dialog is what actually guards it. Gone while filtering, exactly as Clear is:
                              this deletes the WHOLE archive, and offering it above a list reading "1 of 12" is
-                             offering a bulk action whose scope is not the one on screen. -->
+                             offering a bulk action whose scope is not the one on screen.
+                             It counts CONVERSATIONS while the header above counts rows, and the difference is
+                             the point: a workflow row is one thing to browse past and four transcripts to
+                             destroy, and the number on an irreversible act is the cost, not the tidy view. -->
                         <button
-                            v-if="lane.key === 'finished' && archiveOpen && archived.length > 0 && !filtering"
+                            v-if="lane.key === 'finished' && archiveOpen && archiveSize > 0 && !filtering"
                             type="button"
                             :aria-label="`Delete all ${archived.length} archived agents permanently`"
                             :disabled="purging"
@@ -880,7 +922,9 @@ const grabCard = (event: PointerEvent, agent: FleetAgent, card: HTMLElement): vo
                     <!-- The lane's WORKFLOW RUNS, above its agents: a run is the container of several of the
                          cards below it, and a container drawn under its contents is a heading in the wrong
                          place. Outside the TransitionGroup below — that group's FLIP animation is over the
-                         fleet, and a row of another kind moving through it would drag the cards it holds. -->
+                         fleet, and a row of another kind moving through it would drag the cards it holds.
+                         In the archive it is the archived runs that list here, in the same slot: the steps
+                         filed away with a run have no cards of their own there either. -->
                     <div v-if="runsFor(lane.key).length > 0" class="flex flex-col gap-2 px-2 pb-2">
                         <WorkflowRunCard
                             v-for="run in runsFor(lane.key)"
@@ -892,10 +936,14 @@ const grabCard = (event: PointerEvent, agent: FleetAgent, card: HTMLElement): vo
                             @open="openRun(run)"
                             @graph="openRunGraph(run)"
                             @stop="stopRun(run)"
-                            @forget="forgetRun(run)"
+                            @archive="archiveRun(run)"
+                            @restore="restoreRun(run)"
                         />
                     </div>
-                    <p v-if="lane.key === 'finished' && archiveOpen && archived.length === 0" class="px-3 pb-3 text-2xs text-subtle">
+                    <p
+                        v-if="lane.key === 'finished' && archiveOpen && archivedCards.length === 0 && runsFor('finished').length === 0"
+                        class="px-3 pb-3 text-2xs text-subtle"
+                    >
                         {{
                             purged
                                 ? "Archive emptied. Finished agents will collect here again on their own after a few quiet days."
@@ -979,18 +1027,18 @@ const grabCard = (event: PointerEvent, agent: FleetAgent, card: HTMLElement): vo
                 <Icon :name="showBeyond ? 'chevron-up' : 'chevron-down'" class="shrink-0 text-2xs" />
             </button>
             <div v-if="showBeyond" class="scrollbar-thin mt-2 flex min-h-0 flex-col gap-3 overflow-auto">
-                <section v-if="archivedMatches.length > 0" class="flex min-w-0 flex-col gap-2">
+                <section v-if="archivedHits.length > 0" class="flex min-w-0 flex-col gap-2">
                     <div class="flex items-center gap-2 px-1">
                         <Icon name="box" class="shrink-0 text-2xs text-subtle" />
                         <span class="text-2xs font-semibold uppercase tracking-wide text-muted">In the archive</span>
-                        <span class="rounded-full bg-overlay px-1.5 py-px text-2xs text-muted">{{ archivedMatches.length }}</span>
+                        <span class="rounded-full bg-overlay px-1.5 py-px text-2xs text-muted">{{ archivedHits.length }}</span>
                     </div>
                     <!-- Real cards, not a stripped-down list: an archived agent keeps its branch, its diff
                          and its transcript, so the thing the user wants to do with a hit here — read it,
                          restore it — is exactly what the card already offers. -->
                     <div class="grid gap-2" :class="narrow ? '' : 'grid-cols-3 items-start'">
                         <AgentCard
-                            v-for="agent in archivedMatches"
+                            v-for="agent in archivedHits"
                             :key="agent.id"
                             :agent="agent"
                             :now="now"
