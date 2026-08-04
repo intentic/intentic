@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import type { CiHost, CiRepo, PipelineRun } from "@intentic/sandbox-contract";
-import { cmp, CountBar, type CountItem, Icon, InfoHint, Page, PageAction, PageHeader, ProgressRing, RowGroup } from "@intentic/extension-ui";
+import type { CiRepo, PipelineRun } from "@intentic/sandbox-contract";
+import { cmp, CountBar, type CountItem, Icon, InfoHint, Page, PageHeader, ProgressRing, RowGroup } from "@intentic/extension-ui";
 import { computed, onMounted, ref } from "vue";
 import { markPipelinesSeen } from "./ciAttention";
 import { openFailures, supersededBy } from "./ciStreaks";
@@ -43,31 +43,19 @@ const recurringFor = (run: PipelineRun): ReadonlyMap<string, number> => recurrin
 const open = computed(() => openFailures(runs.value));
 const superseded = computed(() => supersededBy(runs.value));
 
-/* The "open the thing this view is about" link, matching Deployments' Open Komodo. Pipelines needs a list
- * rather than one link, because a workspace can span both vendors — and the GitLab entry has to be DERIVED
- * from a project url rather than assumed, since a self-hosted instance is whatever host the capability points
- * at. A url the URL parser refuses simply contributes nothing.
+/* WHERE "OPEN THIS ON THE VENDOR" LIVES, and why it is not a page action.
  *
- * `host` rides along beside the label because it is also the vendor's glyph: these are the one header in the
- * app that can hold TWO outbound links, and drawn as icons a shared generic arrow would make them the same
- * control twice. */
-const hostOrigin = (url: string): string | undefined => {
-    try {
-        return new URL(url).origin;
-    } catch {
-        return undefined;
-    }
-};
-const hosts = computed(() => {
-    const byOrigin = new Map<string, { host: CiHost; label: string; url: string }>();
-    for (const repo of repos.value) {
-        const origin = hostOrigin(repo.url);
-        if (origin !== undefined && !byOrigin.has(origin)) {
-            byOrigin.set(origin, { host: repo.host, label: repo.host === `github` ? `GitHub` : `GitLab`, url: origin });
-        }
-    }
-    return [...byOrigin.values()];
-});
+ * It was one: a header <PageAction> per host origin, so a workspace spanning both vendors got "Open GitHub"
+ * and "Open GitLab" side by side. Two things were wrong with it. The header is page-scoped and this page is
+ * N repos wide, which is why that action had to be written as a v-for — a header action that loops is a
+ * header action whose scope does not fit. And an origin is the vendor's front door: someone leaving a CI
+ * board lands on github.com and has to walk back down to the project they were already looking at.
+ *
+ * Both fix themselves at the repo group, which is the level that actually has ONE destination. So the link
+ * lives in each <RowGroup>'s #info, and it points at that repo's PIPELINE LIST rather than its home page —
+ * this view is about runs, and the row you clicked from is a run. That completes the ladder the rows already
+ * started: one run (PipelineRunRow's run.url) → this repo's pipelines → nothing generic above it. */
+const ciUrl = (repo: CiRepo): string => (repo.host === `github` ? `${repo.url}/actions` : `${repo.url}/-/pipelines`);
 
 const byRepo = computed(() => {
     const groups = new Map<string, PipelineRun[]>();
@@ -153,9 +141,6 @@ const fixRun = async (run: PipelineRun): Promise<void> => {
                         </span>
                     </InfoHint>
                 </template>
-                <template #actions>
-                    <PageAction v-for="entry in hosts" :key="entry.url" :icon="entry.host" :label="`Open ${entry.label}`" :href="entry.url" />
-                </template>
             </PageHeader>
 
             <div v-if="error" :class="cmp.alertDanger(`mb-4 px-4 py-3 text-sm`)">{{ error }}</div>
@@ -205,12 +190,20 @@ const fixRun = async (run: PipelineRun): Promise<void> => {
                 <div class="flex flex-col gap-6">
                     <RowGroup v-for="repo in repos" :key="repo.repo" :label="repo.repo">
                         <template #info>
-                            <div class="flex items-center gap-1.5">
-                                <Icon :name="repo.host === `github` ? `github` : `gitlab`" class="text-subtle" />
-                                <a :href="repo.url" target="_blank" rel="noopener" class="truncate font-mono text-2xs text-subtle hover:text-link">
-                                    {{ repo.project }}
-                                </a>
-                            </div>
+                            <!-- The vendor's own glyph, then the project path, as ONE link out to that
+                                 project's pipelines. The icon is part of the link's name here rather than a
+                                 control of its own — which is the only way an icon may stand in for a
+                                 destination: attached to the words that say where it goes. -->
+                            <a
+                                :href="ciUrl(repo)"
+                                target="_blank"
+                                rel="noopener"
+                                class="flex items-center gap-1.5 text-subtle hover:text-link"
+                                v-tooltip.top="`Open ${repo.project} on ${repo.host === `github` ? `GitHub` : `GitLab`}`"
+                            >
+                                <Icon :name="repo.host" />
+                                <span class="truncate font-mono text-2xs">{{ repo.project }}</span>
+                            </a>
                         </template>
 
                         <div v-if="repo.hookWarning" :class="cmp.alertWarning(`px-4 py-2.5 text-xs break-words`)">{{ repo.hookWarning }}</div>
