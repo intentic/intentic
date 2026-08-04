@@ -37,7 +37,7 @@ bash "$DIR/build-desktop.sh" "$VERSION"
 #
 # It runs HERE, in prepareCmd, rather than being left to the desktop:verify job, because that job is not a gate
 # and cannot become one: it builds its own artifacts on its own rules, and `release` reaches its `needs` the
-# moment `test` goes green. On 2026-08-03 that gap shipped: desktop:verify failed at 12:34:10 with `the setup
+# moment test:core goes green. On 2026-08-03 that gap shipped: desktop:verify failed at 12:34:10 with `the setup
 # link opened the Sandbox Manager (waited 45s)` and `the original instance died while handling the link`,
 # release started at 12:34:12, and forty minutes later the installers with that bug were on the GitHub Release.
 # Verifying the release's OWN output is the only version of this check that cannot be outrun — a failure here

@@ -9,11 +9,16 @@ the config that makes it warm, and the evidence for why it is shaped this way.
 In the runner's `config.toml`, add the mount to `[runners.docker] volumes`:
 
 ```toml
-# Six, not four. The images jobs declare `needs: ["test"]` rather than inheriting the stage barrier, so on a
-# main push that touches the desktop tree seven jobs are live in one pipeline and four of them can be eligible
-# at once: desktop:verify still holds a slot for up to 90 minutes while images, images:platform and release all
-# come free the moment `test` goes green. At four, the DAG buys nothing — the jobs just queue instead.
-concurrent = 6
+# Eight, not six, and never four. Verification is split by release group — test:core, test:platform and
+# test:site each gate only their own artifacts — so the `test` stage opens with SIX jobs eligible at once
+# (those three plus mirror:verify, desktop:check and desktop:verify). Then the publishing jobs come free
+# INDIVIDUALLY as their own gate goes green: images and release the moment test:core passes, images:platform
+# the moment test:platform does, while desktop:verify may still hold a slot for up to 90 minutes.
+#
+# This number is what the split is worth. Under-provision it and the groups queue behind each other, which is
+# the coupling the DAG was rewritten to remove — the pipeline still passes, it just serializes and every
+# argument in .gitlab-ci.yml about a site failure not blocking a platform deploy stops being true in practice.
+concurrent = 8
 
 [[runners]]
   name = "radarsu-worker"
@@ -61,8 +66,8 @@ pipelines the correlation was exact:
 
 At `concurrent = 4` that is a warm cache roughly one pipeline in four.
 
-**Archiving it cost more than it ever returned.** The `test` job spent **6m19s** — 38% of its wall-clock —
-zipping the store (`.pnpm-store/: found 69292 matching artifact files and directories`), and `get_sources` then
+**Archiving it cost more than it ever returned.** The `test` job (since split into the three verify groups)
+spent **6m19s** — 38% of its wall-clock — zipping the store (`.pnpm-store/: found 69292 matching artifact files and directories`), and `get_sources` then
 spent 40s deleting those same 69k files for the next job. That CPU is spent whether or not anything reads the
 result, and an S3/MinIO backend would not remove it; it would add an upload on top.
 
@@ -74,6 +79,10 @@ With the store warm and nothing to download, `pnpm install --frozen-lockfile` st
 every job** of pipeline 2725042409 — the largest uniform cost in the pipeline. Half of that is now addressed
 from the repo side: `.gitlab-ci.yml` sets `GIT_CLEAN_FLAGS: -ffdx -e node_modules`, so a slot keeps its
 installed tree between pipelines instead of deleting 69k files and re-linking them.
+
+Splitting verification into three groups makes this the pipeline's most valuable remaining fix rather than
+merely its largest: the install is per-job, so the `test` stage now pays it six times over instead of four,
+in parallel. Every second cut here is cut from every group at once.
 
 What that cannot fix is the import method. pnpm hardlinks packages out of the store, and a hardlink cannot
 cross a filesystem — so if `/ci-cache` (a host bind mount) and `/builds` (the container's own filesystem) are
@@ -153,7 +162,7 @@ After the first pipeline on the new config:
 
 ```sh
 # no more "Cache file does not exist" for the pnpm/turbo paths — they are no longer GitLab caches at all
-# and the test job should report a large "Cached: N cached" from turbo
+# and each verify job should report a large "Cached: N cached" from turbo
 curl -s -H "PRIVATE-TOKEN: $TOKEN" \
   "https://gitlab.com/api/v4/projects/radarsu%2Fintentic/jobs/<id>/trace" | grep -E 'Cached:|  Time:'
 ```

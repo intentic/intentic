@@ -1,5 +1,7 @@
 # GitLab CI/CD for the consolidated intentic monorepo (intentic/ = OSS core, platform/ = proprietary, site/).
-# One pipeline: turbo build/test covers every product; images + release cover the published artifacts.
+# One pipeline, one shared foundation (install, turbo cache, job images), three INDEPENDENT verify groups —
+# test:core, test:platform, test:site, plus the desktop jobs — each gating only the artifacts it proves. A
+# broken group publishes nothing of its own and blocks nothing of anyone else's.
 # Node + pnpm are pinned by package.json engines/packageManager — corepack reads packageManager, so no
 # version is repeated here.
 
@@ -108,10 +110,11 @@ default:
 # The measurement that put it here: across 40 main pipelines, 22 `test` jobs failed and 10 of them died on one
 # of these three invariants — 6 on ERR_PNPM_OUTDATED_LOCKFILE, 4 on a suite sitting under the wrong budget.
 # Every one of those failed AFTER `pnpm install --frozen-lockfile` resolved 1,800+ packages (0.6-2.0 min), and
-# because test, mirror:verify, desktop:check and desktop:verify all start with that same install, one stale
-# lockfile burned four concurrent slots to say so four times. As its own STAGE rather than a `needs:` edge on
-# each of them: a stage barrier keeps the existing ordering exactly as it was (nothing has to learn about this
-# job), and jobs downstream of `test` inherit it through the `needs` they already declare.
+# because every verify job, mirror:verify, desktop:check and desktop:verify all start with that same install,
+# one stale lockfile burned four concurrent slots to say so four times — six, now that `test` is three jobs,
+# which is what makes this job's ~70ms worth more than when it was written. As its own STAGE rather than a
+# `needs:` edge on each of them: a stage barrier keeps the existing ordering exactly as it was (nothing has to
+# learn about this job), and the publishing jobs inherit it through the `needs` they already declare.
 #
 # No `rules:` — this runs in every pipeline there is, including schedules. It is the cheapest job in the file
 # and the only one whose failure means the rest cannot be worth starting.
@@ -211,12 +214,35 @@ ci-desktop:
         echo "merge request — image built for validation only, tag not moved"
       fi
 
-# Build + test every product (turbo runs across intentic/, platform/, site/): the MR gate, and on main the
-# verify step the images + release stages wait on via stage ordering — a red build publishes nothing.
-# Interruptible on main too: a superseded pipeline's verify is safely canceled (the release job itself is not
-# interruptible and its resource_group serializes releases; the newest pipeline releases the newest commit).
-test:
+# Build + test every product, as ONE JOB PER RELEASE GROUP rather than one job for the monorepo: the MR gate,
+# and on main the verify step each publishing job waits on through its own `needs`. A red group publishes
+# nothing of its own and blocks nothing of anyone else's.
+#
+# The split is what makes the `needs` edges below mean anything. `images:platform` already declared
+# `needs: ["test"]` to keep the DESKTOP jobs off the platform's critical path, but `test` itself still carried
+# every package in the workspace — so a vue-tsc error in the desktop launcher UI, or a broken `astro build` in
+# the marketing site, stopped a production api+web deploy for a reason neither had anything to do with. The
+# groups below are the smallest partition that ends that.
+#
+# COVERAGE IS UNCHANGED, and that is a checkable claim rather than a hope: with `turbo run <task> --dry=json`,
+# the union of the four closures — the three FILTERS here plus desktop:check's — is exactly the 70 packages the
+# single unfiltered job used to cover, for `typecheck` and for `build test` alike. Re-run that comparison when
+# adding a group; a package in no group is a package nothing checks, and turbo will not say so.
+#
+# The groups deliberately OVERLAP on `_libs/*`, because turbo's `pkg...` includes a package's dependencies: a
+# shared lib break fails every group that depends on it, which is the correct blast radius. Only the leaves are
+# exclusive, and those are the ones worth isolating. The duplicated work is a turbo cache replay off the shared
+# /ci-cache dir (see the variables at the top — one dir, every slot, keyed by task hash), not a second build,
+# and the jobs run beside each other rather than in sequence. The runner needs slots for that: `concurrent`
+# must clear the number of verify jobs eligible at once, or the split just makes them queue (docs/ci-runner.md).
+#
+# It is still the graph an agent runs before landing (`pnpm verify`, AGENTS.md) — the same tasks with the same
+# hashes, partitioned across three jobs instead of one — so a failure the fleet can see locally is a failure
+# one of these three reports.
+.verify:
   stage: test
+  # Interruptible on main too: a superseded pipeline's verify is safely canceled (the release job itself is not
+  # interruptible and its resource_group serializes releases; the newest pipeline releases the newest commit).
   interruptible: true
   rules:
     - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
@@ -226,22 +252,57 @@ test:
   # fakes drifted out of shape with the seams they stand in for, and only ever said so as an opaque 500 in some
   # unrelated suite.
   #
-  # It runs FIRST, and as its own `pnpm typecheck` rather than folded into the graph below, for one reason: that
-  # is half of the exact command an agent runs on its branch before landing (`pnpm verify`, AGENTS.md); the
-  # other half is `pnpm test`, which is this job's second line minus the `build` half of the graph — a worktree
-  # cannot run `build` at all (EXDEV), so the fleet's gate proves the tests against a `tsgo -b` dist and CI
-  # proves the same tests against the real build outputs on top. It used to sit in the graph
-  # depending on `^build` — and a pnpm `build` dies EXDEV in an agent worktree, so the check that decided
-  # whether main was green was the one check nobody in the fleet could run. It now emits its own declarations
-  # (the `tsgo -b` prepass the script runs before turbo), needs nothing from the graph, and fails in seconds
-  # instead of after a full build + test.
+  # It runs FIRST and needs nothing from the build graph: the prepass emits its own declarations, which is what
+  # makes the same check runnable in an agent worktree — it used to sit in the graph depending on `^build`, and
+  # a pnpm `build` dies EXDEV (exit 238) in a worktree, so the check that decided whether main was green was the
+  # one check nobody in the fleet could run. CI proves the same tests against the real build outputs on top.
   #
-  # Then one turbo invocation, not two: `build` then `test` as separate calls is a hard barrier — every package
-  # must finish building before ANY test starts. A single `build test` graph lets each package's tests run the
-  # moment its own deps are built while the rest of the monorepo is still compiling.
+  # The prepass is invoked directly rather than through `pnpm typecheck`, because the root script cannot take a
+  # filter. It is repo-wide and unfilterable either way (~45 packages of `tsgo -b`), so each of the three jobs
+  # pays it — the standing cost of the split, against a platform deploy that no longer waits on the site.
+  #
+  # Then ONE turbo invocation for `build test`, not two: `build` then `test` as separate calls is a hard barrier
+  # — every package must finish building before ANY test starts. A single `build test` graph lets each package's
+  # tests run the moment its own deps are built while the rest of the group is still compiling.
+  #
+  # `--continue=dependencies-successful` on both, which `typecheck` already had and `build test` did not: turbo
+  # otherwise stops at the first failing task, so a red pipeline reports one broken package and the next push
+  # finds the next one. Continuing into everything whose own dependencies are still green makes one run say
+  # everything that is wrong, and skips only what genuinely cannot be judged.
+  #
+  # $FILTERS is deliberately unquoted — word-splitting is how a group's several `--filter=` flags reach turbo.
   script:
-    - pnpm typecheck
-    - pnpm turbo run build test
+    - node _tools/scripts/prepass.mjs
+    - pnpm turbo run typecheck $FILTERS --continue=dependencies-successful
+    - pnpm turbo run build test $FILTERS --continue=dependencies-successful
+
+# The OSS core: every npm-published package plus the sandbox image's tree. Gates `images` and `release`.
+#
+# The two desktop packages are subtracted rather than left to fall in with the rest of the scope: the launcher
+# UI is the desktop group's leaf, desktop:check owns it, and leaving it here would mean a vue-tsc error in a
+# Tauri window still held up the sandbox images and the npm release — the same coupling one scope down.
+test:core:
+  extends: .verify
+  variables:
+    FILTERS: "--filter=@intentic/*... --filter=!@intentic/desktop-app --filter=!@intentic/desktop-smoke"
+
+# The hosted platform — api, web, prisma, api-contract, capability-catalog, e2e — and their closure, which
+# reaches every extension, because web declares their UI bundles as workspace dependencies and compiles them
+# in. Gates images:platform, and is now the ONLY thing that does: this job alone decides whether production
+# rolls.
+test:platform:
+  extends: .verify
+  variables:
+    FILTERS: "--filter=@intentic-app/*..."
+
+# The marketing site and the content/integration libs behind it. It gates no deploy YET — the site publishes
+# from Cloudflare's own git integration, outside this pipeline, so nothing here can stop a bad one — which
+# makes this the merge-request gate and the `needs` a future `site:deploy` job hangs off. Until that job
+# exists, the site is the one product whose deploy this file does not verify.
+test:site:
+  extends: .verify
+  variables:
+    FILTERS: "--filter=@intentic-dev/*..."
 
 # The public GitHub mirror, proven before it can be published. verify-mirror.sh materialises the export
 # (_tools/scripts/public.sh) into a scratch tree, reconciles the lockfile against the subset, installs it
@@ -275,12 +336,23 @@ desktop:check:
   # ci-desktop job), so this job's before_script is the plain install again.
   image: $CI_DESKTOP_IMAGE
   interruptible: true
+  # The glob is this job's whole input closure, and it has to be, twice over: it is what decides whether the
+  # desktop is checked at all, and since test:core subtracts the desktop packages, a miss here is a package no
+  # job in the pipeline builds. `turbo run build test --filter=@intentic/desktop-app... --dry` names that
+  # closure — desktop-app, desktop-smoke, ui, tsconfig — and each entry below is one of them.
+  #
+  # _tools/ci-desktop is here because this job's IMAGE is an input like any other: a rustup or webkit2gtk bump
+  # there rebuilt the image and triggered nothing that compiles against it, leaving the 40-minute release job as
+  # the first thing to find out.
   rules:
     - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
       changes: &desktop-changes
         - _apps/desktop/**/*
         - _apps/site/public/scripts/**/*
         - _libs/ui/**/*
+        - _tools/ci-desktop/**/*
+        - _tools/desktop-smoke/**/*
+        - _tools/tsconfig/**/*
         - pnpm-lock.yaml
     - if: '$CI_COMMIT_BRANCH == "main"'
       changes: *desktop-changes
@@ -302,7 +374,13 @@ desktop:check:
   script:
     # The launcher UI first: `tauri build` would run it anyway, and a Vue error is worth failing on in seconds
     # rather than after a cargo build.
-    - pnpm --filter @intentic/desktop-app build
+    #
+    # Through turbo rather than a bare `pnpm --filter … build`, because this job now OWNS the desktop packages:
+    # test:core subtracts them so that a vue-tsc error in a Tauri window cannot block a platform deploy, which
+    # means their build has to happen HERE or nowhere. It also buys the turbo cache the pnpm spelling could not.
+    # No separate `typecheck` run — desktop-app's build IS `vue-tsc --noEmit && vite build`, so a second one
+    # would type-check the same program twice. No prepass either: nothing in this closure reads a dist.
+    - pnpm turbo run build test --filter=@intentic/desktop-app... --filter=@intentic/desktop-smoke... --continue=dependencies-successful
     - cargo fmt --manifest-path _apps/desktop/src-tauri/Cargo.toml --all --check
     - cargo clippy --manifest-path _apps/desktop/src-tauri/Cargo.toml --all-targets -- -D warnings
     - cargo test --manifest-path _apps/desktop/src-tauri/Cargo.toml
@@ -432,18 +510,22 @@ images:
   extends: .dind
   stage: images
   # ci-base (node + docker CLI), not a bare docker:27 image: prepare-image-trees.sh compiles the payload
-  # JOB-side — with the warm pnpm store + turbo cache from the test job it's a cache replay, and the
+  # JOB-side — with the warm pnpm store + turbo cache from test:core it's a cache replay, and the
   # Dockerfile is left with pure COPYs.
   interruptible: true
-  # `test` alone, not the whole stage. A plain stage barrier makes this job wait for the SLOWEST job in `test`
-  # and skips it outright if any of them FAILED — so a desktop clippy warning, or the linuxdeploy download
-  # desktop:verify fetches from GitHub at bundle time, stops the images and the platform deploy for a reason
-  # neither has anything to do with. Both happened: pipelines 2725556418 and 2725541206 skipped this job on a
-  # desktop:check failure, and in 2725612642 `release` (which already had needs) started 4s after test while
-  # images:platform waited 4m30s on desktop:check. mirror:verify is deliberately absent too — it proves the
-  # public export installs, which the release job needs and these images do not. The cache assumption above is
-  # unaffected: `test` is the job that fills the turbo cache and it still completes first.
-  needs: ["test"]
+  # `test:core` alone — the one job that verified what these images contain, not the whole stage. A plain stage
+  # barrier makes this job wait for the SLOWEST job in `test` and skips it outright if any of them FAILED — so a
+  # desktop clippy warning, or the linuxdeploy download desktop:verify fetches from GitHub at bundle time, stops
+  # the images and the platform deploy for a reason neither has anything to do with. Both happened: pipelines
+  # 2725556418 and 2725541206 skipped this job on a desktop:check failure, and in 2725612642 `release` (which
+  # already had needs) started 4s after test while images:platform waited 4m30s on desktop:check.
+  #
+  # Naming the group rather than the stage is now the whole point rather than half of it: a single `test` job
+  # made this edge stop the desktop and e2e JOBS from blocking, while a site or launcher-UI failure inside that
+  # job still did. test:platform and test:site are absent for the same reason mirror:verify is — none of them
+  # proves anything about a sandbox or dind-host image. The cache assumption above is unaffected: test:core is
+  # the job that fills the turbo cache for this closure and it still completes first.
+  needs: ["test:core"]
   cache:
     - !reference [.cache-defs, iq-models]
   before_script:
@@ -470,7 +552,7 @@ images:
 
 # Platform image publishing: build + push web + api on every push to main that touches the platform (moving
 # `latest` + the commit SHA). Separate from `images` (the OSS core: trees payload, semantic-release tags) but
-# the SAME philosophy: apps build job-side under turbo (warm caches from the test job — hence policy: pull),
+# the SAME philosophy: apps build job-side under turbo (warm caches from test:platform — hence policy: pull),
 # and the Dockerfiles are pure COPY. docker:release's TURBO_HASH tag makes the release content-addressed, so
 # the changes: globs are deliberately COARSE — anything in the workspace dirs the platform's dependency
 # closure can reach (web compiles in _extensions UI bundles; @intentic/constants et al live under _tools) —
@@ -482,8 +564,12 @@ images:platform:
   stage: images
   interruptible: true
   # Same reasoning as the images job above, and this is the one it was written for: nothing about api/web is
-  # proven by a Tauri build, so the desktop jobs must not sit between a green `test` and a platform deploy.
-  needs: ["test"]
+  # proven by a Tauri build, so the desktop jobs must not sit between a green verify and a platform deploy.
+  # `test:platform` finishes that argument — the edge used to keep the desktop JOBS out of the way while the
+  # `test` job it pointed at still built the desktop launcher UI and the marketing site, so a vue-tsc error in a
+  # Tauri window or a broken `astro build` took production's deploy with it. This job's gate is now exactly the
+  # closure of what it ships: api, web, and every lib and extension they compile in.
+  needs: ["test:platform"]
   before_script:
     - !reference [.pnpm-setup, script]
     - docker login -u "$CI_REGISTRY_USER" -p "$CI_REGISTRY_PASSWORD" "$CI_REGISTRY"
@@ -503,7 +589,7 @@ images:platform:
     - pnpm turbo run docker:release --filter=@intentic-app/api --filter=@intentic-app/web
     - DEPLOY_VERSION=$CI_COMMIT_SHORT_SHA bash _tools/scripts/deploy-platform.sh
 
-# Release: semantic-release over the test job's verified build — the cross-compiled machine agents and the
+# Release: semantic-release over test:core's verified build — the cross-compiled machine agents and the
 # desktop installers, the sandbox/dind-host images at the release version + moving `stable` tag, and the
 # export to the public GitHub mirror, whose pushed tag is what publishes the npm packages (publish-github.sh).
 release:
@@ -512,7 +598,11 @@ release:
   # The desktop toolchain image: prepareCmd runs build-desktop.sh, which is a Rust build like desktop:check's.
   # Everything ci-base carries comes with it, so nothing else in this job changes.
   image: $CI_DESKTOP_IMAGE
-  # test AND mirror:verify — deliberately NOT the images job. The release builds its own sandbox tree because semantic-release's
+  # test:core AND mirror:verify — deliberately NOT the images job. test:core rather than every verify job: what
+  # this publishes is the npm packages, the sandbox images and the desktop installers, and release-prepare.sh
+  # says so itself by building only the PUB closure ("web/api/site are not release artifacts"). Gating it on
+  # test:platform or test:site would block an npm publish on products it does not ship — the exact coupling the
+  # split above exists to remove. The release builds its own sandbox tree because semantic-release's
   # prepareCmd stamps the release version into every package.json first, and the sandbox READS that at runtime
   # (src/version.ts; ensure-intent's dependencySpec switches `link:` → `~<version>` on it). The images job's
   # sha-/latest images are built unstamped (0.0.0 = dev mode), so they are NOT retaggable as a release. The
@@ -531,7 +621,7 @@ release:
   # job's output can stand in for them. This edge is the cheap half of the same fix — when the pipeline already
   # knows the desktop is broken, spend zero of the release's forty minutes finding out again.
   needs:
-    - "test"
+    - "test:core"
     - "mirror:verify"
     - job: "desktop:verify"
       optional: true
