@@ -212,6 +212,16 @@ export const startInstall = async (root: string, project: WorkspaceProject, proc
 export const SETUP_NOTICE_HEADER =
     "Dependencies are NOT installed for the following projects, so their type-checks, linters and tests cannot work yet";
 
+/* The STALE half's own opening, and it needs one of its own for a reason that took a while to show itself.
+ *
+ * The two halves are independent: a workspace whose projects are all installed-but-behind emits a notice that
+ * never carries the header above, and the stripper anchors on a known opening or does nothing. So on this
+ * workspace — which produces exactly that shape — the preamble was never recognized, and every stored message
+ * came back out of restore with the whole paragraph stapled to the front of it as the user's own words. The
+ * chat then showed a "hello" as three sentences about node_modules. Being a prefix rather than a line of its
+ * own is what keeps the notice reading as prose while still giving the stripper something to anchor on. */
+export const STALE_NOTICE_HEADER = "Some dependencies declared under /work are not installed";
+
 // A project names itself by its directory; the root owns the manifest under a name rather than an empty string.
 const where = (status: ProjectSetupStatus): string => (status.dir === "" ? "the workspace root" : status.dir);
 
@@ -235,9 +245,9 @@ export const setupNoticeFor = (statuses: readonly ProjectSetupStatus[]): string 
         ...(staleLines.length === 0
             ? []
             : [
-                  "Some dependencies declared under /work are not installed, so an unresolved import there is the install " +
-                      "being behind rather than a mistake in the code. Do not edit working source to satisfy one, and do not " +
-                      "run an install — the workspace reconciles itself once it is idle. Say so if it blocks the task:",
+                  `${STALE_NOTICE_HEADER}, so an unresolved import there is the install being behind rather than a mistake ` +
+                      "in the code. Do not edit working source to satisfy one, and do not run an install — the workspace " +
+                      "reconciles itself once it is idle. Say so if it blocks the task:",
                   ...staleLines,
               ]),
     ].join("\n");

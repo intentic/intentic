@@ -1,4 +1,4 @@
-import { mkdtemp, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { AgentTurn } from "@intentic/sandbox-contract";
@@ -6,7 +6,7 @@ import { expect, test } from "vitest";
 import { unstubbed } from "@intentic/testing";
 import type { Services } from "../composition.js";
 import { testConfig } from "../testing.js";
-import { SETUP_NOTICE_HEADER } from "../workspace/workspace-setup.js";
+import { SETUP_NOTICE_HEADER, STALE_NOTICE_HEADER } from "../workspace/workspace-setup.js";
 import type { AgentRequest } from "./agent.js";
 import { planTurn, type TurnContext } from "./turn-plan.js";
 
@@ -29,11 +29,22 @@ const workspaceWithMissingDeps = async (): Promise<string> => {
     return root;
 };
 
-const contextIn = (root: string): TurnContext => ({
+/* An ISOLATED turn's tree as the DAEMON reaches it: the source is checked out, and every installed dependency
+ * is an empty directory. That is not a broken worktree, it is the ordinary one — the real tree arrives as an
+ * overlay mounted inside the turn's own namespace (agents/worktrees.ts), which the daemon is not in. */
+const daemonSideWorktree = async (): Promise<string> => {
+    const worktree = await mkdtemp(join(tmpdir(), "turn-plan-wt-"));
+    await writeFile(join(worktree, "package.json"), `{"name":"app","dependencies":{"left-pad":"^1.0.0"}}`);
+    await writeFile(join(worktree, "pnpm-lock.yaml"), "");
+    await mkdir(join(worktree, "node_modules"), { recursive: true });
+    return worktree;
+};
+
+const contextIn = (root: string, localCwd = root): TurnContext => ({
     base: { prompt: "do the thing", cwd: root, signal: new AbortController().signal },
     attachmentPaths: [],
-    localCwd: root,
-    effectiveCwd: root,
+    localCwd,
+    effectiveCwd: localCwd,
     cliEnv: {},
     syncNote: undefined,
     steering: undefined,
@@ -46,6 +57,8 @@ const servicesIn = (root: string, overrides: Partial<Services> = {}): Services =
         workspace: unstubbed<Services["workspace"]>("workspace", { root }),
         processes: unstubbed<Services["processes"]>("processes", { running: () => false }),
         capabilities: unstubbed<Services["capabilities"]>("capabilities", { list: async () => [] }),
+        // A measurement seam, not a behavioural one: pass the work through and time nothing.
+        perf: unstubbed<Services["perf"]>("perf", { track: (_op, _fields, run) => run() }),
         config: { ...testConfig, translator: { url: "http://127.0.0.1:8788", token: "local" } },
         cliProxy: unstubbed<Services["cliProxy"]>("cliProxy", {
             accounts: async () => ({ codex: [{ name: "sub", label: "sub" }], grok: [], kimi: [], gemini: [] }),
@@ -103,4 +116,29 @@ test("an installed tree earns no notice, so an ordinary turn is the user's messa
     const prompt = await promptOf(services, { prompt: "do the thing", agent: "codex" } as AgentTurn, contextIn(root));
 
     expect(prompt).toBe("do the thing");
+});
+
+/* THE PROBE HAS TO ASK ABOUT THE TREE THE TURN RESOLVES THROUGH, which for an isolated turn is never the
+ * worktree the daemon can see. Everything a worktree's imports resolve through is mounted into the turn's own
+ * namespace and is an empty directory anywhere else — so a probe run daemon-side found the marker, walked it,
+ * found nothing, and declared the whole workspace uninstalled. Against this repository that was 663 phantom
+ * dependencies and three paragraphs of untrue instruction in front of every isolated turn, telling the model to
+ * distrust type errors that were fine and to expect imports to fail that did not. */
+test("an isolated turn is not told its dependencies are missing just because the daemon cannot see them", async () => {
+    const main = await mkdtemp(join(tmpdir(), "turn-plan-"));
+    const services = servicesIn(main, {
+        codexThreadExists: async () => true,
+        codexModels: unstubbed<Services["codexModels"]>("codexModels", {
+            models: async () => ({ models: [{ id: "gpt-5.6-codex", label: "GPT 5.6 Codex" }], default: "gpt-5.6-codex" }),
+        }),
+    });
+
+    const prompt = await promptOf(services, { prompt: "do the thing", agent: "codex" } as AgentTurn, contextIn(main, await daemonSideWorktree()));
+
+    // Neither half of it — a worktree read daemon-side has the marker, so it earns the STALE wording rather
+    // than the never-installed one, and that is the half nothing was anchored on.
+    expect(prompt).not.toContain(STALE_NOTICE_HEADER);
+    expect(prompt).not.toContain(SETUP_NOTICE_HEADER);
+    // The worktree note is a different fact and still belongs: this runtime reaches its branch by cwd alone.
+    expect(prompt.endsWith("do the thing")).toBe(true);
 });

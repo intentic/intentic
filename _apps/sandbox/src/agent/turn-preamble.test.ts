@@ -1,6 +1,6 @@
 import { expect, test } from "vitest";
 import type { RepoSync } from "../agents/sync.js";
-import { SETUP_NOTICE_HEADER } from "../workspace/workspace-setup.js";
+import { setupNoticeFor, SETUP_NOTICE_HEADER } from "../workspace/workspace-setup.js";
 import { DELEGATION_NOTE_HEADER } from "./delegation.js";
 import { LITERAL_SLASH_NOTE, stripTurnPreamble, SYNC_NOTE_HEADER, syncNote, withTurnPreamble } from "./turn-preamble.js";
 
@@ -22,6 +22,26 @@ test("the literal-slash note moves the user's `/` off the front, and strip puts 
     expect(sent.startsWith("/")).toBe(false);
     expect(stripTurnPreamble(sent)).toBe(prompt);
     expect(stripTurnPreamble(withTurnPreamble([note, notice, LITERAL_SLASH_NOTE], prompt))).toBe(prompt);
+});
+
+/* THE DEPENDENCY NOTICE HAS TWO OPENINGS, and for a long time only one of them was anchored — so this case is
+ * built by calling the real builder rather than from a literal like the fixture above. A hand-written one would
+ * have drifted exactly the way the two modules did: the stale half opens with its own sentence, the stripper
+ * recognized nothing, and every restored message in this very workspace wore three lines about node_modules in
+ * front of what the user actually typed. */
+test("the stale-only notice — the shape this workspace itself produces — strips like every other", () => {
+    const stale = setupNoticeFor([
+        {
+            dir: "intentic",
+            recipe: { ecosystem: "node", manager: "pnpm", command: "pnpm install", evidence: "pnpm-lock.yaml", marker: "node_modules" },
+            state: "stale",
+            unresolved: [{ dir: "", names: ["vue", "zod"] }],
+        },
+    ]);
+
+    expect(stale).toBeDefined();
+    expect(stale).not.toContain(SETUP_NOTICE_HEADER);
+    expect(stripTurnPreamble(withTurnPreamble([stale ?? ""], `Say "hello"`))).toBe(`Say "hello"`);
 });
 
 test("no notes ⇒ the prompt rides untouched, and strip leaves ordinary messages alone", () => {

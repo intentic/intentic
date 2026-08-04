@@ -67,6 +67,34 @@ const exists = async (path: string): Promise<boolean> => {
     }
 };
 
+/* ROOT, THEN THE REST TOGETHER — the shape every pass over a composition takes, and the one thing about a
+ * composition that is genuinely ordered.
+ *
+ * Root's checkout CREATES the conversation dir the nested worktrees mount into, so it cannot run beside them;
+ * nothing else in a composition depends on anything else in it. `withRepoLock` is already per repo, so the
+ * serial `for` loops this replaces were not protecting anything — each iteration simply waited on a lock it was
+ * never going to contend, and a workspace that grew from one repo to six grew its turn-start cost by the same
+ * factor, on the one path a person is watching. `retire` had always done it this way (see its pass 2); create,
+ * repair and remove had not caught up.
+ *
+ * `direction` is which end root belongs at: building needs the parent dir first, tearing down needs it last, or
+ * the nested `worktree remove`s find their checkouts already deleted and fall back to a prune. */
+const eachRepo = async (
+    repos: readonly { readonly repo: string }[],
+    direction: "root-first" | "root-last",
+    task: (repo: string) => Promise<void>,
+): Promise<void> => {
+    const together = (wanted: boolean): Promise<unknown> =>
+        Promise.all(repos.filter(({ repo }) => (repo === "root") === wanted).map(({ repo }) => task(repo)));
+    if (direction === "root-first") {
+        await together(true);
+    }
+    await together(false);
+    if (direction === "root-last") {
+        await together(true);
+    }
+};
+
 // DEPENDENCY MIRRORING. A worktree is a checkout of TRACKED files, and everything a package's imports resolve
 // THROUGH is untracked by design — its installed tree and its build output (isolation.ts's MIRRORED_DIRS) — so
 // a fresh worktree holds source that cannot resolve a single import, its own siblings least of all. Nothing
@@ -300,28 +328,35 @@ export const createAgentWorktrees = (
         ensure: async (id, recorded) => {
             const branch = `agent/${id}`;
             if (recorded.length > 0) {
-                for (const { repo } of recorded) {
-                    await withRepoLock(repo, () => repairOne(id, repo));
-                }
+                await eachRepo(recorded, "root-first", (repo) => withRepoLock(repo, () => repairOne(id, repo)));
                 await linkComposition(id, recorded);
                 return { cwd: conversationDir(id), branch, repos: recorded };
             }
-            const repos: { repo: string; base: string }[] = [];
             // Root first: its checkout creates the conversation dir the nested worktrees mount into (the root
             // repo excludes every repo dir — syncRootExcludes — so the mounts never collide with its own
             // tracked files).
-            for (const repo of await liveRepos()) {
-                const created = await withRepoLock(repo, () => createOne(id, repo));
-                if (created !== undefined) {
-                    repos.push(created);
-                }
-            }
+            const live = await liveRepos();
+            const created = new Map<string, { repo: string; base: string }>();
+            await eachRepo(
+                live.map((repo) => ({ repo })),
+                "root-first",
+                async (repo) => {
+                    const made = await withRepoLock(repo, () => createOne(id, repo));
+                    if (made !== undefined) {
+                        created.set(repo, made);
+                    }
+                },
+            );
+            // Read back in DISCOVERY order rather than in the order the creations happened to finish: root leads
+            // a composition (the worktree frame takes its base from that, and the record is written down for
+            // every later turn to repair against), and completion order is whatever the disk felt like.
+            const repos = live.map((repo) => created.get(repo)).filter((entry): entry is { repo: string; base: string } => entry !== undefined);
             await linkComposition(id, repos);
             return { cwd: conversationDir(id), branch, repos };
         },
         remove: async (id, recorded) => {
-            for (const { repo } of recorded) {
-                await withRepoLock(repo, async () => {
+            await eachRepo(recorded, "root-last", (repo) =>
+                withRepoLock(repo, async () => {
                     const main = mainDir(repo);
                     await git(main, ["worktree", "remove", "--force", worktreeDir(id, repo)]).catch(() =>
                         // Dir already gone — drop the stale admin entry instead.
@@ -330,8 +365,8 @@ export const createAgentWorktrees = (
                     // Both spellings: an archived agent being discarded holds its commits on the parked shelf,
                     // and `branch -D` alone would leave them behind with nothing left to reach them by.
                     await dropAgentRef(main, `agent/${id}`, git);
-                });
-            }
+                }),
+            );
             await rm(conversationDir(id), { recursive: true, force: true });
             await rm(overlaysFor(id), { recursive: true, force: true });
         },
@@ -370,7 +405,6 @@ export const createAgentWorktrees = (
             // concurrently with each other. ROOT GOES LAST: its worktree dir is the parent the nested checkouts
             // mount into, so removing it first deletes them out from under their own `worktree remove`, which
             // then fails into a `prune` fallback — two wasted spawns per nested repo, every time.
-            const nested = recorded.filter(({ repo }) => repo !== "root");
             const removeOne = (repo: string): Promise<void> =>
                 withRepoLock(repo, async () => {
                     const main = mainDir(repo);
@@ -387,10 +421,7 @@ export const createAgentWorktrees = (
                         logger.warn({ err: error, repo, id }, "agents: branch park failed"),
                     );
                 });
-            await Promise.all(nested.map(({ repo }) => removeOne(repo)));
-            if (recorded.some(({ repo }) => repo === "root")) {
-                await removeOne("root");
-            }
+            await eachRepo(recorded, "root-last", removeOne);
             await rm(conversationDir(id), { recursive: true, force: true });
             // The branch is the archive; the overlays are not part of it — an archived conversation's
             // dependency scratch has no more claim on the disk than a removed one's.

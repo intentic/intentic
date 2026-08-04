@@ -44,6 +44,16 @@ const servicesWith = (overrides: Partial<Services> = {}): Services =>
         // The dependency probe runs for every runtime now, so every arm reaches it — see honoured().
         processes: unstubbed<Services["processes"]>("processes", { running: () => false }),
         capabilities: unstubbed<Services["capabilities"]>("capabilities", { list: async () => [] }),
+        // A measurement seam, not a behavioural one — the planning steps file their own spans so a slow turn
+        // names the step rather than the phase. Pass the work through and time nothing.
+        perf: unstubbed<Services["perf"]>("perf", { track: (_op, _fields, run) => run() }),
+        /* The schema's own defaults, which is what a workspace that has never written a settings file reads.
+         *
+         * Here rather than only in the harness fixture below, because the harness arm no longer reads settings
+         * BEHIND its gates: the read runs alongside the credential resolution, so a turn that is about to be
+         * refused reaches it too. That is the trade the arm's own comment describes — one cached read on a
+         * refusal, against every accepted turn no longer queueing three round-trips end to end. */
+        sandboxSettings: unstubbed<Services["sandboxSettings"]>("sandboxSettings", { get: async () => SandboxSettingsSchema.parse({}) }),
         // No translator and no api key: the state both Codex gates refuse from, which most cases here start in.
         config: testConfig,
         cliProxy: unstubbed<Services["cliProxy"]>("cliProxy", { accounts: async () => ({ codex: [], grok: [], kimi: [], gemini: [] }) }),
@@ -190,8 +200,6 @@ test("Grok replaces a model its live catalog no longer offers, and keeps one it 
 const harnessServices = (overrides: Partial<Services> = {}): Services =>
     servicesWith({
         sessions: unstubbed<Services["sessions"]>("sessions", { exists: async () => true }),
-        // The schema's own defaults, which is what a workspace that has never written a settings file reads.
-        sandboxSettings: unstubbed<Services["sandboxSettings"]>("sandboxSettings", { get: async () => SandboxSettingsSchema.parse({}) }),
         openCode: unstubbed<Services["openCode"]>("openCode", { connected: async () => false }),
         codexHome: "/root/.codex",
         authRoot: "/root/.local/share",

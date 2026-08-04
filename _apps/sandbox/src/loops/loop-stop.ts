@@ -127,13 +127,19 @@ const askJudge = async (services: Services, loop: Loop, rubric: string, report: 
     }
 };
 
-// The command check: exit 0 ⇒ satisfied. Run in the conversation's OWN tree, not the workspace root — an
-// isolated loop's work is in its worktree, and a check that ran against /work would be testing the code the
-// loop has not landed yet. This is the automations guard's runner with the sign flipped, and the inversion is
-// the point: there, non-zero means "skip"; here, zero means "stop".
-const runCommand = async (command: string, cwd: string): Promise<StopVerdict> => {
+/* The command check: exit 0 ⇒ satisfied. Run in the conversation's OWN tree, not the workspace root — an
+ * isolated loop's work is in its worktree, and a check that ran against /work would be testing the code the
+ * loop has not landed yet. This is the automations guard's runner with the sign flipped, and the inversion is
+ * the point: there, non-zero means "skip"; here, zero means "stop".
+ *
+ * IT TAKES THE STOP SIGNAL, which the judge beside it always had and this one silently did not. A run's Stop
+ * cuts the turn off where it stands (workflows/workflow-runner.ts explains why it is an abort and not a polite
+ * ask) — and then the loop settled the iteration, which meant running this, which meant the user watched a
+ * stopped run go on executing its test command for up to the full minute below. A killed check answers
+ * not-done, exactly as a failing one does, and the loop is ending anyway. */
+const runCommand = async (command: string, cwd: string, signal: AbortSignal): Promise<StopVerdict> => {
     try {
-        const { stdout, stderr } = await execFileAsync("sh", ["-c", command], { cwd, timeout: CHECK_TIMEOUT_MS });
+        const { stdout, stderr } = await execFileAsync("sh", ["-c", command], { cwd, timeout: CHECK_TIMEOUT_MS, signal });
         const detail = `${stderr}${stdout}`.trim().slice(-DETAIL_TAIL);
         return { done: true, ...(detail !== "" ? { detail } : {}) };
     } catch (error) {
@@ -149,7 +155,9 @@ const runCheck = (
     check: LoopCheck,
     params: { readonly cwd: string; readonly report: string; readonly signal: AbortSignal },
 ): Promise<StopVerdict> =>
-    check.kind === "command" ? runCommand(check.command, params.cwd) : askJudge(services, loop, check.rubric, params.report, params.signal);
+    check.kind === "command"
+        ? runCommand(check.command, params.cwd, params.signal)
+        : askJudge(services, loop, check.rubric, params.report, params.signal);
 
 /* Evaluate this loop's completion against the iteration that just ended. `cwd` is the conversation's tree,
  * `report` its closing assistant text (the judge's only evidence).

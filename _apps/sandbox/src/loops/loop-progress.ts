@@ -33,8 +33,13 @@ const repoDigest = async (dir: string, git: GitRunner): Promise<string> => {
     // Both reads tolerate a dir that is not a repo, is mid-checkout, or has an unborn HEAD: the digest's
     // contract is only that equal digests mean nothing moved, and a repo that consistently fails to answer
     // consistently contributes the same empty string. It is the tree's OTHER repos that carry the signal.
-    const head = await git(dir, ["rev-parse", "-q", "--verify", "HEAD"]).catch(() => ({ stdout: "" }));
-    const status = await git(dir, ["status", "--porcelain", "--untracked-files=all"]).catch(() => ({ stdout: "" }));
+    //
+    // Concurrently, and so is every repo in the caller: neither read depends on the other's answer, and the two
+    // of them are the atom this whole pass is made of. See treeDigest.
+    const [head, status] = await Promise.all([
+        git(dir, ["rev-parse", "-q", "--verify", "HEAD"]).catch(() => ({ stdout: "" })),
+        git(dir, ["status", "--porcelain", "--untracked-files=all"]).catch(() => ({ stdout: "" })),
+    ]);
     return `${head.stdout.trim()}\n${status.stdout.slice(0, STATUS_MAX)}`;
 };
 
@@ -46,16 +51,25 @@ const repoDigest = async (dir: string, git: GitRunner): Promise<string> => {
  * before the loop began would score that — one of the largest changes an iteration can make — as no change at
  * all. Discovery is a bounded directory walk (see repo-discovery.ts), which is the same order of cost as the
  * git calls it feeds.
+ *
+ * EVERY REPO AT ONCE, and here that is not a micro-optimisation — it is the difference between the stall
+ * detector costing one git round-trip and costing a whole composition's worth of them, twice per iteration, at
+ * the two moments somebody is watching a clock. "Cheap by construction" was written when a workspace was one
+ * repo or two; this one grew to six, so the pass quietly became twelve sequential spawns before the turn starts
+ * and twelve more after it is stopped. On a busy daemon each `await` also pays whatever the event loop is
+ * behind by, which is how a few hundred milliseconds of git became seconds of visible warm-up. No repo reads
+ * another's answer, so there was never an ordering to keep here — only the HASH's, which the sort still fixes.
  */
 export const treeDigest = async (root: string, git: GitRunner = defaultGit): Promise<string> => {
-    const repos = await discoverRepos(root);
-    const hash = createHash("sha256");
+    const repos = (await discoverRepos(root)).toSorted();
     // The root repo itself first — the whole workspace is version-controlled (git/root-repo.ts), so a change to
     // a file that belongs to no nested repo lives here and nowhere else.
-    hash.update(await repoDigest(root, git));
-    for (const repo of repos.toSorted()) {
+    const digests = await Promise.all([root, ...repos.map((repo) => join(root, repo))].map((dir) => repoDigest(dir, git)));
+    const hash = createHash("sha256");
+    hash.update(digests[0] ?? "");
+    for (const [index, repo] of repos.entries()) {
         hash.update(`\u0000${repo}\u0000`);
-        hash.update(await repoDigest(join(root, repo), git));
+        hash.update(digests[index + 1] ?? "");
     }
     return hash.digest("hex");
 };

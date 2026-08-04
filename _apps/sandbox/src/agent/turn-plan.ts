@@ -101,6 +101,16 @@ export interface TurnContext {
     readonly resync?: () => Promise<ParkedSync | undefined>;
 }
 
+/* WHY EVERY STEP IN HERE IS MEASURED, and why they run together rather than one after another.
+ *
+ * Planning a turn is nothing but independent I/O — a capability listing, a dependency probe, a token refresh, a
+ * settings read, a browser bring-up, a delegation lookup — and it was written as a chain of awaits, so a turn
+ * paid the SUM of them. The daemon's own preflight marks (agent.routes.ts) recorded 5 to 22 seconds sitting
+ * inside a single stage called `plan`, which is where the marks stopped: the one number anybody had said the
+ * slow thing was "planning", and planning is a dozen things. Now each one files its own span, so the next slow
+ * turn names the step instead of the phase — and because they overlap, the turn pays the SLOWEST rather than
+ * the total. Nothing here reads anything else here, with two exceptions the harness arm spells out.
+ */
 export const planTurn = async (services: Services, input: AgentTurn, context: TurnContext): Promise<TurnPlan> => {
     // Harness (agentic loop) is orthogonal to provider: "native" runs each provider on its own runtime;
     // "claude-code" forces the Claude Code Agent SDK loop for ANY provider — codex/grok then fall through to the
@@ -110,13 +120,26 @@ export const planTurn = async (services: Services, input: AgentTurn, context: Tu
     const provider = input.agent ?? "claude";
     const harness = input.harness ?? "native";
     const capabilities = capabilitiesOf(provider, harness);
-    // cli/mcp/plugin/browser/agent-kind capabilities, read once and shared by the arms that need them. NOT the
-    // record above — these are what the OWNER installed, that is what the runtime can DO.
-    const installed = await services.capabilities.list();
-    // Dependency readiness for the tree this turn actually works in (an isolated turn's worktree, not /work).
-    // Resolved HERE, ahead of the dispatch, because it is true of every runtime — see `honoured`.
-    const setupNotice = setupNoticeFor(await workspaceSetup(context.localCwd, services.processes));
-    const planned: TurnContext = { ...context, base: honoured(services, context, capabilities, setupNotice) };
+    const [installed, setup] = await Promise.all([
+        // cli/mcp/plugin/browser/agent-kind capabilities, read once and shared by the arms that need them. NOT
+        // the record above — these are what the OWNER installed, that is what the runtime can DO.
+        services.perf.track("turn.plan.capabilities", {}, () => services.capabilities.list()),
+        /* Dependency readiness — asked of the MAIN checkout, and this is the one place in the daemon where
+         * "the tree this turn works in" is the wrong tree to ask about.
+         *
+         * An isolated turn's worktree carries no installed dependencies of its own. It gets them from the main
+         * checkout: an overlay mount inside the turn's namespace, or a symlink at the same relative path when
+         * the container cannot build one (agents/worktrees.ts). Both resolve THROUGH /work, so /work's answer
+         * is the turn's answer. The daemon, however, stands outside that namespace — where the overlay is an
+         * EMPTY DIRECTORY. So probing the worktree found the marker (the empty mount point), walked it, found
+         * nothing in it, and reported every declared dependency in the workspace as not installed: on this
+         * repository, 663 of them, in a paragraph telling the model its imports are only failing because an
+         * install is behind. None of it was true, and it was stapled to the front of every isolated turn.
+         *
+         * Resolved HERE, ahead of the dispatch, because it is true of every runtime — see `honoured`. */
+        services.perf.track("turn.plan.deps", {}, () => workspaceSetup(services.workspace.root, services.processes)),
+    ]);
+    const planned: TurnContext = { ...context, base: honoured(services, context, capabilities, setupNoticeFor(setup)) };
     // The dispatch, through the registry rather than an if/else chain over the same union — so the set of
     // runtimes has one declaration, and the health probe the picker reads is written next to the arm it
     // predicts (see agent/adapter-registry.ts).
@@ -282,25 +305,40 @@ export const planHarnessTurn = async (
     context: TurnContext,
     installed: readonly Capability[],
 ): Promise<TurnPlan> => {
-    const resolved = await resolveHarnessCredentials(services, {
-        agent: input.agent,
-        ...(input.account !== undefined ? { account: input.account } : {}),
-        ...(input.model !== undefined ? { model: input.model } : {}),
-    });
+    /* THE THREE THINGS NOTHING ELSE HERE DEPENDS ON, together — a token refresh that may go to the network, a
+     * transcript existence check, and a settings read. They used to be three awaits in a row in front of every
+     * gate, which meant every turn paid all three end to end before the first byte of planning happened.
+     *
+     * The REFUSALS below are still asked in their old order, and that ordering is the only thing the old shape
+     * was really buying: a turn with no subscription and a dead session id should say "connect an account",
+     * because that is the one the user acts on first. Doing the other two reads on a turn that then refuses
+     * costs a file read nobody will use, which is the trade. */
+    const [resolved, dead, settings] = await Promise.all([
+        services.perf.track("turn.plan.credentials", { provider: input.agent ?? "claude" }, () =>
+            resolveHarnessCredentials(services, {
+                agent: input.agent,
+                ...(input.account !== undefined ? { account: input.account } : {}),
+                ...(input.model !== undefined ? { model: input.model } : {}),
+            }),
+        ),
+        services.perf.track("turn.plan.session", {}, () =>
+            missingSession(input.sessionId, (id) => services.sessions.exists(context.effectiveCwd, id)),
+        ),
+        // Per-sandbox agent toggles. stableSystemPrompt keeps the preset system prompt byte-stable so the
+        // provider prompt cache survives the turn — the cross-provider delegation note then rides the user
+        // message instead of the system prompt.
+        services.perf.track("turn.plan.settings", {}, () => services.sandboxSettings.get()),
+    ]);
     if (!resolved.ok) {
         return { ok: false, ...(resolved.code !== undefined ? { code: resolved.code } : {}), message: resolved.message };
     }
-    const { oauthToken, refreshOauthToken, endpoint, allowance } = resolved.credentials;
-    const dead = await missingSession(input.sessionId, (id) => services.sessions.exists(context.effectiveCwd, id));
     if (dead !== undefined) {
         return dead;
     }
+    const { oauthToken, refreshOauthToken, endpoint, allowance } = resolved.credentials;
     // Internal (intent-declared, from env) tools first, then external mcp-kind capabilities — a same-named
     // external tool overrides, matching mcpServersOf's last-wins merge.
     const tools = [...services.tools, ...mcpToolsOf(installed), ...hostToolsOf(installed, services.config.sandbox.port, services.hostBridgeToken)];
-    // Per-sandbox agent toggles. stableSystemPrompt keeps the preset system prompt byte-stable so the provider
-    // prompt cache survives the turn — the cross-provider delegation note then rides the user message instead of
-    // the system prompt.
     const {
         stableSystemPrompt,
         hashlineEdits,
@@ -314,7 +352,7 @@ export const planHarnessTurn = async (
         systemPromptMode,
         verifyOnStop,
         systemPrompt: customPrompt,
-    } = await services.sandboxSettings.get();
+    } = settings;
     /* THE TERSE EXPERIMENT'S COIN FLIP. The steer is eligible only where the daemon still appends to the
      * prompt — a custom prompt takes it away with everything else — and the holdout then runs its fraction of
      * eligible turns WITHOUT it, so the savings report has two populations of the same command stream to
@@ -341,6 +379,17 @@ export const planHarnessTurn = async (
         (contextArm ?? iqContext) && input.unattended !== true
             ? retrieveTurnContext({ iq: services.iq, logger: services.logger }, input.prompt)
             : undefined;
+    /* THE SECOND ROUND, and the last of the planning I/O: an extension scan, the browser bring-up, and the
+     * delegation lookup that reaches the translator. Only `delegation` waited on anything above it (it needs
+     * `stableSystemPrompt`), which is why these could not join the round before it — and why they had no
+     * business being three more awaits in a row. */
+    const [extensionAgentDirs, browser, delegation] = await Promise.all([
+        services.perf.track("turn.plan.extensions", {}, () => extensionAgentDirsOf(services)),
+        // Each logged-in browser capability grants the @playwright/mcp browser tools, bound to that platform's
+        // persisted profile so the agent acts as the signed-in owner (read/reply/comment/post/join).
+        services.perf.track("turn.plan.browser", {}, () => browserServersOf(installed, services.workspace.root)),
+        services.perf.track("turn.plan.delegation", {}, () => delegationEnv(services, stableSystemPrompt)),
+    ]);
     // The image-baked iq plugin (skill + SessionStart nudge) loads ahead of any user-added plugin-kind
     // capabilities so the agent prefers iq for code search — gated by the per-sandbox iqSearch toggle (opt-in,
     // default off). Empty dir outside the container ⇒ skipped regardless. Extension checkouts with a
@@ -348,11 +397,8 @@ export const planHarnessTurn = async (
     const plugins = [
         ...(services.config.iqPluginDir !== "" && iqSearch ? [services.config.iqPluginDir] : []),
         ...pluginDirsOf(installed, services.workspace.root),
-        ...(await extensionAgentDirsOf(services)),
+        ...extensionAgentDirs,
     ];
-    // Each logged-in browser capability grants the @playwright/mcp browser tools, bound to that platform's
-    // persisted profile so the agent acts as the signed-in owner (read/reply/comment/post/join).
-    const browser = await browserServersOf(installed, services.workspace.root);
     // Turn-scoped roots follow the effective cwd: hashline edits must anchor in the worktree an isolated turn
     // edits. Browser profiles, plugin checkouts, and attachments stay on /work — absolute-path inputs, not edit
     // targets.
@@ -361,7 +407,6 @@ export const planHarnessTurn = async (
         // hashlineEdits: swap the native Edit/Write (disabled below) for hash-anchored file tools.
         ...(hashlineEdits ? { hashline: createHashlineServer(context.localCwd) } : {}),
     };
-    const delegation = await delegationEnv(services, stableSystemPrompt);
     const shellEnv = { ...context.cliEnv, ...delegation.env };
     // The turn's user message: attachment note folded in as before. With stableSystemPrompt on, the delegation
     // note is prepended HERE (a user-message preamble) instead of appended to the preset system prompt, so the

@@ -1,5 +1,5 @@
 import type { RepoSync } from "../agents/sync.js";
-import { SETUP_NOTICE_HEADER } from "../workspace/workspace-setup.js";
+import { SETUP_NOTICE_HEADER, STALE_NOTICE_HEADER } from "../workspace/workspace-setup.js";
 import { DELEGATION_NOTE_HEADER } from "./delegation.js";
 import { TURN_CONTEXT_NOTE_HEADER } from "./turn-context.js";
 
@@ -125,6 +125,11 @@ export const syncNote = (repos: readonly RepoSync[], when: "start" | "parked"): 
 const INJECTED = [
     DELEGATION_NOTE_HEADER,
     SETUP_NOTICE_HEADER,
+    // The dependency notice has TWO openings, and only one of them was ever listed here. A workspace whose
+    // projects are installed-but-behind emits the stale half alone, which begins with neither the header above
+    // nor anything else this list knew — so the anchor never matched, nothing was stripped, and the notice came
+    // back out of every restore as the user's own words. It is the shape this repo's own sandbox produces.
+    STALE_NOTICE_HEADER,
     TURN_CONTEXT_NOTE_HEADER,
     LITERAL_SLASH_NOTE_HEADER,
     WORKTREE_NOTE_HEADER,
