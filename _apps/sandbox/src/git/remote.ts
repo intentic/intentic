@@ -25,9 +25,9 @@ const run = async (dir: string, args: readonly string[], git: GitRunner): Promis
 // moved. Every field is optional-or-zero because every one of them is legitimately absent in a healthy repo
 // (no remote yet, a fresh branch never pushed, a detached HEAD). Read-only and total — it never throws.
 //
-// `remote` is the branch's OWN remote whenever it tracks one, falling back to the first `git remote` lists for
-// a branch that has never been pushed (which is where a publish has to go). Those two differ in a fork —
-// `origin` and `upstream` both configured — and the difference is the whole ballgame for push.
+// `remote` is the branch's OWN remote whenever it tracks one, falling back to `origin` for a branch that has
+// never been pushed (which is where a publish has to go). Those two differ in a fork — `origin` and `upstream`
+// both configured — and the difference is the whole ballgame for push.
 //
 // Three spawns, not four: `upstreamOf`'s single for-each-ref carries the tracking ref, its remote AND the
 // ahead/behind counts, so no separate `rev-parse @{upstream}` + `rev-list` pass is needed. This runs for every
@@ -37,12 +37,16 @@ export const remoteState = async (dir: string, git: GitRunner = defaultGit): Pro
         git(dir, ["remote"]).catch(() => undefined),
         git(dir, ["branch", "--show-current"]).catch(() => undefined),
     ]);
-    // `git remote` lists one per line; the first stands in for "the remote this repo has" when no branch names
-    // one of its own — it is what a publish would target, and what tells the panel a sync bar is worth showing.
-    const configured = remoteOut?.stdout
+    // What stands in for "the remote this repo has" when no branch names one of its own — what a publish would
+    // target, and what tells the panel a sync bar is worth showing. `origin` by name, NOT the first line:
+    // `git remote` sorts alphabetically, so on a repo carrying an abandoned `gitlab` remote next to its
+    // `origin`, first-line-wins publishes new branches to the host the repo moved off. Only a repo without an
+    // `origin` at all falls back to the listing order.
+    const names = (remoteOut?.stdout ?? "")
         .split("\n")
-        .find((line) => line.trim() !== "")
-        ?.trim();
+        .map((line) => line.trim())
+        .filter((line) => line !== "");
+    const configured = names.includes("origin") ? "origin" : names[0];
     const branch = branchOut?.stdout.trim();
     // Report whichever of the two is known even when the other isn't: the checked-out branch is a true fact
     // about the repo with or without a remote, and pushBranch reads it from here to name its refspec.

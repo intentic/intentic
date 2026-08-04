@@ -48,6 +48,51 @@ test("ciProjects maps workspace repos onto connected accounts by remote hostname
     expect(projects.find((project) => project.repo === "app")?.account.apiBase).toBe("https://gitlab.example.com/api/v4");
 });
 
+// The shape a gitlab → github move leaves behind: the abandoned remote is still configured, and `git remote`
+// sorts it AHEAD of origin, so reading only the first one mapped the repo to the host it moved off — then
+// dropped it entirely once the gitlab account was disconnected.
+test("ciProjects maps a repo by whichever of its remotes is connected, not the one git lists first", async () => {
+    const root = mkdtempSync(join(tmpdir(), "ci-abandoned-"));
+    const capabilities = fileCapabilitiesStore(join(root, ".intentic", "capabilities.json"));
+    await capabilities.upsert({ id: "github", kind: "cli", config: { provider: "github", token: "t" } });
+    const dir = join(root, "web");
+    await initRepo(dir, "https://github.com/acme/web.git");
+    await defaultGit(dir, ["remote", "add", "gitlab", "git@gitlab.com:acme/web.git"]);
+
+    const projects = await ciProjects({ workspace: { root }, capabilities });
+    expect(projects).toHaveLength(1);
+    expect(projects[0]).toMatchObject({ repo: "web", project: "acme/web", account: { provider: "github" } });
+});
+
+// With BOTH hosts connected the repo still maps to exactly one project, and `origin` is what breaks the tie —
+// the board must not flip hosts on a name that happens to sort first.
+test("ciProjects breaks a multi-remote tie on origin", async () => {
+    const root = mkdtempSync(join(tmpdir(), "ci-tie-"));
+    const capabilities = fileCapabilitiesStore(join(root, ".intentic", "capabilities.json"));
+    await capabilities.upsert({ id: "github", kind: "cli", config: { provider: "github", token: "t1" } });
+    await capabilities.upsert({ id: "gitlab", kind: "cli", config: { provider: "gitlab", url: "https://gitlab.com", token: "t2" } });
+    const dir = join(root, "web");
+    await initRepo(dir, "https://github.com/acme/web.git");
+    await defaultGit(dir, ["remote", "add", "gitlab", "git@gitlab.com:acme/web.git"]);
+
+    const projects = await ciProjects({ workspace: { root }, capabilities });
+    expect(projects).toHaveLength(1);
+    expect(projects[0]).toMatchObject({ repo: "web", project: "acme/web", account: { provider: "github" } });
+});
+
+// A pushurl adds a second (push) line for the same remote; the (fetch) url is the one CI addresses.
+test("ciProjects reads the fetch url of a remote that pushes somewhere else too", async () => {
+    const root = mkdtempSync(join(tmpdir(), "ci-pushurl-"));
+    const capabilities = fileCapabilitiesStore(join(root, ".intentic", "capabilities.json"));
+    await capabilities.upsert({ id: "github", kind: "cli", config: { provider: "github", token: "t" } });
+    const dir = join(root, "web");
+    await initRepo(dir, "https://github.com/acme/web.git");
+    await defaultGit(dir, ["remote", "set-url", "--add", "--push", "origin", "git@gitlab.com:acme/web.git"]);
+
+    const projects = await ciProjects({ workspace: { root }, capabilities });
+    expect(projects[0]).toMatchObject({ repo: "web", project: "acme/web", account: { provider: "github" } });
+});
+
 test('ciProjects includes the workspace root repo itself as "root"', async () => {
     const root = mkdtempSync(join(tmpdir(), "ci-root-"));
     const capabilities = fileCapabilitiesStore(join(root, ".intentic", "capabilities.json"));

@@ -100,6 +100,27 @@ test("remoteState reports a remote but no upstream for a branch never pushed", a
     expect(state.upstream).toBeUndefined();
 });
 
+// `git remote` sorts ALPHABETICALLY, so a repo that moved hosts and kept its old remote lists that one first.
+// Falling back to the first line would publish new branches to the host the repo moved off.
+test("remoteState falls back to origin, not to whichever remote name sorts first", async () => {
+    const { clone } = await cloned();
+    await sh(clone, "remote", "add", "abandoned", "git@gitlab.com:acme/web.git");
+    await createBranch(clone, "feature", undefined, true);
+    expect(await sh(clone, "remote")).toBe("abandoned\norigin");
+
+    const state = await remoteState(clone);
+    expect(state.remote).toBe("origin");
+    expect(state.upstream).toBeUndefined();
+});
+
+test("remoteState still falls back to the only remote there is when it isn't named origin", async () => {
+    const { clone } = await cloned();
+    await sh(clone, "remote", "rename", "origin", "upstream");
+    await createBranch(clone, "feature", undefined, true);
+
+    expect((await remoteState(clone)).remote).toBe("upstream");
+});
+
 test("pullRemote fast-forwards, and reports a non-fast-forward as a reason rather than throwing", async () => {
     const { clone, origin } = await cloned();
     const other = await temp();
