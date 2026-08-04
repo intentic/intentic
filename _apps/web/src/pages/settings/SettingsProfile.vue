@@ -33,7 +33,7 @@ const pickAvatar = async (event: Event): Promise<void> => {
     }
     saveError.value = undefined;
     try {
-        stagedAvatar.value = await fileToSquareDataUrl(file);
+        stagedAvatar.value = await fileToSquareDataUrl(file, `cover`);
     } catch {
         saveError.value = `Couldn't read that file as an image.`;
     }

@@ -45,7 +45,10 @@ export const sandboxContract = {
         .output(SandboxSummarySchema),
     update: oc
         .route({ method: "POST", path: "/sandbox/update" })
-        .input(z.object({ sandboxId: z.string(), name: z.string().min(1).max(60).optional(), image: ImageDataUrlSchema.optional() }))
+        // `image: null` CLEARS the logo — absent means "leave it alone", which is why the field is nullable as
+        // well as optional. Without the null the monogram was a one-way door: every picked file could be
+        // replaced but never taken back off.
+        .input(z.object({ sandboxId: z.string(), name: z.string().min(1).max(60).optional(), image: ImageDataUrlSchema.nullable().optional() }))
         .output(SandboxSummarySchema),
     delete: oc
         .route({ method: "POST", path: "/sandbox/delete" })

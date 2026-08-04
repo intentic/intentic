@@ -118,7 +118,9 @@ export const sandboxRoutes = {
         });
         return toSummary(sandbox, `owner`, context);
     }),
-    // Rename an owned sandbox and/or set its switcher logo (a small data URL the browser produced).
+    // Rename an owned sandbox and/or set its switcher logo (a small data URL the browser produced) — `null`
+    // clears the logo back to the monogram. The `!== undefined` guards are what keep the two fields
+    // independent: a rename must not blank a logo, and clearing a logo must not rename anything.
     update: os.sandbox.update.handler(async ({ context, input }) => {
         await requireOwnedSandbox(context, input.sandboxId);
         const sandbox = await context.prisma.sandbox.update({

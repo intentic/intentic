@@ -136,8 +136,10 @@ const create = async (name: string): Promise<SandboxSummary> => {
     return sandbox;
 };
 
-// Rename the active sandbox and/or set its switcher logo (owner-only; the API enforces). No-op when nothing is active.
-const update = async (input: { name?: string; image?: string }): Promise<void> => {
+// Rename the active sandbox and/or set its switcher logo — `image: null` clears it (owner-only; the API
+// enforces). Writing the returned row into the list cache is what repaints the rail chip in the same tick as
+// the hub's own tile. No-op when nothing is active.
+const update = async (input: { name?: string; image?: string | null }): Promise<void> => {
     if (activeSandboxId.value === undefined) {
         return;
     }

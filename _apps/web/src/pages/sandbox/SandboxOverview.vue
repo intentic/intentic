@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { Card, StatusBadge } from "@intentic/ui";
 import Button from "primevue/button";
+import Popover from "primevue/popover";
 import { computed, nextTick, ref } from "vue";
 import { fileToSquareDataUrl } from "../../composables/imageDataUrl";
 import { useSandboxVersion } from "../../composables/sandbox/useSandboxVersion";
@@ -9,10 +10,10 @@ import { errorMessage } from "../../composables/useAsyncAction";
 import SandboxBehindCard from "./SandboxBehindCard.vue";
 import SandboxUpdateCard from "./SandboxUpdateCard.vue";
 
-/* The Sandbox hub's "Overview" tab — WHAT THIS BOX IS. Sandbox identity (name + logo, inline-editable by the
- * owner, absorbing the old SandboxSettingsDialog), the self-reported image + version + URL, online status, and
- * the non-blocking update prompt. The platform stores only the binding; the image/version/URL are relayed live
- * via the daemon's /info.
+/* The Sandbox hub's "Overview" tab — WHAT THIS BOX IS. Sandbox identity (the name, inline-editable by the
+ * owner, and the logo, which is a control in its own right), the self-reported image + version + URL, online
+ * status, and the non-blocking update prompt. The platform stores only the binding; the image/version/URL are
+ * relayed live via the daemon's /info.
  *
  * IT DOES NOT INDEX THE OTHER TABS. It used to end in an "at a glance" block: five rows deep-linking to Agent,
  * Secrets, Capabilities, Status and Access, each with a status chip. Every one of those was a second way to say
@@ -32,20 +33,29 @@ const { info, installed, latest, updateAvailable } = useSandboxVersion();
 const isOwner = computed(() => sandbox.active.value?.role === `owner`);
 const agentUrl = computed(() => sandbox.daemonUrl.value ?? undefined);
 
-// Inline identity editing (owner only): rename + pick a logo. The picked file never uploads — it is downscaled
-// to a small square data URL in the browser and stored as a string (sandbox.update). Only changed fields sent.
-// Editing is strictly in place: every control it needs already occupies a slot in the header (the title box, the
-// logo, the action cell), so entering edit mode reveals affordances without reflowing a single pixel below.
+// Inline renaming (owner only), strictly in place: the title box and the action cell already occupy their slots
+// in the header, so entering edit mode reveals affordances without reflowing a single pixel below.
+//
+// THE LOGO IS NOT PART OF THIS FORM, and that is the correction. It used to be reachable only from inside
+// name-edit mode — press Edit, then discover that the decorative-looking tile had become a file picker — so the
+// one question a fresh sandbox actually prompts ("that's a letter, where do I put my logo?") had its answer
+// hidden behind a control that says "rename". A logo is one click and one file, with nothing to validate and
+// nothing to type, so it needs no commit step of its own: the tile is live for owners at all times, picking
+// saves immediately (see `pickFile`), and the rail chip repaints in the same tick from the same cache write.
 const editing = ref(false);
 const name = ref(``);
-const stagedImage = ref<string | undefined>(undefined);
 const fileInput = ref<HTMLInputElement | null>(null);
 const nameInput = ref<HTMLInputElement | null>(null);
 const nameTouched = ref(false);
 const busy = ref(false);
 const error = ref<string | undefined>(undefined);
 
-const previewImage = computed(() => stagedImage.value ?? sandbox.active.value?.image ?? undefined);
+// The menu opens only over a tile that already HAS a logo, because only then are there two answers (replace,
+// remove) to choose between. An empty tile has exactly one thing to do, and a menu with a single row is a click
+// charged for nothing — so it opens the file dialog directly.
+const logoMenu = ref<InstanceType<typeof Popover> | null>(null);
+const logoBusy = ref(false);
+const logo = computed(() => sandbox.active.value?.image ?? undefined);
 const avatarLetter = computed(() => (editing.value ? name.value : (sandbox.active.value?.name ?? ``)).trim().charAt(0));
 const nameError = computed<string | undefined>(() => {
     const trimmed = name.value.trim();
@@ -55,22 +65,21 @@ const nameError = computed<string | undefined>(() => {
 });
 const canSave = computed(() => {
     const trimmed = name.value.trim();
-    return trimmed.length > 0 && trimmed.length <= 60 && (trimmed !== sandbox.active.value?.name || stagedImage.value !== undefined);
+    return trimmed.length > 0 && trimmed.length <= 60 && trimmed !== sandbox.active.value?.name;
 });
 
 // The single line under the title, present in every state so nothing can grow or shrink beneath it: the
-// sandbox's status when idle, the edit affordances while editing, and errors in place of both.
+// sandbox's status when idle, the rename hint while editing, and errors — from either control — in place of both.
 const subline = computed<{ text: string; tone: string }>(() => {
     if (error.value !== undefined) return { text: error.value, tone: `text-danger` };
     if (editing.value && nameTouched.value && nameError.value !== undefined) return { text: nameError.value, tone: `text-danger` };
-    if (editing.value) return { text: `Click the logo to change it (cropped to a square) · Enter saves · Esc cancels.`, tone: `text-muted` };
+    if (editing.value) return { text: `Enter saves · Esc cancels.`, tone: `text-muted` };
     if (sandbox.reachable.value) return { text: `The workspace Claude Code and your tools operate from.`, tone: `text-muted` };
     return { text: `Reconnecting to the workspace…`, tone: `text-muted` };
 });
 
 const startEdit = async (): Promise<void> => {
     name.value = sandbox.active.value?.name ?? ``;
-    stagedImage.value = undefined;
     error.value = undefined;
     nameTouched.value = false;
     editing.value = true;
@@ -79,22 +88,64 @@ const startEdit = async (): Promise<void> => {
 };
 const cancelEdit = (): void => {
     editing.value = false;
-    stagedImage.value = undefined;
     error.value = undefined;
 };
 
+// The tile's press: choose between replace and remove when there is something to remove, otherwise go straight
+// to the file dialog. Members never get here — the tile is disabled for them.
+const pressLogo = (event: MouseEvent): void => {
+    error.value = undefined;
+    if (logo.value === undefined) {
+        fileInput.value?.click();
+        return;
+    }
+    logoMenu.value?.toggle(event);
+};
+
+// Write a logo straight through; `null` clears it. sandbox.update's cache write is what makes this tile and the
+// rail chip change together, so there is nothing staged here to preview and nothing to reconcile afterwards.
+const writeLogo = async (image: string | null): Promise<void> => {
+    logoBusy.value = true;
+    error.value = undefined;
+    try {
+        await sandbox.update({ image });
+    } catch (err) {
+        error.value = errorMessage(err, `Couldn't save the logo.`);
+    } finally {
+        logoBusy.value = false;
+    }
+};
+
 const pickFile = async (event: Event): Promise<void> => {
-    const file = (event.target as HTMLInputElement).files?.[0];
-    (event.target as HTMLInputElement).value = ``;
+    const input = event.target as HTMLInputElement;
+    const file = input.files?.[0];
+    input.value = ``;
     if (file === undefined) {
         return;
     }
     error.value = undefined;
+    // Contained rather than cropped: a sandbox logo is usually a mark or a wordmark, and a centre slice of a
+    // wordmark is not the wordmark. A failure here is the FILE, not the save, so it says so.
+    let square: string;
     try {
-        stagedImage.value = await fileToSquareDataUrl(file);
+        square = await fileToSquareDataUrl(file, `contain`);
     } catch {
         error.value = `Couldn't read that file as an image.`;
+        return;
     }
+    await writeLogo(square);
+};
+
+// Both menu rows dismiss it themselves: the file dialog is a separate window and the removal is instant, so a
+// menu still hanging over the tile afterwards would be the only thing left to tidy up by hand.
+const changeLogo = (): void => {
+    logoMenu.value?.hide();
+    fileInput.value?.click();
+};
+
+const removeLogo = async (): Promise<void> => {
+    logoMenu.value?.hide();
+    await writeLogo(null);
 };
 
 const save = async (): Promise<void> => {
@@ -105,12 +156,8 @@ const save = async (): Promise<void> => {
     busy.value = true;
     error.value = undefined;
     try {
-        await sandbox.update({
-            ...(trimmed !== sandbox.active.value?.name && { name: trimmed }),
-            ...(stagedImage.value !== undefined && { image: stagedImage.value }),
-        });
+        await sandbox.update({ name: trimmed });
         editing.value = false;
-        stagedImage.value = undefined;
     } catch (err) {
         error.value = errorMessage(err, `Couldn't save sandbox settings.`);
     } finally {
@@ -125,29 +172,52 @@ const save = async (): Promise<void> => {
         <Card class="flex flex-col gap-4">
             <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                 <div class="flex min-w-0 flex-1 items-center gap-3">
-                    <!-- The logo IS the picker while editing — that's what removes the old "Choose image" row,
-                         and with it the card's height change. Disabled outside edit mode, so it stays a plain
-                         decorative avatar (and out of the tab order) until it can actually do something. -->
+                    <!-- The logo IS the control — no "Choose image" row to add, so the card never changes height.
+                         Live for owners in every state (a logo has nothing to commit), disabled and out of the
+                         tab order for members, who cannot change it. The overlay is the affordance: it rests at
+                         zero opacity so the tile reads as identity, and appears on hover, on keyboard focus and
+                         for the whole save — the same layer, so the tile's size is fixed in all three. -->
                     <button
                         type="button"
-                        :disabled="!editing"
-                        :aria-label="editing ? `Change logo` : undefined"
-                        v-tooltip.bottom="editing ? `Change logo` : undefined"
-                        class="group relative flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-lg border bg-card text-muted"
-                        :class="editing ? 'cursor-pointer border-line-strong' : 'border-line'"
-                        @click="fileInput?.click()"
+                        :disabled="!isOwner || logoBusy"
+                        :aria-label="isOwner ? (logo ? `Change or remove the logo` : `Add a logo`) : undefined"
+                        v-tooltip.bottom="isOwner ? (logo ? `Change or remove the logo` : `Add a logo`) : undefined"
+                        class="group relative flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-lg border border-line bg-card text-muted"
+                        :class="isOwner ? 'cursor-pointer hover:border-line-strong' : ''"
+                        @click="pressLogo"
                     >
-                        <img v-if="previewImage" :src="previewImage" alt="" class="h-full w-full object-cover" />
+                        <img v-if="logo" :src="logo" alt="" class="h-full w-full object-cover" />
                         <span v-else-if="avatarLetter" class="text-lg font-semibold uppercase text-content">{{ avatarLetter }}</span>
                         <Icon name="server" v-else class="text-lg" />
                         <span
-                            v-if="editing"
-                            class="absolute inset-0 flex items-center justify-center bg-canvas/70 text-content opacity-90 transition-opacity group-hover:opacity-100"
+                            v-if="isOwner"
+                            class="absolute inset-0 flex items-center justify-center bg-canvas/70 text-content transition-opacity"
+                            :class="logoBusy ? 'opacity-100' : 'opacity-0 group-hover:opacity-100 group-focus-visible:opacity-100'"
                         >
-                            <Icon name="image" class="text-base" />
+                            <Icon :name="logoBusy ? `spinner` : `image`" :spin="logoBusy" class="text-base" />
                         </span>
                     </button>
                     <input ref="fileInput" type="file" accept="image/*" class="hidden" @change="pickFile" />
+
+                    <!-- Only ever opened over a tile that HAS a logo, so both rows always do something. -->
+                    <Popover ref="logoMenu" append-to="body">
+                        <div class="flex w-44 flex-col gap-0.5">
+                            <button
+                                type="button"
+                                class="flex items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs text-content transition-colors hover:bg-content/5"
+                                @click="changeLogo"
+                            >
+                                <Icon name="image" class="shrink-0 text-sm text-muted" />Change logo…
+                            </button>
+                            <button
+                                type="button"
+                                class="flex items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs text-danger transition-colors hover:bg-danger/10"
+                                @click="removeLogo"
+                            >
+                                <Icon name="trash" class="shrink-0 text-sm" />Remove logo
+                            </button>
+                        </div>
+                    </Popover>
 
                     <div class="-ml-2 min-w-0 flex-1 sm:max-w-md">
                         <div class="flex items-center gap-2">

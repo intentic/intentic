@@ -172,6 +172,11 @@ describe(`sandbox routes`, () => {
 
         await call(sandboxRoutes.update, { sandboxId: `s1`, image: logo }, { context: context({ prisma }) });
         expect(update).toHaveBeenLastCalledWith({ where: { id: `s1` }, data: { image: logo } });
+
+        // `null` is a value, not an omission: it has to reach the row as a write, or removing a logo would be
+        // silently ignored the same way an absent field is.
+        await call(sandboxRoutes.update, { sandboxId: `s1`, image: null }, { context: context({ prisma }) });
+        expect(update).toHaveBeenLastCalledWith({ where: { id: `s1` }, data: { image: null } });
     });
 
     it(`maps a rejected Cloudflare token to BAD_REQUEST on zones`, async () => {
