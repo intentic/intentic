@@ -14,12 +14,12 @@
          the weight of a word. `primary` marks the page's single call to action, which is why it is a boolean
          and not a tone: a header with two primaries has no primary.
 
-       • ITS ICON ALONE, borderless — `quiet`. For a VERB THE PAGE ALREADY IMPLIES, which in practice means
-         Refresh and only Refresh: one per page, universally understood as the circular arrow, and doing
-         nothing but re-reading what is already on screen. This tier was the first version's one real mistake:
-         it unified the six refresh spellings correctly, then settled on the LOUD one, so every screen in the
-         app grew the same grey pill out-weighing the h1 above it to announce that the page you are looking at
-         can be reloaded. Ambient controls read as chrome or they compete with the title.
+       • ITS ICON ALONE, borderless — `quiet`, and every `href`. For the controls that commit nothing: Refresh
+         re-reads what is already on screen, a link only leaves for another surface. This tier was the first
+         version's one real mistake: it unified the six refresh spellings correctly, then settled on the LOUD
+         one, so every screen in the app grew the same grey pill out-weighing the h1 above it to announce that
+         the page you are looking at can be reloaded. Ambient controls read as chrome or they compete with the
+         title. The label is not lost — it becomes the tooltip and the accessible name.
 
        • THE LABEL IS ALWAYS REQUIRED, in both tiers. It is the button's face in one and the tooltip and the
          accessible name in the other — a quiet action is drawn without words, never authored without them.
@@ -29,16 +29,18 @@
          tooltip in the app and appears when a pointer expects it — the native `title` attribute this replaces
          was unstyled and a full second late.
 
-     `href` renders the control as an anchor, and it is NOT quiet — a link is a destination, and a destination
-     has to be named. `quiet` briefly applied to links too, and the pair it produced on Pipelines is the whole
-     argument against it: two bare vendor glyphs, side by side, asking the reader to tell GitHub from GitLab by
-     silhouette. There is no glyph at all for the thing a good outbound link actually points at ("this repo's
-     pipelines", "Komodo's stacks"), which is the tell — an icon can carry a verb the reader already expects,
-     never a place they have not been told about.
+     `href` renders the control as an anchor, quiet like the rest of the tier, and it carries TWO obligations
+     that a labelled button would have let it dodge:
 
-     And name a PLACE, not a product: the link belongs at the level of the view it leaves, not at its vendor's
-     front door. A reader clicking out of a CI board wants that repo's pipelines; dropping them on github.com
-     makes them navigate back down to where they already were. -->
+       • THE ICON IS THE DESTINATION'S OWN — GitHub's mark for GitHub, GitLab's for GitLab. A generic outward
+         arrow is the failure mode here: the first version drew every outbound link with one, so a workspace
+         spanning both vendors got the same glyph twice and the header said nothing at all. An icon-only link
+         is legible exactly to the degree its glyph names where it goes.
+
+       • IT POINTS AT THE VIEW'S OWN LEVEL, never the vendor's front door. `github.com` is not what a CI board
+         links to — that repo's pipelines is. Landing a reader on a product home page makes them navigate back
+         down to the thing they were already looking at, which is the one thing an outbound link exists to
+         save them. Same rule for the deployment console: Komodo's stacks, not Komodo. -->
 
 <script setup lang="ts">
 import Button from "primevue/button";
@@ -47,20 +49,21 @@ import { cmp } from "../cmp.js";
 import Icon from "./Icon.vue";
 import type { IconName } from "../icons/iconSets.js";
 
-/* `quiet` and `href` are declared as an EITHER/OR rather than two independent booleans, so the rule above is
- * a compile error rather than a code review: a quiet link would render an icon that navigates nowhere, and a
- * named destination is the one thing the icon tier cannot carry. */
+/* `primary` sits in the non-link half of the union because a link is never the page's call to action: it
+ * leaves. Declaring that here makes it a compile error rather than a code review. */
 const { href, hint, label, quiet } = defineProps<
     {
-        // What the action does, in the imperative. Required: see above.
+        // What the action does, in the imperative. Required: see above — on a quiet control it is the tooltip
+        // and the accessible name rather than a visible word, which makes it MORE load-bearing, not less.
         label: string;
+        // On a link, the destination's own mark — see above.
         icon: IconName;
         // What the label has no room for. Absent is the common case — a self-explaining action earns no tooltip.
         hint?: string;
         disabled?: boolean;
     } & (
         | {
-              // Draw the icon alone. For a verb the page already implies — see above.
+              // Draw the icon alone. Implied by `href`, since leaving is never the loud thing a page does.
               quiet?: boolean;
               // The page's ONE call to action. Everything else is secondary.
               primary?: boolean;
@@ -72,36 +75,30 @@ const { href, hint, label, quiet } = defineProps<
     )
 >();
 
+const iconOnly = computed(() => quiet === true || href !== undefined);
 // With no visible label the tooltip carries both halves, because it is the only place either one is said.
 const tooltip = computed(() => {
-    if (quiet !== true) return hint;
+    if (!iconOnly.value) return hint;
     return hint === undefined ? label : `${label} — ${hint}`;
 });
 </script>
 
 <template>
-    <button
-        v-if="quiet"
-        type="button"
+    <component
+        :is="href === undefined ? `button` : `a`"
+        v-if="iconOnly"
+        :type="href === undefined ? `button` : undefined"
         :class="cmp.iconButton(`h-8 w-8 text-base disabled:pointer-events-none disabled:opacity-40`)"
         :disabled="disabled"
         :aria-label="label"
         v-tooltip.bottom="tooltip"
-    >
-        <Icon :name="icon" />
-    </button>
-    <Button
-        v-else
-        :label="label"
-        size="small"
-        :severity="primary ? undefined : `secondary`"
-        :disabled="disabled"
-        v-tooltip.bottom="tooltip"
-        :as="href === undefined ? undefined : `a`"
         :href="href"
         :target="href === undefined ? undefined : `_blank`"
         :rel="href === undefined ? undefined : `noopener`"
     >
+        <Icon :name="icon" />
+    </component>
+    <Button v-else :label="label" size="small" :severity="primary ? undefined : `secondary`" :disabled="disabled" v-tooltip.bottom="tooltip">
         <template #icon><Icon :name="icon" /></template>
     </Button>
 </template>

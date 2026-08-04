@@ -57,7 +57,11 @@ const stackNames = computed(() => resources.value.filter((resource) => resource.
  * instance root, which is a level above everything on this page — and stacks are the level this view is
  * really about: they head the resource list, and the whole "Your repos" half exists to bind a repo to one.
  * Same route family the daemon already builds every row's deep link from (${baseUrl}/stacks/${id}), minus
- * the id. Per-resource links stay on the rows, where they can name the resource they open. */
+ * the id. Per-resource links stay on the rows, where they can name the resource they open.
+ *
+ * It wears `box` and not the generic outward arrow: the icon on an icon-only link is the only thing that says
+ * where it goes, and "leaves the app" is not a destination. There is no Komodo glyph in the set, so the next
+ * truest thing is what the page is a list of. */
 const stacksUrl = computed(() => (board.value === undefined ? undefined : `${board.value.komodoUrl}/stacks`));
 
 /* WHY AN EMPTY BOARD IS NOT AUTOMATICALLY AN EMPTY KOMODO.
@@ -247,7 +251,7 @@ const setLink = async (repo: string, stack: string): Promise<void> => {
                     </InfoHint>
                 </template>
                 <template #actions>
-                    <PageAction v-if="stacksUrl !== undefined" icon="external-link" label="Open Komodo stacks" :href="stacksUrl" />
+                    <PageAction v-if="stacksUrl !== undefined" icon="box" label="Open Komodo stacks" :href="stacksUrl" />
                 </template>
             </PageHeader>
 

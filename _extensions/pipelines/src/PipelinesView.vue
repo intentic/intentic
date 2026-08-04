@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { CiRepo, PipelineRun } from "@intentic/sandbox-contract";
-import { cmp, CountBar, type CountItem, Icon, InfoHint, Page, PageHeader, ProgressRing, RowGroup } from "@intentic/extension-ui";
+import { cmp, CountBar, type CountItem, Icon, InfoHint, Page, PageAction, PageHeader, ProgressRing, RowGroup } from "@intentic/extension-ui";
 import { computed, onMounted, ref } from "vue";
 import { markPipelinesSeen } from "./ciAttention";
 import { openFailures, supersededBy } from "./ciStreaks";
@@ -43,18 +43,18 @@ const recurringFor = (run: PipelineRun): ReadonlyMap<string, number> => recurrin
 const open = computed(() => openFailures(runs.value));
 const superseded = computed(() => supersededBy(runs.value));
 
-/* WHERE "OPEN THIS ON THE VENDOR" LIVES, and why it is not a page action.
+/* THE WAY OUT TO THE VENDOR, per repo, and pointed at PIPELINES rather than at the project.
  *
- * It was one: a header <PageAction> per host origin, so a workspace spanning both vendors got "Open GitHub"
- * and "Open GitLab" side by side. Two things were wrong with it. The header is page-scoped and this page is
- * N repos wide, which is why that action had to be written as a v-for — a header action that loops is a
- * header action whose scope does not fit. And an origin is the vendor's front door: someone leaving a CI
- * board lands on github.com and has to walk back down to the project they were already looking at.
+ * The header action used to be one link per host ORIGIN — github.com, gitlab.com — which is the vendor's
+ * front door and a level above everything this page shows. Nobody reading a CI board wants github.com; they
+ * want the run list for the repo whose red row they are looking at. So the header carries one link per repo
+ * and each lands on that repo's pipeline list, which is the same surface this view is a mirror of.
  *
- * Both fix themselves at the repo group, which is the level that actually has ONE destination. So the link
- * lives in each <RowGroup>'s #info, and it points at that repo's PIPELINE LIST rather than its home page —
- * this view is about runs, and the row you clicked from is a run. That completes the ladder the rows already
- * started: one run (PipelineRunRow's run.url) → this repo's pipelines → nothing generic above it. */
+ * Per repo and not per origin also fixes what the icons could say. Two links to two origins were two copies
+ * of one vendor glyph; two links to two repos are told apart by their tooltip, which names the project.
+ *
+ * The ladder this completes, finest first: one run (PipelineRunRow's run.url) → this repo's pipelines (here)
+ * → the repo itself (the group's #info line). Nothing generic at any rung. */
 const ciUrl = (repo: CiRepo): string => (repo.host === `github` ? `${repo.url}/actions` : `${repo.url}/-/pipelines`);
 
 const byRepo = computed(() => {
@@ -141,6 +141,17 @@ const fixRun = async (run: PipelineRun): Promise<void> => {
                         </span>
                     </InfoHint>
                 </template>
+                <template #actions>
+                    <!-- No `hint`: the vendor is what the glyph already says, and the project is what the
+                         label already says. A hint here would only be the same fact a third time. -->
+                    <PageAction
+                        v-for="repo in repos"
+                        :key="repo.repo"
+                        :icon="repo.host"
+                        :label="`Open ${repo.project} pipelines`"
+                        :href="ciUrl(repo)"
+                    />
+                </template>
             </PageHeader>
 
             <div v-if="error" :class="cmp.alertDanger(`mb-4 px-4 py-3 text-sm`)">{{ error }}</div>
@@ -190,12 +201,11 @@ const fixRun = async (run: PipelineRun): Promise<void> => {
                 <div class="flex flex-col gap-6">
                     <RowGroup v-for="repo in repos" :key="repo.repo" :label="repo.repo">
                         <template #info>
-                            <!-- The vendor's own glyph, then the project path, as ONE link out to that
-                                 project's pipelines. The icon is part of the link's name here rather than a
-                                 control of its own — which is the only way an icon may stand in for a
-                                 destination: attached to the words that say where it goes. -->
+                            <!-- The REPO itself, not its pipelines — the header action above already owns
+                                 that rung, and this line's job is to say which project the group is. Text and
+                                 destination agree: the words are the project path, the link is the project. -->
                             <a
-                                :href="ciUrl(repo)"
+                                :href="repo.url"
                                 target="_blank"
                                 rel="noopener"
                                 class="flex items-center gap-1.5 text-subtle hover:text-link"
