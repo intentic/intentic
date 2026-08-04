@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed } from "vue";
+import { computed, ref } from "vue";
 import { type AgentHarness, type KeyedProvider, limitationsOf } from "@intentic/sandbox-contract";
 import UsageRing from "../components/UsageRing.vue";
 import { relativeTime } from "../composables/chat/catalog";
@@ -7,8 +7,8 @@ import type { Conversation } from "../composables/chat/conversation";
 import { providerDisplayLabel } from "../composables/chat/providerCatalog";
 import type { PickerEntry } from "../composables/chat/modelPicker";
 import { translatorAccounts } from "../composables/chat/providerAccounts";
-import { liveUsage, planHeadroom } from "../composables/chat/usageStatus";
-import { accountsOf, subscriptionOnly } from "../composables/chat/useChat";
+import { formatAge, liveUsage, planHeadroom } from "../composables/chat/usageStatus";
+import { accountsOf, refreshConnections, subscriptionOnly } from "../composables/chat/useChat";
 import ModelPicker from "./ModelPicker.vue";
 import ProviderLogo from "./ProviderLogo.vue";
 
@@ -185,6 +185,48 @@ const accountRows = computed(() =>
         });
     }),
 );
+
+/* ---- how old these numbers are, and the way to make them new ------------------------------------------------
+ *
+ * The rings are refreshed by the panel opening (ModelPicker's onMounted), which is what stopped them being as
+ * old as the browser tab. This says so, and gives the reader the one move that seam cannot make for them.
+ *
+ * THE OLDEST READING ON SCREEN, not the newest and not the active account's: the header qualifies every ring
+ * under it, and a header that reports its freshest row would vouch for a stale one sitting directly beneath.
+ * Undefined when nothing has been measured at all — the control still shows, because "no reading yet" is
+ * exactly a state worth retrying.
+ *
+ * Read once per open, like every other age in this app (formatAge, the ring's own card): the panel lives for
+ * seconds, and a minute counter ticking under a list being compared is motion that buys nothing. */
+const measuredAt = computed<number | undefined>(() => {
+    const taken = [...accountRows.value, ...routedRows.value].flatMap((row) => (row.headroom === undefined ? [] : [row.headroom.measuredAt]));
+    return taken.length === 0 ? undefined : Math.min(...taken);
+});
+
+/* RE-MEASURE, FORCED. The daemon holds a reading for a minute before it will go back upstream, which is right
+ * for every automatic read and wrong for this one: the person pressing it has just changed something about the
+ * account — a seat downgraded, a plan swapped, a limit spent on another machine — and is asking whether what
+ * they can see survived it. Answering from the last minute would hand back the number they pressed the button
+ * to doubt. Forced, it costs one free round-trip per account and the rings redraw under the cursor.
+ *
+ * Every connection, not this provider's: the list above this footer spans every provider and locks the ones
+ * with no credential, so a read that covered only the session's own would leave the rest of the panel as stale
+ * as it was. */
+const measuring = ref(false);
+// The age is on screen as the button's own label, so the spoken name has to carry it too — a bare
+// "Re-measure plan limits" tells a screen-reader user what the control does and nothing about whether to press
+// it, which is the only question the sighted version answers at a glance.
+const remeasureLabel = computed(() =>
+    measuredAt.value === undefined ? `Measure plan limits` : `Re-measure plan limits — measured ${formatAge(measuredAt.value)}`,
+);
+const remeasure = async (): Promise<void> => {
+    measuring.value = true;
+    try {
+        await refreshConnections(true);
+    } finally {
+        measuring.value = false;
+    }
+};
 </script>
 
 <template>
@@ -211,11 +253,30 @@ const accountRows = computed(() =>
                         <ProviderLogo :provider="provider" class="shrink-0 text-xs" />
                         <span class="truncate">{{ providerDisplayLabel(provider) }} session</span>
                     </span>
-                    <!-- A ring is a glance; the Usage tab is where the windows, their reset times, and what has
-                         been spent against them actually live. -->
-                    <RouterLink to="/sandbox/usage#accounts" class="shrink-0 text-2xs text-link hover:underline" @click="emit(`selected`)"
-                        >Headroom</RouterLink
-                    >
+                    <span class="flex shrink-0 items-center gap-2">
+                        <!-- HOW OLD THESE READINGS ARE, and the button that makes them new — one control,
+                             because a re-measure with nothing to compare against is a button whose effect is
+                             invisible, and an age with no way to act on it is a complaint. The age is the
+                             label: pressing it and watching "14m ago" become "just now" is the whole
+                             confirmation. It staying put is the other answer, and an honest one — this account
+                             cannot be read right now, whatever its ring still says. -->
+                        <button
+                            type="button"
+                            class="flex items-center gap-1 text-2xs text-subtle hover:text-content"
+                            :disabled="measuring"
+                            v-tooltip.top="`Re-measure every account's plan limits now`"
+                            :aria-label="remeasureLabel"
+                            @click="remeasure"
+                        >
+                            <Icon name="refresh" class="text-[0.6rem]" :spin="measuring" />
+                            <span v-if="measuredAt !== undefined">{{ formatAge(measuredAt) }}</span>
+                        </button>
+                        <!-- A ring is a glance; the Usage tab is where the windows, their reset times, and what
+                             has been spent against them actually live. -->
+                        <RouterLink to="/sandbox/usage#accounts" class="text-2xs text-link hover:underline" @click="emit(`selected`)"
+                            >Headroom</RouterLink
+                        >
+                    </span>
                 </div>
                 <template v-if="accounts.length > 1">
                     <!-- Labelled as a group: the header above names the PROVIDER, which is what a sighted reader

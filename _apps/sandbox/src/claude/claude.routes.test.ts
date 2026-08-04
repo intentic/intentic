@@ -14,7 +14,7 @@ import { type ClaudeRoutesDeps, createClaudeRoutes } from "./claude.routes.js";
 /* `accountUsage` is real state here, not a stub: /claude/accounts folds the usage snapshot into every row it
  * returns, and disconnect clears it alongside the credential — "the snapshot goes with the account" is part of
  * what these tests check. Empty by default, which is what a sandbox reports before any turn has run. */
-const claudeClient = (claudeStore: ClaudeRoutesDeps["claudeStore"]) =>
+const claudeClient = (claudeStore: ClaudeRoutesDeps["claudeStore"], sweeps: { withinMs: number | undefined; force: boolean | undefined }[] = []) =>
     routesClient(
         claudeContract,
         createClaudeRoutes(
@@ -22,8 +22,15 @@ const claudeClient = (claudeStore: ClaudeRoutesDeps["claudeStore"]) =>
                 claudeStore,
                 accountUsage: { read: async () => ({}), record: async () => {}, clear: async () => {} },
                 // The list waits on a sweep before answering; there is no endpoint to sweep under test, and
-                // what the sweep would have written is exactly what `accountUsage` is standing in for.
-                claudeUsage: { refresh: async () => {}, start: () => () => {} },
+                // what the sweep would have written is exactly what `accountUsage` is standing in for. What it
+                // was ASKED for is recorded, because the freshness the caller demanded is itself a route
+                // decision — see the forced-read test.
+                claudeUsage: {
+                    refresh: async (withinMs, force) => {
+                        sweeps.push({ withinMs, force });
+                    },
+                    start: () => () => {},
+                },
             }),
         ),
     );
@@ -47,7 +54,7 @@ test("Claude OAuth: accounts reflect the store, disconnect clears the named one"
                 ),
         }),
     );
-    expect(await client.accounts()).toEqual({ accounts: [] });
+    expect(await client.accounts({})).toEqual({ accounts: [] });
     // The start route hands the browser an authorize URL + PKCE material.
     const challenge = await client.start();
     expect(typeof challenge.authorizeUrl).toBe("string");
@@ -56,7 +63,7 @@ test("Claude OAuth: accounts reflect the store, disconnect clears the named one"
     // Directly store two accounts (exchange itself hits Anthropic; the store wiring is what we assert here).
     accounts.set("a", { id: "a", label: "work", connectedAt: 1, accessToken: "tok", scope: "user:inference" });
     accounts.set("b", { id: "b", label: "personal", connectedAt: 2, accessToken: "tok2" });
-    expect(await client.accounts()).toEqual({
+    expect(await client.accounts({})).toEqual({
         accounts: [
             { id: "a", label: "work", connectedAt: 1, scope: "user:inference" },
             { id: "b", label: "personal", connectedAt: 2 },
@@ -97,4 +104,27 @@ test("Claude OAuth: rename writes the label through, and 404s on an account that
     // Blank means "back to the derived name", not a nameless row.
     expect((await client.rename({ id: "a", label: "" })).label).toBe("a@example.com");
     expect(await errorCode(client.rename({ id: "gone", label: "Work" }))).toBe("NOT_FOUND");
+});
+
+/* A reading a caller cannot doubt is a reading nobody can act on. Every ordinary read of this list wants the
+ * daemon's freshness bound — it is what keeps a page load off the provider's quota endpoint — but the person who
+ * has just changed something about the account (a seat downgraded, a plan swapped, a limit spent on another
+ * machine) is asking exactly whether the number they can see survived it, and an answer from the last minute
+ * cannot tell them. So `force` goes through to the sweep, and it waits longer for it: there is a spinner on the
+ * other end of this one, and giving up early would hand back the very reading it was pressed to go behind. */
+test("Claude OAuth: a forced account list re-measures, and waits longer for it", async () => {
+    const sweeps: { withinMs: number | undefined; force: boolean | undefined }[] = [];
+    const client = claudeClient(
+        unstubbed("claudeStore", {
+            read: async () => undefined,
+            write: async () => {},
+            clear: async () => {},
+            list: async () => [],
+        }),
+        sweeps,
+    );
+    await client.accounts({});
+    await client.accounts({ force: "1" });
+    expect(sweeps.map((sweep) => sweep.force)).toEqual([false, true]);
+    expect(sweeps[1]!.withinMs).toBeGreaterThan(sweeps[0]!.withinMs!);
 });

@@ -1,6 +1,7 @@
 import { oc } from "@orpc/contract";
 import {
     AccountIdSchema,
+    AccountListQuerySchema,
     AccountRenameSchema,
     AuthorizeChallengeSchema,
     ModelsSchema,
@@ -19,7 +20,9 @@ export const claudeContract = {
     exchange: oc.route({ method: "POST", path: "/claude/oauth/exchange" }).input(OauthExchangeSchema).output(OauthAccountSchema),
     // Claude's available models for the picker, from the Agent SDK's supportedModels() (see claude-models.ts).
     models: oc.route({ method: "GET", path: "/claude/models" }).output(ModelsSchema),
-    accounts: oc.route({ method: "GET", path: "/claude/accounts" }).output(OauthAccountListSchema),
+    // Each account carries its plan-limit reading. `force` re-measures before answering — see
+    // AccountListQuerySchema, and USAGE_WAIT_MS in claude.routes.ts for what an ordinary read waits.
+    accounts: oc.route({ method: "GET", path: "/claude/accounts" }).input(AccountListQuerySchema).output(OauthAccountListSchema),
     rename: oc.route({ method: "POST", path: "/claude/account/rename" }).input(AccountRenameSchema).output(OauthAccountSchema),
     disconnect: oc.route({ method: "POST", path: "/claude/account/disconnect" }).input(AccountIdSchema).output(OkSchema),
 };

@@ -15,7 +15,7 @@ import { providerReady } from "../../composables/chat/access";
 import { relativeTime } from "../../composables/chat/catalog";
 import { providerRefusals } from "../../composables/chat/providerAccounts";
 import { providerTabs } from "../../composables/chat/providerCatalog";
-import { useChat } from "../../composables/chat/useChat";
+import { refreshConnections, useChat } from "../../composables/chat/useChat";
 import { isSpent, liveUsage, type PlanHeadroom, planHeadroom, refusalNote } from "../../composables/chat/usageStatus";
 import { useSandbox } from "../../composables/sandbox/useSandbox";
 import ConnectFlow from "./ConnectFlow.vue";
@@ -52,7 +52,6 @@ const {
     accountBusy,
     error: chatError,
     showActiveProvider,
-    refreshConnections,
     loadUsage,
     startConnect,
     cancelConnect,

@@ -4,7 +4,7 @@ import { cmp, RowGroup } from "@intentic/ui";
 import { computed, onMounted, ref } from "vue";
 import ProviderLogo from "../../chat/ProviderLogo.vue";
 import { accountsLoaded, providerAccounts, providerRefusals, translatorAccounts } from "../../composables/chat/providerAccounts";
-import { useChat } from "../../composables/chat/useChat";
+import { refreshConnections } from "../../composables/chat/useChat";
 import {
     formatAge,
     formatReset,
@@ -51,7 +51,6 @@ import {
  * has an afternoon-old one. The connection read is what refreshes them (the daemon waits on a quota sweep
  * before answering it), so arriving on this tab is exactly the moment to ask. AiAccountSection does the same
  * for the rings it draws. */
-const { refreshConnections } = useChat();
 onMounted(() => void refreshConnections());
 
 const rows = computed(() => planLimitRows(providerAccounts.value, translatorAccounts.value));
@@ -403,8 +402,8 @@ const roster = computed(() => {
              elsewhere — which is the entire distance between "1%" here and 98% in a terminal on the same
              account. -->
         <p class="px-4 py-2.5 text-2xs text-subtle">
-            A floor, not a reading: other clients spend the same pools without telling this sandbox, and Claude's figure is only as fresh as your
-            last turn.
+            A floor, not a reading: other clients spend the same pools without telling this sandbox, and Claude's figure is only as fresh as your last
+            turn.
         </p>
     </RowGroup>
 

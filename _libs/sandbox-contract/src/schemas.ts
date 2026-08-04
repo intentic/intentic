@@ -872,6 +872,13 @@ export const OauthAccountSchema = z.object({
 export type OauthAccount = z.infer<typeof OauthAccountSchema>;
 export const OauthAccountListSchema = z.object({ accounts: z.array(OauthAccountSchema) });
 export type OauthAccountList = z.infer<typeof OauthAccountListSchema>;
+/* RE-MEASURE THIS PROVIDER'S PLAN LIMITS BEFORE ANSWERING, rather than serving whatever reading is current
+ * enough by the daemon's own bound. Every ordinary read of the list wants that bound — it is what keeps a page
+ * load off the upstream quota endpoint — but a person who has just changed something about the account
+ * (a seat downgraded, a plan swapped, another device's spend) is asking precisely whether the reading they can
+ * see is still true, and an answer from the last minute cannot tell them. Read off the query string, so the
+ * caller says it as `?force=1`. */
+export const AccountListQuerySchema = z.object({ force: z.stringbool().default(false) });
 // Address one account of a provider (disconnect, and the turn's `account`).
 export const AccountIdSchema = z.object({ id: z.string().min(1) });
 // Rename one account of a provider whose credential the sandbox owns (Claude, Kimi). Blank ⇒ the daemon falls

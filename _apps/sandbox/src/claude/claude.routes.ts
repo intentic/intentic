@@ -23,6 +23,13 @@ export type ClaudeRoutesDeps = Pick<Services, "accountUsage" | "claudeModels" | 
  * the sweep keeps running past the deadline and lands for the next read. */
 const USAGE_WAIT_MS = 1_500;
 
+/* And how long a FORCED read waits, which is longer for the one reason that changes the arithmetic: somebody is
+ * watching a spinner they started. The deadline above is set so a page never pays for a slow quota endpoint;
+ * here the read IS what was asked for, so giving up early would answer the question with the stale number the
+ * press was doubting. Bounded by the read's own timeout (READ_TIMEOUT_MS, 8s) — past that there is nothing left
+ * to wait for. */
+const FORCED_USAGE_WAIT_MS = 9_000;
+
 // Claude subscription OAuth — the sandbox owns the credential, the platform never sees it. `start` hands the
 // browser the authorize URL + PKCE material; `exchange` stores the tokens as a new account; `accounts` lists
 // them; `rename` renames one; `disconnect` clears the one named by id. The agent route reads the account the
@@ -51,8 +58,8 @@ export const createClaudeRoutes = (services: ClaudeRoutesDeps) => {
         // spending a turn on it — brought up to date first (see USAGE_WAIT_MS), because an account's allowance
         // moves whether or not this sandbox is the one spending it. Absent only for an account no reading has
         // ever been obtained for; the UI reads that as unknown, not as empty.
-        accounts: i.accounts.handler(async () => {
-            await services.claudeUsage.refresh(USAGE_WAIT_MS);
+        accounts: i.accounts.handler(async ({ input }) => {
+            await services.claudeUsage.refresh(input.force ? FORCED_USAGE_WAIT_MS : USAGE_WAIT_MS, input.force);
             const [accounts, usage] = await Promise.all([services.claudeStore.list(), services.accountUsage.read()]);
             return { accounts: accounts.map((account) => withUsage(account, usage[account.id])) };
         }),

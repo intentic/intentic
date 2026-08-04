@@ -175,8 +175,10 @@ const READ_TIMEOUT_MS = 8_000;
 export interface ClaudeUsageRefresher {
     // Bring every connected account's reading up to date, skipping the ones already current. Resolves when the
     // sweep lands or at `withinMs`, whichever comes first — a caller that gave up waiting still gets the
-    // reading on its next read, because the sweep it started keeps running.
-    readonly refresh: (withinMs?: number) => Promise<void>;
+    // reading on its next read, because the sweep it started keeps running. `force` reads every account
+    // whatever FRESH_MS says: it is the request of someone asking whether the number they can SEE is still
+    // true, which a reading from the last minute cannot answer however current it is.
+    readonly refresh: (withinMs?: number, force?: boolean) => Promise<void>;
     // Sweep now and every `intervalMs` after. Returns the stop.
     readonly start: (intervalMs?: number) => () => void;
 }
@@ -197,7 +199,12 @@ export const createClaudeUsageRefresher = (deps: {
      * caches the successes; this is what stops an endpoint that is down (or an account whose plan reports
      * nothing) from being retried on every single account list. */
     const attemptedAt = new Map<string, number>();
-    // The sweep in flight, so a page load that arrives during one joins it instead of starting a second.
+    /* The sweep in flight, so a page load that arrives during one joins it instead of starting a second.
+     *
+     * A FORCED READ NEVER JOINS ONE. That sweep chose its accounts before the question was asked, so an account
+     * it passed over as current would stay passed over — and the caller would be answered with the very reading
+     * it was sent to go behind. It queues AFTER it rather than beside it, which is also what keeps two sweeps
+     * off one account's token at the same moment. */
     let sweeping: Promise<void> | undefined;
 
     const readOne = async (id: string): Promise<void> => {
@@ -214,13 +221,14 @@ export const createClaudeUsageRefresher = (deps: {
         }
     };
 
-    const sweep = async (): Promise<void> => {
+    const sweep = async (force: boolean): Promise<void> => {
         const [accounts, stored] = await Promise.all([deps.store.list(), deps.usage.read()]);
         const now = Date.now();
         const due = accounts.filter(
             (account) =>
                 // A revoked credential cannot read anything; asking would only mint a 401 per sweep.
-                account.needsReauth !== true && Math.max(stored[account.id]?.measuredAt ?? 0, attemptedAt.get(account.id) ?? 0) < now - FRESH_MS,
+                account.needsReauth !== true &&
+                (force || Math.max(stored[account.id]?.measuredAt ?? 0, attemptedAt.get(account.id) ?? 0) < now - FRESH_MS),
         );
         // A sandbox holds a handful of Claude accounts (the fleets are on the routed providers, which bound
         // their own concurrency for exactly that reason), so the whole sweep goes out at once.
@@ -233,15 +241,26 @@ export const createClaudeUsageRefresher = (deps: {
         );
     };
 
-    const refresh = (withinMs?: number): Promise<void> => {
-        // Never rejects: an account list must not fail because a quota read did — the rings are an enhancement
-        // to that list, exactly as they are to the routed one.
-        sweeping ??= sweep()
+    // Queue one behind whatever is running. Never rejects: an account list must not fail because a quota read
+    // did — the rings are an enhancement to that list, exactly as they are to the routed one.
+    const queue = (force: boolean): Promise<void> => {
+        const next: Promise<void> = (sweeping ?? Promise.resolve())
+            .then(() => sweep(force))
             .catch((error: unknown) => deps.store.logger.warn({ err: error }, "claude usage sweep failed — the next one retries"))
             .finally(() => {
-                sweeping = undefined;
+                // Only while it is still the one in flight: clearing a sweep that has since queued behind this
+                // one would let a third start beside it.
+                if (sweeping === next) {
+                    sweeping = undefined;
+                }
             });
-        return withinMs === undefined ? sweeping : Promise.race([sweeping, deadline(withinMs)]);
+        sweeping = next;
+        return next;
+    };
+
+    const refresh = (withinMs?: number, force = false): Promise<void> => {
+        const pending = force || sweeping === undefined ? queue(force) : sweeping;
+        return withinMs === undefined ? pending : Promise.race([pending, deadline(withinMs)]);
     };
 
     return {

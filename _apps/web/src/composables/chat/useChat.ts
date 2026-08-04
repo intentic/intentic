@@ -934,8 +934,13 @@ const repointStranded = (target: AgentProvider, live: readonly OauthAccount[]): 
 // pick is gone). The single reader of the `/accounts` routes. THROWS when the read fails (sandboxJson): a
 // daemon that didn't answer has not told us the user has no accounts, and callers that treat the two the same
 // are how an empty card comes to claim "not connected" during an outage.
-const refreshAccounts = async (target: AgentProvider): Promise<OauthAccount[]> => {
-    const list = (await sandboxJson<{ accounts?: OauthAccount[] }>(`${providerBase(target)}/accounts`)).accounts ?? [];
+const refreshAccounts = async (target: AgentProvider, force: boolean): Promise<OauthAccount[]> => {
+    /* `force` re-measures the plan limits before the list answers, and reaches CLAUDE ALONE because it is the
+     * only list that waits on a quota sweep at all. The routed subscriptions' rings come off the daemon's own
+     * background sweep and that read deliberately never blocks on upstream — it is the routed turn's credential
+     * gate as much as it is a settings list, so a round-trip there would land on every routed turn's startup. */
+    const forced = force && target === `claude` ? `?force=1` : ``;
+    const list = (await sandboxJson<{ accounts?: OauthAccount[] }>(`${providerBase(target)}/accounts${forced}`)).accounts ?? [];
     providerAccounts.value = { ...providerAccounts.value, [target]: list };
     // Seed the shared usage map from the daemon's persisted snapshots, so a fresh page load shows each account's
     // remaining headroom immediately instead of staying blank until that account's next turn. A reading this
@@ -1065,7 +1070,7 @@ const pollGrokOnce = async (deadline: number): Promise<void> => {
         return;
     }
     try {
-        const grokAccounts = await refreshAccounts(`grok`);
+        const grokAccounts = await refreshAccounts(`grok`, false);
         if (nativeConnectFlow.value !== flow) {
             return;
         }
@@ -1697,10 +1702,10 @@ const showActiveProvider = (): void => {
  * actually came back, so a daemon that is unreachable or mid-restart leaves the surfaces waiting (the reachable
  * seam retries) instead of asserting an empty state it cannot back up. The translator read is excluded from
  * that vote deliberately — it swallows its own failure, so it always "succeeds". */
-const refreshConnections = async (): Promise<void> => {
+export const refreshConnections = async (force = false): Promise<void> => {
     const natives = NATIVE_PROVIDERS.filter((target) => !subscriptionOnly(target));
     const [reads] = await Promise.all([
-        Promise.allSettled(natives.map((target) => refreshAccounts(target))),
+        Promise.allSettled(natives.map((target) => refreshAccounts(target, force))),
         refreshTranslatorAccounts(),
         refreshProviderRefusals(),
     ]);
@@ -1835,7 +1840,7 @@ const renameAccount = async (id: string, label: string): Promise<void> => {
         // restore a name onto an account that no longer exists: the honest answer to a failed write is the
         // current truth, not the state we came from.
         error.value = response.status === 404 ? `That account is no longer connected.` : `Could not rename that account.`;
-        await refreshAccounts(target).catch(() => replaceAccount(target, current));
+        await refreshAccounts(target, false).catch(() => replaceAccount(target, current));
         return;
     }
     replaceAccount(target, (await response.json()) as OauthAccount);
@@ -1926,7 +1931,6 @@ export function useChat() {
         loadSessions,
         openConversation,
         showActiveProvider,
-        refreshConnections,
         loadUsage,
         startConnect,
         completeConnect,

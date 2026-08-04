@@ -7,7 +7,7 @@ import { accessBadge, accessStateFor, providerReady } from "../composables/chat/
 import { BADGE_META } from "../composables/chat/catalog";
 import { acpProviders, endpointProviders, providerDisplayLabel, providerModelsState } from "../composables/chat/providerCatalog";
 import { customEntryFor, filterEntries, type PickerEntry, pickerBlocks, pickerEntries, pickerSections } from "../composables/chat/modelPicker";
-import { loadAllProviderModels, loadProviderModels } from "../composables/chat/useChat";
+import { loadAllProviderModels, loadProviderModels, refreshConnections } from "../composables/chat/useChat";
 import { useSandboxVersion } from "../composables/sandbox/useSandboxVersion";
 import ProviderLogo from "./ProviderLogo.vue";
 
@@ -224,6 +224,18 @@ const stateFor = (target: AgentProvider) => providerModelsState.value[target];
 onMounted(() => {
     // The catalogs are daemon-owned and cached there — refresh on every open so search spans warm lists.
     void loadAllProviderModels();
+    /* AND THE CONNECTIONS, on the same seam and for a sharper reason. Everything this panel says about ACCESS
+     * is read from them — which providers are locked, which need reconnecting, and (in the footer a chat host
+     * gives it) how much of each account's plan is left — and all of it was as old as the last time the daemon
+     * became reachable, which for a browser tab left open is the morning. These pools are account-wide, so an
+     * afternoon of spending elsewhere, a revoked credential or a downgraded seat all land here as a confident
+     * green ring that nothing on screen has any reason to doubt.
+     *
+     * Opening the picker IS the moment the numbers get read, so it is the moment to take them: the daemon
+     * re-measures behind this call (claude.routes.ts) and answers within its own deadline, and the rings
+     * redraw as it lands. Unforced — the daemon's freshness bound is what keeps opening a picker twice in a
+     * minute off the provider's quota endpoint; the footer's own control is the way past it. */
+    void refreshConnections();
     // Desktop only: on mobile the software keyboard would instantly cover half the sheet.
     if (!mobile.value) {
         void nextTick(() => searchInput.value?.focus());

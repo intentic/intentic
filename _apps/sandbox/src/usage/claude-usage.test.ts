@@ -155,6 +155,47 @@ test("sweeps every connected account, and leaves a current reading alone", async
     expect(recorded[`b`]).toBe(fresh);
 });
 
+/* The bound above is right for every read the app takes on its own and wrong for the one a person asks for: they
+ * press it precisely because they doubt the number on screen, and "it was current a moment ago" is that number
+ * again. Forced, the account is read whatever the store says about it. */
+test("a forced sweep re-reads an account the freshness bound would have passed over", async () => {
+    const fresh: AccountUsage = { windows: [{ kind: "five_hour", utilization: 3 }], measuredAt: Date.now() };
+    const { store, usage, recorded } = memoryStores([account("a")], { a: fresh });
+    const refresher = createClaudeUsageRefresher({ store, usage, fetchFn: endpoint(LIVE_PAYLOAD) });
+
+    await refresher.refresh();
+    expect(recorded[`a`]).toBe(fresh);
+
+    await refresher.refresh(undefined, true);
+    expect(recorded[`a`]?.windows.map((window) => window.kind)).toEqual(["five_hour", "seven_day", "model:Fable"]);
+});
+
+// And it cannot be served by the sweep already running: that one chose its accounts before the question was
+// asked, so joining it would answer the forced caller with the reading it was sent to go behind.
+test("a forced sweep queues behind the one in flight rather than joining it", async () => {
+    let answer = (): void => {};
+    const held = new Promise<void>((resolve) => {
+        answer = resolve;
+    });
+    let reads = 0;
+    const { store, usage } = memoryStores([account("a")]);
+    const refresher = createClaudeUsageRefresher({
+        store,
+        usage,
+        fetchFn: (async () => {
+            reads += 1;
+            await (reads === 1 ? held : Promise.resolve());
+            return { ok: true, json: () => Promise.resolve(LIVE_PAYLOAD) };
+        }) as unknown as typeof fetch,
+    });
+
+    const running = refresher.refresh();
+    const forced = refresher.refresh(undefined, true);
+    answer();
+    await Promise.all([running, forced]);
+    expect(reads).toBe(2);
+});
+
 test("a refused read leaves the last good snapshot standing", async () => {
     // The failure mode this exists for: an empty window list means "we could not read", never "this account has
     // no limits" — overwriting a 98% reading with nothing is how a spent account starts looking healthy.
