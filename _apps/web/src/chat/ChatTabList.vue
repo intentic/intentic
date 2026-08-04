@@ -10,17 +10,17 @@ import {
     attentionReason,
     type FleetLane,
     formatCost,
-    formatElapsed,
     turnInFlight,
     unreadBadge,
 } from "../composables/agents/agentStatus";
 import { sessionCategory } from "../composables/sessionCategory";
-import IdentityTile from "../components/IdentityTile.vue";
-import { markSegments, useAgentFilter } from "../composables/agents/useAgentFilter";
+import { useAgentFilter } from "../composables/agents/useAgentFilter";
 import { FINISHED_WINDOW, type FleetAgent, useAgents, windowFinished } from "../composables/agents/useAgents";
 import FilterField from "../components/FilterField.vue";
 import HoverCard from "../components/HoverCard.vue";
 import OriginMark from "../components/OriginMark.vue";
+import RailCard from "../components/RailCard.vue";
+import RailLane from "../components/RailLane.vue";
 import WorkflowMark from "../components/WorkflowMark.vue";
 import { relativeTime, statusIcon, statusLabel } from "../composables/chat/catalog";
 import type { Conversation } from "../composables/chat/conversation";
@@ -53,35 +53,12 @@ import { providerLabel, type WorkflowRun } from "@intentic/sandbox-contract";
  *
  * IT IS THE BOARD'S CARD IN A COLUMN ONE CARD WIDE, and that is a design rule rather than a resemblance —
  * /agents and this list are read minutes apart by the same eye, so anything they draw differently reads as
- * two different products. What "in miniature" costs is only the facts that need width the rail lacks (the
- * branch, the token counters); it does not license a second visual grammar. The card's rows, top to bottom:
+ * two different products. The card and the lane it lies on are therefore not this file's to draw: they are
+ * RailCard and RailLane, which the Subagents area lists its rows with too, and which is where the reasoning
+ * about the card's rows, its two selection channels and the lane slab now lives. What "in miniature" costs is
+ * only the facts that need width the rail lacks (the branch, the token counters).
  *
- *   · the LEADING mark is the chat's IDENTITY TILE (IdentityTile) — the kind-of-work glyph on a tint of the
- *     chat's CATEGORY hue (sessionCategory: the title's action word read as a Conventional Commit type —
- *     audits a blue magnifier, redesigns purple arrows, new work a green plus, fixes a red wrench). Shape and
- *     colour carry the same fact twice, so the tile reads without a legend. A chat whose title reads as
- *     nothing wears the provider mark on neutral chrome instead — for a draft, "whose runtime" is the most a
- *     tile can truthfully say. Always present, so every title starts at one x.
- *   · the TRAILING glyph is the status, in a fixed slot at the end of the title row, with the × taking the
- *     slot beside it on hover (AgentCard's hover-action pattern).
- *   · the title is the card's one piece of CONTENT and takes the content tier (text-xs, semibold) over a
- *     card of text-2xs meta — the board's own hierarchy. A card set entirely in one size is a card with no
- *     first line to land on, which is what made a column of these read as a wall.
- *   · the META line carries the card's facts at the board's own picks: the attention/unread chip, provenance
- *     marks, the model, cost, the diff, the message count, and the age right-aligned.
- *   · a RUNNING card adds the board's live line — tool glyph, what it is doing, and the ticking elapsed — in
- *     link, so the sessions that are working are findable in a column of stopped ones.
- *
- * EACH LANE IS A SLAB (`.lane`), the board's kanban column at one card's width: a rounded surface the lane's
- * cards lie on, capped by its own header and separated from the next lane by a gap rather than by a colour
- * change. Cards are opaque and a step lighter than it. Both halves of that are load-bearing and both were
- * once wrong here — cards were a translucent wash of the canvas colour, which in the pop-out (a canvas body)
- * mixed to exactly the ground they were drawn on, and the header was a bg-canvas band, which on that same
- * ground was a black rectangle with a hard edge butting into the first card.
- *
- * Colour is spent the way the board spends it: the work's category in the tile, status in the glyph, the
- * reason in a chip, the live readout in link, diffs in success/danger — and everything else neutral, so an
- * accent on screen always means something.
+ * This file's job is which lanes exist, what goes in them, and what each card knows — below.
  *
  * The list reads the stores and emits verbs rather than writing them: the panel that hosts it is what hands
  * each verb to useChat, exactly as the strip always did. */
@@ -660,29 +637,17 @@ const closeTab = (event: Event, id: string): void => {
             <!-- A lane with nothing in it is not drawn at all (occupiedLanes — and see the note there before
                  reaching for `v-show` here); a lane the FILTER emptied keeps its header and says so, so the
                  list doesn't reshuffle under the cursor mid-keystroke. -->
-            <section v-for="lane in occupiedLanes" :key="lane.key" class="lane flex min-w-0 flex-col rounded-xl p-1">
-                <!-- The board's lane header, at the board's weights — dot, label, and the count as a pill
-                     rather than a loose number. It is the SLAB'S CAP (see .lane): full-bleed to the lane's
-                     rounded top through the negative margins, painted in the lane's own fill so the two never
-                     seam, and PINNED while its own lane scrolls (the stacked board's behaviour, and the same
-                     argument: a column this tall is read a screen at a time, and a card only means "finished"
-                     while the lane it belongs to is still on screen). It was a bg-canvas band before, which in
-                     a pop-out — a canvas body — was a black rectangle with a hard edge against the first card.
-                     Its text starts where a card's content does, so the lane reads down one left edge. -->
-                <header class="lane-header sticky top-0 z-10 -mx-1 -mt-1 flex items-center gap-2 rounded-t-xl px-3.5 pb-2 pt-2.5">
-                    <span class="h-2 w-2 shrink-0 rounded-full" :class="lane.dot"></span>
-                    <span class="text-2xs font-semibold uppercase tracking-wide text-muted">{{ lane.label }}</span>
-                    <span class="rounded-full bg-overlay px-1.5 py-px text-2xs text-muted">{{ countIn(lane.key) }}</span>
-                    <span class="flex-1"></span>
-                    <!-- "CLEAR", in the slot and the word the board's Finished lane uses — the same act on the
-                         same lane, at the scale the lane is at: there it archives the agents, here it closes
-                         their chats. Both are lossless and neither asks, which is what earns the one-press
-                         treatment; the tooltip names where the chats go. It was reachable only through a card's
-                         right-click menu before, which is a hunt for a target to perform an action that has no
-                         target — the lane is the target, so the lane's header is where it belongs.
-                         Gone while filtering, exactly as the board's is: this closes the WHOLE lane, and
-                         offering it above a lane reading "1 of 12" is offering a bulk action whose scope is not
-                         the one on screen. -->
+            <RailLane v-for="lane in occupiedLanes" :key="lane.key" :label="lane.label" :dot="lane.dot" :count="countIn(lane.key)">
+                <!-- "CLEAR", in the slot and the word the board's Finished lane uses — the same act on the
+                     same lane, at the scale the lane is at: there it archives the agents, here it closes
+                     their chats. Both are lossless and neither asks, which is what earns the one-press
+                     treatment; the tooltip names where the chats go. It was reachable only through a card's
+                     right-click menu before, which is a hunt for a target to perform an action that has no
+                     target — the lane is the target, so the lane's header is where it belongs.
+                     Gone while filtering, exactly as the board's is: this closes the WHOLE lane, and
+                     offering it above a lane reading "1 of 12" is offering a bulk action whose scope is not
+                     the one on screen. -->
+                <template #actions>
                     <button
                         v-if="lane.key === 'finished' && !filtering"
                         type="button"
@@ -693,33 +658,32 @@ const closeTab = (event: Event, id: string): void => {
                     >
                         Clear
                     </button>
-                </header>
+                </template>
                 <!-- THE LANE'S WORKFLOW RUNS, above its chats and dashed like their card on the board: a run
                      is the container of several of the rows beneath it, not one of them. Clicking one is the
                      board card's own press (openRunInChat) — its live sessions into the panes, or its diagram
                      when nothing is live — so the two doors into a run cannot behave differently. -->
                 <div v-if="runsIn(lane.key).length > 0" class="mb-1.5 flex min-w-0 flex-col gap-1.5">
-                    <button
+                    <RailCard
                         v-for="run in runsIn(lane.key)"
                         :key="run.runId"
-                        type="button"
-                        class="chat-tab rail-card group flex w-full min-w-0 shrink-0 flex-col gap-1 rounded-lg border-dashed p-2.5 text-left text-2xs"
-                        :class="{ 'chat-tab-on': runOnScreen(run) }"
+                        :title="run.workflow.name"
+                        icon="sitemap"
+                        dashed
+                        :selected="runOnScreen(run)"
                         :aria-label="`Open the workflow run ${run.workflow.name}`"
                         @click="void openRunInChat(run)"
                     >
-                        <span class="flex min-w-0 items-center gap-1.5">
-                            <Icon name="sitemap" class="shrink-0 text-2xs text-link" />
-                            <span class="min-w-0 flex-1 truncate font-semibold text-content">{{ run.workflow.name }}</span>
-                        </span>
-                        <span class="truncate text-2xs text-subtle">
-                            {{ run.steps.filter((step) => step.state === `done`).length }}/{{ run.steps.length }} steps<template
-                                v-if="runningTitles(run).length > 0"
-                            >
-                                · {{ runningTitles(run).join(` · `) }}</template
-                            >
-                        </span>
-                    </button>
+                        <template #meta>
+                            <span class="min-w-0 truncate text-subtle">
+                                {{ run.steps.filter((step) => step.state === `done`).length }}/{{ run.steps.length }} steps<template
+                                    v-if="runningTitles(run).length > 0"
+                                >
+                                    · {{ runningTitles(run).join(` · `) }}</template
+                                >
+                            </span>
+                        </template>
+                    </RailCard>
                 </div>
                 <p v-if="cardsIn(lane.key).length === 0 && runsIn(lane.key).length === 0" class="px-2.5 pb-1.5 text-2xs text-subtle">No matches</p>
                 <div v-else-if="cardsIn(lane.key).length > 0" class="flex min-w-0 flex-col gap-1.5">
@@ -741,42 +705,26 @@ const closeTab = (event: Event, id: string): void => {
                             @blur="edit.blurCommit()"
                             @vue:mounted="edit.focusInput"
                         />
-                        <button
+                        <RailCard
                             v-else
-                            type="button"
                             :data-chat-tab="c.conversationId"
-                            class="chat-tab rail-card group flex w-full min-w-0 shrink-0 scroll-mt-8 flex-col gap-1.5 rounded-lg p-2.5 text-left text-2xs"
-                            :class="{
-                                'chat-tab-on': activeId === c.conversationId,
-                                'chat-tab-shown': split && activeId !== c.conversationId && showing(c.conversationId),
-                                'rail-card-attention': lane.key === 'attention',
-                            }"
+                            :title="tabLabel(c)"
+                            :needle="needle"
+                            :provider="agent?.provider ?? c.provider.value"
+                            :status="statusOf({ conversation: c, agent })"
+                            :live="liveOf({ conversation: c, agent })"
+                            :now="now"
+                            :selected="activeId === c.conversationId"
+                            :showing="split && activeId !== c.conversationId && showing(c.conversationId)"
+                            :attention="lane.key === 'attention'"
+                            :snippet="agent === undefined ? undefined : snippetOf(agent)"
                             @click="onRowClick($event, c.conversationId)"
                             @dblclick.prevent.stop="beginRename(c.conversationId)"
                             @contextmenu.prevent.stop="openTabMenu(c.conversationId, $event)"
                             @mouseenter="showPreview($event, { conversation: c, agent })"
                             @mouseleave="hidePreview"
                         >
-                            <span class="flex w-full min-w-0 items-start gap-2">
-                                <!-- The IDENTITY TILE leads (see the header comment). Sized to the title's
-                                     first line so a two-line title hangs off it, not around it. -->
-                                <IdentityTile
-                                    :title="tabLabel(c)"
-                                    :provider="agent?.provider ?? c.provider.value"
-                                    class="-mt-px h-4.5 w-4.5 text-2xs"
-                                />
-                                <!-- Two lines before the clamp — a card has the width for most titles whole.
-                                     The content tier over a card of meta: this is the one line being READ.
-                                     Neutral, always: the status colour lives in the glyph beside it, and a
-                                     column of orange titles is one where nothing stands out. -->
-                                <span class="line-clamp-2 min-w-0 flex-1 text-xs font-semibold leading-4 text-content">
-                                    <span
-                                        v-for="(run, at) in markSegments(tabLabel(c), needle)"
-                                        :key="at"
-                                        :class="run.hit ? 'rounded-sm bg-primary-600/30 text-content' : ''"
-                                        >{{ run.text }}</span
-                                    >
-                                </span>
+                            <template #trailing>
                                 <PresenceAvatars
                                     v-if="c.session.value !== undefined"
                                     :members="viewersOfSession(c.session.value.id)"
@@ -798,26 +746,13 @@ const closeTab = (event: Event, id: string): void => {
                                 >
                                     <Icon name="times" class="text-2xs" />
                                 </span>
-                                <!-- Status closes the row, in the board's own slot for it. The REASON an agent
-                                     is in Attention rides the line below instead of replacing this glyph (the
-                                     board's chip does replace it): a chip is a hundred pixels of words, and
-                                     spending them here would leave the title of the one card that most needs
-                                     reading with sixty pixels to be read in. -->
-                                <span class="flex h-4 shrink-0 items-center">
-                                    <Icon v-bind="statusOf({ conversation: c, agent })" />
-                                </span>
-                            </span>
+                            </template>
                             <!-- The crucial facts, one wrapping line at the board's own picks: why it needs
                                  you (or that it's unread), where it came from, the model, cost, diff, how
                                  long a conversation it has been — and the age, right-aligned. Drawn from the
                                  fleet entry where there is one and from the conversation where there isn't
-                                 (see "What the card knows"), so an off-roster chat keeps a populated card.
-                                 Quiet by default: these are reference numbers, not events, so the only colour
-                                 on the line is the one that means something. -->
-                            <span
-                                v-if="hasMeta({ conversation: c, agent })"
-                                class="flex w-full min-w-0 flex-wrap items-center gap-x-2 gap-y-1 text-2xs text-muted"
-                            >
+                                 (see "What the card knows"), so an off-roster chat keeps a populated card. -->
+                            <template v-if="hasMeta({ conversation: c, agent })" #meta>
                                 <span
                                     v-if="agent !== undefined && attentionReason(agent) !== undefined"
                                     class="shrink-0 rounded-full bg-warning/15 px-1.5 py-px font-semibold text-warning"
@@ -869,43 +804,8 @@ const closeTab = (event: Event, id: string): void => {
                                 <span v-if="agent !== undefined && !turnInFlight(agent) && agent.updatedAt > 0" class="ml-auto shrink-0">{{
                                     relativeTime(agent.updatedAt)
                                 }}</span>
-                            </span>
-                            <!-- THE LIVE LINE, the board's own: what the turn is doing this second and how
-                                 long it has been at it, in link — the one accent that makes a working card
-                                 findable in a column of stopped ones. Held through a stop's UNWIND
-                                 (turnInFlight, not `running`): the turn is still live there, the elapsed
-                                 keeps its meaning, and the line freezes on what it was doing when the user
-                                 stopped it — blinking it off a beat before the card settles is the same
-                                 flicker the stopping state exists to remove. -->
-                            <span
-                                v-if="liveOf({ conversation: c, agent }) !== undefined"
-                                class="flex w-full min-w-0 items-center gap-1.5 text-2xs font-medium text-link"
-                            >
-                                <Icon :name="liveOf({ conversation: c, agent })!.icon" class="shrink-0 text-2xs" />
-                                <span class="min-w-0 flex-1 truncate">{{ liveOf({ conversation: c, agent })!.text }}</span>
-                                <span v-if="liveOf({ conversation: c, agent })!.since !== undefined" class="shrink-0">{{
-                                    formatElapsed(liveOf({ conversation: c, agent })!.since!, now)
-                                }}</span>
-                            </span>
-                            <!-- WHY this chat survived the filter, when the reason isn't its title (that one
-                                 is marked in place above). The board's cards carry the same line for the
-                                 same reason: a result the user can't see the cause of is one they stop
-                                 believing. -->
-                            <span
-                                v-if="agent !== undefined && snippetOf(agent) !== undefined"
-                                class="flex w-full min-w-0 items-start gap-1 text-2xs text-muted"
-                            >
-                                <Icon name="search" class="mt-px shrink-0 text-2xs text-subtle" />
-                                <span class="line-clamp-2 min-w-0 flex-1 italic leading-4">
-                                    <span
-                                        v-for="(run, at) in markSegments(snippetOf(agent) ?? '', needle)"
-                                        :key="at"
-                                        :class="run.hit ? 'rounded-sm bg-primary-600/30 not-italic text-content' : ''"
-                                        >{{ run.text }}</span
-                                    >
-                                </span>
-                            </span>
-                        </button>
+                            </template>
+                        </RailCard>
                     </template>
                 </div>
                 <!-- The lane's tail, not a pager: the count is the point ("there are 12 more open"), and the
@@ -920,7 +820,7 @@ const closeTab = (event: Event, id: string): void => {
                     <Icon :name="showAllFinished ? 'chevron-up' : 'chevron-down'" class="text-2xs" />
                     {{ showAllFinished ? "Show fewer" : `${hiddenFinished} earlier` }}
                 </button>
-            </section>
+            </RailLane>
 
             <!-- WHAT THE QUERY FOUND THAT ISN'T OPEN HERE. This list holds the chats of this window, which is
                  almost never the set the question "where did I say X" is about — so the filter reaches the
@@ -931,75 +831,46 @@ const closeTab = (event: Event, id: string): void => {
                  not footnotes, and the board makes the same call with its own off-board hits (real cards, in a
                  group with a header). Only the ink is dropped a step — a muted title, no status glyph — since
                  nothing here is a session you are currently in. -->
-            <section v-if="filtering && notOpenCount > 0" class="lane flex min-w-0 flex-col rounded-xl p-1">
-                <header class="lane-header sticky top-0 z-10 -mx-1 -mt-1 flex items-center gap-2 rounded-t-xl px-3.5 pb-2 pt-2.5">
-                    <Icon name="search" class="shrink-0 text-2xs text-subtle" />
-                    <span class="text-2xs font-semibold uppercase tracking-wide text-muted">Not open</span>
-                    <span class="rounded-full bg-overlay px-1.5 py-px text-2xs text-muted">{{ notOpenCount }}</span>
-                </header>
+            <RailLane v-if="filtering && notOpenCount > 0" label="Not open" icon="search" :count="notOpenCount">
                 <div class="flex min-w-0 flex-col gap-1.5">
-                    <button
+                    <!-- The same identity tile as the lanes above: a hit here is a destination, and the
+                         category tint says what kind of work it will turn out to be. -->
+                    <RailCard
                         v-for="agent in notOpen"
                         :key="agent.id"
-                        type="button"
-                        class="chat-tab rail-card flex w-full min-w-0 shrink-0 flex-col gap-1.5 rounded-lg p-2.5 text-left text-2xs"
+                        :title="agent.title ?? 'Untitled agent'"
+                        :needle="needle"
+                        :provider="agent.provider"
+                        quiet
+                        :snippet="snippetOf(agent)"
                         @click="emit('open', agent.id)"
                     >
-                        <span class="flex w-full min-w-0 items-start gap-2">
-                            <!-- The same identity tile as the lanes above: a hit here is a destination, and
-                                 the category tint says what kind of work it will turn out to be. Only the
-                                 TEXT ink drops a step, since nothing here is a session you are currently in. -->
-                            <IdentityTile :title="agent.title" :provider="agent.provider" class="-mt-px h-4.5 w-4.5 text-2xs" />
-                            <span class="line-clamp-2 min-w-0 flex-1 text-xs font-medium leading-4 text-muted">
-                                <span
-                                    v-for="(run, at) in markSegments(agent.title ?? 'Untitled agent', needle)"
-                                    :key="at"
-                                    :class="run.hit ? 'rounded-sm bg-primary-600/30 text-content' : ''"
-                                    >{{ run.text }}</span
-                                >
-                            </span>
-                        </span>
-                        <span class="flex w-full min-w-0 items-center gap-x-2 text-2xs text-subtle">
+                        <template #meta>
                             <!-- Off the board but not gone: the branch, the diff and the transcript all survive an
-                             archive, so a hit here is a real destination rather than a tombstone. -->
+                                 archive, so a hit here is a real destination rather than a tombstone. -->
                             <Icon v-if="agent.archivedAt !== undefined" name="box" class="shrink-0 text-2xs" aria-label="Archived" />
                             <span v-if="agent.updatedAt > 0" class="ml-auto shrink-0">{{ relativeTime(agent.updatedAt) }}</span>
-                        </span>
-                        <span v-if="snippetOf(agent) !== undefined" class="flex w-full min-w-0 items-start gap-1 text-2xs text-muted">
-                            <Icon name="search" class="mt-px shrink-0 text-2xs text-subtle" />
-                            <span class="line-clamp-2 min-w-0 flex-1 italic leading-4">
-                                <span
-                                    v-for="(run, at) in markSegments(snippetOf(agent) ?? '', needle)"
-                                    :key="at"
-                                    :class="run.hit ? 'rounded-sm bg-primary-600/30 not-italic text-content' : ''"
-                                    >{{ run.text }}</span
-                                >
-                            </span>
-                        </span>
-                    </button>
+                        </template>
+                    </RailCard>
                     <!-- Conversations no agent entry owns — a plain chat, or one whose entry is long gone. Nothing
-                     to draw a provider mark or a status for; the title and the matched line are the whole of
-                     what is known about them. -->
-                    <button
+                         to draw a provider mark or a status for; the title and the matched line are the whole of
+                         what is known about them. -->
+                    <RailCard
                         v-for="session in sessionMatches"
                         :key="session.id"
-                        type="button"
-                        class="chat-tab rail-card flex w-full min-w-0 shrink-0 flex-col gap-1.5 rounded-lg p-2.5 text-left text-2xs"
+                        :title="session.title"
+                        :needle="needle"
+                        icon="comments"
+                        quiet
+                        :snippet="session.snippet"
                         @click="emit('open', session.id)"
                     >
-                        <span class="flex w-full min-w-0 items-start gap-1.5">
-                            <span class="flex h-4 shrink-0 items-center">
-                                <Icon name="comments" class="text-xs text-subtle" />
-                            </span>
-                            <span class="line-clamp-2 min-w-0 flex-1 text-xs font-medium leading-4 text-muted">{{ session.title }}</span>
-                            <span class="shrink-0 text-2xs text-subtle">{{ relativeTime(session.updatedAt) }}</span>
-                        </span>
-                        <span v-if="session.snippet !== undefined" class="line-clamp-2 pl-5 text-2xs italic leading-4 text-subtle">{{
-                            session.snippet
-                        }}</span>
-                    </button>
+                        <template #meta>
+                            <span class="ml-auto shrink-0">{{ relativeTime(session.updatedAt) }}</span>
+                        </template>
+                    </RailCard>
                 </div>
-            </section>
+            </RailLane>
         </div>
         <!-- A failed rename already reverted the title; this says why. Cleared by the next rename. -->
         <span v-if="edit.error !== undefined" class="shrink-0 truncate px-1 text-2xs text-danger" v-tooltip.bottom.overflow="edit.error">{{
@@ -1014,52 +885,3 @@ const closeTab = (event: Event, id: string): void => {
     </div>
 </template>
 
-<style scoped>
-/* The card's surface — AgentCard's skin (visible border, OPAQUE fill) over .chat-tab's behaviour. A
- * transparent pill blends into a column of pills; a bordered card is what makes each session a countable
- * thing. Scoped selectors outweigh chat.css's single-class rules, so these win without !important.
- *
- * `--color-card` on the LANE's fill, exactly as the board's cards sit on their lanes: a card has to be
- * LIGHTER than what it lies on to read as an object rather than as an outline, and `.lane` is mixed to land
- * between canvas and card in both schemes precisely so this holds. The fill this replaced was a 45% wash of
- * the canvas colour, which in the pop-out — whose body IS canvas — composited to the ground it was drawn on,
- * leaving nothing but the 1px border. */
-.rail-card {
-    border-color: var(--color-line);
-    background: var(--color-card);
-    /* Two independent marks on one box-shadow: the attention bar (inset, left edge) and the active ring
-       (outset, all round). Held as variables because a second box-shadow rule would REPLACE the first, which
-       is what forced the old either/or below. */
-    --rail-accent: 0 0 #0000;
-    --rail-ring: 0 0 #0000;
-    box-shadow: var(--rail-accent), var(--rail-ring);
-}
-/* AgentCard's hover, to the letter: the surface lifts a step and the edge sharpens. .chat-tab's own hover is
- * a wash of the CONTENT colour, which over an opaque card reads as the text bleeding rather than as the box
- * responding — so the card overrides both halves of it. */
-.rail-card:hover {
-    border-color: var(--color-line-strong);
-    background: var(--color-overlay);
-}
-/* THE SAME TWO CHANNELS THE BOARD USES (see AgentCard): the card the transcript beside it is showing gets a
- * ring and a lifted fill, an agent that needs the user gets a bar down its left edge. Drawn in different
- * places, so the list no longer has to choose between them — the old rule dropped the warning the moment you
- * opened the card, on the theory that "you are here" outranks "this needs you", which quietly cost the one
- * card most likely to be read the only mark saying why it was in that lane. An inset shadow rather than a
- * wider left border: no layout shift, so a stacked lane's cards keep their text on one axis. */
-/* A chat that HAS a column but is not the one the keyboard is in — the active card's own mark at half weight,
- * on the same two channels. Drawn only in a split (where "on screen" and "focused" are different facts), so a
- * single-pane rail is exactly what it always was. */
-.rail-card.chat-tab-shown {
-    border-color: color-mix(in srgb, var(--color-primary-500) 45%, var(--color-line));
-    --rail-ring: 0 0 0 1px color-mix(in srgb, var(--color-primary-500) 30%, transparent);
-}
-.rail-card.chat-tab-on {
-    border-color: var(--color-primary-500);
-    background: var(--color-overlay);
-    --rail-ring: 0 0 0 2px color-mix(in srgb, var(--color-primary-500) 50%, transparent);
-}
-.rail-card-attention {
-    --rail-accent: inset 3px 0 0 0 var(--color-warning);
-}
-</style>

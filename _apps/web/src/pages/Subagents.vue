@@ -1,9 +1,10 @@
 <script setup lang="ts">
-import type { RestoredMessage, SubagentSession } from "@intentic/sandbox-contract";
-import { Icon, type IconName } from "@intentic/ui";
+import type { AgentProvider, RestoredMessage, SubagentSession } from "@intentic/sandbox-contract";
+import { formatTokens, Icon, type IconName } from "@intentic/ui";
 import { useQuery } from "@tanstack/vue-query";
-import { computed, ref, watch } from "vue";
+import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
+import { activityIcon } from "../composables/agents/agentStatus";
 import { useAgents } from "../composables/agents/useAgents";
 import { relativeTime } from "../composables/chat/catalog";
 import { sandboxJson } from "../composables/sandbox/sandboxClient";
@@ -11,6 +12,9 @@ import { sandboxKey } from "../composables/sandbox/useSandbox";
 import { subagentLive, useSubagentsQuery } from "../composables/subagents/subagentsQuery";
 import { openWorkTerminal } from "../composables/terminal/useWorkTerminals";
 import ChatToolCard from "../chat/ChatToolCard.vue";
+import IdentityTile from "../components/IdentityTile.vue";
+import RailCard from "../components/RailCard.vue";
+import RailLane from "../components/RailLane.vue";
 import { renderMarkdown } from "../composables/renderMarkdown";
 
 /* THE AGENTS THIS SANDBOX'S AGENTS STARTED — the third surface of the same kind, after the terminal panel and the
@@ -23,6 +27,14 @@ import { renderMarkdown } from "../composables/renderMarkdown";
  * the left answering "which agent?", the selected one's work filling the rest — and the content is the chat's own,
  * rendered by the very components the conversation uses (ChatToolCard), because a child's work should read exactly
  * like its parent's.
+ *
+ * THE LIST IS THE CHAT RAIL'S, NOT A SECOND LIST OF SESSIONS. Its rows are RailCard on RailLane — the same card
+ * and the same lane slab the popped-out chat lists its conversations with, and the fleet board's card one column
+ * wide. This used to be its own thing: a flat column of bordered rows, its own status glyphs, its own facts in
+ * its own order, no identity tile and no card surface — so the agents an AGENT started looked like a different
+ * kind of object from the agents the user started, two screens apart in the same app. Everything a row needs
+ * beyond the shared card is a fact about delegation and only that: which turn started it, that it was
+ * backgrounded, and — for a delegation — the shell it runs in.
  *
  * TWO KINDS IN ONE LIST, deliberately: an Agent/Task subagent and a `codex exec` the agent drove from its own
  * shell are the same fact from out here — another agent, working, that you did not start. What differs is only
@@ -62,35 +74,75 @@ const current = computed(() => visible.value.find((session) => session.id === se
 // Selecting keeps whatever narrowed the list — a click inside a filtered rail must not silently widen it.
 const select = (id: string): void => void router.push({ name: `subagents`, params: { id }, query: route.query });
 
-// Running first, then what has finished — the two questions this list is opened with, in that order.
-const lanes = computed<{ readonly label: string; readonly rows: SubagentSession[] }[]>(() => [
-    { label: `Running`, rows: visible.value.filter(subagentLive) },
-    { label: `Finished`, rows: visible.value.filter((session) => !subagentLive(session)) },
+// Running first, then what has finished — the two questions this list is opened with, in that order. The dots
+// are the board's own (ChatTabList's LANES): live is success, the terminal shelf is neutral.
+const lanes = computed<{ readonly label: string; readonly dot: string; readonly rows: SubagentSession[] }[]>(() => [
+    { label: `Running`, dot: `bg-success`, rows: visible.value.filter(subagentLive) },
+    { label: `Finished`, dot: `bg-line-strong`, rows: visible.value.filter((session) => !subagentLive(session)) },
 ]);
 
-// The row's heading: what it runs as, then what it was asked to do. Same ladder the chat card uses, so a row and
-// the card it came from read as the same agent.
+/* The row's heading: WHAT IT WAS ASKED TO DO. The card's one piece of content, so the description takes it
+ * whole — the type it runs as (`Explore`, `general-purpose`) is a fact ABOUT the row and rides the meta line
+ * with the rest of them. It used to lead the title, where on a rail this wide it ate the half of the line that
+ * says which of fourteen children this one is: every row began "general-purpose · " and the descriptions were
+ * clipped at the point they started to differ. */
 const titleOf = (session: SubagentSession): string =>
-    [session.agentType, session.description].filter(Boolean).join(` · `) || `Agent ${session.id.slice(-6)}`;
+    [session.description, session.agentType].find((part) => part !== undefined && part !== ``) ?? `Agent ${session.id.slice(-6)}`;
 // Which agent's turn started it — the way back to the conversation this all came out of.
 const parentOf = (session: SubagentSession): string | undefined => agentById(session.conversationId)?.title ?? undefined;
 
-const STATUS: Record<SubagentSession["status"], { readonly icon: IconName; readonly class: string }> = {
-    pending: { icon: `clock`, class: `text-subtle` },
-    running: { icon: `spinner`, class: `text-link` },
-    paused: { icon: `clock`, class: `text-warning` },
-    completed: { icon: `check`, class: `text-success` },
-    failed: { icon: `times`, class: `text-danger` },
-    killed: { icon: `stop`, class: `text-subtle` },
+/* WHO IS ACTUALLY RUNNING IT, for the identity tile's fallback mark — and for a delegation that is the row's
+ * whole point: a `codex exec` the agent drove from its shell is another vendor's agent working in this sandbox,
+ * and a row that doesn't say so reads as one of ours. An SDK subagent runs inside its parent's own turn, so it
+ * wears the parent's provider, falling back to Claude once the roster no longer holds the parent. */
+const providerOf = (session: SubagentSession): AgentProvider =>
+    session.kind === `subagent` ? (agentById(session.conversationId)?.provider ?? `claude`) : session.kind;
+
+// The SDK's own task vocabulary, ready to `v-bind` onto the Icon — the shape agentStatusMeta returns for a
+// fleet agent, so the rail's glyph slot is fed the same way here as it is there.
+const STATUS: Record<SubagentSession["status"], { name: IconName; spin?: boolean; class: string; "aria-label": string }> = {
+    pending: { name: `clock`, class: `text-xs text-subtle`, "aria-label": `Queued` },
+    running: { name: `spinner`, spin: true, class: `text-xs text-link`, "aria-label": `Running` },
+    paused: { name: `clock`, class: `text-xs text-warning`, "aria-label": `Paused` },
+    completed: { name: `check`, class: `text-xs text-success`, "aria-label": `Completed` },
+    failed: { name: `times`, class: `text-xs text-danger`, "aria-label": `Failed` },
+    killed: { name: `stop`, class: `text-xs text-subtle`, "aria-label": `Killed` },
 };
 
-// The quiet numbers on a row: what it spent, what it did, and when it was last heard from.
-const factsOf = (session: SubagentSession): string[] => [
-    ...(subagentLive(session) && session.lastTool !== undefined ? [session.lastTool] : []),
-    ...(session.toolUses !== undefined && session.toolUses > 0 ? [`${session.toolUses} tools`] : []),
-    ...(session.tokens !== undefined && session.tokens > 0 ? [`${Math.round(session.tokens / 1000)}k tokens`] : []),
-    ...(session.activityAt > 0 ? [relativeTime(session.activityAt)] : []),
-];
+/* THE LIVE LINE, the board's own: what it is doing this second and how long it has been at it, in link — the
+ * one accent that makes a working row findable in a column of stopped ones. A PENDING child gets one too, and
+ * it is the most useful reading on this surface: a queued agent is one the concurrency cap has not let start,
+ * and "Queued · 40s" is the difference between a cap doing its job and a child that is never going to run. */
+const liveOf = (session: SubagentSession): { icon: IconName; text: string; since: number } | undefined => {
+    if (!subagentLive(session)) {
+        return undefined;
+    }
+    if (session.status === `pending`) {
+        return { icon: `clock`, text: `Queued`, since: session.startedAt };
+    }
+    return { icon: activityIcon(session.lastTool), text: session.lastTool ?? `Working…`, since: session.startedAt };
+};
+
+/* HAS THE ROW'S FACTS LINE ANYTHING TO SAY? Asked for the same reason the chat rail's card asks it: a slot
+ * handed a `v-if`-ed template still hands back a vnode, so an unguarded line draws an empty strip under the
+ * title on a child the daemon has only just heard of. */
+const hasFacts = (session: SubagentSession): boolean =>
+    (session.background === true && subagentLive(session)) ||
+    (focus.value === undefined && parentOf(session) !== undefined) ||
+    session.agentType !== undefined ||
+    (session.toolUses ?? 0) > 0 ||
+    (session.tokens ?? 0) > 0 ||
+    (!subagentLive(session) && session.activityAt > 0);
+
+// One second ticks every live row's elapsed together — the board's `now` pattern, one timer for the whole list.
+const now = ref(Date.now());
+let ticker: ReturnType<typeof setInterval> | undefined;
+onMounted(() => {
+    ticker = setInterval(() => {
+        now.value = Date.now();
+    }, 1000);
+});
+onBeforeUnmount(() => clearInterval(ticker));
 
 /* THE SELECTED CHILD'S TRANSCRIPT. Polled while it runs and read once when it has finished — the daemon serves a
  * live one out of its parent turn's frame log and a settled one out of whichever store ran it, so this side needs
@@ -148,75 +200,102 @@ watch(messages, () => {
         </div>
 
         <template v-else>
-            <!-- WHICH AGENT. A rail rather than a pill row: a row of pills can hold a name, and what a row here
-                 has to hold is a name, a parent, a status and a spend. -->
-            <aside class="scrollbar-thin flex w-72 shrink-0 flex-col gap-0.5 overflow-y-auto border-r border-line p-1.5">
+            <!-- WHICH AGENT. The chat rail's own column: lane slabs of session cards, so the agents an agent
+                 started are read exactly the way the agents you started are, two clicks away. -->
+            <aside class="scrollbar-thin flex w-72 shrink-0 flex-col gap-2 overflow-y-auto border-r border-line p-2">
                 <!-- WHAT NARROWED THIS LIST, and the way out of it. A filtered rail that does not say it is
                      filtered is how a reader concludes the sandbox has only ever run two agents. -->
                 <RouterLink
                     v-if="focus !== undefined"
                     :to="{ name: `subagents` }"
-                    class="mb-1 flex items-center gap-1.5 rounded-md border border-line px-2 py-1 text-2xs text-muted transition-colors hover:border-line-strong hover:text-content"
+                    class="flex shrink-0 items-center gap-1.5 rounded-md border border-line px-2 py-1 text-2xs text-muted transition-colors hover:border-line-strong hover:text-content"
                 >
                     <Icon name="comments" class="shrink-0 text-2xs" />
                     <span class="min-w-0 flex-1 truncate">{{ focusTitle }}</span>
                     <span class="shrink-0 text-link">Show all</span>
                 </RouterLink>
                 <template v-for="lane in lanes" :key="lane.label">
-                    <template v-if="lane.rows.length > 0">
-                        <div class="mt-2 px-1 text-2xs font-semibold uppercase tracking-wide text-subtle first:mt-0">
-                            {{ lane.label }} <span class="font-normal">{{ lane.rows.length }}</span>
+                    <RailLane v-if="lane.rows.length > 0" :label="lane.label" :dot="lane.dot" :count="lane.rows.length">
+                        <div class="flex min-w-0 flex-col gap-1.5">
+                            <RailCard
+                                v-for="session in lane.rows"
+                                :key="session.id"
+                                :title="titleOf(session)"
+                                :provider="providerOf(session)"
+                                :status="STATUS[session.status]"
+                                :live="liveOf(session)"
+                                :now="now"
+                                :selected="session.id === selected"
+                                @click="select(session.id)"
+                            >
+                                <template v-if="hasFacts(session)" #meta>
+                                    <!-- Backgrounded: the parent went on working instead of waiting. The fact
+                                         that explains a child still running under a turn that looks finished. -->
+                                    <span
+                                        v-if="session.background === true && subagentLive(session)"
+                                        v-tooltip.top="`Its parent went on working instead of waiting for it`"
+                                        class="shrink-0 rounded-full bg-overlay px-1.5 py-px font-semibold text-subtle"
+                                        >bg</span
+                                    >
+                                    <!-- Whose turn started it. Dropped once the list is already narrowed to one
+                                         agent: repeating the answer on every row is not an answer. Cut short
+                                         rather than given room — every child of one turn repeats it, so it is
+                                         the fact on this line least worth a second row of card height. -->
+                                    <span v-if="focus === undefined && parentOf(session) !== undefined" class="flex min-w-0 items-center gap-1">
+                                        <Icon name="comments" class="shrink-0 text-2xs" />
+                                        <span class="max-w-24 truncate">{{ parentOf(session) }}</span>
+                                    </span>
+                                    <span v-if="session.agentType !== undefined" class="shrink-0">{{ session.agentType }}</span>
+                                    <!-- The MODEL is not on this line, and the omission is the reason the line
+                                         fits one row: the tile already wears whose runtime it is, and the exact
+                                         model is a thing you read once, on the header of the transcript you
+                                         opened — not fourteen times down a rail. -->
+                                    <!-- HOW FAR IT HAS GOT, as one chip rather than two: what it has done and
+                                         what that has cost answer a single question here ("is this one
+                                         working, or is it stuck?"), they are read together, and at this width
+                                         a second glyph is what pushed the line onto a second row. Its tokens
+                                         are ITS OWN — a parent's cost line and the sum of its children's are
+                                         two different true numbers, and this is where a child's are
+                                         attributed. -->
+                                    <span
+                                        v-if="(session.toolUses ?? 0) > 0 || (session.tokens ?? 0) > 0"
+                                        v-tooltip.top="`Tool calls · tokens`"
+                                        class="shrink-0 tabular-nums"
+                                    >
+                                        <Icon name="list-check" class="mr-0.5 text-2xs" />{{
+                                            [session.toolUses, session.tokens === undefined ? undefined : formatTokens(session.tokens)]
+                                                .filter((part) => part !== undefined && part !== 0)
+                                                .join(` · `)
+                                        }}
+                                    </span>
+                                    <!-- The age keeps to the settled rows: a live one's clock is the activity
+                                         line's ticking elapsed, and two clocks on one card disagree by
+                                         construction. It FLOWS with the facts rather than taking the chat
+                                         rail's right-aligned slot — a wrapping line pushes an `ml-auto` item
+                                         onto a row of its own, and "3m" alone on a row is a fifth of a card's
+                                         height spent on the least of its facts. -->
+                                    <span v-if="!subagentLive(session) && session.activityAt > 0" class="shrink-0">{{
+                                        relativeTime(session.activityAt)
+                                    }}</span>
+                                </template>
+                            </RailCard>
                         </div>
-                        <button
-                            v-for="session in lane.rows"
-                            :key="session.id"
-                            type="button"
-                            class="flex w-full min-w-0 flex-col gap-1 rounded-md border px-2 py-1.5 text-left text-2xs transition-colors"
-                            :class="
-                                session.id === selected
-                                    ? 'border-primary-500 bg-overlay text-content'
-                                    : 'border-line text-muted hover:border-line-strong hover:text-content'
-                            "
-                            @click="select(session.id)"
-                        >
-                            <span class="flex w-full min-w-0 items-start gap-1.5">
-                                <Icon
-                                    :name="STATUS[session.status].icon"
-                                    :spin="session.status === 'running'"
-                                    :class="STATUS[session.status].class"
-                                    class="mt-px shrink-0 text-2xs"
-                                    :aria-label="session.status"
-                                />
-                                <span class="line-clamp-2 min-w-0 flex-1 font-medium leading-4">{{ titleOf(session) }}</span>
-                                <!-- Backgrounded: the parent went on working instead of waiting. The fact that
-                                     explains a child still running under a turn that looks finished. -->
-                                <span v-if="session.background === true && subagentLive(session)" class="shrink-0 text-subtle">bg</span>
-                            </span>
-                            <span v-if="parentOf(session)" class="flex w-full min-w-0 items-center gap-1 text-subtle">
-                                <Icon name="comments" class="shrink-0 text-2xs" />
-                                <span class="truncate">{{ parentOf(session) }}</span>
-                            </span>
-                            <span v-if="factsOf(session).length > 0" class="flex w-full flex-wrap items-center gap-x-2 tabular-nums text-subtle">
-                                <span v-for="fact in factsOf(session)" :key="fact">{{ fact }}</span>
-                            </span>
-                        </button>
-                    </template>
+                    </RailLane>
                 </template>
             </aside>
 
             <div class="flex min-w-0 flex-1 flex-col">
-                <!-- WHAT IT IS, and the two ways out of this pane: back to the conversation that started it, and —
-                     for a delegation, which unlike a subagent has a process of its own — into the shell it runs in. -->
-                <div v-if="current" class="flex shrink-0 items-center gap-2 border-b border-line bg-card px-2 py-1 text-2xs text-muted">
-                    <Icon
-                        :name="STATUS[current.status].icon"
-                        :spin="current.status === 'running'"
-                        :class="STATUS[current.status].class"
-                        class="shrink-0 text-2xs"
-                    />
-                    <span class="min-w-0 truncate text-content">{{ titleOf(current) }}</span>
-                    <span v-if="current.model" class="shrink-0">{{ current.model }}</span>
-                    <span class="ml-auto flex shrink-0 items-center gap-2">
+                <!-- WHAT IT IS, in the card's own vocabulary (the tile, the title, the status glyph) so the row
+                     you pressed and the header you land on read as one agent — and the two ways out of this
+                     pane: back to the conversation that started it, and, for a delegation (which unlike a
+                     subagent has a process of its own), into the shell it runs in. -->
+                <div v-if="current" class="flex shrink-0 items-center gap-2 border-b border-line bg-card px-2.5 py-1.5 text-2xs text-muted">
+                    <IdentityTile :title="titleOf(current)" :provider="providerOf(current)" class="h-5 w-5 text-2xs" />
+                    <span class="min-w-0 flex-1 truncate text-xs font-semibold text-content">{{ titleOf(current) }}</span>
+                    <span v-if="current.agentType !== undefined" class="shrink-0">{{ current.agentType }}</span>
+                    <span v-if="current.model !== undefined" class="shrink-0">{{ current.model }}</span>
+                    <Icon v-bind="STATUS[current.status]" class="shrink-0" />
+                    <span class="flex shrink-0 items-center gap-2">
                         <button
                             v-if="current.terminal"
                             type="button"

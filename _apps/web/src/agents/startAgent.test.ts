@@ -97,7 +97,7 @@ it(`opens, focuses and hands the composer a tab from the fleet board and from th
     await nextTick();
     expect(tabs(strip)).toHaveLength(before + 1);
     expect(activeId.value).toBe(conversations.value[before]!.conversationId);
-    expect(tabs(strip)[before]!.className).toContain(`chat-tab-on`);
+    expect(tabs(strip)[before]!.className).toContain(`rail-card-on`);
     expect(composerFocus.value).toBe(focusRequests + 1);
 
     // The strip's "+" — the same action, so the same three effects.
