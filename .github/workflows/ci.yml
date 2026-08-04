@@ -214,6 +214,13 @@ jobs:
   # didn't rebuild this image would leave the desktop jobs on a stale base. `needs` orders it after that
   # rebuild; the `if` tolerates a pipeline where ci-base was skipped.
   #
+  # When ci-base FAILS this job skips, and a skip is the one result that carries no information downstream: it
+  # is what a job reports both when it had nothing to do and when its base could not be built. So every job
+  # that runs in this image guards on ci-base as well as on this one. Without that second guard a ci-base that
+  # built but could not push left the desktop jobs and the release running against the PREVIOUS ci-desktop —
+  # green results, and a release, for a toolchain that is not the commit's. It read as an unrelated failure
+  # three jobs away.
+  #
   # `!cancelled()` rather than `always()`, here and on every other guard in this file. Both override the
   # default "skip me if a `needs` job was skipped", which is what these conditions need — but `always()` also
   # runs the job when the RUN ITSELF was cancelled, so superseding a pull request left this 3.75 GB image
@@ -292,8 +299,8 @@ jobs:
   # same crate. clippy compiles against real webkit2gtk, covering the Linux target; the Windows msvc target is
   # covered by that release cross-build.
   desktop-check:
-    needs: [changes, preflight, ci-desktop]
-    if: ${{ !cancelled() && needs.changes.outputs.desktop == 'true' && needs.preflight.result == 'success' && needs.ci-desktop.result != 'failure' }}
+    needs: [changes, preflight, ci-base, ci-desktop]
+    if: ${{ !cancelled() && needs.changes.outputs.desktop == 'true' && needs.preflight.result == 'success' && needs.ci-base.result != 'failure' && needs.ci-desktop.result != 'failure' }}
     runs-on: [self-hosted, intentic, desktop]
     container:
       image: ghcr.io/intentic/ci-desktop:latest
@@ -345,8 +352,8 @@ jobs:
   # WINDOWS: no runner here can execute Intentic-setup.exe, so the NSIS installer is verified only as an
   # archive (tier 1 reads it with 7z). When a Windows runner exists, its job belongs beside this one.
   desktop-verify:
-    needs: [changes, preflight, ci-desktop]
-    if: ${{ !cancelled() && github.ref == 'refs/heads/main' && needs.changes.outputs.desktop == 'true' && needs.preflight.result == 'success' && needs.ci-desktop.result != 'failure' }}
+    needs: [changes, preflight, ci-base, ci-desktop]
+    if: ${{ !cancelled() && github.ref == 'refs/heads/main' && needs.changes.outputs.desktop == 'true' && needs.preflight.result == 'success' && needs.ci-base.result != 'failure' && needs.ci-desktop.result != 'failure' }}
     runs-on: [self-hosted, intentic, desktop]
     container:
       image: ghcr.io/intentic/ci-desktop:latest
@@ -535,10 +542,11 @@ jobs:
   # the point — the image job skips in almost every pipeline, and this edge only has to bind in the ones where
   # it doesn't.
   release:
-    needs: [verify-core, desktop-verify, ci-desktop]
+    needs: [verify-core, desktop-verify, ci-base, ci-desktop]
     if: |
       !cancelled() && github.event_name == 'push' && github.ref == 'refs/heads/main'
       && needs.verify-core.result == 'success'
+      && needs.ci-base.result != 'failure'
       && needs.ci-desktop.result != 'failure'
       && (needs.desktop-verify.result == 'success' || needs.desktop-verify.result == 'skipped')
     runs-on: [self-hosted, intentic, desktop]
