@@ -4,7 +4,7 @@ import type { AgentsStore, PersistedAgent } from "./agents-store.js";
 import type { LandStanding, LandStandings } from "./standing.js";
 
 // The derived half of a card's status, dialled by hand. Deriving it for real needs a git repo per case and is
-// standing.test.ts's whole subject; what belongs HERE is the projection — which of the two halves wins, and
+// standing.integration.test.ts's whole subject; what belongs HERE is the projection — which of the two halves wins, and
 // what each surface reads off the result.
 const standings = (): LandStandings & { set: (id: string, standing: LandStanding) => void } => {
     const verdicts = new Map<string, LandStanding>();

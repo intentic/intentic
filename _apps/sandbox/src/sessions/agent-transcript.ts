@@ -29,7 +29,7 @@ export interface AgentTranscriptDeps {
 /* THE ONLY PROVIDER-SHAPED READ LEFT, and it is a backfill: the conversations that ran before the daemon kept a
  * transcript of its own (sessions/transcript-record.ts). Everything from here on records as it streams, whatever
  * provider served it, so this list does NOT grow with the provider catalog — a new provider needs no entry here,
- * and adding one to make its chats open would mean its turns are bypassing the record. transcript-record.test.ts
+ * and adding one to make its chats open would mean its turns are bypassing the record. transcript-record.integration.test.ts
  * is the guard that says so.
  *
  * Empty is a legitimate answer (a conversation with no store to read, or one whose store no longer holds it),

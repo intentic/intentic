@@ -35,8 +35,11 @@ const SCROLLBACK_LINES = 1000;
 const DRAG_PX = 5;
 
 export type TerminalSession = {
-    // The discriminant the shared session cache dispatches on — a pane is either a terminal or the agent's
-    // browser (browserSession.ts), and they share nothing but the host-element contract.
+    // Marks a cached pane as a terminal, and single-member on purpose: the agent's browser is NOT a session in
+    // this cache. browser/useBrowserView.ts is plain reactive state over an ordinary <img> — a browser view has
+    // no scrollback to preserve across an unmount, so it needs none of the persistent-host-element machinery
+    // below, and that is what lets the Browsers view be a route rather than a pane in this tab machine. The one
+    // thing it borrows from here is the reconnect backoff.
     readonly kind: `terminal`;
     readonly name: string;
     readonly term: Terminal;

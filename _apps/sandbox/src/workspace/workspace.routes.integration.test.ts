@@ -385,7 +385,7 @@ test("POST /workspace/upload streams any contained path to disk, 400s escape, 41
 
     // A body past the cap surfaces as UploadTooLargeError from the streaming write → 413 (the write itself deletes
     // the partial; here the fake just throws). The declared-length short-circuit + real cap are unit-tested in
-    // workspace-files.test.ts / workspace-archive.test.ts.
+    // workspace-files.integration.test.ts / workspace-archive.integration.test.ts.
     const capped = createApp(
         services({
             files: fakeFiles({

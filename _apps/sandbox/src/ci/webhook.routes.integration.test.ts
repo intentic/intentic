@@ -19,7 +19,7 @@ import { createRunsCache } from "./runs-cache.js";
 import { createCiWebhookRoute } from "./webhook.routes.js";
 
 // The receiver touches ciStore/ciRuns/workspace/capabilities plus the listener dispatch path
-// (automations/activity/logger); `unstubbed` keeps the fake that small — the listeners.test.ts convention.
+// (automations/activity/logger); `unstubbed` keeps the fake that small — the listeners.integration.test.ts convention.
 const harness = async (automationId: string, narrow: { eventType?: string; branch?: string; channelId?: string } = {}) => {
     const root = mkdtempSync(join(tmpdir(), "ci-webhook-"));
     const dir = join(root, "web");

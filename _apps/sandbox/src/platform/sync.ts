@@ -284,7 +284,7 @@ export const clearAllEnrollments = async (historyRoot: string): Promise<void> =>
 };
 
 // The SSH hostname the sandbox tunnel exposes for Mutagen — derived via sandboxIdFromToken (the same digest
-// sandbox-tunnel.ts and preview-hostname.ts use), so the laptop can resolve it from the daemon without guessing.
+// sandbox-tunnel.ts and hostnames.ts use), so the laptop can resolve it from the daemon without guessing.
 // Undefined when the tunnel isn't configured (no connect token / no zone) — e.g. loopback or preview-only.
 export const syncSshHostname = (connectToken: string, zone: string, publicUrl: string): string | undefined => {
     const resolvedZone = zone !== "" ? zone : zoneFromUrl(publicUrl);

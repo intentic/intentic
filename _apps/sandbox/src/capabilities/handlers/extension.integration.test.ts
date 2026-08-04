@@ -21,7 +21,7 @@ import { extensionHandler } from "./extension.js";
 const exec = promisify(execFile);
 const git = (dir: string, ...args: string[]) => exec("git", ["-C", dir, ...args]);
 
-// A ctx exposing only what extensionHandler touches, over a fresh temp workspace (the plugin.test.ts pattern).
+// A ctx exposing only what extensionHandler touches, over a fresh temp workspace (the plugin.integration.test.ts pattern).
 // `stopped` records ctx.panels.stop calls for the remove test.
 const tempCtx = (): { ctx: CapabilityCtx; root: string; stopped: string[] } => {
     const root = mkdtempSync(join(tmpdir(), "extension-cap-"));

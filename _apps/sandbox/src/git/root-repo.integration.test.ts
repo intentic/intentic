@@ -13,7 +13,7 @@ const exec = promisify(execFile);
 const sh = async (cwd: string, ...args: string[]): Promise<string> => (await exec("git", ["-C", cwd, ...args])).stdout.trim();
 
 // These assertions only care that the tree is clean overall — which side a change would have landed on is
-// changes.test.ts's subject, not this file's.
+// changes.integration.test.ts's subject, not this file's.
 const bothSides = async (dir: string): Promise<unknown[]> => {
     const { staged, unstaged } = await changedFiles(dir);
     return [...staged, ...unstaged];

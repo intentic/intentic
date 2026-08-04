@@ -410,7 +410,7 @@ const errorFrame = async (message: SDKAssistantMessage, allowance: TurnAllowance
     if (isUsageLimitText(explained)) {
         return { kind: "error", code: "rate_limit", message: explained };
     }
-    // A credential the CLI has stopped trying to use (auth-failure-text.ts). Coded so the route can re-mint and
+    // A credential the CLI has stopped trying to use (failure-sentences.ts). Coded so the route can re-mint and
     // resume the turn instead of leaving a dead tab for a human to restart by hand — the same "not a workspace
     // fault" treatment a spent allowance gets.
     if (isAuthFailureText(explained)) {

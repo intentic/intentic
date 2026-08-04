@@ -7,7 +7,7 @@ export const sha256Hex = (value: string): string => createHash("sha256").update(
 
 // The sandbox's stable 12-hex id, digested from the connect token. Used by:
 //   • the CLI's sandbox-tunnel bootstrap (sandbox-tunnel.ts) to name the tunnel + DNS
-//   • the sandbox daemon's preview hostname builder (preview-hostname.ts)
+//   • the preview hostname builder beside it (hostnames.ts)
 //   • the sandbox daemon's sync SSH hostname derivation (sync.ts)
 // All three MUST agree on the digest, so it lives in the contract they share.
 export const sandboxIdFromToken = (connectToken: string): string | undefined =>

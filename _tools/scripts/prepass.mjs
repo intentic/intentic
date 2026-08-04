@@ -108,8 +108,8 @@ const configFor = (script) => /-p\s+(\S+)/.exec(script)?.[1] ?? "tsconfig.json";
 /* A suite can also reach the machine THROUGH a fixture module — `makeFixtureWorkspace` writes 900 files under
  * tmpdir, `tempWorkspace` builds a repo tree, `runAgentTurn` drives the real turn path — naming none of the
  * primitives itself. Naming those helpers here instead was the enumeration this file warns against, and it
- * missed: `resident-thread.test.ts` builds and indexes a 900-file tree through one of them and sat under the 5s
- * detector until a loaded runner failed it three times on main.
+ * missed: iq-engine's resident-thread suite builds and indexes a 900-file tree through one of them and, under a
+ * plain `*.test.ts` name, sat under the 5s detector until a loaded runner failed it three times on main.
  *
  * So the helpers a suite IMPORTS are read as part of the suite, found by the convention for where fixtures live
  * (AGENTS.md: a package's `testing.ts`) rather than by a list of names, which a new helper obeys for free. Per

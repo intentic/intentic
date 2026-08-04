@@ -23,7 +23,7 @@ import { WebSocket, WebSocketServer } from "ws";
 
 const dir = mkdtempSync(join(tmpdir(), "h2-"));
 // A throwaway self-signed pair — h2 in browsers (and in node's client) exists only over TLS. openssl is already
-// a test dependency here; csr.test.ts shells out to it the same way.
+// a test dependency here; csr.integration.test.ts shells out to it the same way.
 execFileSync(
     "openssl",
     [

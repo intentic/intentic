@@ -51,7 +51,7 @@ test("capabilities.add composes the entry's image fragment into the overlay and 
             disk.delete(path);
         },
     });
-    // The vpn handler writes ~/.wireguard on the real fs — point HOME at a temp dir like vpn.test.ts.
+    // The vpn handler writes ~/.wireguard on the real fs — point HOME at a temp dir like vpn.integration.test.ts.
     process.env["HOME"] = mkdtempSync(join(tmpdir(), "app-vpn-home-"));
     const client = clientFor(createApp(services({ files: memoryFiles, capabilities: memoryCapabilitiesStore() })));
 

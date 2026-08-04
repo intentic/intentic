@@ -58,7 +58,7 @@ export const TURN_SETTLES = { timeout: 4_000 } as const;
 
 /* Where the agent worktrees' MAIN checkouts would be — a path under tmpdir that is never created, so on every
  * host it is definitively absent. This suite drives the ROUTES; the worktree and land git mechanics have their
- * own suites against real repos (worktrees.test.ts, land.test.ts). The land pass a turn runs at its end reads
+ * own suites against real repos (worktrees.integration.test.ts, land.integration.test.ts). The land pass a turn runs at its end reads
  * the main checkout with real git, so naming the product's own "/work" here made the outcome depend on whether
  * the machine running the tests happens to have one: absent on CI, a LIVE repo on a developer's own intentic
  * sandbox, where the land then shelled git at a worktree that was never created and failed the turn. Absent
@@ -382,7 +382,7 @@ export const services = (overrides: ServiceOverrides = {}): Services => {
         // A real registry over a memory store (cheap, and /events' roster subscription needs the real seam);
         // worktree git mechanics are stubbed — the worktree suites cover them against real git.
         // No land standings to derive here: these suites drive the routes, and where a card's work stands is
-        // standing.test.ts's subject. Every agent this harness makes therefore reads at its turn lifecycle.
+        // standing.integration.test.ts's subject. Every agent this harness makes therefore reads at its turn lifecycle.
         agents: createAgentsRegistry(
             { load: async () => [], save: async () => {} },
             { of: () => "idle", refresh: async () => false, forget: () => {} },
@@ -402,7 +402,7 @@ export const services = (overrides: ServiceOverrides = {}): Services => {
         },
         // Namespace isolation off, which is what a test runner (and any container without CAP_SYS_ADMIN) really
         // gets: turns then run straight in the worktree path, the behaviour every route assertion below expects.
-        // The isolation.test.ts suite covers the plan these routes would build when it IS available.
+        // The isolation.integration.test.ts suite covers the plan these routes would build when it IS available.
         // No mount capability, like a container launched without CAP_SYS_ADMIN — the plan still describes where
         // the worktree is, and the harness enforces it by redirecting tool paths instead of by mounting.
         turnIsolation: noIsolation("/work"),

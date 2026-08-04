@@ -9,7 +9,7 @@ import {
 } from "./provider-health.js";
 
 /* The breaker is module state keyed by provider name, so every test invents its own provider rather than
- * resetting a shared one — the same convention turn-resume.test.ts uses for conversation ids. */
+ * resetting a shared one — the same convention turn-resume.integration.test.ts uses for conversation ids. */
 
 const NOW = 1_000_000;
 

@@ -5,7 +5,7 @@
  * emit, so the map can't be generated from data. */
 
 // Lazily-importable grammars, keyed by Shiki language id — only the ones actually rendered ship in the
-// bundle. The workspace file viewer maps a file's extension to one of these ids (see file-type.ts); add a
+// bundle. The workspace file viewer maps a file's extension to one of these ids (see fileType.ts); add a
 // row here and an extension mapping there to cover a new language. Callers stay untouched.
 export const LANGS = {
     bash: () => import(`@shikijs/langs/bash`),

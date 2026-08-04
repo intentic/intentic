@@ -32,7 +32,7 @@ import { promisify } from "node:util";
  * nothing here is visible to the daemon, to another conversation, or to a main-tree turn.
  *
  * Git keeps working because no gitdir lives under /work: the root repo's .git is a pointer into
- * <historyRoot>/gits/root, and nested repos are migrated to the same shape at boot (git/git-dirs.ts). A repo
+ * <historyRoot>/gits/root, and nested repos are migrated to the same shape at boot (git/repo-git-dirs.ts). A repo
  * whose real .git sat inside /work would resolve its worktree's gitdir pointer back into the worktree itself.
  */
 

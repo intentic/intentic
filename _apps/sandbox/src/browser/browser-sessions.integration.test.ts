@@ -34,7 +34,7 @@ test("a browser tool's server and session name are derived the same way everywhe
  * of it would only prove the mock.
  *
  * The page is served from loopback so the test needs no network, and the whole thing stands down where the
- * image has no Chromium (a CI host that skipped the browser install), exactly as browser-tools.test.ts does. */
+ * image has no Chromium (a CI host that skipped the browser install), exactly as browser-tools.integration.test.ts does. */
 const SESSION_ID = "e2e11111-2222";
 const SESSION = "browser-e2e11111";
 

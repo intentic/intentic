@@ -5,7 +5,7 @@ import { previewUrl } from "@intentic/sandbox-contract";
 
 // Per-app previews for a monorepo. Each app instance in the monorepo previews as its OWN dev server: the
 // process-manager key is `<repo>--<app>` and the preview host is
-// `preview-<repo>--<app>-<sandboxId>.<zone>` (built/parsed by panels/preview-hostname.ts), so the preview
+// `preview-<repo>--<app>-<sandboxId>.<zone>` (built/parsed by hostnames.ts), so the preview
 // proxy resolves the first label → portOf("<repo>--<app>"). (`--` can't appear in a monorepo name — the
 // capability rejects it — so the key never collides with a plain repo's panel.)
 

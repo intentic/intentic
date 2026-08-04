@@ -2,7 +2,7 @@ import { type ConfigDefinition, env, loadConfig as loadPuristicConfig } from "@p
 import { z } from "zod";
 
 // Env-derived config (var names follow @puristic/env's camelToScreamingSnake): WORKSPACE_ROOT, INTENTIC_OUTPUT,
-// IQ_MODEL_DIR, IQ_RG_PATH, IQ_DEBUG. Flags always beat env (lib/output-mode.ts).
+// IQ_MODEL_DIR, IQ_RG_PATH, IQ_DEBUG. Flags always beat env (lib/flags.ts).
 const configSchema = z.object({
     // The workspace to search; empty = current directory. The sandbox image pins this to /work.
     workspaceRoot: z.string().default(""),

@@ -512,7 +512,7 @@ const deleteTunnelById = async (apiToken: string, accountId: string, zoneId: str
 // unless-stopped), are both spared. Each delete is independent: a still-live connector that re-registered
 // between the list and the delete (1022) is skipped for a later sweep, and any other per-tunnel failure is
 // reported via onError and counted — never aborting the run, so one stuck tunnel can't block the rest or
-// poison every future sweep. `exclude` names the pre-provisioned pool tunnels (sandboxPool.ts): unclaimed,
+// poison every future sweep. `exclude` names the pre-provisioned pool tunnels (sandbox-pool.ts): unclaimed,
 // they look exactly like idle orphans (never connected), so the caller passes their names to spare the pool.
 export const reapStaleTunnels = async (args: {
     apiToken: string;

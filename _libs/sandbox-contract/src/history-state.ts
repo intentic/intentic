@@ -16,7 +16,7 @@ import type { StateFile } from "./state-portability.js";
  * these entries would be a column of empty arrays. What they share is the portability class, and that is
  * imported rather than duplicated.
  *
- * `history-state.test.ts` fails when a daemon store builds a `/history` path this list doesn't carry, in both
+ * `history-state-coverage.test.ts` fails when a daemon store builds a `/history` path this list doesn't carry, in both
  * directions — the same shape-recognizing guard that covers the workspace table.
  */
 

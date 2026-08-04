@@ -51,7 +51,7 @@ export const startRetention = (prisma: PrismaClient, config: Config, logger: Log
             return;
         }
         try {
-            // Pre-provisioned pool tunnels (sandboxPool.ts) are unclaimed and have never connected, so they look
+            // Pre-provisioned pool tunnels (sandbox-pool.ts) are unclaimed and have never connected, so they look
             // exactly like idle orphans to the reaper — exclude them by name (the hostname's leftmost label IS the
             // tunnel name) so a full-but-idle pool is never reaped out from under the next signup.
             const reserved = await prisma.reservedSandbox.findMany({ select: { tunnelHostname: true } });

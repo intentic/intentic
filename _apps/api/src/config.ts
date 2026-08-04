@@ -89,7 +89,7 @@ const configSchema = z.object({
             // Log reap candidates without deleting — run the first production sweep with this on, confirm the list,
             // then turn it off.
             reapDryRun: z.stringbool().default(false), // INTENTIC_CLOUDFLARE_REAP_DRY_RUN
-            // Keep this many sandbox tunnels pre-provisioned (sandboxPool.ts): sandbox.create claims one so /setup
+            // Keep this many sandbox tunnels pre-provisioned (sandbox-pool.ts): sandbox.create claims one so /setup
             // pays no Cloudflare round-trips inline. 0 disables the pool (create provisions lazily, as before).
             poolSize: z.coerce.number().int().nonnegative().default(1), // INTENTIC_CLOUDFLARE_POOL_SIZE
         })
