@@ -68,29 +68,54 @@ test("a loop that never claims done runs to its iteration ceiling and settles `e
     expect(loopRunning("c1")).toBe(false);
 });
 
-test("each iteration is numbered and carries the goal — a fresh session is told both or it knows neither", async () => {
+/* WHAT A TURN IS TOLD IS THE JOB, NEVER THE MACHINE RUNNING IT. Every message used to open "# Iteration 2 of
+ * at most 3 — you are one iteration of a loop that repeats until a goal is met", which is the pump's own
+ * bookkeeping wearing the clothes of an instruction: the model cannot act on the number, and a workflow step
+ * that would only ever run once still announced a ceiling of twenty. What it needs is the goal, the file that
+ * is its memory, and the work — asserted here BOTH ways, because the absence is the point.
+ */
+test("a turn is told the goal and where its memory is, and nothing about being one of several", async () => {
     const root = tempRoot();
     const services = fakeServices(root);
     const prompts: string[] = [];
     const record = await services.loops.start({ ...baseLoop("c2"), maxIterations: 2 }, 1);
     await runLoop(services, record, fakeTurn(prompts));
 
-    expect(prompts[0]).toContain("Iteration 1 of at most 2");
-    expect(prompts[1]).toContain("Iteration 2 of at most 2");
+    expect(prompts).toHaveLength(2);
     for (const prompt of prompts) {
+        expect(prompt).toContain("fix the top failure");
         expect(prompt).toContain("the suite is green");
-        // `fresh` mode's memory rule — without it every iteration repeats the last one's dead end.
+        // `fresh` mode's memory rule — without it every session repeats the last one's dead end.
         expect(prompt).toContain("progress.md");
+        expect(prompt).not.toContain("Iteration");
+        expect(prompt).not.toContain("at most");
+        // The word survives only as a PATH (`.intentic/loops/…`), which is a file the turn has to write, not a
+        // description of the harness — so the assertion is against the prose, not against the letters.
+        expect(prompt).not.toContain("a loop");
+        expect(prompt).not.toContain("this loop");
     }
+});
+
+// A goal the prompt already carries would be the same sentence twice — the ordinary shape of a workflow step,
+// which is measured against the very request it was handed verbatim.
+test("a goal the prompt already contains is not quoted back under it", async () => {
+    const root = tempRoot();
+    const services = fakeServices(root);
+    const prompts: string[] = [];
+    const same = { ...baseLoop("c2b"), maxIterations: 1, goal: "say hello", prompt: "say hello", context: "continue" as const };
+    await runLoop(services, await services.loops.start(same, 1), fakeTurn(prompts));
+
+    expect(prompts[0]).not.toContain("Done when");
 });
 
 test("a written verdict of done stops the loop on that iteration", async () => {
     const root = tempRoot();
     const services = fakeServices(root);
     await mkdir(join(root, LOOP_DIR, "c3"), { recursive: true });
-    // The turn's own side effect is the verdict file, which is exactly how a `claim` iteration reports.
+    // The turn's own side effect is the verdict file, which is exactly how a `claim` iteration reports — and
+    // the path it is asked for is the only place the round's number appears in the message at all.
     const turn: TurnFn = async function* claiming(_services, input: AgentTurn) {
-        const n = /Iteration (\d+)/.exec(input.prompt)?.[1] ?? "1";
+        const n = /iteration-(\d+)\.json/.exec(input.prompt)?.[1] ?? "1";
         await writeFile(join(root, LOOP_DIR, "c3", `iteration-${n}.json`), JSON.stringify({ done: n === "2", reason: `pass ${n}` }));
         yield { kind: "done" } as AgentEvent;
     };

@@ -17,12 +17,19 @@ import { planTurn, type TurnContext } from "./turn-plan.js";
 const credentials = vi.fn<() => Promise<Record<string, unknown>>>();
 vi.mock("./harness-credentials.js", () => ({ resolveHarnessCredentials: () => credentials() }));
 
-const base: AgentRequest = { prompt: "do the thing", cwd: "/work", signal: new AbortController().signal };
+/* A workspace root that is not on disk, which is the whole point of it: planTurn probes the tree for
+ * uninstalled dependencies before it dispatches (see honoured), and a root that exists would make every prompt
+ * assertion below depend on whatever happens to be checked out on the machine running the suite. A root with
+ * nothing in it discovers no projects and therefore earns no notice. That the notice DOES reach every arm is
+ * asserted where a real tree can be built — turn-plan.integration.test.ts. */
+const ROOT = "/nowhere/turn-plan";
+
+const base: AgentRequest = { prompt: "do the thing", cwd: ROOT, signal: new AbortController().signal };
 const context: TurnContext = {
     base,
     attachmentPaths: [],
-    localCwd: "/work",
-    effectiveCwd: "/work",
+    localCwd: ROOT,
+    effectiveCwd: ROOT,
     cliEnv: {},
     syncNote: undefined,
     steering: undefined,
@@ -33,7 +40,9 @@ const context: TurnContext = {
 const servicesWith = (overrides: Partial<Services> = {}): Services =>
     unstubbed<Services>("services", {
         tools: [],
-        workspace: unstubbed<Services["workspace"]>("workspace", { root: "/work" }),
+        workspace: unstubbed<Services["workspace"]>("workspace", { root: ROOT }),
+        // The dependency probe runs for every runtime now, so every arm reaches it — see honoured().
+        processes: unstubbed<Services["processes"]>("processes", { running: () => false }),
         capabilities: unstubbed<Services["capabilities"]>("capabilities", { list: async () => [] }),
         // No translator and no api key: the state both Codex gates refuse from, which most cases here start in.
         config: testConfig,
@@ -180,7 +189,6 @@ test("Grok replaces a model its live catalog no longer offers, and keeps one it 
 // so it needs the seams those touch before it can be planned at all.
 const harnessServices = (overrides: Partial<Services> = {}): Services =>
     servicesWith({
-        processes: unstubbed<Services["processes"]>("processes", { running: () => false }),
         sessions: unstubbed<Services["sessions"]>("sessions", { exists: async () => true }),
         // The schema's own defaults, which is what a workspace that has never written a settings file reads.
         sandboxSettings: unstubbed<Services["sandboxSettings"]>("sandboxSettings", { get: async () => SandboxSettingsSchema.parse({}) }),

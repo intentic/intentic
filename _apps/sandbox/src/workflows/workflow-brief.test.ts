@@ -34,8 +34,8 @@ const workflow = (steps: readonly WorkflowStep[]): Workflow => ({
  */
 test("the run's request is handed to every step, root or not", () => {
     const design = workflow([step("first"), step("last", { needs: ["first"] })]);
-    for (const [at, one] of design.steps.entries()) {
-        const brief = briefForStep(design, one, at + 1, [], "make the importer handle empty files");
+    for (const one of design.steps) {
+        const brief = briefForStep(one, [], "make the importer handle empty files");
         expect(brief, one.id).toContain("make the importer handle empty files");
         expect(brief, one.id).toContain("What this run was asked to do");
     }
@@ -45,7 +45,7 @@ test("the run's request is handed to every step, root or not", () => {
 // request the user forgot to write.
 test("a run with no request says nothing about one", () => {
     const design = workflow([step("only")]);
-    const brief = briefForStep(design, design.steps[0]!, 1, []);
+    const brief = briefForStep(design.steps[0]!, []);
     expect(brief).not.toContain("What this run was asked to do");
 });
 
@@ -53,8 +53,40 @@ test("a run with no request says nothing about one", () => {
 // already been told what to think before being told what the job is.
 test("the request comes before what the steps before concluded", () => {
     const design = workflow([step("first"), step("last", { needs: ["first"] })]);
-    const brief = briefForStep(design, design.steps[1]!, 2, [{ title: "first", document: undefined, report: "I did the first bit" }], "the ask");
+    const brief = briefForStep(design.steps[1]!, [{ title: "first", document: undefined, report: "I did the first bit" }], "the ask");
     expect(brief.indexOf("What this run was asked to do")).toBeLessThan(brief.indexOf("What the steps before you concluded"));
+});
+
+/* THE WORKFLOW ITSELF IS NEVER MENTIONED, and this asserts the absence because the sentence was here and was
+ * exactly the wrapper the default exists to remove. A step used to open with its own title and "this is step 2
+ * of 3 in the workflow **a workflow** — <the design's whole description>", which is the scheduler's bookkeeping:
+ * the model cannot act on being second, and one told it is an arm of a comparison writes for the comparison.
+ */
+test("a step is never told which step of what it is", () => {
+    const design = workflow([step("first"), step("last", { needs: ["first"] })]);
+    for (const one of design.steps) {
+        const brief = briefForStep(one, [], "the ask");
+        expect(brief, one.id).not.toContain("a workflow");
+        expect(brief, one.id).not.toContain("step 2");
+        expect(brief, one.id).not.toContain(`# ${one.title}`);
+    }
+});
+
+/* A STEP WITH A JOB OF ITS OWN ENDS ON IT, under two words of label. Its words are the instruction and the
+ * request is the context, so the request goes above and the step's own prompt is the last thing read — the
+ * position an instruction has in any message somebody writes by hand. The label is there because without it a
+ * block of instruction runs straight on from the section above and reads as more of that section; it is the
+ * whole of the framing, which is what "no wrapper" meant.
+ */
+test("a declared prompt is the last thing the step reads", () => {
+    const brief = briefForStep(step("only", { prompt: "merge the two branches" }), [], "the ask");
+    expect(brief.endsWith("## Your task\n\nmerge the two branches")).toBe(true);
+});
+
+// Nothing above it ⇒ nothing to distinguish it from, and a heading over the only thing in a message is
+// furniture — the same rule that hands an inheriting root the bare request.
+test("a step with a prompt and nothing above it is that prompt alone", () => {
+    expect(briefForStep(step("only", { prompt: "merge the two branches" }), [])).toBe("merge the two branches");
 });
 
 /* A ROOT THAT DECLARES NO PROMPT IS HANDED THE REQUEST AND NOTHING ELSE — the default, and `toBe` rather than a
@@ -64,7 +96,7 @@ test("the request comes before what the steps before concluded", () => {
  */
 test("a root with no prompt of its own is handed the request and nothing else", () => {
     const design = workflow([step("only", { prompt: undefined, goal: undefined })]);
-    expect(briefForStep(design, design.steps[0]!, 1, [], "make the importer handle empty files")).toBe("make the importer handle empty files");
+    expect(briefForStep(design.steps[0]!, [], "make the importer handle empty files")).toBe("make the importer handle empty files");
 });
 
 /* An inheriting step that is NOT a root still gets its handovers, and this is the line between "no wrapper" and
@@ -74,7 +106,7 @@ test("a root with no prompt of its own is handed the request and nothing else", 
  */
 test("an inheriting step still receives what the steps before it concluded", () => {
     const design = workflow([step("first"), step("last", { needs: ["first"], prompt: undefined, goal: undefined })]);
-    const brief = briefForStep(design, design.steps[1]!, 2, [{ title: "first", document: undefined, report: "I did the first bit" }], "the ask");
+    const brief = briefForStep(design.steps[1]!, [{ title: "first", document: undefined, report: "I did the first bit" }], "the ask");
     expect(brief).toContain("the ask");
     expect(brief).toContain("What the steps before you concluded");
     expect(brief).toContain("I did the first bit");
@@ -92,8 +124,8 @@ test("an inheriting step still receives what the steps before it concluded", () 
  */
 test("nothing is added about the worktree — the daemon commits the branch itself", () => {
     const design = workflow([step("declared"), step("inheriting", { prompt: undefined, goal: undefined })]);
-    for (const [at, one] of design.steps.entries()) {
-        expect(briefForStep(design, one, at + 1, [], "the ask"), one.id).not.toContain("git diff main...");
+    for (const one of design.steps) {
+        expect(briefForStep(one, [], "the ask"), one.id).not.toContain("git diff main...");
     }
 });
 

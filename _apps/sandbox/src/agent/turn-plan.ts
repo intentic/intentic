@@ -105,7 +105,10 @@ export const planTurn = async (services: Services, input: AgentTurn, context: Tu
     // cli/mcp/plugin/browser/agent-kind capabilities, read once and shared by the arms that need them. NOT the
     // record above — these are what the OWNER installed, that is what the runtime can DO.
     const installed = await services.capabilities.list();
-    const planned: TurnContext = { ...context, base: honoured(services, context, capabilities) };
+    // Dependency readiness for the tree this turn actually works in (an isolated turn's worktree, not /work).
+    // Resolved HERE, ahead of the dispatch, because it is true of every runtime — see `honoured`.
+    const setupNotice = setupNoticeFor(await workspaceSetup(context.localCwd, services.processes));
+    const planned: TurnContext = { ...context, base: honoured(services, context, capabilities, setupNotice) };
     // The dispatch, through the registry rather than an if/else chain over the same union — so the set of
     // runtimes has one declaration, and the health probe the picker reads is written next to the arm it
     // predicts (see agent/adapter-registry.ts).
@@ -127,17 +130,25 @@ export const planTurn = async (services: Services, input: AgentTurn, context: Tu
  * the files under whichever model is about to read them (agents/sync.ts). This is the one point all four arms
  * pass through, so it is the only place a note can be added without being silently absent from three of them —
  * the harness arm wraps its own preamble layer around whatever comes out of here, which stripTurnPreamble
- * peels back off. */
-const honoured = (services: Services, context: TurnContext, capabilities: AgentCapabilities): AgentRequest => {
+ * peels back off.
+ *
+ * THE DEPENDENCY NOTICE IS HERE FOR EXACTLY THAT REASON, having spent its life in the harness arm where three
+ * runtimes could not see it. It is the one fact a turn cannot deduce and will otherwise be misled by — that an
+ * import failing to resolve right now is the install being behind, not the code being wrong — and a Codex or
+ * Grok session without it reads a wall of true-looking errors and starts editing correct source to satisfy
+ * them. It also made the same request arrive as two different messages depending on who was serving it, which
+ * is fatal to the one thing a workflow of two models exists to measure: run the same brief on Claude and on
+ * Codex and the only difference must be the model. Rides the USER message, never systemAppend: it changes the
+ * moment an install finishes, and the system prefix is kept byte-stable for the prompt cache. */
+const honoured = (services: Services, context: TurnContext, capabilities: AgentCapabilities, setupNotice: string | undefined): AgentRequest => {
     const { permissionMode, effort, fast, ...rest } = context.base;
     // An isolated conversation's worktree is not the workspace root; a main-tree turn has nothing to say.
     const isolated = context.localCwd !== services.workspace.root;
-    const notes = isolated
-        ? [
-              ...(capabilities.isolation === "cwd" ? [worktreeNote(context.localCwd, services.workspace.root)] : []),
-              ...(context.syncNote !== undefined ? [context.syncNote] : []),
-          ]
-        : [];
+    const notes = [
+        ...(isolated && capabilities.isolation === "cwd" ? [worktreeNote(context.localCwd, services.workspace.root)] : []),
+        ...(isolated && context.syncNote !== undefined ? [context.syncNote] : []),
+        ...(setupNotice !== undefined ? [setupNotice] : []),
+    ];
     return {
         ...rest,
         prompt: withTurnPreamble(notes, context.base.prompt),
@@ -344,12 +355,6 @@ export const planHarnessTurn = async (services: Services, input: AgentTurn, cont
     // cached system+tools prefix stays byte-stable and the provider prompt cache is reused across the session.
     const promptWithAttachments =
         context.attachmentPaths.length > 0 ? withAttachmentNote(context.base.prompt, [...context.attachmentPaths]) : context.base.prompt;
-    // Dependency readiness for the tree this turn actually works in (an isolated turn's worktree, not /work).
-    // Told up front because the alternative is the model paying to rediscover it the expensive way — a package
-    // script exiting `vue-tsc: not found`, an `npx` reaching the registry for a binary that was never a package
-    // name, and a post-edit type-check whose every error is false. Rides the USER message, never systemAppend: it
-    // changes the moment an install finishes, and the system prefix is kept byte-stable for the prompt cache.
-    const setupNotice = setupNoticeFor(await workspaceSetup(context.localCwd, services.processes));
     // Where this turn's instructions go — the owner's own system prompt (or the preset), what may be appended to
     // it, and whether the delegation note has to travel in the user message instead (system-prompt.ts owns all
     // three, because they are one decision).
@@ -377,7 +382,6 @@ export const planHarnessTurn = async (services: Services, input: AgentTurn, cont
     const prompt = withTurnPreamble(
         [
             ...(placement.userNote !== undefined ? [placement.userNote] : []),
-            ...(setupNotice !== undefined ? [setupNotice] : []),
             // After the standing protocol notes and before the slash note: those two are about how to read the
             // conversation, this is about the message itself, so it belongs against it.
             ...(retrieved !== undefined && "note" in retrieved ? [retrieved.note] : []),

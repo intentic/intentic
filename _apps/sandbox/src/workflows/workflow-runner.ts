@@ -168,9 +168,9 @@ const STEP_IDLE_ROUNDS = 3;
  *
  * THE ORDINARY STEP IS ONE TURN, and the ceiling says so rather than implying twenty. A step with nothing to
  * produce and nothing to check is finished when its turn is finished — loop-stop's `readDocument` answers
- * `done` for a `none` output, so iteration 1 was always the only one. Recording 20 anyway put "Iteration 1 of
- * at most 20" in the prompt and a ceiling on the loops manifest that no step could ever approach: a number
- * describing machinery rather than the job.
+ * `done` for a `none` output, so iteration 1 was always the only one. Recording 20 anyway put a ceiling on the
+ * loops manifest that no step could ever approach: a number describing machinery rather than the job. Nothing
+ * the model reads has ever mentioned it (loop-brief), and nothing should.
  */
 const loopForStep = (step: WorkflowStep, conversationId: string, prompt: string, goal: string): Loop => ({
     conversationId,
@@ -214,7 +214,7 @@ export const runWorkflow = async (services: Services, run: WorkflowRun, fn: Turn
 
     const execute = async (step: WorkflowStep, conversationId: string, handovers: readonly Handover[]): Promise<StepOutcome> => {
         const index = position.get(step.id) ?? 1;
-        const prompt = briefForStep(workflow, step, index, handovers, run.request);
+        const prompt = briefForStep(step, handovers, run.request);
         /* The step's own goal, or the run's request when it declares none — the same fallback the prompt makes
          * one line above, and the reason a design can be a shape at all. `??` rather than a check: a run that
          * would leave both empty never gets this far (workflowRunFaults refuses it at the door), so there is no

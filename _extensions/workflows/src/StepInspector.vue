@@ -1,16 +1,6 @@
 <script setup lang="ts">
 import { Button, Checkbox, cmp, Icon, ProseField, Segmented, Select } from "@intentic/extension-ui";
-import {
-    type CatalogOption,
-    HARNESSES,
-    ModelsSchema,
-    modelsFor,
-    type OutputField,
-    providerLabel,
-    PROVIDERS,
-    type WorkflowStep,
-} from "@intentic/sandbox-contract";
-import { useQuery } from "@tanstack/vue-query";
+import { HARNESSES, type OutputField, providerLabel, type WorkflowStep } from "@intentic/sandbox-contract";
 import { computed, ref } from "vue";
 import { host } from "./host";
 
@@ -143,31 +133,61 @@ const rubric = computed({
  * connected. Pinning is for the graphs where the model IS the design — two attempts at one brief on two
  * different models, a judge from a family that wrote neither — and there the pin has to be READABLE without
  * opening this fold, which is why it reaches the summary line below and the node card (workflowDag).
+ *
+ * IT IS THE SHELL'S PICKER, not a control of this extension's own, and the two dropdowns it replaces are the
+ * argument for that being an API rather than a widget. A provider `<Select>` over the static PROVIDERS list and
+ * a model `<Select>` behind it, fed by a `/{provider}/models` fetch this extension made itself, offered rows in
+ * an order nothing had ranked, said nothing about which providers the sandbox actually holds a credential for,
+ * knew nothing of a configured model endpoint or an installed ACP agent, and asked for the provider first —
+ * which is the one question a person choosing a model does not have in mind. `api.models.pick` hands over the
+ * app's own list: searchable across every provider at once, connected ones first, locked ones marked with what
+ * they would cost, and one gesture to a (provider, model) pair.
+ *
+ * PINNING IS NOW A PAIR, where the provider alone used to be pinnable with the version left to the provider's
+ * default. That default has not gone anywhere — a step saved without a model still runs on it, and the chip
+ * says so — there is simply no longer a control for choosing it, because the picker's list is LIVE: what it
+ * offers is what this subscription serves today, which is the thing "the provider's own default" was standing
+ * in for.
  */
-const UNPINNED = ``;
-const providerOptions: CatalogOption[] = [{ value: UNPINNED, label: `Whatever you normally use` }, ...PROVIDERS];
 
 // Only codex/grok have both a native runtime and a routed one to switch between. Claude IS the Claude Code
 // loop, and kimi/gemini only ever run on it — so none of the three has a harness to choose.
 const harnessChoosable = computed(() => step.value.agent === `codex` || step.value.agent === `grok`);
 
-// The pinned provider's live model list, fetched only while a provider is pinned: with none, there is no
-// catalog to pick from and the row is not drawn at all. Keyed by provider alone — the ids are the same under
-// either harness, since codex/grok route the same subscription models through the translator.
-const liveModels = useQuery({
-    queryKey: computed(() => host().sandbox.key(`agent-models`, step.value.agent ?? UNPINNED)),
-    queryFn: async (): Promise<CatalogOption[]> =>
-        ModelsSchema.parse(await host().sandbox.json(`/${step.value.agent}/models`)).models.map((model) => ({ value: model.id, label: model.label })),
-    enabled: computed(() => host().sandbox.reachable() && step.value.agent !== undefined),
+/* What the chip reads. Three states, and the middle one is the reason it is not simply the model id: a step
+ * saved with a provider and no version — every step of the shipped template — is pinned to a family, not to a
+ * model, and naming the family is the true thing to say about it.
+ *
+ * A pinned version shows as its raw id, because the label belongs to the catalog and the catalog belongs to the
+ * shell: holding one here to pretty-print a stored pin is the duplication `api.models` exists to end, and a
+ * cached label is a label that goes stale the day the provider renames a model. */
+const pinLabel = computed(() => {
+    if (step.value.agent === undefined) {
+        return `Whatever you normally use`;
+    }
+    return step.value.model ?? providerLabel(step.value.agent);
 });
-const modelOptions = computed<CatalogOption[]>(() => [
-    { value: UNPINNED, label: `The provider's own default` },
-    ...(liveModels.data.value ?? modelsFor(step.value.agent ?? UNPINNED)).filter((option) => option.value !== UNPINNED),
-]);
 
-// A provider switch invalidates both choices under it: a model id belongs to one provider's catalog, and a
-// harness only means anything on the two providers that have two of them.
-const setAgent = (agent: string): void => patch({ agent: agent === UNPINNED ? undefined : agent, model: undefined, harness: undefined });
+// The element the shell hangs its picker off — a popover on desktop, a sheet on mobile; the host decides.
+const chip = ref<HTMLElement>();
+
+/* Open the picker on what this step is holding, or — unpinned — on the model a run would spend anyway, so the
+ * list opens with the checkmark on the row this step is effectively already using rather than on nothing. */
+const choose = async (): Promise<void> => {
+    if (chip.value === undefined) {
+        return;
+    }
+    const from = step.value.agent === undefined ? host().models.agentRun() : { provider: step.value.agent, model: step.value.model ?? `` };
+    const next = await host().models.pick({ anchor: chip.value, provider: from.provider, model: from.model });
+    if (next === undefined) {
+        return;
+    }
+    // A provider switch invalidates the harness under it: it only means anything on the two providers that
+    // have two of them, and the one chosen belongs to the provider it was chosen under.
+    patch({ agent: next.provider, model: next.model, ...(next.provider === step.value.agent ? {} : { harness: undefined }) });
+};
+
+const unpin = (): void => patch({ agent: undefined, model: undefined, harness: undefined });
 
 /* What the folded section is currently hiding, in the fewest words that name it. Empty ⇒ everything inside is
  * still at its default and the fold is costing the reader nothing. This is what makes hiding safe: you can see
@@ -324,14 +344,33 @@ const advancedSummary = computed(() => {
 
                 <div class="flex flex-col gap-1.5">
                     <span :class="cmp.sectionLabel()">Runs on</span>
-                    <Select
-                        :model-value="step.agent ?? UNPINNED"
-                        :options="providerOptions"
-                        option-label="label"
-                        option-value="value"
-                        size="small"
-                        @update:model-value="setAgent($event)"
-                    />
+                    <!-- A chip rather than a field, and the same chip the acceptance extension's run pill uses:
+                         it NAMES a choice and opens the app's own picker, where a boxed input would be claiming
+                         this panel holds a catalog. Unpin sits beside it and only exists once there is a pin —
+                         the unpinned chip is already the "no pin" state and needs nothing to clear. -->
+                    <div class="flex items-center gap-1.5">
+                        <button
+                            ref="chip"
+                            type="button"
+                            class="flex min-w-0 flex-1 cursor-pointer items-center gap-1.5 rounded-lg border border-line px-2.5 py-1.5 text-left text-xs text-content transition-colors hover:border-line-strong"
+                            :aria-label="`Model for this step: ${pinLabel}`"
+                            @click="choose"
+                        >
+                            <Icon name="sparkles" class="shrink-0 text-subtle" />
+                            <span class="min-w-0 flex-1 truncate" :class="{ 'text-muted': step.agent === undefined }">{{ pinLabel }}</span>
+                            <Icon name="chevron-down" class="shrink-0 text-2xs text-subtle" />
+                        </button>
+                        <button
+                            v-if="step.agent !== undefined"
+                            type="button"
+                            v-tooltip.top="`Unpin — run this step on whatever you normally use`"
+                            :class="cmp.iconButton()"
+                            aria-label="Unpin the model"
+                            @click="unpin"
+                        >
+                            <Icon name="times" />
+                        </button>
+                    </div>
                     <!-- The harness (the agentic loop), orthogonal to the provider — same semantics as the
                          chat's own picker, and shown only where there is genuinely a choice. -->
                     <Segmented
@@ -339,15 +378,6 @@ const advancedSummary = computed(() => {
                         :model-value="step.harness ?? `native`"
                         :options="HARNESSES"
                         @update:model-value="patch({ harness: $event })"
-                    />
-                    <Select
-                        v-if="step.agent !== undefined"
-                        :model-value="step.model ?? UNPINNED"
-                        :options="modelOptions"
-                        option-label="label"
-                        option-value="value"
-                        size="small"
-                        @update:model-value="patch({ model: $event === UNPINNED ? undefined : $event })"
                     />
                     <span class="text-2xs text-subtle">
                         Pin one where the model is part of the design — two steps on two providers is how you compare them. Left alone, this step runs

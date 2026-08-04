@@ -1,11 +1,10 @@
-import type { LoopDocument, Workflow, WorkflowStep } from "@intentic/sandbox-contract";
+import type { LoopDocument, WorkflowStep } from "@intentic/sandbox-contract";
 
 /* WHAT A STEP IS TOLD, over and above what its loop already tells it.
  *
- * The loop's own brief (loop-brief.ts) covers the goal, the iteration number, the memory rule and the output
- * contract — everything about repeating. This file covers the one thing a loop has no concept of: that this
- * session is part of something, that other sessions ran before it, and that what they concluded is the reason
- * this one is running.
+ * The loop's own brief (loop-brief.ts) covers the goal, the memory rule and the output contract. This file
+ * covers the one thing a loop has no concept of: that other sessions ran before this one, and that what they
+ * concluded is the reason it is running.
  *
  * WHY THE HANDOFF IS SPELLED OUT RATHER THAN IMPLIED. A `fresh` step's session has never seen the workflow, so
  * without this it reads its prompt as a standalone request and cheerfully re-derives everything the previous
@@ -104,14 +103,25 @@ const handoverFrom = ({ title, document, report, branch }: Handover): string => 
  * handed a page about workflows spends some of its attention on workflows; a step whose entire job is "do what
  * was asked" has nothing to add to the asking.
  *
+ * NOTHING IS SAID ABOUT THE WORKFLOW ITSELF, EVER, and that is the rule the rest of this file follows. A step
+ * used to open with its own title, then "this is step 2 of 3 in the workflow **Two models, one task** —" and
+ * the design's whole one-line description, then a paragraph explaining which of the two instructions below won
+ * where they disagreed. None of it is the job. Which step of what is the SCHEDULER's bookkeeping: the model
+ * cannot act on being second, it has already been handed everything the first one concluded, and a session
+ * told it is one arm of a comparison writes for the comparison. What is left is what a person would have
+ * typed: the request, what is already settled, and this step's own instruction.
+ *
  * NOTHING NEEDS TO BE SAID ABOUT THE WORKTREE, which is worth writing down because it is not obvious and it was
  * got wrong here. A step does run isolated, and the step after it does read `git diff main...<branch>` — but
  * the daemon commits the worktree onto that branch itself at clean turn completion (agents/land.ts, in both
  * `check` and `measure` modes). Telling the model to commit was instructing it to do something already done for
  * it, at the cost of the one thing this default exists to protect.
  *
- * A STEP THAT DECLARES A PROMPT IS SAYING IT HAS A JOB OF ITS OWN — review this, merge those — and gets the full
- * brief, because for that step the request genuinely is context rather than the instruction.
+ * A STEP THAT DECLARES A PROMPT IS SAYING IT HAS A JOB OF ITS OWN — review this, merge those — so ITS words go
+ * last, where the instruction belongs, with the request and the handovers above them as the context they are
+ * for that step. Two words of heading over it, and only when something IS above it: a block of instruction
+ * running straight on from "what the steps before you concluded" reads as more of what was concluded. That is
+ * the whole of the framing — a label saying which of these is the ask, not a paragraph explaining it.
  *
  * THE REQUEST GOES TO EVERY STEP EITHER WAY, not only to the roots, and above the handovers. A workflow is a
  * shape and the request is what it is pointed at this time, so a step three down is not working from a summary
@@ -119,7 +129,7 @@ const handoverFrom = ({ title, document, report, branch }: Handover): string => 
  * looking at is that. It is short, the same text for every step, and cached — the cheapest context in the whole
  * brief and the only one that says what any of this is FOR.
  */
-export const briefForStep = (workflow: Workflow, step: WorkflowStep, position: number, handovers: readonly Handover[], request?: string): string => {
+export const briefForStep = (step: WorkflowStep, handovers: readonly Handover[], request?: string): string => {
     const settled =
         handovers.length === 0
             ? []
@@ -145,26 +155,11 @@ export const briefForStep = (workflow: Workflow, step: WorkflowStep, position: n
     if (step.prompt === undefined) {
         return [request ?? ``, ...settled].join(`\n\n`);
     }
-    return [
-        [
-            `# ${step.title}`,
-            ``,
-            `This is step ${position} of ${workflow.steps.length} in the workflow **${workflow.name}**` +
-                `${workflow.description !== undefined ? ` — ${workflow.description}` : ``}.`,
-        ].join(`\n`),
-        ...(request === undefined
-            ? []
-            : [
-                  [
-                      `## What this run was asked to do`,
-                      ``,
-                      `The person who started this run wrote the following. Everything below serves it, and where your own ` +
-                          `step's instructions and this disagree, this is the one that is about today's job.`,
-                      ``,
-                      request,
-                  ].join(`\n`),
-              ]),
-        ...settled,
-        [`## Your task`, ``, step.prompt].join(`\n`),
-    ].join(`\n\n`);
+    // What this step's own instruction is being handed on top of. Empty only for a run with no request and no
+    // predecessors, where the step's prompt is the entire message and a heading over it would be furniture.
+    const context = [...(request === undefined ? [] : [[`## What this run was asked to do`, ``, request].join(`\n`)]), ...settled];
+    if (context.length === 0) {
+        return step.prompt;
+    }
+    return [...context, [`## Your task`, ``, step.prompt].join(`\n`)].join(`\n\n`);
 };

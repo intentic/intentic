@@ -3032,8 +3032,8 @@ export const WorkflowStepSchema = z.object({
     id: StepIdSchema,
     // What the node says on the graph. Short — the prompt is where the detail goes.
     title: z.string().min(1).max(60),
-    /* What "done" means for this step, in the user's words. Restated in every iteration's prompt and put to the
-     * judge; it is the sentence the step is measured against.
+    /* What "done" means for this step, in the user's words. Put to the judge, and restated to the model unless
+     * its instruction already carries it (loop-brief); it is the sentence the step is measured against.
      *
      * ABSENT ⇒ THE RUN'S OWN REQUEST IS THE GOAL, which is the ordinary case and not the exotic one. A saved
      * workflow is a SHAPE — "two models on one task" — and for most of its steps the thing being asked for is

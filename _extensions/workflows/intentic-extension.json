@@ -12,8 +12,7 @@
             "DELETE /workflows/*",
             "POST /workflows/*/run",
             "GET /workflows/runs",
-            "POST /workflows/runs/*/stop",
-            "GET /*/models"
+            "POST /workflows/runs/*/stop"
         ]
     },
     "contributes": {
