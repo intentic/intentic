@@ -88,11 +88,19 @@ const onDisconnect = (link: VpnLink): Promise<void> => run(link.id, () => discon
 // rather than making them guess that a retry needs one.
 const wantsCode = (id: string): boolean => /one-time code|2FA|token/i.test(failures[id] ?? ``);
 
-const anyConnected = computed(() => links.value.some((link) => link.state === `connected`));
+/* The consequence worth stating once, beside the group's NAME rather than as a last child of the list: while a
+ * tunnel is up, everything the sandbox does — agent turns, git, package installs — leaves through it. It used
+ * to sit under the rows, where RowGroup's `divide-y` gave a paragraph a row's hairline and it read as a
+ * half-drawn fourth row. */
+const caption = computed(() =>
+    links.value.some((link) => link.state === `connected`)
+        ? `traffic matching a connected tunnel's routes leaves the sandbox through it — including the agent's`
+        : undefined,
+);
 </script>
 
 <template>
-    <RowGroup label="VPN">
+    <RowGroup label="VPN" :caption="caption">
         <div v-if="listError" :class="cmp.alertDanger('m-4')">{{ listError }}</div>
         <div v-else-if="links.length === 0" class="px-4 py-6 text-center text-xs text-muted">
             No VPN configured.
@@ -171,11 +179,6 @@ const anyConnected = computed(() => links.value.some((link) => link.state === `c
                     </div>
                 </template>
             </Row>
-            <!-- The consequence worth stating once, under the list rather than per row: while a full-tunnel VPN
-                 is up, everything the sandbox does — agent turns, git, package installs — leaves through it. -->
-            <div v-if="anyConnected" class="px-4 pb-3 text-2xs text-muted">
-                Traffic matching a connected tunnel's routes leaves the sandbox through it — including the agent's.
-            </div>
         </template>
     </RowGroup>
 </template>
