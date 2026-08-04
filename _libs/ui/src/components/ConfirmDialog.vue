@@ -1,5 +1,11 @@
-<!-- THE DESTRUCTIVE CONFIRM — one modal for every "are you sure?" in the app: discarding unsaved tabs, killing
-     running terminals, deleting files, removing a capability or an automation, leaving a sandbox.
+<!-- THE CONFIRM — one modal for every "are you sure?" in the app: discarding unsaved tabs, killing running
+     terminals, deleting files, removing a capability or an automation, leaving a sandbox.
+
+     DESTRUCTIVE IS THE DEFAULT, because deleting something is what nearly every confirm in this app is about,
+     and a confirm that has to declare its own tone is a confirm that will be declared wrong. `destructive`
+     turns off only the red — the second thing worth stopping for is a commit that CANNOT BE TAKEN BACK
+     without being a deletion (approving a queue of posts to the public internet), and painting that button
+     danger-red says "this deletes something", which is the one thing it does not do.
 
      Nine call sites had written this out, and what they agreed on was everything that matters: the same four
      Dialog props, the same Cancel-then-danger footer, the same `autofocus` on the destructive button. What
@@ -27,6 +33,7 @@ const {
     confirmLabel,
     confirmIcon,
     items,
+    destructive = true,
     loading = false,
     width = 26,
     appendTo,
@@ -37,6 +44,8 @@ const {
     confirmIcon?: IconName;
     /** The set being acted on. The first few render through `#item`; the rest become a count. */
     items?: readonly T[];
+    /** False for a confirm that commits rather than destroys — see above. */
+    destructive?: boolean;
     /** Keeps the danger button spinning while the teardown runs — removal often hits the network. */
     loading?: boolean;
     /** rem. Clamped to the viewport regardless, so a phone never gets a dialog wider than its screen. */
@@ -75,10 +84,10 @@ const NAMED = 5;
         <slot />
         <template #footer>
             <Button label="Cancel" severity="secondary" :text="true" @click="emit(`cancel`)" />
-            <!-- autofocus on the DESTRUCTIVE button is deliberate and is what the call sites already did: the
+            <!-- autofocus on the CONFIRM button is deliberate and is what the call sites already did: the
                  dialog is dismissable by mask, Esc and Cancel, so the keyboard's default should be the one
                  action the user came here to take. -->
-            <Button :label="confirmLabel" severity="danger" autofocus :loading="loading" @click="emit(`confirm`)">
+            <Button :label="confirmLabel" :severity="destructive ? `danger` : undefined" autofocus :loading="loading" @click="emit(`confirm`)">
                 <template v-if="confirmIcon !== undefined" #icon><Icon :name="confirmIcon" /></template>
             </Button>
         </template>
