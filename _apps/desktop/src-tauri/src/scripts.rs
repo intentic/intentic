@@ -243,6 +243,64 @@ pub fn docker_output(args: &[&str]) -> Result<String, String> {
     Ok(String::from_utf8_lossy(&output.stdout).to_string())
 }
 
+/// Where `intentic-sync` lives on this machine, in the order worth trying. The agent's own installer puts it
+/// under the home it manages, and that copy is the one this app's setup just installed — so it is preferred over
+/// whatever a PATH lookup might find (a stale global, a different user's build). A bare name last means a
+/// user who installed it their own way still works.
+///
+/// A VALUE rather than a `cfg!` read, for the same reason [`Host`] is: the Windows spelling of this path is
+/// cross-built on Linux and first executed on somebody's PC, so one `cargo test` covers both halves.
+pub fn sync_agent_candidates(host: Host, home: Option<&str>) -> Vec<String> {
+    let mut candidates = Vec::new();
+    if let Some(home) = home {
+        let (sep, exe) = match host {
+            Host::Windows => ('\\', "intentic-sync.exe"),
+            Host::Unix => ('/', "intentic-sync"),
+        };
+        candidates.push(format!("{home}{sep}.intentic{sep}sync{sep}bin{sep}{exe}"));
+    }
+    candidates.push(match host {
+        Host::Windows => "intentic-sync.exe".to_string(),
+        Host::Unix => "intentic-sync".to_string(),
+    });
+    candidates
+}
+
+/// This machine's desktop-sync report — `intentic-sync status --json`, the SAME producer the daemon reads
+/// through a host capability and the same one the terminal command prints.
+///
+/// Running the agent rather than reading its state file is the whole point: the file holds pairings, but the
+/// report also asks Mutagen what each session is doing and checks whether the watcher is alive, and a second
+/// implementation of that in Rust is precisely the lockstep this app exists to avoid (see the header).
+///
+/// `Ok(None)` is "no sync agent on this computer" — an ordinary state for a machine set up before desktop sync,
+/// and not an error. Only a machine that HAS the agent and could not be asked is one.
+pub fn sync_report() -> Result<Option<String>, String> {
+    let home = std::env::var("HOME")
+        .or_else(|_| std::env::var("USERPROFILE"))
+        .ok();
+    let mut last: Option<String> = None;
+    for candidate in sync_agent_candidates(Host::current(), home.as_deref()) {
+        let output = quiet(Command::new(&candidate))
+            .args(["status", "--json"])
+            .stdin(Stdio::null())
+            .output();
+        let Ok(output) = output else {
+            continue; // not at this path — try the next one
+        };
+        if output.status.success() {
+            return Ok(Some(String::from_utf8_lossy(&output.stdout).to_string()));
+        }
+        last = Some(String::from_utf8_lossy(&output.stderr).trim().to_string());
+    }
+    match last {
+        None => Ok(None),
+        Some(error) => Err(format!(
+            "the sync agent on this computer could not be read: {error}"
+        )),
+    }
+}
+
 /// The container's last `tail` log lines, BOTH streams merged in the order docker hands them over. The daemon
 /// writes its pino output to stdout and its crashes to stderr, and the line that explains a sandbox that will
 /// not come up is nearly always in the second one — so unlike [`docker_output`], a non-zero exit here still

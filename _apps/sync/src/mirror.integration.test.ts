@@ -102,9 +102,11 @@ describe("reconcileForwards (minimal-touch)", () => {
         const { executor, created, terminated } = fakeExecutor();
         const current: MirroredPort[] = [{ port: 3000, host: "127.0.0.1" }];
         const next = await reconcileForwards(executor, current, [ws(3000), ws(4321)], unclaimed, log);
+        // A row carried over keeps the baseline's own shape; only a freshly created one learns what is listening
+        // behind it, which is what labels the port in the machine report.
         expect(next).toEqual([
             { port: 3000, host: "127.0.0.1" },
-            { port: 4321, host: "127.0.0.1" },
+            { port: 4321, host: "127.0.0.1", command: "vite" },
         ]);
         expect(created).toEqual([4321]); // 3000 was untouched — no dropped connection
         expect(terminated).toEqual([4321]); // only the stale-clear before creating the new one
@@ -125,7 +127,7 @@ describe("reconcileForwards (minimal-touch)", () => {
     it("recreates a forward whose sandbox loopback family moved (127.0.0.1 → ::1)", async () => {
         const { executor, created, terminated } = fakeExecutor();
         const next = await reconcileForwards(executor, [{ port: 3000, host: "127.0.0.1" }], [ws(3000, "::1")], unclaimed, log);
-        expect(next).toEqual([{ port: 3000, host: "::1" }]);
+        expect(next).toEqual([{ port: 3000, host: "::1", command: "vite" }]);
         expect(terminated).toEqual([3000]);
         expect(created).toEqual([3000]);
     });
@@ -144,7 +146,7 @@ describe("reconcileForwards (minimal-touch)", () => {
         const { executor, created, terminated } = fakeExecutor();
         const claimed = new Map([[6480, "sandbox-first.example.dev"]]);
         const next = await reconcileForwards(executor, [], [ws(6480), ws(7000)], claimed, log);
-        expect(next).toEqual([{ port: 7000, host: "127.0.0.1" }]);
+        expect(next).toEqual([{ port: 7000, host: "127.0.0.1", command: "vite" }]);
         expect(created).toEqual([7000]);
         // 6480 is neither created nor terminated: the other pairing's session keeps serving it.
         expect(terminated).toEqual([7000]);

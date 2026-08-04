@@ -1,3 +1,4 @@
+import type { MachineFolderRow, MachinePortRow, MachineWatcherState } from "@intentic/ui";
 import { invoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 
@@ -40,6 +41,24 @@ export interface Settings {
     platformUrl: string | null;
 }
 
+/* What desktop sync is doing on this computer, as `intentic-sync status --json` reports it.
+ *
+ * The row types come from `@intentic/ui`, because the component that renders them is the reason this app reads
+ * any of it — there is no second shape to keep in step. `sandboxes` is deliberately absent: the agent never
+ * reports containers (it has no business enumerating a machine's other sandboxes), and this app has `sandboxList`
+ * for that anyway. */
+export interface MachineReport {
+    hostname: string;
+    os: string;
+    agents: { sync?: string };
+    pairings: MachineFolderRow[];
+    ports: MachinePortRow[];
+    watcher: MachineWatcherState;
+    // When the agent took the reading. This app asks on demand, so it is always moments old — carried because the
+    // shape is the contract's, and a reader that ignores it is not a reader that may drop it.
+    capturedAt: number;
+}
+
 /* What a running script says, as it says it. `run` is the operation's own id (`setup`, `recreate:<slug>`,
  * `remove:<slug>`) so one window can show several at once, and `stream` is kept because the scripts write
  * progress to stdout and diagnostics to stderr — the failure detail is always in the second one. */
@@ -58,6 +77,13 @@ export const sandboxPower = (slug: string, start: boolean): Promise<void> => inv
 export const sandboxRecreate = (slug: string, hash?: string): Promise<void> => invoke(`sandbox_recreate`, { slug, hash });
 export const sandboxRemove = (slug: string): Promise<void> => invoke(`sandbox_remove`, { slug });
 export const sandboxLogs = (slug: string, tail: number): Promise<string> => invoke(`sandbox_logs`, { slug, tail });
+/* The sync agent's report, or undefined when this computer has no agent — an ordinary state (a machine set up
+ * before desktop sync existed), which the screen states rather than treats as a failure. Rust hands back the raw
+ * JSON because that process has no schema for it; parsing belongs on the side that does. */
+export const machineReport = async (): Promise<MachineReport | undefined> => {
+    const raw = await invoke<string | null>(`machine_report`);
+    return raw === null ? undefined : (JSON.parse(raw) as MachineReport);
+};
 export const workspaceOpen = (): Promise<void> => invoke(`workspace_open`);
 export const settingsGet = (): Promise<Settings> => invoke(`settings_get`);
 export const settingsSet = (settings: Settings): Promise<void> => invoke(`settings_set`, { settings });

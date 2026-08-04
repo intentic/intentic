@@ -29,7 +29,15 @@ from any device. The app adds no third plane. It is three thin native things aro
    its only channel into the app is an `intentic://` navigation the window intercepts in Rust.
 2. **A script runner.** Every machine operation is one of the scripts the copy-paste one-liners already run,
    spawned as a child process with its output streamed into the app's own screen.
-3. **A lifecycle manager.** Setup progress, then status, logs, start/stop, update, rebuild, remove.
+3. **A lifecycle manager.** Setup progress, then status, logs, start/stop, update, rebuild, remove — plus what
+   **desktop sync** is doing here, read by spawning `intentic-sync status --json` exactly as the lifecycle
+   actions spawn their scripts, and rendered with `@intentic/ui`'s `MachineDetail` (the same component the web
+   app's Computers tab uses, so the two cannot describe one machine differently).
+
+   That third item was the app's largest blind spot: `SYNC_DIR` rides the setup link into `connect.sh` and was
+   never heard from again, so the window that exists to be the no-terminal way to run a sandbox could show a
+   container as up and say nothing whatsoever about the sync the same setup had just configured. The only
+   rendering of those facts was `intentic-sync status`, in a terminal.
 
 ## Two webviews, one window
 
@@ -67,6 +75,7 @@ it is doing to a window instead of a terminal ([`src-tauri/src/scripts.rs`](src-
 | Update · Rebuild | `recreate.sh <slug> [<sha256>]` / `recreate.ps1 -Slug … [-Hash …]` |
 | Remove | `cleanup.sh <slug> -y` / `cleanup.ps1 -Slug … -Yes` |
 | Start · Stop · Logs | `docker` directly — there is no script that lists or tails |
+| The desktop-sync panel | `intentic-sync status --json` (its own install under `~/.intentic/sync/bin` first, then PATH) |
 
 The scripts are **bundled as resources** from `_apps/site/public/scripts/` (`tauri.conf.json` globs the whole
 directory, so a script added to the site is bundled by construction). A release of the app is cut from one

@@ -336,6 +336,24 @@ pub async fn sandbox_remove(app: AppHandle, slug: String) -> CommandResult<()> {
     Ok(())
 }
 
+/// What desktop sync is doing on THIS computer — the folders it keeps in step, the ports it put on localhost,
+/// and whether the watcher behind them is alive.
+///
+/// None of it was reachable from this app before. `syncDir` rides the setup link into `connect.sh` and is never
+/// heard from again, so the window that exists to be the no-terminal way to run a sandbox could say a container
+/// was up and nothing at all about the sync the same setup had just configured. The only place those facts lived
+/// was `intentic-sync status`, in a terminal.
+///
+/// Returned as the agent's raw JSON rather than parsed here: this process has no schema for it (no Node), the
+/// webview does, and re-stating the shape in Rust would be one more thing to keep in lockstep. `None` means no
+/// sync agent is installed — which the screen renders as a fact about the computer, not as a failure.
+#[tauri::command]
+pub async fn machine_report() -> CommandResult<Option<String>> {
+    tauri::async_runtime::spawn_blocking(scripts::sync_report)
+        .await
+        .map_err(|error| error.to_string())?
+}
+
 #[tauri::command]
 pub async fn sandbox_logs(slug: String, tail: u32) -> CommandResult<String> {
     tauri::async_runtime::spawn_blocking(move || {
@@ -545,5 +563,38 @@ mod tests {
     fn no_flow_but_setup_ever_elevates() {
         assert!(!recreate_script("work", None, Host::Unix).elevate);
         assert!(!remove_script("work", Host::Unix).elevate);
+    }
+
+    /* The sync agent's own install location, per host. Cross-built like everything else here, so the Windows
+     * spelling first executes on a user's PC — and getting it wrong is invisible rather than loud: the PATH
+     * fallback would still find a global copy on a developer's machine and find nothing on a real user's, who
+     * would then see a window that simply never mentions their sync. */
+    #[test]
+    fn the_agents_own_install_is_preferred_over_whatever_is_on_path() {
+        let unix = scripts::sync_agent_candidates(Host::Unix, Some("/home/ada"));
+        assert_eq!(
+            unix,
+            vec![
+                "/home/ada/.intentic/sync/bin/intentic-sync".to_string(),
+                "intentic-sync".to_string()
+            ]
+        );
+
+        let windows = scripts::sync_agent_candidates(Host::Windows, Some("C:\\Users\\Ada"));
+        assert_eq!(
+            windows,
+            vec![
+                "C:\\Users\\Ada\\.intentic\\sync\\bin\\intentic-sync.exe".to_string(),
+                "intentic-sync.exe".to_string()
+            ]
+        );
+    }
+
+    #[test]
+    fn a_machine_with_no_home_still_tries_the_path() {
+        assert_eq!(
+            scripts::sync_agent_candidates(Host::Unix, None),
+            vec!["intentic-sync".to_string()]
+        );
     }
 }

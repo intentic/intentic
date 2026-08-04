@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Card, cmp } from "@intentic/ui";
+import { Card, cmp, MachineDetail } from "@intentic/ui";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { confirm } from "@tauri-apps/plugin-dialog";
 import Button from "primevue/button";
@@ -8,6 +8,7 @@ import RunLog from "./components/RunLog.vue";
 import SandboxCard from "./components/SandboxCard.vue";
 import {
     desktopInfo,
+    machineReport,
     onPendingRecreate,
     onPendingSetup,
     onRun,
@@ -21,6 +22,7 @@ import {
     takePendingRecreate,
     workspaceOpen,
     type DesktopInfo,
+    type MachineReport,
     type RunEvent,
     type SandboxStatus,
     type SetupArgs,
@@ -47,6 +49,10 @@ import {
 const info = ref<DesktopInfo | undefined>(undefined);
 const sandboxes = ref<SandboxStatus[]>([]);
 const listError = ref<string | undefined>(undefined);
+// What desktop sync is doing here. Undefined = no agent on this computer, which is a fact about the machine and
+// not a failure; a string = the agent is installed but would not answer, which is.
+const report = ref<MachineReport | undefined>(undefined);
+const reportError = ref<string | undefined>(undefined);
 const busy = ref<{ slug: string; action: string } | undefined>(undefined);
 const updateVersion = ref<string | undefined>(undefined);
 
@@ -67,7 +73,7 @@ const setupMode = computed(() => pending.value !== undefined || activeRun.value 
  * thing outside this process that can say which screen is up — which is what the desktop smoke tier asserts
  * against, having deliberately no test hook to read instead. */
 watchEffect(() => {
-    void getCurrentWindow().setTitle(setupMode.value ? `Intentic — Setting up your sandbox` : `Intentic — Sandboxes on this computer`);
+    void getCurrentWindow().setTitle(setupMode.value ? `Intentic — Setting up your sandbox` : `Intentic — This computer`);
 });
 
 const refresh = async (): Promise<void> => {
@@ -80,6 +86,30 @@ const refresh = async (): Promise<void> => {
         sandboxes.value = [];
         listError.value = String(error);
     }
+    /* The sync half, read separately and allowed to fail separately: the two answers come from different places
+     * (docker, and the sync agent) and either can be absent on a perfectly working computer. Folding them into
+     * one try would let a machine with no sync agent read as a machine with no sandboxes. */
+    try {
+        report.value = await machineReport();
+        reportError.value = undefined;
+    } catch (error) {
+        report.value = undefined;
+        reportError.value = String(error);
+    }
+};
+
+/* One sandbox's line in the manager: the folder it syncs into here, and how many of its ports reached localhost.
+ * This is the join the app could not make before — docker knows the container, the agent knows the pairing, and
+ * the slug is not the agent's key, so they meet on the sandbox id the pairing carries ending in the slug's own
+ * subdomain label. A sandbox with no pairing gets no line rather than a wrong one. */
+const syncLineFor = (sandbox: SandboxStatus): string | undefined => {
+    const pairing = report.value?.pairings.find((entry) => entry.sandboxId.split(`.`)[0] === sandbox.slug);
+    if (pairing === undefined) {
+        return undefined;
+    }
+    const ports = (report.value?.ports ?? []).filter((port) => port.sandboxId === pairing.sandboxId && port.state === `mirrored`).length;
+    const where = pairing.mode === `sync` ? (pairing.localDir ?? `no folder`) : `ports only`;
+    return ports === 0 ? where : `${where} · ${ports} port${ports === 1 ? `` : `s`} on localhost`;
 };
 
 /* Every operation is one script run and they all report the same way, so there is one place that starts a
@@ -239,7 +269,7 @@ onUnmounted(() => stop.forEach((unlisten) => unlisten()));
             <!-- THE MANAGER — what this machine is running, once nothing is being handed over. -->
             <template v-else>
                 <header class="flex items-center gap-3">
-                    <h1 class="flex-1 text-base font-semibold">Sandboxes on this computer</h1>
+                    <h1 class="flex-1 text-base font-semibold">This computer</h1>
                     <span v-if="info" class="font-mono text-2xs text-subtle">v{{ info.version }}</span>
                     <Button size="small" severity="secondary" :text="true" label="Refresh" :disabled="running" @click="refresh">
                         <template #icon><Icon name="refresh" /></template>
@@ -265,10 +295,26 @@ onUnmounted(() => stop.forEach((unlisten) => unlisten()));
                     :key="sandbox.slug"
                     :sandbox="sandbox"
                     :busy="busyFor(sandbox.slug)"
+                    :sync-line="syncLineFor(sandbox)"
                     @power="power"
                     @update="update"
                     @remove="remove"
                 />
+
+                <!-- DESKTOP SYNC — the half of this computer this window has never shown.
+                     `syncDir` rides the setup link into connect.sh and was never heard from again, so the app
+                     whose whole premise is not needing a terminal could say a container was up and nothing about
+                     the sync the same setup had just configured. The only place these facts lived was
+                     `intentic-sync status`. Below the sandboxes because it is about all of them at once. -->
+                <section v-if="report || reportError" class="flex flex-col gap-3 rounded-xl border border-line bg-canvas p-4">
+                    <div class="flex items-center gap-2">
+                        <Icon name="sync" class="shrink-0 text-muted" />
+                        <h2 class="flex-1 text-sm font-semibold">Desktop sync</h2>
+                        <span v-if="report?.agents.sync" class="font-mono text-2xs text-subtle">agent v{{ report.agents.sync }}</span>
+                    </div>
+                    <div v-if="reportError" :class="cmp.alertDanger('text-2xs')">{{ reportError }}</div>
+                    <MachineDetail v-if="report" :pairings="report.pairings" :ports="report.ports" :watcher="report.watcher" />
+                </section>
 
                 <!-- One run at a time, so one log: whichever operation is in flight owns this. -->
                 <RunLog

@@ -4,6 +4,7 @@ import { computed } from "vue";
 import { accountsLoaded, providerAccounts, translatorAccounts } from "../chat/providerAccounts";
 import { acpProviders } from "../chat/providerCatalog";
 import { useMissingSecretCount } from "../secrets/useSecrets";
+import { useSyncHealth } from "./useComputers";
 import { useEnvironment } from "./useEnvironment";
 import { useSandboxVersion } from "./useSandboxVersion";
 
@@ -59,6 +60,7 @@ export function useSandboxAttention() {
     const { pending, proposal } = useEnvironment();
     const { updateAvailable } = useSandboxVersion();
     const { missingRequiredCount } = useMissingSecretCount();
+    const { stoppedOn, contendedPorts } = useSyncHealth();
 
     /* Declared worst-first: the head decides what the badge wears, and the whole list is what the popover
      * shows. No account leads because it is the only one that stops a turn from running at all; a rebuild is
@@ -100,6 +102,19 @@ export function useSandboxAttention() {
                       to: `/sandbox/environment`,
                   },
               ]),
+        /* A stopped sync agent outranks the secrets below it because of how it fails: silently, and while
+         * everything else keeps reading healthy. The enrollment is intact, the card says "Enabled", and the
+         * user's edits simply stop travelling. This is the one item here whose absence used to cost days. */
+        ...(stoppedOn.value.length === 0
+            ? []
+            : [
+                  {
+                      icon: `desktop` as const,
+                      tone: `warning` as const,
+                      message: `Desktop sync stopped on ${stoppedOn.value.join(`, `)} — its folder isn't syncing`,
+                      to: `/sandbox/computers`,
+                  },
+              ]),
         ...(missingRequiredCount.value === 0
             ? []
             : [
@@ -109,6 +124,20 @@ export function useSandboxAttention() {
                       message: `${missingRequiredCount.value} required secret${missingRequiredCount.value === 1 ? `` : `s`} missing`,
                       to: `/sandbox/secrets`,
                       count: missingRequiredCount.value,
+                  },
+              ]),
+        // Informational, not a fault: the sandbox is fine and so is the machine — one port just could not have the
+        // number it wanted. Worth saying because the symptom (a dev server missing from localhost) otherwise
+        // sends people looking for a process that does not exist.
+        ...(contendedPorts.value.length === 0
+            ? []
+            : [
+                  {
+                      icon: `desktop` as const,
+                      tone: `info` as const,
+                      message: `${contendedPorts.value.length} port${contendedPorts.value.length === 1 ? `` : `s`} couldn't be mirrored to your localhost`,
+                      to: `/sandbox/computers`,
+                      count: contendedPorts.value.length,
                   },
               ]),
         ...(updateAvailable.value

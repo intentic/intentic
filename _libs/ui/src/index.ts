@@ -42,6 +42,9 @@ export { isRenderableImage } from "./components/imageView.js";
 export { default as InfoDialog } from "./components/InfoDialog.vue";
 export { default as InfoHint } from "./components/InfoHint.vue";
 export { default as InfoTable } from "./components/InfoTable.vue";
+// One computer's desktop-sync detail — folders, localhost ports, watcher liveness. The BODY only: the desktop
+// app and the web's Computers tab frame it differently and state exactly the same facts inside.
+export { default as MachineDetail, type MachineFolderRow, type MachinePortRow, type MachineWatcherState } from "./components/MachineDetail.vue";
 export { default as Markdown } from "./components/Markdown.vue";
 export { default as MarkdownFigure } from "./components/MarkdownFigure.vue";
 // The index column: a filter, pinned rows, grouped selectable rows, a footnote. Owns the chrome; the row stays

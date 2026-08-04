@@ -4,13 +4,14 @@ import { mkdir } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join, resolve } from "node:path";
 import { cliLauncher, type Log, registerAutostart, unregisterAutostart } from "@intentic/local-agent";
-import { sandboxIdFromUrl } from "@intentic/sandbox-contract";
+import { type MachinePort, type MachineReport, sandboxIdFromUrl } from "@intentic/sandbox-contract";
 import { buildCommand, type CommandContext } from "@stricli/core";
 import { MIRROR_AUTOSTART } from "./autostart.js";
 import { type Pairing, readState, removePairing, type SyncMode, type SyncState, upsertPairing } from "./config.js";
 import { realBridgeExec, runGitBridge } from "./git-bridge.js";
-import { readLiveWatcherPid, retirePairingMirror, runMirrorWatch, startMirrorWatcher, stopMirror, stopWatcher } from "./mirror.js";
+import { retirePairingMirror, runMirrorWatch, startMirrorWatcher, stopMirror, stopWatcher } from "./mirror.js";
 import { ensureCloudflared, ensureMutagen, ensureSyncSession, retireOrphanSessions, runMutagen, sessionName } from "./mutagen.js";
+import { machineReport } from "./report.js";
 import {
     assertSshConfigVisible,
     ensureSshKey,
@@ -304,20 +305,74 @@ const mirror = buildCommand<MirrorFlags>({
  * indistinguishable from one that never existed. Every folder that should be syncing is named here, or it isn't
  * being synced. The watcher's liveness follows, since a healthy session list under a dead watcher means new dev
  * server ports stop appearing on localhost and commits stop arriving in the local clones. */
-const status = buildCommand<Record<string, never>>({
+interface StatusFlags {
+    readonly json: boolean;
+}
+
+// One port row, in the form the two skip reasons are actually asked about: not "why is 6480 missing" but "who
+// has it". A row nothing took reads as plain busy, because that is all this machine can honestly say.
+const portLine = (port: MachinePort): string => {
+    const what = port.command ?? "unknown process";
+    if (port.state === "mirrored") {
+        return `  localhost:${port.port} ← ${port.sandboxId} (${what})`;
+    }
+    const reason = port.heldBy === undefined ? "something else on this machine has the port" : `${port.heldBy} has it`;
+    return `  localhost:${port.port} — NOT mirrored from ${port.sandboxId}: ${reason} (${what})`;
+};
+
+const printReport = (report: MachineReport, out: (message: string) => void): void => {
+    out(`Paired sandboxes (${report.pairings.length}):`);
+    for (const pairing of report.pairings) {
+        const where = pairing.mode === "sync" ? (pairing.localDir ?? "(no folder)") : "(ports only)";
+        // Mutagen's own word, and the conflict count beside it: a two-way-safe session flags conflicts rather
+        // than clobbering, and nothing else in the product has ever said one was waiting.
+        const state = [
+            pairing.paused === true ? "paused" : pairing.mutagenStatus,
+            pairing.conflicts === 0 ? undefined : `${pairing.conflicts} conflict(s)`,
+        ]
+            .filter((part) => part !== undefined)
+            .join(", ");
+        out(`  ${pairing.sandboxId}  ${where}${state === "" ? "" : `  [${state}]`}`);
+    }
+    out(
+        report.watcher.running
+            ? `Mirror watcher: running (pid ${report.watcher.pid})`
+            : "Mirror watcher: NOT running — run `intentic-sync mirror` to restart it.",
+    );
+    out(`Ports (${report.ports.length}):`);
+    for (const port of report.ports) {
+        out(portLine(port));
+    }
+};
+
+/* Status leads with the PAIRING LIST — which sandboxes this machine syncs and into which folders — because that
+ * is the question a user actually arrives with, and the one this command could not answer before: it read the
+ * single pairing and printed Mutagen's view of it, so a folder that had quietly stopped being synced was
+ * indistinguishable from one that never existed. Every folder that should be syncing is named here, or it isn't
+ * being synced. The watcher's liveness follows, since a healthy session list under a dead watcher means new dev
+ * server ports stop appearing on localhost and commits stop arriving in the local clones.
+ *
+ * `--json` emits the same MachineReport this prints, and is what the desktop app and a `host`-capability read
+ * both consume — so the terminal answer and the two on-screen ones cannot drift apart, for the same reason the
+ * desktop app spawns connect.sh rather than reimplementing it. Mutagen's own listings still follow the report in
+ * the human rendering: they carry live transfer progress, which is detail the report deliberately does not model. */
+const status = buildCommand<StatusFlags>({
     docs: { brief: "Show every paired sandbox, the mirror watcher, and Mutagen's own file-sync/forward state" },
-    parameters: { flags: {} },
-    async func(this: CommandContext) {
+    parameters: {
+        flags: {
+            json: { kind: "boolean", brief: "Emit the machine report as JSON (what the desktop app and the Computers view read)" },
+        },
+    },
+    async func(this: CommandContext, flags: StatusFlags) {
         const out = (message: string): void => void this.process.stdout.write(`${message}\n`);
-        const { pairings } = await readState();
         const mutagen = await ensureMutagen();
-        out(`Paired sandboxes (${pairings.length}):`);
-        for (const pairing of pairings) {
-            out(`  ${pairing.sandboxId}  ${pairing.mode === "sync" ? (pairing.localDir ?? "(no folder)") : "(ports only)"}`);
+        const report = await machineReport(mutagen);
+        if (flags.json) {
+            out(JSON.stringify(report));
+            return;
         }
-        const pid = await readLiveWatcherPid();
-        out(pid === undefined ? "Mirror watcher: NOT running — run `intentic-sync mirror` to restart it." : `Mirror watcher: running (pid ${pid})`);
-        const syncing = pairings.filter((pairing) => pairing.mode === "sync");
+        printReport(report, out);
+        const syncing = report.pairings.filter((pairing) => pairing.mode === "sync");
         if (syncing.length > 0) {
             out("File sync:");
             runMutagen(mutagen, ["sync", "list", ...syncing.map((pairing) => sessionName(pairing.sandboxId))]);

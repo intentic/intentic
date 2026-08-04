@@ -263,7 +263,7 @@ test("bearer middleware maps a ForbiddenError to 403 (wrong account) and any oth
     expect(await unauth.json()).toEqual({ error: "unauthorized" });
 });
 
-test("the enrollment-minted sync token reads /ports and nothing else", async () => {
+test("the enrollment-minted sync token reads /ports, files its own machine report, and nothing else", async () => {
     process.env["HOME"] = mkdtempSync(join(tmpdir(), "sync-token-home-"));
     // Bearer auth rejects everything, so a 200 proves the sync-token branch authorized the read.
     const app = createApp(
@@ -291,9 +291,45 @@ test("the enrollment-minted sync token reads /ports and nothing else", async () 
     const list = await withToken("/ports");
     expect(list.status).toBe(200);
     expect(await list.json()).toEqual({ ports: [{ port: 3000, host: "127.0.0.1", forwardable: true, kind: "system", forwarded: false }] });
-    // Out of scope (403): any other route, and even the ports MUTATIONS — the token is read-only by design.
+    /* The one WRITE the token carries: the machine's own report — the folders/ports/watcher half of desktop sync
+     * that the daemon has no other way to learn (SYNC_DIR never reaches it). Filed under the enrollment that
+     * presented the token, so the `hostname` in the body is a label and never an identity. */
+    const report = {
+        hostname: "laptop",
+        os: "linux",
+        agents: { sync: "0.1.0" },
+        sandboxes: [],
+        pairings: [{ sandboxId: "sandbox-abc.example.com", mode: "mirror" }],
+        ports: [{ port: 3000, host: "127.0.0.1", sandboxId: "sandbox-abc.example.com", state: "mirrored" }],
+        watcher: { running: true, pid: 42 },
+        capturedAt: 1_700_000_000_000,
+    };
+    const filed = await app.request("/system/sync/report", {
+        method: "POST",
+        headers: { "content-type": "application/json", "x-intentic-sync": syncToken },
+        body: JSON.stringify(report),
+    });
+    expect(filed.status).toBe(200);
+    // A body that isn't a report is refused as malformed rather than stored — this route takes a shape, not JSON.
+    const malformed = await app.request("/system/sync/report", {
+        method: "POST",
+        headers: { "content-type": "application/json", "x-intentic-sync": syncToken },
+        body: JSON.stringify({ hostname: "laptop" }),
+    });
+    expect(malformed.status).toBe(400);
+    // A token no enrollment owns cannot file a report for someone else's machine.
+    const forged = await app.request("/system/sync/report", {
+        method: "POST",
+        headers: { "content-type": "application/json", "x-intentic-sync": "ist_bogus" },
+        body: JSON.stringify(report),
+    });
+    expect(forged.status).toBe(401);
+
+    // Out of scope (403): any other route, and even the ports MUTATIONS — the token reads one list and writes
+    // one report, and the report grants nothing back.
     expect((await withToken("/panels")).status).toBe(403);
     expect((await withToken("/ports/forward", "POST")).status).toBe(403);
+    expect((await withToken("/system/sync")).status).toBe(403);
     // A bogus token on the in-scope route is plain unauthorized.
     expect((await app.request("/ports", { headers: { "x-intentic-sync": "ist_bogus" } })).status).toBe(401);
 });

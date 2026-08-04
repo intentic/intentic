@@ -29,9 +29,24 @@ export const mirrorLogPath = join(baseDir, "mirror.log");
 
 // One mirrored port: the local bind (same number) + the loopback address the sandbox listener answers at —
 // stored so the watch reconcile can leave unchanged forwards untouched and recreate one whose family moved.
+// `command` rides along for the report only: what the port is ("node …/vite") is the difference between a row a
+// user recognises and a bare number, and the reconcile is the one place that ever sees it.
 export interface MirroredPort {
     readonly port: number;
     readonly host: PortSummary["host"];
+    readonly command?: string | undefined;
+}
+
+/* A port the sandbox serves that this machine did NOT put on localhost, and why. Persisted for exactly one
+ * reason: it is the only record that the port was ever wanted. The reconcile decides this every tick and writes
+ * it to mirror.log, so a dev server that is simply missing from localhost — because a sibling sandbox paired
+ * first, or because something local already holds the number — has always been diagnosable only by reading an
+ * append-only log on the machine. `heldBy` names the sandbox that won; its absence means a foreign process did. */
+export interface SkippedPort {
+    readonly port: number;
+    readonly host: PortSummary["host"];
+    readonly heldBy?: string | undefined;
+    readonly command?: string | undefined;
 }
 
 // What the daemon granted this machine: "sync" = bidirectional file sync of /work + port mirroring (single
@@ -43,7 +58,8 @@ export type SyncMode = "sync" | "mirror";
 // host, so it identifies the sandbox across re-pairings. syncToken is the enrollment-minted credential for the
 // daemon's GET /ports (what `mirror` reconciles against) + self-revoke on uninstall. localDir is set only for
 // mode "sync" (mirror-only has no file sync). mirroredPorts is the set of Mutagen forward sessions the last
-// reconcile left alive — the baseline, so vanished ports get terminated.
+// reconcile left alive — the baseline, so vanished ports get terminated; skippedPorts is its negative, the ports
+// that same reconcile wanted and could not have.
 export interface Pairing {
     readonly sandboxUrl: string;
     readonly sandboxId: string;
@@ -52,6 +68,7 @@ export interface Pairing {
     readonly localDir?: string;
     readonly syncToken?: string;
     readonly mirroredPorts?: readonly MirroredPort[];
+    readonly skippedPorts?: readonly SkippedPort[];
 }
 
 /* Every pairing this machine holds — a LIST, because one machine legitimately runs a fleet of sandboxes.

@@ -3,7 +3,7 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import { sandboxIdFromToken } from "@intentic/sandbox-contract/tunnel-ids";
-import { sshHostname, zoneFromUrl } from "@intentic/sandbox-contract";
+import { type MachineReport, sshHostname, zoneFromUrl } from "@intentic/sandbox-contract";
 
 // Desktop enrollment for Mutagen: a machine lands its ed25519 public key here (redeeming a browser-minted
 // pairing token), then Mutagen rides SSH with that key for two things — bidirectional FILE sync of /work, and
@@ -219,13 +219,17 @@ const SEEN_THROTTLE_MS = 60_000;
  * The write goes through persist(), which also rewrites authorized_keys: the key set is unchanged by construction
  * here, and keeping the two coupled is worth more than skipping one small write a minute. A concurrent poll from
  * another machine can lose this stamp to a read-modify-write race; the next poll re-stamps it seconds later. */
-export const verifySyncToken = async (historyRoot: string, presented: string): Promise<boolean> => {
+const matchEnrollment = (enrollments: readonly SyncEnrollment[], presented: string): SyncEnrollment | undefined => {
     const digest = Buffer.from(digestOf(presented));
-    const enrollments = await readEnrollments(historyRoot);
-    const matched = enrollments.find((entry) => {
+    return enrollments.find((entry) => {
         const stored = Buffer.from(entry.tokenDigest);
         return stored.length === digest.length && timingSafeEqual(stored, digest);
     });
+};
+
+export const verifySyncToken = async (historyRoot: string, presented: string): Promise<boolean> => {
+    const enrollments = await readEnrollments(historyRoot);
+    const matched = matchEnrollment(enrollments, presented);
     if (matched === undefined) {
         return false;
     }
@@ -264,6 +268,50 @@ export const syncHolder = async (historyRoot: string): Promise<SyncHolder | unde
 // The machines currently mirroring ports (any number) — for the UI to show who has live previews.
 export const mirrorMachines = async (historyRoot: string): Promise<string[]> =>
     (await readEnrollments(historyRoot)).filter((entry) => entry.mode === "mirror").map((entry) => entry.machine);
+
+// Every enrolled machine's label, whichever mode it holds — the Computers view's row list. A machine belongs on
+// it because it is ENROLLED, not because it has managed to report: one that never posts is exactly the case
+// worth showing (an agent too old to report, or a setup that never finished).
+export const enrolledMachines = async (historyRoot: string): Promise<string[]> => (await readEnrollments(historyRoot)).map((entry) => entry.machine);
+
+/* WHAT THE MACHINE SAYS ABOUT ITSELF. Everything above is what the SANDBOX knows about an enrollment — that it
+ * exists, and roughly when it was last used. None of it can answer the questions the Desktop sync card was
+ * actually asked: which folder is this syncing into, which ports did it get onto localhost, is the watcher behind
+ * it even alive. Those are facts only the machine holds (SYNC_DIR never reaches the daemon), so the machine
+ * volunteers them, on the ports poll it was already making.
+ *
+ * IN MEMORY, deliberately, unlike the enrollments beside it. A report is a snapshot of a computer that may since
+ * have closed its lid, and a daemon restart re-learns it within one poll of every machine still there. Persisting
+ * it would mean serving a laptop's folder list back for as long as the record survived — the exact "green over a
+ * machine that stopped hours ago" lie the seenAt heartbeat exists to prevent. */
+const reports = new Map<string, { readonly report: MachineReport; readonly receivedAt: number }>();
+
+/* Record a machine's report, authorized by the same sync token its ports poll uses. The token decides WHICH
+ * machine this is: a report is filed under the enrollment that presented it, never under the hostname it claims,
+ * so no machine can post a report in another's name. An unknown token stores nothing and says so. */
+export const recordMachineReport = async (historyRoot: string, presented: string, report: MachineReport): Promise<boolean> => {
+    const matched = matchEnrollment(await readEnrollments(historyRoot), presented);
+    if (matched === undefined) {
+        return false;
+    }
+    reports.set(matched.machine, { report, receivedAt: Date.now() });
+    return true;
+};
+
+/* The reports of the machines still enrolled, newest first, each beside the enrollment LABEL it was filed under.
+ * The label travels with it because it is the only name the sandbox has ever known this machine by (the ssh key's
+ * comment — what "Syncing from X" says), while the report carries the machine's own hostname; reconciling a
+ * sync-enrolled machine with the same box reached through a host capability needs both.
+ *
+ * Filtered against the live enrollments rather than returned wholesale: revoking a machine's access has to stop
+ * the sandbox showing its folders too, and the in-memory map has no revocation hook of its own. */
+export const machineReports = async (historyRoot: string): Promise<{ machine: string; report: MachineReport }[]> => {
+    const enrolled = new Set((await readEnrollments(historyRoot)).map((entry) => entry.machine));
+    return [...reports.entries()]
+        .filter(([machine]) => enrolled.has(machine))
+        .toSorted(([, a], [, b]) => b.receivedAt - a.receivedAt)
+        .map(([machine, entry]) => ({ machine, report: entry.report }));
+};
 
 // Self-revoke: drop the enrollment owning this sync token (the agent's uninstall). Returns false when no
 // enrollment matches (already gone). Rewrites authorized_keys, so the machine's SSH access dies with it.

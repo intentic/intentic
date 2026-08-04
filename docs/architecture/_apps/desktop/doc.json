@@ -19,14 +19,14 @@
     },
     {
       "path": "_apps/desktop/src/App.vue",
-      "what": "The launcher window: run the handed-over setup, then manage the containers on this machine."
+      "what": "The launcher window: run the handed-over setup, then show this computer's containers and its desktop sync."
     }
   ],
   "name": "@intentic/desktop-app",
   "oneLiner": "A window around the editor, plus the small program on your machine that sets a sandbox up and keeps it updated.",
   "provenance": {
-    "generatedAt": 1785703634000,
+    "generatedAt": 1785851091000,
     "model": "claude-opus-4-6",
-    "sourceRev": "1968d7bfcfa7fc908f36282c64a3862703b98f10"
+    "sourceRev": "e0c2c7fa0029029bb61926c7e977135f4687aa11"
   }
 }

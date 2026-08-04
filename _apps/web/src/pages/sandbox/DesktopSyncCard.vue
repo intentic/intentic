@@ -23,7 +23,6 @@ const {
     syncingFrom,
     syncStopped,
     syncLastSeen,
-    mirroredBy,
     revokedFrom,
     available,
     folder,
@@ -38,13 +37,6 @@ const {
     stop,
     disable,
 } = useDesktopSync();
-
-// Every machine with the sandbox's ports on its localhost: the sync holder mirrors too, plus any mirror-only
-// collaborators — so an active localhost forward is never invisible here.
-const portMachines = computed(() => {
-    const machines = [...(syncingFrom.value === undefined ? [] : [syncingFrom.value]), ...mirroredBy.value];
-    return machines.length > 0 ? machines.join(", ") : "the enrolled computer";
-});
 
 // The owner's opt-in to the ports-only flow (skip file sync on a fresh enable, or add a mirror machine while
 // another holds sync). Members don't need the toggle: portsOnly is forced for them.
@@ -130,17 +122,13 @@ onUnmounted(stop);
                             <span v-if="syncLastSeen !== undefined" :class="syncStopped ? 'text-warning' : 'text-subtle'">{{ syncLastSeen }}</span>
                         </dd>
                     </div>
-                    <div class="flex items-center justify-between gap-3">
-                        <dt class="text-subtle">Ports</dt>
-                        <dd class="truncate text-content">
-                            on <span class="font-mono">localhost</span> at <span class="font-mono">{{ portMachines }}</span>
-                        </dd>
-                    </div>
-                    <div class="flex items-center justify-between gap-3">
-                        <dt class="text-subtle">Manage</dt>
-                        <dd class="font-mono text-content">intentic-sync status</dd>
-                    </div>
                 </dl>
+                <!-- The "Ports: on localhost at <machine>" and "Manage: intentic-sync status" rows that used to
+                     sit here are gone. Both were this card admitting it could not answer: the first named a
+                     machine instead of the ports, and the second named a terminal command. The Computers list
+                     above states each of them as a fact the machine reported, so repeating them here would be two
+                     vaguer copies of what the reader has already scrolled past. -->
+                <p class="text-2xs text-subtle">Folders, ports and agent health for every paired computer are listed above.</p>
                 <!-- The holder went quiet. Name the likeliest cause first: on a computer running more than one
                      sandbox, the agent is shared, and older builds silently handed the whole pairing to whichever
                      sandbox was set up last — so a folder stops syncing with nothing on either end saying so. -->

@@ -57,9 +57,22 @@ const vpnReach = (_method: string, path: string): boolean => path === "/vpn" || 
 // INTENTIC_PANEL_TOKEN and never reaches a browser.
 const panelReach = (): boolean => true;
 
-// The desktop-sync agent reads the listening-ports list — the ONE route port mirroring needs
-// (`intentic-sync mirror` drives Mutagen forwards from it). Read-only by design: not even the ports mutations.
-const syncReach = (method: string, path: string): boolean => method === "GET" && path === "/ports";
+/* The desktop-sync agent's two routes, and it is worth saying why there are two rather than one.
+ *
+ * It READS the listening-ports list — what port mirroring is driven from (`intentic-sync mirror` reconciles
+ * Mutagen forwards against it). Still read-only in the sense that matters: not the ports MUTATIONS, so the agent
+ * can learn which ports exist and can never forward one publicly.
+ *
+ * It WRITES one thing: its own machine report — the folders it syncs into, the ports it got onto localhost, and
+ * whether its watcher is alive. That is the half of desktop sync the sandbox has never been able to see (SYNC_DIR
+ * is local agent state and never reaches the daemon), so the Desktop sync card could only ever claim a machine
+ * was enrolled and point the user at `intentic-sync status` on a terminal for the rest.
+ *
+ * The write grants nothing back: the report is stored in memory, filed under the enrollment whose token presented
+ * it rather than under any name the body claims, and read back only by this sandbox's own collaborators. It does
+ * not widen what the agent can LEARN by a single route. */
+const syncReach = (method: string, path: string): boolean =>
+    (method === "GET" && path === "/ports") || (method === "POST" && path === "/system/sync/report");
 
 export interface GrantSources {
     readonly panelToken: string;

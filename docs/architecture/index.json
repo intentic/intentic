@@ -1,593 +1,599 @@
 {
-    "entries": [
-        {
-            "behind": 5,
-            "component": "sandbox",
-            "dir": "_apps/acp-bridge",
-            "oneLiner": "Lets Zed or JetBrains drive the agents in your sandbox.",
-            "reason": "5 commits have touched this package since it was documented",
-            "sourceRev": "7964113d35fd91f2c3dc949af5d3598b40cd3f60",
-            "stale": true
-        },
-        {
-            "behind": 6,
-            "component": "account",
-            "dir": "_apps/api",
-            "oneLiner": "The small server that handles sign-in and billing.",
-            "reason": "6 commits have touched this package since it was documented",
-            "sourceRev": "692309441332b7b14c133841c1efc9900dd6c50b",
-            "stale": true
-        },
-        {
-            "behind": 4,
-            "component": "deploy",
-            "dir": "_apps/cli",
-            "oneLiner": "The `intentic` command — tunnels, deployment, scaffolding.",
-            "reason": "4 commits have touched this package since it was documented",
-            "sourceRev": "692309441332b7b14c133841c1efc9900dd6c50b",
-            "stale": true
-        },
-        {
-            "behind": 1,
-            "dir": "_apps/demo",
-            "oneLiner": "The landing page's playable demo — the real editor, running on a recording.",
-            "reason": "1 commit have touched this package since it was documented",
-            "sourceRev": "f1a5d15059d02c42208b3f03bf9e45a3952c3533",
-            "stale": true
-        },
-        {
-            "behind": 10,
-            "component": "editor",
-            "dir": "_apps/desktop",
-            "oneLiner": "A window around the editor, plus the small program on your machine that sets a sandbox up and keeps it updated.",
-            "reason": "10 commits have touched this package since it was documented",
-            "sourceRev": "1968d7bfcfa7fc908f36282c64a3862703b98f10",
-            "stale": true
-        },
-        {
-            "behind": 0,
-            "dir": "_apps/host",
-            "oneLiner": "The small agent you install on your own computer so the sandbox can work there.",
-            "sourceRev": "1576c8b049d1c59242c47f635cf761fddc517bbd",
-            "stale": false
-        },
-        {
-            "behind": 5,
-            "component": "search",
-            "dir": "_apps/iq",
-            "oneLiner": "One search command an agent can actually use.",
-            "reason": "5 commits have touched this package since it was documented",
-            "sourceRev": "7704ca993224122c1be3f60f6896039edac344b6",
-            "stale": true
-        },
-        {
-            "behind": 3,
-            "component": "search",
-            "dir": "_apps/lsp",
-            "oneLiner": "Safe renames and real type errors, from the command line.",
-            "reason": "3 commits have touched this package since it was documented",
-            "sourceRev": "de6a43b0c525ffc5e8cfb73c7840379cc5077379",
-            "stale": true
-        },
-        {
-            "behind": 93,
-            "component": "sandbox",
-            "dir": "_apps/sandbox",
-            "oneLiner": "The daemon — the program running inside your project's box.",
-            "reason": "93 commits have touched this package since it was documented",
-            "sourceRev": "4a57e4d504eb2d2341a33fc1c46fc7be2124a844",
-            "stale": true
-        },
-        {
-            "behind": 40,
-            "component": "account",
-            "dir": "_apps/site",
-            "oneLiner": "The public marketing website.",
-            "reason": "40 commits have touched this package since it was documented",
-            "sourceRev": "defafa2da5351076f1c55bf4bd4ab15ed3fdd4f5",
-            "stale": true
-        },
-        {
-            "behind": 0,
-            "component": "sandbox",
-            "dir": "_apps/sync",
-            "oneLiner": "Keeps folders on your computer in step with your sandboxes.",
-            "sourceRev": "79145084a09630d71208223c02b14735b5353041",
-            "stale": false
-        },
-        {
-            "behind": 159,
-            "component": "editor",
-            "dir": "_apps/web",
-            "oneLiner": "The browser app — the whole editor you see and click.",
-            "reason": "159 commits have touched this package since it was documented",
-            "sourceRev": "6b0114cad65ee0e9868b592fbd626e174dfe55bf",
-            "stale": true
-        },
-        {
-            "behind": 13,
-            "component": "extensions",
-            "dir": "_extensions/acceptance",
-            "oneLiner": "Writes down what the product promises, then has agents check it in a real browser.",
-            "reason": "13 commits have touched this package since it was documented",
-            "sourceRev": "66cf2dc1ba8399402946dd4bde9eb20a0df12913",
-            "stale": true
-        },
-        {
-            "behind": 0,
-            "dir": "_extensions/acp-agents",
-            "oneLiner": "Other companies' coding agents, offered as chat providers.",
-            "sourceRev": "164265036d21db7bf70d054bf038f64b51739e20",
-            "stale": false
-        },
-        {
-            "behind": 17,
-            "component": "extensions",
-            "dir": "_extensions/activity",
-            "oneLiner": "Who called the agent, what it did about it, and how that went.",
-            "reason": "17 commits have touched this package since it was documented",
-            "sourceRev": "947caf4fdc1136b2f627f6363746d4a8cb4b8d26",
-            "stale": true
-        },
-        {
-            "behind": 18,
-            "component": "extensions",
-            "dir": "_extensions/automations",
-            "oneLiner": "Wakes an agent on a schedule, a webhook, or an incoming message.",
-            "reason": "18 commits have touched this package since it was documented",
-            "sourceRev": "53225eaa44802806ca3b32f065ec25a5b00c8a6d",
-            "stale": true
-        },
-        {
-            "behind": 0,
-            "dir": "_extensions/computers",
-            "oneLiner": "The Windows and Linux capability cards for connecting your own computer.",
-            "sourceRev": "164265036d21db7bf70d054bf038f64b51739e20",
-            "stale": false
-        },
-        {
-            "behind": 2,
-            "component": "extensions",
-            "dir": "_extensions/connectors",
-            "oneLiner": "A pile of ready-made tool connections — GitHub, Postgres, Sentry and friends.",
-            "reason": "2 commits have touched this package since it was documented",
-            "sourceRev": "ba7a90542009eecce74cfed958791cea0096e096",
-            "stale": true
-        },
-        {
-            "behind": 5,
-            "component": "extensions",
-            "dir": "_extensions/discord",
-            "oneLiner": "Your Discord server as something the agent can read and post to.",
-            "reason": "5 commits have touched this package since it was documented",
-            "sourceRev": "6412c5c789e979f8f0fd749d9b9ca135d2cca6da",
-            "stale": true
-        },
-        {
-            "behind": 18,
-            "component": "extensions",
-            "dir": "_extensions/documentation",
-            "oneLiner": "This documentation — generated by agents, reviewed by you, checked for going stale.",
-            "reason": "18 commits have touched this package since it was documented",
-            "sourceRev": "de0ec93e843602b7ca1ca8425f28787c29ac04bb",
-            "stale": true
-        },
-        {
-            "behind": 0,
-            "dir": "_extensions/git-history",
-            "oneLiner": "One repository's commit graph, its branches, and the actions on them.",
-            "sourceRev": "164265036d21db7bf70d054bf038f64b51739e20",
-            "stale": false
-        },
-        {
-            "behind": 5,
-            "component": "extensions",
-            "dir": "_extensions/imap",
-            "oneLiner": "An email inbox as something the agent can read.",
-            "reason": "5 commits have touched this package since it was documented",
-            "sourceRev": "6412c5c789e979f8f0fd749d9b9ca135d2cca6da",
-            "stale": true
-        },
-        {
-            "behind": 8,
-            "component": "extensions",
-            "dir": "_extensions/logs",
-            "oneLiner": "The sandbox's log tail, on a screen.",
-            "reason": "8 commits have touched this package since it was documented",
-            "sourceRev": "6412c5c789e979f8f0fd749d9b9ca135d2cca6da",
-            "stale": true
-        },
-        {
-            "behind": 0,
-            "dir": "_extensions/maintenance",
-            "oneLiner": "The chore book: what routine upkeep each repository is owed, and the turn that does it.",
-            "sourceRev": "164265036d21db7bf70d054bf038f64b51739e20",
-            "stale": false
-        },
-        {
-            "behind": 9,
-            "component": "extensions",
-            "dir": "_extensions/memory",
-            "oneLiner": "The notes an agent keeps for itself, where you can read and edit them.",
-            "reason": "9 commits have touched this package since it was documented",
-            "sourceRev": "6412c5c789e979f8f0fd749d9b9ca135d2cca6da",
-            "stale": true
-        },
-        {
-            "behind": 14,
-            "component": "extensions",
-            "dir": "_extensions/pipelines",
-            "oneLiner": "Your repo's CI runs, with a button to have an agent fix a failure.",
-            "reason": "14 commits have touched this package since it was documented",
-            "sourceRev": "58b3d277e7a1e9d652c6b9e0d01f07e2a8d9884c",
-            "stale": true
-        },
-        {
-            "behind": 6,
-            "component": "extensions",
-            "dir": "_extensions/preview",
-            "oneLiner": "Your project's dev server, live in a frame.",
-            "reason": "6 commits have touched this package since it was documented",
-            "sourceRev": "6f4e0f524b108807a0f3605f956398d58527bd2c",
-            "stale": true
-        },
-        {
-            "behind": 6,
-            "component": "extensions",
-            "dir": "_extensions/repo-apps",
-            "oneLiner": "The apps inside a monorepo, with their preview links and tests.",
-            "reason": "6 commits have touched this package since it was documented",
-            "sourceRev": "46913981328179f3c39b2ab4da9528563a09f268",
-            "stale": true
-        },
-        {
-            "behind": 0,
-            "dir": "_extensions/slack",
-            "oneLiner": "A connected Slack workspace, as an agent tool and as a thing that can wake the agent.",
-            "sourceRev": "164265036d21db7bf70d054bf038f64b51739e20",
-            "stale": false
-        },
-        {
-            "behind": 0,
-            "dir": "_extensions/social",
-            "oneLiner": "Reddit, X and YouTube — the agent acting as you, in a real logged-in browser.",
-            "sourceRev": "164265036d21db7bf70d054bf038f64b51739e20",
-            "stale": false
-        },
-        {
-            "behind": 5,
-            "component": "extensions",
-            "dir": "_extensions/viewers",
-            "oneLiner": "Renders Word and Excel files in the file viewer.",
-            "reason": "5 commits have touched this package since it was documented",
-            "sourceRev": "6412c5c789e979f8f0fd749d9b9ca135d2cca6da",
-            "stale": true
-        },
-        {
-            "behind": 0,
-            "dir": "_extensions/workflows",
-            "oneLiner": "Designed graphs of agent sessions, each step producing a declared output.",
-            "sourceRev": "66fa40a660f150f75b887a23b9624bafa3e3d0f0",
-            "stale": false
-        },
-        {
-            "behind": 10,
-            "component": "account",
-            "dir": "_libs/api-contract",
-            "oneLiner": "The rulebook for talking to that small server.",
-            "reason": "10 commits have touched this package since it was documented",
-            "sourceRev": "c5a768a9312696c375a80f8712637c075de2d6ff",
-            "stale": true
-        },
-        {
-            "behind": 2,
-            "component": "account",
-            "dir": "_libs/astro-integrations",
-            "oneLiner": "The website's Markdown mirror for machine readers, plus a git-derived lastmod for the sitemap.",
-            "reason": "2 commits have touched this package since it was documented",
-            "sourceRev": "9b0191b432d7260afbeb7b86e3f944fd90364313",
-            "stale": true
-        },
-        {
-            "behind": 0,
-            "dir": "_libs/browser",
-            "oneLiner": "Drive a real browser by naming elements, not pixels.",
-            "sourceRev": "07ad1cb1520a8c3c61be7a475cc0c4318c8fd6d4",
-            "stale": false
-        },
-        {
-            "behind": 2,
-            "component": "account",
-            "dir": "_libs/capability-catalog",
-            "oneLiner": "The list of things you can connect — the half that is not supplied by extensions.",
-            "reason": "2 commits have touched this package since it was documented",
-            "sourceRev": "07ad1cb1520a8c3c61be7a475cc0c4318c8fd6d4",
-            "stale": true
-        },
-        {
-            "behind": 0,
-            "dir": "_libs/desktop",
-            "oneLiner": "Capture a screen and move a real mouse and keyboard, without native modules.",
-            "sourceRev": "07ad1cb1520a8c3c61be7a475cc0c4318c8fd6d4",
-            "stale": false
-        },
-        {
-            "behind": 2,
-            "component": "deploy",
-            "dir": "_libs/engine",
-            "oneLiner": "Compares wanted with actual, then changes the difference.",
-            "reason": "2 commits have touched this package since it was documented",
-            "sourceRev": "ff40451d8a2daa76217d4fba5afbf179054bf450",
-            "stale": true
-        },
-        {
-            "behind": 14,
-            "component": "extensions",
-            "dir": "_libs/extension-api",
-            "oneLiner": "The contract an extension is written against.",
-            "reason": "14 commits have touched this package since it was documented",
-            "sourceRev": "53225eaa44802806ca3b32f065ec25a5b00c8a6d",
-            "stale": true
-        },
-        {
-            "behind": 15,
-            "component": "extensions",
-            "dir": "_libs/extension-ui",
-            "oneLiner": "The component kit extensions draw with.",
-            "reason": "15 commits have touched this package since it was documented",
-            "sourceRev": "6b0114cad65ee0e9868b592fbd626e174dfe55bf",
-            "stale": true
-        },
-        {
-            "behind": 2,
-            "component": "deploy",
-            "dir": "_libs/graph",
-            "oneLiner": "The shape of 'what should exist' — the deployment engine's core data structure.",
-            "reason": "2 commits have touched this package since it was documented",
-            "sourceRev": "ff40451d8a2daa76217d4fba5afbf179054bf450",
-            "stale": true
-        },
-        {
-            "behind": 8,
-            "component": "search",
-            "dir": "_libs/iq-engine",
-            "oneLiner": "The machinery under the search command.",
-            "reason": "8 commits have touched this package since it was documented",
-            "sourceRev": "7704ca993224122c1be3f60f6896039edac344b6",
-            "stale": true
-        },
-        {
-            "behind": 6,
-            "component": "search",
-            "dir": "_libs/iq-recall",
-            "oneLiner": "Searches what past sessions already did.",
-            "reason": "6 commits have touched this package since it was documented",
-            "sourceRev": "4cb0fb4f9ab5280587a75288fd32a195a509fed2",
-            "stale": true
-        },
-        {
-            "behind": 0,
-            "dir": "_libs/local-agent",
-            "oneLiner": "The install-and-stay-alive plumbing every intentic program on a user's machine shares.",
-            "sourceRev": "1576c8b049d1c59242c47f635cf761fddc517bbd",
-            "stale": false
-        },
-        {
-            "behind": 2,
-            "component": "deploy",
-            "dir": "_libs/need-resolver",
-            "oneLiner": "Turns what you asked for into what is needed.",
-            "reason": "2 commits have touched this package since it was documented",
-            "sourceRev": "ff40451d8a2daa76217d4fba5afbf179054bf450",
-            "stale": true
-        },
-        {
-            "behind": 2,
-            "component": "account",
-            "dir": "_libs/prisma",
-            "oneLiner": "The database layer for accounts and billing.",
-            "reason": "2 commits have touched this package since it was documented",
-            "sourceRev": "ff40451d8a2daa76217d4fba5afbf179054bf450",
-            "stale": true
-        },
-        {
-            "behind": 4,
-            "component": "deploy",
-            "dir": "_libs/providers",
-            "oneLiner": "The code that actually talks to real services.",
-            "reason": "4 commits have touched this package since it was documented",
-            "sourceRev": "4d3ff977270939c9f565a6b6cfea0de5f5649644",
-            "stale": true
-        },
-        {
-            "behind": 0,
-            "dir": "_libs/registry",
-            "oneLiner": "The file format an extension registry is written in.",
-            "sourceRev": "164265036d21db7bf70d054bf038f64b51739e20",
-            "stale": false
-        },
-        {
-            "behind": 1,
-            "component": "deploy",
-            "dir": "_libs/resources",
-            "oneLiner": "The closed list of things that can be deployed.",
-            "reason": "1 commit have touched this package since it was documented",
-            "sourceRev": "ff40451d8a2daa76217d4fba5afbf179054bf450",
-            "stale": true
-        },
-        {
-            "behind": 70,
-            "component": "sandbox",
-            "dir": "_libs/sandbox-contract",
-            "oneLiner": "The rulebook both sides of the wire agree on.",
-            "reason": "70 commits have touched this package since it was documented",
-            "sourceRev": "365510f8085cdac1d209de4cbc3f891bf090bf16",
-            "stale": true
-        },
-        {
-            "behind": 5,
-            "component": "sandbox",
-            "dir": "_libs/sandbox-run",
-            "oneLiner": "How the box itself is launched — names, permissions, environment.",
-            "reason": "5 commits have touched this package since it was documented",
-            "sourceRev": "e2bf27f833c214c2c4bb3caa8aca287e6e9e71b3",
-            "stale": true
-        },
-        {
-            "behind": 3,
-            "component": "sandbox",
-            "dir": "_libs/scaffold",
-            "oneLiner": "Makes the starter files for a new project.",
-            "reason": "3 commits have touched this package since it was documented",
-            "sourceRev": "2278a2446fd0d6e3718e986aacd4827e49c2c5df",
-            "stale": true
-        },
-        {
-            "behind": 2,
-            "component": "deploy",
-            "dir": "_libs/sdk",
-            "oneLiner": "The friendly way to write down what you want.",
-            "reason": "2 commits have touched this package since it was documented",
-            "sourceRev": "0cacaa7653464fce9d0205fd59f8e1e5383056c8",
-            "stale": true
-        },
-        {
-            "behind": 20,
-            "component": "account",
-            "dir": "_libs/site-content",
-            "oneLiner": "The website's words and page structure, as data.",
-            "reason": "20 commits have touched this package since it was documented",
-            "sourceRev": "85b09b24aa9db32e05c2d30c18ca2d62b1d89bfa",
-            "stale": true
-        },
-        {
-            "behind": 2,
-            "component": "deploy",
-            "dir": "_libs/state-resolver",
-            "oneLiner": "Turns needs into a concrete desired state.",
-            "reason": "2 commits have touched this package since it was documented",
-            "sourceRev": "f38cee0a83a85ded1cd75ce4e5fda2d71c6e00af",
-            "stale": true
-        },
-        {
-            "behind": 0,
-            "dir": "_libs/testing",
-            "oneLiner": "The stand-in every test suite builds its fakes on, the two suite budgets, and the gate a real-service suite runs behind.",
-            "sourceRev": "b103264e245289284b2b8db6450f704206d0eb79",
-            "stale": false
-        },
-        {
-            "behind": 49,
-            "component": "editor",
-            "dir": "_libs/ui",
-            "oneLiner": "The shared look and feel — buttons, cards, charts, rendered prose.",
-            "reason": "49 commits have touched this package since it was documented",
-            "sourceRev": "6b0114cad65ee0e9868b592fbd626e174dfe55bf",
-            "stale": true
-        },
-        {
-            "behind": 6,
-            "component": "sandbox",
-            "dir": "_libs/webchat-widget",
-            "oneLiner": "Doorbell — the chat bubble a website embeds to talk to your agent.",
-            "reason": "6 commits have touched this package since it was documented",
-            "sourceRev": "255bc631d0034396254c34bf6e76d95b276b0baf",
-            "stale": true
-        },
-        {
-            "behind": 3,
-            "component": "sandbox",
-            "dir": "_libs/workspace-ignore",
-            "oneLiner": "What must never be read, indexed or shown.",
-            "reason": "3 commits have touched this package since it was documented",
-            "sourceRev": "7930fb86cef65d22bc4031e7bbe2715b9979c637",
-            "stale": true
-        },
-        {
-            "behind": 2,
-            "component": "sandbox",
-            "dir": "_libs/workspace-setup",
-            "oneLiner": "Guesses which package manager a dropped project needs.",
-            "reason": "2 commits have touched this package since it was documented",
-            "sourceRev": "525ed012d2fc8d0a5a6197eac608e2fb8a959b7a",
-            "stale": true
-        },
-        {
-            "behind": 3,
-            "component": "plumbing",
-            "dir": "_tools/constants",
-            "oneLiner": "A handful of values more than one package needs.",
-            "reason": "3 commits have touched this package since it was documented",
-            "sourceRev": "6beb10ae62595d56abcf9326ee09278cb5f30e6c",
-            "stale": true
-        },
-        {
-            "behind": 0,
-            "dir": "_tools/desktop-smoke",
-            "oneLiner": "A bare Debian image that meets the desktop installer the way a user's machine does.",
-            "sourceRev": "3e9404aee5c9d61e56c4bcc898012c962136258a",
-            "stale": false
-        },
-        {
-            "behind": 0,
-            "component": "plumbing",
-            "dir": "_tools/dind-host",
-            "oneLiner": "A throwaway Docker-in-Docker host for tests.",
-            "sourceRev": "45f5db418064847334374d08bb60a40ba8c8e1f9",
-            "stale": false
-        },
-        {
-            "behind": 8,
-            "component": "plumbing",
-            "dir": "_tools/e2e",
-            "oneLiner": "The end-to-end browser test suite.",
-            "reason": "8 commits have touched this package since it was documented",
-            "sourceRev": "b27ae97b06f2805a73ef4f9958e1021e84bf7d83",
-            "stale": true
-        },
-        {
-            "behind": 0,
-            "component": "plumbing",
-            "dir": "_tools/examples",
-            "oneLiner": "Example deployment configs.",
-            "sourceRev": "f38cee0a83a85ded1cd75ce4e5fda2d71c6e00af",
-            "stale": false
-        },
-        {
-            "behind": 2,
-            "component": "search",
-            "dir": "_tools/iq-bench",
-            "oneLiner": "Measures whether a search change actually helped.",
-            "reason": "2 commits have touched this package since it was documented",
-            "sourceRev": "7704ca993224122c1be3f60f6896039edac344b6",
-            "stale": true
-        },
-        {
-            "behind": 0,
-            "component": "plumbing",
-            "dir": "_tools/localhost-https",
-            "oneLiner": "Local HTTPS certificates for development.",
-            "sourceRev": "13530c21c2e95d3ac43e474047485cf032fcf571",
-            "stale": false
-        },
-        {
-            "behind": 0,
-            "dir": "_tools/registry",
-            "oneLiner": "The nightly job that finds candidate extensions and proposes them as pull requests.",
-            "sourceRev": "164265036d21db7bf70d054bf038f64b51739e20",
-            "stale": false
-        },
-        {
-            "behind": 0,
-            "component": "plumbing",
-            "dir": "_tools/tsconfig",
-            "oneLiner": "One shared TypeScript configuration.",
-            "sourceRev": "0505c51af57a5a6a6c915373548164d1ecafa9e3",
-            "stale": false
-        }
-    ],
-    "generatedAt": 1785838756542,
-    "orphans": [],
-    "repo": "intentic",
-    "undocumented": ["_apps/desktop/src-tauri", "_extensions/deployments", "_tools/extension-example/seed", "_tools/scripts/public"]
+  "entries": [
+    {
+      "behind": 6,
+      "component": "sandbox",
+      "dir": "_apps/acp-bridge",
+      "oneLiner": "Lets Zed or JetBrains drive the agents in your sandbox.",
+      "reason": "6 commits have touched this package since it was documented",
+      "sourceRev": "7964113d35fd91f2c3dc949af5d3598b40cd3f60",
+      "stale": true
+    },
+    {
+      "behind": 8,
+      "component": "account",
+      "dir": "_apps/api",
+      "oneLiner": "The small server that handles sign-in and billing.",
+      "reason": "8 commits have touched this package since it was documented",
+      "sourceRev": "692309441332b7b14c133841c1efc9900dd6c50b",
+      "stale": true
+    },
+    {
+      "behind": 6,
+      "component": "deploy",
+      "dir": "_apps/cli",
+      "oneLiner": "The `intentic` command — tunnels, deployment, scaffolding.",
+      "reason": "6 commits have touched this package since it was documented",
+      "sourceRev": "692309441332b7b14c133841c1efc9900dd6c50b",
+      "stale": true
+    },
+    {
+      "behind": 2,
+      "dir": "_apps/demo",
+      "oneLiner": "The landing page's playable demo — the real editor, running on a recording.",
+      "reason": "2 commits have touched this package since it was documented",
+      "sourceRev": "f1a5d15059d02c42208b3f03bf9e45a3952c3533",
+      "stale": true
+    },
+    {
+      "behind": 0,
+      "component": "editor",
+      "dir": "_apps/desktop",
+      "oneLiner": "A window around the editor, plus the small program on your machine that sets a sandbox up and keeps it updated.",
+      "sourceRev": "e0c2c7fa0029029bb61926c7e977135f4687aa11",
+      "stale": false
+    },
+    {
+      "behind": 0,
+      "dir": "_apps/host",
+      "oneLiner": "The small agent you install on your own computer so the sandbox can work there.",
+      "sourceRev": "1576c8b049d1c59242c47f635cf761fddc517bbd",
+      "stale": false
+    },
+    {
+      "behind": 6,
+      "component": "search",
+      "dir": "_apps/iq",
+      "oneLiner": "One search command an agent can actually use.",
+      "reason": "6 commits have touched this package since it was documented",
+      "sourceRev": "7704ca993224122c1be3f60f6896039edac344b6",
+      "stale": true
+    },
+    {
+      "behind": 4,
+      "component": "search",
+      "dir": "_apps/lsp",
+      "oneLiner": "Safe renames and real type errors, from the command line.",
+      "reason": "4 commits have touched this package since it was documented",
+      "sourceRev": "de6a43b0c525ffc5e8cfb73c7840379cc5077379",
+      "stale": true
+    },
+    {
+      "behind": 102,
+      "component": "sandbox",
+      "dir": "_apps/sandbox",
+      "oneLiner": "The daemon — the program running inside your project's box.",
+      "reason": "102 commits have touched this package since it was documented",
+      "sourceRev": "4a57e4d504eb2d2341a33fc1c46fc7be2124a844",
+      "stale": true
+    },
+    {
+      "behind": 41,
+      "component": "account",
+      "dir": "_apps/site",
+      "oneLiner": "The public marketing website.",
+      "reason": "41 commits have touched this package since it was documented",
+      "sourceRev": "defafa2da5351076f1c55bf4bd4ab15ed3fdd4f5",
+      "stale": true
+    },
+    {
+      "behind": 0,
+      "component": "sandbox",
+      "dir": "_apps/sync",
+      "oneLiner": "Keeps folders on your computer in step with your sandboxes.",
+      "sourceRev": "495ecb8e227896cca180104066c48814733c0297",
+      "stale": false
+    },
+    {
+      "behind": 164,
+      "component": "editor",
+      "dir": "_apps/web",
+      "oneLiner": "The browser app — the whole editor you see and click.",
+      "reason": "164 commits have touched this package since it was documented",
+      "sourceRev": "6b0114cad65ee0e9868b592fbd626e174dfe55bf",
+      "stale": true
+    },
+    {
+      "behind": 13,
+      "component": "extensions",
+      "dir": "_extensions/acceptance",
+      "oneLiner": "Writes down what the product promises, then has agents check it in a real browser.",
+      "reason": "13 commits have touched this package since it was documented",
+      "sourceRev": "66cf2dc1ba8399402946dd4bde9eb20a0df12913",
+      "stale": true
+    },
+    {
+      "behind": 0,
+      "dir": "_extensions/acp-agents",
+      "oneLiner": "Other companies' coding agents, offered as chat providers.",
+      "sourceRev": "164265036d21db7bf70d054bf038f64b51739e20",
+      "stale": false
+    },
+    {
+      "behind": 17,
+      "component": "extensions",
+      "dir": "_extensions/activity",
+      "oneLiner": "Who called the agent, what it did about it, and how that went.",
+      "reason": "17 commits have touched this package since it was documented",
+      "sourceRev": "947caf4fdc1136b2f627f6363746d4a8cb4b8d26",
+      "stale": true
+    },
+    {
+      "behind": 18,
+      "component": "extensions",
+      "dir": "_extensions/automations",
+      "oneLiner": "Wakes an agent on a schedule, a webhook, or an incoming message.",
+      "reason": "18 commits have touched this package since it was documented",
+      "sourceRev": "53225eaa44802806ca3b32f065ec25a5b00c8a6d",
+      "stale": true
+    },
+    {
+      "behind": 0,
+      "dir": "_extensions/computers",
+      "oneLiner": "The Windows and Linux capability cards for connecting your own computer.",
+      "sourceRev": "164265036d21db7bf70d054bf038f64b51739e20",
+      "stale": false
+    },
+    {
+      "behind": 2,
+      "component": "extensions",
+      "dir": "_extensions/connectors",
+      "oneLiner": "A pile of ready-made tool connections — GitHub, Postgres, Sentry and friends.",
+      "reason": "2 commits have touched this package since it was documented",
+      "sourceRev": "ba7a90542009eecce74cfed958791cea0096e096",
+      "stale": true
+    },
+    {
+      "behind": 5,
+      "component": "extensions",
+      "dir": "_extensions/discord",
+      "oneLiner": "Your Discord server as something the agent can read and post to.",
+      "reason": "5 commits have touched this package since it was documented",
+      "sourceRev": "6412c5c789e979f8f0fd749d9b9ca135d2cca6da",
+      "stale": true
+    },
+    {
+      "behind": 18,
+      "component": "extensions",
+      "dir": "_extensions/documentation",
+      "oneLiner": "This documentation — generated by agents, reviewed by you, checked for going stale.",
+      "reason": "18 commits have touched this package since it was documented",
+      "sourceRev": "de0ec93e843602b7ca1ca8425f28787c29ac04bb",
+      "stale": true
+    },
+    {
+      "behind": 0,
+      "dir": "_extensions/git-history",
+      "oneLiner": "One repository's commit graph, its branches, and the actions on them.",
+      "sourceRev": "164265036d21db7bf70d054bf038f64b51739e20",
+      "stale": false
+    },
+    {
+      "behind": 5,
+      "component": "extensions",
+      "dir": "_extensions/imap",
+      "oneLiner": "An email inbox as something the agent can read.",
+      "reason": "5 commits have touched this package since it was documented",
+      "sourceRev": "6412c5c789e979f8f0fd749d9b9ca135d2cca6da",
+      "stale": true
+    },
+    {
+      "behind": 8,
+      "component": "extensions",
+      "dir": "_extensions/logs",
+      "oneLiner": "The sandbox's log tail, on a screen.",
+      "reason": "8 commits have touched this package since it was documented",
+      "sourceRev": "6412c5c789e979f8f0fd749d9b9ca135d2cca6da",
+      "stale": true
+    },
+    {
+      "behind": 0,
+      "dir": "_extensions/maintenance",
+      "oneLiner": "The chore book: what routine upkeep each repository is owed, and the turn that does it.",
+      "sourceRev": "164265036d21db7bf70d054bf038f64b51739e20",
+      "stale": false
+    },
+    {
+      "behind": 9,
+      "component": "extensions",
+      "dir": "_extensions/memory",
+      "oneLiner": "The notes an agent keeps for itself, where you can read and edit them.",
+      "reason": "9 commits have touched this package since it was documented",
+      "sourceRev": "6412c5c789e979f8f0fd749d9b9ca135d2cca6da",
+      "stale": true
+    },
+    {
+      "behind": 14,
+      "component": "extensions",
+      "dir": "_extensions/pipelines",
+      "oneLiner": "Your repo's CI runs, with a button to have an agent fix a failure.",
+      "reason": "14 commits have touched this package since it was documented",
+      "sourceRev": "58b3d277e7a1e9d652c6b9e0d01f07e2a8d9884c",
+      "stale": true
+    },
+    {
+      "behind": 6,
+      "component": "extensions",
+      "dir": "_extensions/preview",
+      "oneLiner": "Your project's dev server, live in a frame.",
+      "reason": "6 commits have touched this package since it was documented",
+      "sourceRev": "6f4e0f524b108807a0f3605f956398d58527bd2c",
+      "stale": true
+    },
+    {
+      "behind": 6,
+      "component": "extensions",
+      "dir": "_extensions/repo-apps",
+      "oneLiner": "The apps inside a monorepo, with their preview links and tests.",
+      "reason": "6 commits have touched this package since it was documented",
+      "sourceRev": "46913981328179f3c39b2ab4da9528563a09f268",
+      "stale": true
+    },
+    {
+      "behind": 0,
+      "dir": "_extensions/slack",
+      "oneLiner": "A connected Slack workspace, as an agent tool and as a thing that can wake the agent.",
+      "sourceRev": "164265036d21db7bf70d054bf038f64b51739e20",
+      "stale": false
+    },
+    {
+      "behind": 0,
+      "dir": "_extensions/social",
+      "oneLiner": "Reddit, X and YouTube — the agent acting as you, in a real logged-in browser.",
+      "sourceRev": "164265036d21db7bf70d054bf038f64b51739e20",
+      "stale": false
+    },
+    {
+      "behind": 5,
+      "component": "extensions",
+      "dir": "_extensions/viewers",
+      "oneLiner": "Renders Word and Excel files in the file viewer.",
+      "reason": "5 commits have touched this package since it was documented",
+      "sourceRev": "6412c5c789e979f8f0fd749d9b9ca135d2cca6da",
+      "stale": true
+    },
+    {
+      "behind": 1,
+      "dir": "_extensions/workflows",
+      "oneLiner": "Designed graphs of agent sessions, each step producing a declared output.",
+      "reason": "1 commit have touched this package since it was documented",
+      "sourceRev": "66fa40a660f150f75b887a23b9624bafa3e3d0f0",
+      "stale": true
+    },
+    {
+      "behind": 11,
+      "component": "account",
+      "dir": "_libs/api-contract",
+      "oneLiner": "The rulebook for talking to that small server.",
+      "reason": "11 commits have touched this package since it was documented",
+      "sourceRev": "c5a768a9312696c375a80f8712637c075de2d6ff",
+      "stale": true
+    },
+    {
+      "behind": 2,
+      "component": "account",
+      "dir": "_libs/astro-integrations",
+      "oneLiner": "The website's Markdown mirror for machine readers, plus a git-derived lastmod for the sitemap.",
+      "reason": "2 commits have touched this package since it was documented",
+      "sourceRev": "9b0191b432d7260afbeb7b86e3f944fd90364313",
+      "stale": true
+    },
+    {
+      "behind": 0,
+      "dir": "_libs/browser",
+      "oneLiner": "Drive a real browser by naming elements, not pixels.",
+      "sourceRev": "07ad1cb1520a8c3c61be7a475cc0c4318c8fd6d4",
+      "stale": false
+    },
+    {
+      "behind": 2,
+      "component": "account",
+      "dir": "_libs/capability-catalog",
+      "oneLiner": "The list of things you can connect — the half that is not supplied by extensions.",
+      "reason": "2 commits have touched this package since it was documented",
+      "sourceRev": "07ad1cb1520a8c3c61be7a475cc0c4318c8fd6d4",
+      "stale": true
+    },
+    {
+      "behind": 0,
+      "dir": "_libs/desktop",
+      "oneLiner": "Capture a screen and move a real mouse and keyboard, without native modules.",
+      "sourceRev": "07ad1cb1520a8c3c61be7a475cc0c4318c8fd6d4",
+      "stale": false
+    },
+    {
+      "behind": 2,
+      "component": "deploy",
+      "dir": "_libs/engine",
+      "oneLiner": "Compares wanted with actual, then changes the difference.",
+      "reason": "2 commits have touched this package since it was documented",
+      "sourceRev": "ff40451d8a2daa76217d4fba5afbf179054bf450",
+      "stale": true
+    },
+    {
+      "behind": 14,
+      "component": "extensions",
+      "dir": "_libs/extension-api",
+      "oneLiner": "The contract an extension is written against.",
+      "reason": "14 commits have touched this package since it was documented",
+      "sourceRev": "53225eaa44802806ca3b32f065ec25a5b00c8a6d",
+      "stale": true
+    },
+    {
+      "behind": 15,
+      "component": "extensions",
+      "dir": "_libs/extension-ui",
+      "oneLiner": "The component kit extensions draw with.",
+      "reason": "15 commits have touched this package since it was documented",
+      "sourceRev": "6b0114cad65ee0e9868b592fbd626e174dfe55bf",
+      "stale": true
+    },
+    {
+      "behind": 2,
+      "component": "deploy",
+      "dir": "_libs/graph",
+      "oneLiner": "The shape of 'what should exist' — the deployment engine's core data structure.",
+      "reason": "2 commits have touched this package since it was documented",
+      "sourceRev": "ff40451d8a2daa76217d4fba5afbf179054bf450",
+      "stale": true
+    },
+    {
+      "behind": 8,
+      "component": "search",
+      "dir": "_libs/iq-engine",
+      "oneLiner": "The machinery under the search command.",
+      "reason": "8 commits have touched this package since it was documented",
+      "sourceRev": "7704ca993224122c1be3f60f6896039edac344b6",
+      "stale": true
+    },
+    {
+      "behind": 6,
+      "component": "search",
+      "dir": "_libs/iq-recall",
+      "oneLiner": "Searches what past sessions already did.",
+      "reason": "6 commits have touched this package since it was documented",
+      "sourceRev": "4cb0fb4f9ab5280587a75288fd32a195a509fed2",
+      "stale": true
+    },
+    {
+      "behind": 0,
+      "dir": "_libs/local-agent",
+      "oneLiner": "The install-and-stay-alive plumbing every intentic program on a user's machine shares.",
+      "sourceRev": "1576c8b049d1c59242c47f635cf761fddc517bbd",
+      "stale": false
+    },
+    {
+      "behind": 2,
+      "component": "deploy",
+      "dir": "_libs/need-resolver",
+      "oneLiner": "Turns what you asked for into what is needed.",
+      "reason": "2 commits have touched this package since it was documented",
+      "sourceRev": "ff40451d8a2daa76217d4fba5afbf179054bf450",
+      "stale": true
+    },
+    {
+      "behind": 2,
+      "component": "account",
+      "dir": "_libs/prisma",
+      "oneLiner": "The database layer for accounts and billing.",
+      "reason": "2 commits have touched this package since it was documented",
+      "sourceRev": "ff40451d8a2daa76217d4fba5afbf179054bf450",
+      "stale": true
+    },
+    {
+      "behind": 4,
+      "component": "deploy",
+      "dir": "_libs/providers",
+      "oneLiner": "The code that actually talks to real services.",
+      "reason": "4 commits have touched this package since it was documented",
+      "sourceRev": "4d3ff977270939c9f565a6b6cfea0de5f5649644",
+      "stale": true
+    },
+    {
+      "behind": 0,
+      "dir": "_libs/registry",
+      "oneLiner": "The file format an extension registry is written in.",
+      "sourceRev": "164265036d21db7bf70d054bf038f64b51739e20",
+      "stale": false
+    },
+    {
+      "behind": 1,
+      "component": "deploy",
+      "dir": "_libs/resources",
+      "oneLiner": "The closed list of things that can be deployed.",
+      "reason": "1 commit have touched this package since it was documented",
+      "sourceRev": "ff40451d8a2daa76217d4fba5afbf179054bf450",
+      "stale": true
+    },
+    {
+      "behind": 75,
+      "component": "sandbox",
+      "dir": "_libs/sandbox-contract",
+      "oneLiner": "The rulebook both sides of the wire agree on.",
+      "reason": "75 commits have touched this package since it was documented",
+      "sourceRev": "365510f8085cdac1d209de4cbc3f891bf090bf16",
+      "stale": true
+    },
+    {
+      "behind": 5,
+      "component": "sandbox",
+      "dir": "_libs/sandbox-run",
+      "oneLiner": "How the box itself is launched — names, permissions, environment.",
+      "reason": "5 commits have touched this package since it was documented",
+      "sourceRev": "e2bf27f833c214c2c4bb3caa8aca287e6e9e71b3",
+      "stale": true
+    },
+    {
+      "behind": 3,
+      "component": "sandbox",
+      "dir": "_libs/scaffold",
+      "oneLiner": "Makes the starter files for a new project.",
+      "reason": "3 commits have touched this package since it was documented",
+      "sourceRev": "2278a2446fd0d6e3718e986aacd4827e49c2c5df",
+      "stale": true
+    },
+    {
+      "behind": 2,
+      "component": "deploy",
+      "dir": "_libs/sdk",
+      "oneLiner": "The friendly way to write down what you want.",
+      "reason": "2 commits have touched this package since it was documented",
+      "sourceRev": "0cacaa7653464fce9d0205fd59f8e1e5383056c8",
+      "stale": true
+    },
+    {
+      "behind": 21,
+      "component": "account",
+      "dir": "_libs/site-content",
+      "oneLiner": "The website's words and page structure, as data.",
+      "reason": "21 commits have touched this package since it was documented",
+      "sourceRev": "85b09b24aa9db32e05c2d30c18ca2d62b1d89bfa",
+      "stale": true
+    },
+    {
+      "behind": 2,
+      "component": "deploy",
+      "dir": "_libs/state-resolver",
+      "oneLiner": "Turns needs into a concrete desired state.",
+      "reason": "2 commits have touched this package since it was documented",
+      "sourceRev": "f38cee0a83a85ded1cd75ce4e5fda2d71c6e00af",
+      "stale": true
+    },
+    {
+      "behind": 1,
+      "dir": "_libs/testing",
+      "oneLiner": "The stand-in every test suite builds its fakes on, the two suite budgets, and the gate a real-service suite runs behind.",
+      "reason": "1 commit have touched this package since it was documented",
+      "sourceRev": "b103264e245289284b2b8db6450f704206d0eb79",
+      "stale": true
+    },
+    {
+      "behind": 51,
+      "component": "editor",
+      "dir": "_libs/ui",
+      "oneLiner": "The shared look and feel — buttons, cards, charts, rendered prose.",
+      "reason": "51 commits have touched this package since it was documented",
+      "sourceRev": "6b0114cad65ee0e9868b592fbd626e174dfe55bf",
+      "stale": true
+    },
+    {
+      "behind": 6,
+      "component": "sandbox",
+      "dir": "_libs/webchat-widget",
+      "oneLiner": "Doorbell — the chat bubble a website embeds to talk to your agent.",
+      "reason": "6 commits have touched this package since it was documented",
+      "sourceRev": "255bc631d0034396254c34bf6e76d95b276b0baf",
+      "stale": true
+    },
+    {
+      "behind": 3,
+      "component": "sandbox",
+      "dir": "_libs/workspace-ignore",
+      "oneLiner": "What must never be read, indexed or shown.",
+      "reason": "3 commits have touched this package since it was documented",
+      "sourceRev": "7930fb86cef65d22bc4031e7bbe2715b9979c637",
+      "stale": true
+    },
+    {
+      "behind": 2,
+      "component": "sandbox",
+      "dir": "_libs/workspace-setup",
+      "oneLiner": "Guesses which package manager a dropped project needs.",
+      "reason": "2 commits have touched this package since it was documented",
+      "sourceRev": "525ed012d2fc8d0a5a6197eac608e2fb8a959b7a",
+      "stale": true
+    },
+    {
+      "behind": 3,
+      "component": "plumbing",
+      "dir": "_tools/constants",
+      "oneLiner": "A handful of values more than one package needs.",
+      "reason": "3 commits have touched this package since it was documented",
+      "sourceRev": "6beb10ae62595d56abcf9326ee09278cb5f30e6c",
+      "stale": true
+    },
+    {
+      "behind": 0,
+      "dir": "_tools/desktop-smoke",
+      "oneLiner": "A bare Debian image that meets the desktop installer the way a user's machine does.",
+      "sourceRev": "3e9404aee5c9d61e56c4bcc898012c962136258a",
+      "stale": false
+    },
+    {
+      "behind": 0,
+      "component": "plumbing",
+      "dir": "_tools/dind-host",
+      "oneLiner": "A throwaway Docker-in-Docker host for tests.",
+      "sourceRev": "45f5db418064847334374d08bb60a40ba8c8e1f9",
+      "stale": false
+    },
+    {
+      "behind": 10,
+      "component": "plumbing",
+      "dir": "_tools/e2e",
+      "oneLiner": "The end-to-end browser test suite.",
+      "reason": "10 commits have touched this package since it was documented",
+      "sourceRev": "b27ae97b06f2805a73ef4f9958e1021e84bf7d83",
+      "stale": true
+    },
+    {
+      "behind": 0,
+      "component": "plumbing",
+      "dir": "_tools/examples",
+      "oneLiner": "Example deployment configs.",
+      "sourceRev": "f38cee0a83a85ded1cd75ce4e5fda2d71c6e00af",
+      "stale": false
+    },
+    {
+      "behind": 2,
+      "component": "search",
+      "dir": "_tools/iq-bench",
+      "oneLiner": "Measures whether a search change actually helped.",
+      "reason": "2 commits have touched this package since it was documented",
+      "sourceRev": "7704ca993224122c1be3f60f6896039edac344b6",
+      "stale": true
+    },
+    {
+      "behind": 0,
+      "component": "plumbing",
+      "dir": "_tools/localhost-https",
+      "oneLiner": "Local HTTPS certificates for development.",
+      "sourceRev": "13530c21c2e95d3ac43e474047485cf032fcf571",
+      "stale": false
+    },
+    {
+      "behind": 0,
+      "dir": "_tools/registry",
+      "oneLiner": "The nightly job that finds candidate extensions and proposes them as pull requests.",
+      "sourceRev": "164265036d21db7bf70d054bf038f64b51739e20",
+      "stale": false
+    },
+    {
+      "behind": 0,
+      "component": "plumbing",
+      "dir": "_tools/tsconfig",
+      "oneLiner": "One shared TypeScript configuration.",
+      "sourceRev": "0505c51af57a5a6a6c915373548164d1ecafa9e3",
+      "stale": false
+    }
+  ],
+  "generatedAt": 1785851126194,
+  "orphans": [],
+  "repo": "intentic",
+  "undocumented": [
+    "_apps/desktop/src-tauri",
+    "_extensions/deployments",
+    "_tools/extension-example/seed",
+    "_tools/scripts/public"
+  ]
 }

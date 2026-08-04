@@ -11,12 +11,12 @@ import HubLayout from "../hub/HubLayout.vue";
 import type { HubTab } from "../hub/hubNav";
 import SandboxAccess from "./sandbox/SandboxAccess.vue";
 import SandboxAgent from "./sandbox/SandboxAgent.vue";
+import SandboxComputers from "./sandbox/SandboxComputers.vue";
 import SandboxEnvironment from "./sandbox/SandboxEnvironment.vue";
 import SandboxExtensions from "./sandbox/SandboxExtensions.vue";
 import SandboxOverview from "./sandbox/SandboxOverview.vue";
 import SandboxSecrets from "./sandbox/SandboxSecrets.vue";
 import SandboxStatus from "./sandbox/SandboxStatus.vue";
-import SandboxSync from "./sandbox/SandboxSync.vue";
 import SandboxUsage from "./sandbox/SandboxUsage.vue";
 
 /* The sandbox hub: one home for everything about the active sandbox, reached from the rail's sandbox chip. The
@@ -47,7 +47,9 @@ const CONFIGURATION: readonly HubTab[] = [
 ];
 const REACH: readonly HubTab[] = [
     { slug: `access`, label: `Access`, icon: `users` },
-    { slug: `sync`, label: `Sync`, icon: `sync` },
+    // "Computers", not "Sync": a machine is the thing that has folders, ports and sandboxes on it, and the
+    // enrollment this tab used to be named after is one property of one of them.
+    { slug: `computers`, label: `Computers`, icon: `desktop` },
 ];
 // Built per render rather than declared flat, because Status wears a live count and the other two do not.
 const boxRows = (running: number): readonly HubTab[] => [
@@ -109,7 +111,7 @@ const groups = computed<readonly NavGroup<HubTab>[]>(() => [
             <SandboxAccess v-else-if="slug === `access`" />
             <SandboxAgent v-else-if="slug === `agent`" />
             <SandboxExtensions v-else-if="slug === `extensions`" />
-            <SandboxSync v-else-if="slug === `sync`" />
+            <SandboxComputers v-else-if="slug === `computers`" />
             <!-- The extension-contributed sections, rendered with the same error boundary and lazy-view cache
                  the rail's routed host uses. `ActiveExtension` is exactly ExtensionView's two props. -->
             <ExtensionView v-else-if="extensionFor(slug) !== undefined" v-bind="extensionFor(slug)!" />

@@ -1,5 +1,5 @@
 import { join } from "node:path";
-import { type EnrollHostInput, EnrollHostInputSchema } from "@intentic/sandbox-contract";
+import { type EnrollHostInput, EnrollHostInputSchema, MachineReportSchema } from "@intentic/sandbox-contract";
 import { sandboxIdFromToken } from "@intentic/sandbox-contract/tunnel-ids";
 import { OpenAPIHandler } from "@orpc/openapi/fetch";
 import { ORPCError } from "@orpc/server";
@@ -24,9 +24,11 @@ import {
     isKeyEnrolled,
     isValidAuthorizedKey,
     isValidPairing,
+    machineReports,
     mintPairing,
     mirrorMachines,
     pairingMode,
+    recordMachineReport,
     revokeEnrollmentByToken,
     type SyncMode,
     syncHolder,
@@ -40,6 +42,7 @@ import { createCiWebhookRoute } from "./ci/webhook.routes.js";
 import { createListenerRoutes } from "./extensions/listener.routes.js";
 import { createBrowserLoginRoute } from "./browser/browser-login.js";
 import { createHostConnectRoute, createHostMcpRoute, hostSummaries } from "./hosts/host.routes.js";
+import { computers } from "./hosts/machine-reports.js";
 import { createBrowserViewRoute } from "./browser/browser-view.js";
 import { createTerminalRoute } from "./terminal/terminal.js";
 import { createWebchatRoutes } from "./webchat/webchat.routes.js";
@@ -1047,12 +1050,33 @@ export const createApp = (services: Services): Hono<AppEnv> => {
         // enrollment nobody has used for hours is a sync that has stopped, which the card must not report as
         // healthy. mirroredBy lists every machine mirroring ports (unlimited — each collaborator on their own
         // localhost).
+        // `machines` is what each enrolled computer says about ITSELF (folders, ports, watcher) — the half the
+        // enrollment record above has never been able to answer. Empty until a machine's watcher posts one, which
+        // is also what an old agent looks like, so the card must render without it.
         return c.json({
             enrolled: await isKeyEnrolled(services.config.historyRoot),
             ...(holder !== undefined ? { syncingFrom: holder.machine, ...(holder.seenAt === undefined ? {} : { syncSeenAt: holder.seenAt }) } : {}),
             ...(mirrors.length > 0 ? { mirroredBy: mirrors } : {}),
             ...(sshHostname !== undefined ? { sshHostname } : {}),
+            machines: (await machineReports(services.config.historyRoot)).map((entry) => entry.report),
         });
+    });
+    /* Every computer on the other end of this sandbox — the volunteered reports and the ones pulled through a
+     * host capability, merged (hosts/machine-reports.ts). Readable by any collaborator, like /system/sync beside
+     * it: the bearer middleware already blocked a non-member, and a member's own mirroring machine appears here. */
+    app.get("/system/computers", async (c) => c.json({ computers: await computers(services) }));
+    /* The machine's own report, filed on the same credential its ports poll uses (grants.ts scopes the sync token
+     * to exactly this route and that read). The agent posts on its watch tick, so the sandbox learns the folder,
+     * the ports and the watcher's liveness without ever asking for anything new from the computer. */
+    app.post("/system/sync/report", async (c) => {
+        const sync = c.req.header("x-intentic-sync") ?? "";
+        const parsed = MachineReportSchema.safeParse(await c.req.json().catch(() => undefined));
+        if (!parsed.success) {
+            return c.json({ error: "malformed report" }, 400);
+        }
+        return (await recordMachineReport(services.config.historyRoot, sync, parsed.data))
+            ? c.json({ ok: true })
+            : c.json({ error: "unknown enrollment" }, 403);
     });
     app.delete("/system/authorized-key", async (c) => {
         // Two revoke paths: an agent uninstalling self-revokes with its own sync token (removes just its

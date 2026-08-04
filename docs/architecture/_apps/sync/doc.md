@@ -21,6 +21,16 @@ Two sandboxes often serve the same dev-server port, and only one can own `localh
 
 The agent's ports poll doubles as a **heartbeat**. It is the only thing a live sync does on its own, so the sandbox records when it last arrived, and the Desktop sync card reports a machine that has gone quiet instead of trusting the enrollment record forever.
 
+## It also says what it is doing
+
+The sandbox knows a machine is enrolled. It cannot know which folder that machine syncs into, which ports actually reached the machine's localhost, or whether the watcher behind them is still alive — those are facts about somebody's computer, and the folder in particular is never sent to the sandbox at all. So for a long time the only way to see any of it was `intentic-sync status`, typed into a terminal, and the screens that most needed the answer were the two without one: the desktop app, and the sandbox's own page in a browser.
+
+The agent now volunteers a **machine report** on the same tick as its ports poll. One shape, one producer: `status` prints it, `status --json` emits it, the watcher posts it, and the desktop app runs the same command to fill its own window. A second implementation of "what is this machine doing" is exactly the kind of copy this project has watched drift before.
+
+Two things it deliberately does not do. It never reports the machine's **containers** — a sync agent enumerating a computer's other sandboxes to one of them is a disclosure nobody asked for, so whoever is reading supplies that half instead. And a report crossing the network carries only the pairing belonging to the sandbox it is sent to, so a collaborator who mirrors one port does not hand over a map of their laptop.
+
+The report also carries the ports that did **not** make it. Two sandboxes on one computer often serve the same port and only one can have it; the loser used to vanish from localhost with the reason recorded in a log file on the machine and nowhere else.
+
 ```dag
 { "title": "Its neighbours",
   "direction": "LR",

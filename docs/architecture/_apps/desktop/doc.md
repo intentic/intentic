@@ -78,6 +78,22 @@ the app's next release rather than with someone remembering to port it.
 The scripts travel inside the app rather than being downloaded, so a given version of the app always contains
 the scripts it was built with.
 
+## What the window shows about your machine
+
+Two things, and the second one is newer than the app.
+
+The sandboxes: which containers are here, whether each is running, and the buttons — start, stop, update,
+rebuild, remove — that a browser can only ever hand you as a command to paste.
+
+Then **desktop sync**, which this window used to be silent about. The setup it runs configures a folder on
+this computer to stay in step with the sandbox, and mirrors the sandbox's dev-server ports onto this
+computer's localhost. Having done that, the app never mentioned it again: the folder was passed to the install
+script and forgotten, and the only way to see what any of it was doing was a terminal command — in the app
+whose entire reason for existing is not needing one.
+
+It now asks the sync agent directly, and shows the same three answers the browser's Computers view shows,
+because both read the same report from the same program.
+
 ## Signing in happens somewhere else
 
 Google will not let you sign in inside an app window — it refuses on purpose, because a program that draws its

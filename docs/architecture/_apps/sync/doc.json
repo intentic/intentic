@@ -12,7 +12,11 @@
     },
     {
       "path": "_apps/sync/src/mirror.ts",
-      "what": "The one resident watcher: walks every pairing per tick, reconciling port forwards."
+      "what": "The one resident watcher: walks every pairing per tick, reconciling port forwards and posting each sandbox its report."
+    },
+    {
+      "path": "_apps/sync/src/report.ts",
+      "what": "What this machine says about itself — and, in scopedReport, what it deliberately withholds from whom."
     },
     {
       "path": "_apps/sync/src/mutagen.ts",
@@ -26,8 +30,8 @@
   "name": "@intentic/sync",
   "oneLiner": "Keeps folders on your computer in step with your sandboxes.",
   "provenance": {
-    "generatedAt": 1785802604456,
+    "generatedAt": 1785851091000,
     "model": "claude-opus-4-6",
-    "sourceRev": "79145084a09630d71208223c02b14735b5353041"
+    "sourceRev": "495ecb8e227896cca180104066c48814733c0297"
   }
 }

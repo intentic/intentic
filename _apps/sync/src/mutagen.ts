@@ -143,13 +143,17 @@ export const mutagenCreateArgs = (spec: SyncSessionSpec, paused: boolean): strin
     `${spec.alias}:${spec.remoteDir}`,
 ];
 
-// A live session as the daemon reports it, narrowed to what the drift check reads. Protobuf JSON omits
-// defaults, so a session with no ignores at all arrives as `"ignore":{}` and vcs:false is simply absent.
+// A live session as the daemon reports it, narrowed to what the drift check and the status report read. Protobuf
+// JSON omits defaults, so a session with no ignores at all arrives as `"ignore":{}` and vcs:false is simply
+// absent — and by the same rule `status`/`conflicts` are absent on a session that has neither, which is why
+// everything the report reads is optional rather than defaulted here.
 interface LiveSession {
     readonly alpha: { readonly path?: string };
     readonly beta: { readonly host?: string; readonly path?: string };
     readonly ignore: { readonly paths?: readonly string[]; readonly vcs?: boolean };
     readonly paused?: boolean;
+    readonly status?: string;
+    readonly conflicts?: readonly unknown[];
 }
 
 // The session of this name as the daemon has it, or undefined when there is none. A non-zero exit is Mutagen's
@@ -161,6 +165,23 @@ const readSession = (mutagen: string, name: string): LiveSession | undefined => 
         return undefined;
     }
     return (JSON.parse(result.stdout) as LiveSession[])[0];
+};
+
+/* What one pairing's file sync is DOING right now, for the machine report. Mutagen's own word is carried through
+ * rather than mapped onto a traffic light: its halted states name their own cause ("halted-on-root-emptied"), and
+ * a UI that flattens them to "problem" sends the user back to the terminal the report exists to replace.
+ *
+ * Every field is absent when Mutagen did not say — a session that has never run, a daemon that is not up, a
+ * version whose JSON does not carry it. Absent must read as "not known", never as zero conflicts. */
+export const readSessionState = (
+    mutagen: string,
+    name: string,
+): { status?: string | undefined; paused?: boolean | undefined; conflicts?: number | undefined } => {
+    const session = readSession(mutagen, name);
+    if (session === undefined) {
+        return {};
+    }
+    return { status: session.status, paused: session.paused, conflicts: session.conflicts?.length };
 };
 
 // Whether what's running is what THIS build would create. Both endpoints and the WHOLE ignore set count:

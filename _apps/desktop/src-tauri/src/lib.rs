@@ -55,6 +55,7 @@ pub fn run() {
             commands::sandbox_recreate,
             commands::sandbox_remove,
             commands::sandbox_logs,
+            commands::machine_report,
             commands::workspace_open,
             commands::settings_get,
             commands::settings_set,
@@ -118,7 +119,9 @@ pub fn run() {
 
 fn create_tray(app: &AppHandle) -> tauri::Result<()> {
     let open = MenuItemBuilder::with_id("open", "Open Intentic").build(app)?;
-    let manager = MenuItemBuilder::with_id("manager", "Sandboxes on this computer").build(app)?;
+    // "This computer", matching the window it opens — the screen covers the machine's sandboxes AND its desktop
+    // sync, and a tray entry naming only half of that is the reason nobody looked there for the other half.
+    let manager = MenuItemBuilder::with_id("manager", "This computer").build(app)?;
     let quit = MenuItemBuilder::with_id("quit", "Quit").build(app)?;
     let menu = MenuBuilder::new(app)
         .item(&open)

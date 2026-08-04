@@ -5,7 +5,17 @@ import { setTimeout as sleep } from "node:timers/promises";
 import { type CliLauncher, isProcessAlive, livePid, type Log, spawnDetached, unregisterAutostart, writeSecretFile } from "@intentic/local-agent";
 import { type PortSummary, PortsListSchema } from "@intentic/sandbox-contract";
 import { MIRROR_AUTOSTART } from "./autostart.js";
-import { baseDir, type MirroredPort, mirrorLogPath, mirrorPidPath, type Pairing, readState, removePairing, updateState } from "./config.js";
+import {
+    baseDir,
+    type MirroredPort,
+    mirrorLogPath,
+    mirrorPidPath,
+    type Pairing,
+    readState,
+    removePairing,
+    type SkippedPort,
+    updateState,
+} from "./config.js";
 import { realBridgeExec, runGitBridge } from "./git-bridge.js";
 import {
     ensureMutagen,
@@ -16,6 +26,7 @@ import {
     retireOrphanSessions,
     runMutagen,
 } from "./mutagen.js";
+import { machineReport, scopedReport } from "./report.js";
 import { sshAlias } from "./ssh.js";
 
 // Port mirroring: every WORKSPACE port listening in a paired sandbox is bound to the SAME port on this machine's
@@ -47,6 +58,21 @@ const PORTS_TIMEOUT_MS = 10_000;
 // A sandbox's repo SET, though, changes only when a repo is added or removed — so it is cached between passes
 // and re-listed only this often, sparing a round trip on every tick in between.
 const REPO_LIST_EVERY_TICKS = 12;
+
+/* How often this machine tells each paired sandbox what it looks like from here (report.ts). Slower than the
+ * poll because building a report spawns `mutagen sync list` per file-syncing pairing, and the questions it
+ * answers — which folder, which ports, is the watcher alive — move in minutes, not seconds. The consequence is
+ * stated rather than hidden: the browser's Computers view can lag a just-mirrored port by up to this long, while
+ * the port itself is on localhost within one POLL_MS.
+ *
+ * The report rides the tick loop rather than a timer of its own so it can never outlive the watcher: a report
+ * arriving from a process that has stopped mirroring is precisely the stale-but-green lie this whole feature was
+ * built to end. */
+const REPORT_EVERY_TICKS = 3;
+
+// A report is small and the sandbox stores it in memory; anything slower than this is a tunnel problem, and the
+// next pass is seconds away.
+const REPORT_TIMEOUT_MS = 10_000;
 
 // How long to wait for a signalled watcher to actually exit, and how often to look. A watcher spends its life
 // asleep between polls, so it answers a signal in milliseconds; this bound only covers one wedged in a fetch.
@@ -165,7 +191,7 @@ export const reconcileForwards = async (
             continue;
         }
         executor.create(summary);
-        next.push({ port: summary.port, host: summary.host });
+        next.push({ port: summary.port, host: summary.host, command: summary.command });
         log(`  localhost:${summary.port} ← ${summary.command ?? "unknown process"}`);
     }
     return next;
@@ -181,6 +207,34 @@ const sameMirrorSet = (a: readonly MirroredPort[], b: readonly MirroredPort[]): 
     return b.every((mirrored) => seen.has(mirrorKey(mirrored)));
 };
 
+const skippedKey = (skipped: SkippedPort): string => `${skipped.port}:${skipped.heldBy ?? ""}`;
+
+const sameSkippedSet = (a: readonly SkippedPort[], b: readonly SkippedPort[]): boolean => {
+    if (a.length !== b.length) {
+        return false;
+    }
+    const seen = new Set(a.map(skippedKey));
+    return b.every((skipped) => seen.has(skippedKey(skipped)));
+};
+
+/* The ports this pairing WANTED and did not get, recovered from what the reconcile already decided rather than
+ * reported out of it: every desired port either ends up in `mirrored` or hits one of the reconcile's two skip
+ * paths, so the difference is exactly the skip set, and `claimedBy` says which of the two it was. Deriving it
+ * here keeps reconcileForwards a pure port-set function with one return value.
+ *
+ * Worth persisting because it is otherwise write-only: the reconcile logs the reason to mirror.log and forgets
+ * it, so "my dev server isn't on localhost" has never been answerable anywhere a user can see. */
+export const skippedPortsOf = (
+    desired: readonly PortSummary[],
+    mirrored: readonly MirroredPort[],
+    claimedBy: ReadonlyMap<number, string>,
+): SkippedPort[] => {
+    const got = new Set(mirrored.map((port) => port.port));
+    return desired
+        .filter((summary) => !got.has(summary.port))
+        .map((summary) => ({ port: summary.port, host: summary.host, heldBy: claimedBy.get(summary.port), command: summary.command }));
+};
+
 // The pidfile is how `mirror`/`--stop`/`uninstall`/`setup` find the resident watcher across processes.
 export const readLiveWatcherPid = async (): Promise<number | undefined> => await livePid(mirrorPidPath);
 
@@ -188,12 +242,12 @@ export const readLiveWatcherPid = async (): Promise<number | undefined> => await
 // them) so a restart never breaks live connections.
 const watcherShutdown = (): void => void rm(mirrorPidPath, { force: true }).finally(() => process.exit(0));
 
-// Persist one pairing's mirror baseline, leaving every other pairing's alone. Targeted because the watcher and a
+// Persist one pairing's port picture, leaving every other pairing's alone. Targeted because the watcher and a
 // concurrent `setup` write this file for different reasons — a whole-state write from the tick's stale read is
 // how the watcher used to stamp an old pairing back over a new one.
-const saveMirroredPorts = async (sandboxId: string, ports: readonly MirroredPort[]): Promise<void> =>
+const savePorts = async (sandboxId: string, mirroredPorts: readonly MirroredPort[], skippedPorts: readonly SkippedPort[]): Promise<void> =>
     await updateState((state) => ({
-        pairings: state.pairings.map((held) => (held.sandboxId === sandboxId ? { ...held, mirroredPorts: ports } : held)),
+        pairings: state.pairings.map((held) => (held.sandboxId === sandboxId ? { ...held, mirroredPorts, skippedPorts } : held)),
     }));
 
 // One pairing's pass: reconcile its port forwards, then run its git bridge. Returns the ports it ended up
@@ -208,10 +262,52 @@ const servePairing = async (
     const baseline = pairing.mirroredPorts ?? [];
     const ports = pairing.syncToken === undefined ? [] : await fetchWorkspacePorts(pairing.sandboxUrl, pairing.syncToken);
     const next = await reconcileForwards(mutagenExecutor(mutagen, pairing), baseline, ports, claimedBy, log);
-    if (!sameMirrorSet(baseline, next)) {
-        await saveMirroredPorts(pairing.sandboxId, next);
+    const skipped = skippedPortsOf(ports, next, claimedBy);
+    // Either half changing is a write: a port that flipped from mirrored to contended leaves the mirror set the
+    // same size and is exactly the transition the report exists to explain.
+    if (!sameMirrorSet(baseline, next) || !sameSkippedSet(pairing.skippedPorts ?? [], skipped)) {
+        await savePorts(pairing.sandboxId, next, skipped);
     }
     return next;
+};
+
+/* Tell each paired sandbox what this machine looks like from here — the folder it syncs into, the ports it did
+ * and did not get onto localhost, and whether the watcher behind them is alive. None of that is knowable from the
+ * sandbox side (SYNC_DIR never reaches the daemon), which is why the Desktop sync card could only ever say a
+ * machine was enrolled and point at `intentic-sync status` for the rest.
+ *
+ * Each sandbox is sent its OWN slice (scopedReport) on its OWN token, so this loop can never tell one sandbox
+ * about another's folders even though the report it starts from covers the whole machine.
+ *
+ * BEST-EFFORT, always. Mirroring is the job; reporting is telemetry for a card. A sandbox that is unreachable, or
+ * old enough not to have the route, must cost nothing — so failures are logged and dropped, and a definitive
+ * "no such route" retires reporting for that pairing rather than knocking on the same door every 15 seconds for
+ * the life of the login session. */
+const postReports = async (pairings: readonly Pairing[], mutagen: string, unsupported: Set<string>, log: Log): Promise<void> => {
+    const reportable = pairings.filter((pairing) => pairing.syncToken !== undefined && !unsupported.has(pairing.sandboxId));
+    if (reportable.length === 0) {
+        return;
+    }
+    const report = await machineReport(mutagen);
+    for (const pairing of reportable) {
+        try {
+            // oxlint-disable-next-line eslint/no-await-in-loop -- one sandbox at a time, like every other pass in this loop
+            const response = await fetch(`${pairing.sandboxUrl.replace(/\/$/, "")}/system/sync/report`, {
+                method: "POST",
+                headers: { "content-type": "application/json", "x-intentic-sync": pairing.syncToken ?? "" },
+                body: JSON.stringify(scopedReport(report, pairing.sandboxId)),
+                signal: AbortSignal.timeout(REPORT_TIMEOUT_MS),
+            });
+            // 404 = a daemon from before machine reports existed. Nothing about that heals on its own, and the
+            // pairing is otherwise perfectly healthy, so stop asking and say so once.
+            if (response.status === 404) {
+                unsupported.add(pairing.sandboxId);
+                log(`  ${pairing.sandboxId}: this sandbox is running a daemon without machine reports — its Computers view will stay empty.`);
+            }
+        } catch (error) {
+            log(`  ${pairing.sandboxId}: report skipped: ${error instanceof Error ? error.message : String(error)}`);
+        }
+    }
 };
 
 // Drop a pairing the sandbox no longer authorizes: forget it, then let the orphan sweep terminate the file-sync
@@ -268,6 +364,9 @@ export const runMirrorWatch = async (log: Log): Promise<void> => {
     // walks. A pairing that comes and goes takes its entries with it.
     const rejectedPolls = new Map<string, number>();
     const repos = new Map<string, readonly string[]>();
+    // Sandboxes whose daemon has no machine-report route — retired from reporting for this watcher's lifetime, so
+    // an older sandbox costs one request rather than one every REPORT_EVERY_TICKS forever.
+    const reportUnsupported = new Set<string>();
     for (let tick = 0; ; tick += 1) {
         // Re-read every tick: this is how a pairing added by a concurrent `setup` starts being served, and how
         // one removed by `uninstall` stops — without restarting the watcher. A state that won't parse (a `setup`
@@ -333,6 +432,12 @@ export const runMirrorWatch = async (log: Log): Promise<void> => {
                     log(`  ${pairing.sandboxId}: git bridge skipped: ${error instanceof Error ? error.message : String(error)}`);
                 }
             }
+            // After the pairings, not during: servePairing has just persisted this tick's mirrored/skipped ports,
+            // and the report is built by re-reading that state — so reporting last is what makes it report NOW
+            // rather than the previous pass.
+            if (tick % REPORT_EVERY_TICKS === 0) {
+                await postReports(state.pairings, mutagen, reportUnsupported, log);
+            }
         }
         await sleep(POLL_MS);
     }
@@ -362,9 +467,12 @@ const teardownForwards = async (mutagen: string, sandboxId?: string): Promise<nu
         spawnSync(mutagen, ["forward", "terminate", ...names], { stdio: "ignore" });
     }
     // A baseline naming forwards that no longer exist would make the next reconcile treat those ports as already
-    // mirrored and never recreate them.
+    // mirrored and never recreate them. The skip set goes with it: mirroring being off is not the same fact as a
+    // port having lost a contest, and leaving it behind would have the report explaining a state nobody is in.
     await updateState((state) => ({
-        pairings: state.pairings.map((held) => (sandboxId === undefined || held.sandboxId === sandboxId ? { ...held, mirroredPorts: [] } : held)),
+        pairings: state.pairings.map((held) =>
+            sandboxId === undefined || held.sandboxId === sandboxId ? { ...held, mirroredPorts: [], skippedPorts: [] } : held,
+        ),
     }));
     return names.length;
 };

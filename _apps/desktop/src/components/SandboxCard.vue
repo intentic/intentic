@@ -7,6 +7,10 @@ import { sandboxLogs, type SandboxStatus } from "../desktop";
 const props = defineProps<{
     sandbox: SandboxStatus;
     busy: string | null;
+    // What desktop sync does for THIS sandbox on this computer ("~/intentic/work · 3 ports on localhost"), or
+    // undefined when nothing here pairs it. Passed in rather than looked up: the join between a container slug
+    // and a sync pairing belongs where both lists are held.
+    syncLine?: string | undefined;
 }>();
 
 const emit = defineEmits<{
@@ -32,7 +36,11 @@ const toggleLogs = async (): Promise<void> => {
             <Icon name="box" class="shrink-0 text-info" />
             <div class="flex min-w-0 flex-1 flex-col">
                 <span class="truncate text-sm font-semibold text-content">{{ sandbox.name ?? sandbox.slug }}</span>
-                <span class="truncate font-mono text-2xs text-subtle">{{ sandbox.container }}</span>
+                <!-- The folder this sandbox lives in ON THIS COMPUTER, where the reader is already looking at the
+                     container. The full picture is the Desktop sync section below; this is the one line that
+                     belongs beside the box it is about. -->
+                <span v-if="syncLine" class="truncate font-mono text-2xs text-subtle">⇄ {{ syncLine }}</span>
+                <span v-else class="truncate font-mono text-2xs text-subtle">{{ sandbox.container }}</span>
             </div>
             <StatusBadge :variant="sandbox.running ? `success` : `neutral`" :label="sandbox.running ? `running` : `stopped`" />
             <!-- A sandbox reached over the user's own proxy has no sidecar at all, which is not the same fact
