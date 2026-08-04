@@ -82,10 +82,12 @@ export const agentTranscript = async (deps: AgentTranscriptDeps, agent: Transcri
  * including the transcript read of the very chat the user then clicked.
  *
  * The record's byte size is the cache key. The file is append-only, so an unchanged size is an unchanged
- * record; a turn settling grows it and the next probe re-reads. A conversation still on the backfill (no
- * record, size undefined) is frozen by construction — its next turn opens a record before it runs
- * (transcripts.open), which flips the size from undefined and invalidates. The prompt a LIVE turn is running
- * on is not this function's problem: the route unions it in from the routed-prompt index (conversationPrompts),
+ * record; a turn settling grows it and the next probe re-reads. A conversation still on the backfill has no
+ * record and so no size, and stays cached against `undefined` until one exists — which the first settled turn
+ * creates by appending (a turn whose adoption came back empty deliberately does not, see transcript-record's
+ * `open`). So the backfill's prompts can be served for the length of one turn after the provider store behind
+ * them moved; the window closes the moment anything is recorded. The prompt a LIVE turn is running on is not
+ * this function's problem either: the route unions it in from the routed-prompt index (conversationPrompts),
  * the same way the session search covers its own write-lag window. */
 export const createAgentPromptsReader = (deps: AgentTranscriptDeps): ((agent: TranscriptAgent) => Promise<readonly string[]>) => {
     const cache = new Map<string, { size: number | undefined; prompts: readonly string[] }>();

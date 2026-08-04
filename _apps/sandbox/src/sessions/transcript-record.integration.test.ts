@@ -45,6 +45,50 @@ describe("fileTranscriptRecord", () => {
         expect(adoptions).toBe(1);
     });
 
+    /* An adoption that comes back EMPTY is ambiguous: a conversation with genuinely nothing behind it looks
+     * exactly like one whose provider store could not be read (an id the registry never learned, a swept
+     * session file, a runtime with no store at all). Writing the empty file made the second case permanent —
+     * every later open saw a file and returned early — and a conversation frozen that way then seeds every
+     * runtime handoff for the rest of its life with nothing. */
+    it("re-adopts while adoption is empty, and stops as soon as there is something to open with", async () => {
+        const record = fileTranscriptRecord(await dir());
+        let available: RestoredMessage[] = [];
+        let adoptions = 0;
+        const adopt = (): Promise<RestoredMessage[]> => {
+            adoptions += 1;
+            return Promise.resolve(available);
+        };
+
+        await record.open("c1", adopt);
+        expect(await record.read("c1")).toEqual([]);
+
+        // The store answers on a later turn. The retry is the only reason this conversation ever picks it up.
+        available = [said("from before")];
+        await record.open("c1", adopt);
+        await record.open("c1", adopt);
+
+        expect((await record.read("c1")).map((message) => message.text)).toEqual(["from before"]);
+        expect(adoptions).toBe(2);
+    });
+
+    // What bounds the retry: the first settled turn creates the file, so a conversation that really has no
+    // history stops re-asking after one turn rather than probing the provider store forever.
+    it("stops re-adopting once a turn has been recorded, even though adoption stayed empty", async () => {
+        const record = fileTranscriptRecord(await dir());
+        let adoptions = 0;
+        const adopt = (): Promise<RestoredMessage[]> => {
+            adoptions += 1;
+            return Promise.resolve([]);
+        };
+
+        await record.open("c1", adopt);
+        await record.append("c1", [{ role: "user", text: "one" }, said("first")]);
+        await record.open("c1", adopt);
+
+        expect((await record.read("c1")).map((message) => message.text)).toEqual(["one", "first"]);
+        expect(adoptions).toBe(1);
+    });
+
     /* A BRANCH opens as a copy of the conversation it was cut from — the one opening history no provider store
      * and no adoption could supply, since the branch is a conversation nothing else knows about yet. Copying it
      * is what lets a branch seed a switched session and read back in full, instead of appearing to begin at the

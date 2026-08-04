@@ -29,8 +29,19 @@ export interface TranscriptRecord {
     /* Open the record BEFORE its next turn starts. `adopt` supplies history from before this record existed.
      * This boundary is load-bearing: opening at settlement re-reads the provider store AFTER it has recorded
      * the new turn, then appends the live frames for that same turn — duplicating every first turn and doing a
-     * provider-store parse on the daemon's hottest completion path. An empty file is a real open record: it
-     * says there was no older history, so settlement can only append what just streamed. */
+     * provider-store parse on the daemon's hottest completion path.
+     *
+     * AN EMPTY ADOPTION LEAVES THE RECORD UNOPENED, rather than writing the empty file that would say "this
+     * conversation had no history". The two are indistinguishable on disk and only one of them is usually true:
+     * adoption comes back empty for a conversation that genuinely has nothing behind it AND for one whose
+     * provider store simply could not be read (an id the registry never learned, a session file swept, a
+     * runtime with no store to read at all). Writing the file made the second case permanent — every later open
+     * saw a file and returned early — and a conversation frozen that way carries nothing across a runtime
+     * handoff for the rest of its life, because the record is what seeds the replacement session
+     * (turn-transcript.ts → handoffHistory).
+     *
+     * The retry this buys is bounded: the first settled turn appends and creates the file, so a conversation
+     * re-adopts at most once more, and only while it has produced nothing recordable at all. */
     readonly open: (conversationId: string, adopt: () => Promise<readonly RestoredMessage[]>) => Promise<void>;
     /* Open a record as a COPY of another's first `keep` rows — how a branch begins. It is `open` with a
      * different source of opening history: a branch is a new conversation, so nothing it should start with is
@@ -112,6 +123,11 @@ export const fileTranscriptRecord = (dir: string): TranscriptRecord => ({
         // provider store still contains only older turns. `wx` makes two accidental openers converge without
         // either overwriting the other; the conversation mutex normally means there is only one.
         const opening = await adopt();
+        // Nothing to open WITH is not the same as nothing to open — see the interface. Left unopened so the
+        // next turn asks again; the first settled turn's append is what finally creates the file.
+        if (opening.length === 0) {
+            return;
+        }
         await mkdir(dir, { recursive: true });
         await writeFile(path, lines(opening), { flag: "wx" }).catch((error: unknown) => {
             if ((error as NodeJS.ErrnoException).code !== "EEXIST") {
