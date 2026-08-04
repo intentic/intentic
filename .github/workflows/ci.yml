@@ -464,6 +464,11 @@ jobs:
       # which dies with the container, so every release re-downloaded it (~2m40s).
       XWIN_CACHE_DIR: /ci-cache/xwin
       GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      # OPTIONAL, and unset today — it was never a GitLab CI variable either. build-desktop.sh branches on
+      # `-n`, so an absent secret is an empty string and the release skips minisign signatures and latest.json,
+      # exactly as every release has so far. Wired through anyway so that setting the secret is the whole
+      # change: the desktop app's updater endpoint (src-tauri/tauri.conf.json) polls for a latest.json that
+      # nothing currently produces, and this is the one variable standing between here and it.
       TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
     steps:
       - uses: actions/checkout@v4

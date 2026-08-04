@@ -30,27 +30,45 @@ every package.
 
 **A Docker daemon.** The image, release and e2e jobs drive it.
 
-**Room for eight concurrent jobs.** Verification is split by release group — `test:core`, `test:platform` and
-`test:site` each gate only their own artifacts — so the test stage opens with six jobs eligible at once (those
-three plus `desktop:check`, `desktop:verify` and, until cutover, `mirror:verify`). Then the publishing jobs
-come free individually as their own gate goes green. Under-provision this and the groups queue behind each
-other, which is the coupling the DAG was written to remove: the pipeline still passes, it just serializes, and
-every argument about a site failure not blocking a platform deploy stops being true in practice.
+**Room for six concurrent jobs.** Verification is split by release group — `verify-core`, `verify-platform` and
+`verify-site` each gate only their own artifacts — and the widest wave of the Actions DAG is **five**:
+those three plus `ci-base` and `e2e-hermetic`. Six is that number plus one slot of headroom, because the waves
+overlap in practice: `images` starts the moment `verify-core` goes green while the other two groups are still
+running.
+
+Derive it rather than trust it — the graph is the source, and it changes:
+
+```sh
+# widest wave of jobs with no unmet dependency
+node -e 'const Y=require("yaml"),f=require("fs");const j=Y.parse(f.readFileSync(".github/workflows/ci.yml","utf8")).jobs;
+const d=Object.fromEntries(Object.entries(j).map(([k,v])=>[k,[v.needs??[]].flat()]));const m={},L=x=>m[x]??=(d[x].length?1+Math.max(...d[x].map(L)):0);
+const w={};for(const k in j)(w[L(k)]??=[]).push(k);console.log(Math.max(...Object.values(w).map(a=>a.length)))'
+```
+
+Under-provision it and the groups queue behind each other, which is the coupling the DAG was written to
+remove: the pipeline still passes, it just serializes, and every argument about a site failure not blocking a
+platform deploy stops being true in practice.
+
+The GitLab pipeline wanted eight because it had one more job in that wave (`mirror:verify`, deleted with the
+public/private split) and because a slot could sit under a 90-minute `desktop:verify`. Neither holds here.
 
 ---
 
 ## GitHub Actions (the target)
 
-### Eight runners, not one runner with eight slots
+### Six runner processes on one host — not six hosts
 
-**A self-hosted Actions runner executes one job at a time.** There is no `concurrent` setting. To get the
-parallelism above you register **eight runner instances** on the host — or an autoscaling set, or
-[Actions Runner Controller](https://github.com/actions/actions-runner-controller) if this ever moves to
-Kubernetes. Eight `svc.sh` installs from the same tarball, each with its own work directory, is the simplest
-thing that works.
+This is the one structural difference from GitLab, and it is a packaging difference rather than a hardware one.
+`gitlab-runner` is a supervisor: one process, `concurrent = 8`, eight job containers. **The GitHub Actions
+runner has no such setting — one runner process executes one job at a time.** So the same box that ran a single
+`gitlab-runner` now runs six `actions/runner` processes, each a service, all sharing the one `/ci-cache`.
+
+Same machine, same total load, six systemd units instead of one. If that bookkeeping grates, the alternatives
+are an autoscaling set or [Actions Runner Controller](https://github.com/actions/actions-runner-controller) if
+this ever moves to Kubernetes — both solve the same problem with more moving parts than six `svc.sh` installs.
 
 ```sh
-# once per instance, N = 1..8
+# once per instance, N = 1..6
 mkdir -p /srv/actions/runner-$N && cd /srv/actions/runner-$N
 curl -fsSL https://github.com/actions/runner/releases/latest/download/actions-runner-linux-x64.tar.gz | tar xz
 ./config.sh --url https://github.com/intentic/intentic \
@@ -65,7 +83,7 @@ sudo ./svc.sh install && sudo ./svc.sh start
 Get `<registration-token>` from **Settings → Actions → Runners → New self-hosted runner** (it expires in an
 hour), or mint one from the API.
 
-Give at least two of the eight the extra label `desktop` — `desktop:check`, `desktop:verify` and `release` are
+Give at least two of the six the extra label `desktop` — `desktop-check`, `desktop-verify` and `release` are
 the jobs that need the Rust/Tauri/NSIS toolchain image, and pinning them to a subset keeps that ~3.75 GB image
 off every host.
 
