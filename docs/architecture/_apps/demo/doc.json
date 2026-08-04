@@ -1,0 +1,28 @@
+{
+  "dir": "_apps/demo",
+  "keyFiles": [
+    {
+      "path": "_apps/demo/README.md",
+      "what": "How the fake platform and daemon are installed, and how to run it."
+    },
+    {
+      "path": "_apps/demo/src/main.ts",
+      "what": "The entry \u2014 installs the fakes, then imports the real app."
+    },
+    {
+      "path": "_apps/demo/src/daemon.ts",
+      "what": "The daemon as a fetch handler: the route table and the event stream."
+    },
+    {
+      "path": "_apps/demo/src/fixture/workspace.ts",
+      "what": "The one path-to-content table every file-shaped surface is fixtured from."
+    }
+  ],
+  "name": "@intentic-dev/demo",
+  "oneLiner": "The landing page's playable demo \u2014 the real editor, running on a recording.",
+  "provenance": {
+    "generatedAt": 1785802442877,
+    "model": "claude-opus-4-6",
+    "sourceRev": "f1a5d15059d02c42208b3f03bf9e45a3952c3533"
+  }
+}

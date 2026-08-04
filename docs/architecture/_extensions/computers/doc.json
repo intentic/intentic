@@ -1,0 +1,20 @@
+{
+  "dir": "_extensions/computers",
+  "keyFiles": [
+    {
+      "path": "_extensions/computers/intentic-extension.json",
+      "what": "The two capability cards and their setup guides."
+    },
+    {
+      "path": "_extensions/computers/skills/linux/SKILL.md",
+      "what": "What the agent is told about working on a Linux machine."
+    }
+  ],
+  "name": "@intentic/ext-computers",
+  "oneLiner": "The Windows and Linux capability cards for connecting your own computer.",
+  "provenance": {
+    "generatedAt": 1785802442877,
+    "model": "claude-opus-4-6",
+    "sourceRev": "164265036d21db7bf70d054bf038f64b51739e20"
+  }
+}

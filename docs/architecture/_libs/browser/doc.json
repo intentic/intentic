@@ -1,0 +1,28 @@
+{
+  "dir": "_libs/browser",
+  "keyFiles": [
+    {
+      "path": "_libs/browser/README.md",
+      "what": "Why references beat coordinates, and which browser it drives."
+    },
+    {
+      "path": "_libs/browser/src/snapshot.ts",
+      "what": "The page rendered as elements with references \u2014 the whole idea."
+    },
+    {
+      "path": "_libs/browser/src/cdp.ts",
+      "what": "The hand-rolled protocol client, dependency-free on purpose."
+    },
+    {
+      "path": "_libs/browser/src/launch.ts",
+      "what": "Finding or starting a browser, per platform."
+    }
+  ],
+  "name": "@intentic/browser",
+  "oneLiner": "Drive a real browser by naming elements, not pixels.",
+  "provenance": {
+    "generatedAt": 1785802442877,
+    "model": "claude-opus-4-6",
+    "sourceRev": "07ad1cb1520a8c3c61be7a475cc0c4318c8fd6d4"
+  }
+}

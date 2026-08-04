@@ -1,0 +1,28 @@
+{
+  "dir": "_libs/desktop",
+  "keyFiles": [
+    {
+      "path": "_libs/desktop/README.md",
+      "what": "Per-platform behaviour, and the two details that cause silent misclicks."
+    },
+    {
+      "path": "_libs/desktop/src/screen.ts",
+      "what": "Capture and the coordinate space callers work in."
+    },
+    {
+      "path": "_libs/desktop/src/keys.ts",
+      "what": "The one key vocabulary every backend translates from."
+    },
+    {
+      "path": "_libs/desktop/src/input-linux.ts",
+      "what": "The X11/Wayland split, which is where the platform rules live."
+    }
+  ],
+  "name": "@intentic/desktop",
+  "oneLiner": "Capture a screen and move a real mouse and keyboard, without native modules.",
+  "provenance": {
+    "generatedAt": 1785802442877,
+    "model": "claude-opus-4-6",
+    "sourceRev": "07ad1cb1520a8c3c61be7a475cc0c4318c8fd6d4"
+  }
+}

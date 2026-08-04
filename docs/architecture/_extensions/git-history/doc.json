@@ -1,0 +1,28 @@
+{
+  "dir": "_extensions/git-history",
+  "keyFiles": [
+    {
+      "path": "_extensions/git-history/src/extension.ts",
+      "what": "Activation, and the reasoning for the surface it registers."
+    },
+    {
+      "path": "_extensions/git-history/src/GitHistoryTab.vue",
+      "what": "The screen itself."
+    },
+    {
+      "path": "_extensions/git-history/src/graphLayout.ts",
+      "what": "Commits to lanes \u2014 the pure core of the graph."
+    },
+    {
+      "path": "_extensions/git-history/src/host.ts",
+      "what": "Every daemon route this extension is allowed to call."
+    }
+  ],
+  "name": "@intentic/ext-git-history",
+  "oneLiner": "One repository's commit graph, its branches, and the actions on them.",
+  "provenance": {
+    "generatedAt": 1785802442877,
+    "model": "claude-opus-4-6",
+    "sourceRev": "164265036d21db7bf70d054bf038f64b51739e20"
+  }
+}

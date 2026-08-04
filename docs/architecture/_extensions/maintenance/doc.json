@@ -1,0 +1,28 @@
+{
+  "dir": "_extensions/maintenance",
+  "keyFiles": [
+    {
+      "path": "_extensions/maintenance/src/extension.ts",
+      "what": "Activation, and the reasoning behind both surfaces."
+    },
+    {
+      "path": "_extensions/maintenance/src/MaintenanceView.vue",
+      "what": "The screen: chores, evidence, runs."
+    },
+    {
+      "path": "_extensions/maintenance/src/runs.ts",
+      "what": "Reading the run history off the files a chore run leaves behind."
+    },
+    {
+      "path": "_extensions/maintenance/src/attention.ts",
+      "what": "What the badge is allowed to say, and when."
+    }
+  ],
+  "name": "@intentic/ext-maintenance",
+  "oneLiner": "The chore book: what routine upkeep each repository is owed, and the turn that does it.",
+  "provenance": {
+    "generatedAt": 1785802442877,
+    "model": "claude-opus-4-6",
+    "sourceRev": "164265036d21db7bf70d054bf038f64b51739e20"
+  }
+}

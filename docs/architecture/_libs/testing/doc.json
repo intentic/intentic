@@ -1,0 +1,20 @@
+{
+  "dir": "_libs/testing",
+  "keyFiles": [
+    {
+      "path": "_libs/testing/src/index.ts",
+      "what": "The stand-in, and the comment explaining every key it refuses to answer."
+    },
+    {
+      "path": "_libs/testing/src/vitest.ts",
+      "what": "The unit and integration suite budgets a package spreads into its config."
+    }
+  ],
+  "name": "@intentic/testing",
+  "oneLiner": "The stand-in every test suite builds its fakes on, plus the two suite budgets.",
+  "provenance": {
+    "generatedAt": 1785802442877,
+    "model": "claude-opus-4-6",
+    "sourceRev": "b103264e245289284b2b8db6450f704206d0eb79"
+  }
+}

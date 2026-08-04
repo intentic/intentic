@@ -1,0 +1,20 @@
+{
+  "dir": "_extensions/social",
+  "keyFiles": [
+    {
+      "path": "_extensions/social/intentic-extension.json",
+      "what": "The three cards, their sign-in URLs and their warnings."
+    },
+    {
+      "path": "_extensions/social/skills/reddit/SKILL.md",
+      "what": "How the agent is told to operate one of the sites."
+    }
+  ],
+  "name": "@intentic/ext-social",
+  "oneLiner": "Reddit, X and YouTube \u2014 the agent acting as you, in a real logged-in browser.",
+  "provenance": {
+    "generatedAt": 1785802442877,
+    "model": "claude-opus-4-6",
+    "sourceRev": "164265036d21db7bf70d054bf038f64b51739e20"
+  }
+}

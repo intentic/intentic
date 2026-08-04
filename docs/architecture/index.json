@@ -28,13 +28,27 @@
       "stale": true
     },
     {
-      "behind": 8,
+      "behind": 0,
+      "dir": "_apps/demo",
+      "oneLiner": "The landing page's playable demo — the real editor, running on a recording.",
+      "sourceRev": "f1a5d15059d02c42208b3f03bf9e45a3952c3533",
+      "stale": false
+    },
+    {
+      "behind": 9,
       "component": "editor",
       "dir": "_apps/desktop",
       "oneLiner": "A window around the editor, plus the small program on your machine that sets a sandbox up and keeps it updated.",
-      "reason": "8 commits have touched this package since it was documented",
+      "reason": "9 commits have touched this package since it was documented",
       "sourceRev": "1968d7bfcfa7fc908f36282c64a3862703b98f10",
       "stale": true
+    },
+    {
+      "behind": 0,
+      "dir": "_apps/host",
+      "oneLiner": "The small agent you install on your own computer so the sandbox can work there.",
+      "sourceRev": "1576c8b049d1c59242c47f635cf761fddc517bbd",
+      "stale": false
     },
     {
       "behind": 5,
@@ -55,37 +69,38 @@
       "stale": true
     },
     {
-      "behind": 92,
+      "behind": 93,
       "component": "sandbox",
       "dir": "_apps/sandbox",
       "oneLiner": "The daemon — the program running inside your project's box.",
-      "reason": "92 commits have touched this package since it was documented",
+      "reason": "93 commits have touched this package since it was documented",
       "sourceRev": "4a57e4d504eb2d2341a33fc1c46fc7be2124a844",
       "stale": true
     },
     {
-      "behind": 39,
+      "behind": 40,
       "component": "account",
       "dir": "_apps/site",
       "oneLiner": "The public marketing website.",
-      "reason": "39 commits have touched this package since it was documented",
+      "reason": "40 commits have touched this package since it was documented",
       "sourceRev": "defafa2da5351076f1c55bf4bd4ab15ed3fdd4f5",
       "stale": true
     },
     {
-      "behind": 0,
+      "behind": 1,
       "component": "sandbox",
       "dir": "_apps/sync",
       "oneLiner": "Keeps folders on your computer in step with your sandboxes.",
+      "reason": "1 commit have touched this package since it was documented",
       "sourceRev": "07ad1cb1520a8c3c61be7a475cc0c4318c8fd6d4",
-      "stale": false
+      "stale": true
     },
     {
-      "behind": 156,
+      "behind": 157,
       "component": "editor",
       "dir": "_apps/web",
       "oneLiner": "The browser app — the whole editor you see and click.",
-      "reason": "156 commits have touched this package since it was documented",
+      "reason": "157 commits have touched this package since it was documented",
       "sourceRev": "6b0114cad65ee0e9868b592fbd626e174dfe55bf",
       "stale": true
     },
@@ -97,6 +112,13 @@
       "reason": "13 commits have touched this package since it was documented",
       "sourceRev": "66cf2dc1ba8399402946dd4bde9eb20a0df12913",
       "stale": true
+    },
+    {
+      "behind": 0,
+      "dir": "_extensions/acp-agents",
+      "oneLiner": "Other companies' coding agents, offered as chat providers.",
+      "sourceRev": "164265036d21db7bf70d054bf038f64b51739e20",
+      "stale": false
     },
     {
       "behind": 17,
@@ -115,6 +137,13 @@
       "reason": "18 commits have touched this package since it was documented",
       "sourceRev": "53225eaa44802806ca3b32f065ec25a5b00c8a6d",
       "stale": true
+    },
+    {
+      "behind": 0,
+      "dir": "_extensions/computers",
+      "oneLiner": "The Windows and Linux capability cards for connecting your own computer.",
+      "sourceRev": "164265036d21db7bf70d054bf038f64b51739e20",
+      "stale": false
     },
     {
       "behind": 2,
@@ -144,6 +173,13 @@
       "stale": true
     },
     {
+      "behind": 0,
+      "dir": "_extensions/git-history",
+      "oneLiner": "One repository's commit graph, its branches, and the actions on them.",
+      "sourceRev": "164265036d21db7bf70d054bf038f64b51739e20",
+      "stale": false
+    },
+    {
       "behind": 5,
       "component": "extensions",
       "dir": "_extensions/imap",
@@ -160,6 +196,13 @@
       "reason": "8 commits have touched this package since it was documented",
       "sourceRev": "6412c5c789e979f8f0fd749d9b9ca135d2cca6da",
       "stale": true
+    },
+    {
+      "behind": 0,
+      "dir": "_extensions/maintenance",
+      "oneLiner": "The chore book: what routine upkeep each repository is owed, and the turn that does it.",
+      "sourceRev": "164265036d21db7bf70d054bf038f64b51739e20",
+      "stale": false
     },
     {
       "behind": 9,
@@ -198,6 +241,20 @@
       "stale": true
     },
     {
+      "behind": 0,
+      "dir": "_extensions/slack",
+      "oneLiner": "A connected Slack workspace, as an agent tool and as a thing that can wake the agent.",
+      "sourceRev": "164265036d21db7bf70d054bf038f64b51739e20",
+      "stale": false
+    },
+    {
+      "behind": 0,
+      "dir": "_extensions/social",
+      "oneLiner": "Reddit, X and YouTube — the agent acting as you, in a real logged-in browser.",
+      "sourceRev": "164265036d21db7bf70d054bf038f64b51739e20",
+      "stale": false
+    },
+    {
       "behind": 5,
       "component": "extensions",
       "dir": "_extensions/viewers",
@@ -205,6 +262,13 @@
       "reason": "5 commits have touched this package since it was documented",
       "sourceRev": "6412c5c789e979f8f0fd749d9b9ca135d2cca6da",
       "stale": true
+    },
+    {
+      "behind": 0,
+      "dir": "_extensions/workflows",
+      "oneLiner": "Designed graphs of agent sessions, each step producing a declared output.",
+      "sourceRev": "66fa40a660f150f75b887a23b9624bafa3e3d0f0",
+      "stale": false
     },
     {
       "behind": 9,
@@ -225,6 +289,13 @@
       "stale": true
     },
     {
+      "behind": 0,
+      "dir": "_libs/browser",
+      "oneLiner": "Drive a real browser by naming elements, not pixels.",
+      "sourceRev": "07ad1cb1520a8c3c61be7a475cc0c4318c8fd6d4",
+      "stale": false
+    },
+    {
       "behind": 2,
       "component": "account",
       "dir": "_libs/capability-catalog",
@@ -232,6 +303,13 @@
       "reason": "2 commits have touched this package since it was documented",
       "sourceRev": "07ad1cb1520a8c3c61be7a475cc0c4318c8fd6d4",
       "stale": true
+    },
+    {
+      "behind": 0,
+      "dir": "_libs/desktop",
+      "oneLiner": "Capture a screen and move a real mouse and keyboard, without native modules.",
+      "sourceRev": "07ad1cb1520a8c3c61be7a475cc0c4318c8fd6d4",
+      "stale": false
     },
     {
       "behind": 2,
@@ -288,6 +366,13 @@
       "stale": true
     },
     {
+      "behind": 0,
+      "dir": "_libs/local-agent",
+      "oneLiner": "The install-and-stay-alive plumbing every intentic program on a user's machine shares.",
+      "sourceRev": "1576c8b049d1c59242c47f635cf761fddc517bbd",
+      "stale": false
+    },
+    {
       "behind": 2,
       "component": "deploy",
       "dir": "_libs/need-resolver",
@@ -313,6 +398,13 @@
       "reason": "4 commits have touched this package since it was documented",
       "sourceRev": "4d3ff977270939c9f565a6b6cfea0de5f5649644",
       "stale": true
+    },
+    {
+      "behind": 0,
+      "dir": "_libs/registry",
+      "oneLiner": "The file format an extension registry is written in.",
+      "sourceRev": "164265036d21db7bf70d054bf038f64b51739e20",
+      "stale": false
     },
     {
       "behind": 1,
@@ -378,6 +470,13 @@
       "stale": true
     },
     {
+      "behind": 0,
+      "dir": "_libs/testing",
+      "oneLiner": "The stand-in every test suite builds its fakes on, plus the two suite budgets.",
+      "sourceRev": "b103264e245289284b2b8db6450f704206d0eb79",
+      "stale": false
+    },
+    {
       "behind": 48,
       "component": "editor",
       "dir": "_libs/ui",
@@ -424,6 +523,13 @@
     },
     {
       "behind": 0,
+      "dir": "_tools/desktop-smoke",
+      "oneLiner": "A bare Debian image that meets the desktop installer the way a user's machine does.",
+      "sourceRev": "3e9404aee5c9d61e56c4bcc898012c962136258a",
+      "stale": false
+    },
+    {
+      "behind": 0,
       "component": "plumbing",
       "dir": "_tools/dind-host",
       "oneLiner": "A throwaway Docker-in-Docker host for tests.",
@@ -466,6 +572,13 @@
     },
     {
       "behind": 0,
+      "dir": "_tools/registry",
+      "oneLiner": "The nightly job that finds candidate extensions and proposes them as pull requests.",
+      "sourceRev": "164265036d21db7bf70d054bf038f64b51739e20",
+      "stale": false
+    },
+    {
+      "behind": 0,
       "component": "plumbing",
       "dir": "_tools/tsconfig",
       "oneLiner": "One shared TypeScript configuration.",
@@ -473,29 +586,13 @@
       "stale": false
     }
   ],
-  "generatedAt": 1785797392604,
+  "generatedAt": 1785802650414,
   "orphans": [],
   "repo": "intentic",
   "undocumented": [
-    "_apps/demo",
     "_apps/desktop/src-tauri",
-    "_apps/host",
-    "_extensions/acp-agents",
-    "_extensions/computers",
     "_extensions/deployments",
-    "_extensions/git-history",
-    "_extensions/maintenance",
-    "_extensions/slack",
-    "_extensions/social",
-    "_extensions/workflows",
-    "_libs/browser",
-    "_libs/desktop",
-    "_libs/local-agent",
-    "_libs/registry",
-    "_libs/testing",
-    "_tools/desktop-smoke",
     "_tools/extension-example/seed",
-    "_tools/registry",
     "_tools/scripts/public"
   ]
 }
