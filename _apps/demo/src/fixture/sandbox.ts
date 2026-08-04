@@ -1,6 +1,7 @@
 import type { CapabilitySummary } from "@intentic-app/api-contract";
 import { builtinModules } from "@intentic-app/web/builtins";
 import type { Environment, ExtensionSummary, PanelSummary, UsageRollupRow } from "@intentic/sandbox-contract";
+import { demoMode } from "../mode";
 
 /* The sandbox's own furniture for the recorded workspace: what acme-shop is made of, what it is wired to, which
  * extensions supply that wiring, and the spend ledger behind the Usage tab.
@@ -70,16 +71,18 @@ export const demoCapabilities = (): CapabilitySummary[] => [
     { id: `ops-box`, kind: `ssh`, status: { state: `active` }, config: { auth: `key`, host: `ops.acme.dev`, port: 22, user: `deploy` } },
 ];
 
-// The extensions those cli capabilities resolve through: without the contribution there is no card, which is
-// exactly how the product works — a connector is manifest data, not a hardcoded table in the app. These two are
-// daemon-side (a connector catalog and a listener), so no code of theirs runs in the browser and the hub calls
-// them `agent-only`.
-const CONNECTOR_EXTENSIONS: ExtensionSummary[] = [
+/* The extensions those cli capabilities resolve through: without the contribution there is no card, which is
+ * exactly how the product works — a connector is manifest data, not a hardcoded table in the app. These two are
+ * daemon-side (a connector catalog and a listener), so no code of theirs runs in the browser and the hub calls
+ * them `agent-only`.
+ *
+ * No `enabled` on either literal: which extensions are switched on is the demo MODE's call, applied once in
+ * `demoExtensions()` below. A list that carried its own would quietly outrank the switcher. */
+const CONNECTOR_EXTENSIONS: Omit<ExtensionSummary, "enabled">[] = [
     {
         id: `intentic.connectors`,
         commit: `9f2c41d`,
         builtin: true,
-        enabled: true,
         manifest: {
             publisher: `intentic`,
             name: `connectors`,
@@ -172,7 +175,6 @@ const CONNECTOR_EXTENSIONS: ExtensionSummary[] = [
         id: `intentic.discord`,
         commit: `4ab7e10`,
         builtin: true,
-        enabled: true,
         manifest: {
             publisher: `intentic`,
             name: `discord`,
@@ -210,15 +212,23 @@ const CONNECTOR_EXTENSIONS: ExtensionSummary[] = [
  * marketing page, and re-listing them by hand would only move the drift to the next extension somebody adds.
  *
  * `commit` is `demo` for the same reason `info.version` is: the recording is not a build of anything. */
-const compiledExtensions = (): ExtensionSummary[] =>
-    [...builtinModules].map(([id, module]) => ({ id, manifest: module.manifest, commit: `demo`, builtin: true, enabled: true }));
+const compiledExtensions = (): Omit<ExtensionSummary, "enabled">[] =>
+    [...builtinModules].map(([id, module]) => ({ id, manifest: module.manifest, commit: `demo`, builtin: true }));
 
 // Built once and then LIVE: the hub's Extensions tab really writes these switches, because the daemon persists
 // a flip and every later read reflects it — a fixture that answered read-only would have a toggle that springs
 // back on the next poll.
 let extensions: ExtensionSummary[] | undefined;
 
-export const demoExtensions = (): ExtensionSummary[] => (extensions ??= [...compiledExtensions(), ...CONNECTOR_EXTENSIONS]);
+/* WHICH OF THEM ARE ON is the demo mode's opening position (mode.ts), and only that: every extension stays in
+ * the list, because the Extensions tab showing the whole catalog with most of it switched off is the truth
+ * about a workspace nobody has set up yet — and the visitor can turn any of them on from there. */
+export const demoExtensions = (): ExtensionSummary[] =>
+    (extensions ??= [...compiledExtensions(), ...CONNECTOR_EXTENSIONS].map((extension) =>
+        // In place: these objects ARE the live list from here on — the hub's switch writes `enabled` straight
+        // back into them (setExtensionEnabled below), as it has since before there were modes.
+        Object.assign(extension, { enabled: demoMode.extensions?.includes(extension.id) ?? true }),
+    ));
 
 export const setExtensionEnabled = (id: string, enabled: boolean): void => {
     const extension = demoExtensions().find((candidate) => candidate.id === id);

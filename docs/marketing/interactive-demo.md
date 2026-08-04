@@ -86,7 +86,7 @@ Per surface, the routes it actually calls and what the fixture answers with:
 
 | Surface | Routes | Fixture |
 | --- | --- | --- |
-| Fleet board `/agents` | `GET /agents`, `/agents/search`, `/agents/{id}/rename`, `/archive`, `/unarchive`, `/{id}/seen` | 7 agents, one in every lane state: `awaiting` (a question), `conflict`, two `running` (one delegating to subagents), `ready`, `landed`, and an automation's overnight `idle` |
+| Fleet board `/agents` | `GET /agents`, `/agents/search`, `/agents/{id}/rename`, `/archive`, `/unarchive`, `/{id}/seen` | 9 agents, one in every lane state: `awaiting` (a question), `conflict`, two `running` (one delegating to subagents), two more that are steps of one workflow run, `ready`, `landed`, and an automation's overnight `idle` — how many of them a visitor meets is the mode's call (below) |
 | Review panel | `GET /agents/{id}/diff`, `/{id}/transcript`, `/{id}/{repo}/file-diff` | the soft-deletes agent: 4 files over 2 repos, +210 −55, two of them with real before/after text — and the conversation that produced them, so opening the card lands on its transcript rather than on "start a conversation". Every other agent still answers an empty one |
 | Chat | `POST /agent`, `POST /agent/attach` (stream), `/agent/commands`, `/agent/refusals`, `POST /agent/reply`, `/agent/steer`, `/agent/stop` | the scripted turn, below |
 | Model picker | `GET /claude/accounts`, `/grok/accounts`, `/translator/accounts`, `/{provider}/models` | a connected Claude Max and a ChatGPT subscription in the translator — without these the composer never leaves "Checking your AI accounts…" |
@@ -101,6 +101,52 @@ Per surface, the routes it actually calls and what the fixture answers with:
 | Pipelines | `GET /ci/runs`, `POST /ci/runs/jobs`, `/ci/seen` | 7 runs over two repos on two hosts (`web` on GitHub, `api` on GitLab) — one still going, one broken, and one job broken twice so the "failing repeatedly" analysis has something true to say |
 | Automations | `GET /automations`, `/automations/pending` | one of each trigger the union has — a nightly chore, a Discord listener, a Doorbell held for approval, a land-triggered doc check, a disabled CI webhook — each with the run history that makes a row honest |
 | Memory | `GET /memory`, `/memory/file` (+ PUT/DELETE) | four notes about acme-shop, editable and forgettable: the fixture is the store, so the red pen works |
+
+## How full it opens — the three modes
+
+Everything in the table above is what the fixture *can* serve, and for a while it served all of it at once: the
+demo opened on nine agents across three lanes, a question, a land conflict and every extension switched on.
+That is a fair picture of a busy afternoon and a bad first frame. Someone who has just pressed play cannot tell
+the product apart from the demonstration of it — the rail looks like something they would have to configure,
+and the board looks like a mess they would have to clean up.
+
+So fullness is a control rather than a constant (`_apps/demo/src/mode.ts`), with a bar at the bottom of the
+recording that switches between three states. It is the demo's only chrome, and it answers the question a
+recording otherwise cannot: *is this what it looks like, or is this what you filled it with?*
+
+| Mode | The board | The rail | What it is for |
+| --- | --- | --- | --- |
+| Minimal | the featured agent alone, mid-turn | nothing — three core tiles | the workspace as it arrives: one agent, and the app around it |
+| **Default** | three agents: one running with subagents, one parked on a question, one holding a finished delta | Acceptance, Documentation, Pipelines | the three moments the landing page claims, and nothing else |
+| Everything | the whole roster, every lane occupied | every extension on — eight tiles in this workspace | a team's Tuesday: what the product looks like in use |
+
+Two knobs decide almost all of it, because they are what the shell builds itself out of: **which agents the
+roster carries** and **which extensions are switched on** (an extension that is off contributes no tile, no
+view and no badge — the loader never activates it). A third drops the teammate's presence from Minimal, because
+a second avatar is the one remaining piece of furniture nobody chose. Everything else the fixture serves is the
+same in all three: the workspace and its diffs, the sessions history, the pipelines' own record, the connected
+accounts. Those are read on the way IN to a surface the visitor asked for, not things the opening frame is made
+of, and thinning them would only make the recording smaller without making it clearer.
+
+The mode is applied where each thing is **served** rather than by rewriting the fixtures — `daemon.ts` filters
+the roster, the presence frame and the workflow run; `fixture/sandbox.ts` decides each extension's switch — so
+there is still one full cast and a mode is a view onto it. Two consequences worth stating:
+
+- **The workflow run follows the board.** The fleet view draws a run's group card from `/workflows/runs`, not
+  from the roster, so a mode that leaves the two review agents off the board would otherwise show a group card
+  that is a doorway to cards that are not there.
+- **Every extension stays listed**, just switched off, so the hub's Extensions tab is the whole catalog with
+  working switches. A visitor in Minimal can build the rail back up one tile at a time, and each flip activates
+  live, because that is what the tab does against a real daemon.
+
+Switching **reloads**, and lands on the fleet board. The extension host activates the daemon's list once per app
+load (`useExtensionHost.ts`), so which tiles the rail carries is decided on the way in — rebroadcasting a roster
+without a reload would change half the picture and leave the other half stale. The board rather than the current
+address, because the route the visitor is standing on may belong to an extension the next mode switches off. The
+choice lives in `sessionStorage`: it must survive the reload it causes, and it must not still be in force next
+week, when the curated opening frame is what a new visitor should meet. `?mode=minimal` on the address seeds it
+once and is then stripped from the URL — a `mode` left in the address outranks the switcher, so the next press
+would reload into the state the visitor just left.
 
 **`GET /panels` decides which of those rows a visitor can even reach.** It carries the per-repo facts every
 extension's `detect()` runs over, so a fixture that answered it with an empty list — as this one did at first —
@@ -193,7 +239,7 @@ visitor left rather than restarting the recording.
 
 **It opens on `/demo/agents`.** The app's own default lands a desktop on the workspace, which for someone who
 has just pressed play is the one screen with nothing in it — an empty tree and a drop zone, for files this
-visitor does not have. The fleet board arrives full, and it is the thing being claimed. The redirect is written
+visitor does not have. The fleet board arrives occupied, and it is the thing being claimed. The redirect is written
 into the URL by `src/main.ts` before the app boots, so there is no first paint of the wrong screen and no
 history entry to press Back into; only the bare base is redirected, since every other address is one the
 visitor chose. The app's own routing is untouched.
@@ -231,7 +277,8 @@ from breaking the demo outright. `DEMO_PATH` is a relative `/demo/`, so a previe
 ## What is left
 
 - **Tour deep links** — `#see-it`'s seven shots could each open the overlay at the matching route, turning the
-  section into seven doors into one app. The overlay already takes a URL; nothing but the wiring is missing.
+  section into seven doors into one app. The overlay already takes a URL, and that URL can now carry `?mode=`
+  as well as a route, so a shot could open the state it was captured in; nothing but the wiring is missing.
 - **Screenshot regeneration** — the payoff phase: drive the demo build under Playwright (`_tools/e2e` already
   drives this app) so `src/assets/product/*.png` stop being hand-captured. This is also the mitigation for the
   drift risk below.

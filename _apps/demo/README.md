@@ -38,6 +38,8 @@ through `./vite-shared`. Web knows nothing about this.
 | `src/sse.ts` | the event-iterator wire format |
 | `src/terminal.ts` | the recorded pty, as `TerminalServerMessage` frames |
 | `src/browser.ts` | the recorded screencast of the agent's Chromium, played from the pages below |
+| `src/mode.ts` | how full the recording is — the three states, and which one this page load serves |
+| `src/switcher.ts` | the bar at the bottom of the screen that switches between them; the demo's only chrome |
 | `src/fixture/` | the data — `fleet.ts` (the roster), `transcripts.ts` (what a finished agent's chat holds), `workspace.ts` (the filesystem, diffs, landing), `chores.ts`, `acceptance.ts`, `docs.ts`, `storefront.ts`, `ci.ts`, `memory.ts`, `automations.ts`, `sandbox.ts` |
 
 `fixture/workspace.ts` holds one flat path → content table that the tree, every directory listing, every read,
@@ -49,6 +51,35 @@ therefore which tiles the rail carries at all.
 
 Anything the fixture does not serve answers 404 and logs one line naming the method and path. That console line
 is the tool: it is how the served routes were found, and how the next one will be.
+
+## How full it is — the three modes
+
+The fixture is written to prove every surface exists, which made the opening frame a workspace at full tilt:
+nine agents, a question, a land conflict, fourteen extensions in the rail. Fullness is a **control** now
+(`src/mode.ts`), and the play button opens the middle one.
+
+| Mode | The board | The rail |
+| --- | --- | --- |
+| `minimal` | the featured agent alone | no extensions at all |
+| `default` | three agents — one running, one asking, one ready to land | Acceptance, Documentation, Pipelines (+ `viewers`, which has no tile) |
+| `full` | the whole roster, every lane occupied | every extension |
+
+Two knobs decide almost all of it, because they are what the shell builds itself out of: which agents the
+roster carries, and which extensions the owner left switched on. A third drops the teammate's presence in
+`minimal`. Everything else the fixture serves is the same in all three — the workspace, the sessions history,
+the pipelines' record, the connected accounts are read on the way in to a surface the visitor asked for, not
+things the opening frame is made of.
+
+The mode is applied where it is **served** — `daemon.ts` filters the roster, the presence frame and the
+workflow run; `fixture/sandbox.ts` decides each extension's switch — so the fixture stays one full cast and a
+mode is a view onto it. Every extension is still listed in the hub's Extensions tab with a working switch, so a
+visitor in `minimal` can turn the rail back on one tile at a time.
+
+Switching **reloads** and lands on the fleet board. The extension host activates the daemon's list once per app
+load, so which tiles the rail carries is decided on the way in; and the route a visitor is standing on may
+belong to an extension the next mode switches off. The choice lives in `sessionStorage` (per tab, so a later
+visit still meets the curated opening frame) and `?mode=minimal` on the address seeds it once, then is stripped
+from the URL so it cannot outrank the switcher.
 
 Two things this package owns that the app resolves against its BASE rather than the origin root, because here
 that root belongs to the marketing site: the pop-out window's page (`popout.html`, which the dev server's SPA

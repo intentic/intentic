@@ -156,4 +156,6 @@ export const demoRuns = (now: number): WorkflowRun[] => [
     },
 ];
 
-export const demoWorkflows = (now: number): WorkflowSummary[] => [{ ...demoWorkflow(), runs: demoRuns(now) }];
+// The design, carrying whatever runs of it the board is showing — which is the daemon's call, not this file's:
+// a demo mode that leaves the two review agents off the board leaves their run off it too (daemon.ts).
+export const demoWorkflows = (runs: WorkflowRun[]): WorkflowSummary[] => [{ ...demoWorkflow(), runs }];

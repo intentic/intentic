@@ -12,11 +12,13 @@ import {
     type Model,
     type OauthAccount,
     type OauthAccountList,
+    type PresenceUser,
     SANDBOX_ROUTE_NAMES,
     type SavingsReport,
     type SystemEvent,
     type TerminalsList,
     type TranslatorAccounts,
+    type WorkflowRun,
 } from "@intentic/sandbox-contract";
 import { BROWSER_SESSIONS } from "./browser";
 import { automationApprovals, automationsList, deleteAutomation, resolveApproval, saveAutomation } from "./fixture/automations";
@@ -43,6 +45,7 @@ import {
     workspaceTree,
     writeFile,
 } from "./fixture/workspace";
+import { demoMode } from "./mode";
 import { eventStream } from "./sse";
 import { featuredRun, type Run, visitorRun } from "./turn";
 import { json, refuse } from "./transport";
@@ -63,9 +66,12 @@ import { json, refuse } from "./transport";
 
 const STARTED_AT = Date.now();
 
-// The roster is live state: rename/archive/seen write it, and every write bumps `rev` and re-broadcasts, which
-// is exactly the contract the real registry has with the board (snapshot-not-diff, newest rev wins).
-const roster = { agents: fleetRoster(STARTED_AT), rev: 1 };
+/* The roster is live state: rename/archive/seen write it, and every write bumps `rev` and re-broadcasts, which
+ * is exactly the contract the real registry has with the board (snapshot-not-diff, newest rev wins).
+ *
+ * How much of the cast it starts with is the demo mode's call (mode.ts) — the fleet fixture stays the whole
+ * roster, and a mode is a view onto it. */
+const roster = { agents: fleetRoster(STARTED_AT).filter((agent) => demoMode.agents?.includes(agent.id) ?? true), rev: 1 };
 // When the pipelines board was last read. Seeded just before the newest breakage, so the rail badge a visitor
 // arrives to is honest — and opening the view stamps it away, as it does against a real daemon.
 let ciSeenAt = STARTED_AT - 35 * 60_000;
@@ -80,6 +86,15 @@ const broadcastRoster = (): void => {
     }
 };
 
+/* The recorded workflow run, as far as THIS board can see it. The fleet view draws a run's group card from
+ * /workflows/runs rather than from the roster (useWorkflowRuns.ts), so a mode whose board does not carry the
+ * two review agents must not be told about the run they are steps of — the card would be a doorway to cards
+ * that are not there. Keyed on the live steps, because a finished step's conversation is history either way. */
+const runsOnBoard = (now: number): WorkflowRun[] =>
+    demoRuns(now).filter((run) =>
+        run.steps.every((step) => step.state !== `running` || roster.agents.some((agent) => agent.id === step.conversationId)),
+    );
+
 const patchAgent = (id: string, patch: Partial<AgentSummary>): AgentSummary | undefined => {
     const index = roster.agents.findIndex((agent) => agent.id === id);
     const found = roster.agents[index];
@@ -92,8 +107,13 @@ const patchAgent = (id: string, patch: Partial<AgentSummary>): AgentSummary | un
     return next;
 };
 
+// Who is in the workspace. The second one is the whole sharing story told in one frame — and the first thing a
+// minimal recording drops, because an avatar nobody asked for is furniture.
+const OWNER: PresenceUser = { clientId: `demo-owner`, email: `ada@acme.dev`, name: `Ada Lovelace`, idle: false, view: `workspace` };
+const TEAMMATE: PresenceUser = { clientId: `demo-mate`, email: `grace@acme.dev`, name: `Grace Hopper`, idle: true, view: `agents` };
+
 /* The /events stream: the hello identity frame, then a heartbeat inside the browser's 10s watchdog, plus the
- * roster and the presence of a second member — which is the whole sharing story told in one frame.
+ * roster and the presence of whoever this mode has in the workspace.
  *
  * `routes` is deliberately omitted from the hello. useDaemonRoutes reads its absence as "assume supported", so
  * no feature gates itself off on a daemon that never advertised — and the fixture doesn't have to keep a list
@@ -109,13 +129,7 @@ const events = (request: Request): Response =>
         sink.emit({ kind: `hello`, workspaceId: `demo-workspace`, build: `demo`, boot: { ready: true, startedAt: STARTED_AT, steps: [] } });
         sink.emit({ kind: `agents`, agents: roster.agents, rev: roster.rev });
         sink.emit({ kind: `reposChanged`, repos: [...REPOS] });
-        sink.emit({
-            kind: `presence`,
-            users: [
-                { clientId: `demo-owner`, email: `ada@acme.dev`, name: `Ada Lovelace`, idle: false, view: `workspace` },
-                { clientId: `demo-mate`, email: `grace@acme.dev`, name: `Grace Hopper`, idle: true, view: `agents` },
-            ],
-        });
+        sink.emit({ kind: `presence`, users: demoMode.teammate ? [OWNER, TEAMMATE] : [OWNER] });
 
         const beat = setInterval(() => sink.emit({ kind: `heartbeat` }), HEARTBEAT_MS);
         return () => {
@@ -382,8 +396,8 @@ const ROUTES: readonly (readonly [string, string, Handler])[] = [
      * of); what refuses is RUNNING one, because a run is several agent sessions against a real tree. Saving and
      * deleting refuse for the same reason the run does: a design the demo let you keep would be a design that
      * silently vanishes on reload, which teaches worse than a clear no. */
-    [`GET`, `/workflows`, () => json({ workflows: demoWorkflows(Date.now()) })],
-    [`GET`, `/workflows/runs`, () => json({ runs: demoRuns(Date.now()) })],
+    [`GET`, `/workflows`, () => json({ workflows: demoWorkflows(runsOnBoard(Date.now())) })],
+    [`GET`, `/workflows/runs`, () => json({ runs: runsOnBoard(Date.now()) })],
     [`POST`, `/workflows`, () => refuse(`This is the demo workspace — designs are read-only here.`)],
     [`DELETE`, `/workflows/{id}`, () => refuse(`This is the demo workspace — designs are read-only here.`)],
     [`POST`, `/workflows/{id}/run`, () => refuse(`This is the demo workspace — running a workflow starts several agent sessions on a real tree.`)],
