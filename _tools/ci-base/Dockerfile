@@ -41,6 +41,18 @@ RUN apt-get update \
     && apt-get install -y --no-install-recommends docker-ce-cli docker-buildx-plugin \
     && rm -rf /var/lib/apt/lists/*
 
+# Git's ownership check, switched off for every repository this image is handed. The runner's workspace belongs
+# to the host's runner user and a job container runs as root, so git calls the checkout "dubious ownership" and
+# refuses it — exit 128, before it reads a single object. actions/checkout hides this rather than hitting it:
+# it writes its own safe.directory into a HOME it overrides FOR ITS OWN STEPS, so the checkout succeeds and
+# every later step in the job inherits a git that will not touch the tree it just cloned.
+# What that cost: semantic-release probes for a repository with stderr discarded, so the refusal surfaced as
+# `ENOGITREPO Not running from a git repository` and failed the release step of every pipeline. `git ls-files`
+# — how turbo hashes task inputs — is behind the same wall in every other job, silently.
+# `*` and not the workspace path: an exact path is the only other form git honours (a `/__w/*` glob is NOT
+# matched), and baking one repository's checkout path into a shared CI image is the worse trade.
+RUN git config --system --add safe.directory '*'
+
 # bun — _apps/sync/scripts/build-binaries.sh cross-compiles the release's intentic-sync binaries with
 # `bun build --compile`. Copied out of the official image instead of piping the install script from bun.sh: the
 # version is digest-pinned and this layer needs no network. -slim is bookworm, so the binary is linked against
