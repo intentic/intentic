@@ -3,10 +3,13 @@ import { readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { HostScopes } from "@intentic/sandbox-contract";
-import { expect, test } from "vitest";
+import { afterEach, expect, test, vi } from "vitest";
 import { handleMcpMessage } from "./mcp.js";
 
 const scopes = (overrides: Partial<HostScopes> = {}): HostScopes => ({ shell: "on", write: "on", screen: "on", control: "on", ...overrides });
+
+// Without a vitest config there is no unstubEnvs, so a stub outlives its test and the home leaks down the file.
+afterEach(() => vi.unstubAllEnvs());
 
 const call = async (name: string, args: Record<string, unknown>, grant: HostScopes): Promise<{ text: string; isError: boolean }> => {
     const response = (await handleMcpMessage({ jsonrpc: "2.0", id: 1, method: "tools/call", params: { name, arguments: args } }, () => grant)) as {
@@ -84,6 +87,11 @@ test("a write says whether it created or replaced, and a read gets it back", asy
 });
 
 test("trash moves the file somewhere recoverable instead of deleting it", async () => {
+    // The trash lives under $HOME and the move is a rename, which files.ts refuses across filesystems by design.
+    // A home of its own next to the file keeps both on ONE filesystem, which is the case this test means. Left to
+    // the host they need not be: in a container job $HOME is a bind mount from the runner while tmpdir() is the
+    // image's own layer — two devices, so this passed on every laptop and failed only in CI.
+    vi.stubEnv("HOME", mkdtempSync(join(tmpdir(), "host-home-")));
     const root = mkdtempSync(join(tmpdir(), "host-fs-"));
     const path = join(root, "doomed.txt");
     await writeFile(path, "keep me");
