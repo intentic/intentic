@@ -45,6 +45,19 @@ describe(`matchesChord`, () => {
         // Still modifier-exact: plain Ctrl+` (toggle) must not fire on Ctrl+Shift+`.
         expect(matchesChord(`Ctrl+\``, keydown({ key: `~`, code: `Backquote`, ctrlKey: true, shiftKey: true }), false)).toBe(false);
     });
+
+    it(`carries Alt+digit through the glyphs Option composes on Apple layouts`, () => {
+        // THE REASON THE SANDBOX SWITCHER IS ON DIGITS. Option+1 composes "¡" on a US Apple layout (⌥2 "™",
+        // ⌥3 "£", …), so a produced-character match would leave Alt+1…9 dead on every Mac — the same trap that
+        // rules Alt+LETTER out of this app entirely (WorkspaceDesktop's Reopen Closed Tab). The number row is
+        // in CODE_TO_KEY, so the physical key carries it.
+        expect(matchesChord(`Alt+1`, keydown({ key: `¡`, code: `Digit1`, altKey: true }), true)).toBe(true);
+        expect(matchesChord(`Alt+3`, keydown({ key: `£`, code: `Digit3`, altKey: true }), true)).toBe(true);
+        // And unmangled elsewhere, off the same chord string.
+        expect(matchesChord(`Alt+1`, keydown({ key: `1`, code: `Digit1`, altKey: true }), false)).toBe(true);
+        // Modifier-exact, so the rail's Alt+↑/↓ neighbours can't be reached by adding Shift to a digit either.
+        expect(matchesChord(`Alt+1`, keydown({ key: `¡`, code: `Digit1`, altKey: true, shiftKey: true }), true)).toBe(false);
+    });
 });
 
 describe(`chordFromEvent`, () => {
@@ -97,5 +110,12 @@ describe(`formatChord`, () => {
     it(`labels multi-word named keys readably`, () => {
         expect(formatChord(`Ctrl+PageDown`, false)).toBe(`Ctrl+PageDown`);
         expect(formatChord(`Ctrl+PageUp`, true)).toBe(`⌃PageUp`);
+    });
+
+    it(`draws the arrows as arrows`, () => {
+        // The rail's walk chords. "Alt+Arrowup" is not a key anyone has called that, and this label is read in a
+        // 44px tooltip and the keybindings column, where the glyph is the whole word.
+        expect(formatChord(`Alt+ArrowUp`, false)).toBe(`Alt+↑`);
+        expect(formatChord(`Alt+ArrowDown`, true)).toBe(`⌥↓`);
     });
 });

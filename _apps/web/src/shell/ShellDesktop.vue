@@ -1,10 +1,10 @@
 <script setup lang="ts">
-import type { ViewBadge } from "@intentic/extension-api";
+import type { Disposable, ViewBadge } from "@intentic/extension-api";
 // `initialsOf` is the rail tile's glyph for a repository (my-shop-api → MS), so repositories stay
 // distinguishable instead of all sharing one icon — the same monogram <Avatar> and <BrandMark> fall back to.
 import { type IconName, initialsOf } from "@intentic/ui";
-import { computed } from "vue";
-import { RouterView, useRoute } from "vue-router";
+import { computed, onMounted, onUnmounted } from "vue";
+import { RouterView, useRoute, useRouter } from "vue-router";
 import { useAgents } from "../composables/agents/useAgents";
 import { useBrowsersQuery } from "../composables/browser/browsersQuery";
 import { useSubagentsQuery } from "../composables/subagents/subagentsQuery";
@@ -12,7 +12,7 @@ import { useCapabilities } from "../composables/extensions/useCapabilities";
 import { useDrafts } from "../composables/extensions/useDrafts";
 import { useTerminalPanel } from "../composables/terminal/useTerminalPanel";
 import { useTerminalActivity } from "../composables/terminal/useTerminalActivity";
-import { commandShortcut } from "../composables/commands/useCommands";
+import { commandShortcut, registerCommand } from "../composables/commands/useCommands";
 import { type ActiveExtension, activationBadge, detectActivations, extensionPath, railBands, railRank } from "../core-views/registry";
 import { badgeClass, badgeText } from "../core-views/viewBadge";
 import { useChatPopout } from "../composables/chat/useChatPopout";
@@ -83,6 +83,7 @@ const { iconRailSize } = useIconRailSize();
 // mounted above the router now — this shell just lends it the column (see the slot in the template).
 const { poppedOut, restoring: chatRestoring } = useChatPopout();
 const route = useRoute();
+const router = useRouter();
 
 // The connected tunnels behind the rail's VPN indicator. Shown only when non-empty: a VPN badge that is always
 // present would say nothing, whereas one that appears exactly while traffic is tunnelled is the whole signal.
@@ -241,6 +242,66 @@ const tiles = computed<readonly AreaTile[]>(() =>
 );
 // The tiles cut into their bands, so the template can draw a hairline between runs.
 const tileBands = computed(() => railBands(tiles.value, (tile) => tile.id));
+
+/* ALT+↑/↓ — WALK THE RAIL. The column is vertical, so the arrows ARE its axis, and the Alt+PageUp/PageDown
+ * family next door keeps meaning what it means (the tabs WITHIN an area, resolved by focus): one modifier for
+ * "move between things", the key saying which set. Bands are crossed silently — the hairlines group the tiles
+ * for the eye, they are not stops.
+ *
+ * The NAVIGATION run only, not the live-runtime cluster below the divider. Browsers and Subagents appear the
+ * moment a turn spawns one and leave when it is done, and a sequence whose length changes under the hand mid-
+ * turn is not one a hand can learn; that cluster is runtime state, not an area (see browserTile).
+ *
+ * Wraps, like every other cycle in the shell. From a route no tile owns — the sandbox hub, /capabilities, a
+ * runtime view — there is no "next" to be relative to, so the press enters the run at the end it is heading
+ * away from: ↓ opens the first tile, ↑ the last. */
+const cycleArea = (delta: number): void => {
+    const list = tiles.value;
+    if (list.length === 0) {
+        return;
+    }
+    const index = list.findIndex((tile) => isNavActive(tile.to));
+    const from = index === -1 ? (delta > 0 ? -1 : 0) : index;
+    const next = list[(from + delta + list.length) % list.length];
+    if (next !== undefined) {
+        void router.push(next.to);
+    }
+};
+
+let areaCommands: readonly Disposable[] = [];
+
+onMounted(() => {
+    areaCommands = [
+        // Gated on `reachable`, exactly as the tiles themselves are inert while the daemon is unreachable: every
+        // area behind them is served by that machine, so a chord that navigates there would only swap one gate
+        // screen for another. (The sandbox switcher above deliberately does NOT gate — that is the way out.)
+        registerCommand({
+            owner: `builtin`,
+            command: `view.previousArea`,
+            title: `Previous Rail Area`,
+            icon: `chevron-up`,
+            keybinding: `Alt+ArrowUp`,
+            when: () => reachable.value,
+            handler: () => cycleArea(-1),
+        }),
+        registerCommand({
+            owner: `builtin`,
+            command: `view.nextArea`,
+            title: `Next Rail Area`,
+            icon: `chevron-down`,
+            keybinding: `Alt+ArrowDown`,
+            when: () => reachable.value,
+            handler: () => cycleArea(1),
+        }),
+    ];
+});
+
+onUnmounted(() => {
+    for (const disposable of areaCommands) {
+        disposable.dispose();
+    }
+    areaCommands = [];
+});
 
 // Collapse the chat column to nothing while the panel is popped out (it's teleported into its own window), so
 // the workspace reclaims the full width — and equally while a window from before a page reload is still on its

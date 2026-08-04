@@ -130,7 +130,9 @@ export const chordFromEvent = (event: KeyboardEvent, isMac: boolean): string | u
 };
 
 // Multi-word named keys whose readable label isn't just first-letter capitalization ("Pagedown" reads wrong).
-const DISPLAY_NAMES: Readonly<Record<string, string>> = { pageup: `PageUp`, pagedown: `PageDown` };
+// The arrows go all the way to their glyph: "Arrowup" is not a key anyone has ever called that, and the label
+// is read in a 44px rail tooltip and a narrow settings column where ⌥↑ says it in two characters.
+const DISPLAY_NAMES: Readonly<Record<string, string>> = { pageup: `PageUp`, pagedown: `PageDown`, arrowup: `↑`, arrowdown: `↓` };
 
 const displayKey = (key: string): string => DISPLAY_NAMES[key] ?? (key.length === 1 ? key.toUpperCase() : key.charAt(0).toUpperCase() + key.slice(1));
 

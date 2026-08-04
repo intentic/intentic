@@ -1,11 +1,13 @@
 <script setup lang="ts">
+import type { Disposable } from "@intentic/extension-api";
 import type { SandboxSummary } from "@intentic-app/api-contract";
 import { Code, commandLang, ConfirmDialog, type IconName, OS_OPTIONS, Segmented, useOsPreference } from "@intentic/ui";
 import { sandboxSubdomain } from "@intentic/sandbox-contract";
 import Button from "primevue/button";
 import Popover from "primevue/popover";
-import { computed, onMounted, ref, watch } from "vue";
+import { computed, onMounted, onUnmounted, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
+import { commandShortcut, registerCommand } from "../composables/commands/useCommands";
 import { badgeClass, badgeText } from "../core-views/viewBadge";
 import { type SandboxAttentionItem, useSandboxAttention } from "../composables/sandbox/sandboxAttention";
 import { useSandbox } from "../composables/sandbox/useSandbox";
@@ -43,12 +45,6 @@ const ROW_TONE: Record<SandboxAttentionItem["tone"], string> = {
 
 const panel = ref<InstanceType<typeof Popover> | null>(null);
 
-onMounted(() => {
-    if (sandbox.sandboxes.value.length === 0) {
-        void sandbox.list();
-    }
-});
-
 /* Switching to a sandbox that has never reported in is not switching to anything: it has no daemon, so the
  * shell can only paint a connecting gate that cannot resolve. What that row actually is, is an unfinished
  * setup — so picking it goes back there and resumes it, which is also the only place it can become a
@@ -62,6 +58,54 @@ const pick = (option: SandboxSummary): void => {
     }
     sandbox.select(option.id);
 };
+
+/* ALT+1…9 — the Nth sandbox in this popover's own order, without opening it.
+ *
+ * Positional rather than a cycle, because a switch re-points every daemon-backed query and the liveness probe
+ * at another machine: walking past the one you wanted is not a keystroke you take back, and the list is short
+ * enough to aim at directly. A digit past the end therefore does NOTHING — clamping to the last sandbox would
+ * answer a miss with the most expensive thing this control can do.
+ *
+ * Alt, not Mod: every browser owns Mod+1…9 for tab selection and won't hand it over. Digits survive Apple
+ * layouts because matchesChord falls back to the PHYSICAL key for the number row (⌥1 produces "¡"), which is
+ * the same reason the sibling family can't be Alt+letter.
+ *
+ * NOT gated on `reachable`, unlike the rail tiles behind this control: an unreachable sandbox is the single
+ * best reason to be pressing this at all. */
+const SWITCH_SLOTS = 9;
+// The row's own chord, read back from the registry rather than printed as a literal "Alt+N", so a remap in
+// Settings → Keybindings — or an unbind — is what the popover shows. Reactive, like every commandShortcut read.
+const slotChord = (at: number): string | undefined => (at < SWITCH_SLOTS ? commandShortcut(`sandbox.switch${at + 1}`) : undefined);
+
+let disposables: readonly Disposable[] = [];
+
+onMounted(() => {
+    if (sandbox.sandboxes.value.length === 0) {
+        void sandbox.list();
+    }
+    disposables = Array.from({ length: SWITCH_SLOTS }, (_unused, at) =>
+        registerCommand({
+            owner: `builtin`,
+            command: `sandbox.switch${at + 1}`,
+            title: `Switch to Sandbox ${at + 1}`,
+            icon: `server`,
+            keybinding: `Alt+${at + 1}`,
+            handler: (): void => {
+                const option = sandbox.sandboxes.value[at];
+                if (option !== undefined) {
+                    pick(option);
+                }
+            },
+        }),
+    );
+});
+
+onUnmounted(() => {
+    for (const disposable of disposables) {
+        disposable.dispose();
+    }
+    disposables = [];
+});
 
 // The sandbox management hub has no rail tile — this chip is its home (identity → tabbed settings surface), and
 // it is where every attention row lands too: each names a tab of the same hub.
@@ -201,7 +245,7 @@ const confirmRemove = async (): Promise<void> => {
             <div class="px-2 py-1.5 text-2xs font-semibold uppercase tracking-wide text-subtle">Sandboxes</div>
 
             <button
-                v-for="option in sandbox.sandboxes.value"
+                v-for="(option, at) in sandbox.sandboxes.value"
                 :key="option.id"
                 type="button"
                 class="group flex items-center gap-2.5 rounded-md px-2 py-1 text-left text-sm transition-colors"
@@ -229,6 +273,15 @@ const confirmRemove = async (): Promise<void> => {
                 >
                 <span v-else-if="option.role === 'member'" class="shrink-0 rounded-full bg-content/10 px-1.5 py-0.5 text-2xs font-medium text-subtle"
                     >Shared</span
+                >
+                <!-- WHICH DIGIT THIS ROW IS. A positional shortcut nobody can see the positions of is not a
+                     shortcut — the chord is invisible everywhere else (there is no menu row for "sandbox 3"),
+                     so this list is the only place it can be learned. Fades out under the hover that brings in
+                     the trash icon, which needs the same corner. -->
+                <kbd
+                    v-if="slotChord(at)"
+                    class="shrink-0 rounded border border-line px-1 font-mono text-2xs font-normal leading-4 text-subtle transition-opacity group-hover:opacity-0"
+                    >{{ slotChord(at) }}</kbd
                 >
                 <Icon
                     name="trash"
