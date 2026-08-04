@@ -467,7 +467,14 @@ ENV DO_NOT_TRACK=1 \
 # tool's own documented switch; folk-list vars that don't exist (VITE_/PODMAN_/DOCKER_CLI_ telemetry opt-outs,
 # CRATES_EDITION_METRICS) are omitted, as is ANSIBLE_GATHERING=explicit — that changes playbook semantics, not
 # privacy. npm audit/fund are off because install-time audit posts the dependency graph to the registry.
-# NOTE: containers under the sandbox's inner dockerd do NOT inherit this env — only processes in the sandbox itself.
+#
+# INHERITANCE IS NOT UNIVERSAL, and a var set here is worth nothing where it does not reach. Two known holes:
+#   - Containers under the sandbox's inner dockerd get none of this — only processes in the sandbox itself do.
+#   - A TASK RUNNER may rebuild the environment rather than pass it down. Turborepo 2 defaults to envMode
+#     `strict` and hands each task a reconstructed env, so `pnpm dev` in /work/intentic silently dropped 30 of
+#     the 32 names below until turbo.json's `globalPassThroughEnv` re-declared them — `astro dev` ran with
+#     telemetry ON for as long as that hole was open. A name ADDED here must be added there too.
+# Anything else that spawns build/dev commands through a filtering layer needs the same treatment.
 ENV DISABLE_OPENCOLLECTIVE=1 \
     ADBLOCK=true \
     NPM_CONFIG_AUDIT=false \

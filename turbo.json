@@ -1,6 +1,55 @@
 {
     "$schema": "https://turborepo.com/schema.json",
     "ui": "tui",
+    // The sandbox image's privacy hardening, re-declared so it survives into task processes. Turbo 2's default
+    // envMode is `strict`: a task does NOT inherit the ambient environment, it gets a rebuilt one holding only
+    // Turbo's system defaults plus what `globalEnv`/`globalPassThroughEnv`/`env`/`passThroughEnv` name. So the
+    // two ENV blocks in _apps/sandbox/Dockerfile — correct, and live in every sandbox shell — were being
+    // deleted before any task started: measured 30 of these 32 stripped, everything except NEXT_ and TURBO_
+    // (Turbo ships those two itself). `astro dev` therefore ran with telemetry ON and persisted
+    // `enabled: true` plus a tracking id into ~/.config/astro/config.json, which is how this was found.
+    //
+    // passThrough, not `globalEnv`, because these must not enter the cache key: a passthrough variable's VALUE
+    // does not move a task hash, only the presence of the list does — so this costs ONE global invalidation
+    // when it lands and nothing afterwards. Both were verified against turbo 2.10.8 before this was written.
+    //
+    // This list mirrors the Dockerfile's two ENV blocks and has to keep mirroring them: a name added there and
+    // not here is set in the image and invisible to every task, which is the exact bug above. NEXT_ and TURBO_
+    // are kept even though Turbo passes them anyway, so the two lists can be diffed as one statement.
+    "globalPassThroughEnv": [
+        "DO_NOT_TRACK",
+        "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC",
+        "DISABLE_TELEMETRY",
+        "DISABLE_ERROR_REPORTING",
+        "DISABLE_FEEDBACK_COMMAND",
+        "DISABLE_AUTOUPDATER",
+        "OPENCODE_DISABLE_AUTOUPDATE",
+        "DISABLE_OPENCOLLECTIVE",
+        "ADBLOCK",
+        "NPM_CONFIG_AUDIT",
+        "NPM_CONFIG_FUND",
+        "YARN_ENABLE_TELEMETRY",
+        "SCARF_ANALYTICS",
+        "NEXT_TELEMETRY_DISABLED",
+        "NUXT_TELEMETRY_DISABLED",
+        "GATSBY_TELEMETRY_DISABLED",
+        "ASTRO_TELEMETRY_DISABLED",
+        "TURBO_TELEMETRY_DISABLED",
+        "EXPO_NO_TELEMETRY",
+        "STORYBOOK_DISABLE_TELEMETRY",
+        "NG_CLI_ANALYTICS",
+        "DOTNET_CLI_TELEMETRY_OPTOUT",
+        "POWERSHELL_TELEMETRY_OPTOUT",
+        "SAM_CLI_TELEMETRY",
+        "CHECKPOINT_DISABLE",
+        "CLOUDSDK_CORE_DISABLE_USAGE_REPORTING",
+        "AZURE_CORE_COLLECT_TELEMETRY",
+        "WRANGLER_SEND_METRICS",
+        "STRIPE_CLI_TELEMETRY_OPTOUT",
+        "HASURA_GRAPHQL_ENABLE_TELEMETRY",
+        "HF_HUB_DISABLE_TELEMETRY",
+        "CONDA_ANACONDA_ANON_USAGE"
+    ],
     "tasks": {
         "build": {
             "dependsOn": ["^build"],
