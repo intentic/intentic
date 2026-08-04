@@ -1,8 +1,9 @@
 <script setup lang="ts">
-import { Card, Icon } from "@intentic/extension-ui";
+import { Card, DagGraph } from "@intentic/extension-ui";
 import type { Workflow } from "@intentic/sandbox-contract";
 import { computed } from "vue";
-import { workflowLayers } from "./workflowDag";
+import WorkflowNodeCard from "./WorkflowNodeCard.vue";
+import { workflowDag, workflowLayers } from "./workflowDag";
 
 /* ONE WORKFLOW AS A CARD — and the SAME card whether it is a design you have saved or a template you could.
  *
@@ -11,11 +12,14 @@ import { workflowLayers } from "./workflowDag";
  * those" — which is precisely what a template is. Drawn identically (dashed, because you do not own it yet), it
  * reads as a workflow you do not have, and picking one stops being a leap.
  *
- * IT DRAWS THE GRAPH RATHER THAN DESCRIBING IT. The row this replaces said "3 steps, branching" beside a
- * paragraph truncated to whatever width was left over — a sentence about a picture, where the picture is the
- * entire reason a workflow is a thing you keep. One column per generation, chips stacked where steps run side
- * by side, is the designer's own reading (workflowLayers) at a size that fits in a list: a fan-out looks like a
- * fan-out from across the room, and the words go back to being about the work.
+ * IT DRAWS THE ACTUAL GRAPH — dagre, the real edges, the same node card the designer and the run view draw —
+ * and not a diagram-shaped ornament. It had one of those for a while: chips in columns joined by chevrons,
+ * which is a drawing OF a graph rather than the graph, and it quietly dropped everything the picture is worth
+ * having for. The continued handoff that draws solid and tinted where a fresh one draws dashed — the one
+ * structural fact you cannot read off the titles — was not in it, and neither was what each step produces or
+ * what checks it. Feeding `workflowDag` to <DagGraph> makes this a third consumer of the one derivation
+ * (workflowDag.ts) rather than a second, lookalike picture of the same workflow, and the frame it sits in is
+ * the documentation figure's: a tint, bounded, sized to its content.
  *
  * The description is a PROP rather than read off the workflow, because the gallery sells with a different
  * sentence than the design carries — a template's pitch is about its shape, a saved design's is about its job.
@@ -24,21 +28,30 @@ import { workflowLayers } from "./workflowDag";
 const { workflow, description, dashed = false } = defineProps<{ workflow: Workflow; description?: string; dashed?: boolean }>();
 const emit = defineEmits<{ open: [] }>();
 
-// Past four columns the strip is a smear rather than a shape, and a long graph reads as "long" at four columns
-// just as well as at nine. The designer is one click away for the rest.
-const COLUMNS_SHOWN = 4;
-
+const dag = computed(() => workflowDag(workflow));
 const layers = computed(() => workflowLayers(workflow.steps));
-const columns = computed(() => layers.value.slice(0, COLUMNS_SHOWN));
-const beyond = computed(() => layers.value.slice(COLUMNS_SHOWN).reduce((total, layer) => total + layer.length, 0));
+const widest = computed(() => Math.max(...layers.value.map((layer) => layer.length)));
+
+// The designer's own geometry, so a step is the same box here as it is on the canvas you open by clicking it.
+const NODE_WIDTH = 216;
+const NODE_HEIGHT = 56;
+// dagre's `nodesep` (dagLayout.ts) — the gap between two boxes sharing a rank.
+const NODE_GAP = 28;
+
+/* How tall the frame has to be, and it is the WIDEST PARALLEL LAYER that decides it: an LR graph grows sideways
+ * as steps follow one another and downwards only where they run side by side, so a nine-step chain is no taller
+ * than a one-step one. Bounded at both ends for the reason MarkdownFigure bounds a document's figures — a lone
+ * box in a 20rem band is a field of nothing, and past the ceiling the graph is scaled down to fit rather than
+ * the card growing without limit. The `+2` is room for the fit's own padding.
+ */
+const frameRem = computed(() => Math.min(20, Math.max(6, (widest.value * NODE_HEIGHT + (widest.value - 1) * NODE_GAP) / 16 + 2)));
 
 /* The two facts the picture cannot carry: how big it is, and how much of it happens at once. `maxParallel` is
  * only said where there is a fan-out to hold back — on a chain it is a number about nothing.
  */
 const shape = computed(() => {
     const steps = `${workflow.steps.length} step${workflow.steps.length === 1 ? `` : `s`}`;
-    const widest = Math.max(...layers.value.map((layer) => layer.length));
-    return widest > 1 ? `${steps} · up to ${workflow.maxParallel} at once` : steps;
+    return widest.value > 1 ? `${steps} · up to ${workflow.maxParallel} at once` : steps;
 });
 </script>
 
@@ -62,23 +75,25 @@ const shape = computed(() => {
             <div class="flex shrink-0 items-center gap-1"><slot name="actions" /></div>
         </div>
 
-        <!-- THE SHAPE. Scrolls rather than wraps: a wrapped graph is a different graph, and a strip that runs
-             off the edge at least still says "there is more of this to the right". -->
-        <div class="ui-softscroll flex items-center gap-1.5 overflow-x-auto pb-0.5">
-            <template v-for="(column, index) in columns" :key="index">
-                <Icon v-if="index > 0" name="angle-right" class="shrink-0 text-2xs text-subtle" />
-                <div class="flex shrink-0 flex-col gap-1">
-                    <span
-                        v-for="step in column"
-                        :key="step.id"
-                        class="max-w-44 truncate rounded-md border border-line bg-canvas px-2 py-1 text-2xs text-muted"
-                        :title="step.title"
-                    >
-                        {{ step.title }}
-                    </span>
-                </div>
-            </template>
-            <span v-if="beyond > 0" class="shrink-0 text-2xs text-subtle">+{{ beyond }} more</span>
+        <!-- THE DIAGRAM, in the documentation figure's frame: a wash rather than a stroke, because the picture
+             inside is already a field of bordered boxes and an outline around it makes a box of boxes. -->
+        <div class="relative w-full overflow-hidden rounded-lg bg-content/[0.04]" :style="{ height: `${frameRem}rem` }">
+            <!-- A PICTURE, NOT A CANVAS. The graph keeps its own wheel-zoom and drag-pan, which on a page of
+                 cards means scrolling past one zooms it instead — so the whole thing is made inert and the
+                 gestures go to the page. Panning a thumbnail was never the point; opening it is. -->
+            <div class="pointer-events-none h-full w-full">
+                <DagGraph :nodes="dag.nodes" :edges="dag.edges" :node-width="NODE_WIDTH" :node-height="NODE_HEIGHT" :magnify="false">
+                    <template #node="{ node }"><WorkflowNodeCard :node="node.data" /></template>
+                </DagGraph>
+            </div>
+            <!-- The door, laid over the picture rather than wrapped around it: the nodes are buttons, and a
+                 button inside a button is not markup a browser has to honour. -->
+            <button
+                type="button"
+                class="absolute inset-0 cursor-pointer rounded-lg transition-shadow hover:ring-1 hover:ring-line-strong focus-visible:ring-1 focus-visible:ring-link focus-visible:outline-none"
+                :aria-label="`Open ${workflow.name} in the designer`"
+                @click="emit(`open`)"
+            ></button>
         </div>
 
         <!-- The footer is anchored at both ends — what the design IS on the left, how it last WENT on the right

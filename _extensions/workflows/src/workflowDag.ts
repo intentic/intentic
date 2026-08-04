@@ -109,12 +109,12 @@ export const workflowDag = (workflow: Pick<Workflow, "steps">, run?: WorkflowRun
     return { nodes, edges };
 };
 
-/* THE SAME GRAPH AS ONE COLUMN PER GENERATION — what a list card draws instead of the canvas.
+/* THE GRAPH AS ONE COLUMN PER GENERATION — steps that wait on nothing, then everything they unblock.
  *
- * Third consumer, same module, and for the reason the module exists: the picture in the list and the picture in
- * the designer have to be the same picture. A card cannot afford dagre, a viewport and a node component, but it
- * can afford columns — steps that wait on nothing, then everything they unblock — and that is enough to see a
- * fan-out as a fan-out.
+ * NOT A SECOND PICTURE. The list card draws the real graph through DagGraph like everything else; what it needs
+ * from here is the one measurement dagre's own output cannot give it before layout runs — how WIDE the widest
+ * rank is, which in an LR graph is what decides how tall the frame has to be, and whether a design has any
+ * parallelism worth mentioning in words ("up to 2 at once").
  *
  * A CYCLE CANNOT HANG IT. Nothing being ready means every remaining step waits on another one, which the save
  * route refuses — but a template is authored by hand, and a page that spins forever over a typo is not a
