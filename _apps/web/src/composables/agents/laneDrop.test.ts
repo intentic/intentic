@@ -83,9 +83,14 @@ describe("dropActionFor", () => {
         expect(dropActionFor(agent({ status: `running` }), `discard`)).toBeUndefined();
     });
 
-    it("refuses every target for a draft — no registry entry, no worktree, no turn", () => {
-        for (const target of [`attention`, `active`, `finished`, `discard`] as const) {
-            expect(dropActionFor(agent({ status: `draft` }), target)).toBeUndefined();
+    // Both client-only standings, because they refuse for one reason: the daemon has no entry for either, so
+    // every action behind a drop addresses an id it has never heard of. A refused send is the one that looks
+    // most like it should work — it sits in Attention, where a drop on Finished otherwise lands the work.
+    it("refuses every target for a draft and a refused send — no registry entry, no worktree, no turn", () => {
+        for (const status of [`draft`, `failed`] as const) {
+            for (const target of [`attention`, `active`, `finished`, `discard`] as const) {
+                expect(dropActionFor(agent({ status }), target)).toBeUndefined();
+            }
         }
     });
 
@@ -102,6 +107,7 @@ describe("dropActionFor", () => {
     it("explains exactly the refusals it makes, and only those", () => {
         const cases: readonly FleetAgent[] = [
             agent({ status: `draft` }),
+            agent({ status: `failed` }),
             agent({ status: `running` }),
             agent({ status: `awaiting` }),
             agent({ status: `conflict` }),

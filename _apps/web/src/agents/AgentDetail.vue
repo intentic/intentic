@@ -6,7 +6,7 @@ import Popover from "primevue/popover";
 import { computed, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import ChatPanel from "../chat/ChatPanel.vue";
-import { agentStatusMeta } from "../composables/agents/agentStatus";
+import { agentStatusMeta, unregistered } from "../composables/agents/agentStatus";
 import { createTitleEdit } from "../composables/agents/titleEdit";
 import { useAgentChanges } from "../composables/agents/useAgentChanges";
 import { useAgents } from "../composables/agents/useAgents";
@@ -63,7 +63,7 @@ const settleLookup = (id: string): void => {
     void Promise.all([refresh(), loadArchived()]).finally(() => (settling.value = false));
 };
 // Registered = has run a turn. Only a branch-backed registered conversation has a Changes review.
-const registered = computed(() => fleetAgent.value !== undefined && fleetAgent.value.status !== `draft`);
+const registered = computed(() => fleetAgent.value !== undefined && !unregistered(fleetAgent.value.status));
 const reviewable = computed(() => registered.value && fleetAgent.value?.branch !== undefined);
 const conversation = computed(() => conversations.value.find((candidate) => candidate.conversationId === agentId.value));
 

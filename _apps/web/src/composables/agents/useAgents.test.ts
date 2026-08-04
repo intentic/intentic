@@ -117,6 +117,10 @@ describe("canArchive", () => {
     it("refuses a live turn (the worktree is its working state) and a draft (no registry entry to archive)", () => {
         expect(canArchive({ status: `running`, attention: none })).toBe(false);
         expect(canArchive({ status: `draft`, attention: none })).toBe(false);
+        // A REFUSED send is the other half of that same reason — it is in the Attention lane, where archiving
+        // is otherwise the move, but the daemon turned its request away and so has no entry to file. The
+        // affordance the card offers instead is Close (AgentCard.closable).
+        expect(canArchive({ status: `failed`, attention: none })).toBe(false);
         // A stopped turn is still a live turn until its generator unwinds — the daemon holds the worktree for
         // the whole of it, and that window is exactly when a user reaches for the next control.
         expect(canArchive({ status: `stopping`, attention: none })).toBe(false);
@@ -283,6 +287,36 @@ describe("draft cards", () => {
         useChat().conversations.value = [...useChat().conversations.value, conversation];
 
         expect(activeIds()).toEqual([`workspace-fresh`]);
+    });
+
+    /* AN UNREGISTERED CONVERSATION CARRYING AN ERROR IS NOT A DRAFT. The only way one gets here is that its send
+     * was REFUSED — the daemon turns a request away and never makes an entry, which is precisely why the fleet
+     * has never heard of it. Reading that as a draft put a card nobody can act on into the Active lane, sorted
+     * ABOVE the agents genuinely working (drafts lead that lane), where it survived every reload for the life of
+     * the sandbox: the report this came from had ten of them.
+     *
+     * Attention is where it belongs and `Didn't start` is what the chip says, because the card IS a thing that
+     * needs the user — and what they do about it is close it, which is the affordance that standing unlocks. */
+    it("cards a conversation whose send was refused as failed, in Attention rather than among the working", () => {
+        const conversation = new Conversation(`refused`);
+        conversation.error.value = `invalid attachment path: nope.png`;
+        useChat().conversations.value = [...useChat().conversations.value, conversation];
+
+        expect(activeIds()).toEqual([]);
+        expect(useAgents().lanes.value.attention.map((entry) => ({ id: entry.id, status: entry.status }))).toEqual([
+            { id: `refused`, status: `failed` },
+        ]);
+    });
+
+    // The error is about the LAST send, not about the conversation — a turn that goes through clears it, and the
+    // card has to follow rather than wear a refusal the user has already sent past.
+    it("cards it as a draft again once a turn is under way", () => {
+        const conversation = new Conversation(`refused`);
+        conversation.error.value = `invalid attachment path: nope.png`;
+        useChat().conversations.value = [...useChat().conversations.value, conversation];
+        conversation.error.value = null;
+
+        expect(activeIds()).toEqual([`refused`]);
     });
 
     it("stops carding a conversation once the roster registers it — one card, from the registry", () => {

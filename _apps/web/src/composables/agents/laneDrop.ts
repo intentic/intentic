@@ -1,4 +1,4 @@
-import { laneOf, type FleetLane, turnInFlight } from "./agentStatus";
+import { laneOf, type FleetLane, turnInFlight, unregistered } from "./agentStatus";
 import type { FleetAgent } from "./useAgents";
 
 /* What dragging a card across the board actually DOES. The lanes are pure projections of the daemon's status
@@ -23,8 +23,9 @@ export type DropAction = "land" | "resolve" | "stop" | "discard";
 export type PendingAction = DropAction | "archive" | "restore";
 
 export const dropActionFor = (agent: FleetAgent, target: DropTarget): DropAction | undefined => {
-    // A draft is an open tab that never ran: no registry entry, no worktree, no turn — nothing to act on.
-    if (agent.status === `draft`) {
+    // A draft is an open tab that never ran, and a refused one is a tab that TRIED and was turned away: either
+    // way there is no registry entry, no worktree and no turn — nothing for any of these to act on.
+    if (unregistered(agent.status)) {
         return undefined;
     }
     if (target === `discard`) {
@@ -80,7 +81,7 @@ export const dropRejection = (agent: FleetAgent, target: DropTarget): string | u
     if (dropActionFor(agent, target) !== undefined) {
         return undefined;
     }
-    if (agent.status === `draft`) {
+    if (unregistered(agent.status)) {
         return `This agent hasn't run yet`;
     }
     // Ahead of every target, because it is the true answer for all of them — and because the discard line

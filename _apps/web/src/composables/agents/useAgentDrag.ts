@@ -1,6 +1,7 @@
 import { computed, ref } from "vue";
 import { errorMessage } from "../useAsyncAction";
 import { askAgentToResolve, discardAgent, invalidateAgentAction, landAgent, stopAgent } from "./agentActions";
+import { unregistered } from "./agentStatus";
 import { dropActionFor, type DropAction, type DropTarget } from "./laneDrop";
 import { useAgents, type FleetAgent } from "./useAgents";
 
@@ -209,8 +210,9 @@ const begin = (event: PointerEvent, agent: FleetAgent, card: HTMLElement): void 
     if (event.pointerType === `touch` || event.button !== 0) {
         return;
     }
-    // A draft is an open tab that never ran — no registry entry, so no drop on it could do anything.
-    if (agent.status === `draft`) {
+    // A draft is an open tab that never ran, and a refused one never got past the door — no registry entry
+    // either way, so no drop on it could do anything.
+    if (unregistered(agent.status)) {
         return;
     }
     const rect = card.getBoundingClientRect();

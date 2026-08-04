@@ -93,7 +93,7 @@ const {
     busyIds,
     agentById,
 } = useAgents();
-const { active, openConversation, panes, openBeside, closePane, setPanes } = useChat();
+const { active, openConversation, panes, openBeside, closePane, closeTabs, setPanes } = useChat();
 const { popOut: popOutChat, poppedOut } = useChatPopout();
 // This agent's chat has a column in the chat window but not the focus — the board's half of the rail's
 // "showing" mark, so a split is legible from either surface.
@@ -660,6 +660,13 @@ const reviewAgent = (agent: FleetAgent): void => {
     open(agent);
     void router.push(`/agents/${encodeURIComponent(agent.id)}`);
 };
+/* The only exit a card with no registry entry has (AgentCard's `closable`): closing its TAB, which is the same
+ * conversation this card is the other skin of, so the card leaves the board with it. Not `archive` — there is
+ * nothing daemon-side to file — and deliberately the identical act the chat rail's × performs, down to asking
+ * for no confirmation, so the two surfaces cannot come to mean different things by the same press. */
+const closeAgent = (agent: FleetAgent): void => {
+    closeTabs(new Set([agent.id]));
+};
 /* --- Workflow runs on the board ------------------------------------------------------------------
  * A run is not an agent (WorkflowRunCard says why at length), so it is a SECOND list rendered into the same
  * lanes rather than a row in `fleet`. It sits at the top of its lane: a run is the container of several cards
@@ -981,6 +988,7 @@ const grabCard = (event: PointerEvent, agent: FleetAgent, card: HTMLElement): vo
                             @land="landNow(agent.id)"
                             @archive="archive([agent.id])"
                             @restore="restore([agent.id])"
+                            @close="closeAgent(agent)"
                             @grab="(event, card) => grabCard(event, agent, card)"
                         />
                     </TransitionGroup>

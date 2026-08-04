@@ -9,7 +9,13 @@ import { resolvePrompt } from "../agents/conflictResolution";
 import { type ChatMessage, foldsIntoTurn, isAcknowledgment, turnsOf } from "./transcript";
 import { usageStatusByAccount } from "./usageStatus";
 
-vi.mock("../sandbox/sandboxClient", () => ({ sandboxRequest: vi.fn() }));
+// `sandboxError` stands in for the real one minus that module's app-wide singletons (the endpoint, session and
+// sandbox stores sandboxRequest reaches for at import time). It keeps the half this file depends on: the daemon
+// puts its own sentence for a refusal on `message`, and reading it is the whole point of the path below.
+vi.mock("../sandbox/sandboxClient", () => ({
+    sandboxRequest: vi.fn(),
+    sandboxError: async (response: Response) => new Error(((await response.json()) as { message: string }).message),
+}));
 const { sandboxRequest } = await import("../sandbox/sandboxClient");
 const sandboxRequestMock = vi.mocked(sandboxRequest);
 
@@ -1810,6 +1816,57 @@ describe(`Conversation`, () => {
         expect(conversation.queued.value.map((message) => message.text)).toEqual([`/workspace view does not remember the file tree`]);
         // Muted: sending again is the fix, and the daemon now knows the command list well enough to let it past.
         expect(conversation.error.value).toBeNull();
+    });
+
+    /* THE REFUSAL THAT NEVER BECAME A TURN. The daemon turned the POST away at the door, so there is no error
+     * FRAME to classify and none of the machinery above ran — which is exactly how this path came to do neither
+     * of the two things every code up there does. What it left instead was a bare "Chat request failed (400)"
+     * naming nothing the user could fix, their words stranded in a transcript no daemon has a record of, and a
+     * conversation the fleet never registered: a card on the board with no archive, no discard and no drop.
+     *
+     * Both halves are asserted because either alone still strands them. The daemon's own sentence, because the
+     * status code is not a thing anybody can act on. And the words back in the QUEUE — held there, not flushed:
+     * a queue that re-sent itself would re-fail identically for as long as the cause stood. */
+    it(`says why the daemon refused the turn, and takes the undelivered message back`, async () => {
+        const conversation = new Conversation(`c1`);
+        sandboxRequestMock.mockResolvedValue(new Response(JSON.stringify({ message: `invalid attachment path: ../../etc/passwd` }), { status: 400 }));
+
+        await conversation.send(`redesign the settings page`, {
+            agent: `claude`,
+            harness: `native`,
+            account: undefined,
+            model: `opus`,
+            effort: `medium`,
+            thinking: false,
+            fast: false,
+        });
+
+        expect(conversation.error.value).toBe(
+            `invalid attachment path: ../../etc/passwd Your message is held below — send it again once that's sorted.`,
+        );
+        expect(conversation.queued.value.map((message) => message.text)).toEqual([`redesign the settings page`]);
+        // Out of the transcript entirely: nothing about this send is part of the conversation, here or daemon-side.
+        expect(conversation.messages.value).toEqual([]);
+    });
+
+    // A 409 is the one refusal that keeps neither half: a turn IS running on this conversation, so these words
+    // are its to take as steering and the queue has to stay free to flush into it when it settles.
+    it(`leaves the queue alone when the refusal is that a turn is already running`, async () => {
+        const conversation = new Conversation(`c1`);
+        sandboxRequestMock.mockResolvedValue(new Response(JSON.stringify({ message: `a turn is already running` }), { status: 409 }));
+
+        await conversation.send(`and the docs`, {
+            agent: `claude`,
+            harness: `native`,
+            account: undefined,
+            model: `opus`,
+            effort: `medium`,
+            thinking: false,
+            fast: false,
+        });
+
+        expect(conversation.error.value).toBe(`This agent already has a turn running — wait for it to finish.`);
+        expect(conversation.queued.value).toEqual([]);
     });
 
     it(`replays the held message once the account is reconnected`, async () => {

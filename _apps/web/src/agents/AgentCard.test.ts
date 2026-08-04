@@ -74,10 +74,18 @@ const delegating = (): FleetAgent => ({
 let app: App | undefined;
 // Icon and v-tooltip are registered app-wide by installUi; stand-ins keep this off the whole UI plugin. Icon
 // prints the glyph it was handed, because WHICH glyph is what says "in flight" on the button.
-const mount = (agent: FleetAgent, pending?: PendingAction): HTMLElement => {
+const mount = (agent: FleetAgent, pending?: PendingAction, onClose?: () => void): HTMLElement => {
     const el = document.createElement(`div`);
     document.body.append(el);
-    app = createApp({ render: () => h(AgentCard, { agent, now: 2, ...(pending !== undefined ? { pending } : {}) }) });
+    app = createApp({
+        render: () =>
+            h(AgentCard, {
+                agent,
+                now: 2,
+                ...(pending !== undefined ? { pending } : {}),
+                ...(onClose !== undefined ? { onClose } : {}),
+            }),
+    });
     app.component(
         `Icon`,
         defineComponent({
@@ -99,8 +107,25 @@ afterEach(() => {
     document.body.innerHTML = ``;
 });
 
+/* A CONVERSATION THE FLEET NEVER REGISTERED, because the daemon refused its send. No branch, no diff, no entry
+ * to address — which is what made this card the one the board could do nothing at all with. */
+const refused = (): FleetAgent => ({
+    id: `a3`,
+    status: `failed`,
+    provider: `claude`,
+    harness: `native`,
+    title: `make the subagent limit configurable`,
+    updatedAt: 0,
+    attention: NO_ATTENTION,
+    open: true,
+    unread: false,
+});
+
 const landButton = (el: HTMLElement): HTMLButtonElement | undefined =>
     [...el.querySelectorAll(`button`)].find((button) => /Land now|Landing/.test(button.textContent ?? ``));
+
+const buttonLabelled = (el: HTMLElement, label: string): HTMLButtonElement | undefined =>
+    [...el.querySelectorAll(`button`)].find((button) => button.getAttribute(`aria-label`) === label);
 
 it(`offers the land on the card, so finished work needs no second surface to release it`, () => {
     expect(landButton(mount(ready()))?.textContent?.trim()).toBe(`Land now`);
@@ -131,4 +156,32 @@ it(`drops the button once the work is in the workspace`, () => {
  * the turn (the live line below it goes with the spinner), so this is not a duplicate of that line. */
 it(`counts the agents it started while its first turn is still running`, () => {
     expect([...mount(delegating()).querySelectorAll(`button`)].some((button) => button.textContent?.trim() === `8 / 8`)).toBe(true);
+});
+
+/* THE CARD THE BOARD COULD DO NOTHING WITH. A refused send leaves a conversation the daemon never registered,
+ * and every exit on this board goes through the daemon by id: archive, discard, land and each drop are refused
+ * for it, correctly and unanimously. What that left was a card offering a rename and nothing else — permanent,
+ * because the tab behind it is restored on every reload. So the exit it DOES have, closing that tab, is offered
+ * on the card itself instead of only on the chat rail, which the board never points at. */
+it(`offers a close on a card the daemon has no entry for — the only way it can leave the board`, () => {
+    expect(buttonLabelled(mount(refused()), `Close agent`)).not.toBeUndefined();
+});
+
+it(`asks the board to close it on the press`, () => {
+    const closed = vi.fn();
+    buttonLabelled(mount(refused(), undefined, closed), `Close agent`)!.click();
+    expect(closed).toHaveBeenCalledTimes(1);
+});
+
+// The two never appear together, which is what lets them share one slot: an agent the daemon knows is ARCHIVED
+// (its branch, diff and transcript all kept), and one it has never heard of is CLOSED, because there is nothing
+// to keep. Offering the wrong one is worse than offering neither — an archive here posts an id that 404s.
+it(`withholds the archive from a card with no entry to archive`, () => {
+    expect(buttonLabelled(mount(refused()), `Archive agent`)).toBeUndefined();
+});
+
+it(`withholds the close from a registered agent, which archives instead`, () => {
+    const landed = mount(ready(`landed`));
+    expect(buttonLabelled(landed, `Close agent`)).toBeUndefined();
+    expect(buttonLabelled(landed, `Archive agent`)).not.toBeUndefined();
 });

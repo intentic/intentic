@@ -19,17 +19,46 @@ import type { AgentAttention, AgentOrigin, AgentStatus, AgentSummary, LoopState 
  * lets the panel, the rail and the tests all reach the same answer without any of them dragging in the app
  * shell (useAgents pulls useChat pulls the router). */
 
+/* THE TWO STANDINGS THE DAEMON NEVER ASSIGNS — a conversation the fleet has not registered, in the two shapes
+ * that difference comes in. `draft` is one that has not been sent yet; `failed` is one whose send was REFUSED,
+ * so it never became an agent and never will until the user sends again.
+ *
+ * They are told apart because they belong in different lanes and offer different things. A draft is the tab you
+ * are about to type into and reads as Active; a refused one is a dead end that needs the user, and reading it
+ * as a draft is what left the board carrying cards that looked like work in flight, sorted ABOVE the agents
+ * actually working, with no action on them at all. What they share — no registry entry, so nothing to archive,
+ * review, land or drop — is `unregistered` below.
+ *
+ * Neither may be widened into AgentStatus: the wire enum is the daemon's account of agents it HAS, and these
+ * two are by definition the cards it has never heard of. */
+export type ClientAgentStatus = "draft" | "failed";
+
 // Enough of an agent to place one. Every predicate below takes this and nothing more, so a caller holding a
 // FleetAgent, a roster AgentSummary or a test literal can all ask the same question.
 export interface AgentStanding {
-    readonly status: AgentStatus | "draft";
+    readonly status: AgentStatus | ClientAgentStatus;
     readonly attention: AgentAttention;
 }
 
-export const agentStatusMeta = (status: AgentStatus | "draft"): { icon: IconName; spin?: boolean; label: string; class: string } => {
+/* NO REGISTRY ENTRY BEHIND THIS CARD — the guard every fleet mutation needs and the one question both
+ * client-only standings answer the same way. Archiving, reviewing, landing, discarding and dropping all address
+ * an agent BY ID through the daemon, and this card's id names nothing there: the requests 404, and the ones
+ * that don't would register the conversation as a side effect of filing it away. */
+// Takes the status alone, like agentStatusMeta and unlike the lane predicates: it is a question about which
+// half of the world the card came from, and the callers that need it most (the tab `open` builds, the detail
+// page's `registered`) hold a status without an attention block to pair it with.
+export const unregistered = (status: AgentStatus | ClientAgentStatus): boolean => status === `draft` || status === `failed`;
+
+export const agentStatusMeta = (status: AgentStatus | ClientAgentStatus): { icon: IconName; spin?: boolean; label: string; class: string } => {
     // Not `pencil` — that's the card's rename affordance; the draft glyph is a not-yet-started marker.
     if (status === `draft`) {
         return { icon: `circle`, label: `Draft`, class: `text-subtle` };
+    }
+    // The send was refused, so there is no turn to have failed and nothing of the user's is at risk — warning
+    // rather than the `error` danger, the same reading `interrupted` gets for the same reason. What separates
+    // it from every state below is that this agent does not exist: it is a card for work that never started.
+    if (status === `failed`) {
+        return { icon: `exclamation-triangle`, label: `Didn't start`, class: `text-warning` };
     }
     if (status === `running`) {
         return { icon: `spinner`, spin: true, label: `Running`, class: `text-link` };
@@ -93,6 +122,11 @@ export const turnInFlight = (agent: AgentStanding): boolean => agent.status === 
 // leaving a half-written worktree that only a message from the user can carry forward. Nothing is OUTSTANDING
 // on their side (see awaitingUser, which excludes both) — the lane is where the card goes to be picked up again
 // rather than lost among the landed ones.
+//
+// `failed` is the same kind of ending one step earlier: the turn was refused before it ran, so there is no
+// half-written worktree — only the words the user typed, waiting in the composer's queue for a send that works.
+// It is here rather than in Active because a card nobody can act on has no business sitting among the agents
+// that are working, wearing the lane that says they are.
 export const blocked = (agent: AgentStanding): boolean =>
     agent.attention.plan ||
     agent.attention.question ||
@@ -100,7 +134,8 @@ export const blocked = (agent: AgentStanding): boolean =>
     agent.attention.conflict ||
     agent.status === `error` ||
     agent.status === `interrupted` ||
-    agent.status === `stopped`;
+    agent.status === `stopped` ||
+    agent.status === `failed`;
 
 // The half of "blocked" that is literally WAITING TO BE TOLD SOMETHING — a plan to approve, a question, a
 // permission, a paused turn. Deliberately narrower than `blocked`, which also covers the DEAD ENDS (a failed
@@ -124,6 +159,12 @@ export const attentionReason = (agent: AgentStanding): string | undefined => {
     }
     if (agent.status === `error`) {
         return `Error`;
+    }
+    // Names the whole of what happened, in the tense that matters: not "failed" (nothing ran to fail) and not
+    // "error" (there is no agent to have erred). The chip's job here is to stop the card being read as an agent
+    // at all — what the user does about it is close it, and the reason is on the red line in its chat.
+    if (agent.status === `failed`) {
+        return `Didn't start`;
     }
     // Says what the card cannot: the turn did not fail and did not finish — the daemon under it went away. The
     // user's move is to send it a message, which starts a fresh turn on the same session.
@@ -200,7 +241,7 @@ export const unfinishedMark = (agent: AgentStanding | undefined): { dot: string;
 // destination; the label leads with why-you'd-go — pending approval/question first, then a land conflict or
 // error, then a diff to look over, falling back to a plain "Review" for a running agent with nothing yet.
 export const reviewAction = (agent: AgentStanding & { readonly branch?: string; readonly diff?: { files: number } }): string | undefined => {
-    if (agent.status === `draft` || agent.branch === undefined) {
+    if (unregistered(agent.status) || agent.branch === undefined) {
         return undefined;
     }
     if (agent.attention.plan) {

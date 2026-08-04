@@ -17,7 +17,7 @@ import {
 } from "@intentic/sandbox-contract";
 import { computed, ref } from "vue";
 import { trackPerf } from "../perf";
-import { sandboxRequest } from "../sandbox/sandboxClient";
+import { sandboxError, sandboxRequest } from "../sandbox/sandboxClient";
 import { jsonBody } from "../sandbox/jsonBody";
 import { errorMessage } from "../useAsyncAction";
 import { clampEffort } from "./effortScale";
@@ -713,12 +713,31 @@ export class Conversation {
                     }),
                 ),
             });
+            /* TURNED AWAY AT THE DOOR — the daemon refused the request before any turn existed, which is a
+             * different thing from a turn that failed, and the one failure in this file that used to answer
+             * with neither of the two things a refusal owes the user.
+             *
+             * IT SAYS WHY. The daemon puts a sentence on every refusal it makes (an attachment path outside
+             * the workspace, a body its schema rejected); answering with the status code instead left the user
+             * holding "400" and no move to make — so they re-send by hand, and every hand-retry started from a
+             * fresh tab leaves one more card on the board that never ran and cannot be acted on.
+             *
+             * AND IT KEEPS THE WORDS. Nothing reached the daemon, so this window holds the only copy: the
+             * bubble comes back out of the transcript and waits in the queue for the user's own next send,
+             * which is the bargain claude-reauth and unknown-command already strike. This path is just the one
+             * where the refusal arrives as an HTTP status rather than as a turn frame.
+             *
+             * A 409 keeps neither half: a turn IS running on this conversation, so these words are its to take
+             * as steering, and the queue has to stay free to flush into it the moment it settles. */
             if (!response.ok) {
-                throw new Error(
-                    response.status === 409
-                        ? `This agent already has a turn running — wait for it to finish.`
-                        : `Chat request failed (${response.status}).`,
-                );
+                if (response.status === 409) {
+                    this.error.value = `This agent already has a turn running — wait for it to finish.`;
+                    return;
+                }
+                const refusal = await sandboxError(response, { method: `POST`, path: `/agent` });
+                this.requeueUndelivered(userMessageId);
+                this.error.value = `${refusal.message} Your message is held below — send it again once that's sorted.`;
+                return;
             }
             // The ack means the turn is running daemon-side regardless of what happens to this tab; from here
             // on this window is just one renderer of the run.

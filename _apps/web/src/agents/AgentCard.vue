@@ -19,6 +19,7 @@ import {
     reviewAction,
     turnInFlight,
     unreadBadge,
+    unregistered,
 } from "../composables/agents/agentStatus";
 import { providerLabel } from "@intentic/sandbox-contract";
 import { sessionCategory } from "../composables/sessionCategory";
@@ -68,6 +69,7 @@ const emit = defineEmits<{
     land: [];
     archive: [];
     restore: [];
+    close: [];
     grab: [event: PointerEvent, card: HTMLElement];
 }>();
 
@@ -89,6 +91,17 @@ const activityText = computed(() => activityLine(props.agent));
 // stay), so it has to be reachable by touch and by keyboard, which a drag to a zone that only exists mid-drag
 // never was.
 const archivable = computed(() => canArchive(props.agent));
+/* THE EXIT FOR A CARD THAT IS NOT AN AGENT — a draft, and a send the daemon refused (`unregistered`). Every
+ * other way off this board addresses an id through the daemon, which has never heard of this one: archive,
+ * discard, land and every drop are therefore refused, and what that left behind was a card the user could do
+ * NOTHING with except rename it. A broken send would leave one in the Active lane, above the agents actually
+ * working, for the life of the sandbox — it survives a reload, because the tab it belongs to does.
+ *
+ * So the exit it does have — closing the tab — is offered where the card is, instead of only on the chat rail
+ * the board never mentions. It takes the archive glyph's slot because the two can never both apply, and asks
+ * for no confirmation for the same reason no close in the rail does: with no branch, no worktree and no
+ * daemon-side transcript, there is nothing here to lose but the words, and those are in the composer. */
+const closable = computed(() => unregistered(props.agent.status));
 // The drill-in label, or undefined for a draft (nothing to review — a click only focuses the docked chat).
 // Desktop only: on mobile the detail IS the chat, so a tap navigates and no separate affordance is needed.
 const review = computed(() => (mobile.value ? undefined : reviewAction(props.agent)));
@@ -284,6 +297,16 @@ const grab = (event: PointerEvent): void => {
                     @click.stop="emit(`archive`)"
                 >
                     <Icon name="box" class="text-2xs" />
+                </button>
+                <button
+                    v-if="closable"
+                    type="button"
+                    aria-label="Close agent"
+                    v-tooltip.top="'Close — this never started, so there is no branch or transcript to keep'"
+                    :class="[HOVER_ACTION, mobile ? 'opacity-60' : 'opacity-0 focus-visible:opacity-100 group-hover:opacity-100']"
+                    @click.stop="emit(`close`)"
+                >
+                    <Icon name="times" class="text-2xs" />
                 </button>
                 <button
                     v-if="agent.archivedAt !== undefined"

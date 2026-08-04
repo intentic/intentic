@@ -1,6 +1,6 @@
 import type { AgentStatus } from "@intentic/sandbox-contract";
 import { describe, expect, it } from "vitest";
-import { type AgentStanding, laneOf, unfinishedMark } from "./agentStatus";
+import { type AgentStanding, type ClientAgentStatus, laneOf, unfinishedMark } from "./agentStatus";
 
 // No mocks: agentStatus is a leaf of pure functions, which is the point of it living apart from the fleet
 // store — useAgents pulls useChat pulls the router, and none of that is needed to place an agent.
@@ -30,6 +30,14 @@ describe("laneOf", () => {
         expect(laneOf({ status: `draft`, attention: none })).toBe(`active`);
     });
 
+    /* THE TWO CLIENT-ONLY STANDINGS ARE NOT ONE. A draft is the tab you are about to type into; a REFUSED send
+     * is a card for work that never started and never will until the user acts. Filing the second one under
+     * Active — which is what reading it as a draft did — put cards nobody can do anything with above the agents
+     * actually working, in the lane whose whole claim is that they are. */
+    it("routes a refused send to attention, apart from the draft it is not", () => {
+        expect(laneOf({ status: `failed`, attention: none })).toBe(`attention`);
+    });
+
     /* THE STOP, IN ITS TWO HALVES. `stopping` is the seconds between the press and the turn's last breath — the
      * turn is still live and the card stays exactly where it is, so the stop costs one lane change rather than
      * two. `stopped` then lands beside `interrupted`: an ending that came before the work was done, whose
@@ -56,7 +64,7 @@ describe("laneOf", () => {
  * is the user watching two surfaces contradict each other, which is exactly what a second status list here
  * produced before this became a reading of laneOf. */
 describe("unfinishedMark", () => {
-    const STATUSES: readonly (AgentStatus | "draft")[] = [
+    const STATUSES: readonly (AgentStatus | ClientAgentStatus)[] = [
         `idle`,
         `running`,
         `awaiting`,
@@ -68,6 +76,7 @@ describe("unfinishedMark", () => {
         `stopping`,
         `stopped`,
         `draft`,
+        `failed`,
     ];
     const FLAGS: readonly AgentStanding[`attention`][] = [
         none,
@@ -97,6 +106,9 @@ describe("unfinishedMark", () => {
         expect(unfinishedMark({ status: `error`, attention: none })?.label).toBe(`Error`);
         expect(unfinishedMark({ status: `interrupted`, attention: none })?.label).toBe(`Interrupted`);
         expect(unfinishedMark({ status: `stopped`, attention: none })?.label).toBe(`Stopped`);
+        // Not "failed" and not "error": nothing ran to fail, and there is no agent to have erred. What the chip
+        // has to convey is that this card is not an agent at all.
+        expect(unfinishedMark({ status: `failed`, attention: none })?.label).toBe(`Didn't start`);
         // Still the active-lane mark: the turn IS still working — on its own way out.
         expect(unfinishedMark({ status: `stopping`, attention: none })?.label).toBe(`Still working`);
         // A turn parked before any flag went up has nothing more specific to say than that it stopped.
