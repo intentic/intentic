@@ -193,11 +193,20 @@ const sentencesOf = (text: string): string[] => {
     return parts;
 };
 
+/* THE ELLIPSIS IS PART OF THE BUDGET, not an addition to it. MAX_LENGTH is a STORAGE cap the wire contract
+ * enforces (AgentTurnSchema.title), so a title one character over it is not a wide tab — it is a 400 on the
+ * turn that carried it. Cutting to MAX_LENGTH and appending afterwards was exactly that off-by-one, and it
+ * hid for as long as it did because the word-boundary backoff almost always absorbed it: an ordinary sentence
+ * has a space late in the window, so `kept` came back short and the ellipsis fit. What has no such space is a
+ * long unbroken token straddling the cut — a SCREAMING_SNAKE env var, a hash, a base64 blob — and there the
+ * fallback kept the full-width slice and made it one character too long. The conversation then wedged: the
+ * browser writes the derived title into its state before it sends, so every later turn re-sent the same
+ * rejected name. */
 const clamped = (text: string): string => {
     if (text.length <= MAX_LENGTH) {
         return text;
     }
-    const cut = text.slice(0, MAX_LENGTH);
+    const cut = text.slice(0, MAX_LENGTH - 1);
     const boundary = cut.lastIndexOf(" ");
     const kept = boundary >= MIN_WORD_CUT ? cut.slice(0, boundary) : cut;
     return `${kept.replace(/[\s,;:—–-]+$/, "")}…`;

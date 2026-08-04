@@ -1,4 +1,5 @@
 import { expect, test } from "vitest";
+import { AgentTurnSchema } from "./schemas.js";
 import { deriveTitle } from "./title.js";
 
 /* The name a conversation opens under. Every case here is a shape the naive rule (collapse whitespace, cut at
@@ -56,6 +57,24 @@ test("cuts on a word boundary instead of mid-syllable", () => {
     // be a whole one, so what precedes the ellipsis must stop where the prompt itself has a break.
     expect(prompt.startsWith(kept)).toBe(true);
     expect(prompt[kept.length]).toBe(" ");
+});
+
+test("keeps a cut it cannot put on a word boundary inside the budget anyway", () => {
+    /* The sibling of the case above: a long unbroken token straddling the cut leaves no space late enough to
+     * back off to, so the length clamp alone ends the title — and it used to end it one character OVER. That
+     * character is not a cosmetic overflow, it is a 400 on the turn carrying the name, and it wedged the
+     * conversation for good: the browser stores the derived title before it sends, so every retry re-sent the
+     * same rejected one. */
+    const prompt = `In one of the sandboxes I have experienced "CLAUDE_CODE_MAX_CONCURRENT_SUBAGENTS" limit of 20. Make it configurable in sandbox settings somewhere at /sandbox/agent`;
+    const title = deriveTitle(prompt);
+
+    expect(title.endsWith("…")).toBe(true);
+    // Asserted THROUGH the contract rather than against a repeated literal: the clamp and the cap drifting
+    // apart is the entire bug, and a second copy of the number is how they drift.
+    expect(AgentTurnSchema.safeParse({ prompt, title }).success).toBe(true);
+    // Not a property of that one sentence — any token wide enough to swallow the window does it.
+    const wide = `Investigate ${"X".repeat(120)} please`;
+    expect(AgentTurnSchema.safeParse({ prompt: wide, title: deriveTitle(wide) }).success).toBe(true);
 });
 
 test("keeps a link's last meaningful segment rather than its host and scaffolding", () => {
