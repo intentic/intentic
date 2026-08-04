@@ -211,7 +211,9 @@ ci-desktop:
     # The login is unconditional here, unlike ci-base: FROM is the private ci-base:latest, so even a
     # validation-only build has to authenticate to pull it.
     - docker login -u "$CI_REGISTRY_USER" -p "$CI_REGISTRY_PASSWORD" "$CI_REGISTRY"
-    - docker build -t "$CI_DESKTOP_IMAGE" _tools/ci-desktop
+    # The Dockerfile's ARG defaults to GHCR, which this job has no credentials for — point it back at the
+    # registry it just logged into. Goes with this file at cutover.
+    - docker build --build-arg "CI_BASE_IMAGE=$CI_BASE_IMAGE" -t "$CI_DESKTOP_IMAGE" _tools/ci-desktop
     - |
       if [ "$PUSH_DESKTOP" = "1" ]; then
         docker push "$CI_DESKTOP_IMAGE"

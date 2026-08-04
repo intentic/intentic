@@ -12,6 +12,11 @@
 # ponytail: bump this digest together with _apps/sandbox/Dockerfile's FROM — they must stay identical.
 FROM node:24.18.0-bookworm-slim@sha256:b31e7a42fdf8b8aa5f5ed477c72d694301273f1069c5a2f71d53c6482e99a2fc
 
+# What LINKS the GHCR package to this repository, and the reason is not cosmetic: an unlinked private package
+# is one the repository's own GITHUB_TOKEN cannot pull, so every job that runs in this image dies at
+# `Error response from daemon: denied` before its first step. That is exactly how the first Actions run failed.
+LABEL org.opencontainers.image.source=https://github.com/intentic/intentic
+
 # Everything the jobs actually need, and nothing else — the full `node:24.18.0` image would supply most of this
 # but costs ~1.2GB more for a pile of toolchains no job invokes.
 #   ca-certificates + curl  fetch the docker apt key below; curl also backs assorted script steps

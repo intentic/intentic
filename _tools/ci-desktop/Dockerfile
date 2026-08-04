@@ -9,7 +9,14 @@
 #
 # ponytail: FROM tracks ci-base's mutable `latest`, so the ci-desktop job below rebuilds when EITHER
 # _tools/ci-base or _tools/ci-desktop changes — otherwise this image would silently pin a stale base.
-FROM registry.gitlab.com/radarsu/intentic/ci-base:latest
+# The base is wherever ci-base was just published. Defaults to GHCR, which is where the Actions pipeline puts
+# it; the GitLab job overrides it to its own registry, which is the only one that job authenticates to. An ARG
+# rather than a hardcoded path because both pipelines build this image during the cutover and they disagree
+# about where the base lives — the disagreement is real and temporary, so it is a parameter, not a fork.
+ARG CI_BASE_IMAGE=ghcr.io/intentic/ci-base:latest
+FROM ${CI_BASE_IMAGE}
+
+LABEL org.opencontainers.image.source=https://github.com/intentic/intentic
 
 # The Tauri Linux build inputs, plus the ones that are bundle inputs rather than compiler inputs — the same list
 # build-desktop.sh installs at runtime, which is now its fallback path for a developer machine:

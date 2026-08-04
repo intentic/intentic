@@ -5,6 +5,10 @@
 # real infra. The harness injects the authorized public key via testcontainers before start.
 FROM docker:28.5.2-dind@sha256:2a232a42256f70d78e3cc5d2b5d6b3276710a0de0596c145f627ecfae90282ac
 
+# Links the GHCR package to this repository — without it a private package is unpullable by the repository's
+# own GITHUB_TOKEN, and every job that runs this image fails before its first step.
+LABEL org.opencontainers.image.source=https://github.com/intentic/intentic
+
 # openssh: the SSH transport. openssl/iproute2: required by the host (`ip route`) and komodo (`openssl
 # rand`) providers. docker-cli-compose: the komodo provider runs `docker compose up -d`.
 RUN apk add --no-cache openssh openssh-server openssl iproute2 docker-cli-compose \
