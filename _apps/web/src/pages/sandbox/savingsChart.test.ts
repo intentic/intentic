@@ -116,6 +116,36 @@ describe(`verdictOf`, () => {
         expect(verdict.detail).toContain(`note actually landed on 19% of the treated arm`);
     });
 
+    /* …and names what took the rest, because 19% delivered reads as a broken mechanism until you can see that
+     * most of the shortfall is the eligibility gate declining on prompts that named their own file. Same number,
+     * opposite response from whoever is reading the card. */
+    it(`names the largest reason the treated arm went untreated`, () => {
+        const verdict = verdictOf(
+            experiment({
+                metric: `costUsd`,
+                deltaPct: -5,
+                marginPct: 2,
+                saved: 1.2,
+                deliveredPct: 19,
+                outcomes: [
+                    { outcome: `ineligible`, turns: 227 },
+                    { outcome: `note`, turns: 72 },
+                    { outcome: `no-hits`, turns: 40 },
+                ],
+            }),
+        );
+        expect(verdict.detail).toContain(`most of the rest ineligible`);
+    });
+
+    /* "Keep collecting" is not advice a reader can act on — three more days and three more years look the same
+     * in it. The estimate is coarse and says so by being an order of magnitude, but it is the difference between
+     * waiting and changing the holdout. */
+    it(`says how much more control data a withheld delta would need`, () => {
+        const verdict = verdictOf(experiment({ off: { turns: 31, mean: 28_100 }, marginPct: 35.1, controlTurnsNeeded: 5_800 }));
+        expect(verdict).toMatchObject({ value: `No effect`, tone: `muted` });
+        expect(verdict.detail).toBe(`anything real is inside ±35.1pp (95%) — ~5.8K more control turns would settle it`);
+    });
+
     it(`treats an experiment that isn't running as a verdict of its own, not a missing card`, () => {
         expect(verdictOf(undefined)).toMatchObject({ value: `Off`, unit: `not being measured`, tone: `muted` });
     });

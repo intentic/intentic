@@ -1221,6 +1221,23 @@ export type InputSavings = z.infer<typeof InputSavingsSchema>;
 // without it. A mean PER TURN, because the arms never hold the same number of turns.
 export const SavingsArmSchema = z.object({ turns: z.number(), mean: z.number() });
 
+/* WHAT BECAME OF A TURN'S PRE-TURN RETRIEVAL. `note` is the only outcome that reaches the model; the rest are
+ * the ordinary ways it declines, and none of them is an error — each is a turn that proceeded exactly as it
+ * would have without the feature.
+ *
+ *   ineligible — the prompt failed a lexical gate before retrieval ran (it named its own file, or said nothing
+ *                to search for). By design, and the largest share by far.
+ *   deadline   — the resident engine outran its budget and the turn went on without it.
+ *   indexing   — the index had not caught up with disk, so any answer would have been confidently partial.
+ *   no-hits    — the query matched nothing.
+ *   failed     — retrieval threw; swallowed on purpose, since this is an optimisation nobody asked for.
+ *
+ * It lives in the contract rather than in the daemon because two things downstream of the daemon have to speak
+ * it: the ledger row that records it (UsageTurnSchema.iqContextOutcome) and the experiment that reads it back
+ * (TurnExperimentSchema.outcomes). Declared here, above both. */
+export const IqContextOutcomeSchema = z.enum(["note", "ineligible", "deadline", "indexing", "no-hits", "failed"]);
+export type IqContextOutcome = z.infer<typeof IqContextOutcomeSchema>;
+
 /* A turn-level A/B — the one shape both of this sandbox's turn experiments report in, because they differ in
  * nothing but which flag flips and what the turns are judged on. Only turns the mechanism was ELIGIBLE for are
  * counted: a turn under a custom system prompt drops the terse steer along with everything else the daemon
@@ -1245,6 +1262,28 @@ export const TurnExperimentSchema = z.object({
      * turn in the window recorded it. The screen shows the delta as diluted rather than silently scaling it:
      * the correction is a division by a rate this small only when the rate is itself well measured. */
     deliveredPct: z.number().optional(),
+    /* WHERE THE REST OF THE TREATMENT ARM WENT, most common first. `deliveredPct` says a mechanism reached one
+     * turn in five; this says whether the other four were the eligibility gate declining on purpose or a
+     * two-second deadline quietly eating the feature, which are the same number and opposite problems.
+     *
+     * Absent ⇒ the experiment has no delivery question (the terse steer always lands) or no turn recorded one. */
+    outcomes: z.array(z.object({ outcome: IqContextOutcomeSchema, turns: z.number() })).optional(),
+    /* HOW MUCH LONGER, when the margin spans zero and the honest answer is "keep collecting": the additional
+     * CONTROL turns at which the resolution would reach a width worth acting on (turn-experiments.ts sets it),
+     * holding the spread where it sits today.
+     *
+     * It is aimed at a FIXED resolution rather than at today's delta on purpose. Sized against the observed
+     * effect it reported fourteen more turns for an experiment that had gone nine days without resolving — an
+     * estimate divided by noise inherits the noise and promises an answer next week indefinitely. Against a
+     * fixed target the same ledger asks for a few hundred, which is the fact the reader needs: this holdout is
+     * not close, and waiting is not the move.
+     *
+     * An order-of-magnitude figure, and it reads as one — the point is telling "a few more days" apart from
+     * "not at this holdout", which is a decision, where "measuring…" forever is not.
+     *
+     * Absent ⇒ nothing to wait for: the arms are under `minTurns`, the delta is published, or the resolution is
+     * already good enough and the effect is simply smaller than it. */
+    controlTurnsNeeded: z.number().optional(),
     // Turns per arm before a delta is reported at all. Carried on the wire so the screen's "measuring…" state
     // counts toward the daemon's real threshold instead of a number the browser guessed.
     minTurns: z.number(),
@@ -4239,19 +4278,22 @@ export const UsageTurnSchema = z.object({
      * would sort turns by how searchable their question was, which is a property of the question. The control
      * arm contains the same unsearchable questions in the same proportion, so they cancel. */
     iqContext: z.boolean().optional(),
-    /* Whether a note was actually PREPENDED on this turn — the companion to `iqContext`, and the answer to the
+    /* WHAT ACTUALLY HAPPENED to the retrieval on this turn — the companion to `iqContext`, and the answer to the
      * question that field's design deliberately refuses to answer.
      *
      * Keeping the arm on the coin flip is right, and it costs something: the treatment arm contains turns the
-     * treatment never reached, so the delta it yields is diluted by however many those are. Measured over one
-     * day that was four turns in five, which makes the difference between "this mechanism is worth little" and
-     * "this mechanism is worth five times what the number says" — and nothing in the ledger could tell them
-     * apart, because a treated turn and an untreated one in the same arm looked identical.
+     * treatment never reached, so the delta it yields is diluted by however many those are. Measured over nine
+     * days of real use that was four turns in five, which makes the difference between "this mechanism is worth
+     * little" and "this mechanism is worth five times what the number says".
      *
-     * So the arm stays intention-to-treat and this records delivery beside it. Together they give both the
-     * unbiased estimate and the rate to divide it by; alone, either one misleads. Absent ⇒ outside the
-     * experiment, exactly as for the arm. */
-    iqContextNote: z.boolean().optional(),
+     * IT RECORDS THE REASON, not merely a yes/no, because the yes/no left the whole loss unexplained. 81% of an
+     * assigned arm delivering nothing is either a gate doing its job or a deadline quietly eating the feature,
+     * and those call for opposite responses — one is working as designed, the other is a two-second timeout to
+     * raise. A boolean cannot tell them apart, so nothing downstream could act on the number it produced.
+     *
+     * `note` is delivery; every other value is a turn that ran exactly as the control arm would have, labelled
+     * with what took the treatment away. Absent ⇒ outside the experiment, exactly as for the arm. */
+    iqContextOutcome: IqContextOutcomeSchema.optional(),
     /* Characters of the model's own PROSE this turn — the `delta` frames only, so no tool-call arguments and no
      * thinking. What the terse steer is judged on, and the reason it can be judged at all.
      *

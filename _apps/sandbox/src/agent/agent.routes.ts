@@ -907,7 +907,7 @@ async function* runTurn(
                     // unmeasurable after the fact.
                     ...(plan.terseArm !== undefined ? { terse: plan.terseArm } : {}),
                     ...(plan.contextArm !== undefined ? { iqContext: plan.contextArm } : {}),
-                    ...(plan.contextDelivered !== undefined ? { iqContextNote: plan.contextDelivered } : {}),
+                    ...(plan.contextOutcome !== undefined ? { iqContextOutcome: plan.contextOutcome } : {}),
                 })
                 .catch((error: unknown) => services.logger.warn({ err: error }, "usage: ledger append failed"));
         }

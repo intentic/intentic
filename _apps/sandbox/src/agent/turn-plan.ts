@@ -1,4 +1,11 @@
-import { type AgentCapabilities, type AgentEvent, type AgentTurn, type Capability, capabilitiesOf } from "@intentic/sandbox-contract";
+import {
+    type AgentCapabilities,
+    type AgentEvent,
+    type AgentTurn,
+    type Capability,
+    type IqContextOutcome,
+    capabilitiesOf,
+} from "@intentic/sandbox-contract";
 import { browserOutputDir } from "../browser/browser-artifacts.js";
 import { browserServersOf } from "../browser/browser-tools.js";
 import { hostToolsOf } from "../capabilities/host-tools.js";
@@ -60,10 +67,11 @@ export type TurnPlan =
           // ASSIGNED the retrieval, not that it found anything — see the ledger field's note on why the arms
           // have to be the coin flip's populations rather than the ones retrieval happened to serve.
           readonly contextArm?: boolean;
-          // Whether a note was actually prepended (UsageTurn.iqContextNote). The companion to `contextArm`, not
-          // a replacement for it: the arm keeps the experiment honest, this says how much of the treatment arm
-          // the treatment reached, which is the difference between a small effect and a diluted one.
-          readonly contextDelivered?: boolean;
+          // What became of the retrieval (UsageTurn.iqContextOutcome). The companion to `contextArm`, not a
+          // replacement for it: the arm keeps the experiment honest, this says how much of the treatment arm the
+          // treatment reached and what took away the rest — the difference between a small effect and a diluted
+          // one, and then between a dilution worth fixing and one that is the gate doing its job.
+          readonly contextOutcome?: IqContextOutcome;
           readonly request: AgentRequest;
       };
 
@@ -268,7 +276,12 @@ export const planAcpTurn = async (
  * the translator endpoint a routed provider rides. Credentials are resolved by harness-credentials.ts,
  * which the quick-model one-shot behind the commit box's autofill reads too, so both authenticate identically;
  * its refusals are values, and this is where they become the refusal the composer's connect gate reads. */
-export const planHarnessTurn = async (services: Services, input: AgentTurn, context: TurnContext, installed: readonly Capability[]): Promise<TurnPlan> => {
+export const planHarnessTurn = async (
+    services: Services,
+    input: AgentTurn,
+    context: TurnContext,
+    installed: readonly Capability[],
+): Promise<TurnPlan> => {
     const resolved = await resolveHarnessCredentials(services, {
         agent: input.agent,
         ...(input.account !== undefined ? { account: input.account } : {}),
@@ -375,10 +388,11 @@ export const planHarnessTurn = async (services: Services, input: AgentTurn, cont
     // The workspace context retrieved for this very message (turn-context.ts), if the flip gave this turn the
     // treatment arm and the retrieval found something worth prepending. Awaited here, where the notes are
     // assembled, so everything above ran while it was in flight.
-    // A skip carries WHY (turn-context.ts logs it); here only "was anything prepended" matters, because that is
-    // what the ledger has to be able to divide the arm by.
+    // The skip's REASON travels to the ledger, not just the fact of it: an arm that delivers on one turn in five
+    // is either a gate working as designed or a deadline eating the feature, and the two call for opposite
+    // responses. A boolean could not tell them apart, so the loss stayed unattributable for as long as it existed.
     const retrieved = await contextNote;
-    const contextDelivered = retrieved === undefined ? undefined : "note" in retrieved;
+    const contextOutcome = retrieved === undefined ? undefined : "note" in retrieved ? "note" : retrieved.skipped;
     const prompt = withTurnPreamble(
         [
             ...(placement.userNote !== undefined ? [placement.userNote] : []),
@@ -402,7 +416,7 @@ export const planHarnessTurn = async (services: Services, input: AgentTurn, cont
         ...(resolved.credentials.account !== undefined ? { account: resolved.credentials.account } : {}),
         ...(terseArm !== undefined ? { terseArm } : {}),
         ...(contextArm !== undefined ? { contextArm } : {}),
-        ...(contextDelivered !== undefined ? { contextDelivered } : {}),
+        ...(contextOutcome !== undefined ? { contextOutcome } : {}),
         request: {
             ...routable,
             prompt,

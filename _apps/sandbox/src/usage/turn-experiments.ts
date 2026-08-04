@@ -1,4 +1,4 @@
-import type { DayWindowQuery, TurnExperiment, UsageTurn } from "@intentic/sandbox-contract";
+import type { DayWindowQuery, IqContextOutcome, TurnExperiment, UsageTurn } from "@intentic/sandbox-contract";
 import type { UsageStore } from "./usage-store.js";
 
 /* THE TURN-LEVEL EXPERIMENTS, read back out of the spend ledger: what the terse steer and the pre-injected
@@ -15,6 +15,15 @@ import type { UsageStore } from "./usage-store.js";
  * the turns are judged on — so the metric is a parameter, not a second copy of Welch. A turn can sit in both at
  * once (the flips are independent), which is exactly why each is read as its own two populations: the other
  * experiment's coin flip is then just noise, distributed evenly across both of these arms.
+ *
+ * AND WHAT THE WITHHELD NUMBER OWES THE READER. Nine days of real use put pre-injection at +27.0% ± 29.9pp on
+ * cost — withheld, correctly, because that interval runs from −2.9% to +56.9%. Read against the transcripts the
+ * gap turns out not to be the mechanism at all: every raw outcome moves with it (reads +58%, duration +73%,
+ * cache-read tokens +28%), and every outcome with turn size divided out is flat to within a point. It is the
+ * coin flip handing the treatment arm the bigger jobs. So the two gates below are right, and on their own they
+ * left a reader watching "measuring…" with no way to tell a slow experiment from an impossible one, and no way
+ * to see that four turns in five never received the treatment being measured. `outcomes` and
+ * `controlTurnsNeeded` are those two answers.
  *
  * WHY THE NUMBER IS WITHHELD, TWICE. Per-turn cost and output length are wildly heteroscedastic — one turn is
  * "yes", the next is a forty-tool refactor — so a delta over a handful of turns is noise wearing a percentage
@@ -79,11 +88,52 @@ const armOf = (turns: readonly UsageTurn[], metric: Metric): Arm => {
     return { turns: values.length, mean, variance };
 };
 
-// What fraction of an arm the mechanism actually reached, when the arm is intention-to-treat and delivery is a
-// separate fact (pre-injection). Undefined ⇒ not a separate question here, or no turn recorded it.
-const deliveredPctOf = (turns: readonly UsageTurn[], delivered: (turn: UsageTurn) => boolean | undefined): number | undefined => {
-    const known = turns.map(delivered).filter((value) => value !== undefined);
-    return known.length === 0 ? undefined : round1((known.filter((value) => value).length / known.length) * 100);
+/* WHAT REACHED THE TREATMENT ARM, and what took away the rest. Both come off the same field, because a rate
+ * without its reasons is a number nobody can act on: 81% of an assigned arm delivering nothing reads as a
+ * broken mechanism until you can see that most of it is the eligibility gate declining on prompts that named
+ * their own file, which is the gate working. Undefined ⇒ no turn in the window recorded an outcome. */
+const deliveryOf = (
+    turns: readonly UsageTurn[],
+): { readonly deliveredPct: number; readonly outcomes: { outcome: IqContextOutcome; turns: number }[] } | undefined => {
+    const known = turns.map((turn) => turn.iqContextOutcome).filter((outcome) => outcome !== undefined);
+    if (known.length === 0) {
+        return undefined;
+    }
+    const counts = new Map<IqContextOutcome, number>();
+    for (const outcome of known) {
+        counts.set(outcome, (counts.get(outcome) ?? 0) + 1);
+    }
+    return {
+        deliveredPct: round1(((counts.get("note") ?? 0) / known.length) * 100),
+        // Largest first, and sorted HERE so every reader gets the order the contract promises — a screen that
+        // re-sorts to find the biggest loss is a screen that can disagree with the ledger about what it was.
+        outcomes: [...counts].map(([outcome, count]) => ({ outcome, turns: count })).toSorted((a, b) => b.turns - a.turns),
+    };
+};
+
+/* The resolution this is aiming AT. A mechanism that moves per-turn cost by less than a tenth is not one
+ * anybody would act on — the turn-to-turn spread of what people ask for swamps it — so ±10pp is where the
+ * experiment stops being worth more data. It is a judgement, stated once here rather than left implicit in an
+ * estimate that quietly chases whatever the arms happen to show today. */
+const RESOLVING_MARGIN_PCT = 10;
+
+/* WHAT IT WOULD TAKE to resolve, in the only currency the reader controls: more control turns.
+ *
+ * AIMED AT A FIXED RESOLUTION, not at the effect currently on screen. Targeting "enough to clear today's delta"
+ * was the first attempt and it reported FOURTEEN more turns against nine days of data that had never once
+ * resolved — because the observed delta is mostly noise, and an estimate divided by noise inherits it, promising
+ * an answer next Tuesday for as long as the noise happens to be large. Against a fixed ±10pp the same ledger
+ * asks for a few hundred, which is the true shape of the thing: this holdout is not close.
+ *
+ * The margin falls with the square root of the smaller arm, so the control arm scales by (margin ÷ target)².
+ * Only that arm is scaled, though the treatment arm grows alongside it — which makes this an OVERestimate, and
+ * an order-of-magnitude figure either way. It is read to tell "a few more days" from "not at this holdout", and
+ * it is honest at that resolution and no finer. */
+const controlTurnsNeededFor = (offTurns: number, marginPct: number): number | undefined => {
+    if (marginPct <= RESOLVING_MARGIN_PCT) {
+        return undefined;
+    }
+    return Math.ceil(offTurns * (marginPct / RESOLVING_MARGIN_PCT) ** 2) - offTurns;
 };
 
 const round1 = (value: number): number => Math.round(value * 10) / 10;
@@ -94,7 +144,9 @@ const experimentOf = (
     turns: readonly UsageTurn[],
     arm: (turn: UsageTurn) => boolean | undefined,
     metric: Metric,
-    delivered?: (turn: UsageTurn) => boolean | undefined,
+    // Delivery is asked of pre-injection alone: its arm is the coin flip, and a turn can be assigned the
+    // retrieval and still have nothing to prepend. The steer, once assigned, always lands.
+    asksDelivery = false,
 ): TurnExperiment | undefined => {
     // Only turns the experiment applied to. A turn with no arm stamped had the mechanism out of play entirely
     // (a custom system prompt drops the steer, an ineligible prompt is never retrieved for, and so does the
@@ -112,19 +164,13 @@ const experimentOf = (
         return undefined;
     }
 
-    const deliveredPct =
-        delivered === undefined
-            ? undefined
-            : deliveredPctOf(
-                  turns.filter((turn) => arm(turn) === true),
-                  delivered,
-              );
+    const delivery = asksDelivery ? deliveryOf(turns.filter((turn) => arm(turn) === true)) : undefined;
     const arms = {
         metric: metric.name,
         on: { turns: on.turns, mean: metric.round(on.mean) },
         off: { turns: off.turns, mean: metric.round(off.mean) },
         minTurns: MIN_ARM_TURNS,
-        ...(deliveredPct !== undefined ? { deliveredPct } : {}),
+        ...(delivery !== undefined ? { deliveredPct: delivery.deliveredPct, outcomes: delivery.outcomes } : {}),
     } as const;
     if (on.turns < MIN_ARM_TURNS || off.turns < MIN_ARM_TURNS || off.mean === 0) {
         return arms;
@@ -143,7 +189,8 @@ const experimentOf = (
      * The margin still goes out. "Whatever this is worth, it is inside ±35 points" is the honest reading, and
      * it is the one that says to keep collecting rather than to go and change something. */
     if (Math.abs(deltaPct) <= marginPct) {
-        return { ...arms, marginPct };
+        const controlTurnsNeeded = controlTurnsNeededFor(off.turns, marginPct);
+        return { ...arms, marginPct, ...(controlTurnsNeeded !== undefined ? { controlTurnsNeeded } : {}) };
     }
     return {
         ...arms,
@@ -162,13 +209,6 @@ export const readTurnExperiments = async (
 ): Promise<{ readonly output?: TurnExperiment; readonly context?: TurnExperiment }> => {
     const turns = await usage.turns(window);
     const output = experimentOf(turns, (turn) => turn.terse, PROSE_CHARS);
-    // Delivery is asked of pre-injection alone: its arm is the coin flip, and a turn can be assigned the
-    // retrieval and still have nothing to prepend. The steer, once assigned, always lands.
-    const context = experimentOf(
-        turns,
-        (turn) => turn.iqContext,
-        COST_USD,
-        (turn) => turn.iqContextNote,
-    );
+    const context = experimentOf(turns, (turn) => turn.iqContext, COST_USD, true);
     return { ...(output !== undefined ? { output } : {}), ...(context !== undefined ? { context } : {}) };
 };

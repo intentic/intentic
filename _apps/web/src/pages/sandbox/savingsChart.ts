@@ -149,7 +149,14 @@ export const verdictOf = (experiment: TurnExperiment | undefined): ExperimentVer
     // some of the arm it is assigned (a prompt that named its own file is retrieved for and finds nothing worth
     // prepending). Said plainly wherever a figure appears, because a delta over a four-fifths-untreated arm is
     // a fifth of the delta over the treated ones and a reader has no way to know that from the number.
-    const dilution = experiment.deliveredPct === undefined ? `` : ` · note actually landed on ${experiment.deliveredPct}% of the treated arm`;
+    // …and WHERE THE REST WENT, when the ledger knows. "19% delivered" reads as a broken mechanism; "19%
+    // delivered, the rest ineligible" reads as a gate doing its job, and the two want opposite responses from
+    // whoever is looking at the card. Only the largest non-delivery is named — the tail is for the ledger.
+    const lost = experiment.outcomes?.find((row) => row.outcome !== `note`);
+    const dilution =
+        experiment.deliveredPct === undefined
+            ? ``
+            : ` · note actually landed on ${experiment.deliveredPct}% of the treated arm${lost === undefined ? `` : `, most of the rest ${lost.outcome}`}`;
 
     // The margin arrives as soon as both arms clear minTurns; the delta waits for the margin to exclude zero.
     // Two states, two shortfalls, and neither is allowed to borrow the other's headline.
@@ -167,11 +174,19 @@ export const verdictOf = (experiment: TurnExperiment | undefined): ExperimentVer
      * and the reader's next move differs: one waits, the other asks whether the mechanism is worth its keep.
      * The resolution is what it gets instead of a number, since that is the honest content of the reading. */
     if (experiment.deltaPct === undefined) {
+        /* "Keep collecting" for how long, though. Without a figure the reader cannot tell an experiment three
+         * days from an answer apart from one whose holdout is too small to ever produce one, and both look like
+         * patience. The daemon's estimate is coarse by construction (turn-experiments.ts) so it is rounded hard
+         * and said as an order of magnitude. */
+        const wait =
+            experiment.controlTurnsNeeded === undefined
+                ? `keep collecting`
+                : `~${formatCompact(experiment.controlTurnsNeeded)} more control turns would settle it`;
         return {
             value: `No effect`,
             unit: `measurable in ${unit}`,
             tone: `muted`,
-            detail: `anything real is inside ±${experiment.marginPct}pp (95%) — keep collecting${dilution}`,
+            detail: `anything real is inside ±${experiment.marginPct}pp (95%) — ${wait}${dilution}`,
         };
     }
 

@@ -11,6 +11,7 @@ Pick by what you already know:
 - **You know the exact identifier** → `iq def X` / `iq refs X` — one call replaces a grep-then-filter chain.
 - **You don't know where it lives**, or your words may not match the code's vocabulary → bare `iq "…"`. Ask it as a question; there is no separate verb for natural language. This is where iq decisively beats grep.
 - **You have error-message text** → `iq find 'literal text'`, then `iq context` on the hit.
+- **You are already in the code, checking one thing** — did my edit land, does that string still appear, is this import gone → plain `grep`/`rg`. Verification is not discovery: measured over 18k real search calls, iq's advantage is concentrated in the opening half of a turn (it sends you into a file 27.7% of the time against grep's 16.8%) and has disappeared by the second half (9.2% against 8.3%), where it still costs about twice the output per call. Reach for it to find your way, not to confirm what you already know.
 
 ```
 iq "where do we enforce the secrets floor?"

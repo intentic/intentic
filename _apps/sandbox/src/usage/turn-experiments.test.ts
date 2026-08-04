@@ -115,12 +115,90 @@ test("a delta whose margin spans zero is not a delta — only its resolution is 
  * the delta is diluted by exactly that. So delivery rides alongside instead. */
 test("pre-injection reports how much of its treated arm the note actually reached", async () => {
     const arms = [
-        ...Array.from({ length: 40 }, (_, index) => turn({ iqContext: true, iqContextNote: index < 10, costUsd: 0.05 })),
-        ...Array.from({ length: 30 }, () => turn({ iqContext: false, iqContextNote: false, costUsd: 0.06 })),
+        ...Array.from({ length: 40 }, (_, index) => turn({ iqContext: true, iqContextOutcome: index < 10 ? "note" : "ineligible", costUsd: 0.05 })),
+        ...Array.from({ length: 30 }, () => turn({ iqContext: false, iqContextOutcome: "ineligible", costUsd: 0.06 })),
     ];
     const { context } = await readTurnExperiments(storeOf(arms), {});
     // Of the treated arm, not of every turn: the control's non-delivery is what being the control means.
     expect(context?.deliveredPct).toBe(25);
+});
+
+/* A DELIVERY RATE WITHOUT ITS REASONS IS UNACTIONABLE. Nine days of real use put the note on 19% of the arm it
+ * was assigned to, and the boolean that recorded it could not say whether the other 81% was the eligibility
+ * gate declining on prompts that named their own file — working as designed — or a two-second deadline eating
+ * the feature. Those are the same number and opposite bugs. */
+test("the treated arm's non-delivery is broken down by reason, largest first", async () => {
+    const arms = [
+        ...Array.from({ length: 10 }, () => turn({ iqContext: true, iqContextOutcome: "note", costUsd: 0.05 })),
+        ...Array.from({ length: 25 }, () => turn({ iqContext: true, iqContextOutcome: "ineligible", costUsd: 0.05 })),
+        ...Array.from({ length: 5 }, () => turn({ iqContext: true, iqContextOutcome: "deadline", costUsd: 0.05 })),
+        ...Array.from({ length: 30 }, () => turn({ iqContext: false, iqContextOutcome: "ineligible", costUsd: 0.06 })),
+    ];
+    const { context } = await readTurnExperiments(storeOf(arms), {});
+    expect(context?.outcomes).toEqual([
+        { outcome: "ineligible", turns: 25 },
+        { outcome: "note", turns: 10 },
+        { outcome: "deadline", turns: 5 },
+    ]);
+});
+
+/* "Keep collecting" is only advice if the reader can tell three more days from three more years.
+ *
+ * AIMED AT A FIXED RESOLUTION, which is the whole correctness of the thing. Sized against the delta currently
+ * observed, the real ledger's nine-day-old unresolved experiment asked for fourteen more turns — an estimate
+ * divided by noise inherits it and promises an answer next week forever. Against a fixed target the same data
+ * asks for hundreds, which is the fact worth printing. */
+test("a withheld delta says how many more control turns would settle it", async () => {
+    const noisy = [
+        ...Array.from({ length: 40 }, (_, index) => turn({ iqContext: true, costUsd: index % 2 === 0 ? 0.02 : 0.18 })),
+        ...Array.from({ length: 40 }, (_, index) => turn({ iqContext: false, costUsd: index % 2 === 0 ? 0.01 : 0.18 })),
+    ];
+    const { context } = await readTurnExperiments(storeOf(noisy), {});
+    expect(context?.deltaPct).toBeUndefined();
+    // A margin many times the target asks for many times the arm — the reading that says this holdout will not
+    // get there, rather than that it is nearly done.
+    expect(context?.controlTurnsNeeded).toBeGreaterThan(40);
+});
+
+/* THE FALSE-IMMINENCE REGRESSION, pinned. A delta sitting just under its own margin is the case where an
+ * estimate sized against the effect collapses to nothing: the real ledger's +26.3% ± 29.3pp asked for FOURTEEN
+ * more control turns after nine days of never resolving, because (margin ÷ delta)² is barely above one exactly
+ * when the two are close. A wide margin means a wide margin, whatever the effect beside it happens to read, and
+ * the arm has to grow by a multiple rather than a handful. */
+test("a delta sitting just under its margin still asks for a multiple of the arm, not a handful", async () => {
+    const noisy = [
+        ...Array.from({ length: 40 }, (_, index) => turn({ iqContext: true, costUsd: index % 2 === 0 ? 0.02 : 0.18 })),
+        ...Array.from({ length: 40 }, (_, index) => turn({ iqContext: false, costUsd: index % 2 === 0 ? 0.01 : 0.16 })),
+    ];
+    const { context } = await readTurnExperiments(storeOf(noisy), {});
+    expect(context?.deltaPct).toBeUndefined();
+    // The delta is within a few points of the margin, which is where the effect-sized form reported single
+    // digits. Against a fixed target the arm has to multiply.
+    expect(context?.marginPct).toBeGreaterThan(20);
+    expect(context?.controlTurnsNeeded).toBeGreaterThan(3 * 40);
+});
+
+// Nothing to ask for once the resolution is already tight enough — then the effect is simply smaller than the
+// width worth acting on, which is an answer rather than a shortfall.
+test("no waiting estimate once the resolution is already good enough", async () => {
+    const tight = [
+        ...Array.from({ length: 400 }, () => turn({ iqContext: true, costUsd: 0.05 })),
+        ...Array.from({ length: 400 }, () => turn({ iqContext: false, costUsd: 0.05 })),
+    ];
+    const { context } = await readTurnExperiments(storeOf(tight), {});
+    expect(context?.deltaPct).toBeUndefined();
+    expect(context?.controlTurnsNeeded).toBeUndefined();
+});
+
+// Nothing to wait for once the delta is published — the field is the withheld state's own explanation.
+test("a resolved delta carries no waiting estimate", async () => {
+    const clean = [
+        ...Array.from({ length: 40 }, () => turn({ iqContext: true, costUsd: 0.04 })),
+        ...Array.from({ length: 40 }, () => turn({ iqContext: false, costUsd: 0.06 })),
+    ];
+    const { context } = await readTurnExperiments(storeOf(clean), {});
+    expect(context?.deltaPct).toBeDefined();
+    expect(context?.controlTurnsNeeded).toBeUndefined();
 });
 
 test("a metric a turn never recorded leaves it out of the population, rather than counting it as zero", async () => {
