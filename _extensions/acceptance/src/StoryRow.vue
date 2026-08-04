@@ -205,8 +205,19 @@ onBeforeUnmount(() => void flush());
              invalid and unusable (every attempt to tick would expand the row instead), and the two gestures are
              genuinely different — one narrows the next run, the other opens the story to write. The hover tint
              rides the wrapper so the whole line still lights up as one row. -->
-        <div class="flex w-full items-center gap-3 pl-4 hover:bg-overlay" :class="expanded && `bg-overlay`">
-            <Checkbox :model-value="selected" binary :aria-label="`Run ${story.title}`" @update:model-value="emit(`select`, $event === true)" />
+        <div class="group flex w-full items-center gap-3 pl-4 hover:bg-overlay" :class="expanded && `bg-overlay`">
+            <!-- SMALL, because this column is as long as the list and almost none of it is ever ticked (empty
+                 means all — see RunControls): at the full 20px the narrowing control was the first thing the eye
+                 found on a page whose subject is the promises beside it. Size is the only lever that helps here —
+                 a fainter box would read quieter and drop an unchecked control's outline below the contrast a
+                 boundary needs, so the ring stays the design system's own. -->
+            <Checkbox
+                :model-value="selected"
+                binary
+                size="small"
+                :aria-label="`Run ${story.title}`"
+                @update:model-value="emit(`select`, $event === true)"
+            />
             <button
                 type="button"
                 class="flex min-w-0 flex-1 cursor-pointer items-center gap-3 py-2.5 pr-4 text-left"
@@ -216,12 +227,21 @@ onBeforeUnmount(() => void flush());
                 <Icon :name="expanded ? `chevron-down` : `chevron-right`" class="shrink-0 text-subtle" />
                 <!-- Open, the heading below is the title, so the row identifies the FILE instead of repeating it. -->
                 <span v-if="expanded" class="min-w-0 flex-1 truncate font-mono text-2xs text-subtle">{{ story.path }}</span>
-                <span v-else class="min-w-0 flex-1 truncate text-sm text-content">{{ story.title }}</span>
+                <!-- MUTED UNTIL YOU REACH FOR IT — the kit's own rule for a row you pick from (<Row>, `as="button"`),
+                     and this list is the case it was written for: twenty-odd rows whose entire ink is one
+                     sentence-long title each, so at full content white the block reads as a wall and nothing in it
+                     stands out — least of all the row carrying a failed verdict. The story you point at comes up to
+                     full contrast, and so does the one you open. -->
+                <span v-else class="min-w-0 flex-1 truncate text-sm text-muted group-hover:text-content">{{ story.title }}</span>
+                <!-- THE VERDICT FIRST, THEN THE COUNT — and the count in a fixed cell, the runs list's own
+                     trailing-column recipe. Ordered the other way round they both moved: the count sat at the
+                     right edge on a story nothing had tested and 70px in on one that had, so a list where most
+                     rows carry no badge yet had a ragged right margin and no badge column to scan down. -->
+                <StatusBadge v-if="status" :variant="status.variant" :label="status.label" size="xs" />
                 <!-- Criteria are the story's readiness, not its correctness: a story with none still runs, nobody
                      has just said yet what "done" means for it. Stated quietly for that reason — a fresh workspace
                      that shouted a warning on every row would be teaching people to ignore the colour. -->
-                <span class="shrink-0 text-2xs text-subtle">{{ authored === 0 ? `no criteria` : `${authored} criteria` }}</span>
-                <StatusBadge v-if="status" :variant="status.variant" :label="status.label" size="xs" />
+                <span class="w-20 shrink-0 text-right text-2xs text-subtle">{{ authored === 0 ? `no criteria` : `${authored} criteria` }}</span>
             </button>
         </div>
 

@@ -441,7 +441,7 @@ const run = async (model: PickedModel): Promise<void> =>
                                  arrive land exactly where their placeholders were. -->
                     <template v-if="storiesLoading">
                         <div v-for="row in 3" :key="row" class="flex w-full items-center gap-3 px-4 py-2.5">
-                            <span :class="[skeletonBar, `h-3.5 w-3.5 shrink-0`]" />
+                            <span :class="[skeletonBar, `h-4 w-4 shrink-0`]" />
                             <span :class="[skeletonBar, `h-3.5 w-3.5 shrink-0`]" />
                             <span class="flex h-5 min-w-0 flex-1 items-center">
                                 <span :class="[skeletonBar, `block h-3`, skeletonTitles[row - 1]]" />
@@ -460,10 +460,14 @@ const run = async (model: PickedModel): Promise<void> =>
                                     section.paths.some((path) => selected.has(path)) && !section.paths.every((path) => selected.has(path))
                                 "
                                 binary
+                                size="small"
                                 :aria-label="`Run every story in ${section.group}`"
                                 @update:model-value="setSelected(section.paths, $event === true)"
                             />
-                            <span class="min-w-0 flex-1 truncate font-mono text-2xs text-subtle">{{ section.group }}/</span>
+                            <!-- The band's own name reads a step above the facts on the rows it opens: a heading
+                                 quieter than everything under it is a heading nobody finds, and this line is the
+                                 only thing saying where one group of promises ends and the next begins. -->
+                            <span class="min-w-0 flex-1 truncate font-mono text-2xs text-muted">{{ section.group }}/</span>
                             <TargetChip :repo="entry.repo" :group="section.group" :targets="targets" />
                         </div>
                         <StoryRow
@@ -519,7 +523,7 @@ const run = async (model: PickedModel): Promise<void> =>
                     v-for="entry in runRows"
                     :key="entry.row.manifest.runId"
                     type="button"
-                    class="flex w-full cursor-pointer items-center gap-3 px-4 py-2.5 text-left hover:bg-overlay"
+                    class="group flex w-full cursor-pointer items-center gap-3 px-4 py-2.5 text-left hover:bg-overlay"
                     @click="openRunId = entry.row.manifest.runId"
                 >
                     <Icon :name="entry.row.running ? `spinner` : `history`" :class="['shrink-0 text-subtle', entry.row.running && `animate-spin`]" />
@@ -527,7 +531,7 @@ const run = async (model: PickedModel): Promise<void> =>
                         <!-- What it TESTED, not how many. "3 stories" makes every run in the list look
                                      like every other one; the titles are how someone finds the run they
                                      remember. -->
-                        <span class="block truncate text-sm text-content">
+                        <span class="block truncate text-sm text-muted group-hover:text-content">
                             {{ entry.row.manifest.stories.map((story) => story.title).join(` · `) }}
                         </span>
                         <span class="block truncate font-mono text-2xs text-subtle">
