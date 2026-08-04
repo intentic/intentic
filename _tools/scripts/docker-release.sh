@@ -20,18 +20,28 @@ set -euo pipefail
 
 APP="${1:?usage: docker-release.sh <image> [--prune]}"
 shift
-REGISTRY="registry.gitlab.com/radarsu/intentic"
-IMAGE="$REGISTRY/$APP"
+# Both registries for the duration of the GitLab -> GHCR move: these images are pulled by the Komodo stack,
+# whose compose file names the path it was configured with, so the old one has to keep answering until that
+# stack is repointed. Drop the GitLab entry then.
+REGISTRIES="${REGISTRIES:-ghcr.io/intentic registry.gitlab.com/radarsu/intentic}"
+# The hash probe below reads the FIRST registry only — one manifest call, and the registries carry identical
+# content by construction, because everything here is one build pushed to both.
+IMAGE="${REGISTRIES%% *}/$APP"
 
 # `latest` tracks main; CI adds the commit tag. TAGS overrides both for hand runs (space-separated).
-TAGS="${TAGS:-latest${CI_COMMIT_SHORT_SHA:+ sha-$CI_COMMIT_SHORT_SHA}}"
+# CI_COMMIT_SHORT_SHA is GitLab's and goes with it at cutover; GITHUB_SHA is the full 40 chars, so it is cut
+# to the same 8 the GitLab tag used rather than making the two systems disagree about what `sha-` means.
+SHORT_SHA="${CI_COMMIT_SHORT_SHA:-${GITHUB_SHA:0:8}}"
+TAGS="${TAGS:-latest${SHORT_SHA:+ sha-$SHORT_SHA}}"
 
 if [ -n "${TURBO_HASH:-}" ]; then
     HASH_TAG="turbo-$TURBO_HASH"
     if docker manifest inspect "$IMAGE:$HASH_TAG" >/dev/null 2>&1; then
         alias_args=()
-        for tag in $TAGS; do
-            alias_args+=(--tag "$IMAGE:$tag")
+        for registry in $REGISTRIES; do
+            for tag in $TAGS; do
+                alias_args+=(--tag "$registry/$APP:$tag")
+            done
         done
         echo "content unchanged — aliasing tags onto $IMAGE:$HASH_TAG"
         docker buildx imagetools create "${alias_args[@]}" "$IMAGE:$HASH_TAG"
@@ -50,13 +60,17 @@ if [ "${1:-}" = "--prune" ]; then
 fi
 
 tag_args=()
-for tag in $TAGS ${TURBO_HASH:+turbo-$TURBO_HASH}; do
-    tag_args+=(-t "$IMAGE:$tag")
+for registry in $REGISTRIES; do
+    for tag in $TAGS ${TURBO_HASH:+turbo-$TURBO_HASH}; do
+        tag_args+=(-t "$registry/$APP:$tag")
+    done
 done
 # --provenance=false keeps a plain manifest (not an attestation-bearing OCI index) so the hash-tag alias
 # above stays a straight retag. -f is explicit because a pruned context carries its own copy of the Dockerfile.
 docker build --provenance=false -f Dockerfile "${tag_args[@]}" "$CONTEXT"
 
-for tag in $TAGS ${TURBO_HASH:+turbo-$TURBO_HASH}; do
-    docker push "$IMAGE:$tag"
+for registry in $REGISTRIES; do
+    for tag in $TAGS ${TURBO_HASH:+turbo-$TURBO_HASH}; do
+        docker push "$registry/$APP:$tag"
+    done
 done

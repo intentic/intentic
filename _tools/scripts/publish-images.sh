@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# Build + push the first-party intentic images to the repo's GitLab Container Registry (registry.gitlab.com/radarsu/intentic/*):
+# Build + push the first-party intentic images to every registry in REGISTRIES (see below — GHCR and, until
+# the move is finished, the GitLab Container Registry):
 #   sandbox    the AI-agent workspace daemon + CLI
 #   dind-host  a Docker-in-Docker + sshd deploy-target "host" — connect.ps1 stands one up on Windows so a
 #              server-less user can deploy locally (the e2e harness + intentic-local.sh use the same recipe)
@@ -13,7 +14,16 @@
 set -euo pipefail
 
 TAGS="${TAGS:?set TAGS (space-separated, e.g. "0.1.0" or "latest sha-abc1234")}"
-REGISTRY="registry.gitlab.com/radarsu/intentic"
+# Space-separated registries, every one of which gets every tag. BOTH are pushed for the duration of the
+# GitLab -> GHCR move: an installed sandbox resolves `registry.gitlab.com/radarsu/intentic/sandbox:stable` from
+# the connect script it was set up with, and that reference outlives any change made here — so the old path has
+# to keep answering until nothing pulls it. Drop the GitLab entry then; the images become GHCR-only with no
+# coordination and no flag day.
+#
+# GHCR PACKAGE VISIBILITY IS SEPARATE FROM REPOSITORY VISIBILITY. A package published from a private repo is
+# private, and a private sandbox image means every `curl https://intentic.dev/sync | sh` fails at the pull.
+# Each package must be set to public once, by hand, at github.com/orgs/intentic/packages.
+REGISTRIES="${REGISTRIES:-ghcr.io/intentic registry.gitlab.com/radarsu/intentic}"
 # Monorepo root (_tools/scripts -> up two). The sandbox image's build context is the whole monorepo so
 # `pnpm install --frozen-lockfile` resolves the root lockfile; `pnpm deploy` prunes the final image to core.
 root="$(cd "$(dirname "$0")/../.." && pwd)"
@@ -56,16 +66,22 @@ setup_builder
 publish() {
     local image="$1" dockerfile="$2" context="$3"
     shift 3
-    local tag_args=()
-    for tag in $TAGS; do
-        tag_args+=(-t "$REGISTRY/$image:$tag")
+    # One build, every registry: buildx pushes each -t it was given, so the bytes are built once and the two
+    # registries receive the identical manifest rather than two independent builds that could drift.
+    local tag_args=() cache_args=()
+    local registry
+    for registry in $REGISTRIES; do
+        for tag in $TAGS; do
+            tag_args+=(-t "$registry/$image:$tag")
+        done
+        # `latest` moves on every main push that touches the core, `stable` on every release; whichever is
+        # newer is a warm parent, and the release job (which pushes neither) reads both. A missing or
+        # unreachable ref is a non-fatal warning, so this is correct against a cold registry too — which is
+        # exactly what GHCR is on the first run.
+        cache_args+=(--cache-from "type=registry,ref=$registry/$image:latest")
+        cache_args+=(--cache-from "type=registry,ref=$registry/$image:stable")
     done
-    # `latest` moves on every main push that touches the core, `stable` on every release; whichever is newer is
-    # a warm parent, and the release job (which pushes neither) reads both. A missing or unreachable ref is a
-    # non-fatal warning, so this is correct against a cold registry too.
-    docker buildx build -f "$dockerfile" "${tag_args[@]}" \
-        --cache-from "type=registry,ref=$REGISTRY/$image:latest" \
-        --cache-from "type=registry,ref=$REGISTRY/$image:stable" \
+    docker buildx build -f "$dockerfile" "${tag_args[@]}" "${cache_args[@]}" \
         --cache-to "type=inline" \
         "$@" --push "$context"
 }

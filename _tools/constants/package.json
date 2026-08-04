@@ -1,10 +1,12 @@
 {
     "name": "@intentic/constants",
     "version": "0.0.0",
+    "description": "Shared constants for the intentic packages — ports, paths, and image references the daemon, CLIs and desktop app all agree on",
+    "license": "MIT",
     "type": "module",
     "repository": {
         "type": "git",
-        "url": "git+https://github.com/radarsu/intentic.git",
+        "url": "git+https://github.com/intentic/intentic.git",
         "directory": "_tools/constants"
     },
     "types": "./dist/index.d.ts",

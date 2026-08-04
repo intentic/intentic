@@ -1,0 +1,66 @@
+# Publish the @intentic/* packages to npm, with provenance, from the tag semantic-release pushes.
+#
+# A pushed `v*` tag is always a complete, version-stamped tree — release-prepare.sh stamps every package.json
+# before the tag exists — so there is nothing to bump and nothing to check out beyond the tag itself.
+#
+# Auth is TOKENLESS. `id-token: write` lets npm exchange this run's OIDC token for a short-lived publish
+# credential, which is also what makes the provenance attestation possible: the attestation names this
+# repository, this workflow file, and this commit. Registering the trusted publisher is a ONE-TIME manual step
+# per package on npmjs.com (Settings -> Trusted publisher -> GitHub Actions, workflow `npm-publish.yml`); a
+# package that is missing it fails the exchange rather than falling back to anything.
+#
+# PROVENANCE NEEDS A PUBLIC REPOSITORY. The attestation is published to a public transparency log, so npm
+# refuses `--provenance` from a private repo. While this repository is private the publish will fail at that
+# step — which is the correct failure: an unattested tarball is not what this pipeline promises. Hold the first
+# tag until after the repository is public, or use _tools/scripts/publish-catchup.sh from a maintainer machine.
+name: npm publish
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: read
+  id-token: write
+  packages: read
+
+concurrency:
+  group: npm-publish
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: [self-hosted, intentic]
+    container:
+      image: ghcr.io/intentic/ci-base:latest
+      volumes:
+        - /ci-cache:/ci-cache
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+    timeout-minutes: 45
+    env:
+      COREPACK_ENABLE_DOWNLOAD_PROMPT: "0"
+      PNPM_STORE: /ci-cache/pnpm-store
+      TURBO_CACHE_DIR: /ci-cache/turbo
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          clean: false
+
+      # OIDC trusted publishing landed in npm 11.5.1; Node 24 ships an older 11.x.
+      - run: npm install -g npm@latest
+
+      - uses: ./.github/actions/pnpm-setup
+
+      # Only the published closure, in the same shape release-prepare.sh builds it — the desktop app and the
+      # extensions are in this tree but are not npm artifacts, and building them here buys nothing.
+      - name: Build the published packages
+        run: |
+          source _tools/scripts/packages.sh
+          filters=()
+          for d in "${PUB[@]}"; do filters+=("--filter=./$d"); done
+          pnpm turbo run build "${filters[@]}"
+
+      - name: Publish
+        run: bash _tools/scripts/publish-npm.sh "${GITHUB_REF_NAME#v}"

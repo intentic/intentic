@@ -1,0 +1,73 @@
+# One verify group: build + test a release group's closure. The Actions equivalent of .gitlab-ci.yml's
+# `.verify` template, called three times from ci.yml with different filters.
+#
+# A REUSABLE WORKFLOW rather than a matrix, and the reason is the DAG. Actions reports a matrix job's result as
+# one aggregate across every leg, so `needs: verify` would be 'failure' when ANY group broke — and `images`
+# would then wait on the marketing site, and a platform deploy would wait on the desktop launcher UI. That is
+# precisely the coupling the split exists to remove: a red group must publish nothing of its own and block
+# nothing of anyone else's. Three separate callers give three separately-nameable results. Actions supports no
+# YAML anchors, so this file is how one definition serves all three without a matrix.
+name: verify
+
+on:
+  workflow_call:
+    inputs:
+      filters:
+        description: The turbo --filter flags naming this group's closure.
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  packages: read
+
+env:
+  COREPACK_ENABLE_DOWNLOAD_PROMPT: "0"
+  PNPM_STORE: /ci-cache/pnpm-store
+  TURBO_CACHE_DIR: /ci-cache/turbo
+  INDEXNOW_ENABLED: "0"
+
+jobs:
+  verify:
+    runs-on: [self-hosted, intentic]
+    container:
+      image: ghcr.io/intentic/ci-base:latest
+      volumes:
+        - /ci-cache:/ci-cache
+        - /var/run/docker.sock:/var/run/docker.sock
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # Keep node_modules between runs — the Actions equivalent of GIT_CLEAN_FLAGS: -ffdx -e node_modules.
+          # A clean checkout deletes 69k files and the install then re-links them from nothing; letting the
+          # install reconcile what is there instead is worth minutes in every one of these jobs.
+          clean: false
+      - uses: ./.github/actions/pnpm-setup
+
+      # `typecheck` is the one that reads the TEST files. `build` cannot: an emitting package excludes *.test.ts
+      # so test code stays out of dist, which left the tests unchecked by anything but their own execution —
+      # hand-built fakes drifted out of shape with the seams they stand in for, and only ever said so as an
+      # opaque 500 in some unrelated suite.
+      #
+      # It needs nothing from the build graph: the prepass emits its own declarations, which is what makes the
+      # same check runnable in an agent worktree — it used to depend on `^build`, and a pnpm `build` dies EXDEV
+      # in a worktree, so the check that decided main's health was the one check nobody could run locally.
+      #
+      # The prepass is invoked directly rather than through `pnpm typecheck`, because the root script cannot
+      # take a filter. It is repo-wide and unfilterable either way (~45 packages of `tsgo -b`), so each of the
+      # three groups pays it — the standing cost of the split, against a platform deploy that no longer waits
+      # on the marketing site.
+      - run: node _tools/scripts/prepass.mjs
+      - run: pnpm turbo run typecheck ${{ inputs.filters }} --continue=dependencies-successful
+
+      # ONE turbo invocation for `build test`, not two: separate calls are a hard barrier — every package must
+      # finish building before ANY test starts. A single graph lets each package's tests run the moment its own
+      # deps are built while the rest of the group is still compiling.
+      #
+      # `--continue=dependencies-successful` on both: turbo otherwise stops at the first failing task, so a red
+      # pipeline reports one broken package and the next push finds the next one. Continuing into everything
+      # whose own dependencies are still green makes one run say everything that is wrong.
+      - run: pnpm turbo run build test ${{ inputs.filters }} --continue=dependencies-successful

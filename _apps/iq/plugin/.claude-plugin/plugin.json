@@ -3,7 +3,7 @@
     "description": "Teach a coding agent to use the iq CLI (agent-native workspace search) by default over grep/find/Glob, plus session recall: past-session topic→file search and mid-point session forking, suggested automatically on a matching first prompt. Ships the iq skill, a SessionStart nudge + transcript ingest, and a UserPromptSubmit matcher. Requires the iq binary — install with `npm i -g @intentic/iq`.",
     "version": "0.0.0",
     "author": { "name": "intentic" },
-    "homepage": "https://gitlab.com/radarsu/intentic",
-    "repository": "https://gitlab.com/radarsu/intentic",
+    "homepage": "https://github.com/intentic/intentic",
+    "repository": "https://github.com/intentic/intentic",
     "hooks": "./hooks/hooks.json"
 }

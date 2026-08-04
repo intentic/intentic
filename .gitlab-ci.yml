@@ -44,6 +44,11 @@ variables:
   # never broken.
   # pnpm ignores PNPM_STORE_PATH/PNPM_STORE_DIR, so the store is selected by the --store-dir flag below; this
   # variable is deliberately named so it can't be mistaken for one pnpm reads on its own.
+  # publish-images.sh and docker-release.sh default to pushing BOTH registries for the GHCR move. This pipeline
+  # authenticates to the GitLab registry and nothing else, so a GHCR push from here would fail the job — pin it
+  # to the one it has credentials for. GHCR is populated by the Actions pipeline, which has the token for it.
+  # Both this line and the file it lives in go at cutover.
+  REGISTRIES: registry.gitlab.com/radarsu/intentic
   PNPM_STORE: /ci-cache/pnpm-store
   # turbo's own env var (verified against 2.10.7 — absolute paths work). Unlike the old per-branch cache keys,
   # one shared dir is safe for every branch at once: entries are keyed by task hash, so a hash either matches
@@ -646,7 +651,7 @@ release:
     # downloads, the second logs no download at all.
     XWIN_CACHE_DIR: /ci-cache/xwin
   # GITHUB_TOKEN (masked CI variable) is the only credential this job needs for the public side: a fine-grained
-  # PAT on radarsu/intentic with Contents read+write, which publish-github.sh uses to push the snapshot commit,
+  # PAT on intentic/intentic with Contents read+write, which publish-github.sh uses to push the snapshot commit,
   # the tag, and the Release with its installers. There is NO npm credential here any more — the packages are
   # published by GitHub Actions off that tag, tokenless, through npm's OIDC trusted publishing, which the
   # self-hosted runner here could never use and which is what earns the packages their provenance badge.

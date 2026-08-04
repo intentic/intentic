@@ -36,7 +36,7 @@ OUT="$APP/dist-bin"
 # points at the build it describes. ONE set of URLs regardless of which endpoint served the manifest — the
 # GitLab copy of latest.json carries these same GitHub links, so an install that predates the cutover and still
 # polls the old endpoint downloads from the new one.
-DOWNLOADS="https://github.com/radarsu/intentic/releases/download/v${VERSION}"
+DOWNLOADS="https://github.com/intentic/intentic/releases/download/v${VERSION}"
 
 echo "==> desktop release build v${VERSION}"
 
@@ -150,7 +150,7 @@ if [ -n "${TAURI_SIGNING_PRIVATE_KEY:-}" ] && [ "$LINUX_ONLY" -eq 0 ]; then
     cat >"$OUT/latest.json" <<MANIFEST
 {
     "version": "${VERSION}",
-    "notes": "https://github.com/radarsu/intentic/releases/tag/v${VERSION}",
+    "notes": "https://github.com/intentic/intentic/releases/tag/v${VERSION}",
     "pub_date": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
     "platforms": {
         "linux-x86_64": { "signature": "${appimage_sig}", "url": "${DOWNLOADS}/Intentic.AppImage" },

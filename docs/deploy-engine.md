@@ -206,4 +206,4 @@ The engine discovers your zone and account from the token alone (author `zone` o
 
 ## Run on your own PC (no server)
 
-No VPS? Because each host's Cloudflare Tunnel connects *outbound* (the host opens no inbound ports), the "host" can be your own laptop or desktop behind NAT. See [LOCAL.md](../LOCAL.md).
+No VPS? Because each host's Cloudflare Tunnel connects *outbound* (the host opens no inbound ports), the "host" can be your own laptop or desktop behind NAT — point a host at it and apply the same way.

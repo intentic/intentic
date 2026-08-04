@@ -18,7 +18,7 @@ curl https://intentic.dev/sync | sh        # the sandbox on this machine
 curl https://intentic.dev/computer | sh    # connect this computer to an agent
 ```
 
-Or take the desktop app from [Releases](https://github.com/radarsu/intentic/releases/latest) — `.AppImage`,
+Or take the desktop app from [Releases](https://github.com/intentic/intentic/releases/latest) — `.AppImage`,
 `.deb`, `.rpm`, and a Windows installer, all auto-updating.
 
 ## What's in here
@@ -33,12 +33,11 @@ Or take the desktop app from [Releases](https://github.com/radarsu/intentic/rele
 | `_extensions/*` | the loadable capabilities — Discord, IMAP, Slack, deployments, pipelines, memory, … |
 | `_libs/*` | the shared engine, contracts, resolvers, and UI kit those build on |
 
-Every package has its own README with what it is responsible for and where to start reading.
+Most packages carry their own README with what they are responsible for and where to start reading.
 
 The `intentic deploy` command group is a standalone **deployment engine** — a declarative, reconciling
 infrastructure tool. It is one of the many tools a specialized agent can reach for, **not part of the intentic
-product**; it ships here for convenience. See [docs/deploy-engine.md](docs/deploy-engine.md) and
-[LOCAL.md](LOCAL.md).
+product**; it ships here for convenience. See [docs/deploy-engine.md](docs/deploy-engine.md).
 
 ## Published artifacts
 
@@ -47,7 +46,7 @@ product**; it ships here for convenience. See [docs/deploy-engine.md](docs/deplo
   so every tarball links back to the commit and workflow run that built it.
 - **Container images** — `registry.gitlab.com/radarsu/intentic/sandbox` and `.../dind-host`, at each release
   version plus a moving `stable` tag.
-- **Desktop installers** — attached to each [GitHub Release](https://github.com/radarsu/intentic/releases).
+- **Desktop installers** — attached to each [GitHub Release](https://github.com/intentic/intentic/releases).
 
 ## Building it yourself
 
@@ -70,7 +69,8 @@ at any tag is exactly what was published under that version — nothing is filte
 because no past is exported.
 
 Issues and discussion are welcome here. Pull requests cannot be merged into a snapshot, so open an issue first
-and we will carry the change upstream.
+and we will carry the change upstream — [CONTRIBUTING.md](CONTRIBUTING.md) has the details. For security
+problems, report them privately instead: [SECURITY.md](SECURITY.md).
 
 ## License
 

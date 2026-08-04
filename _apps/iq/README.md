@@ -126,7 +126,7 @@ On trivial single-file lookups `iq` is roughly break-even (when the answer is on
 
 ```sh
 npm i -g @intentic/iq                              # the CLI (also needs Node ≥ 24 + ripgrep, see Install)
-/plugin marketplace add radarsu/intentic           # the marketplace (or the repo's https URL)
+/plugin marketplace add intentic/intentic           # the marketplace (or the repo's https URL)
 /plugin install iq                                  # the skill + nudge
 ```
 

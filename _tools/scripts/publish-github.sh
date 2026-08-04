@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Export this release to the PUBLIC mirror at github.com/radarsu/intentic: one commit, one tag, one GitHub
+# Export this release to the PUBLIC mirror at github.com/intentic/intentic: one commit, one tag, one GitHub
 # Release with the installers attached. Runs from release-prepare.sh after the versions are stamped and the
 # binaries are built, and is what makes the whole public surface move at once —
 #
@@ -12,8 +12,11 @@
 # It exports the WORKING TREE, never history: the mirror gets a snapshot per release (public.sh), so nothing
 # that was ever committed and removed can surface, and no force-push is ever needed.
 #
-# CI setup: GITHUB_TOKEN, a masked CI variable holding a fine-grained PAT for radarsu/intentic with Contents:
-# read+write. Without it the export SKIPS — a local release-prepare.sh dry-run stays runnable.
+# CI setup: GITHUB_TOKEN, a masked CI variable holding a fine-grained PAT for intentic/intentic with Contents:
+# read+write. Locally, without it, the export SKIPS so a release-prepare.sh dry-run stays runnable — but IN CI
+# a missing token is fatal. It has to be: this script's tag is the only trigger for the npm publish, so a quiet
+# skip on a real release ships nothing to npm and still reports green, which is how v1.177.0-v1.179.0 were
+# tagged with no packages behind them.
 #   bash _tools/scripts/publish-github.sh 1.177.0
 set -euo pipefail
 VERSION="${1:?usage: publish-github.sh <version>}"
@@ -21,11 +24,15 @@ DIR="$(cd "$(dirname "$0")" && pwd)"
 source "$DIR/public.sh"
 cd "$DIR/../.."
 
-REPO="${GITHUB_MIRROR_REPO:-radarsu/intentic}"
+REPO="${GITHUB_MIRROR_REPO:-intentic/intentic}"
 TAG="v${VERSION}"
 
 if [ -z "${GITHUB_TOKEN:-}" ]; then
-  echo "  skip     GitHub mirror (no GITHUB_TOKEN)"
+  if [ -n "${CI:-}" ]; then
+    echo "GITHUB_TOKEN is unset — the mirror export is the npm release's only trigger, so this is fatal in CI." >&2
+    exit 1
+  fi
+  echo "  skip     GitHub mirror (no GITHUB_TOKEN, not CI)"
   exit 0
 fi
 

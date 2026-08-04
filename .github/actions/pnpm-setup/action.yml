@@ -1,0 +1,28 @@
+# The install every job opens with — the Actions equivalent of .gitlab-ci.yml's `.pnpm-setup` anchor.
+#
+# corepack, pnpm and the node-gyp exec-bit fix are all baked into ci-base. The two lines before the install
+# exist only to cover DRIFT: when package.json's packageManager moves ahead of the pnpm pinned in the image,
+# corepack fetches the new version here, and that freshly-fetched copy needs the same fix — corepack strips the
+# exec bit off its bundled gyp_main.py, and node-pty (no linux prebuild) compiles from source and invokes it
+# directly. When the versions match, both are no-ops.
+name: pnpm setup
+description: Install the workspace against the shared pnpm store and prune the turbo cache.
+
+runs:
+  using: composite
+  steps:
+    - name: Cover a corepack drift
+      shell: bash
+      run: |
+        pnpm --version
+        find "$HOME/.cache/node/corepack" -path '*node-gyp/gyp/gyp_main.py' -exec chmod +x {} + 2>/dev/null || true
+
+    - name: Install
+      shell: bash
+      run: pnpm install --frozen-lockfile --store-dir "$PNPM_STORE"
+
+    # Bound the shared turbo cache: drop entries untouched for 14 days (rebuilt + re-cached if needed). The
+    # directory outlives the job, so nothing else evicts from it — this line is load-bearing, not hygiene.
+    - name: Prune the turbo cache
+      shell: bash
+      run: find "$TURBO_CACHE_DIR" -type f -mtime +14 -delete 2>/dev/null || true

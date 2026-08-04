@@ -37,7 +37,7 @@ test("failed writes an error frame before the terminal done", async () => {
 test("the visitor's error frame carries none of the provider's reason", async () => {
     const frames: Array<{ event?: string; data: string }> = [];
     const stream = createSseStream(fakeStream(frames));
-    stream.turn.failed("Your organization has disabled Claude subscription access · account rkrohmorath@gmail.com");
+    stream.turn.failed("Your organization has disabled Claude subscription access · account owner@example.com");
     await stream.flushed();
     const [error] = frames;
     expect(error?.data).toBe("Sorry — I couldn't answer that just now. Please try again in a moment.");

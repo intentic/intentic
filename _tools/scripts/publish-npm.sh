@@ -51,6 +51,11 @@ for i in "${!PUB[@]}"; do
   # intentic-cli-<version>.tgz) is a rule this script has no reason to re-implement.
   out="$work/tgz-$i"
   mkdir -p "$out"
+  # MIT asks for the notice in "all copies or substantial portions", and a tarball is a copy — but the license
+  # text lives only at the repo root, which no package's `files` reaches. Dropped in beside the package.json
+  # for the pack and removed straight after: npm includes a LICENSE unconditionally, so nothing else changes.
+  cp LICENSE "${PUB[$i]}/LICENSE"
   pnpm --dir "${PUB[$i]}" pack --pack-destination "$out"
+  rm -f "${PUB[$i]}/LICENSE"
   npm publish "$out"/*.tgz --access public --provenance
 done

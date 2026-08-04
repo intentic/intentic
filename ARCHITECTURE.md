@@ -769,7 +769,7 @@ single-graph form used when a single deterministic graph is wanted directly.
   [_libs/sdk/src/deploy.config.test.ts](_libs/sdk/src/deploy.config.test.ts) against
   [_libs/sdk/src/__fixtures__/deploy.graph.ts](_libs/sdk/src/__fixtures__/deploy.graph.ts).
 
-See [CLAUDE.md](CLAUDE.md) for the code-style rules every change must follow.
+See [AGENTS.md](AGENTS.md) for the code-style rules every change must follow.
 
 ## Local end-to-end testing
 

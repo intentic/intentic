@@ -6,7 +6,7 @@
     "type": "module",
     "repository": {
         "type": "git",
-        "url": "git+https://github.com/radarsu/intentic.git",
+        "url": "git+https://github.com/intentic/intentic.git",
         "directory": "_libs/local-agent"
     },
     "files": [

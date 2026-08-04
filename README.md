@@ -13,7 +13,7 @@ An autonomous agent still needs a human in the loop. AI has to have its context 
 - **Plan-and-review by default** — agents propose before they act; every change is a diff you land or discard; environment changes need your explicit approval.
 - **Capabilities** — wire an agent into GitHub, databases, Sentry, Stripe, SSH hosts, MCP servers, Claude plugins, and more, a click each. Credentials stay inside the sandbox.
 - **Automations** — wake an agent on a schedule, a webhook, or a live event (a push, an alert, a payment, an email), each run leaving a transcript.
-- **Ownership by construction** — code and credentials never leave your machine; the platform stores only your identity and the sandbox's URL and sits off the command path. What runs on your machine is MIT on [GitHub](https://github.com/radarsu/intentic), so you can verify it.
+- **Ownership by construction** — code and credentials never leave your machine; the platform stores only your identity and the sandbox's URL and sits off the command path. What runs on your machine is MIT on [GitHub](https://github.com/intentic/intentic), so you can verify it.
 - **Your subscriptions, your hardware, a flat fee** — each agent runs on your own Claude, ChatGPT, or SuperGrok plan; intentic never meters your model usage.
 
 ## How it runs
@@ -41,7 +41,7 @@ Dev serves over HTTPS via the committed `@intentic-app/localhost-https` cert (Go
 
 ## Working in this repo (for agents)
 
-- **Read [CLAUDE.md](CLAUDE.md) first** — it holds the hard editing rules (no legacy/compat shims, no re-exports or aliases, let errors propagate, prefer `undefined`, early returns).
+- **Read [AGENTS.md](AGENTS.md) first** — it holds the hard editing rules (no legacy/compat shims, no re-exports or aliases, let errors propagate, prefer `undefined`, early returns).
 - **Edit `src/` directly.** Workspace packages expose an `@intentic/src` export condition, so cross-package imports resolve to source — no build step is needed between editing a lib and running a dependent test.
 - **Tests are co-located:** `*.test.ts` (unit), `*.integration.test.ts` (temp trees, subprocesses, real git — a 60s budget instead of the 5s hang detector), and gated `*.e2e.test.ts` (real infra, opt-in). Run `pnpm test` (Turbo) or per-package `vitest`.
 - **`pnpm verify` is the gate — run it before you finish, including from an agent worktree.** It is `pnpm typecheck` and then `pnpm test` — under a minute for all 45 packages, from a cold cache. Both emit every dependency's dist with `tsgo -b` first (`_tools/scripts/prepass.mjs`), so neither needs `pnpm build`, which cannot run under worktree isolation. It is also what CI decides main's health on, so a green run here is a green run there.
@@ -52,12 +52,12 @@ Dev serves over HTTPS via the committed `@intentic-app/localhost-https` cert (Go
 
 This monorepo also contains a standalone **deployment engine** — a declarative, reconciling infrastructure tool driven by the `intentic deploy` command group (`init` · `resolve` · `plan` · `apply` · `destroy` · `adopt` · `restore` · …). It turns `i.have` / `i.want` intent into real self-hosted infrastructure on hosts you own.
 
-It is **not part of the intentic product.** It is one of the many tools a specialized agent can reach for — no more a "feature" than `psql` or `docker` — and it lives in this repo only for convenience. Its walkthrough, capabilities, and known limits are documented separately in **[docs/deploy-engine.md](docs/deploy-engine.md)** (and [LOCAL.md](LOCAL.md) for running it against your own PC).
+It is **not part of the intentic product.** It is one of the many tools a specialized agent can reach for — no more a "feature" than `psql` or `docker` — and it lives in this repo only for convenience. Its walkthrough, capabilities, and known limits are documented separately in **[docs/deploy-engine.md](docs/deploy-engine.md)**.
 
 ## The public mirror
 
 Everything that runs on the user's machine is published as MIT source at
-**[github.com/radarsu/intentic](https://github.com/radarsu/intentic)** — the sandbox, the CLIs, the desktop
+**[github.com/intentic/intentic](https://github.com/intentic/intentic)** — the sandbox, the CLIs, the desktop
 app, the extensions, and the libs they stand on. The platform half of this repo (`_apps/{api,web,site,demo}`
 and its libs) stays here.
 

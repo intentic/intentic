@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Single source of truth for what the PUBLIC GitHub mirror (github.com/radarsu/intentic) contains. Sourced by
+# Single source of truth for what the PUBLIC GitHub mirror (github.com/intentic/intentic) contains. Sourced by
 # publish-github.sh (the per-release export) and verify-mirror.sh (the merge-request guard) — one list, so the
 # tree that gets published is byte-for-byte the tree that was proven to install and type-check.
 #
@@ -32,7 +32,7 @@ PUBLIC=(
     # model it explains (why the platform cannot reach your code) is the one thing a reader of a public
     # sandbox most needs to be able to check. Its links into the private half don't resolve here; the mirror's
     # README says so rather than a rewritten copy of the doc drifting from this one.
-    AGENTS.md ARCHITECTURE.md LICENSE LOCAL.md docs/deploy-engine.md
+    AGENTS.md ARCHITECTURE.md CONTRIBUTING.md LICENSE SECURITY.md docs/architecture docs/deploy-engine.md
     .dockerignore .editorconfig .gitignore .npmrc .oxlintrc.json .prettierignore .prettierrc.json
     pnpm-workspace.yaml tsconfig.libs.json turbo.json
     # Exported as a SEED, not as the answer: it still carries the private packages' importers and the root's
