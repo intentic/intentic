@@ -164,14 +164,17 @@
         font-weight: 600;
     }
 
-    /* Dotted blueprint grid overlay (app Login hero motif) */
+    /* Blueprint grid overlay — crossed hairlines, not dots. Two 1px gradients on one 60px cell;
+     * a continuous line inks far more area than a dot, so the weight is carried by the colour
+     * (a fraction of the line token) rather than by opacity on a solid stroke. */
     .grid-overlay {
         position: absolute;
         inset: 0;
         pointer-events: none;
-        opacity: 0.4;
-        background-image: radial-gradient(circle at 1px 1px, var(--color-line-strong) 1px, transparent 0);
-        background-size: 28px 28px;
+        background-image:
+            linear-gradient(color-mix(in srgb, var(--color-line-strong) 30%, transparent) 1px, transparent 1px),
+            linear-gradient(90deg, color-mix(in srgb, var(--color-line-strong) 30%, transparent) 1px, transparent 1px);
+        background-size: 60px 60px;
         mask-image: radial-gradient(ellipse 80% 60% at 30% 20%, black, transparent);
     }
 
