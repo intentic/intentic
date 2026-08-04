@@ -22,7 +22,7 @@ pnpm e2e:browser    # from the repo root: builds libs, then runs this package's 
 Requirements: Docker (compose Postgres + the daemon image), Bun, and Playwright's Chromium
 (`pnpm --filter @intentic-app/e2e exec playwright install chromium`). Everything already running (dev machine)
 is reused; whatever the setup started is torn down, including the seeded rows. `SANDBOX_E2E_IMAGE` overrides
-the daemon image (e.g. a source build from the sibling `intentic` repo).
+the daemon image (e.g. a source build).
 
 **A dev-machine tier, not a CI one**, and that is what the separate task name records (turbo.json says it at
 length): every server above is addressed on `localhost`, and every CI job here drives a docker-in-docker
@@ -30,7 +30,14 @@ length): every server above is addressed on `localhost`, and every CI job here d
 suite and could only ever fail it on `P1001` against `localhost:5440`. The tiers CI does run are
 `pnpm e2e` (gated real-infra) and `pnpm e2e:hermetic` (no secrets, every MR).
 
+Those tiers each declare the credentials they need with `e2eTier` (`_libs/testing/src/e2e.ts`) and stand down
+naming what was missing, which is what lets CI ask for all of them at once. This suite declares nothing —
+its requirement is a whole local stack, which no environment variable can announce.
+
 ## Not covered here (by design)
 
-Real Google OAuth, Stripe billing, invites (platform unit tests cover their logic), and everything that needs
-real infrastructure or Discord — those live in the `intentic` repo's gated e2e tiers.
+Real Google OAuth, Stripe billing and invites — platform unit tests cover their logic. Everything that needs
+real infrastructure or real Discord lives in the gated tiers beside this one: `_apps/cli/src/cli.e2e.test.ts`
+(Cloudflare), `_apps/sandbox/src/discord.e2e.test.ts` (Discord + Whisper), and
+`_apps/cli/src/hermetic.e2e.test.ts` (the secret-free control-plane run). `ARCHITECTURE.md` → *What each tier
+needs* is the table.

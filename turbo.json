@@ -83,22 +83,34 @@
         // credentials each suite names, and every one of them self-skips when its own env is absent — which is
         // what lets the nightly CI job be nothing but `pnpm e2e`. A tier that CANNOT self-skip does not belong
         // under this name; see e2e:browser.
+        //
+        // A suite says which credentials it needs with `e2eTier` (`@intentic/testing/e2e`), and the list below
+        // is what lets those reach it: a variable missing here is invisible to the suite no matter what CI
+        // holds, so the tier stands down over a credential it was actually given. The two are one statement
+        // written twice and they have to agree.
+        //
+        // The Forgejo/Komodo admin passwords used to sit here and were never read: the CLI GENERATES them and
+        // the suite reads them back out of desired-state/.secrets.json, not out of the environment.
         "e2e": {
             "dependsOn": ["^build"],
             "cache": false,
             "passThroughEnv": [
+                // The opt-in switch every gated tier reads.
                 "INTENTIC_E2E",
+                // The Cloudflare tier (cli.e2e): the token is what it stands down without, the zone names which
+                // one of yours to deploy under.
                 "CLOUDFLARE_API_TOKEN",
                 "CLOUDFLARE_ZONE",
-                "FORGEJO_ADMIN_PASSWORD",
-                "KOMODO_ADMIN_PASSWORD",
-                "KOMODO_WEBHOOK_SECRET",
-                "SANDBOX_E2E_IMAGE",
+                // The Discord tier (discord.e2e): all three required, and the Claude credentials unlock only the
+                // one spec inside it that spends a real agent turn.
                 "DISCORD_E2E_BOT_TOKEN",
                 "DISCORD_E2E_SENDER_TOKEN",
                 "DISCORD_E2E_CHANNEL_ID",
                 "ANTHROPIC_API_KEY",
-                "CLAUDE_CODE_OAUTH_TOKEN"
+                "CLAUDE_CODE_OAUTH_TOKEN",
+                // Points the sandbox-daemon tier at a published image instead of a source build (e2e:browser
+                // passes the same variable through for the same reason).
+                "SANDBOX_E2E_IMAGE"
             ]
         },
         "e2e:hermetic": {

@@ -753,8 +753,10 @@ single-graph form used when a single deterministic graph is wanted directly.
 - **One concept per file**, named for the concept (`reconcile-loop.ts`, `resolve.ts`,
   `forgejo-api.ts`). Tests are **co-located** next to their source.
 - **Test naming:** `*.test.ts` = unit; `*.engine.test.ts` = integration driven through the real engine;
-  `*.e2e.test.ts` = gated real run (`INTENTIC_E2E=1` for the Cloudflare-backed nightly,
-  `INTENTIC_E2E_HERMETIC=1` for the secret-free MR sidecar; both self-skip in `pnpm test`).
+  `*.e2e.test.ts` = gated real run against live services. A gated suite does not hand-roll its gate — it
+  declares the switch and the credentials it needs with `e2eTier` ([_libs/testing/src/e2e.ts](_libs/testing/src/e2e.ts))
+  and stands down, saying which variable it wanted, when the environment is short of one. See
+  [What each tier needs](#what-each-tier-needs).
 - **Tiers:** `_libs/` = libraries, `_apps/` = runnable products, `_tools/` = shared config + repo-wide
   maintainer scripts (`_tools/scripts/`). The pnpm-workspace glob is `_*/*`. App-specific scripts live in
   that app's `scripts/` dir (e.g. `_apps/sandbox/scripts/`); the user-facing connect/sync/cleanup scripts
@@ -787,12 +789,13 @@ tiny Dockerfile and authors an environment so `apply` wires CI/CD — the Forgej
 pushes the image and Komodo rolls it out live at `app.<zone>`. It asserts the platform containers are up,
 the public URLs respond, and the app serves its body, then purges the Cloudflare DNS + tunnel it created.
 
-It is gated behind `INTENTIC_E2E` **and `CLOUDFLARE_API_TOKEN`** — both, so the suite self-skips rather than
+It is gated behind `INTENTIC_E2E` **and `CLOUDFLARE_API_TOKEN`** — both, so the suite stands down rather than
 fails wherever its live credentials are absent, which is what lets the nightly CI job (`e2e:nightly`) run
 `pnpm e2e` unconditionally and get whatever the pipeline's variables unlock. It is excluded from `pnpm test`
-either way. Run it from the repo root with `pnpm e2e` — turbo builds the libs (`^build`) and the CLI's e2e
-script sets `INTENTIC_E2E=1`; you supply only a Cloudflare token (and, optionally, the zone to deploy under).
-The host SSH key is generated per run, and the Forgejo/Komodo admin passwords are intentic-generated:
+either way. Run it from the repo root with `pnpm e2e` — turbo builds the libs (`^build`) and each package's
+e2e script sets the switch. That command asks **every** gated tier to run, and the ones you hold no
+credentials for stand down; you supply only a Cloudflare token here (and, optionally, the zone to deploy
+under). The host SSH key is generated per run, and the Forgejo/Komodo admin passwords are intentic-generated:
 
 ```sh
 CLOUDFLARE_API_TOKEN=...        # Account → Tunnel → Edit; Zone → DNS → Edit; Zone → Zone → Read
@@ -827,6 +830,35 @@ the published `dind-host:latest` image (falling back to building [_tools/dind-ho
 the CLI run logs as artifacts on failure. In the field `adopt` needs no flag at all — its default
 transport is an SSH port-forward to Forgejo on the host (public DNS never enters the path); `--baseUrl`
 remains an explicit transport override for reaching Forgejo over an already-mapped address like this test's.
+
+### What each tier needs
+
+`pnpm e2e` asks every gated tier to run at once, which only works because a tier that cannot reach its
+service stands down instead of failing. Each declares its own requirement with `e2eTier`
+([_libs/testing/src/e2e.ts](_libs/testing/src/e2e.ts)) — the opt-in switch it reads, and the credentials it
+is useless without:
+
+| Tier | Suite | Needs beyond a Docker daemon |
+| --- | --- | --- |
+| sandbox-daemon | [sandbox.e2e.test.ts](_apps/sandbox/src/sandbox.e2e.test.ts) | nothing |
+| cloudflare | [cli.e2e.test.ts](_apps/cli/src/cli.e2e.test.ts) | `CLOUDFLARE_API_TOKEN` (+ `CLOUDFLARE_ZONE` to pick the zone) |
+| discord | [discord.e2e.test.ts](_apps/sandbox/src/discord.e2e.test.ts) | `DISCORD_E2E_BOT_TOKEN` + `_SENDER_TOKEN` + `_CHANNEL_ID`; `ANTHROPIC_API_KEY` or `CLAUDE_CODE_OAUTH_TOKEN` unlocks the real-agent-turn spec |
+
+A tier that is asked to run and finds a credential missing puts the variable's name in its own suite title,
+which is what vitest prints beside the `↓` — so the nightly's log states which tiers ran without anything
+logging it. Widening the nightly is adding a protected CI variable, not editing a job. The credentials a
+tier declares and the `passThroughEnv` list on turbo's `e2e` task are the same statement written twice: a
+variable absent from `turbo.json` never reaches the suite, however CI is configured.
+
+Two tiers deliberately sit outside that command, each under its own turbo task, and neither declares
+credentials because neither needs any:
+
+- **hermetic** ([hermetic.e2e.test.ts](_apps/cli/src/hermetic.e2e.test.ts), `pnpm e2e:hermetic`) — needing no
+  secrets at all is exactly what earns it a run on every merge request rather than nightly, so it reads its
+  own switch and must not wake with the gated ones.
+- **browser** ([_tools/e2e](_tools/e2e), `pnpm e2e:browser`) — a dev-machine tier. Its whole stack answers on
+  `localhost`, and every CI job here drives a docker-in-docker *service* that publishes ports on its own
+  namespace, so sharing the `e2e` name only ever swept it into a nightly it could not pass.
 
 ## Demo
 

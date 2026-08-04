@@ -1,5 +1,6 @@
 import { randomBytes } from "node:crypto";
 import { sandboxContract } from "@intentic/sandbox-contract";
+import { e2eTier } from "@intentic/testing/e2e";
 import { createORPCClient } from "@orpc/client";
 import type { ContractRouterClient } from "@orpc/contract";
 import { OpenAPILink } from "@orpc/openapi-client/fetch";
@@ -20,7 +21,9 @@ import { hasValidBase } from "./environment/environment.js";
 //
 // SANDBOX_E2E_IMAGE skips the from-source build and runs a prebuilt image instead (CI's nightly points it at
 // the freshly published :latest; local debugging can point it anywhere).
-const enabled = process.env["INTENTIC_E2E"] === "1" || process.env["INTENTIC_E2E"] === "true";
+// No secrets: a Docker daemon is the whole requirement, so this tier runs on every nightly rather than waiting
+// on a credential. It is the one that always has something to say.
+const tier = e2eTier("sandbox daemon end-to-end (real container, loopback)", { enabledBy: "INTENTIC_E2E" });
 
 // Non-empty so syncSshHostname derives (loopback still exposes the sync surface); the zone is a reserved TLD.
 const CONNECT_TOKEN = randomBytes(16).toString("base64url");
@@ -40,7 +43,7 @@ const tarBuffer = async (entries: { name: string; content: string }[]): Promise<
     return Buffer.concat(chunks);
 };
 
-describe.skipIf(!enabled)("sandbox daemon end-to-end (real container, loopback)", () => {
+describe.skipIf(!tier.runs)(tier.title, () => {
     let container: StartedTestContainer;
     let base: string;
     let client: ContractRouterClient<typeof sandboxContract>;

@@ -18,6 +18,10 @@
         "./vitest": {
             "types": "./src/vitest.ts",
             "default": "./src/vitest.ts"
+        },
+        "./e2e": {
+            "types": "./src/e2e.ts",
+            "default": "./src/e2e.ts"
         }
     },
     "scripts": {

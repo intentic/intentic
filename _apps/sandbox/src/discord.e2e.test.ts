@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { randomBytes } from "node:crypto";
 import { downloadFile } from "@huggingface/hub";
 import { sandboxContract } from "@intentic/sandbox-contract";
+import { e2eTier } from "@intentic/testing/e2e";
 import { createORPCClient } from "@orpc/client";
 import type { ContractRouterClient } from "@orpc/contract";
 import { OpenAPILink } from "@orpc/openapi-client/fetch";
@@ -21,17 +22,20 @@ import { hasValidBase } from "./environment/environment.js";
 // overlay (whisper.cpp from source) and running the real whisper-cli + tiny.en model on the canonical whisper.cpp
 // speech sample, pinned to the same tag the fragment builds.
 //
-// Required env (skipped without them, on top of INTENTIC_E2E):
+// What the tier below names, and what each one has to BE — the declaration says they are required, this says
+// how to make one that works:
 //   DISCORD_E2E_BOT_TOKEN    — the daemon's capability bot. Must be in the test server with the MESSAGE
 //                              CONTENT intent enabled (Developer Portal → Bot → Privileged Gateway Intents).
 //   DISCORD_E2E_SENDER_TOKEN — the harness bot that posts the trigger message. Same server + channel.
 //   DISCORD_E2E_CHANNEL_ID   — a text channel both bots can read/write.
-// Optional: ANTHROPIC_API_KEY / CLAUDE_CODE_OAUTH_TOKEN unlock the one real agent-turn spec.
 // Manual checklist (not automated): a live voice-channel session (`discord-voice join` with real speakers) — the
 // capture path is covered by _extensions/discord/src/audio.test.ts with an injected exec; binary + model here.
-const BOT_TOKEN = process.env["DISCORD_E2E_BOT_TOKEN"] ?? "";
-const SENDER_TOKEN = process.env["DISCORD_E2E_SENDER_TOKEN"] ?? "";
-const CHANNEL_ID = process.env["DISCORD_E2E_CHANNEL_ID"] ?? "";
+const tier = e2eTier("discord + whisper end-to-end (real gateway, real binary)", {
+    enabledBy: "INTENTIC_E2E",
+    secrets: ["DISCORD_E2E_BOT_TOKEN", "DISCORD_E2E_SENDER_TOKEN", "DISCORD_E2E_CHANNEL_ID"],
+});
+// Claude's credentials are an unlock, not a requirement: without them the tier still proves the whole trigger
+// path, and only the one spec that spends a real agent turn stands down.
 const CLAUDE_CREDS = {
     ...(process.env["ANTHROPIC_API_KEY"] !== undefined && process.env["ANTHROPIC_API_KEY"] !== ""
         ? { ANTHROPIC_API_KEY: process.env["ANTHROPIC_API_KEY"] }
@@ -40,8 +44,6 @@ const CLAUDE_CREDS = {
         ? { CLAUDE_CODE_OAUTH_TOKEN: process.env["CLAUDE_CODE_OAUTH_TOKEN"] }
         : {}),
 };
-const enabled =
-    (process.env["INTENTIC_E2E"] === "1" || process.env["INTENTIC_E2E"] === "true") && BOT_TOKEN !== "" && SENDER_TOKEN !== "" && CHANNEL_ID !== "";
 
 // The whisper model + speech fixture, cached across runs (the model is ~75 MB; the fixture is whisper.cpp's own
 // smoke sample — public-domain JFK speech — fetched from the same v1.9.1 tag the overlay fragment builds).
@@ -66,9 +68,9 @@ const ensureCached = async (file: string, fetchBlob: () => Promise<Blob>): Promi
 // Post a message to the test channel as the harness bot — Discord's plain REST, the same API the daemon's
 // skill teaches the agent to call.
 const sendAsHarnessBot = async (content: string): Promise<void> => {
-    const response = await fetch(`https://discord.com/api/v10/channels/${CHANNEL_ID}/messages`, {
+    const response = await fetch(`https://discord.com/api/v10/channels/${tier.secrets.DISCORD_E2E_CHANNEL_ID}/messages`, {
         method: "POST",
-        headers: { authorization: `Bot ${SENDER_TOKEN}`, "content-type": "application/json" },
+        headers: { authorization: `Bot ${tier.secrets.DISCORD_E2E_SENDER_TOKEN}`, "content-type": "application/json" },
         body: JSON.stringify({ content }),
     });
     if (!response.ok) {
@@ -76,7 +78,7 @@ const sendAsHarnessBot = async (content: string): Promise<void> => {
     }
 };
 
-describe.skipIf(!enabled)("discord + whisper end-to-end (real gateway, real binary)", () => {
+describe.skipIf(!tier.runs)(tier.title, () => {
     let container: StartedTestContainer;
     let base: string;
     let client: ContractRouterClient<typeof sandboxContract>;
@@ -92,7 +94,7 @@ describe.skipIf(!enabled)("discord + whisper end-to-end (real gateway, real bina
         for await (const line of await client.capabilities.add({
             id: "discord",
             kind: "cli",
-            config: { provider: "discord", botToken: BOT_TOKEN, voiceModel: "tiny", voiceLanguage: "en" },
+            config: { provider: "discord", botToken: tier.secrets.DISCORD_E2E_BOT_TOKEN, voiceModel: "tiny", voiceLanguage: "en" },
         })) {
             void line;
         }
@@ -111,7 +113,7 @@ describe.skipIf(!enabled)("discord + whisper end-to-end (real gateway, real bina
     it("a real channel message reaches the listener automation and is held for approval", async () => {
         await client.automations.upsert({
             id: "e2e-discord",
-            trigger: { kind: "listener", provider: "discord", channelId: CHANNEL_ID },
+            trigger: { kind: "listener", provider: "discord", channelId: tier.secrets.DISCORD_E2E_CHANNEL_ID },
             prompt: "noop",
             requireApproval: true,
             enabled: true,
@@ -186,7 +188,7 @@ describe.skipIf(!enabled)("discord + whisper end-to-end (real gateway, real bina
         async () => {
             await client.automations.upsert({
                 id: "e2e-agent",
-                trigger: { kind: "listener", provider: "discord", channelId: CHANNEL_ID },
+                trigger: { kind: "listener", provider: "discord", channelId: tier.secrets.DISCORD_E2E_CHANNEL_ID },
                 prompt: "This is an automated end-to-end check. Do not use any tools. Reply with the single word: done.",
                 model: "haiku",
                 enabled: true,

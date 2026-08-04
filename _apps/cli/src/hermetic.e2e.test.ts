@@ -6,6 +6,7 @@ import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 import { forgejoApi, type SshResult, sshExecutor } from "@intentic/providers";
 import { adminUsername, deploymentId, forgejoId, komodoId, runnerId, tunnelId } from "@intentic/state-resolver";
+import { e2eTier } from "@intentic/testing/e2e";
 import { utils } from "ssh2";
 import { GenericContainer, type StartedTestContainer, Wait } from "testcontainers";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
@@ -21,7 +22,9 @@ import { readGeneratedSecrets } from "./secrets/generated-secrets.js";
 // real Forgejo, idempotent re-runs, and a reproduced readiness failure asserting the diagnostic sweep.
 // Gated behind INTENTIC_E2E_HERMETIC (needs a privileged local Docker daemon); runs as a non-blocking MR
 // sidecar in CI, while the Cloudflare-backed cli.e2e stays nightly.
-const enabled = process.env["INTENTIC_E2E_HERMETIC"] === "1" || process.env["INTENTIC_E2E_HERMETIC"] === "true";
+// Its own switch, not the nightly's: naming no secrets is exactly what lets this tier run on every merge
+// request, so it must not turn on with the gated ones.
+const tier = e2eTier("intentic CLI hermetic end-to-end (DinD, no external services)", { enabledBy: "INTENTIC_E2E_HERMETIC" });
 
 const exec = promisify(execFile);
 
@@ -73,7 +76,7 @@ const envFile = (privateKey: string): string =>
 CLOUDFLARE_API_TOKEN=hermetic-dummy
 `;
 
-describe.skipIf(!enabled)("intentic CLI hermetic end-to-end (DinD, no external services)", () => {
+describe.skipIf(!tier.runs)(tier.title, () => {
     let host: StartedTestContainer;
     let tmp: string;
     let privateKey: string;

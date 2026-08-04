@@ -378,15 +378,32 @@ e2e:hermetic:
       - .e2e-hermetic-logs/
     expire_in: 1 week
 
-# Nightly gated e2e (scheduled): the sandbox-daemon tier always, plus whatever CI vars unlock (DISCORD_E2E_*,
-# CLOUDFLARE_API_TOKEN/CLOUDFLARE_ZONE). Each suite self-skips without its secrets. Runs the freshly published
-# :latest sandbox image (SANDBOX_E2E_IMAGE) rather than rebuilding from source.
+# Nightly gated e2e (scheduled). `pnpm e2e` fans out to three tiers, and each declares what it needs
+# (`@intentic/testing/e2e`) instead of assuming this job holds it:
+#
+#   sandbox-daemon  sandbox.e2e   no credentials — a Docker daemon is the whole requirement, so this is the
+#                                 tier that always has something to say.
+#   cloudflare      cli.e2e       CLOUDFLARE_API_TOKEN, scoped DNS-edit + tunnel-edit on a zone you own
+#                                 (CLOUDFLARE_ZONE names it; it defaults to the one in the suite).
+#   discord         discord.e2e   DISCORD_E2E_BOT_TOKEN + _SENDER_TOKEN + _CHANNEL_ID. ANTHROPIC_API_KEY or
+#                                 CLAUDE_CODE_OAUTH_TOKEN additionally unlocks the one spec in it that spends
+#                                 a real agent turn.
+#
+# A tier this job has no credentials for stands down and names the variable it wanted, in the suite title vitest
+# prints beside the ↓. So green here means the UNLOCKED tiers passed and the log says which those were — and
+# widening the run is a matter of adding the protected CI variable, never of editing this file. What a missing
+# credential must not do is fail the job: cli.e2e used to read its token through a helper that threw, and the
+# nightly went red for a tier it had deliberately been given nothing to reach.
 #
 # `pnpm e2e` is the WHOLE scope on purpose — the turbo task name is what decides which tiers a job runs, not a
 # filter list here that would drift the first time a suite is added. The browser tier (@intentic-app/e2e) is
 # `e2e:browser` for exactly that reason: it addresses its stack on localhost, which under the dind service this
-# job attaches is nobody's postgres (turbo.json states it in full). The tiers below reach the daemon through
+# job attaches is nobody's postgres (turbo.json states it in full). The three above reach the daemon through
 # DOCKER_HOST via testcontainers, so they are indifferent to where it lives.
+#
+# Runs the freshly published :latest sandbox image (SANDBOX_E2E_IMAGE) rather than rebuilding from source. The
+# hermetic tier is deliberately absent — needing no secrets at all is what earns it a run per merge request
+# instead, in e2e:hermetic above.
 e2e:nightly:
   extends: .dind
   stage: test

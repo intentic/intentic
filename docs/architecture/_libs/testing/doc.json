@@ -1,20 +1,24 @@
 {
-  "dir": "_libs/testing",
-  "keyFiles": [
-    {
-      "path": "_libs/testing/src/index.ts",
-      "what": "The stand-in, and the comment explaining every key it refuses to answer."
-    },
-    {
-      "path": "_libs/testing/src/vitest.ts",
-      "what": "The unit and integration suite budgets a package spreads into its config."
+    "dir": "_libs/testing",
+    "keyFiles": [
+        {
+            "path": "_libs/testing/src/index.ts",
+            "what": "The stand-in, and the comment explaining every key it refuses to answer."
+        },
+        {
+            "path": "_libs/testing/src/vitest.ts",
+            "what": "The unit and integration suite budgets a package spreads into its config."
+        },
+        {
+            "path": "_libs/testing/src/e2e.ts",
+            "what": "What a real-service suite declares it needs, and why a missing credential skips rather than fails."
+        }
+    ],
+    "name": "@intentic/testing",
+    "oneLiner": "The stand-in every test suite builds its fakes on, the two suite budgets, and the gate a real-service suite runs behind.",
+    "provenance": {
+        "generatedAt": 1785838701045,
+        "model": "claude-opus-4-6",
+        "sourceRev": "b103264e245289284b2b8db6450f704206d0eb79"
     }
-  ],
-  "name": "@intentic/testing",
-  "oneLiner": "The stand-in every test suite builds its fakes on, plus the two suite budgets.",
-  "provenance": {
-    "generatedAt": 1785802442877,
-    "model": "claude-opus-4-6",
-    "sourceRev": "b103264e245289284b2b8db6450f704206d0eb79"
-  }
 }

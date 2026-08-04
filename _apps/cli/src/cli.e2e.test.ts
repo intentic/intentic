@@ -6,6 +6,7 @@ import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 import { cloudflareApi, forgejoApi, sshExecutor } from "@intentic/providers";
 import { deploymentId, deploymentPort } from "@intentic/state-resolver";
+import { e2eTier } from "@intentic/testing/e2e";
 import { utils } from "ssh2";
 import { GenericContainer, type StartedTestContainer, Wait } from "testcontainers";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
@@ -19,18 +20,20 @@ import { readGeneratedSecrets } from "./secrets/generated-secrets.js";
 // Forgejo Actions workflow + a Komodo registry deployment) — intentic does not build or deploy. The workflow
 // then builds + pushes the image and Komodo rolls it out live at app.<zone>. Gated behind INTENTIC_E2E because
 // it needs a privileged Docker daemon + live Cloudflare credentials (with DNS-edit + tunnel-edit scopes) on a
-// zone you own, so default `pnpm test` / CI skip it.
+// zone you own — so `pnpm test` never reaches it, and in CI only the nightly does, and only when it holds a
+// token to reach Cloudflare with.
 //
-// Required env: INTENTIC_E2E=1, CLOUDFLARE_API_TOKEN. The host SSH key is generated per-run and written into
-// the .env the CLI loads; the Forgejo/Komodo admin passwords are intentic-generated (read back from
-// desired-state/.secrets.json to sign in).
+// The host SSH key is generated per-run and written into the .env the CLI loads; the Forgejo/Komodo admin
+// passwords are intentic-generated (read back from desired-state/.secrets.json to sign in).
 //
-// The TOKEN gates `enabled` alongside INTENTIC_E2E, exactly as discord.e2e.test.ts gates on its bot tokens.
-// That is the nightly job's whole contract (.gitlab-ci.yml `e2e:nightly`): it sets INTENTIC_E2E=1 for every
-// tier and each suite decides for itself whether its secrets are present. Asserting the token inside instead
-// turned "this project has no Cloudflare credentials" into a red pipeline every night.
-const CLOUDFLARE_API_TOKEN = process.env["CLOUDFLARE_API_TOKEN"] ?? "";
-const enabled = (process.env["INTENTIC_E2E"] === "1" || process.env["INTENTIC_E2E"] === "true") && CLOUDFLARE_API_TOKEN !== "";
+// The TOKEN gates the tier alongside INTENTIC_E2E, the same way every other gated suite names its own
+// credentials. That is the nightly job's whole contract (.gitlab-ci.yml `e2e:nightly`): it sets INTENTIC_E2E=1
+// for every tier and each suite decides for itself whether its secrets are present. Asserting the token inside
+// instead turned "this project has no Cloudflare credentials" into a red pipeline every night.
+const tier = e2eTier("intentic CLI end-to-end (manual, real Cloudflare + DinD)", {
+    enabledBy: "INTENTIC_E2E",
+    secrets: ["CLOUDFLARE_API_TOKEN"],
+});
 
 const exec = promisify(execFile);
 
@@ -99,7 +102,7 @@ export const intent = defineIntent((i) => {
 
 const envFile = (privateKey: string): string =>
     `HOST_SSH_KEY="${privateKey}"
-CLOUDFLARE_API_TOKEN=${CLOUDFLARE_API_TOKEN}
+CLOUDFLARE_API_TOKEN=${tier.secrets.CLOUDFLARE_API_TOKEN}
 `;
 
 // Poll a public URL through the tunnel until it answers from the origin (not a Cloudflare edge error),
@@ -132,7 +135,7 @@ const pollUrl = async (url: string, timeoutMs: number, bodyIncludes?: string): P
     }
 };
 
-describe.skipIf(!enabled)("intentic CLI end-to-end (manual, real Cloudflare + DinD)", () => {
+describe.skipIf(!tier.runs)(tier.title, () => {
     let host: StartedTestContainer;
     let tmp: string;
     let privateKey: string;
@@ -161,26 +164,28 @@ describe.skipIf(!enabled)("intentic CLI end-to-end (manual, real Cloudflare + Di
 
         // Purge the live Cloudflare resources this run created — the engine has no destroy path. The account id
         // comes back from resolving the zone (the same discovery the CLI does), so it is not configured here.
-        const zone = await cloudflareApi.getZone({ apiToken: CLOUDFLARE_API_TOKEN, zone: ZONE }).catch(() => undefined);
+        const zone = await cloudflareApi.getZone({ apiToken: tier.secrets.CLOUDFLARE_API_TOKEN, zone: ZONE }).catch(() => undefined);
         if (zone !== undefined) {
             const tunnel = await cloudflareApi
-                .findTunnel({ accountId: zone.accountId, apiToken: CLOUDFLARE_API_TOKEN, name: "intentic-host" })
+                .findTunnel({ accountId: zone.accountId, apiToken: tier.secrets.CLOUDFLARE_API_TOKEN, name: "intentic-host" })
                 .catch(() => undefined);
             if (tunnel !== undefined) {
                 // Force-close any lingering connections (cloudflared just died with the host) so the delete sticks.
                 await fetch(`https://api.cloudflare.com/client/v4/accounts/${zone.accountId}/cfd_tunnel/${tunnel.id}/connections`, {
                     method: "DELETE",
-                    headers: { Authorization: `Bearer ${CLOUDFLARE_API_TOKEN}` },
+                    headers: { Authorization: `Bearer ${tier.secrets.CLOUDFLARE_API_TOKEN}` },
                 }).catch(() => {});
                 await cloudflareApi
-                    .deleteTunnel({ accountId: zone.accountId, apiToken: CLOUDFLARE_API_TOKEN, tunnelId: tunnel.id })
+                    .deleteTunnel({ accountId: zone.accountId, apiToken: tier.secrets.CLOUDFLARE_API_TOKEN, tunnelId: tunnel.id })
                     .catch((error) => console.warn(`tunnel cleanup: ${String(error)}`));
             }
             for (const name of [GIT_DOMAIN, KOMODO_DOMAIN, APP_DOMAIN, WILDCARD_PREVIEW]) {
-                const record = await cloudflareApi.findDnsRecord({ apiToken: CLOUDFLARE_API_TOKEN, zoneId: zone.id, name }).catch(() => undefined);
+                const record = await cloudflareApi
+                    .findDnsRecord({ apiToken: tier.secrets.CLOUDFLARE_API_TOKEN, zoneId: zone.id, name })
+                    .catch(() => undefined);
                 if (record !== undefined) {
                     await cloudflareApi
-                        .deleteDnsRecord({ apiToken: CLOUDFLARE_API_TOKEN, zoneId: zone.id, recordId: record.id })
+                        .deleteDnsRecord({ apiToken: tier.secrets.CLOUDFLARE_API_TOKEN, zoneId: zone.id, recordId: record.id })
                         .catch((error) => console.warn(`dns cleanup ${name}: ${String(error)}`));
                 }
             }

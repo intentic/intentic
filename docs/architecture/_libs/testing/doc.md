@@ -1,12 +1,13 @@
 # @intentic/testing
 
-The stand-in every test suite builds its fakes on, plus the two suite budgets.
+The stand-in every test suite builds its fakes on, the two suite budgets, and the gate a real-service suite
+runs behind.
 
 ```stats
 {
   "items": [
-    {"label": "Lines", "value": "145"},
-    {"label": "Files", "value": "4"},
+    {"label": "Lines", "value": "291"},
+    {"label": "Files", "value": "6"},
     {"label": "Used by", "value": "12 packages"},
     {"label": "Tests", "value": "yes"}
   ] }
@@ -48,8 +49,8 @@ Dashed arrows are development-only — needed to build or test, not to run.
 { "title": "Size within Plumbing",
   "items": [
     {"label": "e2e", "value": 1864, "display": "1.9k", "accent": "neutral"},
+    {"label": "testing (this one)", "value": 291, "display": "291", "accent": "neutral"},
     {"label": "examples", "value": 163, "display": "163", "accent": "neutral"},
-    {"label": "testing (this one)", "value": 145, "display": "145", "accent": "neutral"},
     {"label": "constants", "value": 54, "display": "54", "accent": "neutral"},
     {"label": "desktop-smoke", "value": 0, "display": "0", "accent": "neutral"},
     {"label": "dind-host", "value": 0, "display": "0", "accent": "neutral"},
@@ -66,10 +67,22 @@ guarded the keys the *language* reads off an arbitrary value. A value carrying a
 promise as far as the runtime is concerned, so awaiting the fake hands the resolution machinery a
 stand-in that it then calls. Eight tests died inside the await machinery before that was understood.
 
-The other half of the package is `vitest.ts`: the two suite kinds as config data. A five-second
-timeout is a hang detector, correct for a test that composes objects in memory and nonsense for one
-that clones a repo or boots a container. The kind is in the file name, so the ceiling follows the kind
-rather than being repaired suite by suite after it breaks a busy CI runner.
+The rest of the package answers the same question about suites rather than about fakes: what may a suite
+assume, and who decides.
+
+`vitest.ts` holds the two suite kinds as config data. A five-second timeout is a hang detector, correct
+for a test that composes objects in memory and nonsense for one that clones a repo or boots a container.
+The kind is in the file name, so the ceiling follows the kind rather than being repaired suite by suite
+after it breaks a busy CI runner.
+
+`e2e.ts` decides whether a suite that drives real services runs at all. A suite names the opt-in switch it
+reads and the credentials it is useless without; it gets back whether it runs, and a title carrying the
+variable it wanted when it does not. This too replaced copies, and one copy had the interesting bug: the
+Cloudflare suite checked its switch in `describe.skipIf` but read its token through a local helper that
+*threw*, so the nightly — which turns every tier on at once and holds credentials for only some — went red
+on a tier it had deliberately been given nothing to reach. A suite that cannot reach its service has
+nothing to say, and deciding both halves of that in one place is what makes standing down the only
+outcome available.
 
 ## Where it is used
 
