@@ -59,6 +59,11 @@ While a tunnel is up, routing follows what it pushed — matching traffic just w
 \`vpn list\` shows the routed networks, so \`0.0.0.0/0\` means everything is going through the tunnel.
 
 Notes:
+- Lost the internet, or a command started hanging, right after a tunnel came up? That is a FULL TUNNEL whose
+  gateway does not route the internet: \`vpn list\` shows \`0.0.0.0/0\`, so everything — including your own
+  connection out of this sandbox — is being handed to a gateway that drops most of it. Disconnect it to get back,
+  and tell the user to narrow that VPN capability's "Routed networks" to the networks behind the gateway; both
+  work at once after that. Never work around it by editing /etc/ipsec.d — connect rewrites those files.
 - You cannot read a VPN's credentials, and you do not need to: \`vpn connect\` uses the stored ones.
 - A one-time code cannot be guessed or stored — if a connect fails asking for one, ask the user for a current code.
 - A tunnel marked \`unavailable\` needs a sandbox rebuild (the user does this from Sandbox ▸ Environment); say so

@@ -58,6 +58,18 @@ const espProposals = (raw: IpsecVpnConfig): string => {
     return `aes128-sha256-${dh},aes256-sha256-${dh},aes128-sha1-${dh},aes256-sha1-${dh}`;
 };
 
+// The remote traffic selector: which networks this client asks the gateway to route into the tunnel. Whitespace
+// is normalised out because a user types "10.0.0.0/8, 192.168.0.0/16" and strongSwan reads this file literally.
+// Falls back rather than trusting the value, for the same reason dhOf does: an empty rightsubnet makes charon
+// reject the include file WHOLESALE, which takes every other tunnel on this sandbox down with it.
+const routedNetworks = (raw: IpsecVpnConfig): string => {
+    const networks = raw.routedNetworks
+        .split(",")
+        .map((entry) => entry.trim())
+        .filter((entry) => entry !== "");
+    return networks.length === 0 ? "0.0.0.0/0" : networks.join(",");
+};
+
 // strongSwan refuses IKEv1 aggressive mode with a PSK unless this is set, and it is right to: the PSK hash goes
 // out unencrypted. FortiGate dial-up with a group PSK requires it anyway, so the grant is per sandbox and only
 // ever written when an aggressive connection actually exists.
@@ -81,9 +93,11 @@ export const ipsecConnConfig = (id: string, raw: IpsecVpnConfig): string => {
         `    esp=${espProposals(raw)}`,
         `    right=${raw.server}`,
         `    rightid=${raw.remoteId ?? "%any"}`,
-        // A dial-up client asks for everything and lets the gateway narrow it — matching FortiClient's
-        // 0.0.0.0/0 remote network.
-        `    rightsubnet=0.0.0.0/0`,
+        // What the gateway is asked to route into the tunnel. NOT a fixed 0.0.0.0/0 any more: a dial-up gateway
+        // does not necessarily narrow what it is offered — a FortiGate happily accepts the catch-all, and then
+        // drops everything it has no route for, so a sandbox that asked for everything loses the internet
+        // (its own connection to the model included) the moment the tunnel comes up.
+        `    rightsubnet=${routedNetworks(raw)}`,
         `    left=%defaultroute`,
         ...(raw.localId === undefined ? [] : [`    leftid=${raw.localId}`]),
         // %config = take the virtual IP from the gateway's mode config, which is how FortiGate assigns one.
@@ -278,7 +292,17 @@ export const ipsecDriver: VpnDriver = {
                 [`strongSwan could not establish ${id}.`, hint, dialOutput].filter((part) => part !== undefined && part !== "").join("\n\n"),
             );
         }
-        yield { kind: "log", message: `Connected ${id}. The gateway's routed networks now ride the IPsec tunnel.` };
+        // Name what was asked for, and say the consequence out loud while a full tunnel is still the default.
+        // This is the last message that reaches the user before a gateway without internet egress swallows the
+        // sandbox's own outbound traffic — after that there is nothing to read the explanation from.
+        const networks = routedNetworks(ipsec);
+        yield {
+            kind: "log",
+            message:
+                networks === "0.0.0.0/0"
+                    ? `Connected ${id}. ALL traffic now rides the IPsec tunnel. If this sandbox goes quiet from here, the gateway is not routing the internet — set the capability's routed networks to the ones behind it (10.0.0.0/8,192.168.0.0/16) and only those ride the tunnel.`
+                    : `Connected ${id}. ${networks} now rides the IPsec tunnel; everything else keeps going out directly.`,
+        };
     },
     disconnect: async (id) => {
         await exec("ipsec", ["down", connName(id)]).catch(() => undefined);

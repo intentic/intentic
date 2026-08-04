@@ -2397,6 +2397,32 @@ export const IpsecVpnConfigSchema = z.object({
     // IKEv1 aggressive mode: insecure by construction, and exactly what FortiGate dial-up with a group PSK
     // requires — hence opt-in per connection rather than a global strongSwan setting.
     aggressive: z.enum(["on", "off"]).default("on"),
+    // WHICH networks ride the tunnel — strongSwan's rightsubnet, the traffic selector this client offers in
+    // quick mode. The single most consequential setting on an ipsec tunnel, and the one with no visible symptom
+    // until it is wrong: 0.0.0.0/0 offers the gateway EVERYTHING the sandbox sends, including the sandbox's own
+    // outbound connection to the model endpoint. A gateway that routes only its own networks accepts that
+    // selector, assigns a virtual IP, and then black-holes the rest — so the agent goes silent mid-turn, which
+    // reads as the agent breaking rather than as a VPN setting. Narrowing this to the networks actually behind
+    // the gateway (10.0.0.0/8,192.168.0.0/16) fixes it with nothing lost: the gateway is asked for less, not for
+    // something different, and it needs no change of its own to accept that.
+    // Comma-separated because strongSwan takes a list; under IKEv1 each entry is its own CHILD_SA, which not
+    // every gateway will negotiate — a list that dials as one entry is a gateway limit, not a config error.
+    // The DEFAULT STAYS 0.0.0.0/0: narrowing it for everyone would cut existing tunnels off from networks they
+    // reach today, and a full tunnel is right whenever the gateway does route the internet.
+    routedNetworks: z
+        .string()
+        .default("0.0.0.0/0")
+        .refine(
+            (value) =>
+                value
+                    .split(",")
+                    .map((entry) => entry.trim())
+                    .every((entry) => z.cidrv4().safeParse(entry).success || z.cidrv6().safeParse(entry).success),
+            {
+                message:
+                    "Routed networks is a comma-separated list of CIDRs, like 10.0.0.0/8,192.168.0.0/16. A single host needs its prefix too (192.168.0.168/32). Leave it at 0.0.0.0/0 to send everything through the gateway.",
+            },
+        ),
     autoConnect,
 });
 export const VpnConfigSchema = z.discriminatedUnion("provider", [WireguardVpnConfigSchema, FortinetVpnConfigSchema, IpsecVpnConfigSchema]);

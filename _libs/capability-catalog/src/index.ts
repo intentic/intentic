@@ -418,6 +418,18 @@ export const CAPABILITY_CATALOG: readonly CapabilityCatalogEntry[] = [
                 ],
                 when: { key: "provider", value: "ipsec" },
             },
+            // The split-vs-full tunnel decision, and the one ipsec setting whose wrong value has no symptom the
+            // user can attribute: a gateway that doesn't route the internet accepts 0.0.0.0/0 and then drops
+            // everything else, so the sandbox — the agent's own connection included — goes quiet. Which is why
+            // the hint states the consequence rather than the syntax.
+            {
+                key: "routedNetworks",
+                label: "Routed networks",
+                default: "0.0.0.0/0",
+                placeholder: "10.0.0.0/8,192.168.0.0/16",
+                hint: "Which networks go through the tunnel. 0.0.0.0/0 sends everything, including this sandbox's own internet access — if the gateway doesn't route the internet, list only the networks behind it.",
+                when: { key: "provider", value: "ipsec" },
+            },
 
             // Shared: the only persisted connection intent. Connecting itself is a live action on the Status card.
             {
@@ -436,6 +448,7 @@ export const CAPABILITY_CATALOG: readonly CapabilityCatalogEntry[] = [
                 "WireGuard: paste the full .conf ([Interface] + [Peer]) from your provider or server.",
                 "FortiGate SSL-VPN: use the gateway host and port your FortiClient connection uses (e.g. vpn.example.com:10443 → host + 10443).",
                 "IPsec: the pre-shared key, plus your XAuth username and password if the gateway asks for them.",
+                "IPsec routed networks: keep 0.0.0.0/0 only if the gateway also carries your internet — otherwise list the networks behind it, or the sandbox loses everything the gateway doesn't route.",
                 "Have a FortiClient config file? Use “Import from FortiClient” above to fill this in from it.",
                 "If the gateway asks for a 2FA code, connect from the Status card and enter the code there.",
             ],

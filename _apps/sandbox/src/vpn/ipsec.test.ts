@@ -15,6 +15,7 @@ const systemEg: IpsecVpnConfig = {
     aggressive: "on",
     pfs: "on",
     dhGroup: "14",
+    routedNetworks: "0.0.0.0/0",
     autoConnect: "on",
 };
 
@@ -36,6 +37,23 @@ test("generates an IKEv1 aggressive-mode conn with mode-config and XAuth", () =>
     expect(conf).toContain("ike=aes128-sha256-modp2048");
     expect(conf).toContain("esp=aes128-sha256-modp2048");
     expect(conf).not.toContain("modp1536");
+});
+
+// rightsubnet is what decides whether a tunnel is split or full, and a full one on a gateway without internet
+// egress takes the sandbox's own outbound traffic down with it — the failure this field exists to make fixable.
+test("the routed networks are what the tunnel asks the gateway to route, not a fixed catch-all", () => {
+    expect(ipsecConnConfig("x", systemEg)).toContain("rightsubnet=0.0.0.0/0");
+    const split = ipsecConnConfig("x", { ...systemEg, routedNetworks: "192.168.0.0/16" });
+    expect(split).toContain("rightsubnet=192.168.0.0/16");
+    expect(split).not.toContain("0.0.0.0/0");
+    // A list is typed the way a person types one; strongSwan reads this file literally, so the spaces go.
+    expect(ipsecConnConfig("x", { ...systemEg, routedNetworks: "10.0.0.0/8, 192.168.0.0/16" })).toContain("rightsubnet=10.0.0.0/8,192.168.0.0/16");
+});
+
+test("a blank routed-networks value still produces a loadable file", () => {
+    // An empty rightsubnet makes charon reject the whole included config — which would take every OTHER tunnel
+    // on this sandbox down too, so the generator falls back rather than emitting it.
+    expect(ipsecConnConfig("x", { ...systemEg, routedNetworks: " , " })).toContain("rightsubnet=0.0.0.0/0");
 });
 
 test("omits aggressive mode for IKEv2 and for an explicitly disabled IKEv1 tunnel", () => {

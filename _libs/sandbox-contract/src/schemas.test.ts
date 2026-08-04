@@ -1,5 +1,5 @@
 import { expect, test } from "vitest";
-import { CapabilitiesListSchema, DeployOverviewResponseSchema, SandboxSettingsSchema } from "./schemas.js";
+import { CapabilitiesListSchema, DeployOverviewResponseSchema, IpsecVpnConfigSchema, SandboxSettingsSchema } from "./schemas.js";
 
 /* The settings shape spans a version seam that really moves: the browser ships with the platform, the daemon
  * ships inside the user's sandbox image, so a web build routinely parses a payload from an OLDER daemon. These
@@ -83,4 +83,23 @@ test("a board that did carry links keeps them, and garbage in them is still a fa
     expect(DeployOverviewResponseSchema.parse(current).repos[0]?.suggestions).toEqual(["app-prod"]);
     // Tolerance is for absence, not for the wrong shape — a `repos` that is present and wrong is real drift.
     expect(DeployOverviewResponseSchema.safeParse({ ...current, repos: "none" }).success).toBe(false);
+});
+
+/* An ipsec tunnel's routed networks decide whether it is split or full, and both ends of that are load-bearing:
+ * a value the daemon splices into rightsubnet unchecked reaches charon as a config it refuses WHOLESALE (every
+ * tunnel on the sandbox stops loading, and the error names the file rather than the field), while a default that
+ * stopped being 0.0.0.0/0 would silently narrow tunnels that reach those networks today. */
+const ipsec = { provider: "ipsec", server: "gw.example.com", presharedKey: "group-secret" };
+
+test("an ipsec tunnel is a full tunnel unless it says otherwise", () => {
+    expect(IpsecVpnConfigSchema.parse(ipsec).routedNetworks).toBe("0.0.0.0/0");
+});
+
+test("routed networks take a CIDR list and reject what charon could not load", () => {
+    expect(IpsecVpnConfigSchema.parse({ ...ipsec, routedNetworks: "10.0.0.0/8, 192.168.0.0/16" }).routedNetworks).toBe("10.0.0.0/8, 192.168.0.0/16");
+    expect(IpsecVpnConfigSchema.parse({ ...ipsec, routedNetworks: "fd00::/8" }).routedNetworks).toBe("fd00::/8");
+    // A bare host address is the easy mistake — strongSwan wants the prefix, and the message says so.
+    expect(IpsecVpnConfigSchema.safeParse({ ...ipsec, routedNetworks: "192.168.0.168" }).success).toBe(false);
+    expect(IpsecVpnConfigSchema.safeParse({ ...ipsec, routedNetworks: "10.0.0.0/8,nonsense" }).success).toBe(false);
+    expect(IpsecVpnConfigSchema.safeParse({ ...ipsec, routedNetworks: "" }).success).toBe(false);
 });
