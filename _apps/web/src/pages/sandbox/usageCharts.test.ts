@@ -99,8 +99,8 @@ describe(`UsageColumnChart`, () => {
         expect(segments[0]?.getAttribute(`style`)).toContain(`--color-series-2`);
         expect(segments[1]?.getAttribute(`style`)).toContain(`--color-series-1`);
         // Only the topmost segment carries the rounded data-end; the baseline stays square.
-        expect(segments[0]?.classList.contains(`rounded-t-[4px]`)).toBe(true);
-        expect(segments[1]?.classList.contains(`rounded-t-[4px]`)).toBe(false);
+        expect(segments[0]?.classList.contains(`rounded-t-xs`)).toBe(true);
+        expect(segments[1]?.classList.contains(`rounded-t-xs`)).toBe(false);
     });
 
     it(`draws no segment at all for a period nothing ran — a gap, not a zero-height sliver`, () => {

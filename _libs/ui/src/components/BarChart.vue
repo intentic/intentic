@@ -55,7 +55,7 @@ const tip = (item: BarItem): string => item.display ?? item.value.toLocaleString
                     <!-- 10px thick, 4px rounded data-end, square at the baseline it grows from. `min-w-px` keeps
                          a tiny-but-nonzero value visible as a hairline instead of rounding it away to nothing. -->
                     <div
-                        class="h-2.5 min-w-px rounded-r-[4px]"
+                        class="h-2.5 min-w-px rounded-r-xs"
                         :style="{ width: `${(item.value / max) * 100}%`, background: seriesColor(item.accent) }"
                     />
                 </div>

@@ -718,7 +718,7 @@ const closeTab = (event: Event, id: string): void => {
                                 <IdentityTile
                                     :title="tabLabel(c)"
                                     :provider="agent?.provider ?? c.provider.value"
-                                    class="-mt-px h-[18px] w-[18px] text-2xs"
+                                    class="-mt-px h-4.5 w-4.5 text-2xs"
                                 />
                                 <!-- Two lines before the clamp — a card has the width for most titles whole.
                                      The content tier over a card of meta: this is the one line being READ.
@@ -904,7 +904,7 @@ const closeTab = (event: Event, id: string): void => {
                             <!-- The same identity tile as the lanes above: a hit here is a destination, and
                                  the category tint says what kind of work it will turn out to be. Only the
                                  TEXT ink drops a step, since nothing here is a session you are currently in. -->
-                            <IdentityTile :title="agent.title" :provider="agent.provider" class="-mt-px h-[18px] w-[18px] text-2xs" />
+                            <IdentityTile :title="agent.title" :provider="agent.provider" class="-mt-px h-4.5 w-4.5 text-2xs" />
                             <span class="line-clamp-2 min-w-0 flex-1 text-xs font-medium leading-4 text-muted">
                                 <span
                                     v-for="(run, at) in markSegments(agent.title ?? 'Untitled agent', needle)"

@@ -94,7 +94,7 @@ onBeforeUnmount(release);
         role="separator"
         :aria-orientation="axis === `x` ? `vertical` : `horizontal`"
         class="relative z-20 shrink-0 touch-none transition-colors hover:bg-primary-500/35"
-        :class="[axis === `x` ? `-mx-[3px] w-1.5 cursor-col-resize` : `-my-[3px] h-1.5 cursor-row-resize`, dragging ? `bg-primary-500/35` : ``]"
+        :class="[axis === `x` ? `-mx-0.75 w-1.5 cursor-col-resize` : `-my-0.75 h-1.5 cursor-row-resize`, dragging ? `bg-primary-500/35` : ``]"
         @pointerdown="start"
         @pointermove="move"
         @pointerup="end"
