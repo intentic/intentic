@@ -6,6 +6,6 @@
     },
     "include": ["./src/**/*"],
     "exclude": ["./src/**/*.test.ts"],
-    "references": [{ "path": "../graph" }, { "path": "../need-resolver" }, { "path": "../resources" }],
+    "references": [{ "path": "../graph" }, { "path": "../need-resolver" }, { "path": "../resources" }, { "path": "../../_tools/constants" }],
     "extends": "@intentic/tsconfig/tsconfig.base.json"
 }

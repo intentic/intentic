@@ -6,5 +6,6 @@
         "tsBuildInfoFile": "./.cache/tsbuildinfo"
     },
     "include": ["./src/**/*"],
+    "references": [{ "path": "../resources" }, { "path": "../sandbox-contract" }],
     "extends": "@intentic/tsconfig/tsconfig.base.json"
 }

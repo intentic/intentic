@@ -434,7 +434,9 @@ jobs:
           key: iq-models-${{ hashFiles('_libs/iq-engine/scripts/fetch-model.mjs') }}
 
       - run: bash _tools/scripts/prepare-image-trees.sh
+      # `shell: bash` because the job's default is `sh`, where the `${VAR::N}` slice below is a Bad substitution.
       - run: TAGS="latest sha-${GITHUB_SHA::8}" bash _tools/scripts/publish-images.sh
+        shell: bash
 
   # Platform image publishing: build + push web + api on every push to main that touches the platform, then
   # roll the Komodo stack. Same philosophy as `images` — apps build job-side under turbo off the warm caches,
@@ -476,7 +478,9 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
       - run: pnpm turbo run docker:release --filter=@intentic-app/api --filter=@intentic-app/web
+      # `shell: bash` because the job's default is `sh`, where the `${VAR::N}` slice below is a Bad substitution.
       - run: DEPLOY_VERSION="${GITHUB_SHA::8}" bash _tools/scripts/deploy-platform.sh
+        shell: bash
 
   # Release: semantic-release over the core group's verified build — the cross-compiled machine agents, the
   # desktop installers, the sandbox/dind-host images at the release version + moving `stable` tag, and the

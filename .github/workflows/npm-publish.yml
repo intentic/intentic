@@ -56,6 +56,8 @@ jobs:
       # Only the published closure, in the same shape release-prepare.sh builds it — the desktop app and the
       # extensions are in this tree but are not npm artifacts, and building them here buys nothing.
       - name: Build the published packages
+        # `shell: bash` because the job's default is `sh`, where `source` and the arrays below are syntax errors.
+        shell: bash
         run: |
           source _tools/scripts/packages.sh
           filters=()

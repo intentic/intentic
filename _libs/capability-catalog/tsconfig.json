@@ -6,5 +6,6 @@
     },
     "include": ["./src/**/*"],
     "exclude": ["./src/**/*.test.ts"],
+    "references": [{ "path": "../extension-api" }, { "path": "../sandbox-contract" }],
     "extends": "@intentic/tsconfig/tsconfig.base.json"
 }

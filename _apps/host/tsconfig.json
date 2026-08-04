@@ -8,5 +8,11 @@
     },
     "include": ["./src/**/*"],
     "exclude": ["./src/**/*.test.ts", "./src/testing.ts"],
+    "references": [
+        { "path": "../../_libs/browser" },
+        { "path": "../../_libs/desktop" },
+        { "path": "../../_libs/local-agent" },
+        { "path": "../../_libs/sandbox-contract" }
+    ],
     "extends": "@intentic/tsconfig/tsconfig.base.json"
 }

@@ -13,7 +13,11 @@
         { "path": "../../_libs/need-resolver" },
         { "path": "../../_libs/state-resolver" },
         { "path": "../../_libs/engine" },
-        { "path": "../../_libs/providers" }
+        { "path": "../../_libs/providers" },
+        { "path": "../../_libs/sandbox-contract" },
+        { "path": "../../_libs/sandbox-run" },
+        { "path": "../../_libs/scaffold" },
+        { "path": "../../_libs/sdk" }
     ],
     "extends": "@intentic/tsconfig/tsconfig.base.json"
 }

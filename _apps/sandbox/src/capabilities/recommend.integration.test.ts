@@ -19,7 +19,7 @@ const workspace = async (files: readonly string[]): Promise<string> => {
     return root;
 };
 
-const docker: Capability = { id: "docker", kind: "docker", config: {} };
+const docker: Capability = { id: "docker", kind: "docker", config: { gpu: "off" } };
 
 test("a compose file at a repo's root recommends docker, carrying the path as evidence", async () => {
     const root = await workspace(["intentic/docker-compose.yml", "intentic/package.json"]);
