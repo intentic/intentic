@@ -11,6 +11,7 @@ import { computed, ref, watch } from "vue";
 import { useChat } from "../chat/useChat";
 import { queryClient } from "../queryPersistence";
 import { sandboxJson } from "../sandbox/sandboxClient";
+import { jsonBody } from "../sandbox/jsonBody";
 import { sandboxKey } from "../sandbox/useSandbox";
 import { useSandboxQuery } from "../sandbox/useSandboxQuery";
 import { errorMessage } from "../useAsyncAction";
@@ -124,11 +125,7 @@ const fileDiff = (repo: string, path: string, side: GitDiffSide): Promise<FileDi
 const invalidateChanges = (): Promise<void> => queryClient.invalidateQueries({ queryKey: sandboxKey(`git`, `changes`) });
 
 const post = <T>(repo: string, action: string, body: Record<string, unknown>): Promise<T> =>
-    sandboxJson<T>(`/git/${encodeURIComponent(repo)}/${action}`, {
-        method: `POST`,
-        headers: { "content-type": `application/json` },
-        body: JSON.stringify(body),
-    });
+    sandboxJson<T>(`/git/${encodeURIComponent(repo)}/${action}`, jsonBody(`POST`, body));
 
 // Commit. git can't span repos, so each group gets its own real commit on its own branch, all sharing the
 // message — one refresh for the whole batch. `stageFirst` is VSCode's "stage all and commit", for the case where

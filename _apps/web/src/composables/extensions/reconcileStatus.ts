@@ -12,62 +12,49 @@ import { readIntenticLines } from "../intenticStream";
 // ("Drift"); a plan/apply frames what the run will do ("Update"). Same underlying action, two readings.
 export type ReconcileContext = `live` | `plan`;
 
-export const statusLabel = (status: string, context: ReconcileContext = `live`): string => {
-    if (status === `noop`) {
-        return context === `live` ? `In sync` : `No change`;
-    }
-    if (status === `create`) {
-        return context === `live` ? `To create` : `Create`;
-    }
-    if (status === `update` || status === `diff`) {
-        return context === `live` ? `Drift` : `Update`;
-    }
-    if (status === `delete` || status === `prune`) {
-        return context === `live` ? `To remove` : `Remove`;
-    }
-    return `Unknown`;
+// How one reconcile action reads on every surface at once. A row per action rather than a branch per surface:
+// the four readings below are four views of the SAME verdict, and splitting them into four if-chains is what
+// let a new action arrive with a label and no dot colour. `diff` and `prune` are the daemon's older spellings
+// of `update` and `delete` and share their rows verbatim.
+interface Reading {
+    readonly live: string;
+    readonly plan: string;
+    readonly variant: StatusVariant;
+    readonly dot: string;
+    // Present-continuous for an apply node still in flight (kind:"node" state:"start"): "Creating…", "Updating…".
+    readonly gerund: string;
+}
+
+const CREATE: Reading = { live: `To create`, plan: `Create`, variant: `info`, dot: `bg-info`, gerund: `Creating` };
+const UPDATE: Reading = { live: `Drift`, plan: `Update`, variant: `info`, dot: `bg-info`, gerund: `Updating` };
+const REMOVE: Reading = { live: `To remove`, plan: `Remove`, variant: `danger`, dot: `bg-danger`, gerund: `Removing` };
+
+// An action nothing here recognises. Named rather than neutral: `unknown` is the daemon SAYING it could not
+// read the resource, which is worth its own muted treatment, while an action we simply have no row for is
+// still a change of some sort — so it keeps the info colouring and only its wording gives up.
+const UNREADABLE: Reading = { live: `Unknown`, plan: `Unknown`, variant: `neutral`, dot: `bg-subtle`, gerund: `Working` };
+const UNRECOGNISED: Reading = { live: `Unknown`, plan: `Unknown`, variant: `info`, dot: `bg-info`, gerund: `Working` };
+
+const READINGS: Record<string, Reading> = {
+    noop: { live: `In sync`, plan: `No change`, variant: `success`, dot: `bg-success`, gerund: `Working` },
+    create: CREATE,
+    update: UPDATE,
+    diff: UPDATE,
+    delete: REMOVE,
+    prune: REMOVE,
+    unknown: UNREADABLE,
 };
 
-export const statusVariant = (status: string): StatusVariant => {
-    if (status === `noop`) {
-        return `success`;
-    }
-    if (status === `delete` || status === `prune`) {
-        return `danger`;
-    }
-    if (status === `unknown`) {
-        return `neutral`;
-    }
-    return `info`;
-};
+const readingOf = (status: string): Reading => READINGS[status] ?? UNRECOGNISED;
+
+export const statusLabel = (status: string, context: ReconcileContext = `live`): string => readingOf(status)[context];
+
+export const statusVariant = (status: string): StatusVariant => readingOf(status).variant;
 
 // The reconcile status as a dot color — the same semantics as statusVariant's DOT palette.
-export const statusDot = (status: string): string => {
-    if (status === `noop`) {
-        return `bg-success`;
-    }
-    if (status === `delete` || status === `prune`) {
-        return `bg-danger`;
-    }
-    if (status === `unknown`) {
-        return `bg-subtle`;
-    }
-    return `bg-info`;
-};
+export const statusDot = (status: string): string => readingOf(status).dot;
 
-// Present-continuous for an apply node still in flight (kind:"node" state:"start"): "Creating…", "Updating…".
-export const statusGerund = (status: string): string => {
-    if (status === `create`) {
-        return `Creating`;
-    }
-    if (status === `update` || status === `diff`) {
-        return `Updating`;
-    }
-    if (status === `delete` || status === `prune`) {
-        return `Removing`;
-    }
-    return `Working`;
-};
+export const statusGerund = (status: string): string => readingOf(status).gerund;
 
 // One resource's verdict from an `intentic deploy plan` stream (kind:"node"): the resource id + its reconcile action.
 export interface PlanStep {

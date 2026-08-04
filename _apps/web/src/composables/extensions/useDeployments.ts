@@ -2,6 +2,7 @@ import { type Deployment, DeploymentSchema } from "@intentic-app/api-contract";
 import { computed } from "vue";
 import { readIntenticLines } from "../intenticStream";
 import { sandboxRequest } from "../sandbox/sandboxClient";
+import { jsonBody } from "../sandbox/jsonBody";
 import { sandboxKey } from "../sandbox/useSandbox";
 import { useSandboxQuery } from "../sandbox/useSandboxQuery";
 
@@ -15,11 +16,7 @@ import { useSandboxQuery } from "../sandbox/useSandboxQuery";
 // desired config only, nothing is `live`); true = answered. Surfaced so the UI can say "your deploy engine is
 // down" without crying wolf on setups that never had one.
 const fetchDeployments = async (): Promise<{ deployments: Deployment[]; komodoReachable: boolean | undefined }> => {
-    const response = await sandboxRequest(`/intentic`, {
-        method: `POST`,
-        headers: { "content-type": `application/json` },
-        body: JSON.stringify({ args: [`deploy`, `deployments`] }),
-    });
+    const response = await sandboxRequest(`/intentic`, jsonBody(`POST`, { args: [`deploy`, `deployments`] }));
     if (!response.ok || !response.body) {
         throw new Error(`Could not load your deployments (${response.status}).`);
     }

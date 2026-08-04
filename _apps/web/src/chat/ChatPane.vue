@@ -22,6 +22,7 @@ import { useChatPopout } from "../composables/chat/useChatPopout";
 import { useSpeechInput } from "../composables/chat/useSpeechInput";
 import { useStickToBottom } from "../composables/chat/useStickToBottom";
 import { sandboxJson, sandboxUpload } from "../composables/sandbox/sandboxClient";
+import { jsonBody } from "../composables/sandbox/jsonBody";
 import { useEditorSelection } from "../composables/workspace/useEditorSelection";
 import { useWorkspaceTabs } from "../composables/workspace/useWorkspaceTabs";
 import { useSandbox } from "../composables/sandbox/useSandbox";
@@ -430,11 +431,7 @@ const removeAttachment = (attachment: PendingAttachment): void => {
         // Fire-and-forget: drop the uploaded uuid dir; on failure the orphan stays visible in the
         // workspace tree, deletable there.
         const dir = attachment.path.slice(0, attachment.path.lastIndexOf(`/`));
-        sandboxJson(`/workspace/entry`, {
-            method: `DELETE`,
-            headers: { "content-type": `application/json` },
-            body: JSON.stringify({ path: dir }),
-        }).catch(() => undefined);
+        sandboxJson(`/workspace/entry`, jsonBody(`DELETE`, { path: dir })).catch(() => undefined);
     }
     attachments.value = attachments.value.filter((entry) => entry.id !== attachment.id);
 };

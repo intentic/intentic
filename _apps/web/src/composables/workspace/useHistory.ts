@@ -2,6 +2,7 @@ import type { FileDiffResponse, SnapshotDiffResponse, SnapshotsResponse } from "
 import { type QueryClient, useQueryClient } from "@tanstack/vue-query";
 import { computed } from "vue";
 import { sandboxJson } from "../sandbox/sandboxClient";
+import { jsonBody } from "../sandbox/jsonBody";
 import { useAsyncAction } from "../useAsyncAction";
 import { resetEditBuffers } from "./useEditBuffers";
 import { sandboxKey } from "../sandbox/useSandbox";
@@ -42,7 +43,7 @@ export const invalidateWorkspace = async (queryClient: QueryClient): Promise<voi
 // the setup-scoped queryClient.
 export const restoreSnapshot = (queryClient: QueryClient, id: string): Promise<void> =>
     run(async () => {
-        await sandboxJson(`/history/restore`, { method: `POST`, headers: { "content-type": `application/json` }, body: JSON.stringify({ id }) });
+        await sandboxJson(`/history/restore`, jsonBody(`POST`, { id }));
         await invalidateWorkspace(queryClient);
     }, `Restore failed.`);
 

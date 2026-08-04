@@ -1,12 +1,12 @@
 <script setup lang="ts">
 import type { SandboxSummary } from "@intentic-app/api-contract";
 import { Code, commandLang, ConfirmDialog, type IconName, OS_OPTIONS, Segmented, useOsPreference } from "@intentic/ui";
-import type { ViewBadge } from "@intentic/extension-api";
 import { sandboxSubdomain } from "@intentic/sandbox-contract";
 import Button from "primevue/button";
 import Popover from "primevue/popover";
 import { computed, onMounted, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
+import { badgeClass, badgeText } from "../core-views/viewBadge";
 import { type SandboxAttentionItem, useSandboxAttention } from "../composables/sandbox/sandboxAttention";
 import { useSandbox } from "../composables/sandbox/useSandbox";
 import { useAuth } from "../composables/useAuth";
@@ -36,11 +36,6 @@ const switcherLabel = computed(() => {
     return tooltip === undefined ? name : `${name} · ${tooltip}`;
 });
 
-const BADGE_TONE: Record<NonNullable<ViewBadge["tone"]>, string> = {
-    info: `bg-primary-600/15 text-link`,
-    warning: `bg-warning/15 text-warning`,
-    danger: `bg-danger/15 text-danger`,
-};
 const ROW_TONE: Record<SandboxAttentionItem["tone"], string> = {
     info: `text-link`,
     warning: `text-warning`,
@@ -168,11 +163,11 @@ const confirmRemove = async (): Promise<void> => {
         <span
             v-if="attentionBadge"
             class="pointer-events-none absolute -right-1 -top-1 flex min-w-4 items-center justify-center rounded-full px-1 text-center text-[0.6rem] font-semibold leading-4"
-            :class="BADGE_TONE[attentionBadge.tone ?? `info`]"
+            :class="badgeClass(attentionBadge)"
             aria-hidden="true"
         >
             <Icon v-if="attentionBadge.mark !== undefined" :name="attentionBadge.mark as IconName" />
-            <template v-else>{{ (attentionBadge.count ?? 0) > 99 ? `99+` : attentionBadge.count }}</template>
+            <template v-else>{{ badgeText(attentionBadge) }}</template>
         </span>
         <span
             class="pointer-events-none absolute -bottom-0.5 -right-0.5 h-2.5 w-2.5 rounded-full border-2 border-card"

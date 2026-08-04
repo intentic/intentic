@@ -3,6 +3,7 @@ import { useQueryClient } from "@tanstack/vue-query";
 import { computed, type ComputedRef, type Ref } from "vue";
 import { readIntenticLines } from "../intenticStream";
 import { sandboxJson, sandboxRequest } from "./sandboxClient";
+import { jsonBody } from "./jsonBody";
 import { sandboxKey } from "./useSandbox";
 import { useSandboxQuery } from "./useSandboxQuery";
 
@@ -23,13 +24,7 @@ const STEADY_POLL_MS = 15_000;
 // Parse an exported FortiClient config into addable connections. Read-only and cache-free — nothing is stored
 // until the user picks one and submits the ordinary capability add — so it lives outside the composable.
 export const importForticlient = async (xml: string): Promise<ForticlientConnection[]> =>
-    ForticlientImportSchema.parse(
-        await sandboxJson(`/vpn/import-forticlient`, {
-            method: `POST`,
-            headers: { "content-type": `application/json` },
-            body: JSON.stringify({ xml }),
-        }),
-    ).connections;
+    ForticlientImportSchema.parse(await sandboxJson(`/vpn/import-forticlient`, jsonBody(`POST`, { xml }))).connections;
 
 export function useVpn(): {
     links: ComputedRef<VpnLink[]>;
@@ -64,11 +59,10 @@ export function useVpn(): {
     // POST + read the streamed dial, calling onLine per frame; throws with the daemon's message on an error
     // frame — a rejected password or an untrusted certificate is something the user must read, not a toast.
     const connect = async (id: string, otp?: string, onLine?: (message: string) => void): Promise<void> => {
-        const response = await sandboxRequest(`/vpn/${encodeURIComponent(id)}/connect`, {
-            method: `POST`,
-            headers: { "content-type": `application/json` },
-            body: JSON.stringify(otp === undefined || otp === `` ? {} : { otp }),
-        });
+        const response = await sandboxRequest(
+            `/vpn/${encodeURIComponent(id)}/connect`,
+            jsonBody(`POST`, otp === undefined || otp === `` ? {} : { otp }),
+        );
         if (!response.ok || !response.body) {
             const detail = (await response.json().catch(() => null)) as { message?: string } | null;
             throw new Error(detail?.message ?? `Could not connect the VPN (${response.status}).`);

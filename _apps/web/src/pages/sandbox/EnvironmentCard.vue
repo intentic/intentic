@@ -5,6 +5,7 @@ import { useQueryClient } from "@tanstack/vue-query";
 import Button from "primevue/button";
 import { computed } from "vue";
 import { sandboxJson } from "../../composables/sandbox/sandboxClient";
+import { jsonBody } from "../../composables/sandbox/jsonBody";
 import { ENVIRONMENT_KEY, useEnvironment } from "../../composables/sandbox/useEnvironment";
 import { useSandbox } from "../../composables/sandbox/useSandbox";
 import { useAsyncAction } from "../../composables/useAsyncAction";
@@ -37,9 +38,7 @@ const load = (): void => void query.refetch();
 
 const decide = (path: string, body?: object): Promise<void> =>
     run(async () => {
-        const next = EnvironmentSchema.parse(
-            await sandboxJson(path, { method: `POST`, headers: { "content-type": `application/json` }, body: JSON.stringify(body ?? {}) }),
-        );
+        const next = EnvironmentSchema.parse(await sandboxJson(path, jsonBody(`POST`, body ?? {})));
         queryClient.setQueryData(ENVIRONMENT_KEY, next);
     }, `Could not update the environment.`);
 const approve = (): Promise<void> => decide(`/environment/approve`, { hash: proposal.value?.hash });

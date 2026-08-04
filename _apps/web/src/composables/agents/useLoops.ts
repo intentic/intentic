@@ -1,5 +1,6 @@
 import type { Loop, LoopRecord } from "@intentic/sandbox-contract";
 import { sandboxJson } from "../sandbox/sandboxClient";
+import { jsonBody } from "../sandbox/jsonBody";
 
 /* THE LOOP MUTATIONS, and deliberately nothing else.
  *
@@ -14,8 +15,7 @@ import { sandboxJson } from "../sandbox/sandboxClient";
 
 // Start looping a conversation. Resolves with the record as the daemon wrote it; the loop itself runs detached,
 // and the fleet card is where it is watched.
-export const startLoop = (loop: Loop): Promise<LoopRecord> =>
-    sandboxJson<LoopRecord>(`/loops`, { method: `POST`, headers: { "content-type": `application/json` }, body: JSON.stringify(loop) });
+export const startLoop = (loop: Loop): Promise<LoopRecord> => sandboxJson<LoopRecord>(`/loops`, jsonBody(`POST`, loop));
 
 // Ask the loop to stop after the iteration in flight. Explicitly NOT a turn abort — the work running right now
 // finishes and lands. Throwing Stop at the turn as well is `stopAgentTurn`, and pressing both is how a user

@@ -1,6 +1,7 @@
 export * from "./api.js";
 export * from "./diff.js";
 export * from "./facts.js";
+export * from "./host.js";
 export * from "./manifest.js";
 export * from "./permissions.js";
 export * from "./route.js";

@@ -2,6 +2,7 @@ import { type DraftsList, DraftsListSchema, type DraftSummary } from "@intentic-
 import { useMutation, useQueryClient } from "@tanstack/vue-query";
 import { computed } from "vue";
 import { sandboxJson } from "../sandbox/sandboxClient";
+import { jsonBody } from "../sandbox/jsonBody";
 import { sandboxKey } from "../sandbox/useSandbox";
 import { useSandboxQuery } from "../sandbox/useSandboxQuery";
 
@@ -22,12 +23,7 @@ export function useDrafts() {
     const invalidate = (): Promise<void> => queryClient.invalidateQueries({ queryKey: QUERY_KEY });
 
     const save = useMutation({
-        mutationFn: (draft: DraftSummary) =>
-            sandboxJson(`/drafts`, {
-                method: `POST`,
-                headers: { "content-type": `application/json` },
-                body: JSON.stringify(draft),
-            }),
+        mutationFn: (draft: DraftSummary) => sandboxJson(`/drafts`, jsonBody(`POST`, draft)),
         onSuccess: invalidate,
     });
     const remove = useMutation({

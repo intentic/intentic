@@ -8,6 +8,7 @@ import { convergedBadge, type PlanOrphan, type PlanStep, readPlanSteps, statusDo
 import { groupAccent } from "../../composables/extensions/resourceVisual";
 import { reveal } from "../../composables/secrets/useSecrets";
 import { sandboxRequest } from "../../composables/sandbox/sandboxClient";
+import { jsonBody } from "../../composables/sandbox/jsonBody";
 import { useDeployments } from "../../composables/extensions/useDeployments";
 import { useWorkspaceState } from "../../composables/extensions/useWorkspaceState";
 import { useSandbox } from "../../composables/sandbox/useSandbox";
@@ -50,11 +51,7 @@ const runLiveCheck = async (): Promise<void> => {
     liveActions.value = [];
     liveOrphans.value = [];
     try {
-        const response = await sandboxRequest(`/intentic`, {
-            method: `POST`,
-            headers: { "content-type": `application/json` },
-            body: JSON.stringify({ args: [`deploy`, `plan`] }),
-        });
+        const response = await sandboxRequest(`/intentic`, jsonBody(`POST`, { args: [`deploy`, `plan`] }));
         if (!response.ok || !response.body) {
             const detail = (await response.json().catch(() => null)) as { error?: string } | null;
             throw new Error(detail?.error ?? `Could not run a live check (${response.status}).`);

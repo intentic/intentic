@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Row, RowGroup, Segmented, useExplorerStyle, useIconSet, useTheme } from "@intentic/ui";
+import { Row, RowGroup, Segmented, useExplorerStyle, useTheme } from "@intentic/ui";
 import { explorerTreatment } from "@intentic/ui";
 import ToggleSwitch from "primevue/toggleswitch";
 import { computed, ref } from "vue";
@@ -11,14 +11,13 @@ import { useImportedTheme } from "../../composables/theme/useImportedTheme";
 import { useIconRailSize } from "../../composables/useIconRailSize";
 
 /* Appearance: how the workspace looks for this account — color scheme (data-mode), brand style (data-theme),
- * icon set, file-tree treatment, which tabs the terminal strip carries, and an imported VSCode/OpenVSX theme.
+ * file-tree treatment, which tabs the terminal strip carries, and an imported VSCode/OpenVSX theme.
  * Each recolors/re-renders the whole UI
  * live, so most of the app is the preview; the Explorer gets a small inline sample because its tree isn't on
  * this page. Laid out as grouped rows (RowGroup/Row) rather than a card per option, with the borderless
  * Segmented control and the Explorer preview flush in the row's #below. */
 
 const { scheme, set: setScheme, theme, setTheme, themes } = useTheme();
-const { iconSet, iconSets } = useIconSet();
 const { explorerStyle, explorerStyles } = useExplorerStyle();
 const { iconRailSize } = useIconRailSize();
 const { fileNesting } = useFileNesting();
@@ -49,7 +48,6 @@ const schemeOptions = [
     { label: `Dark`, value: `dark` as const },
 ];
 const themeOptions = computed(() => themes.map((value) => ({ label: cap(value), value })));
-const iconOptions = computed(() => iconSets.map((value) => ({ label: cap(value), value })));
 const explorerOptions = computed(() => explorerStyles.map((value) => ({ label: cap(value), value })));
 const iconRailOptions = [
     { label: `Compact`, value: `compact` as const },
@@ -77,11 +75,6 @@ const treatPreview = (entry: { name: string; type: "file" | "dir" }) =>
             </Row>
             <Row icon="palette" title="Style" description="Colors, type and shape of the workspace.">
                 <template #control><Segmented :model-value="theme" :options="themeOptions" @update:model-value="setTheme" /></template>
-            </Row>
-            <Row icon="sparkles" title="Icons" description="Which icon set the workspace draws with.">
-                <template #control>
-                    <Segmented :model-value="iconSet" :options="iconOptions" @update:model-value="(value) => (iconSet = value)" />
-                </template>
             </Row>
             <Row icon="sliders-h" title="Icon rail" description="Width and spacing of the desktop navigation rail.">
                 <template #control>

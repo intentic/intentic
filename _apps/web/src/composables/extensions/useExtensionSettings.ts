@@ -2,6 +2,7 @@ import type { SettingValue } from "@intentic/extension-api";
 import { ExtensionSettingsSchema } from "@intentic/sandbox-contract";
 import { type ShallowRef, shallowRef } from "vue";
 import { sandboxJson } from "../sandbox/sandboxClient";
+import { jsonBody } from "../sandbox/jsonBody";
 
 /* One shared per-extension settings store (keyed by the capability entry id), so the Sandbox hub's Extensions
  * tab and a running extension's api.settings read and write THE SAME reactive record — an edit in either place
@@ -39,11 +40,7 @@ export const extensionSettingsStore = (id: string): ExtensionSettingsStore => {
         secretsSet,
         load,
         save: async (patch) => {
-            await sandboxJson(`/extensions/${encodeURIComponent(id)}/settings`, {
-                method: `POST`,
-                headers: { "content-type": `application/json` },
-                body: JSON.stringify({ settings: patch }),
-            });
+            await sandboxJson(`/extensions/${encodeURIComponent(id)}/settings`, jsonBody(`POST`, { settings: patch }));
             await load();
         },
     };

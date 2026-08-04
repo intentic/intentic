@@ -2,6 +2,7 @@ import { type AddInventoryInput, type InventoryEntry, InventoryEntrySchema } fro
 import { useMutation, useQueryClient } from "@tanstack/vue-query";
 import { computed } from "vue";
 import { sandboxError, sandboxRequest } from "../sandbox/sandboxClient";
+import { jsonBody } from "../sandbox/jsonBody";
 import { sandboxKey } from "../sandbox/useSandbox";
 import { useSandboxQuery } from "../sandbox/useSandboxQuery";
 
@@ -31,12 +32,7 @@ export function useInventory() {
     });
 
     const add = useMutation({
-        mutationFn: (input: AddInventoryInput) =>
-            fetchEntries(`/inventory`, {
-                method: `POST`,
-                headers: { "content-type": `application/json` },
-                body: JSON.stringify(input),
-            }),
+        mutationFn: (input: AddInventoryInput) => fetchEntries(`/inventory`, jsonBody(`POST`, input)),
         onSuccess: (entries) => queryClient.setQueryData(queryKey, entries),
     });
 

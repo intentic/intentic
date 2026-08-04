@@ -4,6 +4,7 @@ import { Avatar, cmp, RowGroup } from "@intentic/ui";
 import Button from "primevue/button";
 import { computed, onMounted, ref } from "vue";
 import { sandboxJson } from "../../composables/sandbox/sandboxClient";
+import { jsonBody } from "../../composables/sandbox/jsonBody";
 import { apiClient, isPaymentRequired } from "../../composables/useApi";
 import { errorMessage } from "../../composables/useAsyncAction";
 import { useAuth } from "../../composables/useAuth";
@@ -80,11 +81,7 @@ const invite = async (): Promise<void> => {
     try {
         // Push to the daemon first (owner-gated, enforced), then record the invite + send the email. sandboxJson
         // throws on a non-2xx daemon reply (403/401/offline), so an unenforced grant is never recorded as sent.
-        await sandboxJson<{ emails: string[] }>(`/members`, {
-            method: `POST`,
-            headers: { "content-type": `application/json` },
-            body: JSON.stringify({ email: value }),
-        });
+        await sandboxJson<{ emails: string[] }>(`/members`, jsonBody(`POST`, { email: value }));
         members.value = (await apiClient.invite.create({ sandboxId: id, email: value })).members;
         email.value = ``;
         emailTouched.value = false;
@@ -149,11 +146,7 @@ const revoke = async (target: string): Promise<void> => {
     try {
         // sandboxJson throws on a non-2xx daemon reply, so revoke reaches the enforcer before the platform row is
         // dropped — a daemon that rejects/is offline surfaces an error instead of a member who still has access.
-        await sandboxJson<{ emails: string[] }>(`/members`, {
-            method: `DELETE`,
-            headers: { "content-type": `application/json` },
-            body: JSON.stringify({ email: target }),
-        });
+        await sandboxJson<{ emails: string[] }>(`/members`, jsonBody(`DELETE`, { email: target }));
         members.value = (await apiClient.invite.revoke({ sandboxId: id, email: target })).members;
     } catch (err) {
         gateOrError(err, `Couldn't revoke access — is the sandbox online?`);

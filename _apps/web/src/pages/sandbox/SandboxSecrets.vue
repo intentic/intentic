@@ -9,6 +9,7 @@ import SecretField from "../../components/SecretField.vue";
 import { useCapabilities } from "../../composables/extensions/useCapabilities";
 import { readIntenticLines } from "../../composables/intenticStream";
 import { sandboxRequest } from "../../composables/sandbox/sandboxClient";
+import { jsonBody } from "../../composables/sandbox/jsonBody";
 import { useSecretInventory } from "../../composables/secrets/useSecrets";
 import { errorMessage } from "../../composables/useAsyncAction";
 
@@ -86,11 +87,7 @@ const pushToCi = async (): Promise<void> => {
     pushing.value = true;
     pushError.value = undefined;
     try {
-        const response = await sandboxRequest(`/intentic`, {
-            method: `POST`,
-            headers: { "content-type": `application/json` },
-            body: JSON.stringify({ args: [`deploy`, `secrets`, `push`] }),
-        });
+        const response = await sandboxRequest(`/intentic`, jsonBody(`POST`, { args: [`deploy`, `secrets`, `push`] }));
         if (!response.ok || !response.body) {
             throw new Error(`Could not push secrets to CI (${response.status}).`);
         }

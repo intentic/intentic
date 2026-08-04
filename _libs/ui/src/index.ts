@@ -120,7 +120,7 @@ export { sinceOf, TIME_WINDOWS, type TimeWindow, timeWindowWords, withinWindow }
 // here: its callers are pure-TypeScript — a renderer's fallback ladder, and the tests that read our own
 // extensions' manifests off disk — and reaching it through this barrel boots Picker.vue and wants a DOM.
 // Renderers should keep using <Icon name="…">.
-export { type IconName, type IconSet, iconSets } from "./icons/iconSets.js";
+export { type IconName } from "./icons/iconSets.js";
 export { type ExplorerStyle, explorerStyles } from "./icons/explorerStyle.js";
 export {
     categoryForEntry,
@@ -134,5 +134,4 @@ export { useExplorerStyle } from "./composables/useExplorerStyle.js";
 export { commandLang, type CommandOs, OS_OPTIONS, useOsPreference } from "./composables/useOsPreference.js";
 export { type Device, useDevice } from "./composables/useDevice.js";
 export { useListNavigation } from "./composables/useListNavigation.js";
-export { useIconSet } from "./composables/useIconSet.js";
 export { type ColorScheme, useTheme } from "./composables/useTheme.js";

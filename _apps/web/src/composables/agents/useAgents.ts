@@ -4,6 +4,7 @@ import { awaitingUser, blocked, type FleetLane, laneOf, turnInFlight } from "./a
 import { openAgentConversation, useChat } from "../chat/useChat";
 import { queryClient } from "../queryPersistence";
 import { sandboxJson } from "../sandbox/sandboxClient";
+import { jsonBody } from "../sandbox/jsonBody";
 import { sandboxKey } from "../sandbox/useSandbox";
 import { errorMessage } from "../useAsyncAction";
 
@@ -538,11 +539,10 @@ const archive = async (ids?: readonly string[]): Promise<void> => {
     // A sweep is the archive with no per-card animation to vouch for it, so it is the archive that reports.
     const sweep = ids === undefined || ids.length > 1;
     try {
-        const { moved, rev } = await sandboxJson<{ moved: AgentSummary[]; rev: number }>(`/agents/archive`, {
-            method: `POST`,
-            headers: { "content-type": `application/json` },
-            body: JSON.stringify(ids === undefined ? {} : { ids }),
-        });
+        const { moved, rev } = await sandboxJson<{ moved: AgentSummary[]; rev: number }>(
+            `/agents/archive`,
+            jsonBody(`POST`, ids === undefined ? {} : { ids }),
+        );
         if (moved.length === 0) {
             // A press that changed nothing always says so, however few cards it aimed at: silence is the one
             // reading the user can't distinguish from a broken button.
@@ -595,11 +595,7 @@ const archive = async (ids?: readonly string[]): Promise<void> => {
 const restore = async (ids: readonly string[]): Promise<void> => {
     const release = claimBusy(ids);
     try {
-        const { moved, rev } = await sandboxJson<{ moved: AgentSummary[]; rev: number }>(`/agents/unarchive`, {
-            method: `POST`,
-            headers: { "content-type": `application/json` },
-            body: JSON.stringify({ ids }),
-        });
+        const { moved, rev } = await sandboxJson<{ moved: AgentSummary[]; rev: number }>(`/agents/unarchive`, jsonBody(`POST`, { ids }));
         // The same delta, in the other direction — and held the same way, so a snapshot in flight can't take the
         // restored card straight back off the board.
         const back = new Set(moved.map((agent) => agent.id));
@@ -686,11 +682,7 @@ const rename = async (id: string, title: string): Promise<void> => {
         conversation.title.value = trimmed;
     }
     const post = (): Promise<AgentSummary> =>
-        sandboxJson<AgentSummary>(`/agents/${encodeURIComponent(id)}/rename`, {
-            method: `POST`,
-            headers: { "content-type": `application/json` },
-            body: JSON.stringify({ title: trimmed }),
-        });
+        sandboxJson<AgentSummary>(`/agents/${encodeURIComponent(id)}/rename`, jsonBody(`POST`, { title: trimmed }));
     const previous = registry.value.find((agent) => agent.id === id);
     if (previous === undefined) {
         void post().catch(() => undefined);
@@ -726,11 +718,7 @@ const setAutoLand = async (id: string, autoLand: boolean | null): Promise<void> 
         previous.autoLand = autoLand ?? undefined;
     }
     try {
-        const summary = await sandboxJson<AgentSummary>(`/agents/${encodeURIComponent(id)}/auto-land`, {
-            method: `POST`,
-            headers: { "content-type": `application/json` },
-            body: JSON.stringify({ autoLand }),
-        });
+        const summary = await sandboxJson<AgentSummary>(`/agents/${encodeURIComponent(id)}/auto-land`, jsonBody(`POST`, { autoLand }));
         registry.value = registry.value.map((agent) => (agent.id === id ? summary : agent));
     } catch (error) {
         const target = registry.value.find((agent) => agent.id === id);

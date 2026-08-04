@@ -6,6 +6,7 @@ import { focusComposer, useChat } from "../chat/useChat";
 import { queryClient } from "../queryPersistence";
 import { router } from "../../router";
 import { sandboxJson } from "../sandbox/sandboxClient";
+import { jsonBody } from "../sandbox/jsonBody";
 import { sandboxKey } from "../sandbox/useSandbox";
 import { agentBlockers, blockersOf, resolvePrompt, userBlockers } from "./conflictResolution";
 import { useAgents } from "./useAgents";
@@ -65,11 +66,7 @@ export const revealConversation = (conversation: Conversation): void => {
 // seam; what broke was the two manual paths (the review panel's Land/Merge, and dropping a card on Finished) —
 // and with them the only way an errored or conflicted agent could ever reach the Finished lane.
 export const landAgent = (id: string, mode: LandMode = `check`): Promise<LandResult> =>
-    sandboxJson<LandResult>(`/agents/${encodeURIComponent(id)}/land`, {
-        method: `POST`,
-        headers: { "content-type": `application/json` },
-        body: JSON.stringify({ mode }),
-    });
+    sandboxJson<LandResult>(`/agents/${encodeURIComponent(id)}/land`, jsonBody(`POST`, { mode }));
 
 /* THE MAIN ROAD OUT OF A LAND CONFLICT: hand it back to the agent that wrote the work.
  *
@@ -161,11 +158,7 @@ export const stopAgent = async (id: string): Promise<void> => {
         conversation.stop();
         return;
     }
-    await sandboxJson(`/agent/stop`, {
-        method: `POST`,
-        headers: { "content-type": `application/json` },
-        body: JSON.stringify({ conversationId: id }),
-    });
+    await sandboxJson(`/agent/stop`, jsonBody(`POST`, { conversationId: id }));
 };
 
 // After a land or discard the agent's diff changed AND the landed work now shows in the MAIN review +

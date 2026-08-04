@@ -1,6 +1,7 @@
 import { type AgentEvent, type AgentHarness, type AgentProvider, type AttachFrame, sseData, sseFrames } from "@intentic/sandbox-contract";
 import type { Ref } from "vue";
 import { sandboxRequest } from "../sandbox/sandboxClient";
+import { jsonBody } from "../sandbox/jsonBody";
 import { acquireStreamSlot } from "../sandbox/streamBudget";
 
 /* HOW THIS WINDOW TALKS TO A RUNNING TURN. A turn EXECUTES as a detached run on the sandbox daemon (POST /agent
@@ -198,11 +199,7 @@ export const followRun = async (
 // Returns whether it succeeded.
 export const postTurnControl = async (path: string, body: unknown): Promise<boolean> => {
     try {
-        const response = await sandboxRequest(path, {
-            method: `POST`,
-            headers: { "content-type": `application/json` },
-            body: JSON.stringify(body),
-        });
+        const response = await sandboxRequest(path, jsonBody(`POST`, body));
         return response.ok;
     } catch {
         return false;

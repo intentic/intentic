@@ -3,6 +3,7 @@ import { useMutation, useQueryClient } from "@tanstack/vue-query";
 import { computed } from "vue";
 import { devFillSet } from "../devFill";
 import { sandboxJson } from "../sandbox/sandboxClient";
+import { jsonBody } from "../sandbox/jsonBody";
 import { sandboxKey } from "../sandbox/useSandbox";
 import { useSandboxQuery } from "../sandbox/useSandboxQuery";
 
@@ -17,9 +18,7 @@ import { useSandboxQuery } from "../sandbox/useSandboxQuery";
 
 // Owner-only; a member gets the daemon's 403 message as a thrown Error. Plain async on purpose (no cache).
 export const reveal = async (key: string): Promise<string> =>
-    SecretRevealSchema.parse(
-        await sandboxJson(`/secrets/reveal`, { method: `POST`, headers: { "content-type": `application/json` }, body: JSON.stringify({ key }) }),
-    ).value;
+    SecretRevealSchema.parse(await sandboxJson(`/secrets/reveal`, jsonBody(`POST`, { key }))).value;
 
 export function useSecretKeys() {
     const { query } = useSandboxQuery({
@@ -94,8 +93,7 @@ export function useSecrets() {
     };
 
     const set = useMutation({
-        mutationFn: (input: { key: string; value: string }) =>
-            sandboxJson(`/secrets`, { method: `POST`, headers: { "content-type": `application/json` }, body: JSON.stringify(input) }),
+        mutationFn: (input: { key: string; value: string }) => sandboxJson(`/secrets`, jsonBody(`POST`, input)),
         // Every .env secret write funnels through here, so this one hook feeds the dev autofill for all of them.
         onSuccess: (_data, input) => {
             invalidate();

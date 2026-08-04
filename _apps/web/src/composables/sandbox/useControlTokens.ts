@@ -1,6 +1,7 @@
 import { ref, watch } from "vue";
 import { errorMessage, useAsyncAction } from "../useAsyncAction";
 import { sandboxJson } from "./sandboxClient";
+import { jsonBody } from "./jsonBody";
 import { useSandbox } from "./useSandbox";
 
 /* Owner-minted control tokens: the credential anything outside the browser presents to drive this sandbox.
@@ -52,11 +53,10 @@ export function useControlTokens(scope: ControlScope, defaultLabel: string) {
     const mint = (): Promise<void> =>
         run(async () => {
             const trimmed = label.value.trim();
-            const response = await sandboxJson<{ id: string; token: string }>(`/system/control/tokens`, {
-                method: `POST`,
-                headers: { "content-type": `application/json` },
-                body: JSON.stringify(trimmed === `` ? { scope } : { scope, label: trimmed }),
-            });
+            const response = await sandboxJson<{ id: string; token: string }>(
+                `/system/control/tokens`,
+                jsonBody(`POST`, trimmed === `` ? { scope } : { scope, label: trimmed }),
+            );
             minted.value = { token: response.token, label: trimmed === `` ? defaultLabel : trimmed };
             label.value = ``;
             await refresh();

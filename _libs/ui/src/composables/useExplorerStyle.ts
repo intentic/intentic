@@ -3,7 +3,7 @@ import { explorerStyles, type ExplorerStyle } from "../icons/explorerStyle.js";
 
 const STORAGE_KEY = `ui-explorer-style`;
 
-/* Owns the active file-tree setup as a module-level singleton, mirroring useIconSet. Drives no <html>
+/* Owns the active file-tree setup as a module-level singleton, mirroring useTheme. Drives no <html>
  * attribute — the workspace tree reads this ref directly, so switching setups repaints every row
  * reactively. Persisted to localStorage; reads fall back to the default until a choice is stored. */
 

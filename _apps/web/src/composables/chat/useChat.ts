@@ -43,6 +43,7 @@ import { usageStatusByAccount } from "./usageStatus";
 import { track } from "../analytics";
 import { withConcurrency } from "../concurrency";
 import { sandboxJson, sandboxRequest } from "../sandbox/sandboxClient";
+import { jsonBody } from "../sandbox/jsonBody";
 import { supportsRoute } from "../sandbox/useDaemonRoutes";
 import { useSandbox } from "../sandbox/useSandbox";
 import { errorMessage } from "../useAsyncAction";
@@ -337,16 +338,28 @@ watch(selectedAccountId, (picks) => {
     }
 });
 
-// Load a provider's daemon-published slash commands into the shared record. Cheap (a cached in-memory read
-// daemon-side), so it rides the same reachable seam as the account/model catalogs.
-const loadProviderCommands = async (target: AgentProvider): Promise<void> => {
+/* A READ whose failure is not news: apply what the daemon sent, and on any failure leave the ref holding
+ * whatever it had. Four surfaces here work this way — slash commands, per-account usage, the routed-provider
+ * listing, the refusal history — and every one of them is an ANNOTATION on a panel that has its own reason to
+ * render. A daemon blip must leave them showing their last reading, never blank them or surface an error the
+ * user cannot act on; the connection state itself is reported by the surfaces that own it.
+ *
+ * The alternative each caller wrote before this was its own try/catch with its own comment saying the same
+ * thing, which is four places for that rule to be decided differently. */
+const readOrKeep = async <T>(path: string, apply: (body: T) => void): Promise<void> => {
     try {
-        const body = await sandboxJson<{ commands?: AgentCommand[] }>(`/agent/commands?agent=${encodeURIComponent(target)}`);
-        providerCommands.value = { ...providerCommands.value, [target]: body.commands ?? [] };
+        apply(await sandboxJson<T>(path));
     } catch {
-        // Leave the last list; the popover simply stays as it was until the next load.
+        // Left as it was — see above.
     }
 };
+
+// Load a provider's daemon-published slash commands into the shared record. Cheap (a cached in-memory read
+// daemon-side), so it rides the same reachable seam as the account/model catalogs.
+const loadProviderCommands = (target: AgentProvider): Promise<void> =>
+    readOrKeep<{ commands: AgentCommand[] }>(`/agent/commands?agent=${encodeURIComponent(target)}`, (body) => {
+        providerCommands.value = { ...providerCommands.value, [target]: body.commands };
+    });
 
 // Past conversations from the sandbox's session store, loaded on demand for the history menu.
 const sessions = ref<ChatSession[]>([]);
@@ -631,14 +644,10 @@ const managedProvider = ref<AgentProvider>(turnDefaults.provider.value);
 // Per-account token/cost totals (from the daemon's /system/usage aggregation of the activity log), keyed by
 // account id. Loaded when the manage card opens; empty until then.
 const accountUsage = ref<Record<string, UsageAccount>>({});
-const loadUsage = async (): Promise<void> => {
-    try {
-        const body = await sandboxJson<{ accounts?: UsageAccount[] }>(`/system/usage`);
-        accountUsage.value = Object.fromEntries((body.accounts ?? []).map((usage) => [usage.account, usage]));
-    } catch {
-        // Leave the last totals; usage is a non-critical display.
-    }
-};
+const loadUsage = (): Promise<void> =>
+    readOrKeep<{ accounts: UsageAccount[] }>(`/system/usage`, (body) => {
+        accountUsage.value = Object.fromEntries(body.accounts.map((usage) => [usage.account, usage]));
+    });
 
 /* Point the account card at a provider. That is ALL it does, and the emptiness is the point.
  *
@@ -692,24 +701,17 @@ let translatorPollTimer: ReturnType<typeof setTimeout> | undefined;
 const translatorProviderLabel = (target: KeyedProvider): string =>
     target === `codex` ? `ChatGPT` : target === `grok` ? `SuperGrok` : target === `kimi` ? `Kimi Code` : `Google`;
 
-const refreshTranslatorAccounts = async (): Promise<void> => {
-    try {
-        translatorAccounts.value = await sandboxJson<TranslatorAccounts>(`/translator/accounts`);
-    } catch {
-        // Non-fatal; the UI shows "not connected" until the daemon is reachable.
-    }
-};
+const refreshTranslatorAccounts = (): Promise<void> =>
+    readOrKeep<TranslatorAccounts>(`/translator/accounts`, (listing) => {
+        translatorAccounts.value = listing;
+    });
 
 // When each provider last refused a turn — the observed counterpart to the polled snapshots that ride the two
-// account listings (see providerRefusals). Swallows its own failure like the translator read above: a refusal
-// history is an annotation on the connection surfaces, never a reason for them not to render.
-const refreshProviderRefusals = async (): Promise<void> => {
-    try {
-        providerRefusals.value = (await sandboxJson<ProviderRefusals>(`/agent/refusals`)).refusals;
-    } catch {
-        // Leave the last reading; the surfaces simply keep showing what they had.
-    }
-};
+// account listings (see providerRefusals).
+const refreshProviderRefusals = (): Promise<void> =>
+    readOrKeep<ProviderRefusals>(`/agent/refusals`, (body) => {
+        providerRefusals.value = body.refusals;
+    });
 
 // CLIProxyAPI finishes every routed login in the background — the device flows poll upstream on their own, and
 // a redirect flow resumes the moment `completeTranslator` hands it the pasted URL — so in both cases the UI just
@@ -774,11 +776,10 @@ const completeTranslator = async (redirectUrl: string): Promise<void> => {
     accountBusy.value = translatorKey(flow.provider);
     error.value = null;
     try {
-        await sandboxJson(`/translator/${flow.provider}/complete`, {
-            method: `POST`,
-            headers: { "content-type": `application/json` },
-            body: JSON.stringify({ provider: flow.provider, redirectUrl: redirectUrl.trim(), state: flow.state }),
-        });
+        await sandboxJson(
+            `/translator/${flow.provider}/complete`,
+            jsonBody(`POST`, { provider: flow.provider, redirectUrl: redirectUrl.trim(), state: flow.state }),
+        );
         await refreshTranslatorAccounts();
     } catch (caught) {
         error.value = errorMessage(caught, `That sign-in link could not be completed — copy the whole URL and try again.`);
@@ -791,11 +792,7 @@ const completeTranslator = async (redirectUrl: string): Promise<void> => {
 const disconnectTranslator = async (target: KeyedProvider, name: string): Promise<void> => {
     accountBusy.value = translatorKey(target, name);
     try {
-        await sandboxRequest(`/translator/${target}/disconnect`, {
-            method: `POST`,
-            headers: { "content-type": `application/json` },
-            body: JSON.stringify({ provider: target, name }),
-        });
+        await sandboxRequest(`/translator/${target}/disconnect`, jsonBody(`POST`, { provider: target, name }));
         if (translatorConnectFlow.value?.provider === target) {
             clearTimeout(translatorPollTimer);
             translatorConnectFlow.value = undefined;
@@ -1771,11 +1768,10 @@ const completeConnect = async (code: string): Promise<boolean> => {
         }
         let response: Response;
         try {
-            response = await sandboxRequest(`/claude/oauth/exchange`, {
-                method: `POST`,
-                headers: { "content-type": `application/json` },
-                body: JSON.stringify({ code, ...flow.pkce, label: connectLabel.value.trim() || undefined }),
-            });
+            response = await sandboxRequest(
+                `/claude/oauth/exchange`,
+                jsonBody(`POST`, { code, ...flow.pkce, label: connectLabel.value.trim() || undefined }),
+            );
         } catch {
             error.value = `Could not connect your Claude account — check the code and try again.`;
             return false;
@@ -1828,11 +1824,7 @@ const renameAccount = async (id: string, label: string): Promise<void> => {
     }
     let response: Response;
     try {
-        response = await sandboxRequest(`${providerBase(target)}/account/rename`, {
-            method: `POST`,
-            headers: { "content-type": `application/json` },
-            body: JSON.stringify({ id, label: typed }),
-        });
+        response = await sandboxRequest(`${providerBase(target)}/account/rename`, jsonBody(`POST`, { id, label: typed }));
     } catch (err) {
         error.value = errorMessage(err, `Could not rename that account — is your sandbox online?`);
         replaceAccount(target, current);
@@ -1855,11 +1847,7 @@ const renameAccount = async (id: string, label: string): Promise<void> => {
 const disconnect = async (id: string): Promise<void> => {
     const target = managedProvider.value;
     accountBusy.value = target;
-    await sandboxRequest(`${providerBase(target)}/account/disconnect`, {
-        method: `POST`,
-        headers: { "content-type": `application/json` },
-        body: JSON.stringify({ id }),
-    })
+    await sandboxRequest(`${providerBase(target)}/account/disconnect`, jsonBody(`POST`, { id }))
         .catch(() => undefined)
         .finally(() => (accountBusy.value = undefined));
     const remaining = accountsOf(target).filter((entry) => entry.id !== id);

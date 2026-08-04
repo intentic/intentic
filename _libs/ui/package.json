@@ -64,11 +64,7 @@
         "vue": "catalog:"
     },
     "devDependencies": {
-        "@iconify-json/hugeicons": "catalog:",
-        "@iconify-json/ph": "catalog:",
-        "@iconify-json/prime": "catalog:",
         "@iconify-json/ri": "catalog:",
-        "@iconify-json/solar": "catalog:",
         "@iconify/types": "catalog:",
         "@iconify/utils": "catalog:",
         "@intentic/tsconfig": "workspace:*",

@@ -2,6 +2,7 @@ import type { WorkspaceChildrenResponse, WorkspaceTreeEntry, WorkspaceTreeRespon
 import { useQueryClient } from "@tanstack/vue-query";
 import { computed, ref, watch } from "vue";
 import { sandboxBlob, sandboxJson } from "../sandbox/sandboxClient";
+import { jsonBody } from "../sandbox/jsonBody";
 import { readFileWindow } from "./fileWindow";
 import { sandboxKey, useSandbox } from "../sandbox/useSandbox";
 import { useSandboxQuery } from "../sandbox/useSandboxQuery";
@@ -100,16 +101,14 @@ const joinPath = (dir: string, rel: string): string => (dir === `` ? rel : `${di
 const canMoveInto = (source: string, targetDir: string): boolean =>
     !(targetDir === parentDir(source) || targetDir === source || targetDir.startsWith(`${source}/`));
 
-const jsonPost = (path: string, data: unknown): Promise<{ ok: true }> =>
-    sandboxJson<{ ok: true }>(path, { method: `POST`, headers: { "content-type": `application/json` }, body: JSON.stringify(data) });
+const jsonPost = (path: string, data: unknown): Promise<{ ok: true }> => sandboxJson<{ ok: true }>(path, jsonBody(`POST`, data));
 
 // Raw single-path daemon calls (no invalidate) — the shared core for the single + batch mutations below.
 const moveRaw = (from: string, to: string): Promise<{ ok: true }> => jsonPost(`/workspace/move`, { from, to });
 const copyRaw = (from: string, to: string): Promise<{ ok: true }> => jsonPost(`/workspace/copy`, { from, to });
 // oRPC's OpenAPI handler reads non-GET input from the request BODY (only GET reads the query), so a DELETE
 // must carry {path} as a JSON body — a query param deserializes to undefined ("expected object").
-const removeRaw = (path: string): Promise<unknown> =>
-    sandboxJson(`/workspace/entry`, { method: `DELETE`, headers: { "content-type": `application/json` }, body: JSON.stringify({ path }) });
+const removeRaw = (path: string): Promise<unknown> => sandboxJson(`/workspace/entry`, jsonBody(`DELETE`, { path }));
 
 // The file's contents, or throws with a user-facing message (e.g. the daemon's denylist 404). One window's
 // worth — the callers here read small managed files (an agent's instructions file), and the route serves text

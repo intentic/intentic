@@ -10,6 +10,7 @@ import { useMutation, useQueryClient } from "@tanstack/vue-query";
 import { computed } from "vue";
 import { readIntenticLines } from "../intenticStream";
 import { sandboxJson, sandboxRequest } from "../sandbox/sandboxClient";
+import { jsonBody } from "../sandbox/jsonBody";
 import { sandboxKey } from "../sandbox/useSandbox";
 import { useSandboxQuery } from "../sandbox/useSandboxQuery";
 
@@ -45,11 +46,7 @@ export function useCapabilitySecret() {
     const queryClient = useQueryClient();
     return useMutation({
         mutationFn: ({ id, value }: { id: string; value: string }) =>
-            sandboxJson(`/capabilities/${encodeURIComponent(id)}/secret`, {
-                method: `POST`,
-                headers: { "content-type": `application/json` },
-                body: JSON.stringify({ value }),
-            }),
+            sandboxJson(`/capabilities/${encodeURIComponent(id)}/secret`, jsonBody(`POST`, { value })),
         onSuccess: async () => {
             await Promise.all([
                 queryClient.invalidateQueries({ queryKey: QUERY_KEY }),
@@ -78,11 +75,7 @@ export function useCapabilities() {
     // POST + read the streamed apply, calling onLine per ndjson frame; throws on an error frame. Refreshes the
     // list on completion so the new capability + its status appear.
     const add = async (input: AddCapabilityInput, onLine?: (line: Record<string, unknown>) => void): Promise<void> => {
-        const response = await sandboxRequest(`/capabilities`, {
-            method: `POST`,
-            headers: { "content-type": `application/json` },
-            body: JSON.stringify(input),
-        });
+        const response = await sandboxRequest(`/capabilities`, jsonBody(`POST`, input));
         if (!response.ok || !response.body) {
             const detail = (await response.json().catch(() => null)) as { message?: string } | null;
             throw new Error(detail?.message ?? `Could not add the capability (${response.status}).`);

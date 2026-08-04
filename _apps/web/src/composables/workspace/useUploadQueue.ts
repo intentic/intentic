@@ -4,6 +4,7 @@ import { detectProjects, managerFromPackageJson, type ProjectSetup } from "@inte
 import { collectDroppedFiles, type DroppedFile, isRootGitPath } from "../../pages/workspace/dropEntries";
 import { packTar } from "../../pages/workspace/tarStream";
 import { sandboxJson, sandboxUpload } from "../sandbox/sandboxClient";
+import { jsonBody } from "../sandbox/jsonBody";
 import { errorMessage } from "../useAsyncAction";
 import { chunkItems, dedupeByPath } from "./uploadChunking";
 
@@ -201,11 +202,7 @@ const recomputeBytesDone = (): void => {
 const filterUnchanged = async (targetDir: string, entries: readonly DroppedFile[]): Promise<readonly DroppedFile[]> => {
     try {
         const stats = entries.map((entry) => ({ path: joinPath(targetDir, entry.path), size: entry.file.size, mtime: entry.file.lastModified }));
-        const { skip } = await sandboxJson<{ skip: string[] }>(`/workspace/upload-diff`, {
-            method: `POST`,
-            headers: { "content-type": `application/json` },
-            body: JSON.stringify({ files: stats }),
-        });
+        const { skip } = await sandboxJson<{ skip: string[] }>(`/workspace/upload-diff`, jsonBody(`POST`, { files: stats }));
         if (skip.length === 0) {
             return entries;
         }

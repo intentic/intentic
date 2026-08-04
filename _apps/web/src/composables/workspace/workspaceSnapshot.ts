@@ -1,3 +1,4 @@
+import { z } from "zod";
 import type { WorkspaceTab } from "../../pages/workspace/workspaceTabs";
 import { readWindowState, writeWindowState } from "../windowStore";
 
@@ -70,56 +71,24 @@ export interface WorkspaceTabStrip {
     readonly tabs: readonly StoredWorkspaceTab[];
 }
 
-const text = (raw: unknown): string | undefined => (typeof raw === `string` && raw !== `` ? raw : undefined);
+// Every field that NAMES something is required and non-empty — an entry missing one names nothing this build
+// can reopen. The exceptions are `dir` and a document's `path`: the /work root is a directory like any other
+// and its path is the empty string, so those two are plain strings.
+const named = z.string().min(1);
 
-// One entry, or undefined when it names nothing this build can reopen. Skipped rather than fatal: a single
-// unreadable tab must not cost the user every other file they had open.
-const readTab = (raw: Record<string, unknown>): StoredWorkspaceTab | undefined => {
-    const id = text(raw[`id`]);
-    if (id === undefined) {
-        return undefined;
-    }
-    const path = text(raw[`path`]);
-    // The /work root is a directory like any other and its path is the empty string, so the two fields that can
-    // name it read back as plain strings rather than through `text` (which treats "" as absent).
-    const dir = raw[`dir`];
-    const documentPath = raw[`path`];
-    const repo = text(raw[`repo`]);
-    switch (raw[`kind`]) {
-        case `file`:
-            return path === undefined ? undefined : { kind: `file`, id, path };
-        case `directory`:
-            return typeof dir === `string` ? { kind: `directory`, id, dir } : undefined;
-        case `health`:
-            return repo === undefined ? undefined : { kind: `health`, id, repo };
-        /* An extension's document. Restored on identity + the strip's own label, never on the provider being
-         * back: extensions activate after this is read, and one that has since been switched off should still
-         * leave the tab where the user left it — it renders its own "no longer available" rather than vanishing
-         * silently. */
-        case `document`: {
-            const extension = text(raw[`extension`]);
-            const provider = text(raw[`provider`]);
-            const title = text(raw[`title`]);
-            const icon = text(raw[`icon`]);
-            return extension === undefined ||
-                provider === undefined ||
-                title === undefined ||
-                icon === undefined ||
-                typeof documentPath !== `string`
-                ? undefined
-                : { kind: `document`, id, extension, provider, path: documentPath, title, icon };
-        }
-        case `plan`: {
-            const body = text(raw[`text`]);
-            const title = text(raw[`title`]);
-            return body === undefined || title === undefined || body.length > MAX_PLAN_TEXT ? undefined : { kind: `plan`, id, title, text: body };
-        }
-        default:
-            return undefined;
-    }
-};
+const StoredTabSchema: z.ZodType<StoredWorkspaceTab> = z.discriminatedUnion(`kind`, [
+    z.object({ kind: z.literal(`file`), id: named, path: named }),
+    z.object({ kind: z.literal(`directory`), id: named, dir: z.string() }),
+    z.object({ kind: z.literal(`health`), id: named, repo: named }),
+    /* An extension's document. Restored on identity + the strip's own label, never on the provider being back:
+     * extensions activate after this is read, and one that has since been switched off should still leave the
+     * tab where the user left it — it renders its own "no longer available" rather than vanishing silently. */
+    z.object({ kind: z.literal(`document`), id: named, extension: named, provider: named, path: z.string(), title: named, icon: named }),
+    z.object({ kind: z.literal(`plan`), id: named, title: named, text: named.max(MAX_PLAN_TEXT) }),
+]);
 
-// Parse one stored blob into a coherent strip: readable tabs only, each id once (a duplicate would render as
+// Parse one stored blob into a coherent strip: readable tabs only (an unreadable one is skipped rather than
+// fatal — it must not cost the user every other file they had open), each id once (a duplicate would render as
 // two tabs sharing a key), and a focus that names one of them.
 const parseStrip = (raw: string): WorkspaceTabStrip | undefined => {
     let stored: { active?: unknown; tabs?: unknown };
@@ -133,8 +102,8 @@ const parseStrip = (raw: string): WorkspaceTabStrip | undefined => {
     }
     const seen = new Set<string>();
     const tabs: StoredWorkspaceTab[] = [];
-    for (const entry of stored.tabs as Record<string, unknown>[]) {
-        const tab = readTab(entry);
+    for (const entry of stored.tabs) {
+        const tab = StoredTabSchema.safeParse(entry).data;
         if (tab !== undefined && !seen.has(tab.id)) {
             seen.add(tab.id);
             tabs.push(tab);

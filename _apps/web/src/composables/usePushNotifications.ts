@@ -2,6 +2,7 @@ import type { PushConfig } from "@intentic-app/api-contract";
 import type { PushTest } from "@intentic/sandbox-contract";
 import { computed, ref, watch } from "vue";
 import { sandboxJson } from "./sandbox/sandboxClient";
+import { jsonBody } from "./sandbox/jsonBody";
 import { useSandbox } from "./sandbox/useSandbox";
 
 /* Web push, from the browser's side. Enabling it is a four-link chain and every link can fail independently:
@@ -191,11 +192,7 @@ export function usePushNotifications() {
                 // Tell the daemon FIRST: if the browser-side unsubscribe succeeds and the daemon call then
                 // fails, the daemon is left pushing at a dead endpoint (harmless — it prunes on 410 — but it
                 // would keep reporting "on"). This order fails in the recoverable direction instead.
-                await sandboxJson(`/push/unsubscribe`, {
-                    method: `POST`,
-                    headers: { "content-type": `application/json` },
-                    body: JSON.stringify({ endpoint: subscription.endpoint }),
-                });
+                await sandboxJson(`/push/unsubscribe`, jsonBody(`POST`, { endpoint: subscription.endpoint }));
                 await subscription.unsubscribe();
             }
             state.value = `off`;

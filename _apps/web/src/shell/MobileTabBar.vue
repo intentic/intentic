@@ -3,6 +3,7 @@ import type { IconName } from "@intentic/ui";
 import type { ViewBadge } from "@intentic/extension-api";
 import { computed } from "vue";
 import { RouterLink, useRoute } from "vue-router";
+import { badgeClass, badgeText } from "../core-views/viewBadge";
 import { useAgents } from "../composables/agents/useAgents";
 import { useDrafts } from "../composables/extensions/useDrafts";
 import { outgoingMark, outgoingSummary } from "../composables/workspace/outgoingWork";
@@ -27,12 +28,6 @@ interface Tab {
     // serves all four instead of a hand-rolled span per tab.
     readonly badge?: ViewBadge;
 }
-
-const BADGE_TONE: Record<NonNullable<ViewBadge["tone"]>, string> = {
-    info: `bg-primary-600/15 text-link`,
-    warning: `bg-warning/15 text-warning`,
-    danger: `bg-danger/15 text-danger`,
-};
 
 const { reachable } = useSandbox();
 const { drafts, invalid: invalidDrafts } = useDrafts();
@@ -96,11 +91,11 @@ const isNavActive = (to: string): boolean => route.path === to || route.path.sta
                 <span
                     v-if="tab.badge"
                     class="absolute -right-2.5 -top-1 flex min-w-4 items-center justify-center rounded-full px-1 text-center text-[0.6rem] font-semibold leading-4"
-                    :class="BADGE_TONE[tab.badge.tone ?? `info`]"
+                    :class="badgeClass(tab.badge)"
                     aria-hidden="true"
                 >
                     <Icon v-if="tab.badge.mark !== undefined" :name="tab.badge.mark as IconName" />
-                    <template v-else>{{ (tab.badge.count ?? 0) > 99 ? "99+" : tab.badge.count }}</template>
+                    <template v-else>{{ badgeText(tab.badge) }}</template>
                 </span>
             </span>
             <span class="text-2xs font-medium">{{ tab.label }}</span>

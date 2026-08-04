@@ -1,25 +1,16 @@
-<!-- The single icon primitive for the whole app. Takes a stable semantic `name` and renders it in whatever
-     set the user has picked (useIconSet), via Iconify. Size/colour come from Tailwind classes on the tag
+<!-- The single icon primitive for the whole app. Takes a stable semantic `name` and resolves it through the
+     icon table (icons/iconSets.ts), via Iconify. Size/colour come from Tailwind classes on the tag
      (Iconify svg is 1em + currentColor), so `text-3xl`/`text-muted` etc. fall through exactly like the old
      <i class="pi …"> did. `spin` adds the loading animation (replaces the old `pi-spin` modifier). -->
 <script setup lang="ts">
 import { Icon as IconifyIcon } from "@iconify/vue";
-import { computed } from "vue";
-import { ICON_SETS, type IconName } from "../icons/iconSets.js";
-import { useIconSet } from "../composables/useIconSet.js";
+import { ICONS, type IconName } from "../icons/iconSets.js";
 
 const { name, spin = false } = defineProps<{ name: IconName; spin?: boolean }>();
-
-const { iconSet } = useIconSet();
-const icon = computed(() => ICON_SETS[iconSet.value][name]);
-const iconClass = computed(() => ({
-    "animate-spin": spin,
-    "ui-icon--remix": iconSet.value === `remix`,
-}));
 </script>
 
 <template>
-    <IconifyIcon :icon="icon" :class="iconClass" />
+    <IconifyIcon :icon="ICONS[name]" :class="{ 'animate-spin': spin }" class="ui-icon" />
 </template>
 
 <style scoped>
@@ -32,7 +23,9 @@ svg {
     flex: none;
 }
 
-.ui-icon--remix {
+/* Remix draws inside a smaller optical box than the other sets do, so its glyphs read a touch small beside
+   text at the same font size. Unconditional now that Remix is the only set. */
+.ui-icon {
     scale: 1.08;
     transform-origin: center;
 }

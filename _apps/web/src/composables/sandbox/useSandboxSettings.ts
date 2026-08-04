@@ -2,6 +2,7 @@ import { type SandboxSettings, SandboxSettingsSchema } from "@intentic-app/api-c
 import { useMutation, useQueryClient } from "@tanstack/vue-query";
 import { computed, ref } from "vue";
 import { sandboxJson } from "./sandboxClient";
+import { jsonBody } from "./jsonBody";
 import { sandboxKey } from "./useSandbox";
 import { useSandboxQuery } from "./useSandboxQuery";
 
@@ -49,12 +50,7 @@ export function useSandboxSettings() {
     });
 
     const save = useMutation({
-        mutationFn: (settings: SandboxSettings) =>
-            sandboxJson(`/settings`, {
-                method: `POST`,
-                headers: { "content-type": `application/json` },
-                body: JSON.stringify(settings),
-            }),
+        mutationFn: (settings: SandboxSettings) => sandboxJson(`/settings`, jsonBody(`POST`, settings)),
         // Write the new settings into the cache the controls render from, BEFORE the request. Every control on
         // the page reads its value — and its disabled state — from this one object, so without this a click
         // leaves the switch showing the OLD value for a daemon round-trip and then jumping; a control mid-flight

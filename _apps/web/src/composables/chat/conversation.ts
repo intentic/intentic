@@ -18,6 +18,7 @@ import {
 import { computed, ref } from "vue";
 import { trackPerf } from "../perf";
 import { sandboxRequest } from "../sandbox/sandboxClient";
+import { jsonBody } from "../sandbox/jsonBody";
 import { errorMessage } from "../useAsyncAction";
 import { clampEffort } from "./effortScale";
 import { rememberedAccountFor, selectedAccountId } from "./providerAccounts";
@@ -564,16 +565,10 @@ export class Conversation {
         if (index === undefined || bubble < 0) {
             return false;
         }
-        const response = await sandboxRequest(`/agent/rewind`, {
-            method: `POST`,
-            headers: { "content-type": `application/json` },
-            body: JSON.stringify({ conversationId: this.conversationId, index }),
-        });
+        const response = await sandboxRequest(`/agent/rewind`, jsonBody(`POST`, { conversationId: this.conversationId, index }));
         if (!response.ok) {
             this.error.value =
-                response.status === 409
-                    ? `This agent is running a turn — stop it before going back.`
-                    : `That message can no longer be gone back to.`;
+                response.status === 409 ? `This agent is running a turn — stop it before going back.` : `That message can no longer be gone back to.`;
             return false;
         }
         this.transcript.rebuild(this.messages.value.slice(0, bubble));

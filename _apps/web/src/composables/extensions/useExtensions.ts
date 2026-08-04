@@ -3,6 +3,7 @@ import type { CapabilityKind } from "@intentic/sandbox-contract";
 import { type ExtensionSummary, ExtensionsListSchema } from "@intentic/sandbox-contract";
 import { computed } from "vue";
 import { sandboxJson } from "../sandbox/sandboxClient";
+import { jsonBody } from "../sandbox/jsonBody";
 import { sandboxKey } from "../sandbox/useSandbox";
 import { useSandboxQuery } from "../sandbox/useSandboxQuery";
 
@@ -27,11 +28,7 @@ export function useExtensions() {
     // stop/start, connectors and listener providers drop out of every subsequent read); the shell's half is the
     // caller's reloadExtensions(), which activates or retires the extension without a page reload.
     const setEnabled = async (id: string, enabled: boolean): Promise<void> => {
-        await sandboxJson(`/extensions/${encodeURIComponent(id)}/enabled`, {
-            method: `POST`,
-            headers: { "content-type": `application/json` },
-            body: JSON.stringify({ enabled }),
-        });
+        await sandboxJson(`/extensions/${encodeURIComponent(id)}/enabled`, jsonBody(`POST`, { enabled }));
         await query.refetch();
     };
     // One card's contribution from the enabled extensions' contributes.capabilities — the data capabilityEffects

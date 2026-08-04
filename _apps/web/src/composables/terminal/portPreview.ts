@@ -1,5 +1,6 @@
 import type { PortForwardResult } from "@intentic/sandbox-contract";
 import { sandboxJson } from "../sandbox/sandboxClient";
+import { jsonBody } from "../sandbox/jsonBody";
 
 /* A terminal link that points at localhost names the SANDBOX's loopback, not the user's machine — the process
  * that printed it runs inside the remote container, so opening it verbatim is a dead link. Ctrl+clicking one
@@ -47,11 +48,7 @@ export const openLoopbackPreview = (link: { port: number; path: string }): void 
     show(`Forwarding port ${link.port} from your sandbox…`);
     void (async () => {
         try {
-            const { previewUrl } = await sandboxJson<PortForwardResult>(`/ports/forward`, {
-                method: `POST`,
-                headers: { "content-type": `application/json` },
-                body: JSON.stringify({ port: link.port }),
-            });
+            const { previewUrl } = await sandboxJson<PortForwardResult>(`/ports/forward`, jsonBody(`POST`, { port: link.port }));
             if (previewUrl === undefined) {
                 show(`This sandbox has no public preview hostname, so ports can't be previewed from the browser.`);
                 return;

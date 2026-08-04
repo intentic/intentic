@@ -2,6 +2,7 @@ import { type Workflow, type WorkflowRun, WorkflowRunSchema, WorkflowRunsListSch
 import { useMutation, useQueryClient } from "@tanstack/vue-query";
 import { computed } from "vue";
 import { sandboxJson } from "../sandbox/sandboxClient";
+import { jsonBody } from "../sandbox/jsonBody";
 import { useSandboxQuery } from "../sandbox/useSandboxQuery";
 import { blocked, type FleetLane } from "./agentStatus";
 import type { FleetAgent } from "./useAgents";
@@ -137,11 +138,7 @@ export function useWorkflowRuns() {
     const start = useMutation({
         mutationFn: async ({ id, request }: { id: string; request?: string }): Promise<WorkflowRun> =>
             WorkflowRunSchema.parse(
-                await sandboxJson(`/workflows/${encodeURIComponent(id)}/run`, {
-                    method: `POST`,
-                    headers: { "content-type": `application/json` },
-                    body: JSON.stringify(request === undefined ? {} : { request }),
-                }),
+                await sandboxJson(`/workflows/${encodeURIComponent(id)}/run`, jsonBody(`POST`, request === undefined ? {} : { request })),
             ),
         onSuccess: invalidate,
     });
