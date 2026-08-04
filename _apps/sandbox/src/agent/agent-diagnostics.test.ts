@@ -6,7 +6,9 @@ import { type DiagRunner, editDiagnosticsHooks, type ModulesProbe } from "./agen
 const RESOLVABLE: ModulesProbe = async () => ({ kind: "installed", missing: [] });
 const MISSING: ModulesProbe = async () => ({ kind: "absent" });
 // A tree that exists and is behind — the state an agent leaves when it adds a dependency and does not install it.
-const stale = (...missing: string[]): ModulesProbe => async () => ({ kind: "installed", missing });
+const stale =
+    (...missing: string[]): ModulesProbe =>
+    async () => ({ kind: "installed", missing });
 
 // Fire one edit at a hook set. Returned separately from runHook so a test can drive the SAME set twice and
 // observe the per-turn state (the missing-dependency notice is told once, not stapled to every edit).
@@ -78,7 +80,7 @@ test("with no resolvable node_modules the type-check never runs", async () => {
     );
     expect(ran).toBe(false);
     expect((syncHookOutput(result).hookSpecificOutput as { additionalContext?: string }).additionalContext).toContain(
-        "dependencies are not installed",
+        "Type diagnostics are unavailable for this edit",
     );
 });
 
@@ -87,7 +89,7 @@ test("the missing-dependency reason is told ONCE per turn, not stapled to every 
     const first = await fire(hooks, { file_path: "/work/src/a.ts" });
     const second = await fire(hooks, { file_path: "/work/src/b.ts" });
     expect((syncHookOutput(first).hookSpecificOutput as { additionalContext?: string }).additionalContext).toContain(
-        "dependencies are not installed",
+        "Type diagnostics are unavailable for this edit",
     );
     expect(second).toEqual({});
 });

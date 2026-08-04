@@ -1,4 +1,4 @@
-import { access, readFile } from "node:fs/promises";
+import { access, opendir, readFile } from "node:fs/promises";
 import { dirname, join, resolve as resolvePath } from "node:path";
 import { readWorkspaceManifests } from "./package-graph.js";
 
@@ -140,12 +140,37 @@ export const unresolvedDependencies = async (projectDir: string): Promise<Unreso
  */
 export type NearbyModules = { readonly kind: "absent" } | { readonly kind: "installed"; readonly missing: readonly string[] };
 
+/* An install root is a node_modules with something IN it, and the emptiness check is not pedantry — it is the
+ * one signature that tells an install apart from a mount point.
+ *
+ * An isolated turn's node_modules is overlaid INSIDE the turn's namespace (agents/worktrees.ts). This probe runs
+ * in the daemon, outside it, where every one of those directories is present and empty. Accepting one as an
+ * install root ended the walk at a tree holding nothing, so every declared name came back missing and the agent
+ * was told its 57 installed, reachable dependencies were not installed — stapled to a wall of TS2307s from a
+ * type-checker standing in the same blind spot (agent-diagnostics.ts), and to a sentence telling it not to trust
+ * either. Walking PAST an empty one reaches a real install higher up, or the top of the tree, and the top is
+ * already `absent`: no answer to be had from here, which is the truth.
+ *
+ * One entry decides it, so this opens the directory instead of listing it — a real node_modules holds thousands
+ * of names and this runs on every edit. */
+const installedAt = async (modules: string): Promise<boolean> => {
+    const dir = await opendir(modules).catch(() => undefined);
+    if (dir === undefined) {
+        return false;
+    }
+    try {
+        return (await dir.read()) !== null;
+    } finally {
+        await dir.close();
+    }
+};
+
 export const modulesNear = async (file: string): Promise<NearbyModules> => {
     let packageDir: string | undefined;
     let installRoot: string | undefined;
-    for (let dir = dirname(resolvePath(file)); installRoot === undefined; ) {
+    for (let dir = dirname(resolvePath(file)); installRoot === undefined;) {
         packageDir ??= (await exists(join(dir, "package.json"))) ? dir : undefined;
-        if (await exists(join(dir, "node_modules"))) {
+        if (await installedAt(join(dir, "node_modules"))) {
             installRoot = dir;
             break;
         }

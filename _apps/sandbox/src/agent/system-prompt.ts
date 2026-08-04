@@ -92,10 +92,17 @@ const browserGuidance = (outputDir: string | undefined): string =>
     "themselves out and come back as errors, but `browser_evaluate` awaits whatever the page hands it: give any " +
     "in-page wait a deadline of its own rather than looping until a condition you are debugging comes true.";
 
-// The concise-response steer (terseOutput): cuts the model's OWN output tokens without dropping substance.
-// Kept short so it barely costs tokens itself each turn.
+/* The concise-response steer (terseOutput): cuts the model's OWN output tokens without dropping substance.
+ * Kept short so it barely costs tokens itself each turn.
+ *
+ * The closing sentence is the one part that is not about brevity, and it is there because the holdout says the
+ * steer does not stay in its lane: over the opus turns of one week, the treated arm ran a median 55 steps
+ * against the control's 64 while its prose fell only 4.3k chars to 4.7k. A small control (n=44) makes that
+ * suggestive rather than settled — but "be concise" is read by the model as a budget on the TURN, not on the
+ * paragraph, and a steer whose whole purpose is to save output tokens has no business buying them back by
+ * skipping a check. Naming the boundary costs ~20 tokens against the ~2k the steer is there to save. */
 const TERSE_NOTE =
-    "Response style: be concise — don't restate the request, re-quote files you just read, or echo tool output the user can already see. Lead with the answer or the action; expand only where detail changes a decision.";
+    "Response style: be concise — don't restate the request, re-quote files you just read, or echo tool output the user can already see. Lead with the answer or the action; expand only where detail changes a decision. This governs your PROSE, not your work: never skip a step, a check or a tool call to make a turn shorter.";
 
 export interface TurnPromptInput {
     // SandboxSettings.systemPromptMode: which base this turn runs on.

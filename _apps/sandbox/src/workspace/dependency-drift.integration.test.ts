@@ -102,6 +102,19 @@ test("modulesNear separates a tree that was never installed from one that is mer
     expect(await modulesNear(join(root, "src/main.ts"))).toEqual({ kind: "installed", missing: [] });
 });
 
+// The shape an isolated turn presents to the daemon: the overlay is mounted inside the turn's namespace, so
+// from outside every node_modules on the path is present and empty. Read as an install root it made a fully
+// installed package look like one missing every dependency it declares.
+test("an EMPTY node_modules is a mount point, not an install — the walk goes past it", async () => {
+    const root = await project();
+    await write(root, "package.json", `{"name":"app","dependencies":{"vue":"^3"}}`);
+    await write(root, "src/main.ts", "");
+    await mkdir(join(root, "node_modules"), { recursive: true });
+    expect(await modulesNear(join(root, "src/main.ts"))).toEqual({ kind: "absent" });
+    await installed(root, "", "vue");
+    expect(await modulesNear(join(root, "src/main.ts"))).toEqual({ kind: "installed", missing: [] });
+});
+
 test("modulesNear answers for the package that OWNS the file, not the install root above it", async () => {
     const root = await project();
     await write(root, "package.json", `{"name":"root","dependencies":{"turbo":"^2"}}`);
@@ -116,10 +129,19 @@ test("modulesNear answers for the package that OWNS the file, not the install ro
 
 test("the summary names a few and counts the rest — the decision is made by the third name", async () => {
     expect(unresolvedSummary([{ dir: "", names: ["a", "b"] }])).toBe("a, b");
-    expect(unresolvedSummary([{ dir: "", names: ["a", "b", "c"] }, { dir: "x", names: ["d", "e", "f"] }])).toBe("a, b, c, d and 2 more");
+    expect(
+        unresolvedSummary([
+            { dir: "", names: ["a", "b", "c"] },
+            { dir: "x", names: ["d", "e", "f"] },
+        ]),
+    ).toBe("a, b, c, d and 2 more");
     // One shared workspace library missing from six packages is six entries and ONE thing to say — without this
     // the sample spends its slots repeating a name the reader already read.
-    expect(unresolvedSummary([{ dir: "a", names: ["shared"] }, { dir: "b", names: ["shared"] }, { dir: "c", names: ["shared", "vue"] }])).toBe(
-        "shared, vue",
-    );
+    expect(
+        unresolvedSummary([
+            { dir: "a", names: ["shared"] },
+            { dir: "b", names: ["shared"] },
+            { dir: "c", names: ["shared", "vue"] },
+        ]),
+    ).toBe("shared, vue");
 });

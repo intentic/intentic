@@ -62,10 +62,21 @@ export type ModulesProbe = (file: string) => Promise<NearbyModules>;
 // is the same fact repeated.
 const NAMED_MISSING = 3;
 
+/* WHAT THIS NOTE MAY AND MAY NOT CLAIM, now that two different states reach it (dependency-drift.ts).
+ *
+ * One is a tree nobody has installed. The other is an install this process cannot SEE — an isolated turn's
+ * node_modules is mounted inside the turn's namespace, so the daemon finds an empty directory where the agent
+ * finds 34 packages. They are one fact for this hook's purposes (no truthful diagnostics from here) and two
+ * completely different facts for the agent, which is why the sentence no longer names a cause or prescribes an
+ * install: told "dependencies are not installed" an agent whose own type-check passes either distrusts working
+ * tooling or goes looking for an install that would land in an overlay and die with the conversation.
+ *
+ * So it says only what is known from here, and points at the check that CAN answer — the package's own. */
 const ABSENT_NOTE =
-    "Type diagnostics are unavailable for this edit: dependencies are not installed (no node_modules resolves " +
-    "from this file), so a type-check would report every import as broken regardless of the edit. Install them " +
-    "before trusting any type-check, lint or test result here.";
+    "Type diagnostics are unavailable for this edit: the type-checker cannot resolve this package's dependencies " +
+    "from where it runs, so it would report every import as broken whatever the edit did. That is a limit of this " +
+    "check, not a verdict on your tools or on the code — run the package's own type-check, lint or tests when you " +
+    "need this file verified.";
 
 /* Said ALONGSIDE the diagnostics rather than instead of them, which is the difference between this and the
  * absent case. A tree missing one package still type-checks everything else correctly, so suppressing the whole
