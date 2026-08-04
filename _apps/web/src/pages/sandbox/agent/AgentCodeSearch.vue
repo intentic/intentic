@@ -4,7 +4,7 @@ import ToggleSwitch from "primevue/toggleswitch";
 import { computed } from "vue";
 import { useSavings } from "../../../composables/sandbox/useSavings";
 import { useSandboxSettings } from "../../../composables/sandbox/useSandboxSettings";
-import { asPercent, commitPercent } from "./percentInput";
+import { asPercent, commitPercent } from "./numberInputs";
 import CodeSearchInfo from "./CodeSearchInfo.vue";
 
 /* HOW THE ASSISTANT FINDS ITS WAY AROUND THE CODE. Two settings that compose and are easy to confuse, which is

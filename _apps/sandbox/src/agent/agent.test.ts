@@ -170,6 +170,35 @@ test("the SDK env always marks the sandbox and carries the per-turn oauth token 
     expect(captured.at(-1)?.env?.["CLAUDE_CODE_OAUTH_TOKEN"]).toBeUndefined();
 });
 
+/* THE ABSENCE IS THE LOAD-BEARING HALF. The three delegation ceilings are read inside the CLI, and each has its
+ * own default there — one of which (the nesting cap) the CLI resolves from its own remote config rather than a
+ * constant. So a turn that says nothing must set nothing: emitting today's default back as an env var would pin
+ * a number that is meant to be able to move, and it would do it for every sandbox that never opened the group.
+ * turn-plan.ts is what decides "the owner moved this"; this asserts the half of the deal that lives here. */
+test("the delegation ceilings reach the CLI only where the turn names one", async () => {
+    const captured: Options[] = [];
+    const capture: QueryFn = async function* (args) {
+        captured.push(args.options);
+        yield { type: "result", subtype: "success" } as SDKMessage;
+    };
+
+    await collect(request, capture);
+    expect(captured.at(-1)?.env?.["CLAUDE_CODE_MAX_CONCURRENT_SUBAGENTS"]).toBeUndefined();
+    expect(captured.at(-1)?.env?.["CLAUDE_CODE_MAX_SUBAGENTS_PER_SESSION"]).toBeUndefined();
+    expect(captured.at(-1)?.env?.["CLAUDE_CODE_MAX_SUBAGENT_SPAWN_DEPTH"]).toBeUndefined();
+
+    // Each is independent: a raised concurrency cap must not drag the other two into the environment with it.
+    await collect({ ...request, subagentsAtOnce: 50 }, capture);
+    expect(captured.at(-1)?.env?.["CLAUDE_CODE_MAX_CONCURRENT_SUBAGENTS"]).toBe("50");
+    expect(captured.at(-1)?.env?.["CLAUDE_CODE_MAX_SUBAGENTS_PER_SESSION"]).toBeUndefined();
+    expect(captured.at(-1)?.env?.["CLAUDE_CODE_MAX_SUBAGENT_SPAWN_DEPTH"]).toBeUndefined();
+
+    await collect({ ...request, subagentsAtOnce: 40, subagentsPerTurn: 500, subagentDepth: 5 }, capture);
+    expect(captured.at(-1)?.env?.["CLAUDE_CODE_MAX_CONCURRENT_SUBAGENTS"]).toBe("40");
+    expect(captured.at(-1)?.env?.["CLAUDE_CODE_MAX_SUBAGENTS_PER_SESSION"]).toBe("500");
+    expect(captured.at(-1)?.env?.["CLAUDE_CODE_MAX_SUBAGENT_SPAWN_DEPTH"]).toBe("5");
+});
+
 /* The env token is a SNAPSHOT taken at spawn: a turn that outlives it — or one caught by an account-wide
  * revocation, which kills tokens that still look valid by the clock — used to die mid-work with
  * "Failed to authenticate. API Error: 401 ...". getOAuthToken is how the CLI asks for a replacement and

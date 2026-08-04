@@ -6,7 +6,7 @@ import { relativeTime } from "../../../composables/chat/catalog";
 import { useSavings } from "../../../composables/sandbox/useSavings";
 import { useSandboxSettings } from "../../../composables/sandbox/useSandboxSettings";
 import { ALL_CLEANER_IDS, CLEANER_OPTIONS, savedByCleaner } from "../savingsChart";
-import { asPercent, commitPercent } from "./percentInput";
+import { asPercent, commitPercent } from "./numberInputs";
 import CommandOutputInfo from "./CommandOutputInfo.vue";
 
 /* The shell-output filter: the master toggle, the per-cleaner checklist the spec string round-trips through,

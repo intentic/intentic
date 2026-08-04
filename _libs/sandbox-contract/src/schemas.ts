@@ -1018,6 +1018,8 @@ export const BuiltinPromptSchema = z.object({ base: z.enum(["intentic", "claude"
 //                        naming the scripts this workspace defines; off ⇒ the turn ends when the model says so.
 //   automationFailureLimit — consecutive `error` runs after which an automation is disabled rather than left
 //                        firing forever; 0 (default) ⇒ never.
+//   subagentsAtOnce / subagentsPerTurn / subagentDepth — the harness's own ceilings on delegation, raised or
+//                        lowered from one place; each defaults to what the CLI enforces on its own.
 // The booleans default off, skills defaults [] (no skill loaded), outputCleaners defaults "off" (cleaning off)
 // and outputHoldout 0 — a fresh sandbox starts with cleaning and iq off until the owner enables them.
 //
@@ -1175,6 +1177,28 @@ export const SandboxSettingsSchema = z.object({
      * Only `error` counts. A `skipped` run is a guard doing its job, and an `interrupted` one means the daemon
      * died mid-fire, which says nothing about the automation — counting either would quarantine healthy jobs. */
     automationFailureLimit: z.number().min(0).max(20).default(0),
+    /* HOW MUCH AN AGENT MAY DELEGATE — the three ceilings the Claude Code harness enforces on its own Agent
+     * tool, surfaced here because their defaults are tuned for a laptop and this is a container the owner sized.
+     *
+     * They are three settings rather than one because they stop different things, and a fan-out that clears one
+     * lands on the next: `subagentsAtOnce` is the parallel width of a single fan-out, `subagentsPerTurn` is the
+     * lifetime budget of one conversation, and `subagentDepth` is how far a child may itself delegate. Raising
+     * the width alone is what makes a wide sweep hit the lifetime cap two rounds later, which reads to the user
+     * as the same wall in a new place.
+     *
+     * Each default is what the CLI does with no env set, so a sandbox that has never opened this group behaves
+     * exactly as it always did — these are not our numbers, they are the harness's, restated so they can move.
+     * The ceilings are ours: an agent is told to stop and NOT retry when it hits one, so the cost of a number
+     * set too high is a real fleet of models running at once, and the cost of one set too low is a wall.
+     *
+     * The refusal an agent sees names the env var (`ask them to raise CLAUDE_CODE_MAX_CONCURRENT_SUBAGENTS`),
+     * which is why these three exist as settings at all: without them the only answer to that ask is editing
+     * the container's environment and restarting the daemon. */
+    subagentsAtOnce: z.number().min(1).max(200).default(20),
+    subagentsPerTurn: z.number().min(1).max(2000).default(200),
+    // Depth 1 = an agent may delegate, but its children may not. The CLI's own default is 3, and it is the one
+    // of the three whose runaway case is unbounded rather than merely wide — each level multiplies the last.
+    subagentDepth: z.number().min(1).max(10).default(3),
 });
 export type SandboxSettings = z.infer<typeof SandboxSettingsSchema>;
 

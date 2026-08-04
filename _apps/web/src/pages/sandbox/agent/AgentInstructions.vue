@@ -9,7 +9,7 @@ import { sandboxJson } from "../../../composables/sandbox/sandboxClient";
 import { useSavings } from "../../../composables/sandbox/useSavings";
 import { useSandboxSettings } from "../../../composables/sandbox/useSandboxSettings";
 import { useAsyncAction } from "../../../composables/useAsyncAction";
-import { asPercent, commitPercent } from "./percentInput";
+import { asPercent, commitPercent } from "./numberInputs";
 import InstructionsInfo from "./InstructionsInfo.vue";
 
 /* WHAT THE ASSISTANT IS TOLD, before the user types anything: how much it writes back, and which prompt it IS.

@@ -4,6 +4,7 @@ import {
     type AgentTurn,
     type Capability,
     type IqContextOutcome,
+    SandboxSettingsSchema,
     capabilitiesOf,
 } from "@intentic/sandbox-contract";
 import { browserOutputDir } from "../browser/browser-artifacts.js";
@@ -295,6 +296,12 @@ export const planAcpTurn = async (
     };
 };
 
+/* WHAT AN UNTOUCHED SETTING LOOKS LIKE, so a cap the owner never moved can be told from one they set to the
+ * same number — the difference decides whether the harness is handed an env var at all (see the subagent caps
+ * below). Read off the schema rather than restated here: two lists of defaults would be one list of defaults
+ * and one list of stale numbers. */
+const SETTINGS_DEFAULTS = SandboxSettingsSchema.parse({});
+
 /* The Claude Code harness — a native Claude turn's subscription OAuth (with its mid-turn refresh callback), or
  * the translator endpoint a routed provider rides. Credentials are resolved by harness-credentials.ts,
  * which the quick-model one-shot behind the commit box's autofill reads too, so both authenticate identically;
@@ -351,6 +358,9 @@ export const planHarnessTurn = async (
         terseHoldout,
         systemPromptMode,
         verifyOnStop,
+        subagentsAtOnce,
+        subagentsPerTurn,
+        subagentDepth,
         systemPrompt: customPrompt,
     } = settings;
     /* THE TERSE EXPERIMENT'S COIN FLIP. The steer is eligible only where the daemon still appends to the
@@ -504,6 +514,13 @@ export const planHarnessTurn = async (
             ...(outputCleaners !== "" ? { outputCleaners } : {}),
             ...(outputHoldout > 0 ? { outputHoldout } : {}),
             ...(Object.keys(shellEnv).length > 0 ? { cliEnv: shellEnv } : {}),
+            /* The delegation ceilings, forwarded ONLY WHERE THE OWNER MOVED ONE. An untouched cap is left for the
+             * harness to answer, which is not the same as sending the number the harness would have picked: the
+             * nesting cap is remote-config'd inside the CLI (its 3 is a fallback), so restating today's default
+             * as an env var would quietly pin a value that is meant to be able to move. */
+            ...(subagentsAtOnce !== SETTINGS_DEFAULTS.subagentsAtOnce ? { subagentsAtOnce } : {}),
+            ...(subagentsPerTurn !== SETTINGS_DEFAULTS.subagentsPerTurn ? { subagentsPerTurn } : {}),
+            ...(subagentDepth !== SETTINGS_DEFAULTS.subagentDepth ? { subagentDepth } : {}),
             // The verify-on-stop ledger, forwarded only when on so an unset workspace wires no hooks at all.
             ...(verifyOnStop ? { verifyOnStop } : {}),
             // Which base the prompt is built on, plus either the owner's own text (under "custom") or what to

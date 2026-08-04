@@ -166,6 +166,16 @@ export interface AgentRequest {
     // Measurement control: a fraction [0,1] of commands whose output bypasses cleaning (INTENTIC_OUTPUT_HOLDOUT),
     // recorded raw so the savings report has a real cleaned-vs-raw baseline. 0/undefined ⇒ no holdout.
     readonly outputHoldout?: number;
+    /* THE HARNESS'S OWN DELEGATION CEILINGS, each raised or lowered by the matching sandbox setting: how many
+     * subagents may run at once, how many one conversation may spawn in total, and how deep they may nest.
+     * Undefined ⇒ nothing is set in the environment and the CLI's own answer stands — which turn-plan relies on,
+     * so an untouched setting cannot pin a default the harness means to be able to move.
+     *
+     * The refusals these produce are worth knowing when reading a transcript that stopped delegating: the agent
+     * is told the limit and told NOT to retry, so the turn carries on doing the work itself rather than failing. */
+    readonly subagentsAtOnce?: number;
+    readonly subagentsPerTurn?: number;
+    readonly subagentDepth?: number;
     // Extra turn-scoped instructions appended to the claude_code preset system prompt (e.g. the CLI
     // delegation note when Codex/Grok accounts are connected — see agent/delegation.ts).
     readonly systemAppend?: string;
@@ -1007,6 +1017,20 @@ const cleanerEnv = (request: AgentRequest): Record<string, string> => {
     };
 };
 
+/* The delegation ceilings, in the harness's own vocabulary — the three env vars the CLI reads before it lets an
+ * Agent tool call through, and the ONLY way to move them: they are read inside the CLI process, not passed as
+ * options, and each refusal it raises names the variable for the user to raise ("ask them to increase
+ * CLAUDE_CODE_MAX_CONCURRENT_SUBAGENTS"). Which is what makes this worth a setting rather than a container env:
+ * the agent's own escalation path used to end at a file the user cannot edit from the app.
+ *
+ * An absent field emits nothing, so the CLI's default answers — see the request fields for why that is not the
+ * same as sending today's default back to it. */
+const subagentEnv = (request: AgentRequest): Record<string, string> => ({
+    ...(request.subagentsAtOnce !== undefined ? { CLAUDE_CODE_MAX_CONCURRENT_SUBAGENTS: String(request.subagentsAtOnce) } : {}),
+    ...(request.subagentsPerTurn !== undefined ? { CLAUDE_CODE_MAX_SUBAGENTS_PER_SESSION: String(request.subagentsPerTurn) } : {}),
+    ...(request.subagentDepth !== undefined ? { CLAUDE_CODE_MAX_SUBAGENT_SPAWN_DEPTH: String(request.subagentDepth) } : {}),
+});
+
 // Combine hook sets, CONCATENATING the matchers registered for the same event. A plain object spread would
 // have the last contributor silently win the key — two producers of PreToolUse:Bash (the tmux wrapper and the
 // install steer) and only one of them would ever fire.
@@ -1143,6 +1167,8 @@ const baseOptions = (
         ...harnessEnv(request),
         // The output-cleaner spec/holdout (or the filter-off flag) that the agent's Bash → tmux-run → agent-output-filter reads.
         ...cleanerEnv(request),
+        // How much this turn may delegate — only the ceilings the owner moved off the harness's own defaults.
+        ...subagentEnv(request),
         // Where bin/tmux-run must stand to talk to tmux, so the server it may have to START is the daemon's
         // and not this turn's (isolation.ts). Only for an anchored turn — the only one whose wrapper runs
         // inside a namespace at all.

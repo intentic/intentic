@@ -12,11 +12,13 @@ import AgentInstructions from "./agent/AgentInstructions.vue";
 import AgentMemory from "./agent/AgentMemory.vue";
 import AgentModels from "./agent/AgentModels.vue";
 import AgentRecovery from "./agent/AgentRecovery.vue";
+import AgentSubagents from "./agent/AgentSubagents.vue";
 
 /* The Sandbox hub's "Agent" tab — the home for everything about the AI the sandbox runs. The provider accounts
  * it authenticates as, and then one group per question the owner might be here to answer: which models get spent
  * when nobody is at the composer, what the assistant is told, how it searches, how much shell output it is
- * handed, what proves its work, what happens when it finishes, and who picks a turn back up when it breaks.
+ * handed, how much of the work it may hand to other agents, what proves its work, what happens when it finishes,
+ * and who picks a turn back up when it breaks.
  * Accounts and memory live INSIDE the sandbox, never on the platform, which is why this is a sandbox tab.
  *
  * Every group reads and writes the SAME settings object through useSandboxSettings — a vue-query cache, so they
@@ -61,6 +63,7 @@ const settingsBlocked = computed(() => {
         <AgentInstructions />
         <AgentCodeSearch />
         <AgentCommandOutput />
+        <AgentSubagents />
         <AgentChecks />
         <AgentFinishedWork />
         <AgentRecovery />
