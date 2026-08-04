@@ -1,6 +1,7 @@
 import type { PipelineJob, PipelineRun, PipelineStatus } from "@intentic/sandbox-contract";
 import { githubHeaders } from "../capabilities/cli/git-access.js";
 import type { CiProject } from "./projects.js";
+import { resolveNeeds } from "./workflowGraph.js";
 
 /* The two vendors' pipeline APIs behind one client shape, keyed off the account a project mapped to
  * (projects.ts). Everything the CI surface does — the view's run list, rerun/cancel, the fix context's log
@@ -120,6 +121,32 @@ export const githubRun = (project: Pick<CiProject, "repo" | "project">, run: Git
 const githubApi = (project: CiProject, path: string): string => `${project.account.apiBase}/repos/${project.project}${path}`;
 
 const githubClient = (fetchFn: FetchFn): CiClient => {
+    /* THE RUN'S OWN WORKFLOW FILE, at the commit it ran on — the only place the dependency graph exists (see
+     * workflowGraph.ts). Two hops, because the jobs endpoint knows neither which file it came from nor which
+     * revision of it: the run object carries `path` + `head_sha`, and contents serves that exact revision.
+     * Pinning to the sha matters more than it looks — reading HEAD instead would draw last week's run with
+     * this morning's graph, and be most wrong precisely when someone is looking at an old failure to see what
+     * changed.
+     *
+     * Undefined, never a throw, for every way this legitimately comes up empty: a token without `contents`
+     * (the CI scopes do not imply it), a private or since-deleted workflow, or a run started by a reusable
+     * workflow in another repository, whose `path` is `owner/repo/file@ref` and resolves nowhere here. The
+     * graph is an enrichment; failing to get it must never cost the caller the job list it came for. */
+    const workflowSource = async (project: CiProject, runId: number): Promise<string | undefined> => {
+        const runResponse = await fetchFn(githubApi(project, `/actions/runs/${runId}`), { headers: githubHeaders(project.account.token) });
+        if (!runResponse.ok) {
+            return undefined;
+        }
+        const run = (await runResponse.json()) as { path?: string; head_sha?: string };
+        if (run.path === undefined || run.head_sha === undefined) {
+            return undefined;
+        }
+        // `.raw` hands back the file itself; the default json media type would wrap it in base64.
+        const file = await fetchFn(githubApi(project, `/contents/${run.path}?ref=${run.head_sha}`), {
+            headers: { ...githubHeaders(project.account.token), Accept: "application/vnd.github.raw" },
+        });
+        return file.ok ? await file.text() : undefined;
+    };
     const post = async (project: CiProject, path: string, what: string, body?: object): Promise<void> => {
         await throwOn(
             await fetchFn(githubApi(project, path), {
@@ -146,28 +173,44 @@ const githubClient = (fetchFn: FetchFn): CiClient => {
             return listed.workflow_runs.map((run) => githubRun(project, run));
         },
         failedJobs: async (project, runId) => (await jobsOf(project, runId)).map((job) => job.name),
-        // No `stage` is emitted: Actions has no stage concept, and faking one per job would defeat the
-        // view's wave layering. The timestamps are what it layers on instead.
+        /* No `stage` is emitted: Actions has no stage concept. `needs` is, when the run's own workflow file can
+         * be read — see workflowGraph.ts for why the graph has to come from there, and note that the file is
+         * fetched ALONGSIDE the job list rather than after it, since only the name-matching needs both. When it
+         * cannot be read the jobs go out exactly as they always did and the view layers them off timestamps. */
         allJobs: async (project, runId) => {
-            const listed = await json<{
-                jobs: {
-                    id: number;
-                    name: string;
-                    status: string;
-                    conclusion: string | null;
-                    started_at: string | null;
-                    completed_at: string | null;
-                    html_url: string | null;
-                }[];
-            }>(
-                await fetchFn(githubApi(project, `/actions/runs/${runId}/jobs?per_page=100`), { headers: githubHeaders(project.account.token) }),
-                "github all jobs",
-            );
+            const [listed, workflow] = await Promise.all([
+                json<{
+                    jobs: {
+                        id: number;
+                        name: string;
+                        status: string;
+                        conclusion: string | null;
+                        started_at: string | null;
+                        completed_at: string | null;
+                        html_url: string | null;
+                    }[];
+                }>(
+                    await fetchFn(githubApi(project, `/actions/runs/${runId}/jobs?per_page=100`), { headers: githubHeaders(project.account.token) }),
+                    "github all jobs",
+                ),
+                workflowSource(project, runId),
+            ]);
+            const needs =
+                workflow === undefined
+                    ? undefined
+                    : resolveNeeds(
+                          workflow,
+                          listed.jobs.map((job) => job.name),
+                      );
             return listed.jobs.map((job) => {
                 const status = githubStatus(job.status, job.conclusion);
                 const started = epoch(job.started_at);
                 const completed = epoch(job.completed_at);
                 const result: PipelineJob = { name: job.name, status };
+                const declared = needs?.get(job.name);
+                if (declared !== undefined) {
+                    result.needs = declared;
+                }
                 if (job.html_url !== null) {
                     result.webUrl = job.html_url;
                 }
@@ -469,10 +512,7 @@ const gitlabClient = (fetchFn: FetchFn): CiClient => {
                     finished_at: string | null;
                     web_url?: string;
                 }[]
-            >(
-                await fetchFn(gitlabApi(project, `/pipelines/${runId}/jobs?per_page=100`), { headers: gitlabHeaders(project) }),
-                "gitlab all jobs",
-            );
+            >(await fetchFn(gitlabApi(project, `/pipelines/${runId}/jobs?per_page=100`), { headers: gitlabHeaders(project) }), "gitlab all jobs");
             return listed.map((job) => {
                 const started = epoch(job.started_at);
                 const finished = epoch(job.finished_at);

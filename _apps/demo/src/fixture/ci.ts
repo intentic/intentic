@@ -147,26 +147,52 @@ const gitlabJobs = (base: number, failing: boolean): PipelineJob[] => [
     { name: `deploy:staging`, status: failing ? `skipped` : `success`, stage: `deploy`, startedAt: base + 420_000, durationSeconds: 62 },
 ];
 
+/* A workflow that BRANCHES, because a straight line is the one shape the job graph cannot teach anything with.
+ * `needs` is what the daemon resolves out of the real workflow file (sandbox: ci/workflowGraph.ts) and it is
+ * what the graph is drawn from — fan-out from install, a matrix of e2e legs, and a deploy that waits on all of
+ * them. The timestamps deliberately do NOT tell the same story: the legs here start one after another, so the
+ * old wave layering would still render this as a queue. It branches because the workflow says so. */
 const githubJobs = (base: number, failing: boolean): PipelineJob[] => [
-    { name: `typecheck`, status: `success`, startedAt: base, finishedAt: base + 74_000, durationSeconds: 74 },
-    { name: `unit`, status: `success`, startedAt: base + 2_000, finishedAt: base + 121_000, durationSeconds: 119 },
+    { name: `install`, status: `success`, needs: [], startedAt: base, finishedAt: base + 31_000, durationSeconds: 31 },
+    { name: `typecheck`, status: `success`, needs: [`install`], startedAt: base + 33_000, finishedAt: base + 107_000, durationSeconds: 74 },
+    { name: `lint`, status: `success`, needs: [`install`], startedAt: base + 34_000, finishedAt: base + 75_000, durationSeconds: 41 },
+    { name: `unit`, status: `success`, needs: [`install`], startedAt: base + 35_000, finishedAt: base + 154_000, durationSeconds: 119 },
+    { name: `build`, status: `success`, needs: [`typecheck`, `lint`], startedAt: base + 110_000, finishedAt: base + 222_000, durationSeconds: 112 },
     {
         name: `e2e (chromium)`,
         status: failing ? `failed` : `success`,
-        startedAt: base + 125_000,
-        finishedAt: base + 268_000,
+        needs: [`build`],
+        startedAt: base + 225_000,
+        finishedAt: base + 368_000,
         durationSeconds: 143,
         webUrl: `https://github.com/acme/shop-web/actions/runs/4820/job/12907`,
     },
-    { name: `bundle-size`, status: failing ? `skipped` : `success`, startedAt: base + 125_000, finishedAt: base + 173_000, durationSeconds: 48 },
+    { name: `e2e (firefox)`, status: `success`, needs: [`build`], startedAt: base + 226_000, finishedAt: base + 355_000, durationSeconds: 129 },
+    { name: `bundle-size`, status: `success`, needs: [`build`], startedAt: base + 227_000, finishedAt: base + 275_000, durationSeconds: 48 },
+    // The whole point of the fan-in: one red leg and the deploy never happens.
+    {
+        name: `deploy preview`,
+        status: failing ? `skipped` : `success`,
+        needs: [`e2e (chromium)`, `e2e (firefox)`, `bundle-size`, `unit`],
+        startedAt: failing ? undefined : base + 370_000,
+        finishedAt: failing ? undefined : base + 432_000,
+        durationSeconds: failing ? undefined : 62,
+    },
 ];
 
-/* A run still going has its jobs mid-flight, which is the one case the row's graph animates. */
+/* A run still going has its jobs mid-flight, which is the one case the row's graph animates — and the one
+ * where a declared graph earns its keep twice over, since the jobs that have not started yet have no
+ * timestamps to be layered by at all. `deploy preview` is placed by what it waits on, not by when it ran. */
 const runningJobs = (base: number): PipelineJob[] => [
-    { name: `typecheck`, status: `success`, startedAt: base, finishedAt: base + 68_000, durationSeconds: 68 },
-    { name: `unit`, status: `success`, startedAt: base + 2_000, finishedAt: base + 112_000, durationSeconds: 110 },
-    { name: `e2e (chromium)`, status: `running`, startedAt: base + 115_000 },
-    { name: `bundle-size`, status: `running`, startedAt: base + 115_000 },
+    { name: `install`, status: `success`, needs: [], startedAt: base, finishedAt: base + 29_000, durationSeconds: 29 },
+    { name: `typecheck`, status: `success`, needs: [`install`], startedAt: base + 31_000, finishedAt: base + 99_000, durationSeconds: 68 },
+    { name: `lint`, status: `success`, needs: [`install`], startedAt: base + 32_000, finishedAt: base + 70_000, durationSeconds: 38 },
+    { name: `unit`, status: `success`, needs: [`install`], startedAt: base + 33_000, finishedAt: base + 145_000, durationSeconds: 112 },
+    { name: `build`, status: `success`, needs: [`typecheck`, `lint`], startedAt: base + 102_000, finishedAt: base + 210_000, durationSeconds: 108 },
+    { name: `e2e (chromium)`, status: `running`, needs: [`build`], startedAt: base + 213_000 },
+    { name: `e2e (firefox)`, status: `running`, needs: [`build`], startedAt: base + 214_000 },
+    { name: `bundle-size`, status: `running`, needs: [`build`], startedAt: base + 215_000 },
+    { name: `deploy preview`, status: `running`, needs: [`e2e (chromium)`, `e2e (firefox)`, `bundle-size`, `unit`] },
 ];
 
 export const ciJobs = (repo: string, runId: number, now: number): PipelineJob[] => {

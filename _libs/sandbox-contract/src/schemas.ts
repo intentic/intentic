@@ -3450,15 +3450,25 @@ export const PipelineRunSchema = z.object({
 });
 export type PipelineRun = z.infer<typeof PipelineRunSchema>;
 
-// One job inside a pipeline run. The view fetches these lazily (one extra call per visible run) so the list
-// endpoint stays cheap. Both GitHub Actions jobs and GitLab CI jobs normalize onto these fields.
-// `stage` is GitLab's native sequential grouping and is absent on GitHub — the Actions jobs API exposes no
-// `stage` and no `needs`, so the view instead layers GitHub jobs into execution waves off the timestamps
-// below (overlapping runtimes ⇒ ran in parallel). Both are epoch ms; absent while a job is still queued.
+/* One job inside a pipeline run. The view fetches these lazily (one extra call per visible run) so the list
+ * endpoint stays cheap. Both GitHub Actions jobs and GitLab CI jobs normalize onto these fields.
+ *
+ * HOW THE VIEW LEARNS THE RUN'S SHAPE, in descending order of truth:
+ *   1. `needs` — the dependencies the pipeline itself declares. The real graph, and the only one that can say
+ *      a job waited on THIS one rather than on everything before it. Neither vendor's jobs API returns it, so
+ *      it is read out of the pipeline definition (github: workflowGraph.ts) and is absent whenever that could
+ *      not be resolved — a private workflow file, a deleted one, a name no declared job matches.
+ *   2. `stage` — GitLab's native sequential grouping, returned by its jobs API and used verbatim.
+ *   3. The timestamps — the last resort, and GitHub's before `needs` existed: overlapping runtimes ⇒ the jobs
+ *      ran in parallel. Honest about when things happened, silent about what actually gated what.
+ * Both timestamps are epoch ms; absent while a job is still queued. */
 export const PipelineJobSchema = z.object({
     name: z.string(),
     status: PipelineStatusSchema,
     stage: z.string().optional(),
+    // Names of jobs IN THIS RUN that this one declared it waits on. Absent ⇒ nothing was resolved and the view
+    // must fall back; an empty array is the different, load-bearing claim that this job is a root.
+    needs: z.array(z.string()).optional(),
     startedAt: z.number().optional(),
     finishedAt: z.number().optional(),
     durationSeconds: z.number().optional(),

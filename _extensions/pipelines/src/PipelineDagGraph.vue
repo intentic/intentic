@@ -2,7 +2,7 @@
 import type { PipelineJob } from "@intentic/sandbox-contract";
 import { DagGraph, Icon } from "@intentic/extension-ui";
 import { computed, ref } from "vue";
-import { lineageCounts, pipelineDag, type PipelineStage, stageOfNode } from "./pipelineDag";
+import { pipelineDag, type PipelineStage, stageOfNode } from "./pipelineDag";
 import { formatDuration, STATUS_TONE } from "./statusVisual";
 
 /* THE RUN'S JOB GRAPH — one card per job, laid out left→right in execution order by the same dagre + Vue Flow
@@ -72,10 +72,11 @@ const caption = computed(() => {
         return undefined;
     }
     const job = dag.value.nodes.find((node) => node.id === id);
-    if (job === undefined) {
+    const lineage = dag.value.lineage;
+    if (job === undefined || lineage === undefined) {
         return undefined;
     }
-    const { before, after } = lineageCounts(stages, id);
+    const { before, after } = lineage;
     const line = [before > 0 ? `${before} ran before` : undefined, after > 0 ? `${after} waited on it` : undefined].filter(Boolean).join(` · `);
     return {
         name: job.data.name,

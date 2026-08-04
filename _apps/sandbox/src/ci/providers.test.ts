@@ -260,3 +260,69 @@ test("gitlab client addresses the project by its url-encoded path", async () => 
     expect(created?.body).toContain(`"pipeline_events":true`);
     expect(created?.body).toContain(`"token":"S"`);
 });
+
+/* The job graph's enrichment. `scriptedFetch` answers JSON, and a workflow file is text, so these use their
+   own two-endpoint stub — which also makes the CALL SHAPE visible, since the point of fetching the run first
+   is to learn the path and sha the contents call needs. */
+const CI_YAML = `
+jobs:
+  preflight: {}
+  verify-core:
+    needs: preflight
+    uses: ./.github/workflows/verify.yml
+  release:
+    needs: verify-core
+`;
+
+const githubJobsFetch = (options: { workflow?: string; runOk?: boolean }): { fetchFn: FetchFn; urls: string[] } => {
+    const urls: string[] = [];
+    const fetchFn = (async (input: RequestInfo | URL) => {
+        const url = String(input);
+        urls.push(url);
+        if (url.includes("/jobs?")) {
+            const jobs = ["preflight", "verify-core / verify", "release"].map((name, index) => ({
+                id: index,
+                name,
+                status: "completed",
+                conclusion: "success",
+                started_at: "2024-01-01T00:00:00Z",
+                completed_at: "2024-01-01T00:01:00Z",
+                html_url: null,
+            }));
+            return new Response(JSON.stringify({ jobs }), { status: 200, headers: { "content-type": "application/json" } });
+        }
+        if (url.includes("/contents/")) {
+            return options.workflow === undefined ? new Response("nope", { status: 404 }) : new Response(options.workflow, { status: 200 });
+        }
+        if (options.runOk === false) {
+            return new Response("nope", { status: 404 });
+        }
+        return new Response(JSON.stringify({ path: ".github/workflows/ci.yml", head_sha: "deadbee" }), {
+            status: 200,
+            headers: { "content-type": "application/json" },
+        });
+    }) as FetchFn;
+    return { fetchFn, urls };
+};
+
+test("github allJobs resolves needs from the run's own workflow file, pinned to the run's sha", async () => {
+    const { fetchFn, urls } = githubJobsFetch({ workflow: CI_YAML });
+    const jobs = await ciClientFor("github", fetchFn).allJobs(githubProject, 7);
+
+    expect(jobs.map((job) => job.needs)).toEqual([[], ["preflight"], ["verify-core / verify"]]);
+    // The reusable-workflow call reported one job under a name `needs` never mentions; `release` still reaches it.
+    expect(jobs[1]?.name).toBe("verify-core / verify");
+    // The sha, not HEAD: an old run must be drawn with the graph it actually ran.
+    expect(urls.some((url) => url.includes("/contents/.github/workflows/ci.yml?ref=deadbee"))).toBe(true);
+});
+
+test("github allJobs still returns the jobs when the workflow file cannot be read", async () => {
+    // A token without `contents`, a deleted workflow, a run owned by another repo's reusable workflow. The
+    // graph is an enrichment; losing it must not cost the caller the job list.
+    for (const options of [{ workflow: undefined }, { workflow: undefined, runOk: false }]) {
+        const jobs = await ciClientFor("github", githubJobsFetch(options).fetchFn).allJobs(githubProject, 7);
+        expect(jobs).toHaveLength(3);
+        expect(jobs.every((job) => job.needs === undefined)).toBe(true);
+        expect(jobs[0]).toMatchObject({ name: "preflight", status: "success", durationSeconds: 60 });
+    }
+});
