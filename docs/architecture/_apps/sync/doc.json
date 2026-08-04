@@ -26,8 +26,8 @@
   "name": "@intentic/sync",
   "oneLiner": "Keeps folders on your computer in step with your sandboxes.",
   "provenance": {
-    "generatedAt": 1785797368290,
+    "generatedAt": 1785802604456,
     "model": "claude-opus-4-6",
-    "sourceRev": "07ad1cb1520a8c3c61be7a475cc0c4318c8fd6d4"
+    "sourceRev": "79145084a09630d71208223c02b14735b5353041"
   }
 }

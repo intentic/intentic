@@ -87,13 +87,12 @@
       "stale": true
     },
     {
-      "behind": 1,
+      "behind": 0,
       "component": "sandbox",
       "dir": "_apps/sync",
       "oneLiner": "Keeps folders on your computer in step with your sandboxes.",
-      "reason": "1 commit have touched this package since it was documented",
-      "sourceRev": "07ad1cb1520a8c3c61be7a475cc0c4318c8fd6d4",
-      "stale": true
+      "sourceRev": "79145084a09630d71208223c02b14735b5353041",
+      "stale": false
     },
     {
       "behind": 157,
