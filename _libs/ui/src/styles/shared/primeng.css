@@ -127,6 +127,34 @@
         animation: ui-check-in 160ms cubic-bezier(0.2, 0.9, 0.3, 1.25);
     }
 
+    /* QUIET TICK — the weight a COLUMN of checkboxes needs, and the switch note below is the same lesson one
+     * control over. Aura's ring (surface-600 in dark) is right for three decisions on a dialog. Down the side
+     * of a twenty-row list it is brighter than `line-strong`, the strongest hairline this app draws anywhere,
+     * so a column of empty boxes outranks the names it belongs to — and on a list whose ticks are an EXCEPTION
+     * (Acceptance runs every story until you narrow it) the loudest thing on the page is the state nobody
+     * chose. It also stops punching a hole: Aura fills the box with the app's canvas, which on a card row is a
+     * dark cut-out giving a one-edge control two.
+     *
+     * KNOW WHAT THIS COSTS. At rest the outline of an unchecked box is then under the 3:1 WCAG asks for the
+     * boundary of a control, which is why it is a modifier and not the default — a dialog's checkboxes keep
+     * Aura's. It is bought back by the two states that matter: pointing anywhere at the ROW hands the whole
+     * column back at full contrast, and a ticked box is the accent fill, which was never in question.
+     *
+     * `:not(:hover)` on the box AND on its row, rather than a brighter rule layered on top: the quiet rule
+     * simply stops matching once the pointer arrives, so nothing here can win a specificity fight with Aura's
+     * own hover, focus or checked treatment.
+     *
+     * The fill is the exception and is dropped in every unchecked state, hovered or not: handing the cut-out
+     * back on hover paints a near-black square on a row that has just lightened, which reads as a state
+     * change — the one thing this control must not say by accident. */
+    .p-checkbox.ui-checkbox-quiet:not(.p-checkbox-checked) .p-checkbox-box {
+        background: transparent;
+    }
+
+    :not(:hover) > .p-checkbox.ui-checkbox-quiet:not(.p-checkbox-checked):not(:hover) .p-checkbox-box {
+        border-color: var(--color-line-strong);
+    }
+
     /* Compact switch — the size a LIST of toggles needs. Aura's 40×24 control is right when a toggle is one
      * of three on a settings card; stacked fifteen deep (the Extensions tab) that same control becomes a
      * column of brand-coloured blocks carrying more weight than the names it belongs to, and the eye reads

@@ -206,15 +206,15 @@ onBeforeUnmount(() => void flush());
              genuinely different — one narrows the next run, the other opens the story to write. The hover tint
              rides the wrapper so the whole line still lights up as one row. -->
         <div class="group flex w-full items-center gap-3 pl-4 hover:bg-overlay" :class="expanded && `bg-overlay`">
-            <!-- SMALL, because this column is as long as the list and almost none of it is ever ticked (empty
-                 means all — see RunControls): at the full 20px the narrowing control was the first thing the eye
-                 found on a page whose subject is the promises beside it. Size is the only lever that helps here —
-                 a fainter box would read quieter and drop an unchecked control's outline below the contrast a
-                 boundary needs, so the ring stays the design system's own. -->
+            <!-- SMALL AND QUIET, because this column is as long as the list and almost none of it is ever ticked
+                 (empty means all — see RunControls): at Aura's full size and ring the narrowing control was the
+                 first thing the eye found on a page whose subject is the promises beside it. Pointing at the row
+                 brings its tick back to full contrast — see `ui-checkbox-quiet` for what that state is paying for. -->
             <Checkbox
                 :model-value="selected"
                 binary
                 size="small"
+                class="ui-checkbox-quiet"
                 :aria-label="`Run ${story.title}`"
                 @update:model-value="emit(`select`, $event === true)"
             />
@@ -227,12 +227,13 @@ onBeforeUnmount(() => void flush());
                 <Icon :name="expanded ? `chevron-down` : `chevron-right`" class="shrink-0 text-subtle" />
                 <!-- Open, the heading below is the title, so the row identifies the FILE instead of repeating it. -->
                 <span v-if="expanded" class="min-w-0 flex-1 truncate font-mono text-2xs text-subtle">{{ story.path }}</span>
-                <!-- MUTED UNTIL YOU REACH FOR IT — the kit's own rule for a row you pick from (<Row>, `as="button"`),
-                     and this list is the case it was written for: twenty-odd rows whose entire ink is one
-                     sentence-long title each, so at full content white the block reads as a wall and nothing in it
-                     stands out — least of all the row carrying a failed verdict. The story you point at comes up to
-                     full contrast, and so does the one you open. -->
-                <span v-else class="min-w-0 flex-1 truncate text-sm text-muted group-hover:text-content">{{ story.title }}</span>
+                <!-- ONE STEP OFF WHITE, AND FULL WHITE UNDER THE POINTER — the app's own weight for a long list of
+                     rows read by scanning (the file tree, the search results, the commit list all sit here). Twenty
+                     rows whose entire ink is one sentence-long title each read as a wall at full content white, and
+                     nothing in them stands out — least of all the row carrying a failed verdict. `muted` is the step
+                     past this one and it is the wrong one: that is the weight of a FACT ABOUT a row, and a list
+                     whose subject is set in it looks switched off. -->
+                <span v-else class="min-w-0 flex-1 truncate text-sm text-content/85 group-hover:text-content">{{ story.title }}</span>
                 <!-- THE VERDICT FIRST, THEN THE COUNT — and the count in a fixed cell, the runs list's own
                      trailing-column recipe. Ordered the other way round they both moved: the count sat at the
                      right edge on a story nothing had tested and 70px in on one that had, so a list where most
