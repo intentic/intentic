@@ -30,6 +30,9 @@ env:
 jobs:
   verify:
     runs-on: [self-hosted, intentic]
+    # GitLab's ceiling was 60 minutes (the runner's maximum_timeout); the Actions default is 360. This is the
+    # job most likely to hang, and there are only six runner processes to hang one of.
+    timeout-minutes: 60
     container:
       image: ghcr.io/intentic/ci-base:latest
       volumes:
