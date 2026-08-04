@@ -9,9 +9,12 @@
 # here. The runner requirements — six instances, a shared /ci-cache on the same filesystem as the work dir,
 # and the host Docker socket — are in docs/ci-runner.md.
 #
-# FIRST RUN: every job below runs in ghcr.io/intentic/ci-base:latest, which the `ci-base` job builds. On a
-# repository that has never published it, build and push it once by hand before the first pipeline:
+# FIRST RUN: ci-base is the one image with a bootstrap problem, because the jobs that could build it all run
+# INSIDE it. On a repository that has never published it, push it once by hand before the first pipeline:
 #   docker build -t ghcr.io/intentic/ci-base:latest _tools/ci-base && docker push ghcr.io/intentic/ci-base:latest
+# ci-desktop needs no such step and never did — its build job runs on the host runner. The `changes` job
+# probes for both tags and builds either one that is absent, so a missing image costs one pipeline, not a
+# maintainer. Nothing else here may assume an image is present merely because its Dockerfile did not change.
 name: CI
 
 on:
@@ -82,6 +85,18 @@ jobs:
           # install.
           clean: false
 
+      # For the `missing` probe below — the CI images are private packages, so reading a manifest needs the
+      # same credential pulling one does. Seconds, and this job is off the critical path: preflight starts
+      # beside it, not after it. Guarded on the same branch the probe is, so the one pipeline that cannot use
+      # a registry credential — a pull request from a fork, whose GITHUB_TOKEN is downgraded to read — never
+      # has to present one.
+      - uses: docker/login-action@v3
+        if: github.ref == 'refs/heads/main'
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
       - id: filter
         shell: bash
         run: |
@@ -103,8 +118,23 @@ jobs:
 
           match() { grep -qE "$1" /tmp/changed.txt && echo true || echo false; }
 
-          echo "ci-base=$(match '^_tools/ci-base/')" >> "$GITHUB_OUTPUT"
-          echo "ci-desktop=$(match '^_tools/ci-(desktop|base)/')" >> "$GITHUB_OUTPUT"
+          # An image job's SECOND trigger: the tag it publishes is not in the registry at all. A path filter
+          # alone answers "has this image's recipe changed", and every consumer then assumes the answer to a
+          # different question — "is the image there" — is yes. It was not: ci-desktop had never been
+          # published, because the only pipelines whose diff touched _tools/ci-desktop were ones where ci-base
+          # failed first, and every release since died in `Initialize containers` on `manifest unknown` for an
+          # image no pipeline had ever had cause to build. A tag deleted from the registry reads the same way.
+          #
+          # Probed only on main. A pull request must not move these tags — the push step below is main-only —
+          # so a missing image is not something a pull request could fix by building one it has to throw away.
+          missing() {
+            if [ "${{ github.ref }}" != 'refs/heads/main' ]; then echo false; return; fi
+            docker manifest inspect "$1" >/dev/null 2>&1 && echo false || echo true
+          }
+          any() { if [ "$1" = true ] || [ "$2" = true ]; then echo true; else echo false; fi; }
+
+          echo "ci-base=$(any "$(match '^_tools/ci-base/')" "$(missing ghcr.io/intentic/ci-base:latest)")" >> "$GITHUB_OUTPUT"
+          echo "ci-desktop=$(any "$(match '^_tools/ci-(desktop|base)/')" "$(missing ghcr.io/intentic/ci-desktop:latest)")" >> "$GITHUB_OUTPUT"
           # desktop-check's whole input closure — `turbo run build test --filter=@intentic/desktop-app... --dry`
           # names it (desktop-app, desktop-smoke, ui, tsconfig) and each entry is one of them. _tools/ci-desktop
           # is here because the job's IMAGE is an input like any other.
@@ -497,11 +527,19 @@ jobs:
   # installers — release-prepare.sh verifies the artifacts this job builds ITSELF, because those are the bytes
   # that get published and no other job's output can stand in for them. This edge is the cheap half: when the
   # pipeline already knows the desktop is broken, spend zero of the release's forty minutes finding out again.
+  #
+  # ci-desktop is a needs edge because this job RUNS IN that image — the same reason desktop-check and
+  # desktop-verify carry it. Without it the dependency was real but undeclared, so the job started whenever
+  # verify-core was green and pulled whatever `latest` happened to be there: nothing at all before the image
+  # was first published, and the previous build during the pipeline that rebuilds it. Tolerating `skipped` is
+  # the point — the image job skips in almost every pipeline, and this edge only has to bind in the ones where
+  # it doesn't.
   release:
-    needs: [verify-core, desktop-verify]
+    needs: [verify-core, desktop-verify, ci-desktop]
     if: |
       !cancelled() && github.event_name == 'push' && github.ref == 'refs/heads/main'
       && needs.verify-core.result == 'success'
+      && needs.ci-desktop.result != 'failure'
       && (needs.desktop-verify.result == 'success' || needs.desktop-verify.result == 'skipped')
     runs-on: [self-hosted, intentic, desktop]
     container:
