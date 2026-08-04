@@ -1,4 +1,4 @@
-import { access, writeFile } from "node:fs/promises";
+import { access, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { defaultGit, gitInit, type GitRunner } from "@intentic/scaffold";
 import { repoGitDir, syncRootExcludes } from "../history/history.js";
@@ -21,6 +21,87 @@ const exists = async (path: string): Promise<boolean> => {
     }
 };
 
+// The index mode git gives a nested repository — the entry a repo dir becomes when it is staged instead of
+// excluded. `ls-files --stage -z` prints "<mode> <sha> <stage>\t<path>", NUL-terminated and never quoted, so a
+// path holding a space (or a newline) survives this parse intact.
+const GITLINK_MODE = "160000 ";
+const trackedGitlinks = async (root: string, git: GitRunner): Promise<string[]> =>
+    (await git(root, ["ls-files", "--stage", "-z"])).stdout
+        .split("\0")
+        .filter((entry) => entry.startsWith(GITLINK_MODE))
+        .map((entry) => entry.slice(entry.indexOf("\t") + 1));
+
+/* ROOT TRACKS FILES, NEVER NESTED REPOSITORIES — the invariant behind the exclude list, enforced here in the
+ * INDEX because the exclude list cannot enforce it.
+ *
+ * Every repo dir is excluded from root (history.ts rootExcludes) precisely so root never takes git's
+ * embedded-repo handling. But an exclude rule is only ever consulted for an UNTRACKED path: the moment a repo
+ * dir reaches root's index — a clone staged in the window before the derived list caught up with it, an agent's
+ * own `git add -f` — the rules go inert for it forever. What the user sees from then on is a phantom `+1 -1` on
+ * a one-line "file" with an empty diff, re-appearing in root's Changes review every time that repo's HEAD moves,
+ * because a gitlink records the nested repo's HEAD sha and nothing inside root can make it stop.
+ *
+ * The entries are dropped from the index — the checkouts on disk are never touched — and the removal is
+ * COMMITTED: left staged it would only trade the phantom modification for a phantom deletion of the whole repo,
+ * one Discard away from checking an empty directory back out over a live checkout.
+ *
+ * The commit is built from HEAD's tree in a PRIVATE index (GIT_INDEX_FILE, the checkpoint snapshots' pattern),
+ * never from the index the user stages into: a boot that swept someone's staged work into a daemon-authored
+ * commit would be a worse bug than the one this fixes. The real index only ever sees the one removal at the end.
+ *
+ * Convergence, not a one-shot: it re-runs every boot, like the exclude sync above it and repo-git-dirs.ts, and
+ * does nothing at all once root's index holds no gitlink — the steady state.
+ */
+const untrackNestedRepos = async (root: string, gitDir: string, git: GitRunner): Promise<void> => {
+    const gitlinks = await trackedGitlinks(root, git);
+    if (gitlinks.length === 0) {
+        return;
+    }
+    // `update-index --force-remove`, not `git rm --cached`: rm consults the worktree and refuses an entry whose
+    // staged content matches neither the checkout nor HEAD — which is every one of these the moment the commit
+    // below lands, since a live nested repo's HEAD has moved on and root's HEAD no longer names it at all. The
+    // plumbing drops the index entry and nothing else; the repo on disk is never read, let alone touched.
+    const drop = ["update-index", "--force-remove", "--", ...gitlinks];
+    // Unborn HEAD (an init whose baseline never ran): the index entries are the whole of it, nothing to commit.
+    const head = await git(root, ["rev-parse", "-q", "--verify", "HEAD"])
+        .then(({ stdout }) => stdout.trim())
+        .catch(() => undefined);
+    if (head === undefined) {
+        await git(root, drop);
+        return;
+    }
+    const index = join(gitDir, "untrack.index");
+    const privateIndex = { GIT_INDEX_FILE: index };
+    try {
+        await git(root, ["read-tree", head], privateIndex);
+        await git(root, drop, privateIndex);
+        const tree = (await git(root, ["write-tree"], privateIndex)).stdout.trim();
+        // Equal trees ⇒ the gitlinks were staged but never committed, so the index removal below is the whole
+        // fix and an empty housekeeping commit would be noise in the user's history.
+        if (tree !== (await git(root, ["rev-parse", "HEAD^{tree}"])).stdout.trim()) {
+            const commit = (
+                await git(root, [
+                    "-c",
+                    `user.name=${AGENT_GIT_AUTHOR.name}`,
+                    "-c",
+                    `user.email=${AGENT_GIT_AUTHOR.email}`,
+                    "commit-tree",
+                    tree,
+                    "-p",
+                    head,
+                    "-m",
+                    "chore: untrack nested repositories",
+                ])
+            ).stdout.trim();
+            // Old-value guard: HEAD moved while this ran ⇒ leave it, the next boot converges again.
+            await git(root, ["update-ref", "HEAD", commit, head]);
+        }
+    } finally {
+        await rm(index, { force: true });
+    }
+    await git(root, drop);
+};
+
 // Returns true only when this boot freshly `gitInit`ed the repo — the caller then takes the baseline commit
 // (commitRootBaseline) AFTER converging its /work-owned files, so those files land inside the baseline.
 export const ensureRootRepo = async (workspace: WorkspacePaths, historyRoot: string, git: GitRunner = defaultGit): Promise<boolean> => {
@@ -37,10 +118,12 @@ export const ensureRootRepo = async (workspace: WorkspacePaths, historyRoot: str
     // credentials, or junk. History's snapshotAll keeps it current as repos appear/disappear at runtime.
     await syncRootExcludes(historyRoot, await discoverRepos(workspace.root));
     if (fresh) {
-        // Repeat status scans over /work stay stat-cheap.
+        // Repeat status scans over /work stay stat-cheap. Nothing is tracked yet, so nothing to untrack.
         await git(workspace.root, ["config", "core.untrackedCache", "true"]);
+        return true;
     }
-    return fresh;
+    await untrackNestedRepos(workspace.root, gitDir, git);
+    return false;
 };
 
 // The baseline "Initialize workspace" commit — run once, on a fresh sandbox, AFTER the daemon has converged its
