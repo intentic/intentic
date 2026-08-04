@@ -304,6 +304,10 @@ export const services = (overrides: ServiceOverrides = {}): Services => {
         accountUsage: { read: async () => ({}), record: async () => {}, clear: async () => {} },
         // …and nothing sweeps for one: the reader would need a live OAuth usage endpoint to reach.
         claudeUsage: { refresh: async () => {}, start: () => () => {} },
+        // Nothing has ever been refused. Both writes are on the turn path — a refusal is filed when the plan says
+        // no, and the account's standing refusal is settled the moment a turn produces content — so every test
+        // that runs a turn at all touches this store whether or not it is about refusals.
+        providerRefusals: { read: async () => ({}), record: async () => {}, clear: async () => {} },
         // Nothing connected in the translator by default; tests exercising the Codex subscription path override this.
         cliProxy: unstubbed("cliProxy", {
             accounts: async () => ({ codex: [], grok: [], kimi: [], gemini: [] }),

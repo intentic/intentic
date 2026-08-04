@@ -726,7 +726,14 @@ export type AccountUsage = z.infer<typeof AccountUsageSchema>;
 export const ProviderRefusalSchema = z.object({
     // Epoch MS, matching AccountUsage.measuredAt — the two are read side by side.
     at: z.number(),
-    kind: z.enum(["limit", "auth"]),
+    /* Three ways a plan says no, kept apart because WHAT ANSWERS EACH is different and a screen that conflates
+     * them tells the user to do the wrong thing. A spent allowance is answered by a later reading with room in
+     * it; a refused credential by the account being read at all through it; and an entitlement refusal — an
+     * organization that has turned Claude Code off for this seat — by NOTHING either of those can produce. Its
+     * token authenticates and its usage endpoint answers with real pools the whole time it cannot run a turn,
+     * so filing it as `auth` let the very next quota sweep dismiss it and leave a full green ring over an
+     * account that refused everything asked of it. Only a turn that actually runs settles this one. */
+    kind: z.enum(["limit", "auth", "entitlement"]),
     // The provider's own sentence, verbatim. It is the only part that says WHICH pool or WHICH credential.
     message: z.string(),
     // The account that was serving, when the daemon knows it (native turns only — see above).

@@ -611,6 +611,25 @@ test("a non-rate-limit assistant error with no explanation falls back to its bar
     expect(events).toEqual([{ kind: "session", sessionId: "s" }, { kind: "error", message: "agent error: unknown" }, { kind: "done" }]);
 });
 
+/* A SEAT THE ORGANIZATION TOOK AWAY — the failure that had no code at all, and so left no trace anywhere but the
+ * chat that provoked it. It arrives as an `unknown` category carrying Anthropic's own prose, matching neither the
+ * usage-limit prefixes nor the CLI's "Failed to authenticate", so it fell through to a bare uncoded error: no
+ * refusal was filed against the account, and the picker went on drawing a fresh green ring over an account that
+ * refused every turn (its token authenticates and its plan publishes pools throughout).
+ *
+ * Its own code rather than claude-token-refused, which is the branch it sits directly above: that one arms a
+ * re-mint-and-re-run, and no token this daemon can mint restores a seat. Coding it there would have spent a
+ * retry, failed identically, and ended by asking the user to reconnect an account that was never disconnected. */
+test("a revoked Claude Code seat is coded as its own refusal, not as a credential to re-mint", async () => {
+    const seat =
+        "Your organization has disabled Claude subscription access for Claude Code · Use an Anthropic API key instead, or ask your admin to enable access";
+    const events = await collect(
+        request,
+        fakeQuery({ type: "assistant", session_id: "s", error: "unknown", message: { content: [{ type: "text", text: seat }] } }),
+    );
+    expect(events).toEqual([{ kind: "session", sessionId: "s" }, { kind: "error", code: "claude-not-entitled", message: seat }, { kind: "done" }]);
+});
+
 /* THE PROVIDER'S OWN FAILURES, read from the CATEGORY rather than the sentence. The harness files every 5xx, every
  * 529 at capacity and every dropped socket as `server_error`, and a pre-retry capacity refusal as `overloaded`;
  * both mean the request is worth making again, which is the one claim the auto-resume has to be right about. The

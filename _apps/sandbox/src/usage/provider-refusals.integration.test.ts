@@ -43,6 +43,36 @@ test("each provider keeps its own last refusal, and the newest one wins", async 
     expect(read[`claude`]?.account).toBe("claude-1");
 });
 
+/* A TURN THAT RAN IS THE ONLY EVIDENCE some refusals will ever get. An entitlement refusal — an organization
+ * that switched Claude Code off for a seat — outlives every reading that could contradict it: the token keeps
+ * authenticating and the plan keeps publishing pools the whole time it refuses everything. So without this, an
+ * admin turning access back on would leave the alarm standing for the full week the store remembers it. */
+test("settles the account's refusal when a turn finally runs on it", async () => {
+    const { store } = tempStore();
+    await store.record("claude", refusal({ kind: "entitlement", message: "organization has disabled", account: "claude-1" }));
+    await store.clear("claude", "claude-1");
+    expect(await store.read()).toEqual({});
+});
+
+/* SCOPED TO THE ACCOUNT IT NAMES, which is the whole difficulty: a sandbox holding three Claude accounts runs
+ * turns on the healthy ones all day, and letting any of those erase the refused one's record would delete the
+ * single fact that stops the picker offering an account that cannot run. The one refusal every success answers
+ * is a nameless one — a routed turn, which CLIProxyAPI only refuses once every credential it holds is cooling. */
+test("leaves a refusal that names another account alone, and settles one that names nobody", async () => {
+    const { store } = tempStore();
+    const claude = refusal({ kind: "entitlement", message: "organization has disabled", account: "claude-1" });
+    await store.record("claude", claude);
+    await store.record("codex", refusal({ message: "all credentials cooling down" }));
+
+    await store.clear("claude", "claude-2");
+    await store.clear("claude", undefined);
+    await store.clear("gemini", "never-refused");
+    await store.clear("codex", "codex-file-3");
+
+    // The named account has served nothing, so its refusal stands; the unattributed one is answered by any turn.
+    expect(await store.read()).toEqual({ claude });
+});
+
 /* Past a week a refusal describes a window that has certainly reopened, so serving it would put a stale alarm
  * under a live meter. Forgotten on READ, because a daemon that never refuses again writes nothing that could
  * prune it — the file keeps the row and the store simply stops reporting it. */

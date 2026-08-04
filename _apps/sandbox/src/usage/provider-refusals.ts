@@ -22,6 +22,17 @@ export interface ProviderRefusalStore {
     // certainly reopened are omitted rather than served (see FORGET_AFTER_MS).
     readonly read: () => Promise<Record<string, ProviderRefusal>>;
     readonly record: (provider: string, refusal: ProviderRefusal) => Promise<void>;
+    /* A TURN JUST RAN — settle whatever this provider last refused, if the refusal was about this account.
+     * The only proof there is for the refusals no poll can answer (see ProviderRefusalSchema.kind): an
+     * entitlement refusal outlives every reading that could contradict it, so without this one seat change
+     * would keep an alarm up for the full week the store remembers it, long after an admin turned access back
+     * on. `account` is the one the turn actually ran under, undefined for a routed turn.
+     *
+     * SCOPED TO THE ACCOUNT IT NAMES. A stored refusal naming account A says nothing about B, and letting B's
+     * successful turn erase it is how a real, current fault disappears from the screen the moment a second
+     * account is connected. The one refusal any success answers is a nameless one — a routed refusal, which
+     * CLIProxyAPI only issues once every credential it holds is cooling down. */
+    readonly clear: (provider: string, account: string | undefined) => Promise<void>;
 }
 
 /* A week, which is the longest pool cycle any of these providers sells. Past it a limit refusal describes a
@@ -46,6 +57,17 @@ export const fileProviderRefusalStore = (path: string): ProviderRefusalStore => 
         },
         record: async (provider, refusal) => {
             await file.update((current) => ({ ...current, [provider]: refusal }));
+        },
+        clear: async (provider, account) => {
+            await file.update((current) => {
+                const stored = current[provider];
+                // A refusal that named a different account is somebody else's, and still true.
+                if (stored === undefined || (stored.account !== undefined && stored.account !== account)) {
+                    return current;
+                }
+                const { [provider]: _settled, ...rest } = current;
+                return rest;
+            });
         },
     };
 };

@@ -1,5 +1,5 @@
 import { expect, test } from "vitest";
-import { isAuthFailureText, isFailureSentence, isUsageLimitText, mentionsSpentAllowance } from "./failure-sentences.js";
+import { isAuthFailureText, isEntitlementRefusalText, isFailureSentence, isUsageLimitText, mentionsSpentAllowance } from "./failure-sentences.js";
 
 /* The two conditions the CLI reports as prose, and the third reading of them that the routed providers forced.
  *
@@ -37,4 +37,28 @@ test("does not read a revoked token as a spent allowance", () => {
  * the obvious-looking change that would quietly start reporting healthy accounts as spent. */
 test("ignores the transient throttling the harness retries through by itself", () => {
     expect(mentionsSpentAllowance("API Error: 429 rate limit exceeded, retrying in 620ms")).toBe(false);
+});
+
+/* THE THIRD CONDITION, AND WHY IT NEEDED ONE. An organization that has switched Claude Code off for a seat
+ * refuses every turn with a sentence that fits neither predicate above — no usage-limit prefix, and it does not
+ * start with "Failed to authenticate" — so the frame went out uncoded and nothing durable was ever written about
+ * it. The account meanwhile authenticates fine and its usage endpoint keeps publishing pools, so the picker went
+ * on drawing a full, fresh ring over the one account in the list that could not run anything at all. */
+const SEAT_REVOKED =
+    "Your organization has disabled Claude subscription access for Claude Code · Use an Anthropic API key instead, or ask your admin to enable access";
+
+test("reads a revoked seat as its own condition, not as a spent plan or a dead credential", () => {
+    expect(isEntitlementRefusalText(SEAT_REVOKED)).toBe(true);
+    // The two it must not be mistaken for: a re-mint and a reset are both recoveries that cannot help here, and
+    // offering either sends the user somewhere that will not fix it.
+    expect(isAuthFailureText(SEAT_REVOKED)).toBe(false);
+    expect(mentionsSpentAllowance(SEAT_REVOKED)).toBe(false);
+});
+
+// And the reverse, which is the direction that would do real damage: a spent plan or a revoked token read as an
+// entitlement problem would tell the user to go and find an administrator over something they can fix themselves.
+test("does not read a spent plan or a revoked token as a revoked seat", () => {
+    expect(isEntitlementRefusalText(KIMI_403)).toBe(false);
+    expect(isEntitlementRefusalText("Failed to authenticate. API Error: 401 OAuth access token has been revoked")).toBe(false);
+    expect(isEntitlementRefusalText("Sure — I've updated the config and the tests pass.")).toBe(false);
 });

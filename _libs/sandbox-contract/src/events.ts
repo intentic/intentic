@@ -439,6 +439,14 @@ export const AgentEventSchema = z.discriminatedUnion("kind", [
                 // nothing is coming (the turn was already a resume, or it ran on a credential with nothing to
                 // re-mint from) — that is the case where reconnecting really is the fix.
                 "claude-token-refused",
+                /* THE ACCOUNT IS FINE AND STILL NOT ALLOWED TO RUN — an Anthropic organization that has turned
+                 * Claude Code off for this seat. The token authenticates, the plan's own usage endpoint answers
+                 * with real pools, and every turn is refused anyway, which is why it is its own code rather than
+                 * a member of either neighbour: a spent allowance comes back on a clock and a refused credential
+                 * comes back on a re-mint, and NEITHER of those is true here. Only an admin re-enabling access
+                 * is, so nothing is re-run and nothing asks the user to reconnect — the one recovery that looks
+                 * plausible and is guaranteed to waste their time. */
+                "claude-not-entitled",
                 // The model provider itself failed transiently — 500/502/503, a 529 at capacity, a dropped
                 // socket — and the harness's own in-turn retries did not outlast it. Nothing about the workspace
                 // or the request is wrong, so the daemon remembers the turn and re-runs it on an escalating

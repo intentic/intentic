@@ -166,7 +166,18 @@ export class TurnFailures {
                 this.host.error.value = message;
                 return;
             default:
-                // `subscription-required`, `agent-busy`, and every uncoded failure: the red line and nothing else.
+                /* `subscription-required`, `agent-busy`, `claude-not-entitled`, and every uncoded failure: the
+                 * red line and nothing else.
+                 *
+                 * `claude-not-entitled` is here DELIBERATELY, next to two codes it superficially resembles but
+                 * must not be treated like. It is not markReauth's: the credential is in perfect health, so
+                 * lighting the reconnect badge would send the user through a sign-in that works and changes
+                 * nothing. And it is not requeue's: the fix is an administrator re-enabling the seat, which is
+                 * not a thing that resolves while someone waits at the composer, so holding their message for
+                 * it would be a promise this cannot keep. The provider's own sentence already names the two
+                 * ways out ("use an API key, or ask your admin"), and a red line carrying it is the whole
+                 * honest response. What DOES persist is the refusal the daemon filed against the account, which
+                 * is what stops the picker offering it as though it had headroom. */
                 this.host.error.value = message;
                 return;
         }

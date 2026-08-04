@@ -740,6 +740,15 @@ async function* runTurn(
                 if (!providerAnswered) {
                     providerAnswered = true;
                     recordProviderSuccess(provider);
+                    /* And it settles whatever this provider last REFUSED, on the account that just proved it
+                     * wrong. Content on the wire is the only evidence that exists for the refusal kinds no poll
+                     * can answer: an entitlement refusal survives every reading that could contradict it (the
+                     * token authenticates and the pools publish all the way through it), so without this an
+                     * admin re-enabling a seat would leave the alarm standing for the full week the store keeps
+                     * it. Fire-and-forget on the same contract as the writes at settle. */
+                    void services.providerRefusals
+                        .clear(provider, resolvedAccount)
+                        .catch((error: unknown) => services.logger.warn({ err: error }, "provider refusal: settle failed"));
                 }
             }
             if (event.kind === "delta") {
@@ -779,21 +788,23 @@ async function* runTurn(
                 record({ type: "turn.error", outcome: "error", error: event.message });
                 /* THE PLAN SAID NO — file it, so the account surfaces can say when it last happened.
                  *
-                 * The two codes that mean "this provider would not serve the turn", as opposed to the workspace
+                 * The three codes that mean "this provider would not serve the turn", as opposed to the workspace
                  * or the request being at fault. Nothing here changes what the turn DOES about it (the branches
                  * below own that, unchanged); this is the durable trace, and it is the only one: a rate_limit
                  * frame is relayed to whoever is attached and forgotten, so a refusal that landed while nobody
                  * was watching — an automation at 4am, a fleet agent — left no mark anywhere a person could find.
                  *
                  * `kind` is read off the SENTENCE (mentionsSpentAllowance) rather than off the code, because for
-                 * every provider but Claude the two disagree — see failure-sentences.ts. Fire-and-forget, the
-                 * same contract as every other turn-end write: a refusal must not be able to fail the turn it is
-                 * describing. */
-                if (event.code === "rate_limit" || event.code === "claude-token-refused") {
+                 * every provider but Claude the two disagree — see failure-sentences.ts. The exception is the
+                 * entitlement refusal, which is the one condition the sentence CANNOT be read for twice: it was
+                 * already classified by its own sentence upstream (isEntitlementRefusalText), and the code is
+                 * that reading carried down here. Fire-and-forget, the same contract as every other turn-end
+                 * write: a refusal must not be able to fail the turn it is describing. */
+                if (event.code === "rate_limit" || event.code === "claude-token-refused" || event.code === "claude-not-entitled") {
                     void services.providerRefusals
                         .record(provider, {
                             at: Date.now(),
-                            kind: mentionsSpentAllowance(event.message) ? "limit" : "auth",
+                            kind: event.code === "claude-not-entitled" ? "entitlement" : mentionsSpentAllowance(event.message) ? "limit" : "auth",
                             message: event.message,
                             // Routed turns have no account to name: CLIProxyAPI picks the auth file itself.
                             ...(resolvedAccount !== undefined ? { account: resolvedAccount } : {}),

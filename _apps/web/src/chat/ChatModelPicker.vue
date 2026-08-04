@@ -6,8 +6,8 @@ import { relativeTime } from "../composables/chat/catalog";
 import type { Conversation } from "../composables/chat/conversation";
 import { providerDisplayLabel } from "../composables/chat/providerCatalog";
 import type { PickerEntry } from "../composables/chat/modelPicker";
-import { translatorAccounts } from "../composables/chat/providerAccounts";
-import { formatAge, liveUsage, planHeadroom } from "../composables/chat/usageStatus";
+import { providerRefusals, translatorAccounts } from "../composables/chat/providerAccounts";
+import { formatAge, liveUsage, planHeadroom, refusalNote, usagePercent } from "../composables/chat/usageStatus";
 import { accountsOf, refreshConnections, subscriptionOnly } from "../composables/chat/useChat";
 import ModelPicker from "./ModelPicker.vue";
 import ProviderLogo from "./ProviderLogo.vue";
@@ -135,13 +135,56 @@ const routedRows = computed(() =>
           })),
 );
 
+/* WHEN THIS PROVIDER LAST REFUSED A TURN, read against everything that has happened since — the observed half
+ * of "can I run on this", beside the polled half the rings draw. Judged over BOTH lists and against the whole
+ * of each, exactly as the Agent tab judges it (AiAccountSection's `refusal`): whether a refusal still stands is
+ * a question about the provider, so every connection it holds gets a say, and the two surfaces disagreeing
+ * about the same event is the bug that made a healthy Kimi account look broken. */
+const providerRefusalNote = computed(() =>
+    refusalNote(providerRefusals.value[provider.value], [
+        ...accounts.value.map((entry) => {
+            const usage = liveUsage(entry.id, entry.usage);
+            return {
+                account: entry.id,
+                measuredAt: usage?.measuredAt,
+                percent: usagePercent(usage),
+                needsReauth: entry.needsReauth === true,
+            };
+        }),
+        ...routedRows.value.map((row) => ({
+            account: row.name,
+            measuredAt: row.headroom?.measuredAt,
+            percent: row.headroom?.percent,
+            needsReauth: false,
+        })),
+    ]),
+);
+
+/* THE SAME REFUSAL WHERE NO ROW CAN CARRY IT. Two cases, and between them they are most of the ones that matter:
+ * a provider with a SINGLE account draws no account list at all (there is nothing to choose between), and a
+ * ROUTED refusal names no account because CLIProxyAPI picked the auth file itself. Placed on the block instead,
+ * which is where the Agent tab puts an unattributable one too — the alternative was the state this whole change
+ * exists to end, where the only place a refusal appeared was the chat that provoked it. */
+const unplacedRefusal = computed(() => {
+    const note = providerRefusalNote.value;
+    const refused = providerRefusals.value[provider.value]?.account;
+    if (note?.current !== true) {
+        return undefined;
+    }
+    const onARow = accounts.value.length > 1 && accounts.value.some((entry) => entry.id === refused);
+    return onARow ? undefined : note.line;
+});
+
 const footerVisible = computed(
     () =>
         accounts.value.length > 1 ||
         routedRows.value.length > 0 ||
         provider.value === `claude` ||
         harnessChoosable.value ||
-        limitations.value.length > 0,
+        limitations.value.length > 0 ||
+        // A standing refusal earns the footer on its own. Every other clause here happens to be true in the
+        // cases that produce one today, which is a coincidence and not a reason to let one go unsaid.
+        unplacedRefusal.value !== undefined,
 );
 
 // Names shared by more than one connected account — the rows a name alone cannot tell apart.
@@ -168,9 +211,19 @@ const ambiguousLabels = computed(() => {
  * question being asked here (which of these has the most room?). The exact figure, its per-pool breakdown and
  * how old the reading is stay one hover away — the card UsageRing opens BESIDE the row, so reading one
  * account's pools never covers the rows it is being compared against — and a row with no ring at all means no
- * reading, never "empty". */
-const accountRows = computed(() =>
-    accounts.value.map((entry) => {
+ * reading, never "empty".
+ *
+ * WHETHER IT CAN RUN AT ALL — which the ring cannot answer and had been left to find out by trying. A poll and
+ * a refusal are different kinds of fact (see providerAccounts.providerRefusals): the ring is a reading of the
+ * PLAN, and an account whose organization has switched Claude Code off for it publishes full pools right up to
+ * the moment it turns every turn away. So this row drew a confident green arc over the one account in the list
+ * that could not serve anything, and the only way to learn that was to pick it and send. The Agent tab and the
+ * Usage tab have both drawn refusals for a while; this is the surface where the account is actually CHOSEN, and
+ * it was the one drawing none. */
+const accountRows = computed(() => {
+    const refusal = providerRefusals.value[provider.value];
+    const note = providerRefusalNote.value;
+    return accounts.value.map((entry) => {
         const identity = [entry.email, entry.organization].filter((part) => part !== undefined && part !== entry.label);
         return Object.assign({}, entry, {
             subtitle:
@@ -182,9 +235,14 @@ const accountRows = computed(() =>
             // liveUsage, not the streamed map alone: the daemon's reading rides the row itself and is the newer
             // of the two whenever no turn has ended in this tab since — which is most of the time.
             headroom: planHeadroom(liveUsage(entry.id, entry.usage)),
+            /* Only while it STANDS, and only on the account it names. A refusal something since has answered is
+             * history, and history does not belong on a row someone is about to click; a refusal the daemon
+             * could not attribute (a routed turn) belongs to no row here at all. Both of those are the Agent
+             * tab's to report in full — this footer carries the one fact that changes the click. */
+            refused: note?.current === true && refusal?.account === entry.id ? note.line : undefined,
         });
-    }),
-);
+    });
+});
 
 /* ---- how old these numbers are, and the way to make them new ------------------------------------------------
  *
@@ -278,6 +336,14 @@ const remeasure = async (): Promise<void> => {
                         >
                     </span>
                 </div>
+
+                <!-- The refusal that belongs to this session but to no row in it (see unplacedRefusal). Directly
+                     under the header, above every control it qualifies: it is the reason the numbers below may
+                     be beside the point, so a reader who stops here has still been told. -->
+                <p v-if="unplacedRefusal" class="flex items-start gap-1.5 text-2xs text-warning" v-tooltip.top="unplacedRefusal">
+                    <Icon name="exclamation-triangle" class="mt-px shrink-0 text-[0.6rem]" aria-hidden="true" />
+                    <span class="line-clamp-2">{{ unplacedRefusal }}</span>
+                </p>
                 <template v-if="accounts.length > 1">
                     <!-- Labelled as a group: the header above names the PROVIDER, which is what a sighted reader
                          needs beside a screen of another provider's models, and these rows still have to announce
@@ -304,10 +370,24 @@ const remeasure = async (): Promise<void> => {
                         >
                             <!-- Name over identity, both truncating: the row grows by a line only for accounts
                                  that need one, so the common single-account case is the same 8-high row it always
-                                 was. -->
+                                 was.
+
+                                 THE REFUSAL TAKES THE SECOND LINE when there is one, rather than adding a third.
+                                 The line it displaces exists to tell two similar accounts apart, and that is a
+                                 strictly smaller question than "this one turned your last turn away" — which the
+                                 name above still answers well enough to pick by. Three lines in a popover row
+                                 would also push the ring out of the reader's line, and the ring is the thing this
+                                 line exists to argue with. -->
                             <span class="flex min-w-0 flex-col items-start leading-tight">
                                 <span class="max-w-full truncate text-content">{{ a.label }}</span>
-                                <span v-if="a.subtitle" class="max-w-full truncate text-2xs text-subtle">{{ a.subtitle }}</span>
+                                <!-- Truncated on the row and whole on hover: the line leads with the condition
+                                     and its age, which is what decides the click, and tails into the provider's
+                                     own sentence, which is the part that says what to do about it. -->
+                                <span v-if="a.refused" class="flex max-w-full items-center gap-1 text-2xs text-warning" v-tooltip.top="a.refused">
+                                    <Icon name="exclamation-triangle" class="shrink-0 text-[0.6rem]" aria-hidden="true" />
+                                    <span class="truncate">{{ a.refused }}</span>
+                                </span>
+                                <span v-else-if="a.subtitle" class="max-w-full truncate text-2xs text-subtle">{{ a.subtitle }}</span>
                             </span>
                             <!-- How much of this account's tightest limit pool is spent, so the switch decision is
                                  informed before it costs a turn. Absent ⇒ no reading at all (never measured, and

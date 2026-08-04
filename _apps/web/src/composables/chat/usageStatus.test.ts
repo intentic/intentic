@@ -450,6 +450,27 @@ describe(`plan-limit aggregates`, () => {
         expect(current([])).toBe(true);
     });
 
+    /* THE REFUSAL NO READING CAN ANSWER, and the reason it needed a kind of its own. An organization that has
+     * turned Claude Code off for a seat leaves everything a reading can see untouched: the token authenticates,
+     * so `needsReauth` stays false, and the plan's own endpoint keeps publishing pools, so a fresh measurement
+     * lands within the minute with room to spare. Filed as `auth` that is precisely the shape of "authenticated
+     * fine since" — so the very next quota sweep dismissed a live refusal and the account picker went back to
+     * drawing a full green ring over the one account that could not run a single turn.
+     *
+     * The evidence that DOES settle it is a turn actually running, which only the daemon can witness (it drops
+     * the record itself — see the refusal store's `clear`). Nothing this side may pre-empt that. */
+    it(`keeps a revoked seat standing under a reading that would answer any other refusal`, () => {
+        const refusal = { at: 1_000, kind: `entitlement` as const, message: `organization has disabled`, account: `a` };
+        const current = (readings: RefusalReading[]): boolean | undefined => refusalNote(refusal, readings, 5_000)?.current;
+        // Read since, healthy credential, pools wide open — an `auth` refusal would be answered by this, and a
+        // `limit` one too. Neither says anything about whether the seat is allowed to run Claude Code.
+        expect(current([reading({ measuredAt: 2_000, percent: 3, needsReauth: false })])).toBe(true);
+        // Not even a reading taken long after it, which is the state a five-minute sweep guarantees.
+        expect(current([reading({ measuredAt: 4_999 })])).toBe(true);
+        // Its own sentence stays the headline for as long as it stands — it is the only part naming the fix.
+        expect(refusalNote(refusal, [reading()], 5_000)?.line).toBe(`Turned this account away just now — organization has disabled`);
+    });
+
     it(`settles a refusal whose account has been disconnected, instead of shouting about one nobody holds`, () => {
         const refusal = { at: 1_000, kind: `auth` as const, message: `401 OAuth access token has been revoked.`, account: `a` };
         const note = refusalNote(refusal, [reading({ account: `b`, measuredAt: 500 })], 5_000);

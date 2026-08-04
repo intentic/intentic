@@ -63,3 +63,23 @@ const SPENT_ALLOWANCE_PHRASES = ["usage limit", "quota", "billing cycle"];
 
 export const mentionsSpentAllowance = (text: string): boolean =>
     isUsageLimitText(text) || SPENT_ALLOWANCE_PHRASES.some((phrase) => text.toLowerCase().includes(phrase));
+
+/* A THIRD CONDITION, AND THE ONE THAT WAS INVISIBLE: the account is connected, its token authenticates, and the
+ * organization it belongs to has turned Claude Code off for it. Anthropic answers the turn with "Your
+ * organization has disabled Claude subscription access for Claude Code · Use an Anthropic API key instead, or
+ * ask your admin to enable access".
+ *
+ * It matched NEITHER predicate above — not a usage-limit prefix, and it does not start with "Failed to
+ * authenticate" — so the frame went out uncoded, nothing durable was written about it, and the only trace of a
+ * seat that had been taken away was a red line in one chat. Meanwhile the plan's usage endpoint kept answering
+ * (a seat governs Claude Code, not whether the plan publishes pools), so the account picker went on drawing a
+ * fresh, confident ring over an account that could not run a single turn. That gap is what this exists to close.
+ *
+ * A PHRASE, not a prefix, and the difference is admitted rather than papered over: the two predicates above
+ * match what the CLI itself writes when it has given up, which is why they can be exact. This sentence is the
+ * API's own prose reaching us through the CLI's error text, so there is no prefix to anchor on — the same
+ * position SPENT_ALLOWANCE_PHRASES is in, and the same answer. A wording we have not seen falls through to a
+ * plain uncoded failure, which is exactly where it stood before; this list grows when one shows up. */
+const NOT_ENTITLED_PHRASES = ["disabled claude subscription access", "claude code is not available"];
+
+export const isEntitlementRefusalText = (text: string): boolean => NOT_ENTITLED_PHRASES.some((phrase) => text.toLowerCase().includes(phrase));

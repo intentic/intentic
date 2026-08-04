@@ -479,10 +479,16 @@ export const planLimitGroups = (
 const REFUSAL_CONDITION: Record<ProviderRefusal["kind"], string> = {
     limit: `Hit its usage limit`,
     auth: `Refused its credential`,
+    // Not "refused its credential": the credential is fine, and telling someone to reconnect an account whose
+    // sign-in works is the one instruction guaranteed to waste their time. The plan turned the ACCOUNT away.
+    entitlement: `Turned this account away`,
 };
 const REFUSAL_ANSWERED: Record<ProviderRefusal["kind"], string> = {
     limit: `has had room since`,
     auth: `has authenticated fine since`,
+    // Only ever printed for a refusal the daemon settled by watching a turn run on this account (the store's
+    // own clear) — nothing this side can observe answers one.
+    entitlement: `has run a turn since`,
 };
 
 export interface RefusalNote {
@@ -512,6 +518,19 @@ export interface RefusalReading {
  * what lets the daemon's own recovery show: a refused Claude token is re-minted and the turn re-run within
  * seconds, and the reading that follows is the proof it worked. */
 const answersRefusal = (refusal: ProviderRefusal, reading: RefusalReading): boolean => {
+    /* NOTHING A READING CONTAINS ANSWERS AN ENTITLEMENT REFUSAL, so this one is settled at the source or not at
+     * all: the daemon drops it the moment a turn actually runs on the account (the refusal store's `clear`),
+     * and until that happens it stands.
+     *
+     * It has to be said here, before the two rules below, because both of them would wave it through. An
+     * organization that has switched Claude Code off for a seat changes nothing else about the account: the
+     * token still authenticates, so `needsReauth` stays false, and the plan's usage endpoint still publishes
+     * pools, so a fresh reading lands within the minute with room to spare. That is the exact combination the
+     * `auth` rule reads as "authenticated fine since" — which is how a live refusal was dismissed by the very
+     * next quota sweep, leaving a full green ring on the one account in the list that could not run. */
+    if (refusal.kind === `entitlement`) {
+        return false;
+    }
     if (reading.measuredAt === undefined || reading.measuredAt <= refusal.at) {
         return false;
     }

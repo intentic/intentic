@@ -51,7 +51,7 @@ import type { TurnLimit } from "../usage/translator-usage.js";
 import { sdkSystemPrompt } from "./system-prompt.js";
 import { TaskChecklist } from "./task-checklist.js";
 import { displayNameOf, editDiffContent, resultText, toolCategoryOf, toolLocations, toolTarget } from "./tool-calls.js";
-import { isAuthFailureText, isUsageLimitText } from "./failure-sentences.js";
+import { isAuthFailureText, isEntitlementRefusalText, isUsageLimitText } from "./failure-sentences.js";
 import {
     closeSubagents,
     noteDelegation,
@@ -409,6 +409,14 @@ const errorFrame = async (message: SDKAssistantMessage, allowance: TurnAllowance
     const explained = apiErrorMessage(message);
     if (isUsageLimitText(explained)) {
         return { kind: "error", code: "rate_limit", message: explained };
+    }
+    /* The seat, not the credential: this account authenticates perfectly and its organization has switched
+     * Claude Code off for it. ABOVE the auth branch because the two are only distinguishable by the sentence and
+     * the recoveries are opposite — a re-mint is what a refused token wants and the one thing that cannot help
+     * here, so coding this as that would spend a retry, fail identically, and leave the user reconnecting an
+     * account that was never disconnected. */
+    if (isEntitlementRefusalText(explained)) {
+        return { kind: "error", code: "claude-not-entitled", message: explained };
     }
     // A credential the CLI has stopped trying to use (failure-sentences.ts). Coded so the route can re-mint and
     // resume the turn instead of leaving a dead tab for a human to restart by hand — the same "not a workspace
