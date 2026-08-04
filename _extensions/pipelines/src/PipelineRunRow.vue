@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { PipelineRun } from "@intentic/sandbox-contract";
-import { Avatar, Button, formatTimestamp, Icon, StatusBadge, timeAgo } from "@intentic/extension-ui";
+import { Avatar, Button, Dialog, formatTimestamp, Icon, StatusBadge, timeAgo } from "@intentic/extension-ui";
 import { computed, ref } from "vue";
 import PipelineDagGraph from "./PipelineDagGraph.vue";
 import PipelineGraph from "./PipelineGraph.vue";
@@ -38,6 +38,7 @@ const { jobs, isLoading: jobsLoading } = useRunJobs(runRef);
 const stages = computed(() => pipelineStages(jobs.value));
 
 const expanded = ref(false);
+const fullscreen = ref(false);
 
 // The run's identity for the parent's in-flight action tracking. A row instance is keyed to one run, so this
 // never has to recompute.
@@ -213,12 +214,13 @@ const fixHint = computed<string | undefined>(() => {
             <div v-else-if="stages.length > 0" class="flex flex-col gap-2">
                 <div class="flex items-center justify-between">
                     <span class="text-2xs font-semibold uppercase tracking-wide text-subtle">Job graph</span>
+                    <!-- The pan/zoom instructions that used to live here are on the canvas now, as controls
+                         rather than as a sentence about controls. -->
                     <span class="text-2xs text-subtle">
-                        {{ stages.length }} {{ stages.length === 1 ? `stage` : `stages` }} · {{ jobCount }} {{ jobCount === 1 ? `job` : `jobs` }} ·
-                        drag to pan, scroll to zoom
+                        {{ stages.length }} {{ stages.length === 1 ? `stage` : `stages` }} · {{ jobCount }} {{ jobCount === 1 ? `job` : `jobs` }}
                     </span>
                 </div>
-                <PipelineDagGraph :stages="stages" />
+                <PipelineDagGraph :stages="stages" :recurring="recurring" @expand="fullscreen = true" />
             </div>
 
             <div v-else-if="run.failedJobs?.length">
@@ -237,5 +239,21 @@ const fixHint = computed<string | undefined>(() => {
 
             <p v-else class="py-2 text-xs text-muted">No job details available for this run.</p>
         </div>
+
+        <!-- THE SAME GRAPH, GIVEN THE WINDOW. A run wide enough to need panning inside a row is exactly the one
+             worth reading whole, and the band in a list of rows can never be that. Its own component instance,
+             so the trace pinned in the small one does not follow you in and the pan you leave behind is still
+             there when you close. -->
+        <Dialog
+            v-model:visible="fullscreen"
+            modal
+            :draggable="false"
+            :dismissable-mask="true"
+            :header="`${headline} — job graph`"
+            :style="{ width: `94vw`, height: `88vh` }"
+            :content-style="{ height: `100%`, display: `flex`, flexDirection: `column` }"
+        >
+            <PipelineDagGraph :stages="stages" :recurring="recurring" fill />
+        </Dialog>
     </div>
 </template>

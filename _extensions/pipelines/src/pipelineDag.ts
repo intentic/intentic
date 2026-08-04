@@ -53,10 +53,12 @@ const namedStages = (jobs: readonly PipelineJob[]): JobGroup[] => {
         }
         group.push(job);
     }
-    return [...groups.entries()]
-        .toSorted(([, a], [, b]) => startOf(a) - startOf(b))
-        // A run that mixes staged and unstaged jobs leaves the latter under the empty key — unnamed, not "".
-        .map(([name, group]): JobGroup => ({ name: name === `` ? undefined : name, jobs: group }));
+    return (
+        [...groups.entries()]
+            .toSorted(([, a], [, b]) => startOf(a) - startOf(b))
+            // A run that mixes staged and unstaged jobs leaves the latter under the empty key — unnamed, not "".
+            .map(([name, group]): JobGroup => ({ name: name === `` ? undefined : name, jobs: group }))
+    );
 };
 
 // GitHub: layer by observed concurrency. Walking start-ascending, a job joins the open layer while it starts
@@ -107,31 +109,67 @@ export const stageLabel = (stage: PipelineStage, index: number): string => {
 // within a run, and a duplicate id would silently drop a node from the graph.
 export const jobNodeId = (stageIndex: number, jobIndex: number): string => `${stageIndex}:${jobIndex}`;
 
+// A node id back to the stage it belongs to. The ids are positional (jobNodeId), so this is a parse rather
+// than a lookup, and it is what every question about a job's place in the run is answered from.
+export const stageOfNode = (nodeId: string): number => Number(nodeId.split(`:`)[0]);
+
+/* ONE JOB'S LINE THROUGH THE RUN — what lights up when a card is under the pointer.
+ *
+ * Everything an earlier stage held had to finish before this job could start, and everything a later stage
+ * holds waited on it: both are on its line. The jobs BESIDE it in its own stage are the ones it merely ran
+ * alongside — same moment, no relation — so they are what fades, and on a run that fans out they are most of
+ * the picture. That is the whole point of the gesture: on the four-way `test` stage every reader has, hovering
+ * one leg answers "which of these am I looking at" instantly.
+ *
+ * Exact rather than a graph walk, because the edges are a stage-to-stage join and not a declared dependency
+ * (see pipelineDag): a job's line IS every job in an earlier stage and every job in a later one. Nothing to
+ * traverse, and no closure to keep in sync with the edges it was derived from.
+ *
+ * The honest limit, worth knowing before reading much into a wide fan-in: neither vendor's jobs API returns
+ * `needs`, so "everything in the previous stage" is the strongest true statement available. A job that in the
+ * workflow file waited on exactly one of six lights all six here. */
+export const onJobLine = (nodeId: string, focusId: string): boolean => stageOfNode(nodeId) !== stageOfNode(focusId) || nodeId === focusId;
+
 export interface PipelineDag {
     readonly nodes: DagNode<PipelineJob>[];
     readonly edges: DagEdge[];
 }
 
-// One edge, styled by the two jobs it spans: tinted by what flowed along it so a failure's blast radius is
-// traceable by eye, and dashed into work that never ran rather than asserting "and then this happened".
-const stageEdge = (from: string, to: string, job: PipelineJob, next: PipelineJob): DagEdge => ({
-    from,
-    to,
-    ...(job.status === `failed` ? { accent: `text-danger` } : {}),
-    ...(job.status === `running` ? { accent: `text-info` } : {}),
-    ...(next.status === `skipped` || next.status === `canceled` ? { dashed: true } : {}),
-});
+/* One edge, styled by the two jobs it spans: tinted by what flowed along it so a failure's blast radius is
+ * traceable by eye, and dashed into work that never ran rather than asserting "and then this happened".
+ *
+ * While a job is focused the TRACE wins that tinting, in one colour for the whole line rather than two for its
+ * two directions — which is the choice the vendors' own graphs make, and it stays out of a view where every
+ * other colour on screen already means a status. Left-to-right says the direction; the accent only says
+ * "you are on it". Everything off the line fades instead. */
+const stageEdge = (from: string, to: string, job: PipelineJob, next: PipelineJob, focus: string | undefined): DagEdge => {
+    const dashed = next.status === `skipped` || next.status === `canceled` ? { dashed: true } : {};
+    if (focus !== undefined) {
+        return onJobLine(from, focus) && onJobLine(to, focus) ? { from, to, accent: `text-link`, ...dashed } : { from, to, dimmed: true, ...dashed };
+    }
+    return {
+        from,
+        to,
+        ...(job.status === `failed` ? { accent: `text-danger` } : {}),
+        ...(job.status === `running` ? { accent: `text-info` } : {}),
+        ...dashed,
+    };
+};
 
 // Stages → the DagGraph model: one node per job, and edges fanning every job of a stage into every job of the
 // next. That bipartite join is what both vendors' own graphs draw for stage-sequenced pipelines — a stage
-// starts when the previous one is done, regardless of which job you follow.
-export const pipelineDag = (stages: readonly PipelineStage[]): PipelineDag => {
+// starts when the previous one is done, regardless of which job you follow. `focus` is the job under the
+// pointer (or pinned by a click): its line is drawn, the rest fades. Only the styling moves with it, never an
+// id or an edge, so a hover cannot disturb the layout or throw away the reader's pan.
+export const pipelineDag = (stages: readonly PipelineStage[], focus?: string): PipelineDag => {
     const nodes = stages.flatMap((stage, stageIndex) =>
-        stage.jobs.map((job, jobIndex) => ({
-            id: jobNodeId(stageIndex, jobIndex),
-            data: job,
-            tooltip: [job.name, stage.name, job.status].filter((part) => part !== undefined && part !== ``).join(` · `),
-        })),
+        stage.jobs.map((job, jobIndex) => {
+            const id = jobNodeId(stageIndex, jobIndex);
+            // No `tooltip`: a card's own popup is drawn ABOVE it, over the neighbours whose lighting or fading
+            // is the entire answer to the hover that summoned it. The graph's caption says the same things —
+            // full name, stage, what the job's line reaches — in a fixed corner that occludes nothing.
+            return { id, data: job, ...(focus !== undefined && !onJobLine(id, focus) ? { dimmed: true } : {}) };
+        }),
     );
 
     const edges = stages.flatMap((stage, stageIndex) => {
@@ -141,10 +179,25 @@ export const pipelineDag = (stages: readonly PipelineStage[]): PipelineDag => {
         }
         return stage.jobs.flatMap((job, jobIndex) =>
             downstream.jobs.map((next, nextIndex) =>
-                stageEdge(jobNodeId(stageIndex, jobIndex), jobNodeId(stageIndex + 1, nextIndex), job, next),
+                stageEdge(jobNodeId(stageIndex, jobIndex), jobNodeId(stageIndex + 1, nextIndex), job, next, focus),
             ),
         );
     });
 
     return { nodes, edges };
+};
+
+/* WHAT THE TRACE SAYS IN WORDS, for the caption above the canvas. The counts are the reason to read the
+ * picture at all — "nine jobs waited on this one" is the sentence a person is looking for when they hover the
+ * job that failed — and they are the one part of the highlight a screenshot or a colour-blind reader still
+ * gets. `alongside` is deliberately absent: it is what the fading already says. */
+export interface LineageCounts {
+    readonly before: number;
+    readonly after: number;
+}
+
+export const lineageCounts = (stages: readonly PipelineStage[], focus: string): LineageCounts => {
+    const focused = stageOfNode(focus);
+    const total = (from: number, to: number): number => stages.slice(from, to).reduce((count, stage) => count + stage.jobs.length, 0);
+    return { before: total(0, focused), after: total(focused + 1, stages.length) };
 };
