@@ -1410,7 +1410,12 @@ export async function* runAgent(
     let stderr = "";
     const options: Options = {
         ...baseOptions(request, abortController, permissionMode, tmuxEnabled, subagents),
-        allowDangerouslySkipPermissions: permissionMode === "bypassPermissions",
+        /* Always on, whatever mode the turn STARTS in: the flag legalises bypassPermissions, it does not
+         * activate it — `permissionMode` above still decides the posture. Any turn can land in bypass
+         * mid-session (an approved plan setModes to POST_PLAN_MODE), and the CLI refuses that switch unless
+         * the session was LAUNCHED with the flag — gating it on the starting mode is how an approved plan
+         * silently fell to `default` and re-asked for every Bash and Write. */
+        allowDangerouslySkipPermissions: true,
         stderr: (data) => {
             stderr += data;
         },

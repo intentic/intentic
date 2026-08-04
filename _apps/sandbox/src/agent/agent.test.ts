@@ -302,8 +302,9 @@ test("the request's tools become remote http MCP servers alongside the ui server
     expect(captured.at(-1)?.mcpServers?.["obs"]).toEqual(obs);
     expect(captured.at(-1)?.mcpServers?.["ui"]).toBeDefined();
     expect(captured.at(-1)?.permissionMode).toBe("plan");
-    // bypassPermissions is the only mode that skips the SDK's permission machinery — plan must not.
-    expect(captured.at(-1)?.allowDangerouslySkipPermissions).toBe(false);
+    // The flag rides every launch: it legalises bypassPermissions without activating it, and a plan turn
+    // NEEDS it — approval setModes to POST_PLAN_MODE, which the CLI refuses on a session launched without it.
+    expect(captured.at(-1)?.allowDangerouslySkipPermissions).toBe(true);
 });
 
 test("plugin checkout dirs are passed to the SDK as local plugins", async () => {
