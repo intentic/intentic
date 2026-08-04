@@ -1,11 +1,13 @@
 // @vitest-environment jsdom
 //
-// jsdom because the subject is the card's PRESS — and a press is only what the user sees come back. Landing an
-// agent's work is a round trip to a daemon that has to commit, diff and patch-apply before the card can change
-// lane, and for that whole span the only honest report is on the control that was pressed. Two properties are
-// pinned here, and neither can be read off the code: the Land button states its own progress, and it states it
-// for ITS action only — the card is equally busy while an archive is out, and a Land button spinning through
-// one would be reporting work nobody asked for.
+// jsdom because the subject is what the card actually PUTS ON SCREEN — a press is only what the user sees come
+// back, and a stat is only what renders. Landing an agent's work is a round trip to a daemon that has to
+// commit, diff and patch-apply before the card can change lane, and for that whole span the only honest report
+// is on the control that was pressed. Three properties are pinned here, and none can be read off the code: the
+// Land button states its own progress; it states it for ITS action only — the card is equally busy while an
+// archive is out, and a Land button spinning through one would be reporting work nobody asked for; and the
+// stat row shows a fact the moment the agent has it, rather than waiting on numbers a turn only produces when
+// it ends.
 import type { AgentSummary } from "@intentic/sandbox-contract";
 import { afterEach, expect, it, vi } from "vitest";
 import { type App, createApp, defineComponent, h } from "vue";
@@ -50,6 +52,23 @@ const ready = (status: FleetAgent[`status`] = `ready`): FleetAgent => ({
     attention: NO_ATTENTION,
     open: false,
     unread: false,
+});
+
+/* AN AGENT ON ITS FIRST TURN, delegating. Nothing is counted yet — no cost, no tokens, no completed turns, no
+ * diff — because a turn produces all four when it ENDS, and this one is still running eight children. */
+const delegating = (): FleetAgent => ({
+    id: `a2`,
+    status: `running`,
+    provider: `claude`,
+    harness: `native`,
+    title: `analyse the gap`,
+    updatedAt: 1,
+    startedAt: 1,
+    attention: NO_ATTENTION,
+    open: false,
+    unread: false,
+    activity: { tool: `Agent` },
+    subagents: { running: 8, total: 8 },
 });
 
 let app: App | undefined;
@@ -104,4 +123,12 @@ it(`leaves the land button alone while some other action holds the card`, () => 
 // takes the button off the card. Nothing about it is a local edit — the card simply has no land left to offer.
 it(`drops the button once the work is in the workspace`, () => {
     expect(landButton(mount(ready(`landed`)))).toBeUndefined();
+});
+
+/* THE STAT ROW CARRIES WHAT THE AGENT HAS NOW. Its chips were gated on tokens/cost/diff/turns, and all four
+ * only exist once a turn has ended — so an agent whose FIRST turn delegated ran eight children with the board
+ * saying nothing, which is the exact case the count was added for. The row is the only surface that outlives
+ * the turn (the live line below it goes with the spinner), so this is not a duplicate of that line. */
+it(`counts the agents it started while its first turn is still running`, () => {
+    expect([...mount(delegating()).querySelectorAll(`button`)].some((button) => button.textContent?.trim() === `8 / 8`)).toBe(true);
 });

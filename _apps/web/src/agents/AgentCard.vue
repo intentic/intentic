@@ -123,6 +123,21 @@ const landable = computed(() => props.agent.archivedAt === undefined && props.ag
 const landing = computed(() => props.pending === `land`);
 const handingOver = computed(() => props.pending === `resolve`);
 const context = computed(() => contextPct(props.agent.contextTokens, props.agent.contextWindow));
+/* WHETHER THE STAT ROW HAS ANYTHING TO SAY — every chip in it, which is the whole point of naming it here.
+ * The row used to be gated on tokens/cost/diff/turns, and all four are facts a turn only produces when it
+ * ENDS: nothing is counted until the result message lands, `turns` moves at finish, the diff after a land. So
+ * the two chips that mean something WHILE the agent works — the agents it started and how full its context
+ * is — were hidden behind four numbers that do not exist yet, and a first turn that delegated showed its
+ * children nowhere. A row gated on a subset of what it renders is a row that hides the rest. */
+const stats = computed(
+    () =>
+        props.agent.inputTokens !== undefined ||
+        props.agent.costUsd !== undefined ||
+        props.agent.diff !== undefined ||
+        props.agent.turns !== undefined ||
+        props.agent.subagents !== undefined ||
+        context.value !== undefined,
+);
 const loopLine = computed(() => (props.agent.loop === undefined ? undefined : loopMeta(props.agent.loop)));
 /* The card says WHO RUNS IT exactly once. While the tile wears the provider mark (no category yet), this
  * line needs no floor; once the category glyph takes the tile, a card with no recorded model would say the
@@ -329,10 +344,7 @@ const grab = (event: PointerEvent): void => {
                 </template>
             </div>
 
-            <div
-                v-if="agent.inputTokens !== undefined || agent.costUsd !== undefined || agent.diff !== undefined || agent.turns !== undefined"
-                class="flex flex-wrap items-center gap-x-2.5 gap-y-1 text-2xs text-muted"
-            >
+            <div v-if="stats" class="flex flex-wrap items-center gap-x-2.5 gap-y-1 text-2xs text-muted">
                 <!-- No hover labels on this row. Five chips side by side each raising its own box turned a
                      glance across the card's numbers into a strip of pop-ups, and every label was the legend
                      for a glyph the reader had already decoded: the arrow is tokens, the pages are files, the
@@ -364,9 +376,11 @@ const grab = (event: PointerEvent): void => {
                 <span v-if="agent.turns !== undefined && agent.turns > 0"> <Icon name="comments" class="mr-0.5 text-2xs" />{{ agent.turns }} </span>
                 <!-- THE AGENTS THIS AGENT STARTED. A card is the answer to "what is this agent up to", and one
                      running five children used to look exactly like one running none. A nested button, like the
-                     cost above and for the same reason: the click opens the Subagents area rather than the agent.
-                     The chip counts live-of-total while any are working and settles to the total once none are —
-                     "3 / 5" says something a bare "5" cannot, and only while it is true. -->
+                     cost above and for the same reason: the click opens the Subagents area rather than the agent
+                     — narrowed to THIS agent's children, because the chip is a claim about one card and a list of
+                     everything the sandbox has ever spawned answers a question nobody asked here. The chip counts
+                     live-of-total while any are working and settles to the lifetime total once none are — "3 / 5"
+                     says something a bare "5" cannot, and only while it is true. -->
                 <button
                     v-if="agent.subagents !== undefined"
                     type="button"
@@ -375,7 +389,7 @@ const grab = (event: PointerEvent): void => {
                     v-tooltip.top="
                         agent.subagents.running > 0 ? `${agent.subagents.running} of ${agent.subagents.total} still working` : 'Agents it started'
                     "
-                    @click.stop="router.push({ name: `subagents` })"
+                    @click.stop="router.push({ name: `subagents`, query: { agent: agent.id } })"
                 >
                     <Icon name="users" class="mr-0.5 text-2xs" />{{
                         agent.subagents.running > 0 ? `${agent.subagents.running} / ${agent.subagents.total}` : agent.subagents.total

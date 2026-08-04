@@ -114,6 +114,13 @@ export const PersistedAgentSchema = z.object({
     // Completed turns + lifetime tool calls (optional: entries predating the counters read as absent).
     turns: z.number().optional(),
     toolUses: z.number().optional(),
+    /* How many agents this one has STARTED, for its whole life. Counted here rather than read off the subagent
+     * registry, which is where the card's live half still comes from: that registry sweeps a finished child
+     * five minutes after it reports (agent/subagents.ts) and holds nothing across a daemon restart, so a card
+     * asked half an hour later said the agent had never delegated at all — for work that may have been most of
+     * what the turn did. What is live is a fact about right now and belongs in memory; what an agent HAS DONE
+     * belongs on the entry, beside its turns and its tool calls. */
+    subagents: z.number().optional(),
     // Cumulative base→tip output across the composition, refreshed on each land — the card's diffstat.
     diffFiles: z.number().optional(),
     diffInsertions: z.number().optional(),

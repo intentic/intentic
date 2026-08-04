@@ -1,4 +1,6 @@
+import type { AgentEvent, AgentSummary } from "@intentic/sandbox-contract";
 import { describe, expect, it } from "vitest";
+import { noteSubagentTask, resetSubagents, type SubagentTaskMessage, type SubagentTurn } from "../agent/subagents.js";
 import { createAgentsRegistry, type AgentTurnIdentity } from "./agents-registry.js";
 import type { AgentsStore, PersistedAgent } from "./agents-store.js";
 import type { LandStanding, LandStandings } from "./standing.js";
@@ -235,6 +237,69 @@ describe("agents registry", () => {
         expect(await registry.setTitle("nope", "x", "user")).toBeUndefined();
         expect(await registry.setTitle("c1", " \u0000 ", "user")).toBeUndefined();
         unsubscribe();
+    });
+
+    /* THE CHILDREN A TURN STARTS, on the board. The counts are not held here — summaryOf reads them off the
+     * subagent registry — so what is pinned is the PUBLISH: nothing else announces a child, and a parent that
+     * delegates and then waits on its children emits no frames of its own for the fleet to ride on. Driven
+     * through the real registry rather than a stub, because the projection is the seam under test.
+     *
+     * The progress case is the other half. An update carrying only a child's tokens and tool name changes
+     * nothing a card renders, and those arrive several times a second per child. */
+    it("publishes the fleet when a child is born and when it settles, but not for its progress", async () => {
+        resetSubagents();
+        const registry = createAgentsRegistry(memoryStore(), standings());
+        await registry.init();
+        await registry.begin(turn(), 1_000);
+        const child: SubagentTurn = { conversationId: "c1", cwd: "/work", sessionId: "sess-1" };
+        const frame = (message: SubagentTaskMessage): AgentEvent => {
+            const born = noteSubagentTask(child, message);
+            if (born === undefined) {
+                throw new Error(`the subagent registry ignored a ${message.subtype}`);
+            }
+            return born;
+        };
+        const frames: (AgentSummary["subagents"] | undefined)[] = [];
+        // Subscribing paints the fleet as it stands, so the run starts with the card as it was: no children.
+        const unsubscribe = registry.subscribe((agents) => frames.push(agents[0]?.subagents));
+        expect(frames).toEqual([undefined]);
+
+        registry.observe(
+            "c1",
+            frame({ subtype: "task_started", task_id: "task-a", tool_use_id: "call-1", description: "Locate the handler", subagent_type: "Explore" }),
+        );
+        expect(frames).toEqual([undefined, { running: 1, total: 1 }]);
+
+        registry.observe("c1", frame({ subtype: "task_progress", task_id: "task-a", tool_use_id: "call-1", usage: { total_tokens: 9_000 } }));
+        expect(frames).toEqual([undefined, { running: 1, total: 1 }]);
+
+        registry.observe("c1", frame({ subtype: "task_updated", task_id: "task-a", patch: { status: "completed" } }));
+        // Still on the card, and no longer working — which is the whole of what the chip says.
+        expect(frames).toEqual([undefined, { running: 1, total: 1 }, { running: 0, total: 1 }]);
+        unsubscribe();
+
+        /* AND IT OUTLIVES THE TURN. resetSubagents() is the five-minute sweep and a daemon restart at once —
+         * everything the live registry knew, gone. What the agent DID is on its entry, so the card still says
+         * it delegated; only the live half falls to zero. */
+        const store = memoryStore();
+        const persisted = createAgentsRegistry(store, standings());
+        await persisted.init();
+        await persisted.begin(turn(), 1_000);
+        persisted.observe(
+            "c1",
+            frame({ subtype: "task_started", task_id: "task-b", tool_use_id: "call-2", description: "Audit the deps", subagent_type: "Explore" }),
+        );
+        await persisted.finish("c1", 2_000);
+        resetSubagents();
+        expect(persisted.get("c1")?.subagents).toEqual({ running: 0, total: 1 });
+        expect(store.saved().find((entry) => entry.id === "c1")?.subagents).toBe(1);
+        // A follow-up turn keeps counting from there rather than starting the tally again.
+        await persisted.begin(turn(), 3_000);
+        persisted.observe(
+            "c1",
+            frame({ subtype: "task_started", task_id: "task-c", tool_use_id: "call-3", description: "Draft the fix", subagent_type: "claude" }),
+        );
+        expect(persisted.get("c1")?.subagents).toEqual({ running: 1, total: 2 });
     });
 
     it("markSeen persists the read marker, broadcasts it, and leaves updatedAt alone", async () => {

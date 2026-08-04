@@ -500,6 +500,11 @@ export const AgentSummarySchema = z.object({
     /* The agents THIS agent started (SubagentSessionSchema), live and lifetime. Absent ⇒ it has never delegated,
      * which is most agents — so the card's chip appears on content rather than reading "0" down the board.
      *
+     * THE TWO HALVES COME FROM DIFFERENT PLACES, and have to: `running` is read off the live subagent registry,
+     * which sweeps a child five minutes after it reports and remembers nothing across a restart, while `total`
+     * is counted onto the agent's own entry as each child is born. Deriving both from the live registry is what
+     * used to take the count off a card while the agent that earned it was still on the board.
+     *
      * It earns a place on a card because a fleet card is the answer to "what is this agent up to", and an agent
      * running five children looked exactly like an agent running none: the work was real, the spend was real, and
      * the board said nothing. The tokens are NOT folded into the parent's cost — a child's spend is its own, and

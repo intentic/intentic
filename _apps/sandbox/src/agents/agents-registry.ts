@@ -63,6 +63,9 @@ interface RuntimeState {
     pendingInputTokens: number;
     pendingOutputTokens: number;
     pendingToolUses: number;
+    // The children this turn has started so far. Flushed like the rest, so a delegating turn costs one write at
+    // its end rather than one per child — and the card still counts them as they are born (see summaryOf).
+    pendingSubagents: number;
 }
 
 const freshRuntime = (): RuntimeState => ({
@@ -81,6 +84,7 @@ const freshRuntime = (): RuntimeState => ({
     pendingInputTokens: 0,
     pendingOutputTokens: 0,
     pendingToolUses: 0,
+    pendingSubagents: 0,
 });
 
 // The registry input of any conversation turn — the fields begin() records onto the entry. Placement is kept
@@ -255,7 +259,12 @@ export const createAgentsRegistry = (store: AgentsStore, standings: LandStanding
         const costUsd = entry.costUsd + (state?.pendingCostUsd ?? 0);
         const inputTokens = entry.inputTokens + (state?.pendingInputTokens ?? 0);
         const outputTokens = entry.outputTokens + (state?.pendingOutputTokens ?? 0);
-        const subagents = subagentCountsOf(entry.id);
+        /* THE CHILDREN, from the two places that each know half of it. What is RUNNING is a fact about right now
+         * and only the live registry has it; how many this agent has EVER started is a fact about the work, and
+         * only the entry keeps it — the live registry sweeps a finished child after five minutes and remembers
+         * nothing across a restart, which is what used to take the count off the card while the agent that
+         * earned it was still on the board. */
+        const subagents = { running: subagentCountsOf(entry.id).running, total: (entry.subagents ?? 0) + (state?.pendingSubagents ?? 0) };
         const loop = loopProjection.of(entry.id);
         const workflow = workflowProjection.of(entry.id);
         return {
@@ -295,9 +304,8 @@ export const createAgentsRegistry = (store: AgentsStore, standings: LandStanding
             ...(entry.turns !== undefined ? { turns: entry.turns } : {}),
             // Live count: the running turn's tool calls show on the card as they happen.
             ...((entry.toolUses ?? 0) + (state?.pendingToolUses ?? 0) > 0 ? { toolUses: (entry.toolUses ?? 0) + (state?.pendingToolUses ?? 0) } : {}),
-            // The agents this one started. Read straight off the subagent registry rather than accumulated here:
-            // that registry already retains and sweeps its own records, and a second copy of the count would be
-            // the same projection with its own staleness (see the derived-verdict note on `conflict` above).
+            // Absent for the agents that never delegated, which is most of them — so the chip appears on content
+            // rather than reading "0" down the board.
             ...(subagents.total > 0 ? { subagents } : {}),
             ...(entry.diffFiles !== undefined
                 ? { diff: { files: entry.diffFiles, insertions: entry.diffInsertions ?? 0, deletions: entry.diffDeletions ?? 0 } }
@@ -517,6 +525,7 @@ export const createAgentsRegistry = (store: AgentsStore, standings: LandStanding
                 // Lifetime counters + diffstat survive the per-turn entry rebuild.
                 ...(existing?.turns !== undefined ? { turns: existing.turns } : {}),
                 ...(existing?.toolUses !== undefined ? { toolUses: existing.toolUses } : {}),
+                ...(existing?.subagents !== undefined ? { subagents: existing.subagents } : {}),
                 ...(existing?.diffFiles !== undefined ? { diffFiles: existing.diffFiles } : {}),
                 ...(existing?.diffInsertions !== undefined ? { diffInsertions: existing.diffInsertions } : {}),
                 ...(existing?.diffDeletions !== undefined ? { diffDeletions: existing.diffDeletions } : {}),
@@ -671,6 +680,27 @@ export const createAgentsRegistry = (store: AgentsStore, standings: LandStanding
                     state.activity = { ...state.activity, ...(current !== undefined ? { todo: current } : {}) };
                     break;
                 }
+                /* THE AGENTS THIS ONE STARTED. A birth is the only place the lifetime count can be taken — the
+                 * live registry sweeps the child five minutes after it reports — so it is counted here and
+                 * flushed at finish, exactly like the turn's tool calls above.
+                 *
+                 * Both cases also PUBLISH, which nothing else did. A parent that spawns children and then waits
+                 * on them emits no frames of its own, so the card learned about its children only as a side
+                 * effect of whatever they happened to do next, and a count that had gone quiet stayed on the
+                 * board after the last child settled.
+                 *
+                 * An update publishes only when it carries a STATUS. What the card shows is running-of-total,
+                 * and the rest of an update is one child's tokens and tool names — the Subagents area's
+                 * business, arriving several times a second per child, and not worth re-publishing the whole
+                 * fleet for. */
+                case "subagent":
+                    state.pendingSubagents += 1;
+                    break;
+                case "subagent_update":
+                    if (event.status === undefined) {
+                        return;
+                    }
+                    break;
                 case "error":
                     /* A failure the daemon has already scheduled a resume for is not how this turn ENDED — the
                      * turn is coming back (turn-resume.ts), and the card has to read as work in progress rather
@@ -738,6 +768,7 @@ export const createAgentsRegistry = (store: AgentsStore, standings: LandStanding
                     outputTokens: entry.outputTokens + (state?.pendingOutputTokens ?? 0),
                     turns: (entry.turns ?? 0) + (ranTurn ? 1 : 0),
                     toolUses: (entry.toolUses ?? 0) + (state?.pendingToolUses ?? 0),
+                    subagents: (entry.subagents ?? 0) + (state?.pendingSubagents ?? 0),
                     updatedAt: now,
                     ...(sessionId !== undefined ? { sessionId } : {}),
                 });
@@ -746,6 +777,7 @@ export const createAgentsRegistry = (store: AgentsStore, standings: LandStanding
                     state.pendingInputTokens = 0;
                     state.pendingOutputTokens = 0;
                     state.pendingToolUses = 0;
+                    state.pendingSubagents = 0;
                     state.pendingSessionId = undefined;
                     state.errored = false;
                 }

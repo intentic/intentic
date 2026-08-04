@@ -38,23 +38,34 @@ const router = useRouter();
 const { sessions } = useSubagentsQuery(LIST_POLL_MS);
 const { agentById } = useAgents();
 
+/* ONE AGENT'S CHILDREN, when the card's chip is what opened this. The chip is a fact about ONE agent — "this
+ * one started five" — and following it into a list of everything every agent in the sandbox has spawned makes
+ * the reader do the filtering the click already expressed. Carried as a query rather than a route of its own so
+ * the id in the path keeps meaning the selected child, and so "show all" is a link that drops one parameter. */
+const focus = computed<string | undefined>(() => (typeof route.query[`agent`] === `string` ? route.query[`agent`] : undefined));
+const focusTitle = computed(() => (focus.value === undefined ? undefined : (agentById(focus.value)?.title ?? `this agent`)));
+const visible = computed(() =>
+    focus.value === undefined ? sessions.value : sessions.value.filter((session) => session.conversationId === focus.value),
+);
+
 // The subagent in the URL, so a reload (or the card's link) opens the same one. Falls back to the first listed —
 // which the daemon sorts live-first, so landing here with no id shows what is happening now.
 const selected = computed<string | undefined>(() => {
     const named = typeof route.params[`id`] === `string` ? route.params[`id`] : undefined;
-    if (named !== undefined && sessions.value.some((session) => session.id === named)) {
+    if (named !== undefined && visible.value.some((session) => session.id === named)) {
         return named;
     }
-    return sessions.value[0]?.id;
+    return visible.value[0]?.id;
 });
-const current = computed(() => sessions.value.find((session) => session.id === selected.value));
+const current = computed(() => visible.value.find((session) => session.id === selected.value));
 
-const select = (id: string): void => void router.push(`/subagents/${id}`);
+// Selecting keeps whatever narrowed the list — a click inside a filtered rail must not silently widen it.
+const select = (id: string): void => void router.push({ name: `subagents`, params: { id }, query: route.query });
 
 // Running first, then what has finished — the two questions this list is opened with, in that order.
 const lanes = computed<{ readonly label: string; readonly rows: SubagentSession[] }[]>(() => [
-    { label: `Running`, rows: sessions.value.filter(subagentLive) },
-    { label: `Finished`, rows: sessions.value.filter((session) => !subagentLive(session)) },
+    { label: `Running`, rows: visible.value.filter(subagentLive) },
+    { label: `Finished`, rows: visible.value.filter((session) => !subagentLive(session)) },
 ]);
 
 // The row's heading: what it runs as, then what it was asked to do. Same ladder the chat card uses, so a row and
@@ -113,21 +124,44 @@ watch(messages, () => {
 
 <template>
     <div class="flex h-full min-h-0">
-        <!-- Nothing has delegated yet. Not an error — plenty of turns never start an agent — so this describes
-             the surface instead of reporting a fault, the way the Browsers area's empty state does. -->
-        <div v-if="sessions.length === 0" class="flex flex-1 flex-col items-center justify-center gap-2 px-4 text-center">
+        <!-- Nothing to show. Not an error — plenty of turns never start an agent — so this describes the surface
+             instead of reporting a fault, the way the Browsers area's empty state does. FILTERED IS ITS OWN
+             SENTENCE: a card counts the children an agent has started for its whole life, while this list holds
+             them for minutes after they report, so following a chip whose work is long finished lands exactly
+             here — and "no agents started" would be a flat contradiction of the number that was just clicked. -->
+        <div v-if="visible.length === 0" class="flex flex-1 flex-col items-center justify-center gap-2 px-4 text-center">
             <Icon name="users" class="text-2xl text-muted" />
-            <div class="text-sm text-content">No agents started</div>
+            <div class="text-sm text-content">{{ focus === undefined ? "No agents started" : "Nothing running for this agent" }}</div>
             <div class="max-w-sm text-xs text-muted">
-                When an agent delegates — with its Agent tool, or by driving Codex or Grok from its shell — the agent it started appears here, with
-                its own transcript.
+                <template v-if="focus === undefined">
+                    When an agent delegates — with its Agent tool, or by driving Codex or Grok from its shell — the agent it started appears here,
+                    with its own transcript.
+                </template>
+                <template v-else>
+                    The agents {{ focusTitle }} started have finished and aged out of this list. Its own transcript is the record of what they
+                    reported back.
+                </template>
             </div>
+            <RouterLink v-if="focus !== undefined" :to="{ name: `subagents` }" class="text-xs text-link hover:underline">
+                Show every agent
+            </RouterLink>
         </div>
 
         <template v-else>
             <!-- WHICH AGENT. A rail rather than a pill row: a row of pills can hold a name, and what a row here
                  has to hold is a name, a parent, a status and a spend. -->
             <aside class="scrollbar-thin flex w-72 shrink-0 flex-col gap-0.5 overflow-y-auto border-r border-line p-1.5">
+                <!-- WHAT NARROWED THIS LIST, and the way out of it. A filtered rail that does not say it is
+                     filtered is how a reader concludes the sandbox has only ever run two agents. -->
+                <RouterLink
+                    v-if="focus !== undefined"
+                    :to="{ name: `subagents` }"
+                    class="mb-1 flex items-center gap-1.5 rounded-md border border-line px-2 py-1 text-2xs text-muted transition-colors hover:border-line-strong hover:text-content"
+                >
+                    <Icon name="comments" class="shrink-0 text-2xs" />
+                    <span class="min-w-0 flex-1 truncate">{{ focusTitle }}</span>
+                    <span class="shrink-0 text-link">Show all</span>
+                </RouterLink>
                 <template v-for="lane in lanes" :key="lane.label">
                     <template v-if="lane.rows.length > 0">
                         <div class="mt-2 px-1 text-2xs font-semibold uppercase tracking-wide text-subtle first:mt-0">
