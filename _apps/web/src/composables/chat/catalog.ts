@@ -38,23 +38,6 @@ export const modeOptions = (capabilities: AgentCapabilities): { value: Permissio
         return { value, label: meta.label, icon: meta.icon, description: meta.description };
     });
 
-// The postures a plan approval can land in, and how the plan card names them. 'plan' is absent by definition:
-// approving is the exit FROM planning.
-const APPROVALS: readonly { mode: PermissionMode; label: string }[] = [
-    { mode: `acceptEdits`, label: `Yes, and auto-accept edits` },
-    { mode: `bypassPermissions`, label: `Yes, and run everything` },
-    { mode: `default`, label: `Yes, and approve each edit` },
-];
-
-// The plan card's approve buttons, primary first: the conversation's own posture leads, so approving a plan
-// RESTORES it rather than demoting an agent that had full permissions to per-command prompts (planning is a
-// move the agent makes on its own — it must not cost the user their pick). A conversation whose pick IS plan
-// has nothing to restore, so auto-accepting edits leads there. The sort is stable, so the rest keep their order.
-export const approvalsFor = (pick: PermissionMode): readonly { mode: PermissionMode; label: string }[] => {
-    const restored: PermissionMode = pick === `plan` ? `acceptEdits` : pick;
-    return APPROVALS.toSorted((left, right) => Number(right.mode === restored) - Number(left.mode === restored));
-};
-
 // The status icon classes for a conversation tab (live spinner / needs-input / error / idle dot).
 export const statusIcon = (status: ConversationStatus): { name: IconName; spin?: boolean; class: string } => {
     if (status === `streaming`) {

@@ -976,7 +976,7 @@ describe(`the plan preview's auto-open`, () => {
         const conversation = useChat().active.value;
         attachStream([
             { kind: `plan`, requestId: `p1`, text: `# Refactor the hotspots\n\nPhase 1 — conversation.ts` },
-            { kind: `resolved`, requestId: `p1`, reply: { kind: `plan`, requestId: `p1`, approve: true, mode: `acceptEdits` } },
+            { kind: `resolved`, requestId: `p1`, reply: { kind: `plan`, requestId: `p1`, approve: true } },
         ]);
 
         await conversation.reattach();

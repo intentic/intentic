@@ -36,7 +36,6 @@ import {
 import { rememberedModelFor, startingMode, turnDefaults } from "./turnDefaults";
 import { providerReady } from "./access";
 import { type ChatAttachment, type ChatMessage, type PlanRequest } from "./transcript";
-import { approvalsFor } from "./catalog";
 import { readAccountPreference, writeAccountPreference } from "./accountPreference";
 import { readTabSnapshot, type StoredTab, writeTabSnapshot } from "./tabSnapshot";
 import { dropTranscript } from "./transcriptCache";
@@ -411,8 +410,6 @@ export const conversationView = (conversation: ComputedRef<Conversation>) => ({
             conversation.value.liveMode.value = undefined;
         },
     }),
-    // The plan card's approve buttons, the posture the approved plan will RESTORE first.
-    planApprovals: computed(() => approvalsFor(conversation.value.mode.value)),
     // Turn settings (read+write) — the composer binds these, so switching tabs shows that chat's
     // provider/model/effort/thinking. All of it is switchable mid-chat: a provider/account switch takes effect
     // at the next send (see Conversation.send's segment cut).
@@ -513,16 +510,10 @@ export const conversationView = (conversation: ComputedRef<Conversation>) => ({
         track(`message_sent`, { agent: branch.provider.value, edited: true });
         await branch.send(text, branch.turnSettings(), carried);
     },
-    // `nextMode` is the posture the approved plan executes in (Claude Code's auto-accept vs approve-each-edit
-    // choice); a rejection passes `plan` so the agent stays put and revises, with the composer's text and staged
-    // files as the feedback.
-    decidePlan: (
-        message: ChatMessage,
-        approve: boolean,
-        nextMode: PermissionMode,
-        feedback?: string,
-        staged?: readonly ChatAttachment[],
-    ): Promise<void> => conversation.value.decidePlan(message, approve, nextMode, feedback, staged),
+    // Approving runs the plan (under bypassPermissions — the daemon's call, not the card's); a rejection leaves
+    // the agent in plan mode to revise, with the composer's text and staged files as the feedback.
+    decidePlan: (message: ChatMessage, approve: boolean, feedback?: string, staged?: readonly ChatAttachment[]): Promise<void> =>
+        conversation.value.decidePlan(message, approve, feedback, staged),
     answerQuestion: (message: ChatMessage, answers: Record<string, string[]>): Promise<void> => conversation.value.answerQuestion(message, answers),
     cancelQuestion: (message: ChatMessage): Promise<void> => conversation.value.cancelQuestion(message),
     decidePermission: (message: ChatMessage, decision: "once" | "always" | "deny", feedback?: string): Promise<void> =>
@@ -563,7 +554,6 @@ const {
     activeModel,
     contextUsage,
     mode,
-    planApprovals,
     provider,
     selectProvider,
     harness,
@@ -1900,7 +1890,6 @@ export function useChat() {
         contextUsage,
         capabilities,
         mode,
-        planApprovals,
         provider,
         selectProvider,
         harness,

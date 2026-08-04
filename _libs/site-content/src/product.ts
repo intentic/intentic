@@ -129,15 +129,15 @@ export const productPages: ProductPage[] = [
         navLabel: "Chat & plan mode",
         menuBlurb: "It proposes, you approve, then it works",
         group: "run",
-        heading: "It plans out loud. You decide how far it may go.",
-        sub: "Every agent starts in plan mode: it reads, writes a plan, and waits. Approving the plan also picks how far it may go on its own.",
+        heading: "It plans out loud. You approve once, then it works.",
+        sub: "Every agent starts in plan mode: it reads, writes a plan, and waits. Approve it and the agent runs the whole plan — it works in a container of its own, so it never stops to ask the same yes twice.",
         hero: {
             name: "chat-plan",
-            alt: "The docked chat: the agent's thinking block, a Read tool call, a four-step plan for adding Stripe checkout, and four approval buttons: run everything, auto-accept edits, approve each edit, or keep planning.",
+            alt: "The docked chat: the agent's thinking block, a Read tool call, a four-step plan for adding Stripe checkout, and two buttons: approve, or keep planning.",
             frame: "bare",
         },
         facts: [
-            { value: "4 answers", label: "run everything · auto-accept edits · approve each edit · keep planning" },
+            { value: "2 answers", label: "approve the plan · or reply to keep planning" },
             { value: "Per turn", label: "switch model, harness and reasoning effort mid-conversation" },
             { value: "Your account", label: "it runs on your Claude, ChatGPT or xAI subscription" },
         ],
@@ -152,7 +152,7 @@ export const productPages: ProductPage[] = [
             },
             {
                 title: "Permission is a dial, not a switch",
-                body: "The same conversation can be strict on a migration and loose on a changelog. The mode rides with the approval, so there is nothing to remember.",
+                body: "The same conversation can be strict on a migration and loose on a changelog — the composer's mode pill sets how much the agent may do unattended, per turn. An approved plan is the exception: you have read what it intends, so it runs the lot.",
             },
             {
                 title: "Bring your own model",
@@ -177,7 +177,7 @@ export const productPages: ProductPage[] = [
         meta: {
             title: "Chat & plan mode · intentic",
             description:
-                "Every agent starts in plan mode: it reads, proposes, and waits for your approval, with the permission mode chosen per approval, on your own model subscription.",
+                "Every agent starts in plan mode: it reads, proposes, and waits for your approval — then runs the plan it showed you, on your own model subscription.",
             datePublished: PUBLISHED,
         },
     },

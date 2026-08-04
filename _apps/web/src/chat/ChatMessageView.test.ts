@@ -74,7 +74,6 @@ vi.mock("../composables/chat/useChat", async () => {
         usePaneView: () => ({
             conversation,
             decidePlan: vi.fn(),
-            planApprovals: ref([]),
             answerQuestion: vi.fn(),
             cancelQuestion: vi.fn(),
             decidePermission: vi.fn(),

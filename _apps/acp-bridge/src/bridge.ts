@@ -74,8 +74,8 @@ const reviewPlan = async (
     const approved = response.outcome.outcome === "selected" && response.outcome.optionId === "approve";
     // Rejection feedback is canned — permission prompts carry no free text (documented loss; the daemon
     // loops another planning turn on the same stream).
-    // No mode: this single-option card can't ask which posture to execute in, so the daemon restores the one
-    // the turn started with (auto-accept edits when it started in plan mode).
+    // The reply names no posture because there is none to name: an approved plan executes with permissions
+    // bypassed, which is exactly what this single-option card can promise.
     await daemon.postReply({
         kind: "plan",
         requestId: event.requestId,

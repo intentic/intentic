@@ -800,7 +800,7 @@ describe(`Conversation`, () => {
         expect(conversation.awaitingDecision.value).toBe(true);
 
         sandboxRequestMock.mockResolvedValue({ ok: true } as Response);
-        await conversation.decidePlan(planMessage!, true, `acceptEdits`);
+        await conversation.decidePlan(planMessage!, true);
         expect(sandboxRequestMock).toHaveBeenLastCalledWith(`/agent/reply`, expect.objectContaining({ method: `POST` }));
         expect(conversation.messages.value[1]!.plan!.status).toBe(`approved`);
         expect(conversation.messages.value.at(-1)).toMatchObject({ role: `notice`, text: `Plan approved.` });
@@ -815,7 +815,7 @@ describe(`Conversation`, () => {
         const planMessage = conversation.messages.value.find((message) => message.plan !== undefined);
 
         sandboxRequestMock.mockResolvedValue({ ok: true } as Response);
-        await conversation.decidePlan(planMessage!, false, `plan`, `this bit is wrong`, [
+        await conversation.decidePlan(planMessage!, false, `this bit is wrong`, [
             { name: `shot.png`, path: `.intentic/attachments/a1/shot.png` },
         ]);
 
@@ -840,7 +840,7 @@ describe(`Conversation`, () => {
         const planMessage = conversation.messages.value.find((message) => message.plan !== undefined);
 
         sandboxRequestMock.mockResolvedValue({ ok: true } as Response);
-        await conversation.decidePlan(planMessage!, false, `plan`, ``, [{ name: `shot.png`, path: `.intentic/attachments/a1/shot.png` }]);
+        await conversation.decidePlan(planMessage!, false, ``, [{ name: `shot.png`, path: `.intentic/attachments/a1/shot.png` }]);
 
         const [, body] = sandboxRequestMock.mock.calls.at(-1) as [string, RequestInit];
         expect(JSON.parse(String(body.body))).toMatchObject({ feedback: `@.intentic/attachments/a1/shot.png` });

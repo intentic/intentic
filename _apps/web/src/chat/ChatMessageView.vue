@@ -39,7 +39,6 @@ const props = defineProps<{
 const {
     conversation,
     decidePlan,
-    planApprovals,
     answerQuestion,
     cancelQuestion,
     decidePermission,
@@ -908,19 +907,13 @@ const onEditKeydown = (event: KeyboardEvent): void => {
                 </div>
                 <div class="md-prose chat-markdown chat-markdown-compact px-3.5 py-3" v-html="plan.settled"></div>
                 <div v-if="message.plan.status === 'pending'" class="flex flex-wrap items-center gap-2 border-t border-line px-3.5 py-2.5">
-                    <!-- The first approval restores the posture the conversation was in before it planned; the
-                         rest are the other two postures, so any of them is one click away. -->
-                    <button
-                        v-for="(approval, index) in planApprovals"
-                        :key="approval.mode"
-                        type="button"
-                        :class="index === 0 ? 'plan-approve' : 'plan-reject'"
-                        @click="decidePlan(message, true, approval.mode)"
-                    >
+                    <!-- One approval, not a posture menu: saying yes to a plan is saying yes to the work in it,
+                         and the container is the isolation boundary. -->
+                    <button type="button" class="plan-approve" @click="decidePlan(message, true)">
                         <Icon name="check" class="text-xs" />
-                        {{ approval.label }}
+                        Approve
                     </button>
-                    <button type="button" class="plan-reject" @click="decidePlan(message, false, 'plan')">
+                    <button type="button" class="plan-reject" @click="decidePlan(message, false)">
                         <Icon name="pencil" class="text-xs" />
                         No, keep planning
                     </button>

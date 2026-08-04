@@ -397,17 +397,20 @@ test("a decided card is recorded in the frame log, so a replay freezes it instea
     expect(frames.findIndex((frame) => frame.kind === "resolved")).toBeGreaterThan(frames.findIndex((frame) => frame.kind === "permission"));
 });
 
-test("an approved plan returns to the posture the turn started in when the reply names none", async () => {
+test("an approved plan executes with permissions bypassed, whatever the turn planned from", async () => {
     const approve = (event: DecidableCard): AgentReply => ({ kind: "plan", requestId: event.requestId, approve: true });
 
-    // The agent put ITSELF into plan mode (EnterPlanMode) on a turn the user started in Auto — approving must
-    // hand those permissions back, not demote the rest of the session to per-command prompts.
-    const auto = await decide({ ...request, permissionMode: "bypassPermissions" }, { tool: "ExitPlanMode", input: { plan: "# Plan" } }, approve);
-    expect(auto.result).toMatchObject({ updatedPermissions: [{ type: "setMode", mode: "bypassPermissions", destination: "session" }] });
-
-    // A turn that started in plan mode has nothing to restore; auto-accepting edits is the floor.
-    const planned = await decide({ ...request, permissionMode: "plan" }, { tool: "ExitPlanMode", input: { plan: "# Plan" } }, approve);
-    expect(planned.result).toMatchObject({ updatedPermissions: [{ type: "setMode", mode: "acceptEdits", destination: "session" }] });
+    /* Approving is the user reading what the agent intends to do and saying yes to all of it, so the posture the
+     * turn PLANNED from is not a ceiling on the plan it approved — and the container is the isolation boundary
+     * either way. The shape this replaces restored the starting posture and floored a plan-mode turn on
+     * 'acceptEdits', so approving a plan in the mode the user picked TO SEE ONE bought them a permission card
+     * for `git log`. */
+    for (const permissionMode of ["plan", "default", "acceptEdits", "bypassPermissions"] as const) {
+        const { result, frames } = await decide({ ...request, permissionMode }, { tool: "ExitPlanMode", input: { plan: "# Plan" } }, approve);
+        expect(result).toMatchObject({ updatedPermissions: [{ type: "setMode", mode: "bypassPermissions", destination: "session" }] });
+        // ...and the composer's pill hears about it, so it never claims the turn is still planning.
+        expect(frames).toContainEqual({ kind: "mode", mode: "bypassPermissions" });
+    }
 });
 
 /* THE REBASE A CARD SETTLES INTO. A plan approval is the longest park of the three cards and the one followed

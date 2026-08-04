@@ -765,16 +765,15 @@ export type TranslatorAccounts = z.infer<typeof TranslatorAccountsSchema>;
 // clarifying questions, a per-tool permission prompt — parks on the SAME registry keyed by `requestId`, so
 // one route resolves all three; the `kind` says which card answered and carries its payload.
 export const AgentReplySchema = z.discriminatedUnion("kind", [
-    // ExitPlanMode approval. `mode` is the posture to execute the approved plan in — auto-accept edits
-    // (acceptEdits), approve each one (default), or run everything (bypassPermissions); it rides back to the SDK
-    // as a session setMode. Absent, the turn returns to the posture it STARTED in, so an agent that put itself
-    // into plan mode does not cost the user the permissions they granted. Rejection feedback loops back into the
-    // model as the denial reason.
+    // ExitPlanMode approval. Approving carries NO posture: an approved plan executes under bypassPermissions,
+    // set on the SDK session by the gate that raised the card. The container is the isolation boundary, so a
+    // plan the user has read and approved is exactly the point where per-tool prompts stop earning their
+    // interruption — landing anywhere else means approving a plan to run `git log` and then being asked whether
+    // `git log` may run. Rejection feedback loops back into the model as the denial reason.
     z.object({
         kind: z.literal("plan"),
         requestId: z.string().min(1),
         approve: z.boolean(),
-        mode: PermissionModeSchema.optional(),
         feedback: z.string().optional(),
     }),
     // AskUserQuestion picks: question text → chosen option label(s) (+ any free-text "Other"). `cancelled`

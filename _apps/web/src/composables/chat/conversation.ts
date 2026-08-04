@@ -1033,22 +1033,16 @@ export class Conversation {
         return true;
     }
 
-    /* Answers a pending plan card. The turn is parked on ExitPlanMode, so on approval it executes in `mode`
-     * (the "auto-accept edits" vs "approve each edit" choice) and streams a closing turn; on rejection the
-     * feedback is fed back and it re-plans.
+    /* Answers a pending plan card. The turn is parked on ExitPlanMode, so on approval it executes the plan and
+     * streams a closing turn; on rejection the feedback is fed back and it re-plans. The reply names no
+     * posture — an approved plan runs under bypassPermissions, decided by the gate that raised the card.
      *
      * Feedback may carry the composer's staged files. The reply has ONE text field on the wire, so they go up
      * the way a user would type them — as `@`-prefixed workspace paths, which is exactly what mentionPaths
      * produces for an ordinary send and what the harness resolves at the other end. The alternative was the
      * rule this replaces ("plan feedback is text-only"), which refused the single most natural way to say what
      * a plan got wrong: a screenshot. */
-    async decidePlan(
-        message: ChatMessage,
-        approve: boolean,
-        mode: PermissionMode,
-        feedback?: string,
-        attachments: readonly ChatAttachment[] = [],
-    ): Promise<void> {
+    async decidePlan(message: ChatMessage, approve: boolean, feedback?: string, attachments: readonly ChatAttachment[] = []): Promise<void> {
         const plan = message.plan;
         if (plan?.status !== `pending`) {
             return;
@@ -1057,7 +1051,7 @@ export class Conversation {
         const written = [trimmed, ...attachments.map((file) => `@${file.path}`)].filter(Boolean).join(`\n`);
         const landed = await this.decide(
             message.id,
-            { kind: `plan`, requestId: plan.requestId, approve, mode, feedback: written.length > 0 ? written : undefined },
+            { kind: `plan`, requestId: plan.requestId, approve, feedback: written.length > 0 ? written : undefined },
             `Could not record your plan decision — the turn may have ended.`,
             { plan: { ...plan, status: approve ? `approved` : `rejected` } },
         );

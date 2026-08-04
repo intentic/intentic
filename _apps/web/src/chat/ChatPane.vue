@@ -724,7 +724,7 @@ const submit = (): void => {
         // agent stays in plan mode and revises. Staged files go with it (as workspace paths in the feedback —
         // see decidePlan), then clear like a normal send: WITHOUT revoking the preview URLs, which the user
         // bubble the rejection leaves behind now owns.
-        void decidePlan(pendingPlan, false, `plan`, text, snapshotAttachments());
+        void decidePlan(pendingPlan, false, text, snapshotAttachments());
         attachments.value = [];
     } else {
         const target = editorTarget.value;

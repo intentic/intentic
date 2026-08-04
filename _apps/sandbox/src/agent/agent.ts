@@ -1238,12 +1238,15 @@ const askServer = (
 // the agent deferring TO the user. Prompting for permission to prompt would be a dead end.
 const UNGATED = new Set(["mcp__ui__ask", "AskUserQuestion", "EnterPlanMode"]);
 
-// The mode a plan approval lands in when the reply names none (the ACP bridge's single-option approval): the
-// posture the turn STARTED in, so approving a plan RESTORES the permissions the agent had before it decided to
-// plan — planning is an escalation the agent makes on its own, and it must not cost the user the posture they
-// picked. A turn that started in plan mode has nothing to restore, so auto-accepting edits is the floor.
-const postPlanMode = (starting: PermissionMode | undefined): PermissionMode =>
-    starting === undefined || starting === "plan" ? "acceptEdits" : starting;
+/* The posture EVERY approved plan executes in, whatever the turn started in and whichever client approved it.
+ * Approval is the one moment the user has read what the agent intends to do and said yes to all of it, so
+ * re-asking per tool afterwards interrupts without adding a decision — the shape this replaces landed a turn
+ * that started in plan mode on `acceptEdits`, which auto-accepts edits but still raised a card for every Bash
+ * command, so approving a plan bought the user a permission prompt for `git log`.
+ *
+ * The container is the isolation boundary, exactly as it is for toolWideAllow below. A user who wants per-tool
+ * approvals still has them: they are a posture the composer picks for the turn, not a tax on planning. */
+const POST_PLAN_MODE: PermissionMode = "bypassPermissions";
 
 // What "always" persists on top of the SDK's own suggestions: allow this TOOL, for the rest of the session.
 // The suggestions are narrowly scoped — for Bash they carry the command prefix (`pnpm install:*`), so the next
@@ -1286,10 +1289,8 @@ const permissionGate =
             if (!reply.approve) {
                 return { behavior: "deny", message: reply.feedback?.trim() || "Keep refining the plan — do not exit plan mode yet." };
             }
-            // Approval carries the posture to execute in (auto-accept edits vs approve each one vs run
-            // everything). Setting it on the session is what actually moves the SDK out of plan mode.
-            const mode = reply.mode ?? postPlanMode(request.permissionMode);
-            push({ kind: "mode", mode });
+            // Setting the mode on the session is what actually moves the SDK out of plan mode.
+            push({ kind: "mode", mode: POST_PLAN_MODE });
             /* Then the ground, before the agent starts building on a plan it wrote against an older tree —
              * the longest park of the three cards, and the one followed by the most writing.
              *
@@ -1306,7 +1307,7 @@ const permissionGate =
             return {
                 behavior: "allow",
                 updatedInput: input,
-                updatedPermissions: [{ type: "setMode", mode, destination: "session" }],
+                updatedPermissions: [{ type: "setMode", mode: POST_PLAN_MODE, destination: "session" }],
                 decisionClassification: "user_temporary",
             };
         }
