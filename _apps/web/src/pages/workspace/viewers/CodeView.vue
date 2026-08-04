@@ -116,9 +116,15 @@ onMounted(async () => {
         domReadOnly: !editable,
         automaticLayout: true,
         minimap: { enabled: true },
+        // Wrap, so a long line is READ rather than scrolled to. Continuation rows carry no gutter number,
+        // which is what marks them as a wrap. `bounded` rather than `on`: wrap at the viewport when the pane
+        // is narrow, but on a wide one stop just past this repo's own 150-column format width — so formatted
+        // source keeps its intended shape and only genuine overflow (prose, logs, generated files) folds.
+        wordWrap: `bounded`,
+        wordWrapColumn: 160,
         // The minimap slider is the vertical scroll affordance — a scrollbar beside it is redundant
-        // (wheel/keyboard/minimap-drag still scroll). Horizontal stays for long lines. Size 0 too:
-        // `hidden` alone still reserves the 14px strip in the layout.
+        // (wheel/keyboard/minimap-drag still scroll). Size 0 too: `hidden` alone still reserves the 14px
+        // strip in the layout. Horizontal only ever appears for what wrapping can't fold (a long token).
         scrollbar: { vertical: `hidden`, verticalScrollbarSize: 0 },
         overviewRulerLanes: 0,
         hideCursorInOverviewRuler: true,
