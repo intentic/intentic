@@ -415,28 +415,94 @@ const vpnFacts = (id: string): string | undefined => {
 };
 
 // --- FortiClient import (vpn card only) ---
-// A user with an exported FortiClient config pastes it and picks a connection instead of re-keying its host,
-// port and protocol per tunnel. The daemon parses it; nothing is stored until the ordinary add below runs.
-const forticlientXml = ref(``);
+// A user with an exported FortiClient config drops the file in and picks a connection instead of re-keying its
+// host, port and protocol per tunnel. The file is read HERE and only its text is posted: the daemon cannot
+// reach the user's Downloads folder, and asking someone to open an XML export and copy it out by hand was the
+// step that made this feature not worth using. Nothing is stored until the ordinary add below runs.
 const forticlientConnections = ref<ForticlientConnection[]>([]);
+// The file the list came from — named back at the user, so a picker full of unfamiliar connections is
+// attributable to what they dropped. Empty until one has been read successfully.
+const forticlientFile = ref(``);
 const importing = ref(false);
-const imported = ref(false);
+const chooseForticlient = ref<HTMLInputElement>();
+// A FortiClient backup is tens of KB of XML. Far past that, the drop was a slip — reading the file into this
+// tab and posting it is the wrong answer to one.
+const FORTICLIENT_MAX_BYTES = 4_000_000;
 
-const importForticlientConfig = async (): Promise<void> => {
-    if (forticlientXml.value.trim().length === 0 || importing.value) {
+const readForticlientFile = async (file: File | undefined): Promise<void> => {
+    if (file === undefined || importing.value) {
+        return;
+    }
+    error.value = null;
+    forticlientFile.value = ``;
+    forticlientConnections.value = [];
+    if (file.size > FORTICLIENT_MAX_BYTES) {
+        error.value = `${file.name} is far too big to be a FortiClient configuration — that looks like the wrong file.`;
         return;
     }
     importing.value = true;
-    error.value = null;
     try {
-        forticlientConnections.value = await importForticlient(forticlientXml.value);
-        imported.value = true;
+        const xml = await file.text();
+        // An empty file is "nothing to import", which the line under the zone already says — posting it would
+        // trade that sentence for the route's validation error, which answers a question nobody asked.
+        forticlientConnections.value = xml.trim().length === 0 ? [] : await importForticlient(xml);
+        forticlientFile.value = file.name;
     } catch (err) {
         error.value = errorMessage(err, `Could not read that FortiClient configuration.`);
     } finally {
         importing.value = false;
     }
 };
+
+// Only an OS-file drag offers anything here; a link or an image dragged around inside the app must not light
+// the zone up as though it could be imported.
+const dragOffersFile = (event: DragEvent): boolean => event.dataTransfer?.types.includes(`Files`) ?? false;
+// Depth, not a boolean: crossing onto the zone's own children fires dragleave on the zone, and a boolean would
+// flicker the highlight off while the pointer is still inside it.
+let forticlientDragDepth = 0;
+const forticlientDragging = ref(false);
+const onForticlientDragEnter = (event: DragEvent): void => {
+    if (!dragOffersFile(event)) {
+        return;
+    }
+    forticlientDragDepth += 1;
+    forticlientDragging.value = true;
+};
+const onForticlientDragLeave = (): void => {
+    forticlientDragDepth -= 1;
+    if (forticlientDragDepth <= 0) {
+        forticlientDragDepth = 0;
+        forticlientDragging.value = false;
+    }
+};
+const onForticlientDrop = (event: DragEvent): void => {
+    forticlientDragDepth = 0;
+    forticlientDragging.value = false;
+    void readForticlientFile(event.dataTransfer?.files[0]);
+};
+const onForticlientPick = (event: Event): void => {
+    const input = event.target as HTMLInputElement;
+    void readForticlientFile(input.files?.[0]);
+    // Clear the field (the File is already captured): re-picking the SAME file after re-exporting it fires no
+    // `change` otherwise, and the zone would look dead.
+    input.value = ``;
+};
+
+// A file that misses the zone would otherwise navigate this tab to the file itself, taking a half-filled form
+// with it. Swallow file drags page-wide — the zone's own handler runs first and still gets its file.
+const swallowFileDrag = (event: DragEvent): void => {
+    if (dragOffersFile(event)) {
+        event.preventDefault();
+    }
+};
+onMounted(() => {
+    window.addEventListener(`dragover`, swallowFileDrag);
+    window.addEventListener(`drop`, swallowFileDrag);
+});
+onBeforeUnmount(() => {
+    window.removeEventListener(`dragover`, swallowFileDrag);
+    window.removeEventListener(`drop`, swallowFileDrag);
+});
 
 // Fill the form from a parsed connection. Credentials are never among them (FortiClient encrypts them), so the
 // user still types the secret — `needs` is what tells them which fields are waiting.
@@ -494,6 +560,8 @@ const clearForm = (): void => {
     marketUrl.value = ``;
     marketToken.value = ``;
     market.value = null;
+    forticlientFile.value = ``;
+    forticlientConnections.value = [];
     touched.clear();
     shaking.value = false;
 };
@@ -847,50 +915,75 @@ const submitLabel = computed(() =>
                     </div>
                 </RowGroup>
 
-                <!-- FortiClient import (vpn only): paste an exported config and pick a connection to pre-fill
+                <!-- FortiClient import (vpn only): drop an exported config and pick a connection to pre-fill
                      the form. FortiClient encrypts stored credentials with a machine-bound key, so the secret
                      is never importable — each connection says which fields are still waiting. -->
                 <RowGroup v-if="selected.kind === 'vpn'" label="Import from FortiClient (optional)">
                     <div class="flex flex-col gap-2 px-4 py-3">
                         <p class="text-2xs text-muted">
-                            Paste an exported FortiClient configuration (File ▸ Settings ▸ Backup) to fill the form from one of its connections.
+                            Drop an exported FortiClient configuration (File ▸ Settings ▸ Backup) here to fill the form from one of its connections.
                             Passwords in that file are encrypted by FortiClient and can't be read — you'll still type those.
                         </p>
-                        <textarea
-                            v-model="forticlientXml"
-                            rows="4"
-                            spellcheck="false"
-                            placeholder='<?xml version="1.0"?><forticlient_configuration> …'
-                            :class="cmp.input('font-mono resize-y')"
+                        <!-- The zone IS the button, so the drag and the click share one target and there is no
+                             small "browse" link beside it to aim at. -->
+                        <button
+                            type="button"
+                            :class="
+                                cmp.emptyState(
+                                    `flex cursor-pointer flex-col items-center gap-1 py-6 transition-colors`,
+                                    forticlientDragging ? `border-primary-500 bg-primary-500/5` : `hover:border-line-strong`,
+                                )
+                            "
+                            :disabled="importing"
+                            @click="chooseForticlient?.click()"
+                            @dragenter.prevent="onForticlientDragEnter"
+                            @dragover.prevent
+                            @dragleave="onForticlientDragLeave"
+                            @drop.prevent="onForticlientDrop"
+                        >
+                            <Icon v-if="importing" name="spinner" spin class="text-lg text-info" />
+                            <Icon v-else name="upload" :class="['text-lg', forticlientDragging ? 'text-primary-500' : 'text-muted']" />
+                            <span class="text-xs text-content">
+                                <template v-if="importing">Reading…</template>
+                                <template v-else-if="forticlientDragging">Drop it to read its connections</template>
+                                <template v-else>Drop the configuration file here</template>
+                            </span>
+                            <!-- Hidden, never unmounted: dropping the line would shorten the zone under the
+                                 pointer mid-drag, and a cursor near its bottom edge would then leave and
+                                 re-enter it in a loop. -->
+                            <span :class="['text-2xs text-subtle', importing || forticlientDragging ? 'invisible' : '']">or click to choose one</span>
+                        </button>
+                        <input
+                            ref="chooseForticlient"
+                            type="file"
+                            accept=".conf,.xml,text/xml,application/xml"
+                            class="hidden"
+                            @change="onForticlientPick"
                         />
-                        <div class="flex justify-end">
-                            <Button
-                                label="Read connections"
-                                size="small"
-                                :disabled="forticlientXml.trim().length === 0 || importing"
-                                :loading="importing"
-                                @click="importForticlientConfig"
-                            />
-                        </div>
-                        <p v-if="imported && forticlientConnections.length === 0" class="text-2xs text-warning">
-                            No VPN connections found in that file.
+                        <p v-if="forticlientFile !== '' && forticlientConnections.length === 0" class="text-2xs text-warning">
+                            No VPN connections found in {{ forticlientFile }}.
                         </p>
-                        <div v-if="forticlientConnections.length > 0" class="scrollbar-thin flex max-h-48 flex-col gap-0.5 overflow-auto">
-                            <button
-                                v-for="connection in forticlientConnections"
-                                :key="`${connection.provider}-${connection.id}`"
-                                type="button"
-                                class="flex flex-col gap-0.5 rounded-md bg-canvas px-2.5 py-1.5 text-left text-xs transition-colors hover:bg-overlay"
-                                @click="pickForticlient(connection)"
-                            >
-                                <span class="flex items-baseline gap-2">
-                                    <span class="font-medium text-content">{{ connection.label }}</span>
-                                    <span class="text-2xs text-subtle">{{ connection.provider === "fortinet" ? "SSL-VPN" : "IPsec" }}</span>
-                                    <span class="min-w-0 truncate font-mono text-2xs text-muted">{{ connection.server }}:{{ connection.port }}</span>
-                                </span>
-                                <span class="text-2xs text-subtle">You'll need to enter: {{ connection.needs.join(", ") }}</span>
-                            </button>
-                        </div>
+                        <template v-if="forticlientConnections.length > 0">
+                            <p class="text-2xs text-subtle">From {{ forticlientFile }} — pick the connection to fill the form with.</p>
+                            <div class="scrollbar-thin flex max-h-48 flex-col gap-0.5 overflow-auto">
+                                <button
+                                    v-for="connection in forticlientConnections"
+                                    :key="`${connection.provider}-${connection.id}`"
+                                    type="button"
+                                    class="flex flex-col gap-0.5 rounded-md bg-canvas px-2.5 py-1.5 text-left text-xs transition-colors hover:bg-overlay"
+                                    @click="pickForticlient(connection)"
+                                >
+                                    <span class="flex items-baseline gap-2">
+                                        <span class="font-medium text-content">{{ connection.label }}</span>
+                                        <span class="text-2xs text-subtle">{{ connection.provider === "fortinet" ? "SSL-VPN" : "IPsec" }}</span>
+                                        <span class="min-w-0 truncate font-mono text-2xs text-muted">
+                                            {{ connection.server }}:{{ connection.port }}
+                                        </span>
+                                    </span>
+                                    <span class="text-2xs text-subtle">You'll need to enter: {{ connection.needs.join(", ") }}</span>
+                                </button>
+                            </div>
+                        </template>
                     </div>
                 </RowGroup>
 
