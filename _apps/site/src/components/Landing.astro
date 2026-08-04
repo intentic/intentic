@@ -2,7 +2,7 @@
 import { CREATOR_NAME, creatorBio, creatorRole } from "@intentic-dev/site-content/about";
 import { faqGroups } from "@intentic-dev/site-content/faq";
 import type { LandingContent } from "@intentic-dev/site-content/landing";
-import { APP_URL, DEMO_PATH, gitlabIssuesUrl, gitlabUrl } from "@intentic-dev/site-content/site";
+import { APP_URL, DEMO_PATH, githubIssuesUrl, githubUrl } from "@intentic-dev/site-content/site";
 import { buildSoftwareAppSchema } from "@intentic-dev/site-content/structured-data";
 import { Image } from "astro:assets";
 import { COLUMN_SIZES, shotAsset, SHOT_WIDTHS } from "../lib/shots";
@@ -102,7 +102,7 @@ const cubeGlyph = icon('<path d="M12 2.5 20.5 7v10L12 21.5 3.5 17V7z"/><path d="
 
                     <div class="mt-8 flex flex-wrap gap-3">
                         <a class="btn btn-primary" href={APP_URL}>Get started free</a>
-                        <a class="btn btn-secondary" href={gitlabUrl} target="_blank" rel="noopener">See the source</a>
+                        <a class="btn btn-secondary" href={githubUrl} target="_blank" rel="noopener">See the source</a>
                     </div>
 
                     <ul class="mt-8 flex flex-wrap gap-x-4 gap-y-2 text-xs text-subtle">
@@ -610,7 +610,7 @@ const cubeGlyph = icon('<path d="M12 2.5 20.5 7v10L12 21.5 3.5 17V7z"/><path d="
 
                 <div class="mt-10 flex max-w-3xl flex-wrap items-center justify-between gap-4 rounded-2xl border border-line bg-card/40 px-5 py-4">
                     <p class="text-sm text-muted">Still unanswered? Issues are public and get a real reply.</p>
-                    <a href={gitlabIssuesUrl} target="_blank" rel="noopener" class="text-sm font-medium text-link hover:underline">Open an issue →</a>
+                    <a href={githubIssuesUrl} target="_blank" rel="noopener" class="text-sm font-medium text-link hover:underline">Open an issue →</a>
                 </div>
             </div>
         </section>
@@ -624,7 +624,7 @@ const cubeGlyph = icon('<path d="M12 2.5 20.5 7v10L12 21.5 3.5 17V7z"/><path d="
                 <p class="mx-auto mt-3 max-w-md text-base leading-relaxed text-muted">{content.finalCta.sub}</p>
                 <div class="mt-8 flex justify-center gap-3">
                     <a class="btn btn-primary" href={APP_URL}>Get started free</a>
-                    <a class="btn btn-secondary" href={gitlabUrl} target="_blank" rel="noopener">See the engine</a>
+                    <a class="btn btn-secondary" href={githubUrl} target="_blank" rel="noopener">See the engine</a>
                 </div>
             </div>
         </section>

@@ -44,7 +44,7 @@ product**; it ships here for convenience. See [docs/deploy-engine.md](docs/deplo
 - **npm** — 23 packages under [`@intentic/*`](https://www.npmjs.com/org/intentic), published from this
   repository by GitHub Actions with [npm provenance](https://docs.npmjs.com/generating-provenance-statements),
   so every tarball links back to the commit and workflow run that built it.
-- **Container images** — `registry.gitlab.com/radarsu/intentic/sandbox` and `.../dind-host`, at each release
+- **Container images** — `ghcr.io/intentic/sandbox` and `.../dind-host`, at each release
   version plus a moving `stable` tag.
 - **Desktop installers** — attached to each [GitHub Release](https://github.com/intentic/intentic/releases).
 

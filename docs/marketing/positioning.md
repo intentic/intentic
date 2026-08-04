@@ -2,8 +2,8 @@
 
 Who intentic is for, the pains it removes, and why it wins. **The product being sold is
 intentic-app** — the hosted workspace at app.intentic.dev, where you run co-piloted **specialized
-agents** on hardware you own. The sandbox and CLI those agents run on are MIT open source on GitLab
-(`gitlab.com/radarsu/intentic`) — the trust layer you can read and run yourself. Every claim traces
+agents** on hardware you own. The sandbox and CLI those agents run on are MIT open source on GitHub
+(`github.com/intentic/intentic`) — the trust layer you can read and run yourself. Every claim traces
 to a file in the repo; if a claim has no path, it doesn't go on the site.
 
 Companion docs: [messaging.md](messaging.md) (what we say), [landing-blueprint.md](landing-blueprint.md) (where we say it).
@@ -47,7 +47,7 @@ local-grade ownership.
 **Business model**: bring your own model subscription + your own hardware + a flat platform fee —
 never a meter on model usage. Free (1 sandbox) / Pro (unlimited sandboxes + team sharing), Stripe
 billing (`_apps/api/src/billing/entitlements.ts`). The sandbox and CLI are MIT open source
-(`LICENSE`, GitLab).
+(`LICENSE`, GitHub).
 
 ## Who it's for
 
@@ -82,7 +82,7 @@ payment event, a GitHub push, a new email — with a guard command deciding whet
 | P4 | Agent autonomy is scary on real systems — you can't just fire-and-forget | Co-piloting: every agent works in its own branch and lands nothing until you accept it — a changes-review panel (diff → discard or commit), per-edit permission modes (plan / accept edits / ask before edits, the default on the shared tree), owner-approved environment changes, a transcript per run | `_apps/web/src/composables/chat/catalog.ts`, `_apps/web/src/pages/workspace/ReviewPanel.vue`, `_apps/web/src/pages/sandbox/EnvironmentCard.vue` |
 | P5 | Wiring the agent to your tools (repos, DBs, chat, monitoring) is N one-off integrations | A capabilities catalog: GitHub/GitLab/Redmine, SQL databases, Sentry/SigNoz, Discord/IMAP, Stripe, SSH/VPN, custom MCP servers, Claude plugins — credentials stay inside the sandbox | `_libs/capability-catalog/src/index.ts` (CAPABILITY_CATALOG), `_apps/web/src/pages/Capabilities.vue` |
 | P6 | The agent only works when you're at the keyboard | Automations: wake it on a schedule, a webhook, or live events (GitHub/GitLab push, Sentry alert, Stripe payments, new email, Discord), each run a fresh session with a transcript, optionally gated by a guard command | `_libs/api-contract/src/schemas.ts` (Automation schemas) |
-| P7 | AI SaaS lock-in — models, data, exit | BYO agent (Claude Code, Codex, or Grok), your repos are plain git on your machine, GDPR export + account deletion, MIT sandbox + CLI on GitLab if you leave the app entirely | `_apps/web/src/composables/chat/conversation.ts`, `_apps/api/src/router.ts` (me.export), `LICENSE` |
+| P7 | AI SaaS lock-in — models, data, exit | BYO agent (Claude Code, Codex, or Grok), your repos are plain git on your machine, GDPR export + account deletion, MIT sandbox + CLI on GitHub if you leave the app entirely | `_apps/web/src/composables/chat/conversation.ts`, `_apps/api/src/router.ts` (me.export), `LICENSE` |
 
 ## Selling points, ranked
 
@@ -154,12 +154,12 @@ Rules that keep the shelf credible — it is the easiest page on the site to tur
 - **No prices, either side.** Ours are a recorded no (landing-blueprint.md); theirs rot within a quarter.
 - **Invite the correction.** Both the hub and every page link to the issue tracker for inaccuracies. A
   comparison page that asks to be contradicted is the only kind worth trusting — and it is the same posture
-  as MIT-on-GitLab.
+  as MIT-on-GitHub.
 
 ## Honest maturity (say it, don't hide it)
 
 - The hosted app is new (launching at app.intentic.dev); the free tier is a real sandbox, not a demo.
-- The sandbox and CLI that run on your machine are MIT and developed in the open on GitLab — read
+- The sandbox and CLI that run on your machine are MIT and developed in the open on GitHub — read
   exactly what executes on your hardware before you trust it. Verify test counts at build time —
   never hardcode stale numbers.
 - No testimonials yet — do not fabricate; lead with verifiable architecture and open source
@@ -177,7 +177,7 @@ Four legs, and the fourth is what makes the first three land:
 1. **A named, checkable person** — Artur Kurowski, with GitHub, LinkedIn and radarsu.com as real
    outbound `rel="me"` links and as `sameAs` on the Person schema. An anonymous "our team" reads worse
    than a solo founder, not better.
-2. **Code you can read before you run it** — MIT on GitLab, the parts that touch your machine.
+2. **Code you can read before you run it** — MIT on GitHub, the parts that touch your machine.
 3. **The dogfooding proof, which nobody else has** — most of this repository's commits are authored by
    `agent@intentic.dev`, in public. It is a trust signal *and* a proof of the core claim: the fleet on
    the page shipped the page. Counted from git at build time (`gitStats()`), never authored.

@@ -1,6 +1,6 @@
 ---
 import { compareFamilies, compareHref, compareIndex, comparePages, familyPages } from "@intentic-dev/site-content/compare";
-import { APP_URL, DEMO_PATH, gitlabIssuesUrl } from "@intentic-dev/site-content/site";
+import { APP_URL, DEMO_PATH, githubIssuesUrl } from "@intentic-dev/site-content/site";
 import BaseLayout from "../../layouts/BaseLayout.astro";
 import Footer from "../../components/Footer.astro";
 import Nav from "../../components/Nav.astro";
@@ -129,7 +129,7 @@ const pageByName = new Map(comparePages.map((page) => [page.name, page]));
                     <h2 class="text-base font-medium text-content">{compareIndex.correction.title}</h2>
                     <p class="mt-2 text-sm leading-relaxed text-muted">{compareIndex.correction.body}</p>
                 </div>
-                <a class="btn btn-secondary shrink-0" href={gitlabIssuesUrl} target="_blank" rel="noopener">
+                <a class="btn btn-secondary shrink-0" href={githubIssuesUrl} target="_blank" rel="noopener">
                     {compareIndex.correction.cta}
                 </a>
             </div>

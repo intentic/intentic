@@ -39,7 +39,7 @@ services:
         networks: [intentic-platform]
 
     api:
-        image: registry.gitlab.com/radarsu/intentic/api:${INTENTIC_IMAGE_TAG:-latest}
+        image: ghcr.io/intentic/api:${INTENTIC_IMAGE_TAG:-latest}
         pull_policy: always
         restart: unless-stopped
         logging: *logging
@@ -91,7 +91,7 @@ services:
         networks: [intentic-platform]
 
     web:
-        image: registry.gitlab.com/radarsu/intentic/web:${INTENTIC_IMAGE_TAG:-latest}
+        image: ghcr.io/intentic/web:${INTENTIC_IMAGE_TAG:-latest}
         pull_policy: always
         restart: unless-stopped
         logging: *logging

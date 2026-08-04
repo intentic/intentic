@@ -17,13 +17,13 @@ cookie is `SameSite=Lax`, so `app.<zone>` → `api.<zone>` is cross-origin (CORS
 
 ## Prerequisites
 
-1. **The images exist.** `registry.gitlab.com/radarsu/intentic/{web,api}` are published by
-   `images:platform` on push to main, or by hand:
+1. **The images exist.** `ghcr.io/intentic/{web,api}` are published by
+   `images-platform` on push to main, or by hand:
    ```sh
-   docker login registry.gitlab.com
+   docker login ghcr.io
    TAGS=latest pnpm publish:platform-images        # or TAGS="latest sha-abc1234"
    ```
-   These packages are **private** — on the deploy host, `docker login registry.gitlab.com` before `up`
+   These packages are **private** — on the deploy host, `docker login ghcr.io` before `up`
    (the sandbox image is public; the platform is not).
 
 2. **A Google OAuth client.** The web SPA's public client id is hardcoded in
@@ -79,11 +79,11 @@ volume self-initializes and an image bump self-migrates — no manual db step.
 ## Continuous deploy via Komodo (optional)
 
 Run this compose as a **Komodo stack** named `intentic-platform` and every main push redeploys itself:
-`images:platform` ends with [deploy-platform.sh](../../scripts/deploy-platform.sh), which calls Komodo's
+`images-platform` ends with [deploy-platform.sh](../../scripts/deploy-platform.sh), which calls Komodo's
 `DeployStack` — the stack's services run `:latest` with `pull_policy: always`, so the redeploy pulls what CI
-just pushed. The stack name is set in the job's rules (`PLATFORM_DEPLOY_STACK`) and the Komodo core origin
-defaults to `https://komodo.radarsu.com`, leaving one thing to configure — the api key, as masked GitLab
-CI/CD variables:
+just pushed. The stack name is set in the job's `env` (`PLATFORM_DEPLOY_STACK`) and the Komodo core origin
+defaults to `https://komodo.radarsu.com`, leaving one thing to configure — the api key, as GitHub Actions
+secrets:
 
 | Variable | Value |
 | --- | --- |

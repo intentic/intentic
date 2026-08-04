@@ -168,7 +168,7 @@ export const comparePages: ComparePage[] = [
                 them: "cloud workspaces, nothing to host",
                 theirs: true,
             },
-            { label: "Source you can read", intentic: "sandbox and CLI are MIT on GitLab", them: "closed source" },
+            { label: "Source you can read", intentic: "sandbox and CLI are MIT on GitHub", them: "closed source" },
         ],
         pickThem:
             "You work on one Mac and want a native app rather than a browser, your agents only ever need the toolchain already on that Mac, and you would rather rent a cloud workspace than provide a machine.",
@@ -238,7 +238,7 @@ export const comparePages: ComparePage[] = [
                 them: "a full IDE, forked from VS Code",
                 theirs: true,
             },
-            { label: "Source you can read", intentic: "sandbox and CLI are MIT on GitLab", them: "closed source" },
+            { label: "Source you can read", intentic: "sandbox and CLI are MIT on GitHub", them: "closed source" },
         ],
         together: {
             title: "Run both, and mean it",
@@ -323,7 +323,7 @@ export const comparePages: ComparePage[] = [
         ],
         together: {
             title: "You are already running it",
-            body: "Claude Code is the default harness inside every intentic sandbox, and the sandbox and CLI are MIT on GitLab. You can read exactly what wraps your agent before you trust it.",
+            body: "Claude Code is the default harness inside every intentic sandbox, and the sandbox and CLI are MIT on GitHub. You can read exactly what wraps your agent before you trust it.",
         },
         pickThem:
             "You live in one terminal on one machine and need none of the fleet, the browser or the automations. The bare CLI is excellent and this does not pretend otherwise.",
@@ -351,7 +351,7 @@ export const comparePages: ComparePage[] = [
         ],
         overlap: {
             title: "Where we agree",
-            body: "Both are open source and mean it: OpenCode's agent, and the intentic sandbox and CLI, MIT on GitLab. Both run on your own accounts, and neither sits between you and your model provider.",
+            body: "Both are open source and mean it: OpenCode's agent, and the intentic sandbox and CLI, MIT on GitHub. Both run on your own accounts, and neither sits between you and your model provider.",
         },
         differences: [
             {
@@ -770,7 +770,7 @@ export const comparePages: ComparePage[] = [
             },
             {
                 title: "An exit that is not a migration",
-                body: "Your repos are ordinary git on your own disk. The sandbox and CLI are MIT on GitLab and drive from the command line without ever signing in. Leaving is deleting an account, not extracting a workspace.",
+                body: "Your repos are ordinary git on your own disk. The sandbox and CLI are MIT on GitHub and drive from the command line without ever signing in. Leaving is deleting an account, not extracting a workspace.",
             },
         ],
         table: [

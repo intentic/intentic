@@ -32,7 +32,7 @@
 #   GOOGLE_CLIENT_ID     the platform's PUBLIC Google web client id the daemon verifies sign-in against (default: hardcoded below)
 #
 # Optional env:
-#   SANDBOX_IMAGE   sandbox image to run (default: the latest release registry.gitlab.com/radarsu/intentic/sandbox:stable)
+#   SANDBOX_IMAGE   sandbox image to run (default: the latest release ghcr.io/intentic/sandbox:stable)
 #   PREVIEW_PORT    the daemon's preview-proxy port, exposed at preview-*.<zone> (default: 5173)
 #   WEB_ORIGIN      browser origin(s) the daemon emits CORS for, comma-separated (default: https://app.intentic.dev)
 #   ZONE            the Cloudflare zone to use when the token sees more than one
@@ -97,7 +97,7 @@ CONNECT_TOKEN="${CONNECT_TOKEN:-}"
 # (~<version>) resolves from npm. The continuous :latest / hand-tagged builds carry internal version 0.0.0
 # (unpublished), so init's `pnpm install` fails and resolve can't find @intentic/graph. Unpinned on purpose — the
 # release always moves `stable` to the newest release, so there's no tag+digest to bump here.
-SANDBOX_IMAGE="${SANDBOX_IMAGE:-registry.gitlab.com/radarsu/intentic/sandbox:stable}"
+SANDBOX_IMAGE="${SANDBOX_IMAGE:-ghcr.io/intentic/sandbox:stable}"
 # The daemon's preview proxy port, exposed at preview-*.<zone>; apps declare their own ports in apps.json.
 PREVIEW_PORT="${PREVIEW_PORT:-5173}"
 # Dev QoL: a named volume (or absolute host path) mounted at /agent-auth and passed as AGENT_AUTH_DIR, so the
@@ -326,7 +326,7 @@ image_has_registry() {
 # (The dev one-liner is `sh _apps/site/public/scripts/connect.sh` at the repo root; the piped curl|sh form has
 # no script path in $0 and thus no checkout — it runs an existing local image as-is, or errors.)
 # Registry images are pulled even when cached so the moving `stable` tag always runs the newest release. The
-# image is PUBLIC, so no login is needed — but a stale/expired `docker login registry.gitlab.com` (commonly
+# image is PUBLIC, so no login is needed — but a stale/expired `docker login ghcr.io` (commonly
 # left by Docker Desktop's credential store) makes docker present that token instead of pulling anonymously
 # and the registry rejects the pull with "denied": on any pull failure, clear that login and retry once.
 ensure_image() {
@@ -367,8 +367,8 @@ ensure_image() {
         echo "intentic: pull failed but the image exists locally — using the local copy." >&2
         return 0
     fi
-    echo "intentic: pull failed — clearing a stale registry.gitlab.com login and retrying anonymously…" >&2
-    docker logout registry.gitlab.com >/dev/null 2>&1 || true
+    echo "intentic: pull failed — clearing a stale ghcr.io login and retrying anonymously…" >&2
+    docker logout ghcr.io >/dev/null 2>&1 || true
     docker pull "$image"
 }
 

@@ -58,7 +58,7 @@ if [ -z "$BIN" ]; then
     # running executable fails outright ("Text file busy"). A rename swaps the directory entry instead, leaving
     # the live process on the old inode until it next restarts. It also means a half-downloaded agent is never
     # what runs. The download error stays visible (a masked network/permission failure used to silently drop to npx).
-    if curl -fsSL "https://gitlab.com/api/v4/projects/radarsu%2Fintentic/packages/generic/intentic-sync/latest/intentic-sync-${os}-${arch}" -o "${dest}.tmp"; then
+    if curl -fsSL "https://github.com/intentic/intentic/releases/latest/download/intentic-sync-${os}-${arch}" -o "${dest}.tmp"; then
         chmod +x "${dest}.tmp"
         mv -f "${dest}.tmp" "$dest"
         BIN="$dest"

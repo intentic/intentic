@@ -1,4 +1,4 @@
-# The install every job opens with — the Actions equivalent of .gitlab-ci.yml's `.pnpm-setup` anchor.
+# The install every job opens with.
 #
 # corepack, pnpm and the node-gyp exec-bit fix are all baked into ci-base. The two lines before the install
 # exist only to cover DRIFT: when package.json's packageManager moves ahead of the pnpm pinned in the image,

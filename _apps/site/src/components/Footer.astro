@@ -2,7 +2,7 @@
 import { compareHref, comparePages } from "@intentic-dev/site-content/compare";
 import { docsHref, docsPages } from "@intentic-dev/site-content/docs";
 import { productHref, productPages } from "@intentic-dev/site-content/product";
-import { APP_URL, gitlabIssuesUrl, gitlabReleasesUrl, gitlabUrl, ORG_NAME, ORG_TAGLINE } from "@intentic-dev/site-content/site";
+import { APP_URL, githubIssuesUrl, githubReleasesUrl, githubUrl, ORG_NAME, ORG_TAGLINE } from "@intentic-dev/site-content/site";
 import { Image } from "astro:assets";
 import logo from "../assets/intentic-full.png";
 import ExternalIcon from "./ExternalIcon.astro";
@@ -22,7 +22,7 @@ const columns: { label: string; links: { href: string; label: string; external?:
         label: "Docs",
         links: [
             ...docsPages.map((page) => ({ href: docsHref(page.id), label: page.title })),
-            { href: gitlabReleasesUrl, label: "Release notes", external: true },
+            { href: githubReleasesUrl, label: "Release notes", external: true },
         ],
     },
     {
@@ -39,8 +39,8 @@ const columns: { label: string; links: { href: string; label: string; external?:
         links: [
             { href: APP_URL, label: "Open the app", external: true },
             { href: "/about/", label: "About the creator" },
-            { href: gitlabUrl, label: "GitLab", external: true },
-            { href: gitlabIssuesUrl, label: "Issues", external: true },
+            { href: githubUrl, label: "GitHub", external: true },
+            { href: githubIssuesUrl, label: "Issues", external: true },
             { href: "/#faq", label: "FAQ" },
         ],
     },
@@ -100,12 +100,12 @@ const legalLinks = [
         <span class="inline-flex items-center gap-1">
             Open source on
             <a
-                href={gitlabUrl}
+                href={githubUrl}
                 target="_blank"
                 rel="noopener"
                 class="inline-flex min-h-6 items-center gap-1 transition-colors hover:text-link"
             >
-                GitLab
+                GitHub
                 <ExternalIcon />
             </a>
         </span>

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Shared per-app image release for the PLATFORM images (registry.gitlab.com/radarsu/intentic/{api,web}).
+# Shared per-app image release for the PLATFORM images (ghcr.io/intentic/{api,web}).
 # Runs from an app dir as its `docker:release` turbo task (turbo.json: dependsOn build), so the app and its
 # workspace deps are already built job-side with the warm turbo cache — each Dockerfile is a pure COPY of the
 # prepared tree, never an in-container install/compile. The OSS core images (sandbox/dind-host) keep their own
@@ -20,18 +20,16 @@ set -euo pipefail
 
 APP="${1:?usage: docker-release.sh <image> [--prune]}"
 shift
-# Both registries for the duration of the GitLab -> GHCR move: these images are pulled by the Komodo stack,
-# whose compose file names the path it was configured with, so the old one has to keep answering until that
-# stack is repointed. Drop the GitLab entry then.
-REGISTRIES="${REGISTRIES:-ghcr.io/intentic registry.gitlab.com/radarsu/intentic}"
+# Space-separated registries, every one of which gets every tag. These images are pulled by the Komodo stack,
+# whose compose file names the path it was configured with — so a registry change here has to be matched there.
+REGISTRIES="${REGISTRIES:-ghcr.io/intentic}"
 # The hash probe below reads the FIRST registry only — one manifest call, and the registries carry identical
-# content by construction, because everything here is one build pushed to both.
+# content by construction, because everything here is one build pushed to all of them.
 IMAGE="${REGISTRIES%% *}/$APP"
 
 # `latest` tracks main; CI adds the commit tag. TAGS overrides both for hand runs (space-separated).
-# CI_COMMIT_SHORT_SHA is GitLab's and goes with it at cutover; GITHUB_SHA is the full 40 chars, so it is cut
-# to the same 8 the GitLab tag used rather than making the two systems disagree about what `sha-` means.
-SHORT_SHA="${CI_COMMIT_SHORT_SHA:-${GITHUB_SHA:0:8}}"
+# GITHUB_SHA is the full 40 chars, cut to 8 so `sha-` tags stay short and stable.
+SHORT_SHA="${GITHUB_SHA:0:8}"
 TAGS="${TAGS:-latest${SHORT_SHA:+ sha-$SHORT_SHA}}"
 
 if [ -n "${TURBO_HASH:-}" ]; then

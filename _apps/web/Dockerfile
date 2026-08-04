@@ -1,4 +1,4 @@
-# The intentic platform web SPA image (registry.gitlab.com/radarsu/intentic/web): the Vue 3 SPA as static
+# The intentic platform web SPA image (ghcr.io/intentic/web): the Vue 3 SPA as static
 # files behind nginx. One build artifact serves any environment — the API origin is a `$API_URL` placeholder
 # in assets/js/env.js (environment.deployment.ts) and the PostHog proxy upstreams are placeholders in
 # nginx.conf, all substituted by entrypoint.sh at container start, so the same image points anywhere.
@@ -9,7 +9,7 @@
 # and entrypoint.sh:
 #   pnpm --filter=@intentic-app/web build && docker build -t …/web _apps/web
 FROM nginx:1.30-alpine
-LABEL org.opencontainers.image.source=https://gitlab.com/radarsu/intentic
+LABEL org.opencontainers.image.source=https://github.com/intentic/intentic
 # Staged as a template, not dropped straight into conf.d — the entrypoint renders it. Also NOT into the base
 # image's /etc/nginx/templates/, whose auto-envsubst runs with no variable filter and would blank every $uri.
 COPY nginx.conf /etc/nginx/default.conf.template

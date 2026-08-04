@@ -923,7 +923,7 @@ test("environment: members read the state, approve/reject are owner-gated, appro
     const state = (await approved.json()) as { proposal: unknown; custom: unknown; approved?: { content: string; hash: string } };
     expect(state.proposal).toEqual({ content: proposal, hash });
     expect(state.custom).toEqual({ content: proposal, hash });
-    expect(state.approved?.content).toContain("FROM registry.gitlab.com/radarsu/intentic/sandbox:stable");
+    expect(state.approved?.content).toContain("FROM ghcr.io/intentic/sandbox:stable");
     expect(state.approved?.content).toContain(proposal.trim());
     expect(state.approved?.hash).toBe(sha256Hex(state.approved?.content ?? ""));
 

@@ -5,7 +5,7 @@ import { createWorkspaceProvider } from "./workspace.js";
 
 const res = (stdout: string, code = 0): SshResult => ({ stdout, stderr: "", code });
 
-const IMAGE = "registry.gitlab.com/radarsu/intentic-sandbox:0.1.0";
+const IMAGE = "ghcr.io/intentic/sandbox:0.1.0";
 const CONTAINER = "intentic-sandbox-workspace";
 
 const fakeSsh = (
@@ -92,9 +92,7 @@ test("read returns the daemon/health/base outputs + observed image and tools dig
 test("diff is noop when the running image matches the pin, update when it differs", () => {
     const provider = createWorkspaceProvider(fakeSsh().executor);
     expect(provider.diff(inputs, { outputs: {}, detail: { image: IMAGE, tools: "" } })).toEqual({ action: "noop" });
-    expect(provider.diff(inputs, { outputs: {}, detail: { image: "registry.gitlab.com/radarsu/intentic-sandbox:0.0.9", tools: "" } }).action).toBe(
-        "update",
-    );
+    expect(provider.diff(inputs, { outputs: {}, detail: { image: "ghcr.io/intentic/sandbox:0.0.9", tools: "" } }).action).toBe("update");
 });
 
 test("apply forwards the agent tools as base64 INTENTIC_AGENT_TOOLS + stamps the tools digest label", async () => {
@@ -167,7 +165,7 @@ test("apply throws when the docker run fails", async () => {
 
 // A composed overlay: content + the vpn fragment's runtime directives the executor turns into docker flags.
 const DOCKERFILE =
-    "FROM registry.gitlab.com/radarsu/intentic/sandbox:stable\nRUN apt-get install -y cowsay\n# intentic:runtime --device=/dev/net/tun\n# intentic:runtime --cap-add=NET_ADMIN\n";
+    "FROM ghcr.io/intentic/sandbox:stable\nRUN apt-get install -y cowsay\n# intentic:runtime --device=/dev/net/tun\n# intentic:runtime --cap-add=NET_ADMIN\n";
 const DOCKERFILE_HASH = createHash("sha256").update(DOCKERFILE).digest("hex");
 const ENV_IMAGE = `intentic-sandbox-env:${DOCKERFILE_HASH.slice(0, 12)}`;
 
@@ -195,7 +193,7 @@ test("apply with an overlay dockerfile builds it (base64 → stdin) BEFORE recre
 
 test("apply splices --privileged from a docker-capability overlay (the only source of a privileged run)", async () => {
     const ssh = fakeSsh();
-    const dockerfile = "FROM registry.gitlab.com/radarsu/intentic/sandbox:stable\n# intentic:runtime --privileged\n";
+    const dockerfile = "FROM ghcr.io/intentic/sandbox:stable\n# intentic:runtime --privileged\n";
     await createWorkspaceProvider(ssh.executor).apply({ ...inputs, dockerfile }, undefined, ctx());
     expect(ssh.commands.find((c) => c.includes("docker run"))).toContain("--privileged");
 });

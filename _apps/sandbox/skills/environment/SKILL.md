@@ -5,7 +5,7 @@ description: Extend this sandbox's own environment (system packages, language to
 
 # Sandbox environment (overlay Dockerfile)
 
-You run inside a container built from `registry.gitlab.com/radarsu/intentic/sandbox:stable`. Anything you install at
+You run inside a container built from `ghcr.io/intentic/sandbox:stable`. Anything you install at
 runtime outside `/work` is lost when the container is recreated. To extend the environment permanently,
 propose custom Dockerfile steps — the owner reviews and approves them, then a rebuild recreates the sandbox
 (`/work` persists).

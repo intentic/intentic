@@ -1,6 +1,6 @@
 ---
 import { compareFamilies, compareHref, comparePages, type ComparePage } from "@intentic-dev/site-content/compare";
-import { APP_URL, gitlabIssuesUrl, ORG_NAME } from "@intentic-dev/site-content/site";
+import { APP_URL, githubIssuesUrl, ORG_NAME } from "@intentic-dev/site-content/site";
 import BaseLayout from "../../layouts/BaseLayout.astro";
 import Footer from "../../components/Footer.astro";
 import Nav from "../../components/Nav.astro";
@@ -144,7 +144,7 @@ const theirRows = page.table.filter((row) => row.theirs).length;
                         {new URL(page.url).host}
                     </a>
                     and in this repo. Where we have it wrong,
-                    <a href={gitlabIssuesUrl} target="_blank" rel="noopener" class="text-link hover:underline">open an issue</a>
+                    <a href={githubIssuesUrl} target="_blank" rel="noopener" class="text-link hover:underline">open an issue</a>
                     and it gets fixed in the next build.
                 </p>
             </section>

@@ -129,7 +129,6 @@ catalog:
   "@prisma/client": 7.9.1
   "@puristic/env": 1.6.1
   "@semantic-release/exec": 7.1.0
-  "@semantic-release/gitlab": 13.3.3
   "@shikijs/langs": 4.4.1
   "@shikijs/monaco": 4.4.1
   "@shikijs/themes": 4.4.1

@@ -10,7 +10,7 @@ import {
     openSource,
     whyIntentic,
 } from "@intentic-dev/site-content/about";
-import { gitlabUrl } from "@intentic-dev/site-content/site";
+import { githubIssuesUrl } from "@intentic-dev/site-content/site";
 import { buildProfilePageSchema } from "@intentic-dev/site-content/structured-data";
 import BaseLayout from "../layouts/BaseLayout.astro";
 import CreatorLinks from "../components/CreatorLinks.astro";
@@ -113,11 +113,11 @@ import TrustCards from "../components/TrustCards.astro";
                         , or open one in the open.
                     </p>
                 </div>
-                <a href={`${gitlabUrl}/-/issues`} target="_blank" rel="noopener" class="btn btn-secondary">Open an issue</a>
+                <a href={githubIssuesUrl} target="_blank" rel="noopener" class="btn btn-secondary">Open an issue</a>
             </div>
 
             <p class="mt-6 text-xs leading-relaxed text-subtle">
-                Also at <span class="font-mono">@{CREATOR_HANDLE}</span> on GitHub, GitLab and LinkedIn.
+                Also at <span class="font-mono">@{CREATOR_HANDLE}</span> on GitHub and LinkedIn.
             </p>
         </section>
     </main>

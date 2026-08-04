@@ -69,10 +69,10 @@ and no force-push is ever needed. Three files carry the whole mechanism:
   has that this repo doesn't (its README, its root `package.json`, its GitHub Actions workflow).
 - `_tools/scripts/publish-github.sh` — the export, run from `release-prepare.sh`: commit, tag, GitHub Release
   with the installers and machine-agent binaries attached.
-- `_tools/scripts/verify-mirror.sh` — the guard, run by the `mirror:verify` CI job on every merge request:
-  materialise, reconcile the subset lockfile, install frozen, type-check. **A public package that grows a
-  workspace dependency on a private one fails here**, which is the one failure mode a subset has and this
-  repo cannot see.
+- `_tools/scripts/verify-mirror.sh` — the guard: materialise, reconcile the subset lockfile, install frozen,
+  type-check. **A public package that grows a workspace dependency on a private one fails here**, which is the
+  one failure mode a subset has and this repo cannot see. No CI job runs it today — run it by hand before a
+  release when the public path set or a public package's dependencies moved.
 
 The pushed tag is also what publishes to npm: GitHub Actions builds the closure and publishes all 23 packages
 with provenance over npm's OIDC trusted publishing, so there is no npm token in this repo's CI at all.

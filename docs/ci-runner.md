@@ -1,12 +1,11 @@
 # The CI runners
 
 CI assumes one thing no runner provides by default: **a persistent host directory at `/ci-cache`**. Without it
-the pipeline still passes — every job just runs cold. This file is the config that makes it warm, the evidence
-for why it is shaped this way, and the setup for both runner systems while the migration to GitHub Actions is
-in flight.
+the pipeline still passes — every job just runs cold. This file is the config that makes it warm, the runner
+setup, and the evidence for why it is shaped this way.
 
-The evidence below was measured on GitLab, but none of it is GitLab-specific: it is about how pnpm, turbo and
-cargo behave when their content-addressed stores are thrown away between jobs, which is the same on any CI.
+That evidence is not CI-vendor-specific: it is about how pnpm, turbo and cargo behave when their
+content-addressed stores are thrown away between jobs, which is the same anywhere.
 
 ---
 
@@ -49,23 +48,19 @@ Under-provision it and the groups queue behind each other, which is the coupling
 remove: the pipeline still passes, it just serializes, and every argument about a site failure not blocking a
 platform deploy stops being true in practice.
 
-The GitLab pipeline wanted eight because it had one more job in that wave (`mirror:verify`, deleted with the
-public/private split) and because a slot could sit under a 90-minute `desktop:verify`. Neither holds here.
-
 ---
 
-## GitHub Actions (the target)
+## The runners
 
 ### Six runner processes on one host — not six hosts
 
-This is the one structural difference from GitLab, and it is a packaging difference rather than a hardware one.
-`gitlab-runner` is a supervisor: one process, `concurrent = 8`, eight job containers. **The GitHub Actions
-runner has no such setting — one runner process executes one job at a time.** So the same box that ran a single
-`gitlab-runner` now runs six `actions/runner` processes, each a service, all sharing the one `/ci-cache`.
+**The GitHub Actions runner executes one job at a time — there is no concurrency setting.** Six concurrent
+jobs therefore means six `actions/runner` processes on the one box, each a systemd service, all sharing the
+one `/ci-cache`.
 
-Same machine, same total load, six systemd units instead of one. If that bookkeeping grates, the alternatives
-are an autoscaling set or [Actions Runner Controller](https://github.com/actions/actions-runner-controller) if
-this ever moves to Kubernetes — both solve the same problem with more moving parts than six `svc.sh` installs.
+One machine, six systemd units. If that bookkeeping grates, the alternatives are an autoscaling set or
+[Actions Runner Controller](https://github.com/actions/actions-runner-controller) if this ever moves to
+Kubernetes — both solve the same problem with more moving parts than six `svc.sh` installs.
 
 ```sh
 # once per instance, N = 1..6
@@ -120,8 +115,8 @@ stat -c '%d %n' /srv/actions/ci-cache /srv/actions/work-1
 
 ### Jobs run in a container, and need two mounts
 
-Every job runs in the prebaked `ci-base` image, the same way it did on GitLab. In Actions that is
-`jobs.<id>.container`, and two mounts have to be declared or the job is cold and Docker-less:
+Every job runs in the prebaked `ci-base` image. That is `jobs.<id>.container`, and two mounts have to be
+declared or the job is cold and Docker-less:
 
 ```yaml
 container:
@@ -134,8 +129,8 @@ container:
     password: ${{ secrets.GITHUB_TOKEN }}
 ```
 
-Mounting the host socket is what **removes the `docker:27-dind` service** the GitLab jobs attached, along with
-its TLS certificate dance. The runner user must be in the `docker` group.
+Mounting the host socket is what makes a **dind service unnecessary**, along with its TLS certificate dance.
+The runner user must be in the `docker` group.
 
 ### What the runner host needs installed
 
@@ -154,7 +149,7 @@ Tauri toolchains — is baked into `ci-base` and `ci-desktop`.
   `desktop-target` (release), `desktop-verify-target` and `desktop-check-target` are **one per job** on
   purpose, for two reasons. Cargo locks a target directory exclusively for a whole build, so jobs sharing one
   serialize; and a build's fingerprint includes the stamped version, so the release (a new version every time)
-  and `desktop:verify` (always `0.0.0`) each invalidated the other's leaf crate and paid a fresh LTO for it.
+  and `desktop-verify` (always `0.0.0`) each invalidated the other's leaf crate and paid a fresh LTO for it.
   Measured on the desktop crate: bumping the version recompiles exactly one crate in 20s, rebuilding the same
   version is a 1s no-op. Each dir is a few GB of rebuildable objects; `rm -rf` any of them in a quiet window
   and the next job repays it once.
@@ -169,66 +164,27 @@ sharing one `CARGO_HOME`.
 
 ---
 
-## GitLab (until cutover)
+## Why a bind mount and not a managed cache
 
-`.gitlab-ci.yml` stays live and green until the Actions pipeline has produced a green run on the same commit.
-This section goes with it.
+A per-job cache archive was measured against the shared directory and lost twice over.
 
-In the runner's `config.toml`:
-
-```toml
-concurrent = 8
-
-[[runners]]
-  name = "radarsu-worker"
-  executor = "docker"
-
-  [runners.docker]
-    # ci-base's tag is mutable (the ci-base job moves it on main), so this must stay "always" — with the
-    # layers already on the host that is a manifest digest check, not a download.
-    pull_policy = "always"
-    volumes = [
-      "/cache",
-      "/srv/gitlab-runner/ci-cache:/ci-cache",
-    ]
-```
-
-Then once, on the runner host: `mkdir -p /srv/gitlab-runner/ci-cache`. Jobs run as root in the container, so
-no ownership work is needed. If the mount is missing, both paths fall back to the container's own filesystem —
-cold, never broken.
-
-### Why a bind mount and not GitLab's `cache:`
-
-Two independent problems, both measured on pipeline 2721608438 (2026-07-31, 47.9 min). This is the evidence
-that also justifies the Actions design above.
-
-**GitLab's cache never restored.** Every job logged `No URL provided, cache will not be downloaded from shared
-cache server`. With no `[runners.cache]` backend the runner falls back to local storage scoped to the
-**concurrent slot**, so a cache written by one slot is invisible to the next job that lands on another. Across
-five consecutive `main` pipelines the correlation was exact:
-
-| Pipeline | Slot | Turbo tasks cached |
-| --- | --- | --- |
-| 2721608438 | concurrent-2 | 0 / 75 |
-| 2719431011 | concurrent-1 | 0 / 74 |
-| 2718157354 | concurrent-3 | 0 / 74 |
-| 2717973061 | **concurrent-0** | **71 / 74** |
-| 2716887280 | **concurrent-0** | **34 / 74** |
-
-At `concurrent = 4` that is a warm cache roughly one pipeline in four.
-
-**Archiving it cost more than it ever returned.** The `test` job spent **6m19s** — 38% of its wall-clock —
-zipping the store (69,292 files), and `get_sources` then spent 40s deleting those same files for the next job.
-That CPU is spent whether or not anything reads the result, and an S3/MinIO backend would not remove it; it
+**Archiving cost more than it ever returned.** The verify job spent **6m19s** — 38% of its wall-clock —
+zipping the store (69,292 files), and the next job's source fetch spent another 40s deleting those same files.
+That CPU is spent whether or not anything reads the result, and an object-store backend would not remove it; it
 would add an upload on top.
 
-A shared directory has no archive step, no upload, no restore, and is shared by every job from the first
-pipeline. Actions has the same choice and the same answer.
+**A slot-scoped cache almost never hit.** Local cache storage scoped per concurrent slot meant a cache written
+by one slot was invisible to the next job that landed on another — measured across five consecutive `main`
+pipelines, a warm turbo cache (71/74 tasks) appeared only when a run happened to land on the slot that wrote
+it, roughly one pipeline in four. Everything else was 0/74.
+
+A shared directory has no archive step, no upload, no restore, and is warm for every job from the first
+pipeline onward.
 
 ### The install that stays slow
 
 With the store warm and nothing to download, `pnpm install --frozen-lockfile` still measured **2m21s–3m43s in
-every job** of pipeline 2725042409 — the largest uniform cost in the pipeline. Half of that is addressed from
-the repo side: `GIT_CLEAN_FLAGS: -ffdx -e node_modules` keeps a slot's installed tree between pipelines
-instead of deleting 69k files and re-linking them. The other half is the same-filesystem rule at the top of
-this file.
+every job** — the largest uniform cost in the pipeline. Half of that is addressed by keeping a workspace's
+installed tree between runs rather than deleting 69k files and re-linking them, which is what
+`actions/checkout`'s `clean: false` is for in every job of `ci.yml`. The other half is the same-filesystem
+rule at the top of this file.

@@ -29,7 +29,7 @@
 # POSIX sh (piped into `sh`, like connect.sh).
 set -eu
 
-REGISTRY_IMAGE="${SANDBOX_IMAGE:-registry.gitlab.com/radarsu/intentic/sandbox:stable}"
+REGISTRY_IMAGE="${SANDBOX_IMAGE:-ghcr.io/intentic/sandbox:stable}"
 APPROVED_FILE="/work/.intentic/environment.approved.Dockerfile"
 DEV_TAG="intentic-sandbox:dev"
 
@@ -135,7 +135,7 @@ CHANNEL="${CHANNEL:-stable}"
 # SANDBOX_IMAGE still overrides everything, unchanged: it is how a pinned or locally-built image is passed in,
 # and a channel is a default rather than a policy.
 if [ -z "${SANDBOX_IMAGE:-}" ] && [ "$MODE" = "update" ]; then
-    REGISTRY_IMAGE="registry.gitlab.com/radarsu/intentic/sandbox:${CHANNEL}"
+    REGISTRY_IMAGE="ghcr.io/intentic/sandbox:${CHANNEL}"
 fi
 
 # Everything this script reads off the OLD container is read WITHOUT `docker exec`, so a crashed sandbox is
@@ -156,7 +156,7 @@ mkdir -p "$LOG_DIR"
 ls -1t "$LOG_DIR"/recreate-*.log 2>/dev/null | tail -n +10 | xargs rm -f 2>/dev/null || true
 LOG="$LOG_DIR/recreate-${MODE}-$(date +%Y%m%d-%H%M%S).log"
 
-# Pull a published image; a stale/expired `docker login registry.gitlab.com` (Docker Desktop's credential
+# Pull a published image; a stale/expired `docker login ghcr.io` (Docker Desktop's credential
 # store) makes docker present that token and the registry reject the PUBLIC pull — clear it and retry.
 pull_image() {
     if docker pull "$1"; then
@@ -166,8 +166,8 @@ pull_image() {
         echo "intentic: pull failed but the image exists locally — using the local copy." >&2
         return 0
     fi
-    echo "intentic: pull failed — clearing a stale registry.gitlab.com login and retrying anonymously…" >&2
-    docker logout registry.gitlab.com >/dev/null 2>&1 || true
+    echo "intentic: pull failed — clearing a stale ghcr.io login and retrying anonymously…" >&2
+    docker logout ghcr.io >/dev/null 2>&1 || true
     docker pull "$1"
 }
 
@@ -260,10 +260,10 @@ if [ -s "$overlay" ]; then
         exit 1
     fi
     case "$BASE_IMAGE" in
-        registry.gitlab.com/radarsu/intentic/sandbox:?* | "$DEV_TAG") ;;
+        ghcr.io/intentic/sandbox:?* | "$DEV_TAG") ;;
         *)
             if [ -z "$CURRENT_BASE" ] || [ "$BASE_IMAGE" != "$CURRENT_BASE" ]; then
-                echo "error: the approved overlay must start with FROM registry.gitlab.com/radarsu/intentic/sandbox:<tag>" >&2
+                echo "error: the approved overlay must start with FROM ghcr.io/intentic/sandbox:<tag>" >&2
                 echo "       (or FROM this sandbox's own base, ${CURRENT_BASE:-<none>}); found ${BASE_IMAGE}." >&2
                 exit 1
             fi

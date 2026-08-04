@@ -4,7 +4,7 @@ What we say, in which words, everywhere. Pairs with [positioning.md](positioning
 pains, P1–P7) and [landing-blueprint.md](landing-blueprint.md) (section placement). The product
 being sold is **intentic-app** (app.intentic.dev): co-piloted **specialized agents** — autonomous
 employees, each a sandbox on hardware you own. The sandbox and CLI that run on your machine are MIT
-open source on GitLab — the trust layer you can read and run yourself.
+open source on GitHub — the trust layer you can read and run yourself.
 
 ## Rules of voice
 
@@ -54,8 +54,8 @@ Landing copy lives in code: `_libs/site-content/src/landing.ts` is a single `Lan
 — **one page, no variants** (there is no `SITE_VARIANT`, no `/preview` route, no a/b/c doors).
 Change copy there, not in the `.astro` files.
 
-**Hero CTA:** `Get started free` → app.intentic.dev. Secondary: `See the source` → the GitLab repo
-(gitlab.com/radarsu/intentic) — the trust-through-transparency path.
+**Hero CTA:** `Get started free` → app.intentic.dev. Secondary: `See the source` → the GitHub repo
+(github.com/intentic/intentic) — the trust-through-transparency path.
 
 Retired framing (do not bring back): "Your coding agent. Out of the terminal.", "Build software with
 intent." as the definition, "An AI-native workspace for infra, data, apps, and code…", "Specialized
@@ -149,14 +149,14 @@ team sharing). Do not reintroduce a pricing section.
    Sentry alerts, Stripe payments, new email, Discord messages, or plain cron — each run a fresh
    agent session with a transcript, optionally gated by a guard command you define.
 9. **Is it open source? Can I run it without the app?** — Yes. The sandbox and CLI that execute on
-   your machine are MIT on GitLab (gitlab.com/radarsu/intentic) — read exactly what runs on your
+   your machine are MIT on GitHub (github.com/intentic/intentic) — read exactly what runs on your
    hardware, and drive a sandbox from the CLI without ever signing in. The hosted app adds the
    browser workspace, the fleet board, capabilities, automations, and teams.
 10. **What about my data — export, deletion?** — Settings → Export downloads everything the
     platform stores about your account as JSON (deliberately excluding credentials). Account
     deletion cancels billing and cascades sandboxes, sessions, and grants.
 11. **Is it production-ready?** — The app is new and says so. Because the sandbox and CLI are MIT on
-    GitLab, you can read exactly what runs on your machine before you trust it with anything you
+    GitHub, you can read exactly what runs on your machine before you trust it with anything you
     care about — and because the agent is co-piloted (plan mode, reviewable diffs, owner-approved
     environment changes), you stay in control of every change. Verify test counts and prices at
     build time — never hardcode stale numbers.

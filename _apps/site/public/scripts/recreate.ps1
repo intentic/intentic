@@ -50,7 +50,7 @@ param(
 $ErrorActionPreference = 'Continue'
 $PSNativeCommandUseErrorActionPreference = $false
 
-$RegistryImage = if ($env:SANDBOX_IMAGE) { $env:SANDBOX_IMAGE } else { 'registry.gitlab.com/radarsu/intentic/sandbox:stable' }
+$RegistryImage = if ($env:SANDBOX_IMAGE) { $env:SANDBOX_IMAGE } else { 'ghcr.io/intentic/sandbox:stable' }
 $ApprovedFile = '/work/.intentic/environment.approved.Dockerfile'
 $Mode = if ($Hash) { 'rebuild' } else { 'update' }
 $Container = "intentic-sandbox-$Slug"
@@ -88,7 +88,7 @@ function Get-ContainerEnvValue([string]$Name) {
     return ''
 }
 
-# A stale/expired `docker login registry.gitlab.com` (Docker Desktop's credential store) makes docker present
+# A stale/expired `docker login ghcr.io` (Docker Desktop's credential store) makes docker present
 # that token and the registry reject the PUBLIC pull - clear it and retry anonymously.
 function Invoke-Pull([string]$Image) {
     docker pull $Image 2>&1 | Tee-Object -FilePath $Log -Append
@@ -98,8 +98,8 @@ function Invoke-Pull([string]$Image) {
         Write-Host 'intentic: pull failed but the image exists locally - using the local copy.'
         return $true
     }
-    Write-Host 'intentic: pull failed - clearing a stale registry.gitlab.com login and retrying anonymously...'
-    docker logout registry.gitlab.com *> $null
+    Write-Host 'intentic: pull failed - clearing a stale ghcr.io login and retrying anonymously...'
+    docker logout ghcr.io *> $null
     docker pull $Image 2>&1 | Tee-Object -FilePath $Log -Append
     return ($LASTEXITCODE -eq 0)
 }
@@ -160,8 +160,8 @@ try {
             exit 1
         }
         $currentBase = Get-ContainerEnvValue 'SANDBOX_BASE_IMAGE'
-        if ($BaseImage -notlike 'registry.gitlab.com/radarsu/intentic/sandbox:?*' -and $BaseImage -ne $currentBase) {
-            Write-Error "the approved overlay must start with FROM registry.gitlab.com/radarsu/intentic/sandbox:<tag> (or FROM this sandbox's own base, $currentBase); found $BaseImage."
+        if ($BaseImage -notlike 'ghcr.io/intentic/sandbox:?*' -and $BaseImage -ne $currentBase) {
+            Write-Error "the approved overlay must start with FROM ghcr.io/intentic/sandbox:<tag> (or FROM this sandbox's own base, $currentBase); found $BaseImage."
             exit 1
         }
     }

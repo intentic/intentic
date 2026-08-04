@@ -11,12 +11,11 @@ export const ORG_DESCRIPTION =
     "An IDE for your agents. A window for you. Every coding agent gets a sandbox of its own on hardware you own, with the job's dev-tools really installed and its own git worktree. Run ten at once, and read every diff before it lands. Free to start.";
 export const LOGO_URL = `${SITE_URL}/assets/intentic-logo-sized.png`;
 export const FOUNDER_NAME = "Artur Kurowski";
-export const FOUNDER_URL = "https://gitlab.com/radarsu";
 
-export const gitlabUrl = "https://gitlab.com/radarsu/intentic";
-export const gitlabProfileUrl = "https://gitlab.com/radarsu";
-export const gitlabIssuesUrl = "https://gitlab.com/radarsu/intentic/-/issues";
-export const gitlabReleasesUrl = "https://gitlab.com/radarsu/intentic/-/releases";
+export const orgUrl = "https://github.com/intentic";
+export const githubUrl = "https://github.com/intentic/intentic";
+export const githubIssuesUrl = "https://github.com/intentic/intentic/issues";
+export const githubReleasesUrl = "https://github.com/intentic/intentic/releases";
 
 /* The founder's public profiles. They are here rather than in about.ts because two consumers need them
  * and neither owns them: the visible link chips on /about/ and the landing band, and `sameAs` in the
@@ -26,5 +25,5 @@ export const githubProfileUrl = "https://github.com/radarsu";
 export const linkedinProfileUrl = "https://www.linkedin.com/in/radarsu/";
 export const personalSiteUrl = "https://radarsu.com/";
 
-export const SAME_AS: readonly string[] = [gitlabUrl, gitlabProfileUrl];
-export const FOUNDER_SAME_AS: readonly string[] = [githubProfileUrl, linkedinProfileUrl, personalSiteUrl, gitlabProfileUrl];
+export const SAME_AS: readonly string[] = [orgUrl, githubUrl];
+export const FOUNDER_SAME_AS: readonly string[] = [githubProfileUrl, linkedinProfileUrl, personalSiteUrl];

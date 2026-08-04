@@ -8,7 +8,7 @@
 # It is here because of what those failures cost in CI. Measured over 40 main pipelines, 10 of the 22 red ones
 # died on one of these three, every one of them AFTER `pnpm install --frozen-lockfile` had resolved 1,800+
 # packages against the registry — 0.6-2.0 min, in four jobs at once, to report something readable from two files
-# in the working tree. The preflight job in .gitlab-ci.yml is the same check on the other side of the push; this
+# in the working tree. The preflight job in .github/workflows/ci.yml is the same check on the other side of the push; this
 # one is what keeps the round trip from happening at all.
 #
 # No dependency guard, unlike commit-msg: this needs only node, which is the thing running the repo. Use

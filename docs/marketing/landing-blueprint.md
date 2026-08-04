@@ -65,7 +65,7 @@ this page.
 
 - **Primary conversion**: `Get started free` → app.intentic.dev (Google sign-in). Every scroll
   depth offers a path back to it.
-- **Secondary**: `See the source` → gitlab.com/radarsu/intentic — the trust-through-transparency
+- **Secondary**: `See the source` → github.com/intentic/intentic — the trust-through-transparency
   path. The sandbox + CLI that run on your machine are MIT; this is *not* framed as "the open-source
   engine" or a standalone deploy tool.
 - Accuracy rules:
@@ -226,7 +226,7 @@ it is a row in `#extend`.
 ## Conversion checklist
 
 - [ ] `Get started free` resolves to a working app.intentic.dev sign-in.
-- [ ] `See the source` resolves to gitlab.com/radarsu/intentic.
+- [ ] `See the source` resolves to github.com/intentic/intentic.
 - [ ] Every section ends within one viewport of a CTA.
 - [ ] The page is still one claim. Read it cold and answer "what is this product?" in one sentence.
 - [ ] `#trust` still concedes something, and still shows no number that could be zero.

@@ -170,11 +170,11 @@ test("minting without a usable scope is refused rather than defaulted", async ()
 
 test("system.info reports the sandbox image tag and exact bundled version", async () => {
     const client = clientFor(
-        createApp(services({ info: { name: "intentic-sandbox", image: "registry.gitlab.com/radarsu/intentic/sandbox:stable", version: "1.52.0" } })),
+        createApp(services({ info: { name: "intentic-sandbox", image: "ghcr.io/intentic/sandbox:stable", version: "1.52.0" } })),
     );
     expect(await client.system.info()).toEqual({
         name: "intentic-sandbox",
-        image: "registry.gitlab.com/radarsu/intentic/sandbox:stable",
+        image: "ghcr.io/intentic/sandbox:stable",
         version: "1.52.0",
     });
 });

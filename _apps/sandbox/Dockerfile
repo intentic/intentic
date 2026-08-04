@@ -1,4 +1,4 @@
-# The per-project AI-agent sandbox image (published as registry.gitlab.com/radarsu/intentic/sandbox). The
+# The per-project AI-agent sandbox image (published as ghcr.io/intentic/sandbox). The
 # monorepo is compiled OUTSIDE Docker: _tools/scripts/prepare-image-trees.sh builds the six baked packages
 # (turbo, warm cache) and prunes their production trees + the iq models into .image-out/, which enters this
 # build as the named context `trees`. Every layer here is a pinned tool install (registry-cache-stable) or a
@@ -6,12 +6,12 @@
 # container. Build from the REPO ROOT (the main context still carries the source-copied bits — iq plugin,
 # skills, bin scripts, entrypoint, connectors):
 #   bash _tools/scripts/prepare-image-trees.sh
-#   docker build --build-context trees=.image-out -f _apps/sandbox/Dockerfile -t registry.gitlab.com/radarsu/intentic/sandbox .
+#   docker build --build-context trees=.image-out -f _apps/sandbox/Dockerfile -t ghcr.io/intentic/sandbox .
 # At run time connect.sh / the workspace provider inject agent credentials (ANTHROPIC_API_KEY or
 # CLAUDE_CODE_OAUTH_TOKEN) and mount the workspace volume at /work — neither is baked into the image.
 
 FROM node:24.18.0-bookworm-slim@sha256:b31e7a42fdf8b8aa5f5ed477c72d694301273f1069c5a2f71d53c6482e99a2fc AS runtime
-# Links the GitLab Container Registry package to the repo (inherits its visibility/permissions, shows under its Packages).
+# Links the GHCR package to the repo (inherits its visibility/permissions, shows under its Packages).
 LABEL org.opencontainers.image.source=https://github.com/intentic/intentic
 # procps gives the interactive terminal (system/terminal.ts) real process tools — `ps`, `top`, `kill` — so the
 # owner can see what's running in the sandbox and reap a stuck dev command. zsh is the terminal's shell (below).

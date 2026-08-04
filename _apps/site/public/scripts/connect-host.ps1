@@ -50,8 +50,8 @@ $HostSshHostname = $env:HOST_SSH_HOSTNAME
 $ProvidedTunnel = [bool]$HostSshTunnelToken -and [bool]$HostSshHostname
 # The DinD "host" image (its own dockerd + sshd) is the actual deploy target; the sandbox image carries the CLI
 # that mints the own-Cloudflare host tunnel. Both track the latest release like connect.ps1.
-$DindImage = if ($env:DIND_IMAGE) { $env:DIND_IMAGE } else { 'registry.gitlab.com/radarsu/intentic/dind-host:latest' }
-$SandboxImage = if ($env:SANDBOX_IMAGE) { $env:SANDBOX_IMAGE } else { 'registry.gitlab.com/radarsu/intentic/sandbox:stable' }
+$DindImage = if ($env:DIND_IMAGE) { $env:DIND_IMAGE } else { 'ghcr.io/intentic/dind-host:latest' }
+$SandboxImage = if ($env:SANDBOX_IMAGE) { $env:SANDBOX_IMAGE } else { 'ghcr.io/intentic/sandbox:stable' }
 $CloudflaredImage = if ($env:CLOUDFLARED_IMAGE) { $env:CLOUDFLARED_IMAGE } else { 'cloudflare/cloudflared:2026.6.1' }
 # The key is generated INSIDE the DinD (root-owned), so the sandbox always logs in as root - the user supplies none.
 $HostUser = 'root'
@@ -93,13 +93,13 @@ if (-not $HostName) {
     if (-not $HostName) { $HostName = 'host' }
 }
 
-# Pull a published image, clearing a stale registry.gitlab.com login and retrying anonymously on failure (images are public).
+# Pull a published image, clearing a stale ghcr.io login and retrying anonymously on failure (images are public).
 function Invoke-ImagePull([string]$Image) {
     Write-Host "intentic: pulling $Image (first run can take a minute)..."
     docker pull $Image
     if ($LASTEXITCODE -ne 0) {
-        Write-Host 'intentic: pull failed - clearing a stale registry.gitlab.com login and retrying anonymously...'
-        docker logout registry.gitlab.com *> $null
+        Write-Host 'intentic: pull failed - clearing a stale ghcr.io login and retrying anonymously...'
+        docker logout ghcr.io *> $null
         docker pull $Image
         if ($LASTEXITCODE -ne 0) { Write-Error "failed to pull $Image (see the docker output above)."; exit 1 }
     }

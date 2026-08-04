@@ -63,4 +63,4 @@ The Windows NSIS installer — running it needs Windows. Its *contents* are chec
 
 The hosted SPA does not load here either: `INTENTIC_APP_URL` points at a stub baked into the image, which keeps
 this tier hermetic. Whether the real app renders in WebKitGTK is the nightly tier's job
-(`_apps/desktop/src/../../..` → `e2e:nightly`).
+(`_apps/desktop/src/../../..` → `nightly.yml`'s `e2e`).

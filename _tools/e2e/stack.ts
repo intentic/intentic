@@ -29,7 +29,7 @@ export const BETTER_AUTH_SECRET = envSecret() ?? `intentic-e2e-secret`;
 
 // The daemon under test: the PUBLISHED sandbox image by default — the real contract a user's browser meets —
 // overridable to a source build for cross-repo debugging (SANDBOX_E2E_IMAGE=...).
-export const DAEMON_IMAGE = process.env[`SANDBOX_E2E_IMAGE`] ?? `registry.gitlab.com/radarsu/intentic/sandbox:stable`;
+export const DAEMON_IMAGE = process.env[`SANDBOX_E2E_IMAGE`] ?? `ghcr.io/intentic/sandbox:stable`;
 // A non-default host port so the reuse check can never latch onto a REAL sandbox a dev runs on this machine.
 export const DAEMON_URL = `http://localhost:18787`;
 export const DAEMON_CONTAINER = `intentic-app-e2e-daemon`;

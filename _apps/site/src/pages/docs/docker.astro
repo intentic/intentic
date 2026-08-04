@@ -32,7 +32,7 @@ curl -fsSL https://intentic.dev/rebuild | sh -s -- <SLUG> <SHA256>`;
     <p>Connecting starts two containers and opens no inbound ports:</p>
     <ul>
         <li>
-            <strong>The sandbox</strong>: the published image (<code>registry.gitlab.com/radarsu/intentic/sandbox</code>), running
+            <strong>The sandbox</strong>: the published image (<code>ghcr.io/intentic/sandbox</code>), running
             <strong>unprivileged by default</strong>. Your workspace lives at <code>/work</code>; snapshots live on a separate
             <code>/history</code> volume mounted outside <code>/work</code>, so an agent <code>rm -rf</code> can't reach your history.
         </li>

@@ -22,12 +22,10 @@ pnpm turbo run build "${filters[@]}"
 
 bash "$DIR/set-versions.sh" "$VERSION"
 bash "$DIR/build-agent-binaries.sh" _apps/sync intentic-sync linux-x64 linux-arm64 darwin-x64 darwin-arm64 windows-x64
-bash "$DIR/publish-agent-binaries.sh" _apps/sync intentic-sync "$VERSION"
 # The connected-computer agent ships for exactly the platforms the capability offers cards for (Windows, Linux).
 bash "$DIR/build-agent-binaries.sh" _apps/host intentic-host linux-x64 linux-arm64 windows-x64
-bash "$DIR/publish-agent-binaries.sh" _apps/host intentic-host "$VERSION"
 # The desktop app: installers rather than a bun binary, but it stages into _apps/desktop/dist-bin all the same,
-# so both publishers below ship it verbatim.
+# so the export below ships it verbatim.
 bash "$DIR/build-desktop.sh" "$VERSION"
 
 # …and prove those exact bytes install and run before anything publishes them. build-desktop.sh ends with
@@ -35,9 +33,9 @@ bash "$DIR/build-desktop.sh" "$VERSION"
 # installs the .deb and the AppImage on a bare Debian, starts the app under Xvfb and fires a real xdg-open
 # intentic:// at it.
 #
-# It runs HERE, in prepareCmd, rather than being left to the desktop:verify job, because that job is not a gate
+# It runs HERE, in prepareCmd, rather than being left to the desktop-verify job, because that job is not a gate
 # and cannot become one: it builds its own artifacts on its own rules, and `release` reaches its `needs` the
-# moment test:core goes green. On 2026-08-03 that gap shipped: desktop:verify failed at 12:34:10 with `the setup
+# moment verify-core goes green. On 2026-08-03 that gap shipped: desktop-verify failed at 12:34:10 with `the setup
 # link opened the Sandbox Manager (waited 45s)` and `the original instance died while handling the link`,
 # release started at 12:34:12, and forty minutes later the installers with that bug were on the GitHub Release.
 # Verifying the release's OWN output is the only version of this check that cannot be outrun — a failure here
@@ -48,12 +46,8 @@ bash "$DIR/build-desktop.sh" "$VERSION"
 # tests in commands.rs.
 bash "$DIR/verify-desktop-install.sh"
 
-# The public export, and the last build artifact this release produces on its own: it attaches everything in
-# the dist-bin dirs above to a GitHub Release, then pushes the `v<version>` tag whose arrival is what publishes
-# the npm packages (GitHub Actions, provenance, tokenless — .github/workflows/npm-publish.yml in the mirror).
+# The public export, and the last step of the release: it attaches everything in the dist-bin dirs above to a
+# GitHub Release — the one download surface for the machine agents and the desktop installers — then pushes the
+# `v<version>` tag whose arrival is what publishes the npm packages (GitHub Actions, provenance, tokenless —
+# .github/workflows/npm-publish.yml in the mirror).
 bash "$DIR/publish-github.sh" "$VERSION"
-
-# The GitLab generic Package Registry copy of the desktop installers, and it runs AFTER the export on purpose:
-# latest.json now points at the GitHub Release assets, and installed apps that still poll the GitLab endpoint
-# (the one baked into every build before this change) must never be handed a manifest whose downloads 404.
-bash "$DIR/publish-agent-binaries.sh" _apps/desktop intentic-desktop "$VERSION"

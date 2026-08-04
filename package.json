@@ -5,7 +5,7 @@
     "license": "UNLICENSED",
     "repository": {
         "type": "git",
-        "url": "git+https://gitlab.com/radarsu/intentic.git"
+        "url": "git+https://github.com/intentic/intentic.git"
     },
     "scripts": {
         "build": "turbo run build",
@@ -51,7 +51,6 @@
         "@commitlint/config-conventional": "catalog:",
         "@commitlint/types": "catalog:",
         "@semantic-release/exec": "catalog:",
-        "@semantic-release/gitlab": "catalog:",
         "@types/node": "catalog:",
         "@typescript/native-preview": "catalog:",
         "knip": "catalog:",

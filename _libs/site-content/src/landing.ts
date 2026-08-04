@@ -218,7 +218,7 @@ export const landingContent: LandingContent = {
                 holds: ["Your email address", "Your sandbox's URL"],
                 never: "No code, no keys, and no way to command your agents.",
             },
-            footnote: "Your browser holds the token that drives the sandbox; the platform never does. The sandbox is MIT on GitLab, so you can check.",
+            footnote: "Your browser holds the token that drives the sandbox; the platform never does. The sandbox is MIT on GitHub, so you can check.",
         },
     },
     economics: {

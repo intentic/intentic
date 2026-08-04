@@ -1,20 +1,16 @@
-# The desktop jobs' image (registry.gitlab.com/radarsu/intentic/ci-desktop) — desktop:check, desktop:verify and
+# The desktop jobs' image (ghcr.io/intentic/ci-desktop) — desktop-check, desktop-verify and
 # release run in this. Same reason ci-base exists, one layer further out: every one of those three jobs opened by
 # apt-installing the Tauri build inputs and curl|sh-ing rustup, measured at 2m53s + 41s in release job
 # 15686372011 and repeated per job per pipeline. Baked once here, all of it becomes free.
 #
 # Why a SEPARATE image rather than more lines in ci-base: webkit2gtk's dev headers, clang/llvm and the Windows
-# cross-toolchain are ~1.5 GB that the test, mirror:verify, images and images:platform jobs have no use for.
+# cross-toolchain are ~1.5 GB that the verify, images and images-platform jobs have no use for.
 # ci-base stays the small image every job pulls; this one is pulled by the three that build Rust.
 #
 # ponytail: FROM tracks ci-base's mutable `latest`, so the ci-desktop job below rebuilds when EITHER
 # _tools/ci-base or _tools/ci-desktop changes — otherwise this image would silently pin a stale base.
-# The base is wherever ci-base was just published. Defaults to GHCR, which is where the Actions pipeline puts
-# it; the GitLab job overrides it to its own registry, which is the only one that job authenticates to. An ARG
-# rather than a hardcoded path because both pipelines build this image during the cutover and they disagree
-# about where the base lives — the disagreement is real and temporary, so it is a parameter, not a fork.
-ARG CI_BASE_IMAGE=ghcr.io/intentic/ci-base:latest
-FROM ${CI_BASE_IMAGE}
+# The base is wherever ci-base was just published — GHCR, which is where the pipeline puts it.
+FROM ghcr.io/intentic/ci-base:latest
 
 LABEL org.opencontainers.image.source=https://github.com/intentic/intentic
 
@@ -39,7 +35,7 @@ RUN apt-get update \
 # Rust, in the image rather than in $CARGO_HOME: the jobs point CARGO_HOME at the shared /ci-cache store for the
 # registry, and a toolchain living there would be re-downloaded by any job whose PATH does not already have it.
 # Splitting them is what makes the toolchain immutable-and-free and the registry shared-and-warm.
-#   --profile minimal + rustfmt/clippy = exactly what desktop:check invokes, nothing else.
+#   --profile minimal + rustfmt/clippy = exactly what desktop-check invokes, nothing else.
 #   the msvc target + cargo-xwin = the Windows cross-build the release job runs; cargo-xwin from source is a
 #   ~200-crate compile, which belongs in a rebuilt-on-change image and not in a release.
 ENV RUSTUP_HOME=/usr/local/rustup \

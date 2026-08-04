@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Single source of truth for what the PUBLIC GitHub mirror (github.com/intentic/intentic) contains. Sourced by
-# publish-github.sh (the per-release export) and verify-mirror.sh (the merge-request guard) — one list, so the
+# publish-github.sh (the per-release export) and verify-mirror.sh (the pre-release guard) — one list, so the
 # tree that gets published is byte-for-byte the tree that was proven to install and type-check.
 #
 # The mirror is a SNAPSHOT, not a filtered history: every release materialises the current working tree into a

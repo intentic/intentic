@@ -31,7 +31,7 @@ set -euo pipefail
 CONTAINER="intentic-host"
 # The DinD + sshd "host" image: the published dind-host (built from _tools/dind-host — the same recipe the e2e harness
 # uses, so this stays in lockstep with no embedded copy). Override INTENTIC_HOST_IMAGE to test a locally-built tag.
-IMAGE="${INTENTIC_HOST_IMAGE:-registry.gitlab.com/radarsu/intentic/dind-host:latest}"
+IMAGE="${INTENTIC_HOST_IMAGE:-ghcr.io/intentic/dind-host:latest}"
 DATA_VOLUME="intentic-host-docker"
 
 SSH_PORT="${SSH_PORT:-2222}"

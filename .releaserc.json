@@ -11,13 +11,6 @@
                 "publishCmd": "bash _tools/scripts/prepare-image-trees.sh && TAGS=\"${nextRelease.version} stable\" bash _tools/scripts/publish-images.sh",
                 "successCmd": "git tag -f stable && git push -f origin stable"
             }
-        ],
-        [
-            "@semantic-release/gitlab",
-            {
-                "successComment": false,
-                "failComment": false
-            }
         ]
     ]
 }

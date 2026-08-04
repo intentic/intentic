@@ -1,7 +1,7 @@
 # @intentic-app/e2e
 
 The browser smoke tier: Playwright drives the real Vue SPA + https API + Postgres + the **published sandbox
-daemon** (`registry.gitlab.com/radarsu/intentic/sandbox:stable`) running in loopback (no-auth) mode — the same
+daemon** (`ghcr.io/intentic/sandbox:stable`) running in loopback (no-auth) mode — the same
 image a user's browser meets, so a hand-mirrored `api-contract` schema that drifts from the daemon fails here.
 
 ## What it proves

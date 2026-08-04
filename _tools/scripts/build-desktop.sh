@@ -13,10 +13,8 @@
 # in tauri.conf.json. Without the variable the installers still build; the .sig files and latest.json are
 # skipped, which means no auto-update for that release.
 #
-# The artifacts land in _apps/desktop/dist-bin/, from where the release ships them twice: attached to the
-# GitHub Release (publish-github.sh — the download surface the site and the updater point at) and to this
-# project's GitLab generic Package Registry (publish-agent-binaries.sh), which stays for as long as installs
-# built before the GitHub cutover are still polling the endpoint baked into their binary.
+# The artifacts land in _apps/desktop/dist-bin/, from where publish-github.sh attaches them to the GitHub
+# Release — the download surface the site and the updater both point at.
 set -euo pipefail
 
 VERSION="${1:?usage: build-desktop.sh <version> [--linux-only]}"
@@ -33,9 +31,7 @@ APP="$ROOT/_apps/desktop"
 TAURI_DIR="$APP/src-tauri"
 OUT="$APP/dist-bin"
 # Where the updater fetches an installer FROM: the GitHub Release for this exact version, so a manifest always
-# points at the build it describes. ONE set of URLs regardless of which endpoint served the manifest — the
-# GitLab copy of latest.json carries these same GitHub links, so an install that predates the cutover and still
-# polls the old endpoint downloads from the new one.
+# points at the build it describes.
 DOWNLOADS="https://github.com/intentic/intentic/releases/download/v${VERSION}"
 
 echo "==> desktop release build v${VERSION}"
@@ -43,7 +39,7 @@ echo "==> desktop release build v${VERSION}"
 # --- toolchain: the FALLBACK path (idempotent; runs as root) ---
 # In CI none of this executes — _tools/ci-desktop bakes every tool below into the image the desktop jobs run in,
 # because installing them per job cost 2m53s (apt) + 41s (rustup) in release job 15686372011 and repeated in
-# desktop:check and desktop:verify. What is left here is what a developer machine needs, and it is what keeps
+# desktop-check and desktop-verify. What is left here is what a developer machine needs, and it is what keeps
 # `build-desktop.sh <version>` a command anyone can run.
 # xdg-utils is not a compiler dep but a bundle INPUT: the `intentic://` deep-link scheme in tauri.conf.json makes
 # the AppImage bundler copy the host's /usr/bin/xdg-mime into the AppDir verbatim (it is what registers the scheme

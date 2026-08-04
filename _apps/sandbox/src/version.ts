@@ -4,7 +4,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 // The release flow bumps package versions before building the stable image, so this is the readable version
-// behind registry.gitlab.com/radarsu/intentic/sandbox:stable.
+// behind ghcr.io/intentic/sandbox:stable.
 export const { version } = createRequire(import.meta.url)("../package.json") as { version: string };
 
 // Only semantic-release's prepareCmd stamps a real version into package.json; everything built from a working

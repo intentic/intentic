@@ -51,7 +51,7 @@ if [ -z "$BIN" ]; then
     # Download beside the target and rename into place: the connection runs FROM $dest, and overwriting a running
     # executable fails outright ("Text file busy"). A rename swaps the directory entry instead, leaving the live
     # process on the old inode until it restarts — and a half-downloaded agent is never what runs.
-    if curl -fsSL "https://gitlab.com/api/v4/projects/radarsu%2Fintentic/packages/generic/intentic-host/latest/intentic-host-${os}-${arch}" -o "${dest}.tmp"; then
+    if curl -fsSL "https://github.com/intentic/intentic/releases/latest/download/intentic-host-${os}-${arch}" -o "${dest}.tmp"; then
         chmod +x "${dest}.tmp"
         mv -f "${dest}.tmp" "$dest"
         BIN="$dest"

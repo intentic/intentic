@@ -23,8 +23,8 @@ export const customPath = (services: Services): string => statePath(services.wor
 // pinned SHA (SANDBOX_IMAGE, which connect.sh passes through) came back from a rebuild older than it went in,
 // with no sign a downgrade happened. A capability whose whole point is its image fragment (vpn) is the worst
 // case — applying the fragment and running a daemon that understands it become mutually exclusive.
-const RELEASE_IMAGE = "registry.gitlab.com/radarsu/intentic/sandbox:stable";
-const OFFICIAL_IMAGE = /^registry\.gitlab\.com\/radarsu\/intentic\/sandbox:\S+$/;
+const RELEASE_IMAGE = "ghcr.io/intentic/sandbox:stable";
+const OFFICIAL_IMAGE = /^ghcr\.io\/intentic\/sandbox:\S+$/;
 
 // Both inputs are RUNNER-set container env (SANDBOX_BASE_IMAGE / SANDBOX_IMAGE) — never anything the agent can
 // write — so neither is a path for smuggling a base image past the owner.
@@ -57,7 +57,7 @@ export const hasValidBase = (content: string): boolean => {
         .split("\n")
         .map((line) => line.trim())
         .find((line) => line !== "" && !line.startsWith("#"));
-    return first !== undefined && /^FROM registry\.gitlab\.com\/radarsu\/intentic\/sandbox:\S+$/.test(first);
+    return first !== undefined && /^FROM ghcr\.io\/intentic\/sandbox:\S+$/.test(first);
 };
 
 // A proposal is custom-section content only: the daemon owns the base pin (no FROM) and runtime directives are

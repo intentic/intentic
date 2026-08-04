@@ -43,7 +43,7 @@ test("with e2e not asked for at all, the title stays plain — every tier is off
 });
 
 test("a credential CI defined with no value counts as missing", () => {
-    // GitLab hands an undefined-but-declared variable through as the empty string; taken as present it would
+    // CI hands an undefined-but-declared variable through as the empty string; taken as present it would
     // start the tier and fail against the real service with an empty token.
     vi.stubEnv("INTENTIC_E2E", "1");
     vi.stubEnv("CLOUDFLARE_API_TOKEN", "");

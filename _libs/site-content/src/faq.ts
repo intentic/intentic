@@ -135,7 +135,7 @@ export const faqGroups: FaqGroup[] = [
                 id: "open-source",
                 question: "Is it open source?",
                 answer: [
-                    "Yes. The sandbox and CLI that run on your machine are MIT on GitLab, so you can read what touches your code before you run it.",
+                    "Yes. The sandbox and CLI that run on your machine are MIT on GitHub, so you can read what touches your code before you run it.",
                     "The hosted platform adds accounts, billing and the connection layer. It stays off the command path.",
                 ],
             },

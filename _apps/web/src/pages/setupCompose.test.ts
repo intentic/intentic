@@ -7,7 +7,7 @@ const base: ComposeArgs = {
     mode: `intentic`,
     code: `abc123`,
     hostname: `sandbox-0f00ba4dd12b.intentic.dev`,
-    image: `registry.gitlab.com/radarsu/intentic/sandbox:stable`,
+    image: `ghcr.io/intentic/sandbox:stable`,
     googleClientId: `client-id.apps.googleusercontent.com`,
     webOrigin: PLATFORM_WEB_ORIGIN,
 };
@@ -59,7 +59,7 @@ test("a local-only dev image is marked pull_policy: never so `compose pull` skip
 
 test("the production registry image is pull_policy: always so it tracks the moving :stable release", () => {
     const yaml = composeFile(base);
-    expect(yaml).toContain(`image: registry.gitlab.com/radarsu/intentic/sandbox:stable`);
+    expect(yaml).toContain(`image: ghcr.io/intentic/sandbox:stable`);
     expect(yaml).toContain(`pull_policy: always`);
     expect(yaml).not.toContain(`pull_policy: never`);
 });

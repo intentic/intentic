@@ -25,7 +25,7 @@ import {
 const CUSTOM = "RUN apt-get update && apt-get install -y cowsay\n";
 
 // The moving release tag the base falls back to when nothing official is available.
-const RELEASE = "registry.gitlab.com/radarsu/intentic/sandbox:stable";
+const RELEASE = "ghcr.io/intentic/sandbox:stable";
 
 // The real first-party connectors/discord extensions, so a cli capability's image fragment resolves.
 const EXTENSIONS_DIR = fileURLToPath(new URL("../../../../_extensions", import.meta.url));
@@ -63,21 +63,19 @@ const vpn = (id: string): Capability => ({
 const discord: Capability = { id: "discord", kind: "cli", config: { provider: "discord", botToken: "t" } };
 
 test("hasValidBase pins the first instruction to the official sandbox image", () => {
-    expect(hasValidBase("FROM registry.gitlab.com/radarsu/intentic/sandbox:stable\nRUN true\n")).toBe(true);
-    expect(hasValidBase("# comment\n\nFROM registry.gitlab.com/radarsu/intentic/sandbox:1.52.0\nRUN true\n")).toBe(true);
+    expect(hasValidBase("FROM ghcr.io/intentic/sandbox:stable\nRUN true\n")).toBe(true);
+    expect(hasValidBase("# comment\n\nFROM ghcr.io/intentic/sandbox:1.52.0\nRUN true\n")).toBe(true);
     expect(hasValidBase("FROM alpine:latest\n")).toBe(false);
-    expect(hasValidBase("FROM registry.gitlab.com/radarsu/intentic/sandbox:\n")).toBe(false);
-    expect(hasValidBase("RUN true\nFROM registry.gitlab.com/radarsu/intentic/sandbox:stable\n")).toBe(false);
+    expect(hasValidBase("FROM ghcr.io/intentic/sandbox:\n")).toBe(false);
+    expect(hasValidBase("RUN true\nFROM ghcr.io/intentic/sandbox:stable\n")).toBe(false);
     expect(hasValidBase("")).toBe(false);
 });
 
 test("baseImageOf prefers the runner-named base, else an official running image, else the release tag", () => {
-    const latest = "registry.gitlab.com/radarsu/intentic/sandbox:latest";
+    const latest = "ghcr.io/intentic/sandbox:latest";
     // Fresh connect.sh run: no base named, and the running image IS the base.
     expect(baseImageOf("", latest)).toBe(latest);
-    expect(baseImageOf("", "registry.gitlab.com/radarsu/intentic/sandbox:sha-abc1234")).toBe(
-        "registry.gitlab.com/radarsu/intentic/sandbox:sha-abc1234",
-    );
+    expect(baseImageOf("", "ghcr.io/intentic/sandbox:sha-abc1234")).toBe("ghcr.io/intentic/sandbox:sha-abc1234");
     // After a rebuild the running image is the overlay's own tag, which is not a base — the named base wins.
     // Getting this wrong is what produced the endless rebuild prompt AND rolled the sandbox back each time.
     expect(baseImageOf(latest, "intentic-sandbox-env-demo:abc123def456")).toBe(latest);
@@ -99,7 +97,7 @@ test("baseImageOf prefers the runner-named base, else an official running image,
 });
 
 test("a rebuild is version-preserving: composing again after one is byte-identical", async () => {
-    const latest = "registry.gitlab.com/radarsu/intentic/sandbox:latest";
+    const latest = "ghcr.io/intentic/sandbox:latest";
     const services = stubServices("", [vpn("office")], latest);
 
     const first = await composeEnvironment(services);

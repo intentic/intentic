@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
-# Roll the self-hosted platform after images:platform pushes: one Komodo DeployStack call against the stack
+# Roll the self-hosted platform after images-platform pushes: one Komodo DeployStack call against the stack
 # created from _tools/selfhost/platform (its services run :latest with pull_policy: always, so a redeploy
 # pulls what CI just pushed).
 #
-# PLATFORM_DEPLOY_STACK is set per-branch in .gitlab-ci.yml rules; an empty value means "do not auto-deploy",
+# PLATFORM_DEPLOY_STACK is set per-branch by the images-platform job in .github/workflows/ci.yml; an empty value means "do not auto-deploy",
 # so a manual/local run of the images job is inert. The Komodo core origin is baked in here (override with a
 # KOMODO_URL CI variable), leaving the api key the only configuration:
 #   KOMODO_API_KEY / KOMODO_API_SECRET   an api key minted in Komodo (masked CI variables)

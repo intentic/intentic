@@ -1,4 +1,4 @@
-# CI for the intentic monorepo — the GitHub Actions translation of .gitlab-ci.yml.
+# CI for the intentic monorepo.
 #
 # One workflow, one DAG, three INDEPENDENT verify groups — test-core, test-platform, test-site, plus the
 # desktop jobs — each gating only the artifacts it proves. A broken group publishes nothing of its own and
@@ -6,7 +6,7 @@
 # `needs` edges only exist inside a workflow, and those edges are what the split buys.
 #
 # Node + pnpm are pinned by package.json engines/packageManager and baked into ci-base, so no version appears
-# here. The runner requirements — eight instances, a shared /ci-cache on the same filesystem as the work dir,
+# here. The runner requirements — six instances, a shared /ci-cache on the same filesystem as the work dir,
 # and the host Docker socket — are in docs/ci-runner.md.
 #
 # FIRST RUN: every job below runs in ghcr.io/intentic/ci-base:latest, which the `ci-base` job builds. On a
@@ -25,11 +25,10 @@ on:
 #
 # The group is PER-SHA on push, so two main pipelines never share one. A shared group with
 # cancel-in-progress: false does not run them side by side — the newer run sits PENDING until the older one
-# finishes, which behind a release is up to two hours, and a third push cancels the pending second. GitLab
-# started every pipeline immediately and auto-cancelled only the interruptible jobs; Actions has no per-job
-# opt-out of a workflow-level cancel, so the faithful shape is a group main pushes cannot collide in at all.
-# Releases stay serialized — by the release job's own `concurrency: release`, which is what GitLab's
-# `resource_group` was.
+# finishes, which behind a release is up to two hours, and a third push cancels the pending second. Actions
+# has no per-job opt-out of a workflow-level cancel, so the shape that keeps the verify jobs cancellable
+# without ever queueing a main push is a group main pushes cannot collide in at all.
+# Releases stay serialized — by the release job's own `concurrency: release`.
 concurrency:
   group: ci-${{ github.workflow }}-${{ github.ref }}-${{ github.event_name == 'push' && github.sha || '' }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
@@ -53,18 +52,17 @@ env:
   INDEXNOW_ENABLED: "0"
 
 jobs:
-  # Which parts of the tree moved. GitLab evaluated `changes:` per job; Actions has no such key, so the answer
-  # is computed once here and downstream jobs gate on these outputs.
+  # Which parts of the tree moved. Actions has no per-job `changes:` key, so the answer is computed once
+  # here and downstream jobs gate on these outputs.
   #
   # Written in bash against git rather than with a marketplace action on purpose: this repo digest-pins its
   # base images and publishes with provenance, and a third-party action in the critical path of every pipeline
   # is a supply-chain surface that buys nothing a `git diff --name-only` cannot.
   changes:
     runs-on: [self-hosted, intentic]
-    # Every job in this file carries a timeout, because the Actions default is 360 MINUTES where GitLab's
-    # ceiling was 60 (the runner's maximum_timeout). There are six runner processes on one host, so an
-    # unbounded hang is a sixth of the fleet parked for six hours. The heavy jobs get GitLab's 60; the two
-    # that only read the checkout get 15.
+    # Every job in this file carries a timeout, because the Actions default is 360 MINUTES. There are six
+    # runner processes on one host, so an unbounded hang is a sixth of the fleet parked for six hours. The
+    # heavy jobs get 60; the two that only read the checkout get 15.
     timeout-minutes: 15
     outputs:
       ci-base: ${{ steps.filter.outputs.ci-base }}
@@ -78,10 +76,10 @@ jobs:
           # Full history: a pull request's base.sha can sit arbitrarily far back and the diff below needs it
           # present. Cheap after the first run — the workspace persists, so this is an incremental fetch.
           fetch-depth: 0
-          # GitLab set GIT_CLEAN_FLAGS once, in `variables:`, so EVERY job kept node_modules. On Actions it is
-          # per-checkout, and this job runs in every pipeline: a `git clean -ffdx` here deletes the 69k-file
-          # install, the local .turbo and .image-out on whichever of the six workspaces it lands on, and the
-          # next job to land there repays it as a 2-3 minute cold install.
+          # Keeping node_modules is per-checkout on Actions, and this job runs in every pipeline: a
+          # `git clean -ffdx` here deletes the 69k-file install, the local .turbo and .image-out on whichever
+          # of the six workspaces it lands on, and the next job to land there repays it as a 2-3 minute cold
+          # install.
           clean: false
 
       - id: filter
@@ -107,7 +105,7 @@ jobs:
 
           echo "ci-base=$(match '^_tools/ci-base/')" >> "$GITHUB_OUTPUT"
           echo "ci-desktop=$(match '^_tools/ci-(desktop|base)/')" >> "$GITHUB_OUTPUT"
-          # desktop:check's whole input closure — `turbo run build test --filter=@intentic/desktop-app... --dry`
+          # desktop-check's whole input closure — `turbo run build test --filter=@intentic/desktop-app... --dry`
           # names it (desktop-app, desktop-smoke, ui, tsconfig) and each entry is one of them. _tools/ci-desktop
           # is here because the job's IMAGE is an input like any other.
           echo "desktop=$(match '^(_apps/desktop/|_apps/site/public/scripts/|_libs/ui/|_tools/ci-desktop/|_tools/desktop-smoke/|_tools/tsconfig/|pnpm-lock\.yaml)')" >> "$GITHUB_OUTPUT"
@@ -190,7 +188,7 @@ jobs:
   # default "skip me if a `needs` job was skipped", which is what these conditions need — but `always()` also
   # runs the job when the RUN ITSELF was cancelled, so superseding a pull request left this 3.75 GB image
   # build and the Rust job below still going, and a hand-cancelled main run would still have published images
-  # and rolled production. That was `interruptible: true` on GitLab and it worked.
+  # and rolled production.
   ci-desktop:
     needs: [changes, ci-base]
     # Wrapped in ${{ }} because a bare leading `!` is a YAML tag indicator, not an operator.
@@ -275,8 +273,8 @@ jobs:
       credentials:
         username: ${{ github.actor }}
         password: ${{ secrets.GITHUB_TOKEN }}
-    # A debug cargo build off the shared registry, not the release-profile one desktop-verify runs — GitLab's
-    # 60-minute default was never close to binding here, and this keeps it that way.
+    # A debug cargo build off the shared registry, not the release-profile one desktop-verify runs — 60
+    # minutes was never close to binding here, and this keeps it that way.
     timeout-minutes: 60
     env:
       # The registry, shared. Overriding CARGO_HOME does not hide the baked toolchain: rustup's proxies live in
@@ -385,8 +383,8 @@ jobs:
   #
   # It needs `verify (core)` alone — not the whole matrix. A plain stage barrier would make this wait for the
   # SLOWEST group and skip outright if any of them failed, so a site build or a desktop clippy warning would
-  # stop the images and the platform deploy for a reason neither has anything to do with. Both happened on
-  # GitLab before the edges were narrowed.
+  # stop the images and the platform deploy for a reason neither has anything to do with. Both happened
+  # before the edges were narrowed.
   images:
     needs: [changes, verify-core]
     if: |
@@ -407,10 +405,9 @@ jobs:
         password: ${{ secrets.GITHUB_TOKEN }}
     timeout-minutes: 60
     env:
-      # publish-images.sh defaults to BOTH registries for the GitLab -> GHCR move, and the only login below is
-      # to ghcr.io — so the default would spend a second ~1.5 GB upload failing to authenticate to
-      # registry.gitlab.com, and probe two more `--cache-from` refs per image on the way. GHCR is what this
-      # pipeline has credentials for; pin it to that. The GitLab path freezes at its last pushed tag.
+      # Pinned rather than left to publish-images.sh's default: ghcr.io is the only registry the login below
+      # authenticates to, and every extra entry costs a second ~1.5 GB upload plus two more `--cache-from`
+      # probes per image. Adding a registry here means adding a login step for it too.
       REGISTRIES: ghcr.io/intentic
     steps:
       - uses: actions/checkout@v4
@@ -426,9 +423,9 @@ jobs:
       # The iq models (~57 MB, fetched from HuggingFace) that prepare-image-trees.sh bakes into the sandbox
       # image's `trees` context. That script skips the download when .iq-models-complete is already there, so
       # this cache is the whole reason the fetch happens once per change of fetch-model.mjs rather than once
-      # per pipeline. It stays an Actions cache rather than moving to /ci-cache for the reason it was a GitLab
-      # cache and not a bind mount: the directory has to land inside .image-out, and this job and `release`
-      # run CONCURRENTLY — one shared directory would need the fetch to be race-safe first.
+      # per pipeline. It stays an Actions cache rather than moving to /ci-cache for one reason: the directory
+      # has to land inside .image-out, and this job and `release` run CONCURRENTLY — one shared directory
+      # would need the fetch to be race-safe first.
       - uses: actions/cache@v4
         with:
           path: |
@@ -461,8 +458,8 @@ jobs:
         password: ${{ secrets.GITHUB_TOKEN }}
     timeout-minutes: 60
     env:
-      # Same pin as the `images` job — docker-release.sh carries the identical both-registries default, and
-      # this job authenticates to ghcr.io only.
+      # Same pin as the `images` job — docker-release.sh carries the identical default, and this job
+      # authenticates to ghcr.io only.
       REGISTRIES: ghcr.io/intentic
       PLATFORM_DEPLOY_STACK: intentic-platform
       KOMODO_URL: ${{ secrets.KOMODO_URL }}
@@ -535,7 +532,7 @@ jobs:
       # which dies with the container, so every release re-downloaded it (~2m40s).
       XWIN_CACHE_DIR: /ci-cache/xwin
       GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      # OPTIONAL, and unset today — it was never a GitLab CI variable either. build-desktop.sh branches on
+      # OPTIONAL, and unset today. build-desktop.sh branches on
       # `-n`, so an absent secret is an empty string and the release skips minisign signatures and latest.json,
       # exactly as every release has so far. Wired through anyway so that setting the secret is the whole
       # change: the desktop app's updater endpoint (src-tauri/tauri.conf.json) polls for a latest.json that

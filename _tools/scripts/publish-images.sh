@@ -1,29 +1,25 @@
 #!/usr/bin/env bash
-# Build + push the first-party intentic images to every registry in REGISTRIES (see below — GHCR and, until
-# the move is finished, the GitLab Container Registry):
+# Build + push the first-party intentic images to every registry in REGISTRIES (see below — GHCR):
 #   sandbox    the AI-agent workspace daemon + CLI
 #   dind-host  a Docker-in-Docker + sshd deploy-target "host" — connect.ps1 stands one up on Windows so a
 #              server-less user can deploy locally (the e2e harness + intentic-local.sh use the same recipe)
 # Used by CI — the Images workflow (latest + commit SHA on push to main) and the release (the version + the
 # moving `stable` tag, via semantic-release successCmd) — and runnable by hand:
-#   docker login registry.gitlab.com && TAGS=0.1.0 pnpm publish:images
+#   docker login ghcr.io && TAGS=0.1.0 pnpm publish:images
 # TAGS is a space-separated tag list; every listed tag is pushed. On release the moving `stable` tag is pushed
 # onto the new version; _libs/state-resolver/src/lib/images.ts and the connect scripts reference `sandbox:stable`
-# (unpinned — always the latest release, no digest to maintain). The GitLab Container Registry packages must be made public once so
+# (unpinned — always the latest release, no digest to maintain). The GHCR packages must be made public once so
 # tenant hosts can pull them unauthenticated.
 set -euo pipefail
 
 TAGS="${TAGS:?set TAGS (space-separated, e.g. "0.1.0" or "latest sha-abc1234")}"
-# Space-separated registries, every one of which gets every tag. BOTH are pushed for the duration of the
-# GitLab -> GHCR move: an installed sandbox resolves `registry.gitlab.com/radarsu/intentic/sandbox:stable` from
-# the connect script it was set up with, and that reference outlives any change made here — so the old path has
-# to keep answering until nothing pulls it. Drop the GitLab entry then; the images become GHCR-only with no
-# coordination and no flag day.
+# Space-separated registries, every one of which gets every tag. Adding one is how a second registry would be
+# served: the bytes are built once and every listed registry receives the identical manifest.
 #
 # GHCR PACKAGE VISIBILITY IS SEPARATE FROM REPOSITORY VISIBILITY. A package published from a private repo is
 # private, and a private sandbox image means every `curl https://intentic.dev/sync | sh` fails at the pull.
 # Each package must be set to public once, by hand, at github.com/orgs/intentic/packages.
-REGISTRIES="${REGISTRIES:-ghcr.io/intentic registry.gitlab.com/radarsu/intentic}"
+REGISTRIES="${REGISTRIES:-ghcr.io/intentic}"
 # Monorepo root (_tools/scripts -> up two). The sandbox image's build context is the whole monorepo so
 # `pnpm install --frozen-lockfile` resolves the root lockfile; `pnpm deploy` prunes the final image to core.
 root="$(cd "$(dirname "$0")/../.." && pwd)"
@@ -57,8 +53,8 @@ setup_builder
 # covers the identical layer set a separate mode=max ref would.
 #
 # It covers that set far more reliably. A separate `type=registry,ref=…:buildcache` meant a SECOND ~1.5 GB
-# upload, and gitlab.com's registry answers the finalizing PUT of its largest blob with a 400; buildkit then
-# cancels the image push running alongside it, so a fully-pushed image got thrown away — that is how 1.159.0
+# upload, and a registry that answers the finalizing PUT of its largest blob with a 400 makes buildkit
+# cancel the image push running alongside it, so a fully-pushed image got thrown away — that is how 1.159.0
 # and 1.160.0 reached npm with no sandbox image behind them. ignore-error=true stopped that from failing the
 # build, and thereby made it SILENT: sandbox:buildcache froze at 2026-07-23 and nothing said so for eight days,
 # during which every sandbox build ran fully cold (~20 min, in both the images and release jobs, every
@@ -66,8 +62,8 @@ setup_builder
 publish() {
     local image="$1" dockerfile="$2" context="$3"
     shift 3
-    # One build, every registry: buildx pushes each -t it was given, so the bytes are built once and the two
-    # registries receive the identical manifest rather than two independent builds that could drift.
+    # One build, every registry: buildx pushes each -t it was given, so the bytes are built once and every
+    # registry receives the identical manifest rather than independent builds that could drift.
     local tag_args=() cache_args=()
     local registry
     for registry in $REGISTRIES; do

@@ -19,5 +19,5 @@ test("every third-party image is pinned to a full tag + sha256 digest", () => {
 // The first-party sandbox is intentionally unpinned — it must track the moving `stable` release tag (only the
 // release moves it, onto a published version), never a digest pin and never `:latest` (the 0.0.0 continuous build).
 test("the first-party sandbox tracks the moving stable release tag", () => {
-    expect(IMAGES.sandbox).toBe("registry.gitlab.com/radarsu/intentic/sandbox:stable");
+    expect(IMAGES.sandbox).toBe("ghcr.io/intentic/sandbox:stable");
 });

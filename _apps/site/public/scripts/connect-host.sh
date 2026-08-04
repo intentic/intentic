@@ -48,7 +48,7 @@ ZONE="${ZONE:-}"
 HOST_SSH_TUNNEL_TOKEN="${HOST_SSH_TUNNEL_TOKEN:-}"
 HOST_SSH_HOSTNAME="${HOST_SSH_HOSTNAME:-}"
 HOST_USER="${HOST_USER:-intentic}"
-SANDBOX_IMAGE="${SANDBOX_IMAGE:-registry.gitlab.com/radarsu/intentic/sandbox:stable}"
+SANDBOX_IMAGE="${SANDBOX_IMAGE:-ghcr.io/intentic/sandbox:stable}"
 CLOUDFLARED_VERSION="${CLOUDFLARED_VERSION:-2026.7.2}"
 HOST_SSH_KEY=""
 SUDO=""
@@ -232,14 +232,14 @@ run_host_ssh_connector() {
     fi
 }
 
-# Pull a published image, clearing a stale registry.gitlab.com login and retrying anonymously on failure (the image is public).
+# Pull a published image, clearing a stale ghcr.io login and retrying anonymously on failure (the image is public).
 pull_image() {
     image="$1"
     if docker pull "$image"; then
         return 0
     fi
-    echo "intentic: pull failed — clearing a stale registry.gitlab.com login and retrying anonymously…" >&2
-    docker logout registry.gitlab.com >/dev/null 2>&1 || true
+    echo "intentic: pull failed — clearing a stale ghcr.io login and retrying anonymously…" >&2
+    docker logout ghcr.io >/dev/null 2>&1 || true
     docker pull "$image"
 }
 

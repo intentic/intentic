@@ -73,7 +73,7 @@ test("apply writes the connector's SKILL.md; discord voice pends only when the g
     expect(skill).toContain("$DISCORD_BOT_TOKEN");
     expect(skill).toContain("https://discord.com/oauth2/authorize?client_id=<APP_ID>&scope=bot&permissions=1117248");
     expect(skill).toContain("discord-voice");
-    expect(skill).not.toContain("FROM registry.gitlab.com");
+    expect(skill).not.toContain("FROM ghcr.io");
     // No gateway status yet ⇒ text tools active; whisper state is unknown, so it doesn't pend.
     expect(await cliHandler.status(ctx, "discord", discord.config)).toEqual({ state: "active" });
     // Once the gateway reports whisper missing (its /listeners/discord/status post), voice pends on a rebuild.

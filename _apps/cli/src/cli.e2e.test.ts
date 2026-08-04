@@ -27,7 +27,7 @@ import { readGeneratedSecrets } from "./secrets/generated-secrets.js";
 // passwords are intentic-generated (read back from desired-state/.secrets.json to sign in).
 //
 // The TOKEN gates the tier alongside INTENTIC_E2E, the same way every other gated suite names its own
-// credentials. That is the nightly job's whole contract (.gitlab-ci.yml `e2e:nightly`): it sets INTENTIC_E2E=1
+// credentials. That is the nightly job's whole contract (.github/workflows/nightly.yml `e2e`): it sets INTENTIC_E2E=1
 // for every tier and each suite decides for itself whether its secrets are present. Asserting the token inside
 // instead turned "this project has no Cloudflare credentials" into a red pipeline every night.
 const tier = e2eTier("intentic CLI end-to-end (manual, real Cloudflare + DinD)", {
@@ -234,7 +234,7 @@ describe.skipIf(!tier.runs)(tier.title, () => {
 
         // 3. Resolve + apply: brings up Forgejo + its Actions runner + Komodo + the workspace sandbox + the
         // tunnel/routes, and wires the app's CI/CD. The workspace provider PULLS the published sandbox image
-        // (registry.gitlab.com/radarsu/intentic/sandbox) from the GitLab Container Registry — it must be published under that nested name + public.
+        // (ghcr.io/intentic/sandbox) from GHCR — it must be published under that name + public.
         await intentic("deploy", "resolve", "--config", configPath, "--out", artifactPath);
         await intentic("deploy", "apply", "--yes", "--artifact", artifactPath, "--maxIterations", "8");
 

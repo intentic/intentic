@@ -1,5 +1,5 @@
 import { productHref } from "./product";
-import { githubProfileUrl, gitlabUrl, linkedinProfileUrl, personalSiteUrl } from "./site";
+import { githubProfileUrl, githubUrl, linkedinProfileUrl, personalSiteUrl } from "./site";
 
 /* Who builds this, as data — shared by the landing page's trust band and by /about/.
  *
@@ -19,7 +19,7 @@ import { githubProfileUrl, gitlabUrl, linkedinProfileUrl, personalSiteUrl } from
 export interface AboutLink {
     label: string;
     href: string;
-    logo: "gitlab" | "github" | "linkedin" | "globe";
+    logo: "github" | "linkedin" | "globe";
 }
 
 /** One checkable claim, rendered as a card. `stat` is filled at build time, never authored. */
@@ -76,15 +76,15 @@ export const trustCards: TrustCard[] = [
     },
     {
         title: "Open source first",
-        body: "The sandbox and CLI, the parts that touch your credentials, are MIT on GitLab. No hidden binaries, no telemetry. Read what executes on your hardware before you run it.",
-        href: gitlabUrl,
+        body: "The sandbox and CLI, the parts that touch your credentials, are MIT on GitHub. No hidden binaries, no telemetry. Read what executes on your hardware before you run it.",
+        href: githubUrl,
         linkLabel: "Read the source",
     },
     {
         title: "It builds itself",
         body: "Agents running in this product wrote most of it, in public, one reviewable commit at a time. The fleet on this page is what shipped the page.",
         stat: "commits",
-        href: `${gitlabUrl}/-/commits/main`,
+        href: `${githubUrl}/commits/main`,
         linkLabel: "Read the commit log",
     },
     {
@@ -119,6 +119,6 @@ export const whyIntentic = [
 export const aboutMeta = {
     title: `About · ${CREATOR_NAME}, the creator of intentic`,
     description:
-        "Who builds intentic: Artur Kurowski, a full-stack engineer with 15+ years in production systems. Verifiable background, MIT source on GitLab, and a commit log the agents wrote.",
+        "Who builds intentic: Artur Kurowski, a full-stack engineer with 15+ years in production systems. Verifiable background, MIT source on GitHub, and a commit log the agents wrote.",
     datePublished: "2026-08-02",
 };

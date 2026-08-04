@@ -27,7 +27,7 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
-SANDBOX_IMAGE="${SANDBOX_E2E_IMAGE:-registry.gitlab.com/radarsu/intentic/sandbox:stable}"
+SANDBOX_IMAGE="${SANDBOX_E2E_IMAGE:-ghcr.io/intentic/sandbox:stable}"
 HOST_IMAGE="${INTENTIC_HOST_IMAGE:-}"
 # An RFC 2606 reserved TLD: resolvable by no one, so anything here that accidentally reaches for the public
 # network fails loudly instead of leaking traffic. Same choice, for the same reason, as hermetic.e2e.test.ts.

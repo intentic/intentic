@@ -1,6 +1,6 @@
 import { LEGAL_CONTACT_EMAIL } from "@intentic/constants";
 import { creatorRole } from "./about";
-import { APP_URL, FOUNDER_NAME, FOUNDER_SAME_AS, FOUNDER_URL, LOGO_URL, ORG_DESCRIPTION, ORG_NAME, SAME_AS, SITE_URL } from "./site";
+import { APP_URL, FOUNDER_NAME, FOUNDER_SAME_AS, githubProfileUrl, LOGO_URL, ORG_DESCRIPTION, ORG_NAME, SAME_AS, SITE_URL } from "./site";
 
 // One JSON-LD graph per page instead of a pile of standalone documents: every entity is declared once,
 // under a stable @id, and everything else points at it. Consumers (Google, and any LLM reading the page)
@@ -70,7 +70,7 @@ function founderNode() {
         "@type": "Person",
         "@id": FOUNDER_ID,
         name: FOUNDER_NAME,
-        url: FOUNDER_URL,
+        url: githubProfileUrl,
         jobTitle: "Founder & engineer",
         description: creatorRole,
         sameAs: [...FOUNDER_SAME_AS],

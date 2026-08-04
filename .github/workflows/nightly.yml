@@ -1,8 +1,8 @@
 # The deep verification tiers, on a schedule rather than per-push — they need real credentials, real infra, or
 # both, and they take hours. Split out of ci.yml because a schedule is a different trigger, not a different
-# branch: on GitLab these were `rules: if: $CI_PIPELINE_SOURCE == "schedule"` inside the one pipeline, and
-# every publish rule in that file needed a `!= "schedule"` guard to stop the nightly re-tagging images and
-# rolling production at 03:00 for a commit nobody pushed. A separate workflow deletes that whole class of bug.
+# branch: kept inside one pipeline, every publish rule there would need a not-a-schedule guard to stop the
+# nightly re-tagging images and rolling production at 03:00 for a commit nobody pushed. A separate workflow
+# deletes that whole class of bug.
 name: Nightly
 
 on:

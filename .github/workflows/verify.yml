@@ -1,5 +1,5 @@
-# One verify group: build + test a release group's closure. The Actions equivalent of .gitlab-ci.yml's
-# `.verify` template, called three times from ci.yml with different filters.
+# One verify group: build + test a release group's closure. Called three times from ci.yml with different
+# filters.
 #
 # A REUSABLE WORKFLOW rather than a matrix, and the reason is the DAG. Actions reports a matrix job's result as
 # one aggregate across every leg, so `needs: verify` would be 'failure' when ANY group broke — and `images`
@@ -30,8 +30,8 @@ env:
 jobs:
   verify:
     runs-on: [self-hosted, intentic]
-    # GitLab's ceiling was 60 minutes (the runner's maximum_timeout); the Actions default is 360. This is the
-    # job most likely to hang, and there are only six runner processes to hang one of.
+    # The Actions default is 360 minutes. This is the job most likely to hang, and there are only six
+    # runner processes to hang one of.
     timeout-minutes: 60
     container:
       image: ghcr.io/intentic/ci-base:latest

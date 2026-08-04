@@ -1,6 +1,6 @@
-# The CI job image (registry.gitlab.com/radarsu/intentic/ci-base) — every .gitlab-ci.yml job runs in this.
+# The CI job image (ghcr.io/intentic/ci-base) — every CI job runs in this.
 # It exists to delete per-job tool installation: the docker-ce-cli + buildx apt install that the images,
-# images:platform and release jobs EACH repeated at runtime, the ripgrep install the test job repeated, and the
+# images-platform and release jobs EACH repeated at runtime, the ripgrep install the test job repeated, and the
 # `curl https://bun.sh/install | bash` the release job repeated. Baked once here, all of that becomes free.
 #
 # The base is the SAME digest-pinned image the sandbox runtime uses (_apps/sandbox/Dockerfile) — deliberately,

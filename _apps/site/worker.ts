@@ -39,13 +39,13 @@ function canonicalForMarkdown(pathname: string): string | undefined {
 
 /* Desktop-app downloads (_apps/desktop): stable vanity URLs, so the site and the app's own links never carry
  * a version. An installer staged locally into public/desktop/ (stage-local-downloads.sh — gitignored, so a
- * deploy normally ships none) is served directly; otherwise this redirects to the public generic Package
- * Registry, which is where release-prepare.sh publishes them.
+ * deploy normally ships none) is served directly; otherwise this redirects to the latest GitHub Release,
+ * which is where publish-github.sh attaches them.
  *
- * The registry rather than a release asset, for the same reason sync.sh and computer.sh fetch their binaries
- * there: this project's Releases feature is member-only, so a release-asset download 404s for exactly the
- * anonymous visitor who just clicked Download. Names match build-desktop.sh's un-versioned artifact names. */
-const DESKTOP_LATEST = "https://gitlab.com/api/v4/projects/radarsu%2Fintentic/packages/generic/intentic-desktop/latest";
+ * `releases/latest/download/<name>` is the same surface sync.sh and computer.sh fetch their binaries from:
+ * it resolves to the newest release without the site knowing a version. Names match build-desktop.sh's
+ * un-versioned artifact names. */
+const DESKTOP_LATEST = "https://github.com/intentic/intentic/releases/latest/download";
 const DESKTOP_FILES: Record<string, string> = {
     "/desktop": "Intentic-setup.exe",
     "/desktop/windows": "Intentic-setup.exe",

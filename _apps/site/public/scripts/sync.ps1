@@ -36,7 +36,7 @@ if (-not $bin) {
         # overwrite or delete a running executable - but it does allow RENAMING one out of the way, which leaves
         # the live watcher running from the renamed file while the new binary takes its place. The leftover is
         # cleared on the next run, once nothing is executing it. A half-download never becomes $dest either.
-        Invoke-WebRequest -UseBasicParsing -Uri "https://gitlab.com/api/v4/projects/radarsu%2Fintentic/packages/generic/intentic-sync/latest/intentic-sync-windows-$arch.exe" -OutFile "$dest.tmp"
+        Invoke-WebRequest -UseBasicParsing -Uri "https://github.com/intentic/intentic/releases/latest/download/intentic-sync-windows-$arch.exe" -OutFile "$dest.tmp"
         Remove-Item -Force -ErrorAction SilentlyContinue "$dest.old"
         if (Test-Path $dest) { Move-Item -Force -Path $dest -Destination "$dest.old" }
         Move-Item -Force -Path "$dest.tmp" -Destination $dest

@@ -6,7 +6,7 @@
  * exactly one place — CI, on main, after the merge.
  *
  * The first two need no node_modules and no network, which is what lets `--checks-only` run them from a
- * `pre-push` hook and from a CI job that has not installed anything yet (.gitlab-ci.yml, the `preflight` job).
+ * `pre-push` hook and from a CI job that has not installed anything yet (ci.yml, the `preflight` job).
  * Measured over 40 main pipelines, 10 of the 22 red ones died on invariant 1 or 3 — each after 0.6-2.0 min of
  * runner time, in four jobs at once, for a fact that is readable from the checkout in under a second.
  *

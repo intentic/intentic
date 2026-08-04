@@ -3,7 +3,7 @@ import { docsHref, docsSections } from "./docs";
 import type { ShotImage } from "./landing";
 import type { ProductPage } from "./product";
 import { productHref, productPages } from "./product";
-import { DEMO_PATH, gitlabReleasesUrl } from "./site";
+import { DEMO_PATH, githubReleasesUrl } from "./site";
 
 /* The site's navigation, as data.
  *
@@ -88,7 +88,7 @@ export const navEntries: NavEntry[] = [
         // Release notes as the panel's action rather than a seventh link in the bar. It is the same question
         // the docs answer — what does this thing do — asked about the last two weeks of it, and it was the
         // one row of the bar a visitor reads once a release.
-        action: { label: "Release notes", href: gitlabReleasesUrl, external: true },
+        action: { label: "Release notes", href: githubReleasesUrl, external: true },
     },
     // A bare link, like Compare: the gallery's contents come from the registry repo at build time, so there is
     // no authored list here to build a menu out of.

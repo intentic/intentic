@@ -1,4 +1,4 @@
-# The intentic platform API image (registry.gitlab.com/radarsu/intentic/api): Hono + oRPC + Better Auth on
+# The intentic platform API image (ghcr.io/intentic/api): Hono + oRPC + Better Auth on
 # Bun, backed by Postgres via Prisma. Bun executes the TypeScript source directly — the api is never compiled.
 #
 # Deliberately a pure COPY wrapper: the tree is built and pruned OUTSIDE Docker by the `docker:release` turbo
@@ -10,7 +10,7 @@
 # Runtime config (see src/config.ts) is injected by the deployment, never baked: DATABASE_URL,
 # BETTER_AUTH_SECRET, SECRETS_KEY, WEB_ORIGIN, API_URL, GOOGLE_CLIENT_*, INTENTIC_CLOUDFLARE_*, STRIPE_*, …
 FROM oven/bun:1.3.14-slim
-LABEL org.opencontainers.image.source=https://gitlab.com/radarsu/intentic
+LABEL org.opencontainers.image.source=https://github.com/intentic/intentic
 WORKDIR /app
 COPY . /app
 # The dev default binds loopback (127.0.0.1); a container must bind all interfaces so the tunnel/proxy

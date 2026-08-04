@@ -3,7 +3,7 @@ import { environment } from "./environment";
 /* The connect/sync/host install scripts the copy-paste one-liners run. Two deliveries, chosen by build:
  *   • deploy (production): fetch the public intentic.dev vanity URL — the site worker (see _apps/site) serves
  *     the scripts tracked in _apps/site/public/scripts/ and redirects each vanity path to the `stable`
- *     release's script. The private repo has no anonymous raw URL, so we never fetch from GitLab.
+ *     release's script. The private repo has no anonymous raw URL, so we never fetch from it directly.
  *   • local dev: the platform runs on the same machine as the checked-out repo, so run the script BY PATH
  *     (relative to the repo root) — no network fetch, and the command exercises the working-tree scripts. */
 const SCRIPT_URLS = {

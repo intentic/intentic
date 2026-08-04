@@ -1,9 +1,8 @@
 // The daemon compares its own baked version (version.ts) to the latest published release so the web can offer
 // a non-blocking update, surfaced on /info. Version strings, not registry digests: the sandbox has no Docker
-// socket. Source is the PUBLIC npm dist-tag `@intentic/sync@latest` — the GitLab Releases API can't be used
-// because the project's Releases feature is member-only, so an anonymous sandbox gets 403. Every first-party
+// socket. Source is the PUBLIC npm dist-tag `@intentic/sync@latest`. Every first-party
 // package is stamped to the same release version and a release moves the image `:stable` tag onto that version,
-// so `@intentic/sync@latest`'s version IS what registry.gitlab.com/radarsu/intentic/sandbox:stable resolves to.
+// so `@intentic/sync@latest`'s version IS what ghcr.io/intentic/sandbox:stable resolves to.
 // Plain global fetch (not the node:https of announce.ts, whose only reason is per-host TLS skip).
 //
 // The fetch runs on a boot-started background timer (startVersionCheck), NEVER on the /info request path:

@@ -53,7 +53,7 @@
         "docker:release": {
             "dependsOn": ["build"],
             "cache": false,
-            "passThroughEnv": ["REGISTRIES", "TAGS", "CI_COMMIT_SHORT_SHA", "DOCKER_HOST", "DOCKER_TLS_VERIFY", "DOCKER_CERT_PATH"]
+            "passThroughEnv": ["REGISTRIES", "TAGS", "GITHUB_SHA", "DOCKER_HOST", "DOCKER_TLS_VERIFY", "DOCKER_CERT_PATH"]
         },
         "watch": {
             "cache": false,
@@ -120,10 +120,10 @@
         },
         // The browser tier (@intentic-app/e2e), named apart from `e2e` for the same reason e2e:hermetic is: it
         // asks for a provisioning of its own. Its whole stack is addressed on LOCALHOST — compose postgres on
-        // :5440, the https API on :6480, vite on :47145, the daemon container on :18787 — and every job in
-        // .gitlab-ci.yml talks to a dind SERVICE, which publishes those ports on ITS network namespace, not the
-        // job's loopback (`docker compose up postgres` there leaves the server on `docker:5440`, and the migrate
-        // that follows dies P1001 against localhost). ci-base carries no Chromium either. Sharing the `e2e` name
+        // :5440, the https API on :6480, vite on :47145, the daemon container on :18787 — and CI jobs run in a
+        // container that reaches Docker through the HOST's socket, which publishes those ports on the HOST's
+        // network namespace, not the job's loopback (`docker compose up postgres` there leaves the server off
+        // localhost, and the migrate that follows dies P1001). ci-base carries no Chromium either. Sharing the `e2e` name
         // is what swept it into the nightly, where it can only fail; under its own it runs where its stack is
         // real — a dev machine, `pnpm e2e:browser`.
         "e2e:browser": {

@@ -3,11 +3,11 @@
 # Release with the installers attached. Runs from release-prepare.sh after the versions are stamped and the
 # binaries are built, and is what makes the whole public surface move at once —
 #
-#   • the mirror's tree becomes the source anyone can read (this project's GitLab repository is member-only);
+#   • the mirror's tree becomes the source anyone can read (the development repository is member-only);
 #   • the pushed `v*` tag triggers .github/workflows/npm-publish.yml, which is where the @intentic/* packages
 #     are published now — with provenance, tokenless, attested to the commit this script just pushed;
-#   • the Release is the download surface for the desktop installers and the machine-agent binaries, which
-#     needed the GitLab generic Package Registry precisely because Releases 404 for anonymous users there.
+#   • the Release is the download surface for the desktop installers and the machine-agent binaries — the
+#     anonymous download channel behind `curl https://intentic.dev/sync | sh` and `.../computer | sh`.
 #
 # It exports the WORKING TREE, never history: the mirror gets a snapshot per release (public.sh), so nothing
 # that was ever committed and removed can surface, and no force-push is ever needed.

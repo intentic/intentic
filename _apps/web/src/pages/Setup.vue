@@ -704,7 +704,7 @@ const composeArgs = computed<ComposeArgs | undefined>(() => {
         // references the published registry image, never the local `:dev` tag connect.sh rebuilds from the
         // checkout (a local-only tag can't be pulled and won't exist on a deploy target). The rendered file
         // gets pull_policy: always, tracking the moving `:stable` release.
-        image: `registry.gitlab.com/radarsu/intentic/sandbox:stable`,
+        image: `ghcr.io/intentic/sandbox:stable`,
         googleClientId: environment.auth.googleClientId,
         webOrigin: globalThis.location.origin,
         ...(platformUrlOverride.value ? { platformUrl: platformUrlOverride.value } : {}),

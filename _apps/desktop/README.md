@@ -151,9 +151,8 @@ too.
 
 `_tools/scripts/build-desktop.sh` runs in `release-prepare.sh`: Linux `deb`/`rpm`/AppImage natively, the
 Windows NSIS installer via `cargo-xwin` on the same Linux runner, and `latest.json`. The artifacts land in
-`dist-bin/` and `publish-agent-binaries.sh` ships them — to the **public generic Package Registry**, exactly
-like `intentic-sync` and `intentic-host`, and for the same reason: this project's Releases feature is
-member-only, so a release-asset download 404s for the anonymous visitor who just clicked Download on the site.
+`dist-bin/`, and `publish-github.sh` attaches them to the **GitHub Release**, exactly like `intentic-sync` and
+`intentic-host` — the anonymous download surface behind the Download button on the site.
 
 Updater artifacts are minisign-signed when `TAURI_SIGNING_PRIVATE_KEY` is set in CI (generate a pair with
 `pnpm --filter @intentic/desktop-app exec tauri signer generate`; the pubkey is committed in
@@ -166,9 +165,9 @@ fact: **this app is cross-built on Linux and its Windows conventions first execu
 
 | Tier | Runs | Proves |
 | --- | --- | --- |
-| `cargo test` | per MR (`desktop:check`) | the argv/env each flow assembles — for **both** hosts, since `Host` is a value rather than a `cfg!` read, so the `.ps1` named-parameter conventions are covered on a Linux runner |
+| `cargo test` | per PR (`desktop-check`) | the argv/env each flow assembles — for **both** hosts, since `Host` is a value rather than a `cfg!` read, so the `.ps1` named-parameter conventions are covered on a Linux runner |
 | `_tools/scripts/verify-desktop-bundle.sh` | every build (called by `build-desktop.sh`) | the bundled scripts are present and byte-identical, and the `.desktop` entry both registers `intentic://` and carries the `%u` that delivers it. Reads the deb, rpm, AppImage **and the NSIS installer** — the only automated look inside the Windows artifact |
-| `_tools/scripts/verify-desktop-install.sh` | main + nightly (`desktop:verify`) | the artifacts install on a **bare** Debian, launch under Xvfb, and answer a real `xdg-open intentic://` — with the app running *and* with it closed, which are different mechanisms — see [`_tools/desktop-smoke`](../../_tools/desktop-smoke/README.md) |
+| `_tools/scripts/verify-desktop-install.sh` | main + nightly (`desktop-verify`) | the artifacts install on a **bare** Debian, launch under Xvfb, and answer a real `xdg-open intentic://` — with the app running *and* with it closed, which are different mechanisms — see [`_tools/desktop-smoke`](../../_tools/desktop-smoke/README.md) |
 | `_tools/scripts/verify-desktop-setup.sh` | nightly | the `connect.sh` **extracted from the installer** brings a sandbox up on a clean Docker host, hermetically (no Cloudflare, no Google, no platform) |
 
 Run the last two locally against your own build:
@@ -179,7 +178,7 @@ bash _tools/scripts/verify-desktop-bundle.sh _apps/site/public/desktop
 bash _tools/scripts/verify-desktop-install.sh _apps/site/public/desktop   # needs Docker
 ```
 
-**Not covered:** running `Intentic-setup.exe` (needs Windows — a runner job belongs beside `desktop:verify`),
+**Not covered:** running `Intentic-setup.exe` (needs Windows — a runner job belongs beside `desktop-verify`),
 and the setup-code claim round trip, which needs a Cloudflare pool and so belongs with the gated nightly
 suites. Whether every extension view renders is the browser tier's job
 ([`_tools/e2e/specs/extension-views.spec.ts`](../../_tools/e2e/specs/extension-views.spec.ts)) — the workspace

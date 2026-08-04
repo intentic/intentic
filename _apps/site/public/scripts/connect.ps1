@@ -65,7 +65,7 @@ $OwnerEmail = $env:OWNER_EMAIL
 # The latest RELEASE image via the moving `stable` tag (pulled fresh below), never :latest - see connect.sh for
 # why (the :latest/hand-tagged builds carry internal version 0.0.0, whose @intentic/* deps are unpublished, so
 # `intentic deploy init` can't resolve them; the release only ever moves `stable` onto a published release image).
-$SandboxImage = if ($env:SANDBOX_IMAGE) { $env:SANDBOX_IMAGE } else { 'registry.gitlab.com/radarsu/intentic/sandbox:stable' }
+$SandboxImage = if ($env:SANDBOX_IMAGE) { $env:SANDBOX_IMAGE } else { 'ghcr.io/intentic/sandbox:stable' }
 # The daemon's preview proxy port, exposed at *.preview.<zone>; apps declare their own ports in apps.json.
 $PreviewPort = if ($env:PREVIEW_PORT) { $env:PREVIEW_PORT } else { '5173' }
 # Dev QoL (see connect.sh): a named volume or absolute host path mounted at /agent-auth and passed as
@@ -217,7 +217,7 @@ $OriginHost = 'intentic-sandbox-workspace'
 # The Docker-in-Docker deploy target (when self-host is on): its own dockerd + sshd, reached by the sandbox at this
 # container name on the per-sandbox network. Per-slug too, so self-hosting sandboxes don't fight over one target.
 $DindContainer = "intentic-dind-host-$Slug"
-$DindImage = if ($env:DIND_IMAGE) { $env:DIND_IMAGE } else { 'registry.gitlab.com/radarsu/intentic/dind-host:latest' }
+$DindImage = if ($env:DIND_IMAGE) { $env:DIND_IMAGE } else { 'ghcr.io/intentic/dind-host:latest' }
 $DindVolume = "intentic-dind-docker-$Slug"
 
 # CONNECT_TOKEN is the per-user value the setup code redeems into (or env/-ConnectToken carries directly).
@@ -301,7 +301,7 @@ if (-not $Yes) {
 # Dockerfile or source edits, and docker's layer cache makes an unchanged rebuild near-instant. ($PSScriptRoot
 # is empty on the irm|iex path - no checkout there, so that path runs an existing local image as-is, or errors.)
 # Registry images are pulled even when cached so the moving `stable` tag always runs the newest release. The
-# image is PUBLIC; if a stale Docker Desktop `docker login registry.gitlab.com` makes the pull "denied", clear
+# image is PUBLIC; if a stale Docker Desktop `docker login ghcr.io` makes the pull "denied", clear
 # it and retry anonymously.
 $FirstSegment = ($SandboxImage -split '/', 2)[0]
 $HasRegistry = $SandboxImage.Contains('/') -and ($FirstSegment -match '[.:]' -or $FirstSegment -eq 'localhost')
@@ -344,8 +344,8 @@ if (-not $HasRegistry) {
         if ($LASTEXITCODE -eq 0) {
             Write-Host 'intentic: pull failed but the image exists locally - using the local copy.'
         } else {
-            Write-Host 'intentic: pull failed - clearing a stale registry.gitlab.com login and retrying anonymously...'
-            docker logout registry.gitlab.com *> $null
+            Write-Host 'intentic: pull failed - clearing a stale ghcr.io login and retrying anonymously...'
+            docker logout ghcr.io *> $null
             docker pull $SandboxImage
             if ($LASTEXITCODE -ne 0) {
                 Write-Error 'failed to pull the sandbox image (see the docker output above).'
