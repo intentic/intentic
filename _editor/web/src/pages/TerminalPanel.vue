@@ -109,6 +109,14 @@ const stripIndex = computed(() => {
 // What the pop-out button says and is named, both directions — the same wording as the strip menu's row and the
 // palette's, with the chord when one is bound (withShortcut, shared with the chat strip's own button).
 const popoutHint = computed(() => withShortcut(popout.poppedOut.value ? `Dock panel back` : `Move panel into new window`, `terminal.togglePopout`));
+// The panel's dismissal, which is NOT a kill — the sessions are tmux facts on the sandbox and outlive every view
+// of them. It used to say "Close terminal" under a ×, the same glyph the pills carry for the one action that
+// DOES end a session, so the toolbar read as "kill everything". It now says what it does and leaves × to the
+// pills: docked, the panel drops back down to its dock (chevron-down, pointing where it goes); floating, there
+// is nothing to drop into and the press retires the window, which is the one place a × still tells the truth.
+const closeHint = computed(() =>
+    withShortcut(popout.poppedOut.value ? `Close the window — the terminals keep running` : `Hide the panel — the terminals keep running`, `terminal.toggle`),
+);
 const segmentIcon = (name: string): IconName => terminalMeta(name).icon ?? KIND_ICONS[tabByName.value.get(name)?.kind ?? `shell`];
 const segmentColor = (name: string): string | undefined => {
     const color = terminalMeta(name).color;
@@ -910,7 +918,7 @@ const endResize = (event: PointerEvent): void => {
                                 v-if="closeTab !== undefined && renamingName !== name"
                                 class="relative flex h-3 w-3 shrink-0 items-center justify-center"
                                 @click.stop="closeTab(name)"
-                                aria-label="Close tab"
+                                aria-label="Kill terminal"
                             >
                                 <Icon
                                     name="times"
@@ -967,10 +975,10 @@ const endResize = (event: PointerEvent): void => {
                     type="button"
                     :class="cmp.iconButton()"
                     @click="emit(`close`)"
-                    v-tooltip.top="withShortcut('Close terminal', 'terminal.toggle')"
-                    aria-label="Close terminal"
+                    v-tooltip.top="closeHint"
+                    :aria-label="closeHint"
                 >
-                    <Icon name="times" class="text-xs" />
+                    <Icon :name="popout.poppedOut.value ? 'times' : 'chevron-down'" class="text-xs" />
                 </button>
             </div>
         </div>
