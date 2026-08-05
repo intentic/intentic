@@ -73,10 +73,13 @@ const DIFF_LAYOUT_KEY = `ui-diff-layout`;
 
 // Where a diff OPENS, the third of the reader's diff settings. Monaco lands on the first change, which is the
 // import list far more often than it is the change the file was opened for — every review then starts with the
-// same scroll past the same block. On, the diff opens on the first change that touches something other than an
-// import instead (a file whose only changes ARE imports still opens on them — there is nothing else to show).
-// Off by default: landing on the first change is what every diff tool does, and a reader who hasn't asked for
-// this must not have their diffs quietly scrolled somewhere else. Persists.
+// same scroll past the same block. So the diff opens on the first change that touches something other than an
+// import (a file whose only changes ARE imports still opens on them — there is nothing else to show).
+//
+// On by default, like the comment strip above it and for the same reason: the reader came to see what the code
+// now does, and both settings hold back the part of the file that isn't that answer. Neither HIDES anything —
+// the imports are one scroll up — so the cost of the default being wrong for someone is a scroll, against a
+// scroll on every file of every review for leaving it off. Persists.
 const SKIP_IMPORTS_KEY = `ui-diff-skip-imports`;
 
 /* Owns shell-layout state shared across areas (module-level singleton): where the chat panel sits relative to
@@ -97,11 +100,14 @@ const clampSidebarWidth = (px: number): number => Math.round(Math.max(MIN_SIDEBA
 const clampReviewListWidth = (px: number): number => Math.round(Math.max(MIN_REVIEW_LIST_WIDTH, Math.min(px, MAX_REVIEW_LIST_WIDTH)));
 
 // Shared localStorage readers — Storage may be unavailable (private mode); helpers catch and fall back.
-const readBool = (key: string): boolean => {
+// `fallback` is what an unset key reads as, so a setting that ships ON is still one line here; anything stored
+// is the reader's own answer, and only the exact `1` this file writes counts as true.
+const readBool = (key: string, fallback = false): boolean => {
     try {
-        return localStorage.getItem(key) === `1`;
+        const stored = localStorage.getItem(key);
+        return stored === null ? fallback : stored === `1`;
     } catch {
-        return false;
+        return fallback;
     }
 };
 
@@ -150,7 +156,7 @@ const editMode = ref<boolean>(readBool(EDIT_MODE_KEY));
 const showComments = ref<boolean>(readBool(SHOW_COMMENTS_KEY));
 const hideFileComments = ref<boolean>(readBool(HIDE_FILE_COMMENTS_KEY));
 const diffLayout = ref<DiffLayout>(readEnum(DIFF_LAYOUT_KEY, [`split`, `unified`] as const, `split`));
-const skipImports = ref<boolean>(readBool(SKIP_IMPORTS_KEY));
+const skipImports = ref<boolean>(readBool(SKIP_IMPORTS_KEY, true));
 
 const set = (value: ChatPosition): void => {
     position.value = value;
