@@ -1,0 +1,315 @@
+---
+import { navEntries } from "@intentic-dev/site-content/nav";
+import { APP_URL, githubUrl } from "@intentic-dev/site-content/site";
+import ExternalIcon from "./ExternalIcon.astro";
+---
+
+<div class="mobile-nav-overlay" id="mobile-nav-overlay">
+    <div class="mobile-nav-inner">
+        <ul class="mobile-nav-list">
+            {
+                navEntries.map((entry) => {
+                    if (entry.type === "menu") {
+                        return (
+                            <li class="mobile-nav-group">
+                                <button type="button" class="mobile-nav-heading" aria-expanded="false">
+                                    {entry.label}
+                                    <svg
+                                        class="mobile-chevron"
+                                        width="12"
+                                        height="7"
+                                        viewBox="0 0 12 7"
+                                        fill="none"
+                                        aria-hidden="true"
+                                    >
+                                        <path
+                                            d="M1 1L6 6L11 1"
+                                            stroke="currentColor"
+                                            stroke-width="1.5"
+                                            stroke-linecap="round"
+                                            stroke-linejoin="round"
+                                        />
+                                    </svg>
+                                </button>
+                                {/* Sections keep their labels here too — the grouping is the point of the
+                                    menu, and a phone has even less room to guess what a row means. */}
+                                <div class="mobile-subnav">
+                                    <ul class="mobile-subnav-inner">
+                                    {entry.sections.map((section) => (
+                                        <>
+                                            <li class="mobile-subnav-label">{section.label}</li>
+                                            {section.items.map((item) => (
+                                                <li>
+                                                    <a
+                                                        href={item.href}
+                                                        class="mobile-nav-link sub"
+                                                        target={item.external ? "_blank" : undefined}
+                                                        rel={item.external ? "noopener" : undefined}
+                                                    >
+                                                        {item.label}
+                                                        {item.external && <ExternalIcon />}
+                                                    </a>
+                                                </li>
+                                            ))}
+                                        </>
+                                    ))}
+                                    {entry.action && (
+                                        <li>
+                                            <a
+                                                href={entry.action.href}
+                                                class="mobile-nav-link sub action"
+                                                target={entry.action.external ? "_blank" : undefined}
+                                                rel={entry.action.external ? "noopener" : undefined}
+                                            >
+                                                {entry.action.label}{" "}
+                                                {entry.action.external ? <ExternalIcon /> : <span aria-hidden="true">→</span>}
+                                            </a>
+                                        </li>
+                                    )}
+                                    </ul>
+                                </div>
+                            </li>
+                        );
+                    }
+
+                    if (entry.type === "link") {
+                        return (
+                            <li>
+                                <a
+                                    href={entry.href}
+                                    class="mobile-nav-link"
+                                    target={entry.external ? "_blank" : undefined}
+                                    rel={entry.external ? "noopener" : undefined}
+                                >
+                                    {entry.label}
+                                    {entry.external && <ExternalIcon />}
+                                </a>
+                            </li>
+                        );
+                    }
+                })
+            }
+
+            <li class="mobile-nav-divider"></li>
+
+            <li>
+                <a href={githubUrl} target="_blank" rel="noopener" class="mobile-nav-link">
+                    <svg viewBox="0 0 24 24" fill="currentColor" width="16" height="16" aria-hidden="true">
+                        <path
+                            d="M12 .297c-6.63 0-12 5.373-12 12 0 5.303 3.438 9.8 8.205 11.385.6.113.82-.258.82-.577 0-.285-.01-1.04-.015-2.04-3.338.724-4.042-1.61-4.042-1.61C4.422 18.07 3.633 17.7 3.633 17.7c-1.087-.744.084-.729.084-.729 1.205.084 1.838 1.236 1.838 1.236 1.07 1.835 2.809 1.305 3.495.998.108-.776.417-1.305.76-1.605-2.665-.3-5.466-1.332-5.466-5.93 0-1.31.465-2.38 1.235-3.22-.135-.303-.54-1.523.105-3.176 0 0 1.005-.322 3.3 1.23.96-.267 1.98-.399 3-.405 1.02.006 2.04.138 3 .405 2.28-1.552 3.285-1.23 3.285-1.23.645 1.653.24 2.873.12 3.176.765.84 1.23 1.91 1.23 3.22 0 4.61-2.805 5.625-5.475 5.92.42.36.81 1.096.81 2.22 0 1.606-.015 2.896-.015 3.286 0 .315.21.69.825.57C20.565 22.092 24 17.592 24 12.297c0-6.627-5.373-12-12-12"
+                        />
+                    </svg>
+                    GitHub
+                </a>
+            </li>
+        </ul>
+
+        <a class="btn btn-primary mobile-cta" href={APP_URL}>Get started free</a>
+    </div>
+</div>
+
+<style>
+    /* ── Mobile nav overlay ────────────────────────────── */
+    .mobile-nav-overlay {
+        position: fixed;
+        inset: 0;
+        top: 4rem;
+        z-index: 99;
+        /* Opaque for the same reason the desktop menu is: the page behind ghosts through an almost-opaque
+           layer once the blur spreads it, and this overlay covers the whole viewport. */
+        background: var(--color-canvas);
+        opacity: 0;
+        visibility: hidden;
+        transform: translateY(-12px);
+        transition:
+            opacity 0.28s cubic-bezier(0.16, 1, 0.3, 1),
+            visibility 0.28s,
+            transform 0.28s cubic-bezier(0.16, 1, 0.3, 1);
+        overflow-y: auto;
+        -webkit-overflow-scrolling: touch;
+    }
+
+    .mobile-nav-overlay.open {
+        opacity: 1;
+        visibility: visible;
+        transform: translateY(0);
+    }
+
+    .mobile-nav-inner {
+        max-width: 32rem;
+        margin: 0 auto;
+        padding: 1.5rem;
+        display: flex;
+        flex-direction: column;
+        min-height: calc(100dvh - 4rem);
+    }
+
+    /* ── List ──────────────────────────────────────────── */
+    .mobile-nav-list {
+        list-style: none;
+        padding: 0;
+        margin: 0;
+        display: flex;
+        flex-direction: column;
+        gap: 2px;
+    }
+
+    /* ── Links ─────────────────────────────────────────── */
+    .mobile-nav-link {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 14px 16px;
+        font-size: 1rem;
+        font-weight: 500;
+        color: var(--color-muted);
+        border-radius: 10px;
+        text-decoration: none;
+        transition:
+            color 0.15s,
+            background 0.15s;
+    }
+
+    .mobile-nav-link:hover {
+        color: var(--color-content);
+        background: var(--color-overlay);
+    }
+
+    .mobile-nav-link.sub {
+        font-size: 0.925rem;
+        padding: 12px 16px 12px 28px;
+        color: var(--color-subtle);
+    }
+
+    .mobile-nav-link.sub:hover {
+        color: var(--color-content);
+    }
+
+    .mobile-nav-link.sub.action {
+        color: var(--color-link);
+    }
+
+    .mobile-subnav-label {
+        padding: 12px 16px 4px 28px;
+        font-size: 0.6875rem;
+        font-weight: 600;
+        letter-spacing: 0.05em;
+        text-transform: uppercase;
+        color: var(--color-subtle);
+    }
+
+    /* ── Accordion heading ─────────────────────────────── */
+    .mobile-nav-heading {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        width: 100%;
+        padding: 14px 16px;
+        font-size: 1rem;
+        font-weight: 600;
+        color: var(--color-content);
+        background: none;
+        border: none;
+        border-radius: 10px;
+        cursor: pointer;
+        font-family: inherit;
+        transition: background 0.15s;
+    }
+
+    .mobile-nav-heading:hover {
+        background: var(--color-overlay);
+    }
+
+    .mobile-chevron {
+        transition: transform 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+
+    .mobile-nav-heading[aria-expanded="true"] .mobile-chevron {
+        transform: rotate(180deg);
+    }
+
+    /* ── Sub-nav (collapsed by default) ────────────────── */
+    /* The 0fr→1fr collapse needs exactly ONE grid child, so the grid wraps the list rather than sizing each
+       link: rows added by the section labels would otherwise land in implicit `auto` rows and stay readable
+       while the menu says it is closed. */
+    .mobile-subnav {
+        display: grid;
+        grid-template-rows: 0fr;
+        transition: grid-template-rows 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+
+    /* `overflow: hidden` is what lets the 0fr row actually reach zero (it zeroes the item's automatic minimum
+       size); a `min-height: 0` here would also zero its max-content contribution, so the OPEN state collapses
+       to nothing too. */
+    .mobile-subnav-inner {
+        list-style: none;
+        margin: 0;
+        padding: 0;
+        overflow: hidden;
+    }
+
+    .mobile-nav-group.expanded .mobile-subnav {
+        grid-template-rows: 1fr;
+    }
+
+    /* ── Divider ───────────────────────────────────────── */
+    .mobile-nav-divider {
+        height: 1px;
+        background: var(--color-line);
+        margin: 12px 16px;
+    }
+
+    /* ── CTA button ────────────────────────────────────── */
+    .mobile-cta {
+        margin-top: auto;
+        padding-top: 1.5rem;
+        width: 100%;
+        text-align: center;
+    }
+
+    /* ── Only visible below the bar's breakpoint ───────── */
+    /* The same 64rem Nav uses, spelled the same way: the old pair (max-width: 48rem / min-width: 48.0625rem)
+       left one pixel at the boundary where the bar was hidden and this overlay was too. */
+    @media (width >= 64rem) {
+        .mobile-nav-overlay {
+            display: none;
+        }
+    }
+</style>
+
+<script is:inline>
+    document.addEventListener("DOMContentLoaded", () => {
+        const overlay = document.getElementById("mobile-nav-overlay");
+        const toggle = document.getElementById("mobile-nav-open");
+
+        // Accordion toggles
+        overlay?.querySelectorAll(".mobile-nav-heading").forEach((btn) => {
+            btn.addEventListener("click", () => {
+                const group = btn.closest(".mobile-nav-group");
+                const wasExpanded = group?.classList.contains("expanded");
+
+                // Collapse all other groups
+                overlay.querySelectorAll(".mobile-nav-group.expanded").forEach((g) => {
+                    g.classList.remove("expanded");
+                    g.querySelector(".mobile-nav-heading")?.setAttribute("aria-expanded", "false");
+                });
+
+                // Toggle the clicked group
+                if (!wasExpanded) {
+                    group?.classList.add("expanded");
+                    btn.setAttribute("aria-expanded", "true");
+                }
+            });
+        });
+
+        // Close on link click
+        overlay?.querySelectorAll("a").forEach((a) => {
+            a.addEventListener("click", () => {
+                overlay.classList.remove("open");
+                toggle?.classList.remove("active");
+                toggle?.setAttribute("aria-expanded", "false");
+                document.body.style.overflow = "";
+            });
+        });
+    });
+</script>

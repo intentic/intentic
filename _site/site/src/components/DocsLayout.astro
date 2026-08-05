@@ -1,0 +1,132 @@
+---
+import { docsHref, docsPage, docsPages, docsSections } from "@intentic-dev/site-content/docs";
+import BaseLayout from "../layouts/BaseLayout.astro";
+import Footer from "./Footer.astro";
+import Nav from "./Nav.astro";
+
+interface Props {
+    pageId: string;
+    heading: string;
+    lead: string;
+}
+
+const { pageId, heading, lead } = Astro.props;
+const page = docsPage(pageId);
+
+// The same trail the reader sees, handed to BaseLayout so the BreadcrumbList can't drift from it.
+// Title, description and dates are not passed: BaseLayout resolves them from the route.
+const breadcrumbs = [{ name: "Docs", path: docsHref("") }, ...(page && pageId ? [{ name: page.title, path: docsHref(pageId) }] : [])];
+
+const index = docsPages.findIndex((p) => p.id === pageId);
+const prev = index > 0 ? docsPages[index - 1] : undefined;
+const next = index >= 0 && index < docsPages.length - 1 ? docsPages[index + 1] : undefined;
+
+const linkBase =
+    "block border-l-2 border-transparent py-1.5 pl-3 text-sm text-muted transition-colors hover:border-line-strong hover:text-content";
+const linkActive = "border-primary-500 text-content";
+---
+
+<BaseLayout breadcrumbs={breadcrumbs}>
+    <Nav />
+    <main class="flex-1">
+        <div class="mx-auto grid max-w-6xl gap-10 px-6 pt-28 pb-20 lg:grid-cols-[13rem_1fr] lg:gap-14 lg:pt-32">
+            <!-- Sidebar -->
+            <aside class="lg:relative">
+                <button
+                    class="mb-4 flex items-center gap-2 rounded-lg border border-line bg-card px-3.5 py-2 text-sm text-muted lg:hidden"
+                    id="docs-sidebar-toggle"
+                    aria-label="Toggle docs menu"
+                    aria-expanded="false"
+                >
+                    <svg width="18" height="18" viewBox="0 0 20 20" fill="none" aria-hidden="true">
+                        <path d="M3 5h14M3 10h14M3 15h14" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"></path>
+                    </svg>
+                    Menu
+                </button>
+                <nav
+                    class="sticky top-28 hidden max-h-[calc(100vh-9rem)] overflow-y-auto pb-6 lg:block"
+                    id="docs-sidebar"
+                >
+                    {
+                        docsSections.map((section) => (
+                            <div class="mt-6 first:mt-0">
+                                <div class="eyebrow mb-2 pl-3">{section.label}</div>
+                                <ul class="list-none space-y-0.5 p-0">
+                                    {section.items.map((item) => (
+                                        <li>
+                                            <a href={docsHref(item.id)} class:list={[linkBase, { [linkActive]: item.id === pageId }]}>
+                                                {item.title}
+                                            </a>
+                                        </li>
+                                    ))}
+                                </ul>
+                            </div>
+                        ))
+                    }
+                </nav>
+            </aside>
+
+            <!-- Content -->
+            <article class="min-w-0">
+                <nav aria-label="Breadcrumb" class="mb-6 text-xs text-subtle">
+                    <ol class="flex flex-wrap items-center gap-1.5 p-0">
+                        <li><a href="/" class="transition-colors hover:text-link">Home</a></li>
+                        <li aria-hidden="true">›</li>
+                        <li><a href="/docs/" class="transition-colors hover:text-link">Docs</a></li>
+                        {
+                            pageId && (
+                                <Fragment>
+                                    <li aria-hidden="true">›</li>
+                                    <li aria-current="page" class="text-muted">
+                                        {page?.title}
+                                    </li>
+                                </Fragment>
+                            )
+                        }
+                    </ol>
+                </nav>
+
+                <header class="mb-10 border-b border-line pb-8">
+                    <div class="eyebrow">Documentation</div>
+                    <h1 class="mt-3 text-3xl font-semibold tracking-tight sm:text-4xl">{heading}</h1>
+                    <p class="mt-4 max-w-xl text-base leading-relaxed text-muted">{lead}</p>
+                </header>
+
+                <div class="docs-body">
+                    <slot />
+                </div>
+
+                {
+                    (prev || next) && (
+                        <div class="mt-16 flex items-stretch justify-between gap-4 border-t border-line pt-8">
+                            {prev ? (
+                                <a href={docsHref(prev.id)} class="group flex flex-col gap-1">
+                                    <span class="eyebrow">Previous</span>
+                                    <span class="text-sm font-medium text-content transition-colors group-hover:text-link">← {prev.title}</span>
+                                </a>
+                            ) : (
+                                <span />
+                            )}
+                            {next && (
+                                <a href={docsHref(next.id)} class="group ml-auto flex flex-col gap-1 text-right">
+                                    <span class="eyebrow">Next</span>
+                                    <span class="text-sm font-medium text-content transition-colors group-hover:text-link">{next.title} →</span>
+                                </a>
+                            )}
+                        </div>
+                    )
+                }
+            </article>
+        </div>
+    </main>
+    <Footer />
+
+    <script>
+        const toggle = document.getElementById("docs-sidebar-toggle");
+        const sidebar = document.getElementById("docs-sidebar");
+        toggle?.addEventListener("click", () => {
+            const open = sidebar?.classList.toggle("!block");
+            toggle.setAttribute("aria-expanded", String(!!open));
+        });
+    </script>
+</BaseLayout>

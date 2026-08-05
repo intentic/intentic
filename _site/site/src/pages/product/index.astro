@@ -1,0 +1,92 @@
+---
+import { productHref, productPages } from "@intentic-dev/site-content/product";
+import { APP_URL, DEMO_PATH } from "@intentic-dev/site-content/site";
+import { Image } from "astro:assets";
+import BaseLayout from "../../layouts/BaseLayout.astro";
+import Footer from "../../components/Footer.astro";
+import Nav from "../../components/Nav.astro";
+import { shotAsset, SHOT_WIDTHS } from "../../lib/shots";
+
+/* The product index: every surface as a card, in the order the menu lists them. It is what the mega-menu is
+ * a shortcut to — and the page a search engine, a shared link or a touch device lands on. */
+
+const groups = [
+    { label: "Run agents", blurb: "Start work, steer it, and decide what lands.", slugs: productPages.filter((page) => page.group === "run") },
+    {
+        label: "Configure the environment",
+        blurb: "The workspace they operate in, and the machine it runs on.",
+        slugs: productPages.filter((page) => page.group === "environment"),
+    },
+];
+---
+
+<BaseLayout
+    title="The product · intentic"
+    description="Every surface of the intentic workspace: the fleet board, plan mode, diff review, the shared editor and terminal, capabilities, and the sandbox on hardware you own."
+>
+    <Nav />
+    <main class="flex-1">
+        <section class="relative overflow-hidden border-b border-line">
+            <div class="absolute inset-0 bg-linear-to-br from-primary-600/10 via-canvas to-canvas" aria-hidden="true"></div>
+            <div class="relative mx-auto max-w-7xl px-6 pt-28 pb-14 lg:pt-32">
+                <div class="eyebrow">The product</div>
+                <h1 class="mt-3 max-w-3xl text-3xl leading-tight font-semibold tracking-tight sm:text-4xl">
+                    An IDE for your agents, surface by surface.
+                </h1>
+                <p class="mt-4 max-w-2xl text-base leading-relaxed text-muted">
+                    Every screen below is the real app, shot from the workspace you can open yourself. It is the same recording the live demo runs on.
+                </p>
+                <div class="mt-7 flex flex-wrap gap-3">
+                    <a class="btn btn-primary" href={APP_URL}>Get started free</a>
+                    <a class="btn btn-secondary" href={DEMO_PATH}>Open the live workspace</a>
+                </div>
+            </div>
+        </section>
+
+        <div class="mx-auto max-w-7xl space-y-16 px-6 py-16 lg:py-20">
+            {
+                groups.map((group) => (
+                    <section>
+                        <div class="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+                            <h2 class="text-lg font-semibold tracking-tight text-content">{group.label}</h2>
+                            <p class="text-xs text-subtle">{group.blurb}</p>
+                        </div>
+                        {/* Two across, and never wider than the shot really is — same reasoning as the
+                            landing's gallery: at three the thumbnail rendered a 1072 CSS px interface at a
+                            third size, and the one portrait shot stretched to a blurry 1.6×. */}
+                        <div class="mt-6 grid gap-6 sm:grid-cols-2">
+                            {group.slugs.map((page) => {
+                                const image = shotAsset(page.hero.name);
+                                // Half the capture's own pixels — the "never wider than the shot really is" cap
+                                // above. `sizes` repeats it, or the portrait card asks for a 736px file to paint 368.
+                                const cap = `${image.width / 2}px`;
+                                return (
+                                    <a href={productHref(page.slug)} class="card group overflow-hidden transition-colors hover:border-primary-600/40">
+                                        <div class="flex aspect-16/10 justify-center overflow-hidden border-b border-line bg-canvas">
+                                            <Image
+                                                src={image}
+                                                alt={page.hero.alt}
+                                                widths={SHOT_WIDTHS}
+                                                sizes={`(min-width: 80rem) min(604px, ${cap}), (min-width: 40rem) min((100vw - 4.5rem) / 2, ${cap}), min(100vw - 3rem, ${cap})`}
+                                                style={`max-width:${cap}`}
+                                                loading="lazy"
+                                                decoding="async"
+                                                class="h-full w-full object-cover object-left-top"
+                                            />
+                                        </div>
+                                        <div class="p-6">
+                                            <h3 class="text-base font-medium text-content group-hover:text-link">{page.navLabel}</h3>
+                                            <p class="mt-2 text-sm leading-relaxed text-muted">{page.menuBlurb}</p>
+                                        </div>
+                                    </a>
+                                );
+                            })}
+                        </div>
+                    </section>
+                ))
+            }
+        </div>
+    </main>
+
+    <Footer />
+</BaseLayout>

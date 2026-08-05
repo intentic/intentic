@@ -1,0 +1,139 @@
+---
+import DocsCodeBlock from "../../../components/DocsCodeBlock.astro";
+import DocsLayout from "../../../components/DocsLayout.astro";
+
+const manifest = `{
+    "publisher": "acme",
+    "name": "incidents",
+    "version": "1.0.0",
+    "category": "work",
+    "icon": "exclamation-triangle",
+    "engines": { "intentic": "^0.4.0" },
+    "permissions": { "sandbox": ["GET /logs", "GET /logs/tail"] },
+    "contributes": {
+        "views": [{ "id": "incidents", "label": "Incidents", "surface": "rail", "badge": true }]
+    }
+}`;
+
+// The contribution points, split by which half of the sandbox they extend — the distinction the page is built on.
+const uiPoints = [
+    { name: "views", what: "A tile in the left rail, a per-repo panel in the Workspace tree, or a tab on the Sandbox hub." },
+    { name: "viewers", what: "A renderer for a file type: the host fetches the bytes, your component draws them." },
+    { name: "commands", what: "An entry in the command palette, optionally with a global keyboard shortcut." },
+    { name: "settings", what: "Typed settings the host renders and stores for you, including secrets and env vars for the agent." },
+    { name: "files", what: "Which workspace files back your view, so the daemon pushes you a refresh instead of you polling." },
+];
+
+const agentPoints = [
+    { name: "agent", what: "A directory of skills, subagents, hooks and MCP servers, loaded into the agent every turn." },
+    { name: "bin", what: "Executables prepended to the agent's PATH, which is how you ship it a command-line tool." },
+    { name: "capabilities", what: "A whole third-party integration as data: a card, a config form, env vars, and a cheatsheet." },
+    { name: "processes", what: "A long-lived background process the daemon supervises, optionally on a tunneled preview URL." },
+    { name: "listener", what: "A realtime event source that can wake the agent, the way Discord and IMAP do." },
+    { name: "environment", what: "Dockerfile layers baked into the sandbox image, so your tools are actually installed." },
+];
+---
+
+<DocsLayout
+    pageId="extensions"
+    heading="Extensions"
+    lead="intentic is a lean core plus an extension system. An extension is a git repo with a manifest, and unlike an editor plugin it can extend the agent as well as the UI."
+>
+    <h2>What an extension is</h2>
+    <p>
+        A git repository with an <code>intentic-extension.json</code> file at its root. That's the whole definition. The manifest names a
+        publisher, a name, and the things the extension contributes; if it contributes UI, the repo also holds a prebuilt bundle exporting an
+        <code>activate()</code> function.
+    </p>
+    <DocsCodeBlock code={manifest} lang="json" title="intentic-extension.json" />
+    <p>
+        Identity is <strong>derived, never declared</strong>: this extension is <code>acme.incidents</code> everywhere in the product,
+        because that's what <code>publisher</code> and <code>name</code> say. There is no id field to contradict the one the install dialog
+        showed you.
+    </p>
+
+    <h2>It extends the agent, not just the editor</h2>
+    <p>
+        This is the part that has no equivalent in a normal editor's plugin model, and it's the reason to build one. A sandbox is a whole
+        machine: an agent, its tools, its credentials, its image. An extension can reach all of it.
+    </p>
+
+    <h3>The UI half</h3>
+    <table>
+        <thead>
+            <tr><th>Contributes</th><th>What it adds</th></tr>
+        </thead>
+        <tbody>
+            {uiPoints.map((point) => (<tr><td><code>{point.name}</code></td><td>{point.what}</td></tr>))}
+        </tbody>
+    </table>
+
+    <h3>The agent and daemon half</h3>
+    <table>
+        <thead>
+            <tr><th>Contributes</th><th>What it adds</th></tr>
+        </thead>
+        <tbody>
+            {agentPoints.map((point) => (<tr><td><code>{point.name}</code></td><td>{point.what}</td></tr>))}
+        </tbody>
+    </table>
+    <p>
+        Nothing says you have to use both halves. A connector is a manifest and two files with <strong>no code at all</strong>. A skill pack
+        is a directory. An extension that ships a CLI for the agent and never draws a pixel is a perfectly ordinary extension.
+    </p>
+
+    <h2>The trust model</h2>
+    <p>
+        Extension code runs in your browser and your sandbox, so the install is built to be understood before it's approved, not audited
+        after. Three mechanics do that work:
+    </p>
+    <ul>
+        <li>
+            <strong>The code is pinned to a commit.</strong> Installing takes a full 40-character commit sha, not a branch. The code you
+            approved is the code that runs, and an update is an explicit, visible act, never something that happens under you.
+        </li>
+        <li>
+            <strong>The manifest is the approval surface.</strong> The install dialog shows exactly the declared contributions. Afterwards
+            the host <em>enforces</em> them: a view, command, viewer, setting or process the approved manifest never declared is refused at
+            runtime. An extension cannot grow new powers after you said yes.
+        </li>
+        <li>
+            <strong>Backend reach is an allowlist.</strong> An extension has no ambient client to your daemon. It declares the routes it
+            calls as <code>"GET /logs"</code>-style entries and the host refuses everything else, so "what can this thing actually touch"
+            is a list you can read in the diff.
+        </li>
+    </ul>
+    <p>
+        Credentials are never part of that surface. The transport injects auth host-side; an extension bundle never sees a token, and secret
+        settings round-trip as "still set" rather than as their value.
+    </p>
+
+    <h2>Everything first-party is an extension too</h2>
+    <p>
+        Thirteen of the features you already use are extensions: Activity, Automations, Logs, Memory, Pipelines, Preview, Acceptance, the
+        file viewers, the Discord and IMAP gateways, the connector catalog. They ship through the same
+        <code>@intentic/extension-api</code> a third-party bundle compiles against, and a lint rule fails the build if one of them reaches
+        into app internals instead.
+    </p>
+    <p>
+        That's a deliberate constraint rather than a boast: it means the public API is the API the product is built on, so it can't quietly
+        rot into the second-class path.
+    </p>
+
+    <h2>How extensions reach a sandbox</h2>
+    <ul>
+        <li><strong>Baked into the image</strong>: first-party ones are present in every sandbox and can be switched off, not removed.</li>
+        <li><strong>Git-installed</strong>: everything else, as a sha-pinned clone into <code>.intentic/extensions/</code>, added from a repo URL or picked from a registry.</li>
+    </ul>
+    <p>
+        Both land in one list on <strong>Sandbox → Extensions</strong>, with one on/off switch each. Switching one off unwires it
+        everywhere: no view, no command, no PATH entry, no connector card, no env var, no background process.
+    </p>
+
+    <h2>Where to go next</h2>
+    <ul>
+        <li><a href="/docs/extensions/build/">Build an extension</a>: a working rail view, from empty directory to installed.</li>
+        <li><a href="/docs/extensions/manifest/">Manifest reference</a>: every contribution point and every field.</li>
+        <li><a href="/docs/extensions/publish/">Publish &amp; the marketplace</a>: get yours listed, and how updates and trust work.</li>
+    </ul>
+</DocsLayout>

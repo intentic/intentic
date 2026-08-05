@@ -1,0 +1,16 @@
+{
+    "name": "intentic",
+    "short_name": "intentic",
+    "description": "Specialized coding agents, each with its own sandbox — the libraries, dev-tools, integrations, and context its job needs, on hardware you own.",
+    "start_url": "/",
+    "display": "standalone",
+    "background_color": "#181614",
+    "theme_color": "#181614",
+    "icons": [
+        {
+            "src": "/assets/intentic-logo-sized.png",
+            "sizes": "326x326",
+            "type": "image/png"
+        }
+    ]
+}

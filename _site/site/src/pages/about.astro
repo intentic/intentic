@@ -1,0 +1,152 @@
+---
+import {
+    aboutMeta,
+    background,
+    CONTACT_EMAIL_PARTS,
+    CREATOR_HANDLE,
+    CREATOR_NAME,
+    creatorBio,
+    creatorRole,
+    openSource,
+    whyIntentic,
+} from "@intentic-dev/site-content/about";
+import { githubIssuesUrl } from "@intentic-dev/site-content/site";
+import { buildProfilePageSchema } from "@intentic-dev/site-content/structured-data";
+import BaseLayout from "../layouts/BaseLayout.astro";
+import CreatorLinks from "../components/CreatorLinks.astro";
+import Footer from "../components/Footer.astro";
+import Nav from "../components/Nav.astro";
+import TrustCards from "../components/TrustCards.astro";
+
+/* Who builds intentic — the depth behind the landing page's `#trust` band.
+ *
+ * It exists for two readers. A human deciding whether to run a container on their own machine and hand
+ * it real credentials, and the machines (Google, LLM answer engines) that establish who is behind a
+ * domain — which is what the ProfilePage graph in BaseLayout is for. The band converts; this page is
+ * where the CV can be specific enough to be checkable.
+ *
+ * Everything here is already public on github.com/radarsu, linkedin.com/in/radarsu and radarsu.com.
+ * Nothing is asserted that a reader cannot go and verify. */
+---
+
+<BaseLayout title={aboutMeta.title} description={aboutMeta.description} extraJsonLd={[buildProfilePageSchema("/about/")]}>
+    <Nav />
+    <main class="flex-1">
+        <section class="mx-auto max-w-5xl px-6 pt-32 pb-16 max-sm:pt-28">
+            <div class="eyebrow">About the creator</div>
+            <h1 class="mt-3 text-3xl font-semibold tracking-tight sm:text-4xl">{CREATOR_NAME}</h1>
+            <p class="mt-4 max-w-2xl text-lg leading-relaxed text-muted">{creatorRole}</p>
+            <p class="mt-4 max-w-2xl text-base leading-relaxed text-subtle">{creatorBio}</p>
+            <CreatorLinks class="mt-8" />
+        </section>
+
+        <section class="mx-auto max-w-5xl px-6 pb-16">
+            <TrustCards />
+        </section>
+
+        <section class="mx-auto max-w-5xl px-6 pb-16">
+            <div class="grid gap-10 md:grid-cols-2 md:gap-14">
+                <div>
+                    <h2 class="text-lg font-semibold tracking-tight text-content">Background</h2>
+                    <ul class="mt-5 space-y-4">
+                        {
+                            background.map((item) => (
+                                <li class="flex gap-3 text-sm leading-relaxed text-muted">
+                                    <span class="mt-2 h-1 w-1 shrink-0 rounded-full bg-primary-500" />
+                                    <span>
+                                        <strong class="font-medium text-content">{item.lead}</strong> {item.body}
+                                    </span>
+                                </li>
+                            ))
+                        }
+                    </ul>
+                </div>
+
+                <div>
+                    <h2 class="text-lg font-semibold tracking-tight text-content">Why intentic exists</h2>
+                    {whyIntentic.map((paragraph) => <p class="mt-4 text-sm leading-relaxed text-muted">{paragraph}</p>)}
+                </div>
+            </div>
+        </section>
+
+        <section class="mx-auto max-w-5xl px-6 pb-16">
+            <h2 class="text-lg font-semibold tracking-tight text-content">Open source, before this</h2>
+            <p class="mt-3 max-w-2xl text-sm leading-relaxed text-muted">
+                Libraries that shipped and got used independently of intentic, the easiest thing on this page to check,
+                because npm and GitHub keep the receipts.
+            </p>
+            <div class="mt-6 grid gap-4 sm:grid-cols-2">
+                {
+                    openSource.map((project) => (
+                        <a
+                            href={project.href}
+                            target="_blank"
+                            rel="noopener"
+                            class="card group p-5 transition-colors hover:border-primary-600/40"
+                        >
+                            <h3 class="font-mono text-sm text-content group-hover:text-link">{project.name}</h3>
+                            <p class="mt-2 text-sm leading-relaxed text-muted">{project.body}</p>
+                        </a>
+                    ))
+                }
+            </div>
+        </section>
+
+        <section class="mx-auto max-w-5xl px-6 pb-24">
+            <div class="card flex flex-wrap items-center justify-between gap-x-8 gap-y-4 p-6">
+                <div>
+                    <h2 class="text-lg font-semibold tracking-tight text-content">Get in touch</h2>
+                    {/* No `\S+@\S+` exists anywhere in this markup: the address ships as separate spans and the
+                        script below assembles it. A human reads it either way: with JavaScript off it stays
+                        legible, just not clickable, while a harvester matching a plain address pattern finds
+                        nothing to take. The parts are also why the mailto is built rather than written. */}
+                    <p class="mt-2 text-sm leading-relaxed text-muted">
+                        Questions, bug reports and disagreements welcome:
+                        <span
+                            id="contact-email"
+                            class="font-mono text-content"
+                            data-user={CONTACT_EMAIL_PARTS.user}
+                            data-domain={CONTACT_EMAIL_PARTS.domain}
+                        >
+                            {CONTACT_EMAIL_PARTS.user} [at] {CONTACT_EMAIL_PARTS.domain.replace(".", " [dot] ")}
+                        </span>
+                        , or open one in the open.
+                    </p>
+                </div>
+                <a href={githubIssuesUrl} target="_blank" rel="noopener" class="btn btn-secondary">Open an issue</a>
+            </div>
+
+            <p class="mt-6 text-xs leading-relaxed text-subtle">
+                Also at <span class="font-mono">@{CREATOR_HANDLE}</span> on GitHub and LinkedIn.
+            </p>
+        </section>
+    </main>
+
+    <Footer />
+
+    <script>
+        /* Upgrade the spelled-out address to a real mailto, once, on first interaction.
+         *
+         * Deferred to interaction rather than done on load because the cheapest harvesters render the page
+         * and scrape the DOM; the ones that also move a pointer or focus a link are a different class of
+         * effort. Nothing is lost if it never runs — the address is already readable in the markup. */
+        const target = document.getElementById("contact-email");
+        const user = target?.dataset.user;
+        const domain = target?.dataset.domain;
+
+        if (target && user && domain) {
+            const reveal = (): void => {
+                const address = `${user}@${domain}`;
+                const link = document.createElement("a");
+                link.href = `mailto:${address}`;
+                link.className = "font-mono text-link hover:underline";
+                link.textContent = address;
+                target.replaceWith(link);
+            };
+
+            for (const event of ["pointerdown", "focusin", "keydown"] as const) {
+                document.addEventListener(event, reveal, { once: true, passive: true });
+            }
+        }
+    </script>
+</BaseLayout>

@@ -1,0 +1,194 @@
+---
+import DocsCodeBlock from "../../../components/DocsCodeBlock.astro";
+import DocsLayout from "../../../components/DocsLayout.astro";
+
+const install = `mkdir acme-incidents && cd acme-incidents
+npm init -y
+npm i -D vite @vitejs/plugin-vue vue typescript
+npm i @intentic/extension-api @intentic/sandbox-contract`;
+
+const manifest = `{
+    "publisher": "acme",
+    "name": "incidents",
+    "version": "1.0.0",
+    "category": "work",
+    "icon": "exclamation-triangle",
+    "engines": { "intentic": "^0.4.0" },
+    "entry": "dist/extension.js",
+    "permissions": { "sandbox": ["GET /logs"] },
+    "contributes": {
+        "views": [{ "id": "incidents", "label": "Incidents", "surface": "rail", "badge": true }],
+        "settings": [
+            { "key": "pageSize", "type": "number", "title": "Rows per page", "default": 50 }
+        ]
+    }
+}`;
+
+const activate = `import type { ExtensionContext, IntenticApi } from "@intentic/extension-api";
+
+// Module state, not view state: the badge has to keep working while the view is unmounted.
+let openCount = 0;
+
+export const activate = (api: IntenticApi, context: ExtensionContext): void => {
+    context.subscriptions.push(
+        api.views.register({
+            id: \`incidents\`,
+            label: \`Incidents\`,
+            surface: \`rail\`,
+            // Evidence, not identity: activate wherever there is something to show.
+            detect: (repos) => repos.filter((repo) => repo.vitest).map((repo) => ({
+                key: repo.repo,
+                title: repo.repo,
+                icon: \`exclamation-triangle\`,
+                repo: repo.repo,
+            })),
+            badge: () => (openCount > 0 ? { count: openCount, tone: \`warning\` } : undefined),
+            view: async () => (await import(\`./IncidentsView.vue\`)).default,
+        }),
+    );
+};`;
+
+const view = `<script setup lang="ts">
+import { useQuery } from "@tanstack/vue-query";
+import { host } from "./host";
+
+// One activation per repo. The host binds \`repo\` (and any extra props) for you.
+const props = defineProps<{ repo: string }>();
+
+const { data } = useQuery({
+    // Always prefix with api.sandbox.key(...) so the cache can't bleed across a sandbox switch.
+    queryKey: host.sandbox.key(\`incidents\`, props.repo),
+    queryFn: () => host.sandbox.json<{ lines: string[] }>(\`/logs\`),
+    enabled: () => host.sandbox.reachable(),
+});
+<\/script>
+
+<template>
+    <ul>
+        <li v-for="line in data?.lines ?? []" :key="line">{{ line }}</li>
+    </ul>
+</template>`;
+
+const viteConfig = `import vue from "@vitejs/plugin-vue";
+import { defineConfig } from "vite";
+
+export default defineConfig({
+    plugins: [vue()],
+    build: {
+        outDir: "dist",
+        lib: { entry: "src/extension.ts", formats: ["es"], fileName: () => "extension.js" },
+        rollupOptions: {
+            // The host supplies these at runtime. Bundling your own copy forks reactivity and the query cache.
+            external: ["vue", "@tanstack/vue-query", "@intentic/extension-api", "@intentic/extension-ui"],
+            // One file, no chunks: the loader imports the bundle from a blob URL, where relative chunks break.
+            output: { inlineDynamicImports: true },
+        },
+    },
+});`;
+
+const ship = `npm run build          # produces dist/extension.js
+git add -f dist/extension.js
+git commit -m "release 1.0.0"
+git push && git rev-parse HEAD   # this sha is what you install`;
+---
+
+<DocsLayout
+    pageId="extensions/build"
+    heading="Build an extension"
+    lead="A rail view that reads from the daemon, badges when something needs attention, and installs into a real sandbox, start to finish."
+>
+    <h2>1 · Start a package</h2>
+    <p>
+        An extension is an ordinary npm package that happens to hold a manifest. Nothing about the layout is prescribed except where the
+        manifest lives: the repo root.
+    </p>
+    <DocsCodeBlock code={install} lang="bash" title="Your machine" />
+    <p>
+        <code>@intentic/extension-api</code> is the one SDK you program against: the manifest schema, the host API types, and the detection
+        facts. <code>@intentic/sandbox-contract</code> is optional. It holds the zod schemas for the daemon routes you call, so your
+        responses are typed and validated instead of cast.
+    </p>
+
+    <h2>2 · Declare what it contributes</h2>
+    <p>
+        Write the manifest before the code. It's the approval dialog the owner reads, and the host enforces it at runtime: a registration
+        that isn't declared here is refused, so this file is the honest description of what your extension can do.
+    </p>
+    <DocsCodeBlock code={manifest} lang="json" title="intentic-extension.json" />
+    <p>
+        Three fields are doing real work. <code>engines.intentic</code> is a semver range over the host's API version, checked before your
+        code is loaded. <code>entry</code> points at a <strong>prebuilt, committed</strong> bundle. There is no install-time build step, so
+        the commit the owner approves is literally the code that runs. <code>permissions.sandbox</code> is the complete list of daemon routes
+        you may call; <code>*</code> matches one path segment.
+    </p>
+
+    <h2>3 · Write activate()</h2>
+    <p>
+        There is no ambient global. The host API arrives as the argument to <code>activate()</code>, and everything you register comes back
+        as a disposable you push onto <code>context.subscriptions</code> so switching the extension off unwinds it cleanly.
+    </p>
+    <DocsCodeBlock code={activate} lang="typescript" title="src/extension.ts" />
+    <p>
+        <code>detect()</code> decides when your view appears, and it runs against <strong>facts, not names</strong>: it receives the repos
+        found in the workspace and the capabilities the owner connected, and returns one activation per sidebar element. Activating on
+        "the repo contains a vitest config" survives a rename; activating on "the repo is called api" does not.
+    </p>
+    <p>
+        A <code>badge</code> is the one thing your tile can say without being opened, so treat it as a claim on attention: it must mean
+        "something happened here you don't know about", never "here is a statistic". It also has to be declared with
+        <code>"badge": true</code> in the manifest: a tile that can interrupt the user is a contribution the owner approves.
+    </p>
+
+    <h2>4 · Render the view</h2>
+    <p>
+        Views are ordinary Vue components. The host binds <code>repo</code> and any props from the activation, and provides its own Vue,
+        vue-query and design-system instances, so your component joins the shell's single query cache and re-themes with it.
+    </p>
+    <DocsCodeBlock code={view} lang="typescript" title="src/IncidentsView.vue" />
+    <p>
+        Two rules make caching behave. Prefix every query key with <code>api.sandbox.key(...)</code> so a sandbox switch can't serve you
+        another box's data, and gate fetches on <code>api.sandbox.reachable()</code> so a sleeping sandbox doesn't produce a wall of errors.
+    </p>
+    <p>
+        If your view reads workspace files that the agent edits, declare them under <code>contributes.files</code>. The daemon watches the
+        filesystem and pushes an invalidation to the query keys you name, which is how you stay live without polling.
+    </p>
+
+    <h2>5 · Bundle it</h2>
+    <p>
+        Ship a <strong>single-file ESM bundle</strong> with the host-provided modules marked external. The host serves your bundle over an
+        authenticated fetch and imports it from a blob URL, so relative chunk imports have no base to resolve against.
+    </p>
+    <DocsCodeBlock code={viteConfig} lang="typescript" title="vite.config.ts" />
+    <p>
+        <code>@intentic/extension-ui</code>, the shell's own buttons, inputs, cards and icons, is resolved by the host at runtime today;
+        its typed npm artifact lands with the marketplace. Until then you can render with plain Vue and the shell's CSS variables, or mark
+        it external and import it untyped.
+    </p>
+
+    <h2>6 · Install it</h2>
+    <p>Commit the built bundle. The sha you push is the identity your extension installs under.</p>
+    <DocsCodeBlock code={ship} lang="bash" title="Your machine" />
+    <p>
+        In the app, go to <strong>Capabilities → Add → Extension</strong> and give it the repo URL and that full commit sha (plus a token for
+        a private repo). The daemon clones into a staging directory, validates the manifest and checks that the entry bundle really exists
+        <em>before</em> anything goes live, so a broken push can't replace a working install.
+    </p>
+    <p>
+        Reload the app and your view is in the rail. Agent-side contributions (<code>agent</code>, <code>bin</code>) apply from the next
+        turn; an <code>environment</code> fragment applies at the next image rebuild.
+    </p>
+
+    <h2>Developing without a rebuild loop</h2>
+    <p>
+        Point the install at a branch head sha, iterate, and re-add at the new sha to pick up changes. The staged-checkout validation makes
+        that cheap and safe. Your extension's settings are stored by <code>publisher.name</code> on the daemon, not in the checkout, so they
+        survive every re-clone.
+    </p>
+
+    <h2>Next</h2>
+    <ul>
+        <li><a href="/docs/extensions/manifest/">Manifest reference</a>: the contribution points this page didn't use, capability cards, processes, listeners, agent plugins, image fragments.</li>
+        <li><a href="/docs/extensions/publish/">Publish &amp; the marketplace</a>: list it so other people can install it in one click.</li>
+    </ul>
+</DocsLayout>

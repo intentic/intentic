@@ -1,0 +1,21 @@
+---
+import Footer from "../components/Footer.astro";
+import Nav from "../components/Nav.astro";
+import BaseLayout from "../layouts/BaseLayout.astro";
+---
+
+<BaseLayout title="Page not found · intentic" description="The page you're looking for doesn't exist." noindex>
+    <Nav />
+    <main class="flex flex-1 items-center justify-center px-6 py-32 text-center">
+        <div>
+            <div class="font-mono text-[clamp(3rem,12vw,7rem)] leading-none font-extrabold tracking-tighter text-primary-500">404</div>
+            <h1 class="mt-4 text-2xl font-semibold">This route didn't reconcile</h1>
+            <p class="mx-auto mt-3 max-w-md text-muted">The page you're looking for doesn't exist, or hasn't been declared yet.</p>
+            <div class="mt-8 flex flex-wrap justify-center gap-4 max-sm:flex-col">
+                <a class="btn btn-primary" href="/">Back home</a>
+                <a class="btn btn-secondary" href="/#faq">Read the FAQ</a>
+            </div>
+        </div>
+    </main>
+    <Footer />
+</BaseLayout>
