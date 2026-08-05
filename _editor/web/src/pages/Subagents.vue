@@ -182,7 +182,10 @@ watch(messages, () => {
          the cards sit flush in. Same three colours, inverted relief — which is exactly how the two lists read
          as two different components to anyone who has both open. The chat's reading is the one that wins: it
          is the surface this list was copied from. -->
-    <div class="flex h-full min-h-0 bg-card">
+    <!-- Clipped to its own surface. Everything inside is height-bounded, and this is the guard that says so:
+         a block that outgrows the column used to paint straight down the page past the card ground, so the
+         report ran on over the shell's own background with the rail stopping short beside it. -->
+    <div class="flex h-full min-h-0 overflow-hidden bg-card">
         <!-- Nothing to show. Not an error — plenty of turns never start an agent — so this describes the surface
              instead of reporting a fault, the way the Browsers area's empty state does. FILTERED IS ITS OWN
              SENTENCE: a card counts the children an agent has started for its whole life, while this list holds
@@ -302,7 +305,7 @@ watch(messages, () => {
                 </aside>
             </div>
 
-            <div class="flex min-w-0 flex-1 flex-col">
+            <div class="flex min-h-0 min-w-0 flex-1 flex-col">
                 <!-- WHAT IT IS, in the card's own vocabulary (the tile, the title, the status glyph) so the row
                      you pressed and the header you land on read as one agent — and the two ways out of this
                      pane: back to the conversation that started it, and, for a delegation (which unlike a
@@ -332,46 +335,76 @@ watch(messages, () => {
                         </RouterLink>
                     </span>
                 </div>
-                <!-- Its report, above its work — the answer is what the delegation was for. -->
-                <p
-                    v-if="current?.summary"
-                    class="shrink-0 whitespace-pre-wrap border-b border-line px-3 py-2 text-2xs leading-relaxed"
-                    :class="current.error ? 'text-danger' : 'text-muted'"
-                >
-                    {{ current.summary }}
+                <!-- HOW IT ENDED, when that was badly. Plain text, because an error string is a string and
+                     not a document — and separate from the report below, which for a delegation is the same
+                     tail of the same output and must not be said twice. -->
+                <p v-if="current?.error" class="shrink-0 whitespace-pre-wrap border-b border-line px-3 py-1.5 text-2xs text-danger">
+                    {{ current.error }}
                 </p>
 
+                <!-- ITS REPORT, above its work — the answer is what the delegation was for, so it keeps the
+                     top of the column. Two things it must not be: raw, and unbounded. A child's last words
+                     are a document — headings, tables, file references — which poured out as plain text read
+                     as literal asterisks and pipes, so it goes through the renderer the chat's own prose
+                     does. And a long one grew this column taller than the surface under it, which is what
+                     put the transcript off the bottom of the page; a ceiling of its own to scroll inside is
+                     what keeps the work below it reachable. It takes the transcript's column (.chat-turns)
+                     so the report and the work it summarizes share one left edge and one reading width.
+                     That it FAILED is not said in here: the header's status glyph already says so, and a
+                     page of body text in danger red is the least readable way to repeat it. -->
+                <div
+                    v-if="current?.summary !== undefined && current.summary !== current.error"
+                    class="scrollbar-thin max-h-56 shrink-0 overflow-y-auto border-b border-line py-2"
+                >
+                    <!-- eslint-disable-next-line vue/no-v-html -- same sanitized renderer the chat's own prose goes through -->
+                    <div class="chat-turns md-prose chat-markdown chat-markdown-compact" v-html="renderMarkdown(current.summary)"></div>
+                </div>
+
                 <!-- ITS WORK, in the chat's own shapes: prose as prose, tool calls as the very cards the
-                     conversation draws (children and all — a child that itself delegates nests here too). -->
-                <div ref="pane" class="scrollbar-thin flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto px-3 py-2">
-                    <div v-for="(message, index) in messages" :key="index" class="flex flex-col gap-1">
-                        <!-- The prompt it was given reads as a prompt: the same right-aligned bubble the chat
-                             gives the user's own words, because from the child's side that is what it is. -->
-                        <p
-                            v-if="message.role === 'user'"
-                            class="self-end whitespace-pre-wrap rounded-lg bg-overlay px-2.5 py-1.5 text-xs leading-relaxed text-content"
-                        >
-                            {{ message.text }}
+                     conversation draws (children and all — a child that itself delegates nests here too) —
+                     and on the chat's own column (.chat-turns), for the reason that column exists. Left to
+                     fill this pane, a report's paragraphs ran past 200 characters a line on a wide window,
+                     which is where the eye loses the start of the next one. -->
+                <div ref="pane" class="scrollbar-thin flex min-h-0 flex-1 flex-col overflow-y-auto py-2">
+                    <div class="chat-turns flex flex-col gap-3">
+                        <div v-for="(message, index) in messages" :key="index" class="flex flex-col gap-1">
+                            <!-- The prompt it was given reads as a prompt: the same right-aligned bubble the
+                                 chat gives the user's own words, because from the child's side that is what
+                                 it is. -->
+                            <p
+                                v-if="message.role === 'user'"
+                                class="self-end whitespace-pre-wrap rounded-lg bg-overlay px-2.5 py-1.5 text-xs leading-relaxed text-content"
+                            >
+                                {{ message.text }}
+                            </p>
+                            <template v-else>
+                                <div v-if="message.thinking" class="text-2xs italic leading-relaxed text-subtle">{{ message.thinking }}</div>
+                                <!-- `md-prose` is what dresses that output — every rule in prose.css hangs off
+                                     it, and without it the renderer's headings, lists, tables and code blocks
+                                     all came out as undifferentiated body text. `chat-markdown` is only the
+                                     transcript's tuning of those tokens. -->
+                                <!-- eslint-disable-next-line vue/no-v-html -- same sanitized renderer the chat's own prose goes through -->
+                                <div v-if="message.text" class="md-prose chat-markdown" v-html="renderMarkdown(message.text)"></div>
+                                <ChatToolCard
+                                    v-for="tool in message.tools ?? []"
+                                    :key="tool.id"
+                                    :tool="tool"
+                                    :live="current !== undefined && subagentLive(current)"
+                                />
+                            </template>
+                        </div>
+                        <!-- WHERE THE LIVE VIEW COMES FROM, said out loud. A running child is read out of its
+                             parent turn's stream, which fills in as it works — so an empty pane here means
+                             "nothing yet", not "nothing is coming", and those two read identically when the
+                             surface says neither. -->
+                        <p v-if="messages.length === 0" class="px-1 py-3 text-center text-2xs text-subtle">
+                            {{
+                                current !== undefined && subagentLive(current)
+                                    ? "Watching live — what this agent writes lands here as it works."
+                                    : "No transcript was recorded for this agent."
+                            }}
                         </p>
-                        <template v-else>
-                            <div v-if="message.thinking" class="text-2xs italic leading-relaxed text-subtle">{{ message.thinking }}</div>
-                            <!-- eslint-disable-next-line vue/no-v-html -- same sanitized renderer the chat's own prose goes through -->
-                            <div
-                                v-if="message.text"
-                                class="chat-markdown text-xs leading-relaxed text-content"
-                                v-html="renderMarkdown(message.text)"
-                            ></div>
-                            <ChatToolCard
-                                v-for="tool in message.tools ?? []"
-                                :key="tool.id"
-                                :tool="tool"
-                                :live="current !== undefined && subagentLive(current)"
-                            />
-                        </template>
                     </div>
-                    <p v-if="messages.length === 0" class="px-1 py-3 text-center text-2xs text-subtle">
-                        {{ current !== undefined && subagentLive(current) ? "Nothing recorded yet." : "No transcript was recorded for this agent." }}
-                    </p>
                 </div>
             </div>
         </template>
