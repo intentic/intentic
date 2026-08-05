@@ -251,7 +251,7 @@ describe("agents registry", () => {
         const registry = createAgentsRegistry(memoryStore(), standings());
         await registry.init();
         await registry.begin(turn(), 1_000);
-        const child: SubagentTurn = { conversationId: "c1", cwd: "/work", sessionId: "sess-1" };
+        const child: SubagentTurn = { conversationId: "c1", cwd: "/work", sessionId: "sess-1", subagentsDir: undefined };
         const frame = (message: SubagentTaskMessage): AgentEvent => {
             const born = noteSubagentTask(child, message);
             if (born === undefined) {
