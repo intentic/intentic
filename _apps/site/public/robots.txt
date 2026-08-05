@@ -1,8 +1,0 @@
-User-agent: *
-Allow: /
-
-# The raw install scripts. /connect, /cleanup and friends are the documented URLs; these are the
-# assets behind them, and a shell script has no business in a search index.
-Disallow: /scripts/
-
-Sitemap: https://intentic.dev/sitemap-index.xml
