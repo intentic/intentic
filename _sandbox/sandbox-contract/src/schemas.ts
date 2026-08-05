@@ -418,12 +418,24 @@ export const LoopIdParamSchema = z.object({ conversationId: ConversationIdSchema
  * accusing the user's own deliberate press of being a failure. Not `interrupted` either: that one means the
  * daemon died under the turn, and a boot pass may re-run it, which is precisely what must never happen to a
  * turn a person chose to end. */
+/* `resuming` is the same argument as `stopping`, made about the other end of a turn's life: the turn was killed
+ * by something the daemon is ALREADY undoing (a rotated credential being re-minted, a provider outage being
+ * waited out — turn-resume.ts), so it has stopped without having ended. The gap is real time — a few seconds for
+ * a re-mint, minutes for an outage's backoff — and for that whole window the turn reported the resting `idle`,
+ * which the board reads as finished. So a 401 that nobody caused and nobody has to fix filed the card under
+ * Finished and then pulled it back into Active a moment later, which is the fleet contradicting itself in front
+ * of the user about work that never stopped being in progress.
+ *
+ * Never persisted (see PersistedAgentStatusSchema): what is coming back is remembered in the daemon's memory
+ * alone, and a daemon that dies mid-wait takes the resume with it — so the card falls back to the ending its
+ * killed turn actually wrote and reads as finished, which by then is true. Nothing is left to bring it back. */
 export const AgentStatusSchema = z.enum([
     "idle",
     "running",
     "awaiting",
     "stopping",
     "stopped",
+    "resuming",
     "ready",
     "landed",
     "conflict",

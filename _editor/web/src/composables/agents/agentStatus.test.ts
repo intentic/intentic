@@ -1,6 +1,6 @@
 import type { AgentStatus } from "@intentic/sandbox-contract";
 import { describe, expect, it } from "vitest";
-import { type AgentStanding, type ClientAgentStatus, laneOf, unfinishedMark } from "./agentStatus";
+import { type AgentStanding, agentStatusMeta, type ClientAgentStatus, laneOf, unfinishedMark } from "./agentStatus";
 
 // No mocks: agentStatus is a leaf of pure functions, which is the point of it living apart from the fleet
 // store — useAgents pulls useChat pulls the router, and none of that is needed to place an agent.
@@ -47,6 +47,14 @@ describe("laneOf", () => {
         expect(laneOf({ status: `stopped`, attention: none })).toBe(`attention`);
     });
 
+    /* THE SAME ARGUMENT AT THE OTHER END OF A TURN. A turn the daemon is already re-running — a rotated token
+     * being re-minted, an outage being waited out — has stopped without ending, and reading that as finished is
+     * what dropped a card into Finished for the couple of seconds a 401 takes to repair and then hauled it back
+     * into Active. Two lane changes to say nothing, on work nobody had to do anything about. */
+    it("keeps a turn that is coming back in active, not finished", () => {
+        expect(laneOf({ status: `resuming`, attention: none })).toBe(`active`);
+    });
+
     it("routes landed and idle agents to finished — the auto-finish rule", () => {
         expect(laneOf({ status: `landed`, attention: none })).toBe(`finished`);
         expect(laneOf({ status: `idle`, attention: none })).toBe(`finished`);
@@ -56,6 +64,17 @@ describe("laneOf", () => {
         // The user CHOSE to hold work for review — a card in this state is an offer, never a warning, and
         // routing it to Attention would teach people to ignore that lane (see blocked()'s note).
         expect(laneOf({ status: `ready`, attention: none })).toBe(`finished`);
+    });
+});
+
+/* The words each state wears where a surface has room for them — the detail page's chip, the chat tab's
+ * aria-label. Only the pair that has to be told apart is pinned: a turn ENDING by the user's hand and one
+ * stopped mid-flight by something the daemon is repairing look identical to anyone reading a spinner, and
+ * calling either of them by the other's name is the whole complaint. */
+describe("agentStatusMeta", () => {
+    it("names a turn that is coming back apart from one that is going away", () => {
+        expect(agentStatusMeta(`resuming`)).toMatchObject({ label: `Resuming…`, icon: `spinner`, spin: true });
+        expect(agentStatusMeta(`stopping`)).toMatchObject({ label: `Stopping…` });
     });
 });
 
@@ -75,6 +94,7 @@ describe("unfinishedMark", () => {
         `interrupted`,
         `stopping`,
         `stopped`,
+        `resuming`,
         `draft`,
         `failed`,
     ];
@@ -111,6 +131,9 @@ describe("unfinishedMark", () => {
         expect(unfinishedMark({ status: `failed`, attention: none })?.label).toBe(`Didn't start`);
         // Still the active-lane mark: the turn IS still working — on its own way out.
         expect(unfinishedMark({ status: `stopping`, attention: none })?.label).toBe(`Still working`);
+        // And on its way back in: the blocker is the daemon's to clear, so nothing about this chip is the
+        // user's business beyond "not done yet".
+        expect(unfinishedMark({ status: `resuming`, attention: none })?.label).toBe(`Still working`);
         // A turn parked before any flag went up has nothing more specific to say than that it stopped.
         expect(unfinishedMark({ status: `awaiting`, attention: none })?.label).toBe(`Waiting on you`);
     });

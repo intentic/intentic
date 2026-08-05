@@ -249,8 +249,10 @@ const fireAuthResume = async (services: Services, wake: WakeFn, failure: AuthFai
         return undefined;
     });
     // Nothing new to run on: the credential is revoked outright, or the store handed back the very token the
-    // API just refused — which would fail identically the moment the turn respawned.
+    // API just refused — which would fail identically the moment the turn respawned. The card has been holding
+    // itself open for this since the turn stopped, so settle it: nothing is coming, and a human is needed.
     if (replacement === undefined || replacement === failure.refusedToken) {
+        await services.agents.abandonResume(conversationId, Date.now());
         return;
     }
     if ((await startConversationTurn(services, wake, resumedTurn(failure, RESUME_NOTES.auth))) !== undefined) {
@@ -283,6 +285,8 @@ const runOutagePass = async (services: Services, wake: WakeFn, now: number): Pro
         // a turn springing back to life long after they did is worse than one that stayed dead.
         if (now - failure.recordedAt > OUTAGE_STALE_AFTER_MS) {
             pendingOutage.delete(conversationId);
+            // And the card stops saying it is coming back, for the same reason — see abandonResume.
+            await services.agents.abandonResume(conversationId, now);
             continue;
         }
         if (!resumeAfterOutage || !outageRetryDue(failure.provider, now)) {

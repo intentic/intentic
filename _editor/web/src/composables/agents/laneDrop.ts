@@ -89,6 +89,11 @@ export const dropRejection = (agent: FleetAgent, target: DropTarget): string | u
     if (agent.status === `stopping`) {
         return `This turn is already stopping`;
     }
+    // Same placement, same reason: there is no turn here to stop and nothing to land, because the one that was
+    // running is coming back to this worktree by itself.
+    if (agent.status === `resuming`) {
+        return `This turn is picking itself back up`;
+    }
     if (target === `discard`) {
         return agent.branch === undefined ? `Workspace conversations have no isolated branch to discard` : `Stop the turn first`;
     }

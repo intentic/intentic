@@ -47,6 +47,16 @@ interface RuntimeState {
      * Read twice: `summaryOf` publishes it as `stopping` the moment it is set, and `finish` reads it to write
      * the terminal `stopped` — the one thing that tells a turn a person ended from one the daemon died under. */
     stopping: boolean;
+    /* This turn was killed by something the daemon is already undoing — a rotated credential being re-minted, a
+     * provider outage being waited out — and it is coming back on its own (turn-resume.ts).
+     *
+     * The one flag here that OUTLIVES its turn, and it has to: `finish` runs seconds before the resume does, and
+     * what it writes is how the turn ended — which for this one is nothing, because it hasn't. Without it the
+     * entry's resting `idle` went out in between and the board filed a card the daemon was about to re-run under
+     * Finished, then pulled it back into Active a moment later. Cleared by whatever ends the wait: the resumed
+     * turn's own `begin` (a fresh runtime state), or `abandonResume` when the re-mint fails and the failure has
+     * to stand. */
+    resuming: boolean;
     activity: { tool?: string; target?: string; todo?: string } | undefined;
     contextTokens: number | undefined;
     contextWindow: number | undefined;
@@ -73,6 +83,7 @@ const freshRuntime = (): RuntimeState => ({
     pauses: new Map(),
     errored: false,
     stopping: false,
+    resuming: false,
     activity: undefined,
     contextTokens: undefined,
     contextWindow: undefined,
@@ -183,6 +194,15 @@ export interface AgentsRegistry {
     // Deliberately says nothing about where the work now stands: that is standing.ts's question, re-derived
     // here before the roster goes out.
     readonly finish: (id: string, now: number) => Promise<void>;
+    /* THE RESUME IS NOT COMING — the other way out of `resuming`, and the one nobody sees happen: the credential
+     * could not be re-minted, or an outage's stranded turn went stale waiting for a setting that stayed off
+     * (turn-resume.ts). Writes the failure the card was holding open for: this is exactly the condition where a
+     * person really is needed, so it settles into Attention rather than back into the resting `idle` the
+     * interrupted turn left behind.
+     *
+     * A no-op while a turn is running: the resume lost a race to the user's own send, and that turn's begin has
+     * already cleared the wait and owns the entry this would otherwise write over. */
+    readonly abandonResume: (id: string, now: number) => Promise<void>;
     /* Re-derive every live agent's land standing and publish the roster if any of them moved. Called wherever
      * the answer can have changed without this daemon doing it — most of all the roster READ, which is what
      * heals a card after work reached the main tree by a road the daemon never saw (a hand-merge in a
@@ -234,15 +254,18 @@ export const createAgentsRegistry = (store: AgentsStore, standings: LandStanding
         const state = runtime.get(entry.id);
         // A turn holding an unanswered card is AWAITING, however much else it has in flight beside it.
         const parked = state === undefined ? [] : [...state.pauses.values()];
-        /* THE STATUS PROJECTION, in precedence order: the live turn, then how the last one ENDED, then where
-         * the work stands. The middle rung is why `idle` is the only persisted value that yields — it is the
-         * one that means "the turn ended cleanly", i.e. that the entry has nothing more to say and the
-         * question passes to git. `error` and `interrupted` outrank precisely because nothing else remembers
-         * them: a turn that died is not made fine by a branch that happens to be empty.
+        /* THE STATUS PROJECTION, in precedence order: the live turn, then the one that is coming BACK, then how
+         * the last one ENDED, then where the work stands. The `idle` rung is why it is the only persisted value
+         * that yields — it is the one that means "the turn ended cleanly", i.e. that the entry has nothing more
+         * to say and the question passes to git. `error` and `interrupted` outrank precisely because nothing
+         * else remembers them: a turn that died is not made fine by a branch that happens to be empty.
          *
          * Within the live rung, a stop outranks a park: a turn aborted while holding a question is on its way
          * out, and publishing it as `awaiting` would keep asking the user to answer a card the abort has
-         * already settled. */
+         * already settled.
+         *
+         * An armed resume outranks every settled reading below it for the same reason `stopping` outranks
+         * `running`: the entry describes a turn that has stopped, and this one has stopped without ending. */
         const landing = entry.branch === undefined ? "idle" : standings.of(entry.id);
         const status =
             state?.running === true
@@ -251,9 +274,11 @@ export const createAgentsRegistry = (store: AgentsStore, standings: LandStanding
                     : parked.length > 0
                       ? "awaiting"
                       : "running"
-                : entry.status === "idle"
-                  ? landing
-                  : entry.status;
+                : state?.resuming === true
+                  ? "resuming"
+                  : entry.status === "idle"
+                    ? landing
+                    : entry.status;
         const base = (entry.repos.find((repo) => repo.repo === "root") ?? entry.repos[0])?.base.slice(0, 7);
         // Live totals: persisted totals plus the running turn's not-yet-flushed usage.
         const costUsd = entry.costUsd + (state?.pendingCostUsd ?? 0);
@@ -710,8 +735,15 @@ export const createAgentsRegistry = (store: AgentsStore, standings: LandStanding
                      *
                      * Keyed on the frame's own verdict rather than on the code, so it covers every condition that
                      * resumes itself. "available" is NOT covered — nothing is armed, so the failure stands until
-                     * the user arms it. */
+                     * the user arms it.
+                     *
+                     * Remembered rather than merely skipped, because skipping alone only got the card as far as
+                     * the entry's resting `idle` — which is the Finished lane. The flag is what carries "coming
+                     * back" past the finish() that is seconds away (see RuntimeState.resuming). Nothing to
+                     * broadcast here: the turn is still running, and `running` is what the card should say until
+                     * it isn't. */
                     if (event.autoResume === "scheduled") {
+                        state.resuming = true;
                         return;
                     }
                     state.errored = true;
@@ -751,6 +783,8 @@ export const createAgentsRegistry = (store: AgentsStore, standings: LandStanding
                 // settled by the same abort, and its `resolved` frame may never make it out of the stream.
                 state.pauses.clear();
                 state.startedAt = undefined;
+                // `resuming` is deliberately NOT reset here, unlike everything else on this list: it is the one
+                // fact that has to survive the finish, because it says this turn's ending isn't one.
             }
             // Tolerates a missing runtime state: the manual land route finishes with an outcome outside any
             // turn (possibly right after a daemon restart), and must still write the status through.
@@ -787,6 +821,17 @@ export const createAgentsRegistry = (store: AgentsStore, standings: LandStanding
             // roster goes out, so the card the user sees settle carries the new standing rather than the one
             // from before the turn ran.
             await reprobe();
+            broadcast();
+        },
+        abandonResume: async (id, now) => {
+            const entry = entryOf(id);
+            const state = runtime.get(id);
+            if (entry === undefined || state?.resuming !== true || state.running) {
+                return;
+            }
+            state.resuming = false;
+            replace({ ...entry, status: "error", updatedAt: now });
+            await persist();
             broadcast();
         },
         recordLanded: async (id, outcome) => {

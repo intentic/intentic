@@ -629,14 +629,67 @@ describe("agents registry", () => {
     /* A failure the daemon has already armed a resume for is not how the turn ENDED — it is coming back
      * (turn-resume.ts). Painting the card red for it turned every provider blip into a board full of agents that
      * look like they need attention while the daemon is quietly fixing them, which is the single most effective
-     * way to make a user switch the automation off. */
-    it("a failure with a scheduled resume leaves the card out of the error state", async () => {
+     * way to make a user switch the automation off.
+     *
+     * Nor is it `idle`, which is what the fix originally left behind and what this case now pins: `idle` reads
+     * as the resting state of a turn that finished, so for the seconds between the 401 and the re-minted token
+     * the board filed the card under Finished and then pulled it back into Active — the fleet contradicting
+     * itself about work that never stopped. */
+    it("a failure with a scheduled resume publishes the card as still coming back", async () => {
         const registry = createAgentsRegistry(memoryStore(), standings());
         await registry.init();
         await registry.begin(turn(), 1_000);
-        registry.observe("c1", { kind: "error", code: "provider-outage", message: "API Error: 529", autoResume: "scheduled" });
+        registry.observe("c1", { kind: "error", code: "claude-token-refused", message: "API Error: 401", autoResume: "scheduled" });
+        // Still the running turn's own state while it unwinds — the frame arrives mid-stream.
+        expect(registry.get("c1")?.status).toBe("running");
         await registry.finish("c1", 2_000);
+        expect(registry.get("c1")?.status).toBe("resuming");
+        // And the entry itself says nothing new: what is coming back is the daemon's own memory, so a restart
+        // finds the interrupted turn rather than a state it would have to interpret.
+        expect(registry.entry("c1")?.status).toBe("idle");
+    });
+
+    // The ordinary ending of that wait: the daemon re-mints the token and re-runs the turn, and the card goes
+    // from "coming back" to running without ever having left the Active lane.
+    it("the resumed turn takes the card straight back to running", async () => {
+        const registry = createAgentsRegistry(memoryStore(), standings());
+        await registry.init();
+        await registry.begin(turn(), 1_000);
+        registry.observe("c1", { kind: "error", code: "claude-token-refused", message: "API Error: 401", autoResume: "scheduled" });
+        await registry.finish("c1", 2_000);
+        expect(await registry.begin(turn({ prompt: "…resumed automatically. Fix the login bug" }), 3_000)).toBe(true);
+        expect(registry.get("c1")?.status).toBe("running");
+        await registry.finish("c1", 4_000);
         expect(registry.get("c1")?.status).toBe("idle");
+    });
+
+    /* The other ending, and the one that must not leave a spinner turning forever: the credential is genuinely
+     * dead, so nothing re-runs. The wait closes into the failure it was holding open — Attention, where a person
+     * is asked to reconnect the account — and not back into the clean `idle` the killed turn left on the entry. */
+    it("an abandoned resume settles the card into the failure it was holding open", async () => {
+        const registry = createAgentsRegistry(memoryStore(), standings());
+        await registry.init();
+        await registry.begin(turn(), 1_000);
+        registry.observe("c1", { kind: "error", code: "claude-token-refused", message: "API Error: 401", autoResume: "scheduled" });
+        await registry.finish("c1", 2_000);
+        await registry.abandonResume("c1", 3_000);
+        expect(registry.get("c1")?.status).toBe("error");
+        // Idempotent, because the scheduler's passes are: a second call has no wait left to close.
+        await registry.abandonResume("c1", 4_000);
+        expect(registry.get("c1")?.status).toBe("error");
+    });
+
+    // The race the guard exists for: the user's own send beats the scheduler to the conversation, so the resume
+    // it was going to fire is superseded. The abandon must not write a failure over the turn that is running.
+    it("an abandoned resume leaves a turn the user already restarted alone", async () => {
+        const registry = createAgentsRegistry(memoryStore(), standings());
+        await registry.init();
+        await registry.begin(turn(), 1_000);
+        registry.observe("c1", { kind: "error", code: "claude-token-refused", message: "API Error: 401", autoResume: "scheduled" });
+        await registry.finish("c1", 2_000);
+        await registry.begin(turn({ prompt: "try again" }), 3_000);
+        await registry.abandonResume("c1", 4_000);
+        expect(registry.get("c1")?.status).toBe("running");
     });
 
     // "available" is the other half: nothing is armed, the turn is only REMEMBERED behind a setting the user has

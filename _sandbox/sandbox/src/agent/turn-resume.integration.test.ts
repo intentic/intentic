@@ -26,10 +26,20 @@ import {
 
 // The scheduler touches settings/push/logger; the fake stays that small, plus the transcript record every
 // started turn writes its settled frames to (startConversationTurn).
-const fakeServices = (root: string): Services => {
+//
+// `abandoned` collects the cards the pass gave up on — the fleet's half of a resume that never fires. It is
+// worth a parameter rather than a stub each test writes, because the property it pins is the one nobody sees
+// happen: a card holds itself out of the Finished lane from the moment its turn dies, so a pass that decides
+// nothing is coming back and says nothing to the registry leaves a "Resuming…" spinner turning forever.
+const fakeServices = (root: string, abandoned: string[] = []): Services => {
     const record = fileTranscriptRecord(join(root, "transcripts"));
     return unstubbed<Services>("services", {
         sandboxSettings: fileSandboxSettingsStore(join(root, "settings.json")),
+        agents: unstubbed<Services["agents"]>("agents", {
+            abandonResume: async (id: string) => {
+                abandoned.push(id);
+            },
+        }),
         // No device subscribed, which is what a workspace that has never granted push reports.
         pushSender: unstubbed<Services["pushSender"]>("pushSender", { notifyIfAway: async () => ({ delivered: 0, failed: 0 }) }),
         logger: unstubbed<Services["logger"]>("logger", { info: () => {}, warn: () => {}, error: () => {} }),
@@ -147,8 +157,8 @@ const fakeStore = (stored: { accessToken: string; revokedAt?: number }): Service
         logger: unstubbed<Services["logger"]>("logger", { info: () => {}, warn: () => {}, error: () => {}, debug: () => {} }),
     });
 
-const authServices = (root: string, claudeStore: Services["claudeStore"]): Services =>
-    unstubbed<Services>("services", { ...fakeServices(root), claudeStore });
+const authServices = (root: string, claudeStore: Services["claudeStore"], abandoned: string[] = []): Services =>
+    unstubbed<Services>("services", { ...fakeServices(root, abandoned), claudeStore });
 
 test("a turn the API refused mid-flight is re-minted and re-run on the next pass", async () => {
     const services = authServices(mkdtempSync(join(tmpdir(), "turn-resume-")), fakeStore({ accessToken: "tok-2" }));
@@ -164,11 +174,15 @@ test("a turn the API refused mid-flight is re-minted and re-run on the next pass
 
 test("no resume when the credential is genuinely dead — the error frame's reconnect prompt is the real fix", async () => {
     // An account already marked revoked (its refresh token was rejected): rotate answers undefined.
-    const services = authServices(mkdtempSync(join(tmpdir(), "turn-resume-")), fakeStore({ accessToken: "tok-1", revokedAt: 1 }));
+    const abandoned: string[] = [];
+    const services = authServices(mkdtempSync(join(tmpdir(), "turn-resume-")), fakeStore({ accessToken: "tok-1", revokedAt: 1 }), abandoned);
     const prompts: string[] = [];
     recordAuthFailure({ input: { prompt: "finish the report", conversationId: "auth-2", isolated: true }, account: "acct", refusedToken: "tok-1" });
     await createTurnResumeScheduler(services, fakeWake(prompts)).tick();
     expect(prompts).toHaveLength(0);
+    // And the card is told, because it has been saying "coming back" since the turn died. This is the one auth
+    // failure a person really does have to act on, so it has to end up in front of them.
+    expect(abandoned).toEqual(["auth-2"]);
 });
 
 test("a resume that is itself refused is not resumed again — a dead credential must not respawn forever", async () => {
@@ -210,8 +224,8 @@ const outage = (conversationId: string, provider: string, extra: Record<string, 
     ...extra,
 });
 
-const outageServices = async (root: string, resumeAfterOutage = true): Promise<Services> => {
-    const services = fakeServices(root);
+const outageServices = async (root: string, resumeAfterOutage = true, abandoned: string[] = []): Promise<Services> => {
+    const services = fakeServices(root, abandoned);
     const settings = await services.sandboxSettings.get();
     await services.sandboxSettings.set({ ...settings, resumeAfterOutage });
     return services;
@@ -299,12 +313,15 @@ test("with the toggle off the turn is remembered, not resumed — turning it on 
 });
 
 test("a stranded turn nobody resumed within the hour is dropped rather than sprung back to life", async () => {
-    const services = await outageServices(mkdtempSync(join(tmpdir(), "turn-resume-")));
+    const abandoned: string[] = [];
+    const services = await outageServices(mkdtempSync(join(tmpdir(), "turn-resume-")), true, abandoned);
     recordOutageFailure(outage("stale-1", "out-stale"), OUT_NOW - 61 * 60_000);
     const prompts: string[] = [];
     await createTurnResumeScheduler(services, fakeWake(prompts)).tick(OUT_NOW);
     expect(prompts).toEqual([]);
     expect(pendingOutageFailure("stale-1")).toBeUndefined();
+    // Dropped from the board's point of view too: the card stops promising a turn that is no longer coming.
+    expect(abandoned).toEqual(["stale-1"]);
 });
 
 test("once the attempt budget is spent the failure stands — the retrying is finite by design", async () => {

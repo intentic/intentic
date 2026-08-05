@@ -82,6 +82,12 @@ export const agentStatusMeta = (status: AgentStatus | ClientAgentStatus): { icon
     if (status === `stopping`) {
         return { icon: `stop`, label: `Stopping…`, class: `text-subtle` };
     }
+    // The turn stopped without ending — something underneath it broke and the daemon is already undoing it. The
+    // running spinner and the running blue, deliberately: nothing failed that the user has to know about, the
+    // work is still in progress, and the whole point of this state is that the card goes on saying so.
+    if (status === `resuming`) {
+        return { icon: `spinner`, spin: true, label: `Resuming…`, class: `text-link` };
+    }
     if (status === `awaiting`) {
         return { icon: `exclamation-circle`, label: `Needs you`, class: `text-primary-500` };
     }
@@ -115,16 +121,22 @@ export const agentStatusMeta = (status: AgentStatus | ClientAgentStatus): { icon
     return { icon: `circle-fill`, label: `Idle`, class: `text-subtle` };
 };
 
-/* A TURN IS IN FLIGHT — running, or unwinding after a Stop. The one question every "hands off this agent"
- * guard is really asking (its worktree is a live turn's working state, so it cannot be archived, discarded or
- * landed), and the one the live readouts are drawn for: the ticking elapsed and the activity line keep their
- * meaning while the daemon walks a stopped turn out, and blinking them off a beat before the card settles is
- * the same flicker this whole state exists to remove.
+/* A TURN IS IN FLIGHT — running, unwinding after a Stop, or waiting out the blocker that killed it. The one
+ * question every "hands off this agent" guard is really asking (its worktree is a live turn's working state, so
+ * it cannot be archived, discarded or landed), and the one the live readouts are drawn for: the ticking elapsed
+ * and the activity line keep their meaning while the daemon walks a stopped turn out, and blinking them off a
+ * beat before the card settles is the same flicker this whole state exists to remove.
+ *
+ * `resuming` belongs here on both counts. Its worktree is the working state of a turn that is about to run
+ * again in it, so every hands-off guard means the same thing it means for a running one — and the wait is the
+ * daemon's own bookkeeping being repaired, so a card that stopped reading as work-in-progress halfway through
+ * is the flicker again, only slower.
  *
  * `awaiting` is deliberately not here. Its turn is live too, but it is live and PARKED — the guards that read
  * this either want it excluded (a parked turn is exactly what awaitingUser answers for) or answer it in their
  * own terms. */
-export const turnInFlight = (agent: AgentStanding): boolean => agent.status === `running` || agent.status === `stopping`;
+export const turnInFlight = (agent: AgentStanding): boolean =>
+    agent.status === `running` || agent.status === `stopping` || agent.status === `resuming`;
 
 // "Blocked on you" — the agent literally cannot go on (or has failed) until you act. Deliberately NOT the same
 // thing as unread, which only says you haven't looked at it yet: a board that tells the user seven finished
@@ -205,6 +217,8 @@ export const laneOf = (agent: AgentStanding): FleetLane => {
     // `stopping` stays ACTIVE, where the card already is: the turn is still live (the daemon holds its worktree
     // until the unwind finishes), and moving it now would spend a lane change on a state that lasts seconds —
     // then spend another one the moment it settles. The card says "Stopping…" where it stands, and moves once.
+    // `resuming` is here for the same reason and is the case that proves it: a card that dropped into Finished
+    // for the seconds a credential takes to re-mint, and climbed back out, moved twice to say nothing at all.
     if (turnInFlight(agent) || agent.status === `draft`) {
         return `active`;
     }

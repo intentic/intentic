@@ -188,3 +188,17 @@ it(`withholds the close from a registered agent, which archives instead`, () => 
     expect(buttonLabelled(landed, `Close agent`)).toBeUndefined();
     expect(buttonLabelled(landed, `Archive agent`)).not.toBeUndefined();
 });
+
+/* THE CARD OF A TURN THAT IS COMING BACK. A rotated credential 401s every turn holding it at once, and the
+ * daemon re-mints and re-runs them within a scheduler pass — so what the card has to draw for those seconds is
+ * work still in progress. It read `idle` instead, which is the Finished lane: the board filed the agent away
+ * and then took it back out, in front of a user who had done nothing and was owed nothing.
+ *
+ * Asserted on the RENDERED card rather than on laneOf alone, because the two halves have to agree — a lane that
+ * says "still working" under a resting glyph is the same contradiction one surface further in. The archive goes
+ * with it: the worktree belongs to a turn that is about to run in it again, which is what turnInFlight means. */
+it(`draws an agent whose turn is being resumed as work still in flight`, () => {
+    const card = mount(ready(`resuming`));
+    expect(card.querySelector(`[data-icon="spinner"]`)).not.toBeNull();
+    expect(buttonLabelled(card, `Archive agent`)).toBeUndefined();
+});
