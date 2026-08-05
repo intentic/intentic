@@ -98,7 +98,7 @@ const setup = buildCommand<SetupFlags>({
             sandboxUrl: flags.url,
             id,
             token: hostToken,
-            scopes: { shell: "off", write: "off", screen: "off", control: "off" },
+            scopes: { shell: "off", write: "off", screen: "off", control: "off", sandboxes: "off" },
         };
         await writeHostConfig(config);
         // Stop whatever the previous pairing left resident before the new config replaces it — otherwise a

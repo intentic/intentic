@@ -84,7 +84,7 @@ test("the daemon can ask a machine what it is", async () => {
 test("a pushed grant takes effect on the machine", async () => {
     const { client, scopesNow } = connectedPair();
     expect(await client.setScopes({ shell: "off", write: "off", screen: "on", control: "off" })).toEqual({ ok: true });
-    expect(scopesNow()).toEqual({ shell: "off", write: "off", screen: "on", control: "off" });
+    expect(scopesNow()).toEqual({ shell: "off", write: "off", screen: "on", control: "off", sandboxes: "off" });
 });
 
 test("a grant that does not satisfy the contract is refused before it reaches the machine", async () => {

@@ -49,6 +49,8 @@ test("tools/list is the machine's whole surface — and there is no delete", asy
         "browser_tabs",
         "computer",
         "screenshot",
+        "list_sandboxes",
+        "manage_sandbox",
     ]);
     expect(names).not.toContain("delete_file");
 });
