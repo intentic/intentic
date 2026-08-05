@@ -1,4 +1,4 @@
-import { readFile } from "node:fs/promises";
+import { readdir, readFile } from "node:fs/promises";
 import { basename, dirname, join } from "node:path";
 import type { HookCallbackMatcher, HookEvent } from "@anthropic-ai/claude-agent-sdk";
 import type { AgentEvent, SubagentKind, SubagentSession, SubagentStatus } from "@intentic/sandbox-contract";
@@ -63,12 +63,13 @@ interface SubagentRecord {
     error: string | undefined;
     terminal: string | undefined;
     /* --- how its transcript is READ. Daemon-side only; see the header. ---
-     * `cwd` is the turn's working dir, which is both the project scope getSubagentMessages searches and the
-     * directory a delegated CLI recorded its own session under. */
-    readonly cwd: string;
-    sessionId: string | undefined;
-    // The SDK's own id for the child, learned from the SubagentStart/SubagentStop hooks. Half of what
-    // getSubagentMessages reads a transcript with; the file itself is the SDK's to locate, not ours to remember.
+     * The TURN itself rather than a copy of what it knew when the child was born: its session id is filled from
+     * the stream's first frame and the directory below from the first child's start hook, both of which can land
+     * after a record is opened. A snapshot taken at `open` froze whichever of them had not arrived yet. */
+    readonly turn: SubagentTurn;
+    // The SDK's own id for the child — half of what getSubagentMessages reads a transcript with, and the half
+    // only the child's meta file can pair to the tool call that spawned it. Cached here once resolved; see
+    // subagentAgentId for when that happens and why it cannot happen sooner.
     agentId: string | undefined;
     // A delegated thread/session id, but ONLY when the command named one (`codex exec resume <id>`,
     // `opencode run --session <id>`). A fresh delegation prints its id and we do not parse stdout for it: the
@@ -136,7 +137,6 @@ export const subagentSource = (
           // prompt of their own to start from.
           readonly description: string | undefined;
           readonly sessionId: string | undefined;
-          readonly agentId: string | undefined;
           readonly thread: string | undefined;
       }
     | undefined => {
@@ -147,12 +147,11 @@ export const subagentSource = (
     return {
         kind: record.kind,
         conversationId: record.conversationId,
-        cwd: record.cwd,
+        cwd: record.turn.cwd,
         running: subagentRunning(record),
         startedAt: record.startedAt,
         description: record.description,
-        sessionId: record.sessionId,
-        agentId: record.agentId,
+        sessionId: record.turn.sessionId,
         thread: record.thread,
     };
 };
@@ -173,16 +172,18 @@ export const subagentCountsOf = (conversationId: string): { readonly running: nu
     return { running, total };
 };
 
-/* What a turn knows about itself when it spawns something — one handle, held for the turn's life.
+/* What a turn knows about itself when it spawns something — one handle, held for the turn's life and pointed at
+ * by every child it opens, so a fact the turn learns late reaches the children born before it.
  *
- * `sessionId` is deliberately MUTABLE: the hooks are wired before the SDK has said which session this turn runs
- * under, and that id is half of what a child's transcript is read with. The stream fills it at its first frame,
- * and because the hooks close over this object rather than a copy of the id, a child spawned at any point in the
- * turn records the session it actually belongs to. */
+ * Both of the mutable fields are learned late, and neither can be waited for. `sessionId` is filled from the
+ * stream's first frame — the hooks are wired before the SDK has said which session this turn runs under.
+ * `subagentsDir` is filled by the first child's start hook, which is the only place the SDK ever names the
+ * directory it files this session's children in. */
 export interface SubagentTurn {
     readonly conversationId: string;
     readonly cwd: string;
     sessionId: string | undefined;
+    subagentsDir: string | undefined;
 }
 
 const open = (turn: SubagentTurn, id: string, kind: SubagentKind, fields: Partial<SubagentRecord>): SubagentRecord => {
@@ -207,8 +208,7 @@ const open = (turn: SubagentTurn, id: string, kind: SubagentKind, fields: Partia
         summary: undefined,
         error: undefined,
         terminal: undefined,
-        cwd: turn.cwd,
-        sessionId: turn.sessionId,
+        turn,
         agentId: undefined,
         thread: undefined,
         ...fields,
@@ -301,10 +301,9 @@ const tasks = new Map<string, string>();
  * left off this surface rather than filed as an agent, which is the failure that produced a Subagents list of
  * backgrounded shell commands.
  *
- * A real child that somehow reached us unlabelled is still not lost: SubagentStart/SubagentStop adopt it from
- * its own meta file, and those hooks fire for nothing else. */
-const isSubagentTask = (message: SubagentTaskMessage): boolean =>
-    message.subagent_type !== undefined || message.task_type === "subagent";
+ * A real child that somehow reached us unlabelled is still not lost: the SubagentStop hook adopts it from its
+ * own meta file, and that hook fires for nothing else. */
+const isSubagentTask = (message: SubagentTaskMessage): boolean => message.subagent_type !== undefined || message.task_type === "subagent";
 
 // The SDK's task status vocabulary is our own (SubagentStatusSchema), so a value it adds that we have never heard
 // of leaves the status where it was rather than being coerced into a wrong one.
@@ -377,9 +376,14 @@ export const noteSubagentTask = (turn: SubagentTurn, message: SubagentTaskMessag
  * depth in one read, and is the authoritative pairing rather than an inference from arrival order (parallel
  * children would break that immediately).
  *
- * The meta path is DERIVED, not guessed: a session's subagents live beside its transcript, in a directory named
- * after it (`<transcript>.jsonl` → `<transcript>/subagents/agent-<id>.{jsonl,meta.json}`). SubagentStop hands
- * over the child's transcript path outright, so there the sibling is exact.
+ * WHAT EACH HOOK CAN ACTUALLY DO IS DECIDED BY WHEN THE META FILE EXISTS, and it does not exist at
+ * SubagentStart: that hook's return is what lets the child begin, so the file it would be read from is written
+ * after it resolves. Waiting there deadlocks against the very write being waited for. So Start does the one
+ * thing it uniquely can — name the DIRECTORY this session files its children in, which no other input carries
+ * — and the pairing is resolved from that directory later, on demand (subagentAgentId).
+ *
+ * Stop is the other half and keeps its full read: it hands over the child's own transcript path, so the meta
+ * sibling is exact, and by then the file is long written.
  *
  * These hooks are pure record-keeping — they emit no frame. The card already learned the child exists from
  * `task_started`, and the ids landing here are ones no surface reads. */
@@ -406,26 +410,59 @@ const readMeta = async (metaPath: string): Promise<SubagentMeta | undefined> => 
 // `<projects>/<slug>/<session>.jsonl` → `<projects>/<slug>/<session>/subagents/`.
 const subagentsDirOf = (sessionTranscriptPath: string): string => join(sessionTranscriptPath.replace(/\.jsonl$/u, ""), "subagents");
 
-// Adopt what the meta file says about a child, whichever hook found it. The record may not exist yet (a hook can
-// beat its task_started), in which case the meta is enough to open one: `toolUseId` is the key, and everything
-// else the card wants is right there.
+// What the meta file says about a child, onto the record it names. Everything but the agent id is `??=`: the
+// task stream got there first with the same facts more often than not, and the one that arrived live is the one
+// to keep.
+const fill = (record: SubagentRecord, meta: SubagentMeta, agentId: string): void => {
+    record.agentId = agentId;
+    record.agentType ??= meta.agentType;
+    record.description ??= meta.description;
+    record.model ??= meta.model;
+    record.spawnDepth ??= meta.spawnDepth;
+};
+
+// Adopt what the meta file says about a child, from the hook that found it. The record may not exist yet (a hook
+// can beat its task_started), in which case the meta is enough to open one: `toolUseId` is the key, and
+// everything else the card wants is right there.
 const adopt = (turn: SubagentTurn, meta: SubagentMeta, agentId: string): void => {
     const id = meta.toolUseId;
     if (id === undefined) {
         return;
     }
-    const record =
-        records.get(id) ??
-        open(turn, id, "subagent", {
-            ...(meta.agentType !== undefined ? { agentType: meta.agentType } : {}),
-            ...(meta.description !== undefined ? { description: meta.description } : {}),
-        });
-    record.agentId = agentId;
-    record.sessionId ??= turn.sessionId;
-    record.agentType ??= meta.agentType;
-    record.description ??= meta.description;
-    record.model ??= meta.model;
-    record.spawnDepth ??= meta.spawnDepth;
+    fill(records.get(id) ?? open(turn, id, "subagent", {}), meta, agentId);
+};
+
+/* WHICH SDK AGENT A CHILD IS — resolved from the session's own meta files, on demand.
+ *
+ * This is the pairing SubagentStart cannot do (see the note above it) and SubagentStop only does for a child
+ * that stops while its parent's session is still alive. A BACKGROUNDED child — the Agent tool's default — often
+ * does not: the parent fires it and walks away, the turn ends, closeSubagents settles it, and the stop hook
+ * never comes. Those children were listed with their tokens and their tool counts and then opened on "No
+ * transcript was recorded", with the JSONL sitting on disk beside the parent's, complete.
+ *
+ * Asked at READ time, so every meta file of that turn is long written; cached on the record, because the answer
+ * cannot change. The scan is one session's children, and a meta file is a few hundred bytes. */
+export const subagentAgentId = async (id: string): Promise<string | undefined> => {
+    const record = records.get(id);
+    if (record === undefined || record.agentId !== undefined) {
+        return record?.agentId;
+    }
+    const dir = record.turn.subagentsDir;
+    if (dir === undefined) {
+        return undefined;
+    }
+    for (const entry of await readdir(dir).catch(() => [])) {
+        const agentId = /^agent-(.+)\.meta\.json$/u.exec(entry)?.[1];
+        if (agentId === undefined) {
+            continue;
+        }
+        const meta = await readMeta(join(dir, entry));
+        if (meta?.toolUseId === id) {
+            fill(record, meta, agentId);
+            return agentId;
+        }
+    }
+    return undefined;
 };
 
 export const subagentHooks = (turn: SubagentTurn): Partial<Record<HookEvent, HookCallbackMatcher[]>> => ({
@@ -434,10 +471,7 @@ export const subagentHooks = (turn: SubagentTurn): Partial<Record<HookEvent, Hoo
             hooks: [
                 async (input): Promise<{ continue: true }> => {
                     if (input.hook_event_name === "SubagentStart") {
-                        const meta = await readMeta(join(subagentsDirOf(input.transcript_path), `agent-${input.agent_id}.meta.json`));
-                        if (meta !== undefined) {
-                            adopt(turn, meta, input.agent_id);
-                        }
+                        turn.subagentsDir = subagentsDirOf(input.transcript_path);
                     }
                     return { continue: true };
                 },

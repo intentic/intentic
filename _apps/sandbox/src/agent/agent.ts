@@ -340,10 +340,17 @@ async function* sdkTurns(
             const message = step.value;
             if (message.type === "system" && message.subtype === "background_tasks_changed") {
                 heldTasks = message.tasks.filter((task) => HELD_TASK_TYPES.has(task.task_type)).length;
-            } else if ((message.type === "assistant" || message.type === "stream_event" || message.type === "user") && message.parent_tool_use_id === null) {
+            } else if (
+                (message.type === "assistant" || message.type === "stream_event" || message.type === "user") &&
+                message.parent_tool_use_id === null
+            ) {
                 midTurn = true;
             }
-            if (message.type === "assistant" || message.type === "stream_event" || (message.type === "system" && message.subtype === "local_command_output")) {
+            if (
+                message.type === "assistant" ||
+                message.type === "stream_event" ||
+                (message.type === "system" && message.subtype === "local_command_output")
+            ) {
                 sawWork = true;
             }
             if (message.type !== "result") {
@@ -1510,7 +1517,9 @@ export async function* runAgent(
     // exists) and the stream (which fills it in). No conversation ⇒ nothing to file children under, so the whole
     // surface stays off rather than accumulating records nothing can list.
     const subagents: SubagentTurn | undefined =
-        request.conversationId === undefined ? undefined : { conversationId: request.conversationId, cwd: request.cwd, sessionId: undefined };
+        request.conversationId === undefined
+            ? undefined
+            : { conversationId: request.conversationId, cwd: request.cwd, sessionId: undefined, subagentsDir: undefined };
     /* The turn's tmux session, by the id the CLI mints for it — read by the parked cards to ask whether a
      * command is still running before anything rebases under it. Mutable for the same reason the subagent
      * handle is: the ask tool and the permission gate are wired here, before a fresh turn's id exists.
@@ -1555,7 +1564,9 @@ export async function* runAgent(
     // frames).
     const oauthToken = request.oauthToken;
     const readUsage =
-        oauthToken === undefined ? undefined : (): Promise<UsageWindow[]> => readClaudeUsage(oauthToken, usageFetch).then((reading) => reading.windows);
+        oauthToken === undefined
+            ? undefined
+            : (): Promise<UsageWindow[]> => readClaudeUsage(oauthToken, usageFetch).then((reading) => reading.windows);
 
     // The swallowed-prompt recovery (sdkTurns): the turn's own prompt, pushed back through the steering queue,
     // once. Built here because this is where both halves live — the prompt text and the queue the streaming

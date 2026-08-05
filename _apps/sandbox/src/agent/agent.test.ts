@@ -534,7 +534,7 @@ test("a subagent still running holds the rebase off", async () => {
     const conversationId = "c-parked";
     let calls = 0;
     noteDelegation(
-        { conversationId, cwd: "/work", sessionId: undefined },
+        { conversationId, cwd: "/work", sessionId: undefined, subagentsDir: undefined },
         { id: "bash-1", command: "codex exec --sandbox danger-full-access --cd /work 'port the tests'" },
     );
 

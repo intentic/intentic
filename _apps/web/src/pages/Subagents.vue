@@ -175,7 +175,14 @@ watch(messages, () => {
 </script>
 
 <template>
-    <div class="flex h-full min-h-0">
+    <!-- ON THE CARD SURFACE, which is the popped-out chat's ground (ChatPanel) and not this route's default
+         canvas — because the list down the left is that window's list, drawn by the same RailLane and RailCard,
+         and a lane means opposite things on the two grounds. `.lane` is mixed FROM canvas, so on canvas it is a
+         slab that RISES out of the page and its cards rise again off that; on the card ground it is a trough
+         the cards sit flush in. Same three colours, inverted relief — which is exactly how the two lists read
+         as two different components to anyone who has both open. The chat's reading is the one that wins: it
+         is the surface this list was copied from. -->
+    <div class="flex h-full min-h-0 bg-card">
         <!-- Nothing to show. Not an error — plenty of turns never start an agent — so this describes the surface
              instead of reporting a fault, the way the Browsers area's empty state does. FILTERED IS ITS OWN
              SENTENCE: a card counts the children an agent has started for its whole life, while this list holds
@@ -202,7 +209,10 @@ watch(messages, () => {
         <template v-else>
             <!-- WHICH AGENT. The chat rail's own column: lane slabs of session cards, so the agents an agent
                  started are read exactly the way the agents you started are, two clicks away. -->
-            <aside class="scrollbar-thin flex w-72 shrink-0 flex-col gap-2 overflow-y-auto border-r border-line p-2">
+            <!-- No divider down its right edge, for the reason the pop-out rail has none: the lane slabs are
+                 the structure, and a hairline against a column of them is a second edge saying what the first
+                 already said. -->
+            <aside class="scrollbar-thin flex w-72 shrink-0 flex-col gap-2 overflow-y-auto p-2">
                 <!-- WHAT NARROWED THIS LIST, and the way out of it. A filtered rail that does not say it is
                      filtered is how a reader concludes the sandbox has only ever run two agents. -->
                 <RouterLink
@@ -289,7 +299,7 @@ watch(messages, () => {
                      you pressed and the header you land on read as one agent — and the two ways out of this
                      pane: back to the conversation that started it, and, for a delegation (which unlike a
                      subagent has a process of its own), into the shell it runs in. -->
-                <div v-if="current" class="flex shrink-0 items-center gap-2 border-b border-line bg-card px-2.5 py-1.5 text-2xs text-muted">
+                <div v-if="current" class="flex shrink-0 items-center gap-2 border-b border-line px-2.5 py-1.5 text-2xs text-muted">
                     <IdentityTile :title="titleOf(current)" :provider="providerOf(current)" class="h-5 w-5 text-2xs" />
                     <span class="min-w-0 flex-1 truncate text-xs font-semibold text-content">{{ titleOf(current) }}</span>
                     <span v-if="current.agentType !== undefined" class="shrink-0">{{ current.agentType }}</span>

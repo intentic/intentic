@@ -1,3 +1,7 @@
+import { mkdtemp, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import type { HookInput } from "@anthropic-ai/claude-agent-sdk";
 import type { AgentEvent } from "@intentic/sandbox-contract";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
@@ -7,13 +11,15 @@ import {
     noteSubagentTask,
     resetSubagents,
     settleDelegation,
+    subagentAgentId,
     subagentCountsOf,
+    subagentHooks,
     subagentSource,
     type SubagentTaskMessage,
     type SubagentTurn,
 } from "./subagents.js";
 
-const turn = (): SubagentTurn => ({ conversationId: "conv-1", cwd: "/work", sessionId: "sess-1" });
+const turn = (): SubagentTurn => ({ conversationId: "conv-1", cwd: "/work", sessionId: "sess-1", subagentsDir: undefined });
 
 // A `task_started` as the SDK delivers it. An override spelled out as `undefined` states that the SDK sent the
 // task WITHOUT that field — the case two of these suites are about — which is why the override map admits
@@ -139,6 +145,62 @@ describe("the SDK's own subagents", () => {
         noteSubagentTask(turn(), started());
         expect(subagentSource("call-1")).toMatchObject({ kind: "subagent", conversationId: "conv-1", sessionId: "sess-1", running: true });
         expect(subagentSource("nobody")).toBeUndefined();
+    });
+
+    // The turn's session id arrives on the stream's first frame, which can land AFTER a child is already open.
+    // A record that copied it at birth kept the `undefined` it was born with, and a transcript read with no
+    // session id reads nothing.
+    it("reads the turn's session id as it stands, not as it was when the child was born", () => {
+        const handle: SubagentTurn = { conversationId: "conv-1", cwd: "/work", sessionId: undefined, subagentsDir: undefined };
+        noteSubagentTask(handle, started());
+        handle.sessionId = "sess-late";
+        expect(subagentSource("call-1")).toMatchObject({ sessionId: "sess-late" });
+    });
+});
+
+/* THE PAIRING BETWEEN A CHILD AND THE TOOL CALL THAT SPAWNED IT — the fact the whole transcript door hangs on,
+ * and the one this surface shipped without. It was read in the SubagentStart hook, which fires BEFORE the SDK
+ * writes the meta file it was being read from, so it never once succeeded; the SubagentStop hook was the only
+ * one that ever landed a pairing, and that hook never comes for a backgrounded child whose parent turn ends
+ * first — which is the Agent tool's DEFAULT. Every one of those children listed its tokens and its tool count
+ * and then opened on "No transcript was recorded", with its JSONL complete on disk. */
+describe("pairing a child to its transcript", () => {
+    const meta = (dir: string, agentId: string, body: Record<string, unknown>): Promise<void> =>
+        writeFile(join(dir, `agent-${agentId}.meta.json`), JSON.stringify(body));
+
+    it("resolves the agent id from the session's meta files, and takes what else they say", async () => {
+        const dir = await mkdtemp(join(tmpdir(), "subagents-"));
+        const handle: SubagentTurn = { conversationId: "conv-1", cwd: "/work", sessionId: "sess-1", subagentsDir: undefined };
+
+        // The start hook's one job: name the directory this session files its children in. It carries the
+        // PARENT's transcript path, and the children live in a directory named after it.
+        const startHook = subagentHooks(handle).SubagentStart?.[0]?.hooks[0];
+        await startHook?.(
+            { hook_event_name: "SubagentStart", transcript_path: join(dir, "sess-1.jsonl"), agent_id: "a1" } as unknown as HookInput,
+            "t1",
+            {
+                signal: new AbortController().signal,
+            },
+        );
+        expect(handle.subagentsDir).toBe(join(dir, "sess-1", "subagents"));
+
+        // The real directory, as the SDK fills it: a sibling child of the same turn, and ours.
+        handle.subagentsDir = dir;
+        noteSubagentTask(handle, started());
+        await meta(dir, "sibling", { toolUseId: "call-9", agentType: "Explore" });
+        await meta(dir, "a1b2c3", { toolUseId: "call-1", agentType: "Explore", model: "opus", spawnDepth: 1 });
+
+        expect(await subagentAgentId("call-1")).toBe("a1b2c3");
+        // And the rest of the meta rides along — the model and the spawn depth reach the card the same way.
+        expect(listSubagentSessions()).toMatchObject([{ id: "call-1", model: "opus", spawnDepth: 1 }]);
+    });
+
+    // Nothing to scan (no child of this turn ever started, so no hook ever named a directory) and no such
+    // child — both are "no transcript", which is what the surface already draws.
+    it("answers nothing for a child it cannot place", async () => {
+        noteSubagentTask(turn(), started());
+        expect(await subagentAgentId("call-1")).toBeUndefined();
+        expect(await subagentAgentId("nobody")).toBeUndefined();
     });
 });
 

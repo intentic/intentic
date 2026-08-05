@@ -2,7 +2,7 @@ import { readdir } from "node:fs/promises";
 import { join } from "node:path";
 import { getSubagentMessages } from "@anthropic-ai/claude-agent-sdk";
 import type { RestoredMessage, RestoredToolCall } from "@intentic/sandbox-contract";
-import { subagentSource } from "../agent/subagents.js";
+import { subagentAgentId, subagentSource } from "../agent/subagents.js";
 import { turnRunOf } from "../agent/turn-runs.js";
 import { displayNameOf, toolCategoryOf } from "../agent/tool-calls.js";
 import type { OpenCodeService } from "../grok/opencode.js";
@@ -146,12 +146,14 @@ export const readSubagentTranscript = async (deps: SubagentTranscriptDeps, id: s
         }
     }
     if (source.kind === "subagent") {
-        // Both ids are needed and either can be missing: the SubagentStart hook is what learns them, and a child
-        // that ended before it fired (or in a session the hook never saw) has no file to point at.
-        if (source.sessionId === undefined || source.agentId === undefined) {
+        // Both ids are needed and either can be missing: the session's is the turn's own, and the child's is
+        // paired to the spawning tool call out of the SDK's meta files here, at read time (subagentAgentId says
+        // why it cannot be known earlier). A child from a session neither ever named has no file to point at.
+        const agentId = await subagentAgentId(id);
+        if (source.sessionId === undefined || agentId === undefined) {
             return [];
         }
-        const messages = await getSubagentMessages(source.sessionId, source.agentId, { dir: source.cwd });
+        const messages = await getSubagentMessages(source.sessionId, agentId, { dir: source.cwd });
         return restoredSessionMessages(messages, deps.root);
     }
     if (source.kind === "codex") {
