@@ -22,6 +22,15 @@ type RuleStack = Parameters<Grammar[`tokenizeLine`]>[1];
 // One side of a diff: the text to show, and the 1-based source line each of its lines came from.
 export type CodeSide = { text: string; lines: number[] };
 
+// The line of a stripped view showing the file's line `line` — itself when it survived, otherwise the first kept
+// line after it, so a jump into a removed comment lands on the code that comment introduces. Past the last kept
+// line it is the end of the view. The inverse (`lines[modelLine - 1]`) is what the gutter and the reported
+// selection print, which is why nothing outside this module ever sees the view's own numbering.
+export const modelLineOf = (lines: readonly number[], line: number): number => {
+    const index = lines.findIndex((source) => source >= line);
+    return index < 0 ? Math.max(lines.length, 1) : index + 1;
+};
+
 // The guard @shikijs/monaco puts on the same grammars, for the same reason: a minified bundle opened as a diff
 // must not cost the frame. Past it, the line is kept exactly as it is.
 const MAX_TOKENIZED_LINE = 20_000;

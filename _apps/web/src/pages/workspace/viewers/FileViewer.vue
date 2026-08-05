@@ -294,7 +294,7 @@ const download = async (): Promise<void> => {
 /* Inline editing (text files only). Read and edit are the same Monaco surface (readOnly toggles), seeded from
  * the file's live buffer (edits survive tab switches via useEditBuffers) or its on-disk text. Ctrl+S / Save
  * persists through the daemon's upload route; the tree refetch then refreshes size + the read view. */
-const layout = useLayout();
+const { editMode, setEditMode, hideFileComments, toggleHideFileComments } = useLayout();
 const { saveText, run } = useWorkspaceTree();
 // The editable CodeView instance — the toolbar Save button saves through its exposed save() so the toolbar and
 // Ctrl+S run the same normalize-then-save path.
@@ -306,7 +306,10 @@ const { mobile } = useDevice();
 const canEdit = computed(() => (open.value.kind === `code` || open.value.kind === `markdown`) && text.value !== null);
 // Global edit mode (useLayout), gated per file by canEdit so a viewer's file (and every binary) stays in its
 // viewer — including one whose file is text, like an .svg: an extension viewer renders, it does not edit.
-const editingThis = computed(() => !mobile.value && layout.editMode.value && canEdit.value);
+const editingThis = computed(() => !mobile.value && editMode.value && canEdit.value);
+// Reading the code alone is offered where there is code to isolate: a text file on the editor surface, being
+// READ. Editing shows the file whole — the buffer that gets saved is never the stripped one.
+const canHideComments = computed(() => open.value.kind === `code` && text.value !== null && !editingThis.value);
 const dirtyThis = computed(() => edit.isDirty(path));
 const editorSeed = computed(() => edit.bufferOf(path) ?? text.value ?? ``);
 
@@ -336,6 +339,21 @@ const onEditorSave = (value: string): void =>
         <!-- Context bar: breadcrumb path + edit actions (text files only). The actions stay put across the
              post-save refetch via `|| editingThis`; the tab's dirty dot makes an "Unsaved" label redundant. -->
         <FileBreadcrumb :path="path" :meta="meta">
+            <!-- The diff surface's Comments toggle, in the bar that reads a file — same words, same eye, so the
+                 two surfaces are one habit. It reads the other way round here (comments start SHOWN) because
+                 opening a file asks what it says, and the gutter keeps the file's own line numbers either way. -->
+            <button
+                v-if="canHideComments"
+                type="button"
+                class="inline-flex shrink-0 items-center gap-1 rounded-md px-2 py-1 text-2xs text-muted transition-colors hover:bg-overlay hover:text-content"
+                :class="{ 'bg-primary-600/15 text-link': hideFileComments }"
+                :aria-pressed="hideFileComments"
+                @click="toggleHideFileComments()"
+                v-tooltip.bottom="hideFileComments ? 'Comments hidden — click to show them' : 'Hide comments — read the code alone'"
+            >
+                <Icon :name="hideFileComments ? 'eye-slash' : 'eye'" class="text-[0.7rem]" />
+                <span class="max-md:hidden">Comments</span>
+            </button>
             <CopyButton v-if="text !== null" :text="editorSeed" aria-label="Copy file content" v-tooltip.bottom="'Copy content'" />
             <template v-if="!mobile && (canEdit || editingThis)">
                 <span v-if="dirtyThis" class="inline-flex shrink-0 items-center text-warning" v-tooltip.bottom="'Unsaved changes — Ctrl+S to save'">
@@ -354,7 +372,7 @@ const onEditorSave = (value: string): void =>
                     <button
                         type="button"
                         class="inline-flex shrink-0 items-center gap-1 rounded-md px-2 py-1 text-2xs text-muted transition-colors hover:bg-overlay hover:text-content"
-                        @click="layout.setEditMode(false)"
+                        @click="setEditMode(false)"
                         v-tooltip.bottom="'Back to preview (keeps unsaved edits)'"
                     >
                         <Icon name="eye" class="text-[0.7rem]" /> Preview
@@ -364,7 +382,7 @@ const onEditorSave = (value: string): void =>
                     v-else
                     type="button"
                     class="inline-flex shrink-0 items-center gap-1 rounded-md px-2 py-1 text-2xs text-muted transition-colors hover:bg-overlay hover:text-content"
-                    @click="layout.setEditMode(true)"
+                    @click="setEditMode(true)"
                     v-tooltip.bottom="'Edit all files'"
                 >
                     <Icon name="pencil" class="text-[0.7rem]" /> Edit
@@ -406,7 +424,14 @@ const onEditorSave = (value: string): void =>
                 <Icon name="spinner" class="text-xl" spin />
             </div>
             <template v-else>
-                <CodeView v-if="open.kind === 'code' && text !== null" :path="path" :code="text" :lang="lang" :scroll-to-line="line" />
+                <CodeView
+                    v-if="open.kind === 'code' && text !== null"
+                    :path="path"
+                    :code="text"
+                    :lang="lang"
+                    :scroll-to-line="line"
+                    :hide-comments="hideFileComments"
+                />
                 <MarkdownViewer v-else-if="open.kind === 'markdown' && text !== null" :source="text" :path="path" :line="line" />
                 <!-- Over the editable cap: windowed, read-only, seeded with the window the read above already got. -->
                 <BigTextView v-else-if="open.kind === 'big-text' && firstWindow" :path="path" :first="firstWindow" @download="download" />

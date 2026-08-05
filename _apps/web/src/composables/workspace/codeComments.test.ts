@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { describe, expect, it, vi } from "vitest";
-import { stripComments } from "./codeComments";
+import { modelLineOf, stripComments } from "./codeComments";
 
 // The @intentic/ui barrel that carries useHighlighter reaches window.matchMedia (useDevice) at import — hence
 // jsdom plus the stub jsdom itself doesn't ship. Nothing under test touches the DOM.
@@ -80,5 +80,29 @@ describe(`stripComments`, () => {
         const source = [`# a shell note`, `echo hi  # trailing`].join(`\n`);
 
         expect(await stripComments(source, `bash`)).toEqual({ text: `echo hi`, lines: [2] });
+    });
+});
+
+// The way back: the file viewer jumps to a line of the FILE (a content-search hit, the scroll position it holds
+// across the toggle), and the view it lands in is short by every comment above it.
+describe(`modelLineOf`, () => {
+    // The stripped view of a 6-line file whose lines 1, 2 and 5 were comments.
+    const lines = [3, 4, 6];
+
+    it(`lands on the view's own line for a line that survived`, () => {
+        expect(modelLineOf(lines, 3)).toBe(1);
+        expect(modelLineOf(lines, 4)).toBe(2);
+        expect(modelLineOf(lines, 6)).toBe(3);
+    });
+
+    it(`lands on the code a removed comment introduces`, () => {
+        expect(modelLineOf(lines, 1)).toBe(1); // the header comment ⇒ the first line of code under it
+        expect(modelLineOf(lines, 5)).toBe(3);
+    });
+
+    it(`stops at the end for a line past everything kept`, () => {
+        expect(modelLineOf(lines, 99)).toBe(3);
+        // A view with nothing in it still has to name a line — Monaco has no line 0.
+        expect(modelLineOf([], 1)).toBe(1);
     });
 });

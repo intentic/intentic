@@ -59,6 +59,12 @@ const EDIT_MODE_KEY = `ui-workspace-edit-mode`;
 // opens on the code alone and comment-only edits don't read as changes. See codeComments.ts. Persists.
 const SHOW_COMMENTS_KEY = `ui-diff-show-comments`;
 
+// Comments in a file being READ (the workspace file viewer) — on by default, the opposite of the diff above, and
+// its own switch rather than a second reader of that one. The two answer different questions: a diff asks what the
+// code now does, so the prose is noise; opening a file asks what this file says, and its comments are half the
+// answer. Hiding them there is a deliberate "just the code" mode, so it starts off and persists once chosen.
+const HIDE_FILE_COMMENTS_KEY = `ui-file-hide-comments`;
+
 // Side-by-side or inline, for every diff surface at once — the reader's habit, not a property of the file they
 // happen to be looking at. It lives beside showComments because the two are the same kind of setting: how this
 // person reads a diff, chosen once, honoured everywhere (DiffToolbar owns the control). Mobile ignores it —
@@ -134,6 +140,7 @@ const showIgnored = ref<boolean>(readBool(SHOW_IGNORED_KEY));
 const hideTests = ref<boolean>(readBool(HIDE_TESTS_KEY));
 const editMode = ref<boolean>(readBool(EDIT_MODE_KEY));
 const showComments = ref<boolean>(readBool(SHOW_COMMENTS_KEY));
+const hideFileComments = ref<boolean>(readBool(HIDE_FILE_COMMENTS_KEY));
 const diffLayout = ref<DiffLayout>(readEnum(DIFF_LAYOUT_KEY, [`split`, `unified`] as const, `split`));
 
 const set = (value: ChatPosition): void => {
@@ -224,6 +231,11 @@ const toggleShowComments = (): void => {
     write(SHOW_COMMENTS_KEY, showComments.value ? `1` : `0`);
 };
 
+const toggleHideFileComments = (): void => {
+    hideFileComments.value = !hideFileComments.value;
+    write(HIDE_FILE_COMMENTS_KEY, hideFileComments.value ? `1` : `0`);
+};
+
 const setDiffLayout = (value: DiffLayout): void => {
     diffLayout.value = value;
     write(DIFF_LAYOUT_KEY, value);
@@ -242,6 +254,7 @@ export function useLayout() {
         hideTests,
         editMode,
         showComments,
+        hideFileComments,
         diffLayout,
         set,
         toggle,
@@ -260,6 +273,7 @@ export function useLayout() {
         toggleHideTests,
         setEditMode,
         toggleShowComments,
+        toggleHideFileComments,
         setDiffLayout,
     };
 }
