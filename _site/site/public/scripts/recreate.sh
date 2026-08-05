@@ -168,7 +168,16 @@ pull_image() {
     fi
     echo "intentic: pull failed — clearing a stale ghcr.io login and retrying anonymously…" >&2
     docker logout ghcr.io >/dev/null 2>&1 || true
-    docker pull "$1"
+    if docker pull "$1"; then
+        return 0
+    fi
+    # The stale-login guess has been cleared and the anonymous retry failed too, so an "unauthorized"/"denied"
+    # here means the package is refused to everyone — ours to fix, not the user's (a GHCR package is private
+    # until made public by hand; see publish-images.sh).
+    echo "intentic: ${1} could not be pulled without a login — an \"unauthorized\" or \"denied\" above means its" >&2
+    echo "          registry package is not public, which is a packaging fault on our side rather than a problem" >&2
+    echo "          with this machine." >&2
+    return 1
 }
 
 # ——— The mode pre-step: produce TARGET_IMAGE / BASE_IMAGE / ENV_HASH and the overlay file (may be empty). ———

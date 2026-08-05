@@ -369,7 +369,18 @@ ensure_image() {
     fi
     echo "intentic: pull failed — clearing a stale ghcr.io login and retrying anonymously…" >&2
     docker logout ghcr.io >/dev/null 2>&1 || true
-    docker pull "$image"
+    if docker pull "$image"; then
+        return 0
+    fi
+    # A stale login was the guess above; it has now been cleared and the anonymous retry failed too, so an
+    # "unauthorized"/"denied" here is the registry refusing the package to everyone rather than anything about
+    # this machine. Say that, because the older wording sent users hunting through their own Docker config for
+    # a fault that is ours — a GHCR package is private until it is made public by hand (see publish-images.sh).
+    echo "intentic: ${image} could not be pulled without a login. An \"unauthorized\" or \"denied\" above means" >&2
+    echo "          the image's registry package is not public — that is a packaging fault on our side, not a" >&2
+    echo "          problem with your machine. Report it, or if this org is yours make the package public at" >&2
+    echo "          https://github.com/orgs/intentic/packages, then re-run." >&2
+    return 1
 }
 
 # Desktop sync (opted into at setup): wait for the daemon to answer INSIDE the container (a local check — no

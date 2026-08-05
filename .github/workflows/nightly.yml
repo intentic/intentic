@@ -116,3 +116,28 @@ jobs:
       - uses: ./.github/actions/pnpm-setup
       - run: bash _tools/scripts/build-desktop.sh 0.0.0 --linux-only
       - run: bash _tools/scripts/verify-desktop-setup.sh
+
+  # The published images are readable WITHOUT a credential — the one thing no other job here can see. Every job
+  # in this file and in ci.yml opens with a `docker login ghcr.io`, including desktop-setup above, which runs
+  # the shipped connect.sh but hands it the runner's login; so a package published private looks identical to a
+  # public one from inside the pipeline, and the first thing that notices is a user's install dying at
+  # `error from registry: unauthorized`. That is not hypothetical — it is how the sandbox image shipped.
+  #
+  # Cheap enough to be a schedule rather than a release gate (two HTTP calls, no pull), and a schedule is the
+  # right trigger anyway: this guards REGISTRY state, which can turn private again long after the release that
+  # published it. The ci-base container is pulled with credentials as everywhere else, which does not weaken the
+  # check — the script speaks HTTP to the registry's token endpoint as an anonymous client and never invokes
+  # docker, so it cannot pick up a login from the runner's shared config.
+  images-public:
+    runs-on: [self-hosted, intentic]
+    container:
+      image: ghcr.io/intentic/ci-base:latest
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          clean: false
+      - run: bash _tools/scripts/verify-images-public.sh

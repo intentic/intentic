@@ -162,7 +162,7 @@ Updater artifacts are minisign-signed when `TAURI_SIGNING_PRIVATE_KEY` is set in
 
 ## How it is tested
 
-Four tiers, ordered by cost. Each proves something the one before it cannot, and the split is driven by one
+Five tiers, ordered by cost. Each proves something the one before it cannot, and the split is driven by one
 fact: **this app is cross-built on Linux and its Windows conventions first execute on a user's machine.**
 
 | Tier | Runs | Proves |
@@ -171,6 +171,7 @@ fact: **this app is cross-built on Linux and its Windows conventions first execu
 | `_tools/scripts/verify-desktop-bundle.sh` | every build (called by `build-desktop.sh`) | the bundled scripts are present and byte-identical, and the `.desktop` entry both registers `intentic://` and carries the `%u` that delivers it. Reads the deb, rpm, AppImage **and the NSIS installer** — the only automated look inside the Windows artifact |
 | `_tools/scripts/verify-desktop-install.sh` | main + nightly (`desktop-verify`) | the artifacts install on a **bare** Debian, launch under Xvfb, and answer a real `xdg-open intentic://` — with the app running *and* with it closed, which are different mechanisms — see [`_tools/desktop-smoke`](../../_tools/desktop-smoke/README.md) |
 | `_tools/scripts/verify-desktop-setup.sh` | nightly | the `connect.sh` **extracted from the installer** brings a sandbox up on a clean Docker host, hermetically (no Cloudflare, no Google, no platform) |
+| `_tools/scripts/verify-images-public.sh` | nightly | the images those scripts pull are readable **without a credential**. The only tier that runs logged out — every other one carries the runner's `ghcr.io` login, including the tier above, so a package published private is invisible to all of them and surfaces first as a user's install dying at `error from registry: unauthorized` |
 
 Run the last two locally against your own build:
 

@@ -348,6 +348,15 @@ if (-not $HasRegistry) {
             docker logout ghcr.io *> $null
             docker pull $SandboxImage
             if ($LASTEXITCODE -ne 0) {
+                # A stale login was the guess above; it has now been cleared and the anonymous retry failed
+                # too, so an "unauthorized"/"denied" here is the registry refusing the package to everyone
+                # rather than anything about this machine. Say that, because the older wording sent users
+                # hunting through their own Docker config for a fault that is ours - a GHCR package is
+                # private until it is made public by hand (see publish-images.sh).
+                Write-Host "intentic: $SandboxImage could not be pulled without a login. An ""unauthorized"" or ""denied"" above"
+                Write-Host '          means the image''s registry package is not public - that is a packaging fault on our side,'
+                Write-Host '          not a problem with your machine. Report it, or if this org is yours make the package public'
+                Write-Host '          at https://github.com/orgs/intentic/packages, then re-run.'
                 Write-Error 'failed to pull the sandbox image (see the docker output above).'
                 exit 1
             }

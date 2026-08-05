@@ -101,7 +101,14 @@ function Invoke-Pull([string]$Image) {
     Write-Host 'intentic: pull failed - clearing a stale ghcr.io login and retrying anonymously...'
     docker logout ghcr.io *> $null
     docker pull $Image 2>&1 | Tee-Object -FilePath $Log -Append
-    return ($LASTEXITCODE -eq 0)
+    if ($LASTEXITCODE -eq 0) { return $true }
+    # The stale-login guess has been cleared and the anonymous retry failed too, so an "unauthorized"/"denied"
+    # here means the package is refused to everyone - ours to fix, not the user's (a GHCR package is private
+    # until made public by hand; see publish-images.sh).
+    Write-Host "intentic: $Image could not be pulled without a login - an ""unauthorized"" or ""denied"" above means its"
+    Write-Host '          registry package is not public, which is a packaging fault on our side rather than a problem'
+    Write-Host '          with this machine.'
+    return $false
 }
 
 # --- The mode pre-step: produce $TargetImage / $BaseImage / $EnvHash and the overlay file (may be empty). ---
