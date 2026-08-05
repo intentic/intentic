@@ -8,11 +8,13 @@
 import { Button, cmp, Icon, PageAction, Segmented, Select, SplitView } from "@intentic/extension-ui";
 import { computed, ref, watch } from "vue";
 import { acknowledgeStaged } from "./attention.js";
+import { documentAt, refreshDocumentPresence } from "./docPresence.js";
 import DocsNav from "./DocsNav.vue";
 import DocPage from "./DocPage.vue";
 import { packageFigures } from "./figures.js";
 import GenerateDialog from "./GenerateDialog.vue";
 import { host } from "./host.js";
+import { openingRepo, rememberRepo, rememberedRepo } from "./repoChoice.js";
 import { useDocs, type DocSource } from "./useDocs.js";
 import { usePublish, type Preflight } from "./usePublish.js";
 import { useRuns } from "./useRuns.js";
@@ -34,10 +36,41 @@ const repos = computed(() => api.workspace.repos().map((facts) => facts.repo));
  * is NOT: a draft is one person's unreviewed work in progress, so a link carrying "show me your draft" would
  * either mislead the recipient or show them nothing. */
 const query = computed(() => api.route.query());
-const repo = computed(() => pinned ?? query.value[`repo`] ?? repos.value[0] ?? ``);
+/* What this browser last opened, honoured only while the workspace still has it — see repoChoice.ts for why the
+ * area remembers at all, and why the fallback prefers a repository that has something to read. Not the mirror the
+ * paragraph above warns about: it is written FROM the URL and never back to it, so nothing here can fight the URL
+ * over what is open — it only answers when the URL says nothing.
+ *
+ * A ref rather than a read at mount because the rail's tile links to this same view without a query: clicking it
+ * while already here empties `repo` from the URL without remounting anything, and the answer then has to be the
+ * choice just made. */
+const remembered = ref(rememberedRepo());
+const repo = computed(() => pinned ?? query.value[`repo`] ?? openingRepo(repos.value, remembered.value, (name) => documentAt(name) !== undefined));
 const label = computed(() => (repo.value === `` ? `the workspace root` : repo.value));
 // undefined ⇒ the repository's own overview page, which is where a reader should land.
 const page = computed(() => query.value[`doc`]);
+
+/* A REPOSITORY IN THE URL IS A CHOICE — the picker below puts it there, and so does a link someone followed to
+ * another repo's documents. A fallback is not a choice and is deliberately not remembered: writing one back would
+ * freeze whichever repo happened to be first before the presence map had answered. Pinned means the host bound
+ * the repo for a directory panel, which says nothing about where the rail's tile should open. */
+watch(
+    () => query.value[`repo`],
+    (chosen) => {
+        if (pinned === undefined && chosen !== undefined) {
+            remembered.value = chosen;
+            rememberRepo(chosen);
+        }
+    },
+    { immediate: true },
+);
+
+/* Presence is a sixty-second poll, so when it is what decides the opening repository — no link, nothing
+ * remembered — ask for a fresh read instead of opening on a minute-old answer and then moving the page under the
+ * reader when the poll lands. */
+if (pinned === undefined && remembered.value === undefined) {
+    refreshDocumentPresence();
+}
 
 // Pushed, not replaced: moving to another document is exactly what Back should undo. Selecting the overview drops
 // the key rather than writing an empty one, so the tidy URL is the one you get by default.

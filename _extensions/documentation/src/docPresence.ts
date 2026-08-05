@@ -2,7 +2,7 @@ import type { Disposable } from "@intentic/extension-api";
 import { ref } from "vue";
 import { parseDocIndex } from "./docModel.js";
 import { host } from "./host.js";
-import { INDEX_TAIL, publishedPath, underRepo } from "./paths.js";
+import { INDEX_TAIL, publishedPath, REPO_DOC_TAIL, underRepo } from "./paths.js";
 import { documentedDirs, listStagedTails } from "./stagedTree.js";
 
 /* WHICH DIRECTORIES HAVE A DOCUMENT — the state behind the icon on a Workspace tree row.
@@ -52,6 +52,23 @@ const publishedEntries = async (repo: string): Promise<ReadonlyMap<string, strin
     }
 };
 
+/* Whether the repository's own OVERVIEW is published — `repo.json`, the same marker the staged side reads, so a
+ * repo's row means one thing on both trees.
+ *
+ * Not "its index lists packages", which is what this used to ask. An index is derived bookkeeping that
+ * `intentic-docs check` writes for whatever directory it is pointed at, so a repo can hold one with no map beside
+ * it — a workspace root pointed at every package under it is the ordinary way that happens. The row then promised
+ * a document that opens empty, and the area would offer to open on a repository whose overview does not exist. The
+ * map is what a reader lands on, so the map is the question. */
+const hasPublishedMap = async (repo: string): Promise<boolean> => {
+    try {
+        return (await host().workspace.file(publishedPath(repo, REPO_DOC_TAIL))) !== undefined;
+    } catch {
+        // One unreachable repo must not blank the others; the next poll picks it up.
+        return false;
+    }
+};
+
 /* Never throws and never rejects — a timer nothing awaits (attention.ts documents the reasoning). It also runs at
  * activation, before the shell has a sandbox at all, so "not reachable yet" is an ordinary first state. */
 const scan = async (): Promise<void> => {
@@ -63,16 +80,16 @@ const scan = async (): Promise<void> => {
         const next = new Map<string, DocumentPresence>();
         await Promise.all(
             api.workspace.repos().map(async ({ repo }) => {
-                const [published, staged] = await Promise.all([publishedEntries(repo), listStagedTails(api, repo)]);
+                const [published, staged, map] = await Promise.all([publishedEntries(repo), listStagedTails(api, repo), hasPublishedMap(repo)]);
                 // Drafts first, so a published document overwrites its draft's entry rather than the other way
                 // round: the tab opens the published page, and the row should not call it a draft.
-                if (staged.includes(`repo.json`)) {
+                if (staged.includes(REPO_DOC_TAIL)) {
                     next.set(repo, { oneLiner: ``, draft: true });
                 }
                 for (const dir of documentedDirs(staged)) {
                     next.set(underRepo(repo, dir), { oneLiner: ``, draft: true });
                 }
-                if (published.size > 0) {
+                if (map) {
                     next.set(repo, { oneLiner: ``, draft: false });
                 }
                 for (const [dir, oneLiner] of published) {

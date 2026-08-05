@@ -124,7 +124,9 @@ in the Workspace's own editor area as a tab rather than navigating away from the
 The presence of a document is module state on a slow poll ([src/docPresence.ts](src/docPresence.ts)), not a query:
 the host asks `detect(path)` while nothing of this extension is mounted, and nothing observes an unmounted view —
 so neither a vue-query nor the file-change push could answer. One index read per repository covers every package it
-documents, tooltips included, because `index.json` already carries the one-liners.
+documents, tooltips included, because `index.json` already carries the one-liners. A repository's *own* row asks a
+different question — does its map exist — because an index is derived bookkeeping that can be written for a
+directory nobody wrote an overview for, and a row that promises a document has to open one.
 
 [src/DocTab.vue](src/DocTab.vue) is a separate component from `DocsView` rather than a mode of it, for one reason:
 `DocsView` keeps the open page in the URL query, which is right for a routed area and wrong for a tab — the route
@@ -156,6 +158,15 @@ repository.
 
 The published/draft toggle is deliberately **not** in the URL. A draft is one person's unreviewed work in progress,
 so a link carrying "show me your draft" would either mislead the recipient or show them nothing.
+
+**When the URL names no repository** — which is always, from the rail's tile, since its link has to stay stable —
+the area opens on the one this browser last had in the URL ([src/repoChoice.ts](src/repoChoice.ts)), so leaving for
+another view and coming back does not throw the reader's choice away. A remembered name that the workspace no
+longer has is ignored rather than honoured. With nothing remembered, the opening repository is the first one that
+*has documents*, read off the presence map: most repos have none, so discovery order would usually open on an empty
+state offering to generate while the set the reader came for sat one dropdown away. Only a repository the URL names
+is remembered — a fallback is not a choice, and writing one back would freeze whichever repo happened to be first
+before the presence map had answered.
 
 This rides on `api.route` in the public extension API, added for this view because `/ext/:ext/:key?` has exactly one
 free path segment and it already means "which activation" — a view with internal navigation has nowhere else to put
