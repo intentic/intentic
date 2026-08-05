@@ -85,11 +85,23 @@ const dismissFailure = (scope: string): void => {
     failures.value = next;
 };
 
-// One busy span over a batch of per-scope tasks. A failure is filed against its own scope and the batch CARRIES
-// ON: the repos are independent, so aborting root's discard because intentic's remote is unreachable would
-// strand work the user asked for behind a failure they cannot act on. Re-entry while busy is a no-op, so a
-// double-click fires once. `settle` runs whatever happened — the cache must match the worktree even when only
-// half the batch landed.
+/* One busy span over a batch of per-scope tasks. A failure is filed against its own scope and the batch CARRIES
+ * ON: the repos are independent, so aborting root's discard because intentic's remote is unreachable would
+ * strand work the user asked for behind a failure they cannot act on. Re-entry while busy is a no-op, so a
+ * double-click fires once. `settle` runs whatever happened — the cache must match the worktree even when only
+ * half the batch landed.
+ *
+ * THE SPAN COVERS THE WRITES, NOT THE REFRESH. Every button in the panel is disabled off this flag, and `settle`
+ * is a refetch of the most expensive read the daemon serves — a workspace-wide rescan that measured seconds
+ * under load. Holding the flag across it meant a commit that itself took under two seconds left the whole panel
+ * dead for ten, with no spinner to say why; and because nothing on that refetch ever times out, a refresh that
+ * never settled disabled the panel until the page was reloaded. That is the "I click Commit and nothing
+ * happens" report, and the flag was the thing reporting it.
+ *
+ * So the refresh is fired and not awaited. Nothing waits on it: `settle`'s synchronous half (dropping edit
+ * buffers) still runs before this returns, and the rows it refetches are stale-while-revalidate everywhere else
+ * in the app already. The one door this could reopen — committing twice off rows that have not caught up — is
+ * shut a second time by the commit box, which clears its message on success and needs one to arm the button. */
 const runBatch = async (tasks: readonly ScopedTask[], settle: () => Promise<unknown>): Promise<void> => {
     if (actionBusy.value) {
         return;
@@ -110,10 +122,10 @@ const runBatch = async (tasks: readonly ScopedTask[], settle: () => Promise<unkn
                 });
             }
         }
-        await settle();
     } finally {
         actionBusy.value = false;
     }
+    void settle();
 };
 
 // The diff of the ROW that was clicked, not of the file in general: `staged` is index-vs-HEAD, `unstaged` is

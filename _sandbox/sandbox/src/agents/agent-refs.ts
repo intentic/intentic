@@ -27,9 +27,10 @@ import type { GitRunner } from "@intentic/scaffold";
  */
 
 // Ref namespaces, spelled once. The shelf is the branch's own name one directory up from `refs/heads/`.
-const HEADS = "refs/heads/";
+const REFS = "refs/";
+const HEADS = `${REFS}heads/`;
 const AGENT = "agent/";
-const parkedRef = (branch: string): string => `refs/${branch}`;
+const parkedRef = (branch: string): string => `${REFS}${branch}`;
 
 /* The tip of an agent's branch as the MAIN repo sees it — the stand-in for `rev-parse HEAD` whenever the
  * checkout is retired (the refs and the objects live in the shared git dir either way). Undefined when neither
@@ -42,6 +43,35 @@ const parkedRef = (branch: string): string => `refs/${branch}`;
 export const branchSha = async (main: string, branch: string, git: GitRunner): Promise<string | undefined> => {
     const { stdout } = await git(main, ["for-each-ref", "--format=%(objectname)", `${HEADS}${branch}`, parkedRef(branch)]);
     return stdout.split("\n").find((line) => line !== "");
+};
+
+/* EVERY agent branch in this repo and its tip, in ONE spawn — the sweep behind a fleet-wide standings pass.
+ *
+ * `branchSha` answers for one agent, which is the right shape for a land and the wrong one for the board: asked
+ * per agent per repo, a workspace with 64 conversations across 6 repos spent 384 subprocesses on a single pass,
+ * several times a minute. The daemon's own perf log is unambiguous about what that costs once the disk is
+ * contended — a read that normally takes 20ms takes 250, and they come back in batches of forty at the same
+ * millisecond, having cleared a queue rather than done any work.
+ *
+ * Keyed by BRANCH (`agent/<id>`), so both spellings collapse onto the name every caller already holds, and a
+ * repo holding nothing costs the one spawn rather than none. Where a branch is BOTH live and parked — the crash
+ * window in the middle of parkAgentRefs — the parked spelling wins, because git sorts its output by refname and
+ * `refs/agent/…` precedes `refs/heads/agent/…`. That is the same tie, resolved the same way, as branchSha
+ * taking the first line of its own two-pattern read. */
+export const agentBranchTips = async (main: string, git: GitRunner): Promise<Map<string, string>> => {
+    const { stdout } = await git(main, ["for-each-ref", "--format=%(objectname) %(refname)", `${HEADS}${AGENT}`, parkedRef(AGENT)]);
+    const tips = new Map<string, string>();
+    for (const line of stdout.split("\n")) {
+        const [sha, ref] = line.split(" ");
+        if (sha === undefined || ref === undefined) {
+            continue;
+        }
+        const branch = ref.startsWith(HEADS) ? ref.slice(HEADS.length) : ref.slice(REFS.length);
+        if (!tips.has(branch)) {
+            tips.set(branch, sha);
+        }
+    }
+    return tips;
 };
 
 /* The name of the user's main line in a repo — the branch their checkout is on. The one fact an agent needs to

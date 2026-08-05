@@ -2,7 +2,7 @@ import { defaultGit, type GitRunner } from "@intentic/scaffold";
 import { headSha } from "../git/changes.js";
 import type { IsolatedAgent, PersistedAgent } from "./agents-store.js";
 import { anchorOf } from "./agent-changes.js";
-import { branchSha } from "./agent-refs.js";
+import { agentBranchTips } from "./agent-refs.js";
 import type { AgentWorktrees } from "./worktrees.js";
 
 /* WHERE AN AGENT'S WORK STANDS RELATIVE TO THE MAIN TREE — asked of git, not remembered from the last land.
@@ -83,14 +83,27 @@ export const createLandStandings = (worktrees: AgentWorktrees, git: GitRunner = 
             }
         },
         refresh: async (entries) => {
-            // One HEAD read per repo for the whole pass, not per agent: a fleet shares its workspace, and the
-            // key of every agent in it names the same handful of main-tree shas.
-            const heads = new Map<string, string | undefined>();
-            const headOf = async (repo: string): Promise<string | undefined> => {
-                if (!heads.has(repo)) {
-                    heads.set(repo, await headSha(worktrees.mainDir(repo), git));
+            /* Two reads per repo for the WHOLE pass, not per agent: a fleet shares its workspace, so the key of
+             * every agent in it names the same handful of main-tree shas, and every branch tip the pass will ask
+             * for is in the one ref sweep. Both memos are keyed on the repo and hold the in-flight promise, so
+             * the repos an entry composes can be probed together without two of them racing to the same spawn. */
+            const heads = new Map<string, Promise<string | undefined>>();
+            const headOf = (repo: string): Promise<string | undefined> => {
+                let head = heads.get(repo);
+                if (head === undefined) {
+                    head = headSha(worktrees.mainDir(repo), git);
+                    heads.set(repo, head);
                 }
-                return heads.get(repo);
+                return head;
+            };
+            const sweeps = new Map<string, Promise<Map<string, string>>>();
+            const tipOf = async (repo: string, branch: string): Promise<string | undefined> => {
+                let sweep = sweeps.get(repo);
+                if (sweep === undefined) {
+                    sweep = agentBranchTips(worktrees.mainDir(repo), git);
+                    sweeps.set(repo, sweep);
+                }
+                return (await sweep).get(branch);
             };
             let moved = false;
             for (const entry of entries) {
@@ -100,7 +113,7 @@ export const createLandStandings = (worktrees: AgentWorktrees, git: GitRunner = 
                     entry.repos.map(async (composed) => ({
                         composed,
                         head: await headOf(composed.repo),
-                        tip: await branchSha(worktrees.mainDir(composed.repo), entry.branch, git),
+                        tip: await tipOf(composed.repo, entry.branch),
                     })),
                 );
                 const conflicted = entry.conflicts !== undefined && entry.conflicts.length > 0;
