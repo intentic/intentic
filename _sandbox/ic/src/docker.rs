@@ -197,12 +197,24 @@ fn tee(mut from: impl Read, log: &Log, terminal: &mut impl Write) {
 
 /// Execute an argv the run contract printed (`--format json`), all output into the log — the launch itself
 /// is silent on success, exactly as `sh "$run_command" >/dev/null 2>>"$LOG"` was.
+///
+/// The contract's json form is docker's ARGUMENTS (`["run", "-d", …]`) — only its sh form carries the
+/// `docker` word, because that one is text for a shell. Spawning argv[0] as the program would exec `run`.
 pub fn run_argv(argv: &[String], log: &Log) -> bool {
-    let Some((program, rest)) = argv.split_first() else {
+    if argv.is_empty() {
         return false;
-    };
-    let Ok(out) = Command::new(program).args(rest).output() else {
-        return false;
+    }
+    // Logged HERE, not by the caller: every caller runs a second, differently-shaped attempt when the first
+    // is refused, and a postmortem that shows only the first command describes a launch that never happened.
+    log.line(&format!("docker {}", argv.join(" ")));
+    let out = match Command::new("docker").args(argv).output() {
+        Ok(out) => out,
+        // Silence here reads as "docker refused the flags" in every caller's error message, so the one
+        // failure that isn't docker's answer at all has to say so.
+        Err(err) => {
+            log.line(&format!("could not run docker: {err}"));
+            return false;
+        }
     };
     log.write(&out.stdout);
     log.write(&out.stderr);

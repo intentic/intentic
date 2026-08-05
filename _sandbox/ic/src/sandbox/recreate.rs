@@ -305,7 +305,6 @@ pub fn run(mode: Mode, slug: Option<String>) -> Result<()> {
 
     docker::quiet(&["rm", "-f", &container]);
     log.section("run command");
-    log.line(&argv.join(" "));
 
     // Two attempts: everything the run can lose WITHOUT the sandbox being broken comes off together on the
     // retry — the loopback shortcut (docker refuses the whole launch when its port is already held) and
