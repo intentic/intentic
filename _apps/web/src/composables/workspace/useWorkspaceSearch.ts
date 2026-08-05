@@ -19,6 +19,10 @@ import { sandboxKey, useSandbox } from "../sandbox/useSandbox";
  *   `files` → iq's `files`: fuzzy over PATHS, no file contents. The quick-open fallback for the trees the
  *             client can't rank itself (useFuzzyFiles).
  *
+ * Either scope can be pointed at part of the workspace instead of all of it — the search box's second field,
+ * carrying VSCode's files-to-include grammar (`*.test.ts, _apps/web`, `!` to exclude) straight through to the
+ * daemon, which turns it into the engine's path globs.
+ *
  * Results come relevance-ranked and grouped by file, one page at a time: the daemon answers with as many whole
  * files as its row ceiling allows plus a cursor, and `loadMore` appends the next page rather than re-rendering
  * the list. The input is debounced just enough to coalesce a keystroke burst; TanStack's abort signal is
@@ -30,16 +34,22 @@ const VERB: Record<SearchScope, NonNullable<WorkspaceSearchMode>> = { text: `fin
 
 export function useWorkspaceSearch(filter: Ref<string>, scope: Ref<SearchScope>, active: Ref<boolean>, debounceMs = 150) {
     const { reachable } = useSandbox();
-    const { includeIgnored, useRegex, matchCase, wholeWord } = useSearchOptions();
+    const { includeIgnored, useRegex, matchCase, wholeWord, include } = useSearchOptions();
 
-    const debounced = ref(filter.value.trim());
-    let timer: ReturnType<typeof setTimeout> | undefined;
-    watch(filter, (value) => {
-        clearTimeout(timer);
-        timer = setTimeout(() => {
-            debounced.value = value.trim();
-        }, debounceMs);
-    });
+    // Both fields are typed a character at a time, so both wait out the same burst before a search goes out.
+    const debounce = (source: Ref<string>): Ref<string> => {
+        const settled = ref(source.value.trim());
+        let timer: ReturnType<typeof setTimeout> | undefined;
+        watch(source, (value) => {
+            clearTimeout(timer);
+            timer = setTimeout(() => {
+                settled.value = value.trim();
+            }, debounceMs);
+        });
+        return settled;
+    };
+    const debounced = debounce(filter);
+    const debouncedInclude = debounce(include);
 
     // The daemon rejects queries under 2 chars (min length in the contract), so short input just disables the query.
     const enabled = computed(() => reachable.value && active.value && debounced.value.length >= 2);
@@ -48,6 +58,11 @@ export function useWorkspaceSearch(filter: Ref<string>, scope: Ref<SearchScope>,
         const search = new URLSearchParams({ query: debounced.value, mode: VERB[scope.value] });
         if (includeIgnored.value) {
             search.set(`includeIgnored`, `true`);
+        }
+        // Which files to ask, in VSCode's grammar — the daemon splits it into the engine's path globs. It scopes
+        // both content scopes: a question about `_apps/web` is as answerable as a pattern found only there.
+        if (debouncedInclude.value !== ``) {
+            search.set(`include`, debouncedInclude.value);
         }
         if (scope.value === `text`) {
             // The engine's `find` takes a rust regex; with .* off the query is fixed text (rg -F) instead, so a
@@ -103,7 +118,10 @@ export function useWorkspaceSearch(filter: Ref<string>, scope: Ref<SearchScope>,
         // What the engine did with the pattern that the pattern didn't ask for (an unparseable regex rerun as
         // literal text, grep-style escapes rewritten) — the panel shows it the way the CLI prints it.
         note: computed(() => head.value?.note),
-        // True while the typed filter hasn't produced a searchable query yet (too short, or debounce pending).
-        pending: computed(() => filter.value.trim().length >= 2 && debounced.value !== filter.value.trim()),
+        // True while what is typed hasn't produced a searchable query yet (too short, or debounce pending) —
+        // either field, since editing the glob filter re-searches exactly as editing the query does.
+        pending: computed(
+            () => filter.value.trim().length >= 2 && (debounced.value !== filter.value.trim() || debouncedInclude.value !== include.value.trim()),
+        ),
     };
 }

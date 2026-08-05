@@ -390,6 +390,24 @@ const onPick = (event: Event): void => {
                         ]"
                     />
                 </div>
+                <!-- Which files to ask, VSCode's files-to-include grammar — the desktop field's twin, full width
+                     because a glob is typed and a phone's row is the only place with room for it. -->
+                <div v-if="contentMode" class="shrink-0 px-2 pb-1.5">
+                    <div class="relative">
+                        <Icon
+                            class="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-2xs text-subtle"
+                            aria-hidden="true"
+                            name="folder"
+                        />
+                        <input
+                            v-model="search.include.value"
+                            type="search"
+                            placeholder="Files to include, e.g. *.test.ts"
+                            aria-label="Files to include"
+                            class="h-10 w-full min-w-0 rounded-lg border border-line bg-canvas pl-8 pr-3 text-base text-content placeholder:text-subtle focus:border-line-strong focus:outline-none"
+                        />
+                    </div>
+                </div>
                 <!-- Aa / ab / .* + Ignored — the same switches the desktop field carries, and the same rule for
                      which scope sees which: the three change what a PATTERN means, Ignored changes what is
                      searched at all. -->

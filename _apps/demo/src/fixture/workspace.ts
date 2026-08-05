@@ -447,10 +447,46 @@ export const sessions = (now: number): SessionSummary[] => {
 // What there is to search: the files the recording carries a BODY for, ignored paths excluded — the same two
 // rules the daemon's search follows (it cannot match text it does not have, and it skips node_modules by
 // default), so a hit here is a hit a real workspace would also produce.
-const searchablePaths = (): string[] =>
-    [...FILES].flatMap(([path, entry]) =>
-        typeof entry === `string` && !isIgnored(path) ? [path] : [],
-    );
+const searchablePaths = (include: string): string[] => {
+    const admits = includeFilter(include);
+    return [...FILES].flatMap(([path, entry]) => (typeof entry === `string` && !isIgnored(path) && admits(path) ? [path] : []));
+};
+
+/* The panel's second field — VSCode's files-to-include grammar, honoured the way the daemon honours it: commas
+ * separate patterns (except inside `{ts,py}`), a leading `!` excludes, and a pattern with no wildcard is the
+ * directory under it. A small matcher rather than the engine's, for the same reason the text matcher above is
+ * one: this fixture holds a few dozen paths and no index. */
+// One glob token → one regex, everything else escaped as itself. `**/` may match no directory at all (so
+// `*.ts` finds a file at the root), a bare `**` runs to the end of the path, and a brace group is the
+// alternation the field's comma-split deliberately leaves intact.
+const GLOB_TOKENS: Record<string, string> = {
+    "**/": `(?:.*/)?`,
+    "**": `.*`,
+    "*": `[^/]*`,
+    "?": `[^/]`,
+    "{": `(?:`,
+    "}": `)`,
+    ",": `|`,
+};
+const globRegExp = (glob: string): RegExp => {
+    const bare = glob.replace(/\/+$/, ``);
+    // A pattern with no wildcard is a directory: everything under it. A bare name with no slash means that
+    // directory wherever it sits; a path is anchored at the workspace root.
+    const directory = /[*?[\]{}]/.test(bare) ? bare : `${bare}/`;
+    const anchored = bare.includes(`/`) ? directory : `**/${directory}`;
+    const source = [...anchored.matchAll(/\*\*\/|\*\*|\*|\?|\{|\}|,|[^*?{},]+/g)]
+        .map(([token]) => GLOB_TOKENS[token] ?? token.replaceAll(/[.+^$()|[\]\\]/g, String.raw`\$&`))
+        .join(``);
+    return new RegExp(`^${source}${anchored.endsWith(`/`) ? `.*` : ``}$`);
+};
+
+const includeFilter = (include: string): ((path: string) => boolean) => {
+    // Split on the commas that separate patterns, never on the one inside `{ts,py}`.
+    const patterns = include.split(/,(?![^{]*\})/).flatMap((raw) => (raw.trim() === `` || raw.trim() === `!` ? [] : [raw.trim()]));
+    const globs = patterns.filter((pattern) => !pattern.startsWith(`!`)).map(globRegExp);
+    const notGlobs = patterns.filter((pattern) => pattern.startsWith(`!`)).map((pattern) => globRegExp(pattern.slice(1)));
+    return (path) => (globs.length === 0 || globs.some((glob) => glob.test(path))) && !notGlobs.some((glob) => glob.test(path));
+};
 
 // Fixed text unless the .* switch is on, and an unparseable regex falls back to matching itself — the same
 // recovery the daemon's engine does, and the same note it reports for it.
@@ -473,13 +509,15 @@ interface SearchOptions {
     readonly literal: boolean;
     readonly word: boolean;
     readonly caseSensitive: boolean;
+    // The files-to-include field, empty when the search is asked of the whole recording.
+    readonly include: string;
 }
 
 export const searchWorkspace = (query: string, options: SearchOptions): WorkspaceSearchResult => {
     const { regex, note } = matcher(query, options);
     const groups: WorkspaceSearchGroup[] = [];
     let total = 0;
-    for (const path of searchablePaths()) {
+    for (const path of searchablePaths(options.include)) {
         const hits = (fileBody(path) ?? ``)
             .split(`\n`)
             .map((text, index) => {

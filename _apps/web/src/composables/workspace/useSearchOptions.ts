@@ -2,8 +2,8 @@ import { ref, watch, type Ref } from "vue";
 
 /* What the workspace search box remembers between searches (module-level singleton, persisted): the three
  * match switches every editor puts inside its search field — VSCode's Aa / ab / .* — plus how wide the search
- * looks. Persisted because they are a habit, not a per-query choice: someone who works in regexes wants regexes
- * still on tomorrow, the way VSCode keeps them.
+ * looks, and which files it is asked of. Persisted because they are a habit, not a per-query choice: someone
+ * who works in regexes wants regexes still on tomorrow, the way VSCode keeps them.
  *
  * They live here rather than in useLayout because they are not layout: they change what a query MEANS, and the
  * two readers of that meaning (the content search and the filename quick-open) sit beside this file. */
@@ -14,6 +14,10 @@ const WORD_KEY = `ui-workspace-search-word`;
 // Widens BOTH the filename quick-open and the content search into node_modules and .gitignore'd paths (the
 // security floor still applies — secrets never surface). Off by default.
 const INCLUDE_IGNORED_KEY = `ui-workspace-include-ignored`;
+// VSCode's "files to include" box: comma-separated path globs (`*.test.ts, _apps/web`), `!` on one to exclude
+// instead. Empty = the whole workspace. Narrows WITHIN what includeIgnored admitted, and the daemon reads the
+// grammar (the sandbox's search-globs.ts) — the field itself only carries the text.
+const INCLUDE_KEY = `ui-workspace-search-include`;
 
 // Storage may be unavailable (private mode); the in-memory refs still hold for the session.
 const readBool = (key: string): boolean => {
@@ -21,6 +25,14 @@ const readBool = (key: string): boolean => {
         return localStorage.getItem(key) === `1`;
     } catch {
         return false;
+    }
+};
+
+const readText = (key: string): string => {
+    try {
+        return localStorage.getItem(key) ?? ``;
+    } catch {
+        return ``;
     }
 };
 
@@ -44,13 +56,26 @@ const persistedBool = (key: string): Ref<boolean> => {
     return state;
 };
 
+const persistedText = (key: string): Ref<string> => {
+    const state = ref(readText(key));
+    watch(state, (value) => {
+        try {
+            localStorage.setItem(key, value);
+        } catch {
+            // Storage may be unavailable (private mode); the in-memory ref still holds.
+        }
+    });
+    return state;
+};
+
 const useRegex = persistedBool(REGEX_KEY);
 const matchCase = persistedBool(CASE_KEY);
 const wholeWord = persistedBool(WORD_KEY);
 const includeIgnored = persistedBool(INCLUDE_IGNORED_KEY);
+const include = persistedText(INCLUDE_KEY);
 
 export function useSearchOptions() {
-    return { useRegex, matchCase, wholeWord, includeIgnored };
+    return { useRegex, matchCase, wholeWord, includeIgnored, include };
 }
 
 /* The three match switches, in the order every editor puts them — shipped from here beside the state they

@@ -325,6 +325,7 @@ const ROUTES: readonly (readonly [string, string, Handler])[] = [
                     literal: url.searchParams.get(`literal`) === `true`,
                     word: url.searchParams.get(`word`) === `true`,
                     caseSensitive: url.searchParams.get(`caseSensitive`) === `true`,
+                    include: url.searchParams.get(`include`) ?? ``,
                 }),
             ),
     ],

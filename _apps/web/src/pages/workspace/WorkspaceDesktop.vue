@@ -694,8 +694,9 @@ const endResize = (event: PointerEvent): void => {
                 </div>
                 <ReviewPanel v-if="layout.sidebarPanel.value === 'changes'" @open-diff="openDiff" />
                 <HistoryPanel v-else-if="layout.sidebarPanel.value === 'history'" @open-diff="openDiff" />
-                <!-- Search header: input hero on row 1; scope switch + the filter funnel on row 2. One `filter`
-                     ref, three scopes (name = instant client-side tree filter, text/smart = debounced daemon search).
+                <!-- Search header: input hero on row 1; the files-to-include field under it while a content search
+                     is on; scope switch + the filter funnel on the last row. One `filter` ref, three scopes
+                     (name = instant client-side tree filter, text/smart = debounced daemon search).
                      The leading icon doubles as the content-search spinner; the ✕ (and Esc) clear text AND snap scope
                      back to name. The Aa/ab/.* switches sit INSIDE the field, where every editor puts them, and only
                      in the text scope — they change what the pattern means, and the other scopes have no pattern. -->
@@ -749,6 +750,26 @@ const endResize = (event: PointerEvent): void => {
                                 <Icon name="times" />
                             </button>
                         </div>
+                    </div>
+                    <!-- Which files the search is asked of, in VSCode's files-to-include grammar. Its own field
+                         under the query rather than another switch beside it: a glob is typed, not toggled, and
+                         seeing `*.test.ts` sitting there is what keeps a narrowed search from reading as an empty
+                         workspace. Only under a content search — the Name scope already matches paths. -->
+                    <div v-if="contentMode" class="relative">
+                        <Icon
+                            class="pointer-events-none absolute left-2 top-1/2 -translate-y-1/2 text-2xs text-subtle"
+                            aria-hidden="true"
+                            name="folder"
+                        />
+                        <input
+                            v-model="search.include.value"
+                            type="text"
+                            placeholder="Files to include, e.g. *.test.ts"
+                            class="w-full min-w-0 rounded-md border border-line bg-canvas py-1 pr-2 pl-7 text-xs text-content placeholder:text-subtle focus:border-line-strong focus:outline-none"
+                            aria-label="Files to include"
+                            v-tooltip.bottom="'Files to include — comma-separated globs (*.test.ts, _apps/web); ! excludes'"
+                            @keydown.esc="search.include.value = ``"
+                        />
                     </div>
                     <div class="flex items-center gap-1">
                         <Segmented

@@ -14,6 +14,7 @@ import { readModules } from "./modules.js";
 import { readPackageGraph } from "./package-graph.js";
 import { discoverRepos, isValidRepoId, isValidRepoName } from "./repo-discovery.js";
 import { resolveReference } from "./resolve-reference.js";
+import { globScope } from "./search-globs.js";
 import { INSTALLABLE, missingCount, startInstall, workspaceSetup } from "./workspace-setup.js";
 import { syncWorkspaceRepos } from "./sync-repos.js";
 import { listTemplates, loadManifest, readTemplatesConfig } from "../scaffold/templates-config.js";
@@ -134,11 +135,16 @@ export const createWorkspaceRoutes = (services: Services) => {
                 ...(input.word === true ? { word: true } : {}),
                 ...(input.caseSensitive === true ? { caseSensitive: true } : {}),
             };
+            const { globs, notGlobs } = globScope(input.include);
             const outcome = await services.iq.run(
                 {
                     verb,
                     query: input.query,
-                    scope: ignored ? { ignored: true } : {},
+                    scope: {
+                        ...(ignored ? { ignored: true } : {}),
+                        ...(globs !== undefined ? { globs } : {}),
+                        ...(notGlobs !== undefined ? { notGlobs } : {}),
+                    },
                     render: {
                         budget: GUI_SEARCH_BUDGET,
                         list: { hits: GUI_SEARCH_HITS, files: Math.min(input.limit ?? GUI_SEARCH_FILES, GUI_SEARCH_FILES) },
@@ -146,8 +152,8 @@ export const createWorkspaceRoutes = (services: Services) => {
                     },
                     options,
                     // Echo mirrors the CLI form — it seeds the pagination cursor id, so it must be stable for
-                    // the same query+mode+scope across requests.
-                    echo: `${verb === "q" ? "" : `${verb} `}"${input.query}"${ignored ? " --ignored" : ""}${input.literal === true ? " --literal" : ""}${input.word === true ? " --word" : ""}${input.caseSensitive === true ? " --case" : ""}`,
+                    // the same query+mode+scope across requests, and the glob filter is part of that scope.
+                    echo: `${verb === "q" ? "" : `${verb} `}"${input.query}"${ignored ? " --ignored" : ""}${input.literal === true ? " --literal" : ""}${input.word === true ? " --word" : ""}${input.caseSensitive === true ? " --case" : ""}${(globs ?? []).map((glob) => ` --glob '${glob}'`).join("")}${(notGlobs ?? []).map((glob) => ` --not-glob '${glob}'`).join("")}`,
                 },
                 signal,
             );

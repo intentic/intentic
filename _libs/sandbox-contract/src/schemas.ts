@@ -1928,6 +1928,11 @@ export const WorkspaceSearchQuerySchema = z.object({
     literal: z.stringbool().optional(),
     word: z.stringbool().optional(),
     caseSensitive: z.stringbool().optional(),
+    // Which FILES the query is asked of, in VSCode's files-to-include grammar: comma-separated path globs
+    // (`*.test.ts, _apps/web`), a leading `!` on one excluding instead. A path with no wildcard matches
+    // anywhere under it, so a directory is a valid pattern. Distinct from `includeIgnored`, which decides
+    // whether the ignored layers are searched at all — this narrows within whatever that admitted.
+    include: z.string().max(512).optional(),
     limit: z.coerce.number().int().positive().optional(),
     after: z.string().optional(),
 });
