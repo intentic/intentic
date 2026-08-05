@@ -1,7 +1,7 @@
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { AgentEvent, Automation, WorkspaceEvent } from "@intentic/sandbox-contract";
+import { type AgentEvent, type Automation, SandboxSettingsSchema, type WorkspaceEvent } from "@intentic/sandbox-contract";
 import { expect, test, vi } from "vitest";
 import { fileTurnJournal } from "../agent/turn-journal.js";
 import type { Services } from "../composition.js";
@@ -15,6 +15,7 @@ import { dispatchWorkspaceEvent } from "./workspace-events.js";
 const fakeServices = (root: string): Services =>
     unstubbed<Services>("services", {
         automations: fileAutomationsStore(join(root, "automations.json")),
+        sandboxSettings: unstubbed<Services["sandboxSettings"]>("sandboxSettings", { get: async () => SandboxSettingsSchema.parse({}) }),
         approvals: fileApprovalsStore(join(root, "approvals")),
         turnJournal: fileTurnJournal(join(root, "turns")),
         transcripts: unstubbed<Services["transcripts"]>("transcripts", { read: async () => [], open: async () => {}, append: async () => {} }),

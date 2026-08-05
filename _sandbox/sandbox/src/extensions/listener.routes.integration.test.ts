@@ -1,7 +1,7 @@
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { ActivityEvent, AgentEvent, Automation } from "@intentic/sandbox-contract";
+import { type ActivityEvent, type AgentEvent, type Automation, SandboxSettingsSchema } from "@intentic/sandbox-contract";
 import { Hono } from "hono";
 import { expect, test, vi } from "vitest";
 import { fileTurnJournal } from "../agent/turn-journal.js";
@@ -20,6 +20,7 @@ import { createListenerRoutes } from "./listener.routes.js";
 const fakeServices = (root: string, appends: ActivityEvent[] = []): Services =>
     unstubbed<Services>("services", {
         automations: fileAutomationsStore(join(root, "automations.json")),
+        sandboxSettings: unstubbed<Services["sandboxSettings"]>("sandboxSettings", { get: async () => SandboxSettingsSchema.parse({}) }),
         approvals: fileApprovalsStore(join(root, "approvals")),
         capabilities: fileCapabilitiesStore(join(root, "capabilities.json")),
         threadSessions: fileThreadSessionsStore(join(root, "thread-sessions.json")),

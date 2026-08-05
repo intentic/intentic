@@ -443,3 +443,62 @@ test("a successful run resets the streak", async () => {
     await fireUntil(services, "flaky", 1);
     expect((await services.automations.get("flaky"))?.enabled).toBe(true);
 });
+
+test("an admission-floor hold parks a wake whose automation asked for nothing — and it never auto-runs", async () => {
+    const services = fakeServices(mkdtempSync(join(tmpdir(), "sched-")), { admission: { schedule: "hold" } });
+    await services.automations.upsert(automation("plain"));
+    const prompts: string[] = [];
+    const scheduler = createAutomationsScheduler(services, fakeWake(prompts));
+    await scheduler.tick(pastDue());
+    await vi.waitFor(async () => expect(await services.approvals.list()).toHaveLength(1));
+    // "Ask me" from the floor is the same "ask me" as requireApproval: no deadline for the scan to release.
+    expect((await services.approvals.list())[0]?.autoRunAt).toBeUndefined();
+    expect(prompts).toEqual([]);
+
+    // The owner's approval replays it — the grant satisfies the hold.
+    const record = (await services.automations.get("plain")) as AutomationRecord;
+    await fireAutomation(services, record, fakeWake(prompts), { cleared: "both" });
+    expect(prompts).toEqual(["wake:plain"]);
+});
+
+test("an admission-floor deny refuses the wake and says so on the run record", async () => {
+    const services = fakeServices(mkdtempSync(join(tmpdir(), "sched-")), { admission: { schedule: "deny" } });
+    await services.automations.upsert(automation("refused"));
+    const prompts: string[] = [];
+    const record = (await services.automations.get("refused")) as AutomationRecord;
+    await fireAutomation(services, record, fakeWake(prompts));
+    expect(prompts).toEqual([]);
+    expect(await services.approvals.list()).toEqual([]);
+    const run = (await services.automations.get("refused"))?.runs[0];
+    expect(run?.outcome).toBe("skipped");
+    expect(run?.detail).toContain("admission policy");
+});
+
+test("a deny refuses even an approved replay — approve-then-tighten does not execute", async () => {
+    const services = fakeServices(mkdtempSync(join(tmpdir(), "sched-")), { admission: { schedule: "deny" } });
+    await services.automations.upsert(automation("revoked"));
+    const prompts: string[] = [];
+    const record = (await services.automations.get("revoked")) as AutomationRecord;
+    // The owner approved this wake before the policy tightened; the checks re-run live, so it still refuses.
+    await fireAutomation(services, record, fakeWake(prompts), { cleared: "both" });
+    expect(prompts).toEqual([]);
+    expect((await services.automations.get("revoked"))?.runs[0]?.outcome).toBe("skipped");
+});
+
+test("the webchat floor keys off its own source — a listener rule does not reach the Doorbell, nor vice versa", async () => {
+    const services = fakeServices(mkdtempSync(join(tmpdir(), "sched-")), { admission: { listener: "hold" } });
+    await services.automations.upsert(automation("door", { trigger: { kind: "listener", provider: "webchat", allowedOrigins: ["https://a.example"] } }));
+    const prompts: string[] = [];
+    const record = (await services.automations.get("door")) as AutomationRecord;
+    // listener:hold does not hold a webchat wake — the Doorbell has its own admission key.
+    await fireAutomation(services, record, fakeWake(prompts), { payload: "hi" });
+    expect(prompts).toEqual(["wake:door\n\n--- Event payload ---\nhi"]);
+
+    const heldServices = fakeServices(mkdtempSync(join(tmpdir(), "sched-")), { admission: { webchat: "hold" } });
+    await heldServices.automations.upsert(automation("door", { trigger: { kind: "listener", provider: "webchat", allowedOrigins: ["https://a.example"] } }));
+    const heldPrompts: string[] = [];
+    const heldRecord = (await heldServices.automations.get("door")) as AutomationRecord;
+    await fireAutomation(heldServices, heldRecord, fakeWake(heldPrompts), { payload: "hi" });
+    expect(heldPrompts).toEqual([]);
+    expect((await heldServices.approvals.list())[0]?.automationId).toBe("door");
+});

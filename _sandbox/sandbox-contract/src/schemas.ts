@@ -73,6 +73,33 @@ export const AgentOriginSchema = z.object({
 });
 export type AgentOrigin = z.infer<typeof AgentOriginSchema>;
 
+/* The class of thing asking to START a session — the admission policy's key space. Derived daemon-side from
+ * the automation's trigger (guard/actions.ts wakeSourceOf) or named by the door itself (the workflow release
+ * gate); never sent by a client. Chat and loops are absent deliberately: both begin with the owner's own
+ * click, and holding the owner's work in their own queue is a queue entry that says nothing (the same argument
+ * fireAutomation's `cleared` makes about a by-hand fire). */
+export const WakeSourceSchema = z.enum(["schedule", "event", "listener", "webchat", "workspace", "workflow"]);
+export type WakeSource = z.infer<typeof WakeSourceSchema>;
+
+// One admission verdict the owner can configure: let it run, hold it for approval, or refuse it outright.
+export const AdmissionRuleSchema = z.enum(["allow", "hold", "deny"]);
+export type AdmissionRule = z.infer<typeof AdmissionRuleSchema>;
+
+/* THE ADMISSION FLOOR — the workspace-wide rule per wake source, consulted by the session.start guard on every
+ * outside-driven wake. Per-automation `requireApproval` / `holdForSeconds` remain the per-object override; the
+ * floor composes with them most-restrictive-wins, so "hold every webchat session" needs no edit to each
+ * automation. `workflow` is allow|deny only: the release gate answers a CI runner holding a connection with a
+ * deadline, so a hold there is indistinguishable from a timeout — deny is the honest refusal. */
+export const AdmissionPolicySchema = z.object({
+    schedule: AdmissionRuleSchema.default("allow"),
+    event: AdmissionRuleSchema.default("allow"),
+    listener: AdmissionRuleSchema.default("allow"),
+    webchat: AdmissionRuleSchema.default("allow"),
+    workspace: AdmissionRuleSchema.default("allow"),
+    workflow: z.enum(["allow", "deny"]).default("allow"),
+});
+export type AdmissionPolicy = z.infer<typeof AdmissionPolicySchema>;
+
 // How tool calls are gated — the Claude Agent SDK's PermissionMode, narrowed to the four the composer offers
 // (the SDK also has 'dontAsk'/'auto', which have no UI here). The user picks one per turn AND the agent can
 // move itself between them mid-turn, so this is both a turn input and the payload of the `mode` frame.
@@ -570,13 +597,8 @@ export const AgentSummarySchema = z.object({
     archivedAt: z.number().optional(),
 });
 export type AgentSummary = z.infer<typeof AgentSummarySchema>;
-// `rev` is the registry revision this roster was read at — a counter the daemon bumps on every registry change.
-// It is what makes the browser's optimistic writes safe: the fleet is published as full snapshots (last frame
-// wins), so without an ordering stamp a roster READ before a mutation but delivered after it silently puts the
-// mutated agents back. The browser drops any roster older than the newest it has applied, and holds its own
-// pending change until a roster at or past the revision that applied it arrives. See useAgents.ts.
-export const AgentsListSchema = z.object({ agents: z.array(AgentSummarySchema), rev: z.number() });
-export type AgentsList = z.infer<typeof AgentsListSchema>;
+// AgentsListSchema lives further down, after AutomationApprovalSchema — the fleet list carries the held wakes,
+// and zod declaration order forces the ride-along to be declared first.
 export const AgentIdSchema = z.object({ id: z.string().min(1) });
 // archive's input: the agents to take off the board. Absent `ids` ⇒ every finished agent that is archivable
 // right now (the lane header's "Clear"); unarchive always names its ids (a restore, or a bulk archive's undo).
@@ -1189,6 +1211,16 @@ export const SandboxSettingsSchema = z.object({
      * Only `error` counts. A `skipped` run is a guard doing its job, and an `interrupted` one means the daemon
      * died mid-fire, which says nothing about the automation — counting either would quarantine healthy jobs. */
     automationFailureLimit: z.number().min(0).max(20).default(0),
+    /* WHO MAY START A SESSION WITHOUT YOU — the admission floor, per wake source (see AdmissionPolicySchema).
+     * Defaults all-allow, so a fresh sandbox behaves exactly as before the floor existed and the per-automation
+     * `requireApproval` stays the way most owners meet holds. */
+    admission: AdmissionPolicySchema.prefault({}),
+    /* THE SNIFFER'S RULEBOOK — verdicts for in-turn actions the outbound gate classifies, keyed by
+     * `<provider>.<type>` ("discord.message.send") with `<provider>.*` as the per-provider wildcard; exact key
+     * wins. An action with no rule is allowed — the empty default wires no hook at all, so an unconfigured
+     * workspace pays nothing. "hold" cannot park a running turn (nobody may be there to answer); it refuses the
+     * live call and points the agent at the drafts outbox, which IS the held form of a send. */
+    actionRules: z.record(z.string(), AdmissionRuleSchema).default({}),
     /* HOW MUCH AN AGENT MAY DELEGATE — the three ceilings the Claude Code harness enforces on its own Agent
      * tool, surfaced here because their defaults are tuned for a laptop and this is a container the owner sized.
      *
@@ -3173,6 +3205,21 @@ export const AutomationApprovalSchema = z.object({
     autoRunAt: z.number().optional(),
 });
 export type AutomationApproval = z.infer<typeof AutomationApprovalSchema>;
+
+// `rev` is the registry revision this roster was read at — a counter the daemon bumps on every registry change.
+// It is what makes the browser's optimistic writes safe: the fleet is published as full snapshots (last frame
+// wins), so without an ordering stamp a roster READ before a mutation but delivered after it silently puts the
+// mutated agents back. The browser drops any roster older than the newest it has applied, and holds its own
+// pending change until a roster at or past the revision that applied it arrives. See useAgents.ts.
+// `held` is the approvals queue projected onto the board — the wakes waiting at the door, so "needs you" sits
+// beside "running" instead of in a page nobody opens. Defaulted so an older daemon's roster still parses.
+export const AgentsListSchema = z.object({
+    agents: z.array(AgentSummarySchema),
+    rev: z.number(),
+    held: z.array(AutomationApprovalSchema).default([]),
+});
+export type AgentsList = z.infer<typeof AgentsListSchema>;
+
 export const AutomationApprovalsListSchema = z.object({ approvals: z.array(AutomationApprovalSchema) });
 export const AutomationApprovalIdParamSchema = z.object({ id: z.string() });
 

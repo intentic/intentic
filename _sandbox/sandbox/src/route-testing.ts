@@ -274,6 +274,8 @@ export const services = (overrides: ServiceOverrides = {}): Services => {
         tools: [],
         capabilities: memoryCapabilitiesStore(),
         automations: memoryAutomationsStore(),
+        // Empty approvals queue: agents.list projects it as `held`, and no suite here holds a wake.
+        approvals: { list: async () => [], get: async () => undefined, add: async (approval) => ({ ...approval, id: "held-1" }), remove: async () => false },
         // Inert turn journal: every fire path writes an in-flight entry and clears it, and nothing here resumes.
         turnJournal: {
             list: async () => [],

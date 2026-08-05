@@ -2,7 +2,7 @@ import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { mkdir, writeFile } from "node:fs/promises";
-import { type AgentEvent, type AgentTurn, LOOP_DIR, type Workflow } from "@intentic/sandbox-contract";
+import { type AgentEvent, type AgentTurn, LOOP_DIR, SandboxSettingsSchema, type Workflow } from "@intentic/sandbox-contract";
 import { unstubbed } from "@intentic/testing";
 import { Hono } from "hono";
 import { expect, test } from "vitest";
@@ -25,6 +25,7 @@ const fakeServices = (root: string): Services =>
     unstubbed<Services>("services", {
         loops: fileLoopsStore(join(root, "loops.json")),
         workflows: fileWorkflowsStore(join(root, "workflows.json")),
+        sandboxSettings: unstubbed<Services["sandboxSettings"]>("sandboxSettings", { get: async () => SandboxSettingsSchema.parse({}) }),
         workflowRuns: fileWorkflowRunsStore(join(root, "workflow-runs.json")),
         workspace: unstubbed<Services["workspace"]>("workspace", { root }),
         agents: unstubbed<Services["agents"]>("agents", { sessionIdOf: () => undefined }),

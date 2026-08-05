@@ -11,7 +11,7 @@ import type { Services } from "../composition.js";
 // How much tool output survives into an error event's detail.
 const ERROR_TAIL = 300;
 
-interface OutboundCall {
+export interface OutboundCall {
     readonly provider: string;
     readonly type: string;
     readonly method: string;
@@ -101,6 +101,18 @@ const matchSlack = (command: string): OutboundCall | undefined => {
 // One matcher per cli provider (the cli/providers.ts key space); the chat providers whose skills teach curl.
 const matchers: readonly ((command: string) => OutboundCall | undefined)[] = [matchDiscord, matchSlack];
 
+// The classifier, shared with the enforcing PreToolUse gate (guard/outbound-gate.ts) — one parser for audit
+// and enforcement, so the two can never disagree about what a command is.
+export const classifyOutboundCall = (command: string): OutboundCall | undefined => {
+    for (const match of matchers) {
+        const call = match(command);
+        if (call !== undefined) {
+            return call;
+        }
+    }
+    return undefined;
+};
+
 // curl -s exits 0 on HTTP 4xx, so the response body is the status signal. Discord's error envelope is a JSON
 // object with a numeric `code` and string `message`; Slack always answers 200 and puts the verdict in `ok`,
 // which is why a `"ok": false` body has to be read as a failure here or every refused Slack call would log as
@@ -160,13 +172,9 @@ export const createOutboundSniffer = (services: Services, turnId: string): Outbo
                 return;
             }
             if (event.kind === "tool_call" && event.name === "Bash" && event.target !== undefined) {
-                for (const match of matchers) {
-                    const call = match(event.target);
-                    if (call === undefined) {
-                        continue;
-                    }
+                const call = classifyOutboundCall(event.target);
+                if (call !== undefined) {
                     pending.set(event.id, call);
-                    return;
                 }
                 return;
             }

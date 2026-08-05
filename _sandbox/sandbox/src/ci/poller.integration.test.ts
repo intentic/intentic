@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { defaultGit } from "@intentic/scaffold";
 import { unstubbed } from "@intentic/testing";
+import { SandboxSettingsSchema } from "@intentic/sandbox-contract";
 import { expect, test, vi } from "vitest";
 import { fileTurnJournal } from "../agent/turn-journal.js";
 import { fileAutomationsStore } from "../automations/automations-store.js";
@@ -48,6 +49,7 @@ const harness = async (warned: boolean, narrow: { branch?: string } = {}) => {
         capabilities,
         automations,
         ciStore: fileCiStore(join(root, ".intentic", "ci.json")),
+        sandboxSettings: unstubbed<Services["sandboxSettings"]>("sandboxSettings", { get: async () => SandboxSettingsSchema.parse({}) }),
         ciRuns: createRunsCache(60_000),
         ciHooks: unstubbed<Services["ciHooks"]>("ciHooks", {
             warnings: () => new Map(warned ? [["web", "Pipeline webhooks are off: this sandbox has no public URL."]] : []),

@@ -5,6 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { defaultGit } from "@intentic/scaffold";
 import { Hono } from "hono";
+import { SandboxSettingsSchema } from "@intentic/sandbox-contract";
 import { expect, test, vi } from "vitest";
 import { fileTurnJournal } from "../agent/turn-journal.js";
 import { fileAutomationsStore } from "../automations/automations-store.js";
@@ -40,6 +41,7 @@ const harness = async (automationId: string, narrow: { eventType?: string; branc
         capabilities,
         automations,
         ciStore: fileCiStore(join(root, ".intentic", "ci.json")),
+        sandboxSettings: unstubbed<Services["sandboxSettings"]>("sandboxSettings", { get: async () => SandboxSettingsSchema.parse({}) }),
         ciRuns: createRunsCache(60_000),
         threadSessions: fileThreadSessionsStore(join(root, ".intentic", "thread-sessions.json")),
         turnJournal: fileTurnJournal(join(root, "turns")),
@@ -183,6 +185,7 @@ test("a gitlab delivery authenticates by token echo and normalizes the Pipeline 
         capabilities,
         automations,
         ciStore: fileCiStore(join(root, ".intentic", "ci.json")),
+        sandboxSettings: unstubbed<Services["sandboxSettings"]>("sandboxSettings", { get: async () => SandboxSettingsSchema.parse({}) }),
         ciRuns: createRunsCache(60_000),
         threadSessions: fileThreadSessionsStore(join(root, ".intentic", "thread-sessions.json")),
         turnJournal: fileTurnJournal(join(root, "turns")),

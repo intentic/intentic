@@ -4,6 +4,8 @@ import { Cron } from "croner";
 import type { AgentEvent, AgentOrigin, AgentTurn, AutomationApproval } from "@intentic/sandbox-contract";
 import { openTurnTranscript, recordTurnTranscript } from "../sessions/turn-transcript.js";
 import type { Services } from "../composition.js";
+import { sessionStart, wakeSourceOf } from "../guard/actions.js";
+import { guard } from "../guard/guard.js";
 import { automationPending } from "../push/notifications.js";
 import { threadKey } from "../sessions/thread-sessions.js";
 import { type AutomationRecord, consecutiveFailures } from "./automations-store.js";
@@ -189,31 +191,53 @@ export const fireAutomation = async (
     inFlight.add(automation.id);
     try {
         const capped = payload?.slice(0, PAYLOAD_MAX);
+        /* ADMISSION — the session.start guard, consulted on EVERY fire including approved replays. A deny
+         * refuses even a `cleared` fire (the checks re-run live, so approve-then-tighten does not execute); a
+         * hold is what `cleared` satisfies — the owner's click, or the approve route's replay, already answered
+         * it. The verdict folds the workspace admission floor and the automation's own requireApproval /
+         * holdForSeconds into one decision (guard/actions.ts owns the precedence). */
+        const { admission } = await services.sandboxSettings.get();
+        const verdict = guard(sessionStart, {
+            source: wakeSourceOf(automation.trigger),
+            admission,
+            ...(automation.requireApproval !== undefined ? { requireApproval: automation.requireApproval } : {}),
+            ...(automation.holdForSeconds !== undefined ? { holdForSeconds: automation.holdForSeconds } : {}),
+        });
+        if (verdict.effect === "deny") {
+            await services.automations.recordRun(automation.id, {
+                at: Date.now(),
+                outcome: "skipped",
+                detail: verdict.reason,
+            });
+            // Refused by policy is the workspace working as configured — but to whoever is waiting on the
+            // sink it is still a reply that never arrives, so it is said rather than left silent.
+            stream?.failed(verdict.reason);
+            return {};
+        }
         if (cleared !== "both") {
             if (automation.guard !== undefined) {
-                const guard = await runGuard(automation.guard, services.workspace.root, capped);
-                if (!guard.pass) {
+                const precheck = await runGuard(automation.guard, services.workspace.root, capped);
+                if (!precheck.pass) {
                     await services.automations.recordRun(automation.id, {
                         at: Date.now(),
                         outcome: "skipped",
-                        ...(guard.detail !== undefined ? { detail: guard.detail } : {}),
+                        ...(precheck.detail !== undefined ? { detail: precheck.detail } : {}),
                     });
                     // A guard saying no is the automation working as configured — but to whoever is waiting on
                     // the sink it is still a reply that never arrives, so it is said rather than left silent.
-                    stream?.failed(guard.detail ?? "this automation's guard skipped the run");
+                    stream?.failed(precheck.detail ?? "this automation's guard skipped the run");
                     return {};
                 }
             }
             // Approval gate: hold the wake (payload snapshotted) instead of running. inFlight releases in the
             // finally, so the lock is NOT held while it waits for the owner — the approve route runs it later,
-            // or (a `holdForSeconds` hold) the scheduler's own tick does once the countdown passes unanswered.
-            if ((automation.requireApproval === true || automation.holdForSeconds !== undefined) && cleared === undefined) {
+            // or (a countdown hold) the scheduler's own tick does once the countdown passes unanswered.
+            if (verdict.effect === "hold" && cleared === undefined) {
                 await services.approvals.add({
                     automationId: automation.id,
-                    // requireApproval wins over the countdown: "ask me" must never become "unless I'm slow".
-                    ...(automation.requireApproval !== true && automation.holdForSeconds !== undefined
-                        ? { autoRunAt: Date.now() + automation.holdForSeconds * 1_000 }
-                        : {}),
+                    // Only a pure-countdown hold carries autoRunAfterS (guard/actions.ts): "ask me" — whether
+                    // the automation's own requireApproval or the admission floor — never auto-runs.
+                    ...(verdict.autoRunAfterS !== undefined ? { autoRunAt: Date.now() + verdict.autoRunAfterS * 1_000 } : {}),
                     ...(capped !== undefined ? { payload: capped } : {}),
                     // Snapshotted with the payload so the approved run opens the same conversation this fire
                     // would have — an approved Discord mention lands on the board as a Discord agent, not as

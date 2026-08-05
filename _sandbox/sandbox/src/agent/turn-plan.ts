@@ -361,6 +361,7 @@ export const planHarnessTurn = async (
         subagentsAtOnce,
         subagentsPerTurn,
         subagentDepth,
+        actionRules,
         systemPrompt: customPrompt,
     } = settings;
     /* THE TERSE EXPERIMENT'S COIN FLIP. The steer is eligible only where the daemon still appends to the
@@ -523,6 +524,8 @@ export const planHarnessTurn = async (
             ...(subagentDepth !== SETTINGS_DEFAULTS.subagentDepth ? { subagentDepth } : {}),
             // The verify-on-stop ledger, forwarded only when on so an unset workspace wires no hooks at all.
             ...(verifyOnStop ? { verifyOnStop } : {}),
+            // The sniffer's rulebook, forwarded only when the owner wrote a rule — same no-hook economy.
+            ...(Object.keys(actionRules).length > 0 ? { actionRules } : {}),
             // Which base the prompt is built on, plus either the owner's own text (under "custom") or what to
             // append to a built-in base — never both, which is what turnPromptPlacement decided above.
             systemPromptMode,

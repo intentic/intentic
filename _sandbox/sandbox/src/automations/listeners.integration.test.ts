@@ -1,7 +1,7 @@
 import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { AgentTurn, Automation } from "@intentic/sandbox-contract";
+import { type AgentTurn, type Automation, SandboxSettingsSchema } from "@intentic/sandbox-contract";
 import { expect, test, vi } from "vitest";
 import { fileCapabilitiesStore } from "../capabilities/capabilities-store.js";
 import { fileTurnJournal } from "../agent/turn-journal.js";
@@ -16,6 +16,7 @@ import { PAYLOAD_MAX, type TurnStream, type WakeFn } from "./scheduler.js";
 const fakeServices = (root: string): Services =>
     unstubbed<Services>("services", {
         automations: fileAutomationsStore(join(root, "automations.json")),
+        sandboxSettings: unstubbed<Services["sandboxSettings"]>("sandboxSettings", { get: async () => SandboxSettingsSchema.parse({}) }),
         capabilities: fileCapabilitiesStore(join(root, "capabilities.json")),
         threadSessions: fileThreadSessionsStore(join(root, "thread-sessions.json")),
         turnJournal: fileTurnJournal(join(root, "turns")),

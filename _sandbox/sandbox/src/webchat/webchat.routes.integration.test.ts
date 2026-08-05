@@ -1,7 +1,7 @@
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { type ActivityEvent, type AgentEvent, type AgentTurn, type Automation, WEBCHAT_DAILY_MAX_DEFAULT } from "@intentic/sandbox-contract";
+import { type ActivityEvent, type AgentEvent, type AgentTurn, type Automation, SandboxSettingsSchema, WEBCHAT_DAILY_MAX_DEFAULT } from "@intentic/sandbox-contract";
 import { Hono } from "hono";
 import { expect, test, vi } from "vitest";
 import { fileApprovalsStore } from "../automations/approvals-store.js";
@@ -34,11 +34,9 @@ const fakeServices = (root: string, appends: ActivityEvent[]): Services =>
             notify: async () => ({ delivered: 0, failed: 0 }),
             notifyIfAway: async () => ({ delivered: 0, failed: 0 }),
         }),
-        // Read only on the way out of a FAILED wake (the spin-loop guard weighs the streak). 0 turns the
-        // quarantine off, which keeps these tests about the Doorbell rather than about the failure limit.
-        sandboxSettings: unstubbed<Services["sandboxSettings"]>("sandboxSettings", {
-            get: async () => ({ automationFailureLimit: 0 }) as Awaited<ReturnType<Services["sandboxSettings"]["get"]>>,
-        }),
+        // Real parsed defaults: the admission gate reads them on every fire (all-allow out of the box), and
+        // the spin-loop guard's limit defaults to 0 — which keeps these tests about the Doorbell.
+        sandboxSettings: unstubbed<Services["sandboxSettings"]>("sandboxSettings", { get: async () => SandboxSettingsSchema.parse({}) }),
     });
 
 const fakeWake = (turns: AgentTurn[], events: AgentEvent[] = [{ kind: "done" }]): WakeFn =>

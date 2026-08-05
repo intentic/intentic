@@ -1,4 +1,4 @@
-import type { AgentSummary } from "@intentic/sandbox-contract";
+import type { AgentSummary, AutomationApproval } from "@intentic/sandbox-contract";
 import { computed, ref, shallowRef, watch } from "vue";
 import { awaitingUser, blocked, type ClientAgentStatus, type FleetLane, laneOf, turnInFlight, unregistered } from "./agentStatus";
 import type { Conversation } from "../chat/conversation";
@@ -491,11 +491,18 @@ const lanes = computed<Record<FleetLane, FleetAgent[]>>(() => {
     return grouped;
 });
 
+/* The wakes HELD at the door — the daemon's approvals queue, projected onto the board so "waiting for you"
+ * sits beside "running" instead of in a page nobody opens. Separate state from the roster on purpose: the
+ * /events stream repaints `registry` and knows nothing of holds, so a stream frame must not clobber this.
+ * Pull-fed by refresh() (board mount, the reachable seam, pull-to-refresh) and by the approve/reject actions
+ * below — a hold appearing while the board sits open lands on the next pull. */
+const heldWakes = shallowRef<AutomationApproval[]>([]);
+
 // Explicit registry pull — the reachable seam and pull-to-refresh use it; steady-state updates ride /events.
 const refresh = async (): Promise<void> => {
     const issuedAt = epoch;
     try {
-        const body = await sandboxJson<{ agents: AgentSummary[]; rev: number }>(`/agents`);
+        const body = await sandboxJson<{ agents: AgentSummary[]; rev: number; held?: AutomationApproval[] }>(`/agents`);
         // Answered on a revision line nobody is on any more — the daemon this read left for has since been
         // replaced (see `epoch`). Its number would land as a high-water mark the successor cannot beat.
         if (issuedAt !== epoch) {
@@ -504,9 +511,19 @@ const refresh = async (): Promise<void> => {
         // Through setAgents, not a raw assignment: this read races the stream, and a slow one that started
         // before the newest frame must not be allowed to undo it.
         setAgents(body.agents, body.rev);
+        heldWakes.value = body.held ?? [];
     } catch {
         // Leave the last roster; the events stream repaints on reconnect.
     }
+};
+
+/* Release or drop a held wake — the automations routes' own verbs, so the board and any other surface cannot
+ * come to mean different things by the same press. The entry leaves the list optimistically (the daemon
+ * removes it before the detached turn runs); the trailing refresh() repaints whatever else moved. */
+const releaseHeld = async (id: string, verb: `approve` | `reject`): Promise<void> => {
+    await sandboxJson(`/automations/pending/${encodeURIComponent(id)}/${verb}`, { method: `POST` });
+    heldWakes.value = heldWakes.value.filter((entry) => entry.id !== id);
+    void refresh();
 };
 
 /* --- Archive ---------------------------------------------------------------------------------------------
@@ -880,6 +897,8 @@ export function useAgents() {
         attention,
         blocking,
         unread,
+        heldWakes,
+        releaseHeld,
         refresh,
         open,
         markSeen,

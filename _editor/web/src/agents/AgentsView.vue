@@ -23,6 +23,7 @@ import { useNow } from "../composables/useNow";
 import { commandShortcut, registerCommand } from "../composables/commands/useCommands";
 import FilterField from "../components/FilterField.vue";
 import AgentCard from "./AgentCard.vue";
+import HeldWakeCard from "./HeldWakeCard.vue";
 import WorkflowRunCard from "./WorkflowRunCard.vue";
 /* The fleet as a kanban: Attention | Active | Finished — attention leftmost because the board's whole job is
  * routing the user to agents that need them. Lanes are pure projections of the registry status machine
@@ -75,6 +76,8 @@ const {
     fleet,
     blocking,
     unread,
+    heldWakes,
+    releaseHeld,
     refresh,
     open,
     markAllSeen,
@@ -572,7 +575,9 @@ const LANES: readonly { key: FleetLane; label: string; dot: string; empty: strin
 /* The board's own total, so it counts WHAT IS ON SCREEN: a run's steps are inside its row, not beside it, so
  * they are counted once — as the row. Without the run half a board showing a workflow and nothing else read
  * "0 of 0" and then told the user their query matched nothing, with the match sitting above the sentence. */
-const total = computed(() => LANES.reduce((sum, lane) => sum + boardLanes.value[lane.key].length, 0) + boardRunRows.value.length);
+// Held wakes count toward the board having something to show — a fresh workspace whose only row is a hold
+// must not hide it behind the "No agents yet" splash.
+const total = computed(() => LANES.reduce((sum, lane) => sum + boardLanes.value[lane.key].length, 0) + boardRunRows.value.length + heldWakes.value.length);
 // The header's tally. Summed over the same cardsFor and runsFor the lanes render, so it can never disagree
 // with the `n of m` counts under it.
 const kept = computed(() => LANES.reduce((sum, lane) => sum + cardsFor(lane.key).length + runsFor(lane.key).length, 0));
@@ -726,6 +731,27 @@ watch(workflowRuns, (list) => {
         }
     }
 });
+
+/* --- Held wakes on the board ---------------------------------------------------------------------
+ * The approvals queue's rows, in the Attention lane only — a hold's entire meaning is "waiting on you", and
+ * there is no conversation behind it yet to place anywhere else. Releasing one is detached daemon-side (the
+ * turn outlives the request), so the row leaves on the store's optimistic remove; `busyHeld` covers the gap
+ * between the press and that removal so a slow answer cannot collect two presses. */
+const busyHeld = ref(new Set<string>());
+const releaseWake = async (id: string, verb: `approve` | `reject`): Promise<void> => {
+    busyHeld.value = new Set([...busyHeld.value, id]);
+    try {
+        await releaseHeld(id, verb);
+    } catch {
+        // The usual cause is the countdown ran it (or another device answered) between the render and the
+        // press — refresh repaints the truth either way.
+        void refresh();
+    } finally {
+        const rest = new Set(busyHeld.value);
+        rest.delete(id);
+        busyHeld.value = rest;
+    }
+};
 
 // A FILTERED board is a result set wearing the lanes' shape, so it does not drag. Half the lanes may be
 // reading "no matches", the archive's own matches sit in a group with no lane at all, and a card dropped onto
@@ -928,6 +954,19 @@ const grabCard = (event: PointerEvent, agent: FleetAgent, card: HTMLElement): vo
                             <Icon :name="purging ? 'spinner' : 'trash'" :spin="purging" class="text-2xs" />Delete all
                         </button>
                     </header>
+                    <!-- The lane's HELD WAKES, first of all: a hold is the one row here that is WHOLLY waiting
+                         on you — everything below it is at least running. Attention lane only (HeldWakeCard
+                         says why), and outside the TransitionGroup for the runs' reason. -->
+                    <div v-if="lane.key === 'attention' && !archiveOpen && heldWakes.length > 0" class="flex flex-col gap-2 px-2 pb-2">
+                        <HeldWakeCard
+                            v-for="entry in heldWakes"
+                            :key="entry.id"
+                            :entry="entry"
+                            :busy="busyHeld.has(entry.id)"
+                            @approve="releaseWake(entry.id, `approve`)"
+                            @reject="releaseWake(entry.id, `reject`)"
+                        />
+                    </div>
                     <!-- The lane's WORKFLOW RUNS, above its agents: a run is the container of several of the
                          cards below it, and a container drawn under its contents is a heading in the wrong
                          place. Outside the TransitionGroup below — that group's FLIP animation is over the
@@ -962,8 +1001,12 @@ const grabCard = (event: PointerEvent, agent: FleetAgent, card: HTMLElement): vo
                     <!-- An emptied lane keeps its header and says so on one line. It does NOT disappear: three
                          columns collapsing to one as the query lands makes the whole board jump under the
                          cursor mid-keystroke, and the lane you were about to read moves out from under it. A
-                         lane holding only a run is not empty, whatever the fleet half of it says. -->
-                    <p v-else-if="cardsFor(lane.key).length === 0 && runsFor(lane.key).length === 0" class="px-3 pb-3 text-2xs text-subtle">
+                         lane holding only a run — or, in Attention, only a held wake — is not empty, whatever
+                         the fleet half of it says. -->
+                    <p
+                        v-else-if="cardsFor(lane.key).length === 0 && runsFor(lane.key).length === 0 && !(lane.key === 'attention' && heldWakes.length > 0)"
+                        class="px-3 pb-3 text-2xs text-subtle"
+                    >
                         {{ filtering ? "No matches in this lane." : lane.empty }}
                     </p>
                     <TransitionGroup v-else tag="div" name="lane" class="relative flex flex-col gap-2 px-2 pb-2">

@@ -19,6 +19,7 @@ import {
 } from "@anthropic-ai/claude-agent-sdk";
 import { spawn } from "node:child_process";
 import {
+    type AdmissionRule,
     type AgentEvent,
     type AgentReply,
     type AskQuestion,
@@ -38,6 +39,7 @@ import { browserServerOfTool, browserSessionHooks } from "../browser/browser-ses
 import { localCommandText, unknownCommandName } from "./agent-commands.js";
 import { editDiagnosticsHooks } from "./agent-diagnostics.js";
 import { installSteeringHooks } from "./agent-installs.js";
+import { outboundGateHooks } from "../guard/outbound-gate.js";
 import { type AgentTool, mcpServersOf } from "./agent-tools.js";
 import { createRequest } from "./agent-requests.js";
 import type { SteeringQueue } from "./agent-steering.js";
@@ -163,6 +165,9 @@ export interface AgentRequest {
     // literal "off" to disable the filter (INTENTIC_RUN_FILTER=0, raw baseline). Empty/undefined ⇒ the filter's
     // all-on default. See settings/outputCleaners + bin/cleaners.mjs.
     readonly outputCleaners?: string;
+    // The sniffer's rulebook (settings.actionRules) — verdicts per classified outbound call, enforced by the
+    // PreToolUse outbound gate. Absent/empty ⇒ the gate is not wired at all (guard/outbound-gate.ts).
+    readonly actionRules?: Readonly<Record<string, AdmissionRule>>;
     // Measurement control: a fraction [0,1] of commands whose output bypasses cleaning (INTENTIC_OUTPUT_HOLDOUT),
     // recorded raw so the savings report has a real cleaned-vs-raw baseline. 0/undefined ⇒ no holdout.
     readonly outputHoldout?: number;
@@ -1276,6 +1281,10 @@ const baseOptions = (
     hooks: mergeHooks(
         tmuxEnabled ? bashTmuxHooks(Object.keys(request.cliEnv ?? {}), request.isolation) : {},
         installSteeringHooks(),
+        // The outbound sniffer's enforcing half: classified provider calls (a discord curl) are checked against
+        // the owner's action rules BEFORE they run — and hooks fire even under bypassPermissions, which is what
+        // makes this hold for unattended automation turns. No rules ⇒ no hook (turn-plan forwards none).
+        request.actionRules !== undefined && Object.keys(request.actionRules).length > 0 ? outboundGateHooks(request.actionRules) : {},
         // Verification: the per-turn ledger of what was edited against what was proven, and the one follow-up
         // it asks for when a turn tries to end on unproven code. Opt-in — off, nothing is wired.
         request.verifyOnStop === true ? verificationHooks(request.isolation?.plan) : {},

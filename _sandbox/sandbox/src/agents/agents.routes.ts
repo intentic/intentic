@@ -65,7 +65,9 @@ export const createAgentsRoutes = (services: Services) => {
          * heals with it. */
         list: i.list.handler(async () => {
             await services.agents.refreshStandings();
-            return { agents: services.agents.list(), rev: services.agents.revision() };
+            // The approvals queue rides along as `held` — the wakes waiting at the door belong on the board
+            // beside the agents that got through it. Approve/reject stay the automations routes' verbs.
+            return { agents: services.agents.list(), rev: services.agents.revision(), held: await services.approvals.list() };
         }),
         // The archive's own roster — the other half of the fleet, off `list` by construction and pulled on
         // demand (the /events stream never carries it). Newest-archived first; see registry.listArchived.

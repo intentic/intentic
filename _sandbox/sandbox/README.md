@@ -11,6 +11,10 @@ The **per-project AI-agent dev daemon** — a Docker image that runs as the proj
 - Keep the tree true after lands: reinstall drifted dependencies, run the project's own checks, and announce the
   edges (`deps.broken`/`deps.fixed`) that wake the seeded fix chore — every step in a visible terminal panel and
   the activity feed (src/workspace/reconcile-deps.ts → verify-deps.ts → src/automations).
+- Gate what runs without the owner: every outside-driven wake (automations, listeners, the Doorbell, the
+  workflow release gate) consults one decision seam before a session starts — allow, hold for approval, or
+  refuse — and classified outbound provider calls are checked against the owner's action rules before they
+  execute (src/guard).
 
 ## Key files
 
@@ -19,6 +23,7 @@ The **per-project AI-agent dev daemon** — a Docker image that runs as the proj
 - [src/agents](src/agents) — **plural**: the fleet. The registry, `worktrees.ts`, `isolation.ts`, `land.ts`, `origins.ts`.
 - [src/git/git.routes.ts](src/git/git.routes.ts) — status/commit/push over the wire; [src/workspace](src/workspace) — the repo layout the daemon serves.
 - [src/composition.ts](src/composition.ts) — what is wired to what; [src/main.ts](src/main.ts) — the entrypoint that builds it and serves.
+- [src/guard/guard.ts](src/guard/guard.ts) — the one gate every gated action consults (fail-closed); [src/guard/actions.ts](src/guard/actions.ts) is the catalog of decisions.
 
 ## How it fits
 

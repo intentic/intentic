@@ -4,6 +4,8 @@ import type { Context } from "hono";
 import { streamAgent } from "../agent/agent.routes.js";
 import { PAYLOAD_MAX } from "../automations/scheduler.js";
 import { tokenEquals } from "../auth/auth.js";
+import { sessionStart } from "../guard/actions.js";
+import { guard } from "../guard/guard.js";
 import type { Services } from "../composition.js";
 import type { AppEnv } from "../context.js";
 import type { TurnFn } from "../loops/loop-runner.js";
@@ -84,6 +86,16 @@ export const createGateRoute =
         const declared = Number(c.req.header("content-length"));
         if (Number.isFinite(declared) && declared > PAYLOAD_MAX) {
             return c.json({ error: "payload too large" }, 413);
+        }
+        /* ADMISSION — the same session.start guard every automation wake passes, with this door's own source.
+         * The workflow floor is allow|deny only (a hold here is indistinguishable from a timeout to the CI
+         * runner holding the connection), so a refusal answers 403 with the policy's sentence — a fact about
+         * this workspace's configuration, which the caller's on-call can act on. Before the daily spend: a
+         * refused call must not eat the day's budget. */
+        const { admission } = await services.sandboxSettings.get();
+        const admitted = guard(sessionStart, { source: "workflow", admission });
+        if (admitted.effect !== "allow") {
+            return c.json({ error: admitted.reason }, 403);
         }
         if (daily.spend(workflow.id, gate.dailyMax ?? GATE_DAILY_MAX_DEFAULT, Date.now())) {
             return c.json({ error: "this gate has reached today's run limit" }, 429);
