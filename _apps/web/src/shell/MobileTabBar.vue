@@ -30,16 +30,18 @@ interface Tab {
 }
 
 const { reachable } = useSandbox();
-const { drafts, invalid: invalidDrafts } = useDrafts();
+const { owed: draftsOwed } = useDrafts();
 const { attention } = useAgents();
 const changes = useChanges();
 const { badge: sandboxBadge } = useSandboxAttention();
 
-// Things to act on: agent drafts plus uncommitted changes. Once that total is zero but the workspace still owes
-// its remotes a push, the same glyph the desktop rail and the Changes tab wear takes over — so the fact looks
-// the same on a phone as on a desk, and the tab never reads as empty over work that is still waiting.
+// Things to act on: the drafts that owe a decision plus uncommitted changes. Once that total is zero but the
+// workspace still owes its remotes a push, the same glyph the desktop rail and the Changes tab wear takes over —
+// so the fact looks the same on a phone as on a desk, and the tab never reads as empty over work that is still
+// waiting. The drafts half is useDrafts' `owed`, the same count the desktop rail's Drafts tile badges: this used
+// to be every draft in the store, so one post ever published left the tab permanently wearing a number.
 const reviewBadge = computed<ViewBadge | undefined>(() => {
-    const count = drafts.value.length + invalidDrafts.value.length + changes.count.value;
+    const count = draftsOwed.value + changes.count.value;
     if (count > 0) {
         return { count, tooltip: `${count} to review` };
     }

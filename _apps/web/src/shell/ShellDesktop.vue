@@ -64,8 +64,8 @@ const tileLabel = (tile: AreaTile): string => (tile.badge?.tooltip === undefined
 
 const { panels } = usePanels();
 const { capabilities } = useCapabilities();
-// Drafts is agent-driven and usually empty — its rail tile appears only once there's something to act on.
-const { drafts, invalid: invalidDrafts } = useDrafts();
+// Drafts is agent-driven; its tile is permanent and the badge carries how much is owed (see draftsBadge).
+const { owed: draftsOwed, broken: draftsBroken } = useDrafts();
 // The agent's browsers, on the same appear-on-content terms. Polled loosely: this is the always-on read that
 // makes the tile show up mid-turn, and the view itself polls tighter once it is on screen.
 const { sessions: browsers } = useBrowsersQuery(10_000);
@@ -134,7 +134,22 @@ const workspaceBadge = computed<ViewBadge | undefined>(() => {
     return { mark: outgoingMark(work), tooltip: outgoingSummary(work) };
 });
 
-// The thin shell: two always-present areas, then one tile per EXTENSION ACTIVATION — extensions detect
+/* WHAT THE DRAFTS TILE SAYS — the queue's own `owed` count (useDrafts defines it and says why it excludes what it
+ * excludes). Danger tone once something is broken rather than merely waiting: a post that failed and a post
+ * awaiting approval want different afternoons, and a bare number cannot say which is in it. */
+const draftsBadge = computed<ViewBadge | undefined>(() => {
+    const owed = draftsOwed.value;
+    const broken = draftsBroken.value;
+    if (owed === 0) {
+        return undefined;
+    }
+    // Phrased to follow the tile's name, which tileLabel puts in front of it: "Drafts · 3 waiting on you".
+    const tooltip =
+        broken === 0 ? `${owed} waiting on you` : owed === broken ? `${broken} failed to post` : `${owed} waiting on you, ${broken} failed to post`;
+    return { count: owed, ...(broken > 0 ? { tone: `danger` } : {}), tooltip };
+});
+
+// The thin shell: three always-present areas, then one tile per EXTENSION ACTIVATION — extensions detect
 // workspace content (repo facts from /panels) and contribute their own sidebar elements (Infrastructure, Live
 // status, one per monorepo, …) — then the "+" Capabilities tile (rendered separately below). The Sandbox
 // status/management view lives behind the switcher chip, not a rail tile. The rail is capability-first: a repo
@@ -162,12 +177,23 @@ const fixedTiles = computed<readonly AreaTile[]>(() => [
         icon: `folder`,
         ...(workspaceBadge.value === undefined ? {} : { badge: workspaceBadge.value }),
     },
+    /* PERMANENT, AND THE BADGE CARRIES THE QUEUE. Drafts used to appear only once something was waiting, which made
+     * it the one navigation tile whose arrival re-seated every tile beneath it — and it arrived on someone else's
+     * schedule, an agent proposing a post overnight. A column that moves under the hand has to be re-read. It is
+     * now an AREA on the terms ext-maintenance argued for its own: the surface exists whether or not anything is in
+     * it, so it can be visited to confirm the queue is empty, and the badge rather than the tile's existence is the
+     * signal. The phone has always worked this way — its "Review" tab is fixed and badges the same fact.
+     *
+     * A core shell surface, not an extension (the mobile bottom bar depends on it too). Where it lands among the
+     * others is RAIL_GROUPS' call like every other tile's, not a splice here. */
+    {
+        id: `drafts`,
+        to: `/drafts`,
+        label: `Drafts`,
+        icon: `send`,
+        ...(draftsBadge.value === undefined ? {} : { badge: draftsBadge.value }),
+    },
 ]);
-// Present only when the agent has proposed a draft (or left an unreadable draft file) — an empty queue keeps the
-// rail uncluttered, mirroring the extension tiles that appear on content. Drafts stays a core shell surface (the
-// mobile bottom-bar "Review" tab depends on it too), so its tile is not an extension. Where it lands among the
-// others is RAIL_GROUPS' call like every other tile's, not a splice here.
-const draftsTile: AreaTile = { id: `drafts`, to: `/drafts`, label: `Drafts`, icon: `send` };
 /* Browsers appears the moment a turn opens one and stays while the daemon still lists it — a rail tile that
  * tracks live work rather than a permanent surface. It renders in the rail's live-runtime cluster (next to the
  * ports indicator and the terminal), not among the navigation tiles: a browser session is runtime state like a
@@ -220,10 +246,10 @@ const extensionTile = (active: ActiveExtension): AreaTile => {
         ...(badge === undefined ? {} : { badge }),
     };
 };
-/* The navigation tiles, in ONE run ranked by RAIL_GROUPS: the always-present areas, Drafts when there is
- * something to review, and one tile per EXTENSION ACTIVATION (extensions detect workspace content from /panels
- * and contribute their own areas). Core tiles are no longer pinned above the extensions — that pinning is what
- * made Workflows, which belongs beside Agents, unable to sit anywhere but below every core view.
+/* The navigation tiles, in ONE run ranked by RAIL_GROUPS: the core areas, then one tile per EXTENSION ACTIVATION
+ * (extensions detect workspace content from /panels and contribute their own areas). Core tiles are not pinned
+ * above the extensions — that pinning is what stopped an extension from being seated among them at all, which is
+ * how Workflows came to sit in the rail's third seat with no way to say it belongs beside Automations.
  *
  * The sort is stable and detectActivations has already ranked the extensions by the same table, so activations a
  * table cannot order (one Deployments tile per Komodo connection) keep the order it gave them.
@@ -232,7 +258,7 @@ const extensionTile = (active: ActiveExtension): AreaTile => {
  * cluster below the divider, next to the "+" and account controls. */
 const tiles = computed<readonly AreaTile[]>(() =>
     [
-        ...(drafts.value.length > 0 || invalidDrafts.value.length > 0 ? [...fixedTiles.value, draftsTile] : fixedTiles.value),
+        ...fixedTiles.value,
         ...detectActivations(panels.value, capabilities.value)
             // Only rail-surface extensions get a tile; per-repo directory panels (Apps, UI, preview) open from
             // the Workspace tree instead, so the rail stays a short, capability-first list.

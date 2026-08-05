@@ -31,9 +31,23 @@ export function useDrafts() {
         onSuccess: invalidate,
     });
 
+    const drafts = computed<DraftSummary[]>(() => query.data.value?.drafts ?? []);
+    const invalid = computed<string[]>(() => query.data.value?.invalid ?? []);
+    /* WHAT THE QUEUE OWES ITS OWNER, defined once because two surfaces badge it — the desktop rail's Drafts tile
+     * and the phone's Review tab — and a count that meant one thing on a desk and another on a phone is the same
+     * fact told two ways. A proposal waiting for a yes, a post that failed, and a file the daemon could not read
+     * are the three states where nothing moves until the owner acts. Approved-and-scheduled is owed nothing (it
+     * goes out on its own) and `posted` is history: counting either would give a badge that never returns to zero,
+     * which is how a badge stops being read. `broken` is the subset that is wrong rather than merely waiting —
+     * enough for a caller to pick its tone without re-deriving the split. */
+    const broken = computed<number>(() => drafts.value.filter((draft) => draft.status === `failed`).length + invalid.value.length);
+    const owed = computed<number>(() => drafts.value.filter((draft) => draft.status === `proposed`).length + broken.value);
+
     return {
-        drafts: computed<DraftSummary[]>(() => query.data.value?.drafts ?? []),
-        invalid: computed<string[]>(() => query.data.value?.invalid ?? []),
+        drafts,
+        invalid,
+        owed,
+        broken,
         error,
         isLoading: query.isLoading,
         save,

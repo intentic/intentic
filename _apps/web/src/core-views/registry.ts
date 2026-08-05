@@ -57,21 +57,31 @@ export const extensionPath = (extension: ViewRegistration, activation: Activatio
  * put Documentation — a surface read once a month — in the best position left after the two pinned tiles, and
  * buried the ones that light up to fetch you. Position now tracks how a hand uses the column.
  *
- *   Work   Agents, Drafts, Workflows, Workspace — where a turn is started, reviewed and landed. Workflows sits
- *          with Agents because it is the same verb at another scale: one agent watched, or many run.
- *   Judge  Acceptance, Pipelines, Deployments, Maintenance — "is it good, did it ship, what is owed". These are
- *          the tiles you click BECAUSE one lit up, so they are together and high.
- *   Know   Automations, Memory, Documentation, Activity, Infrastructure, Live status — what you go and consult
- *          on your own initiative. Documentation badges too, but its badge is an invitation (docs nobody has
- *          read yet), not an alarm, so it stays here.
+ *   Work    Agents, Workspace — the two ends of one loop: start a turn, then read what it did and land it. Both
+ *           are permanent and both are the busiest tiles in the product, so they take the two seats a hand finds
+ *           without looking, and NOTHING is allowed between them. The first table put Drafts and Workflows there,
+ *           which split the pair with two surfaces touched weekly.
+ *   Judge   Drafts, Acceptance, Pipelines, Deployments, Maintenance — "does this go out, is it good, did it ship,
+ *           what is owed". The tiles you click BECAUSE one lit up, so they are together and high. Drafts heads the
+ *           band: it is the only one where nothing happens at all until the owner acts, and a post carrying a send
+ *           time is the most perishable thing on the rail.
+ *   Set up  Workflows, Automations — the two ways a run happens without anyone sitting there. The mechanisms have
+ *           little in common (a workflow forks a prompt across sessions and merges what comes back; an automation
+ *           is a trigger), but their relationship to the day is identical: authored once, then left alone, and
+ *           neither ever lights up. That is what makes them a shelf rather than work — Workflows previously sat
+ *           third, an unbadged permanent tile holding a seat the hand reaches for by reflex.
+ *   Know    Memory, Documentation, Activity, Infrastructure, Live status — what you go and consult on your own
+ *           initiative. Documentation badges too, but its badge is an invitation (docs nobody has read yet), not
+ *           an alarm, so it stays here.
  *
- * The bands are DECLARED, not derived. `badge: true` in the manifest happens to land on exactly the Judge set,
- * which is good evidence the band is real — but deriving from it would reshuffle the whole rail the day
+ * The bands are DECLARED, not derived. `badge: true` in the manifest lands on the Judge extensions and nothing
+ * else, which is good evidence the band is real — but deriving from it would reshuffle the whole rail the day
  * Automations grows a badge, and a column whose order moves is a column that has to be re-read.
  *
  * IT NAMES CORE SHELL TILES TOO (`agents`, `drafts`, `workspace`), not just extensions. Order used to live half
- * here and half in ShellDesktop's fixedTiles, which is how Workflows — an extension that belongs beside Agents —
- * had no way to be expressed as anything but "after every core view". One column, one table.
+ * here and half in ShellDesktop's fixedTiles, which is how an extension could not be placed among the core views
+ * at all — only "after every core view". One column, one table. Drafts is what that buys: a core shell surface
+ * banded with the four extensions it shares a job with, which no split table could have said.
  *
  * An id absent from these groups keeps its registration position within the last group, so a third-party
  * extension appends rather than silently jumping the queue. Note what that default cost the two first-party
@@ -86,9 +96,10 @@ export interface RailGroup {
 }
 
 export const RAIL_GROUPS: readonly RailGroup[] = [
-    { id: `work`, label: `Work`, ids: [`agents`, `drafts`, `workflows`, `workspace`] },
-    { id: `judge`, label: `Judge`, ids: [`acceptance`, `pipelines`, `deployments`, `maintenance`] },
-    { id: `know`, label: `Know`, ids: [`automations`, `memory`, `documentation`, `activity`, `infrastructure`, `live-status`] },
+    { id: `work`, label: `Work`, ids: [`agents`, `workspace`] },
+    { id: `judge`, label: `Judge`, ids: [`drafts`, `acceptance`, `pipelines`, `deployments`, `maintenance`] },
+    { id: `setup`, label: `Set up`, ids: [`workflows`, `automations`] },
+    { id: `know`, label: `Know`, ids: [`memory`, `documentation`, `activity`, `infrastructure`, `live-status`] },
 ];
 
 const RAIL_ORDER: readonly string[] = RAIL_GROUPS.flatMap((group) => group.ids);

@@ -5,7 +5,7 @@ import * as apps from "@intentic/ext-repo-apps";
 import * as preview from "@intentic/ext-preview";
 import type { PanelSummary } from "@intentic-app/api-contract";
 import { describe, expect, it } from "vitest";
-import { RAIL_GROUPS, detectActivations, registerView } from "./registry";
+import { RAIL_GROUPS, detectActivations, railRank, registerView } from "./registry";
 
 // apps + preview are packaged extensions the app activates via loadBuiltins; the registry seeds only the still-
 // static core views (infrastructure/live-status/directory-ui). Register the two packaged detects here so the
@@ -233,6 +233,29 @@ describe(`rail order`, () => {
             .filter(({ extension }) => extension.surface === `rail`)
             .map(({ extension }) => extension.id);
         expect(rail.filter((id) => !listed.has(id))).toEqual([]);
+    });
+
+    /* THE TOP OF THE COLUMN IS THE SCARCE THING, and both of these were spent badly before. Checked on railRank
+     * rather than on a detected run because two of the four ids are core shell tiles, which contribute no
+     * activation — the table ranks them all the same way, which is the whole reason it names them. */
+    it(`keeps the busy permanent pair adjacent, with nothing seated between them`, () => {
+        // Start a turn, then read what it did: the loop the rail exists to serve. Drafts and Workflows used to
+        // sit in between, and both are touched by the week rather than by the minute.
+        expect(railRank(`workspace`)).toBe(railRank(`agents`) + 1);
+    });
+
+    it(`seats configuration below everything that lights up`, () => {
+        // Workflows is a permanent tile that never badges — it held the third seat purely by having been filed
+        // beside Agents, and it belongs with the other thing you author once and leave alone.
+        expect(railRank(`workflows`)).toBe(railRank(`automations`) - 1);
+        for (const summons of [`drafts`, `acceptance`, `pipelines`, `deployments`, `maintenance`]) {
+            expect(railRank(summons)).toBeLessThan(railRank(`workflows`));
+        }
+    });
+
+    it(`heads the decisions band with Drafts, the only one where nothing moves until the owner acts`, () => {
+        const judge = RAIL_GROUPS.find((group) => group.id === `judge`);
+        expect(judge?.ids[0]).toBe(`drafts`);
     });
 
     it(`keeps an unlisted view at the end instead of letting it jump the queue`, () => {
