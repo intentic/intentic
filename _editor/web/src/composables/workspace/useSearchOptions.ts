@@ -14,9 +14,9 @@ const WORD_KEY = `ui-workspace-search-word`;
 // Widens BOTH the filename quick-open and the content search into node_modules and .gitignore'd paths (the
 // security floor still applies — secrets never surface). Off by default.
 const INCLUDE_IGNORED_KEY = `ui-workspace-include-ignored`;
-// VSCode's "files to include" box: comma-separated path globs (`*.test.ts, _editor/web`), `!` on one to exclude
-// instead. Empty = the whole workspace. Narrows WITHIN what includeIgnored admitted, and the daemon reads the
-// grammar (the sandbox's search-globs.ts) — the field itself only carries the text.
+// VSCode's "files to include" box: comma-separated path globs (`package.json, src/**`), `!` on one to exclude
+// instead. Empty = the whole workspace. Narrows WITHIN what includeIgnored admitted, and the grammar is read
+// where both ends can share one reading of it (the contract's search-globs.ts) — the field carries the text.
 const INCLUDE_KEY = `ui-workspace-search-include`;
 
 // Storage may be unavailable (private mode); the in-memory refs still hold for the session.

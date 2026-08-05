@@ -1,6 +1,6 @@
 import { existsSync } from "node:fs";
 import { join } from "node:path";
-import { HEALTH_LIMIT, MAX_REF_CANDIDATES, previewLabel, previewUrl, workspaceContract, zoneFromUrl } from "@intentic/sandbox-contract";
+import { HEALTH_LIMIT, includeGlobs, MAX_REF_CANDIDATES, previewLabel, previewUrl, workspaceContract, zoneFromUrl } from "@intentic/sandbox-contract";
 import { sandboxIdFromToken } from "@intentic/sandbox-contract/tunnel-ids";
 import { implement, ORPCError } from "@orpc/server";
 import type { Services } from "../composition.js";
@@ -14,7 +14,6 @@ import { readModules } from "./modules.js";
 import { readPackageGraph } from "./package-graph.js";
 import { discoverRepos, isValidRepoId, isValidRepoName } from "./repo-discovery.js";
 import { resolveReference } from "./resolve-reference.js";
-import { globScope } from "./search-globs.js";
 import { INSTALLABLE, missingCount, startInstall, workspaceSetup } from "./workspace-setup.js";
 import { syncWorkspaceRepos } from "./sync-repos.js";
 import { listTemplates, loadManifest, readTemplatesConfig } from "../scaffold/templates-config.js";
@@ -135,15 +134,17 @@ export const createWorkspaceRoutes = (services: Services) => {
                 ...(input.word === true ? { word: true } : {}),
                 ...(input.caseSensitive === true ? { caseSensitive: true } : {}),
             };
-            const { globs, notGlobs } = globScope(input.include);
+            // The files-to-include field, read as the editor reads it (includeGlobs) and handed to the engine as
+            // the path globs it scopes by.
+            const { globs, notGlobs } = includeGlobs(input.include);
             const outcome = await services.iq.run(
                 {
                     verb,
                     query: input.query,
                     scope: {
                         ...(ignored ? { ignored: true } : {}),
-                        ...(globs !== undefined ? { globs } : {}),
-                        ...(notGlobs !== undefined ? { notGlobs } : {}),
+                        ...(globs.length > 0 ? { globs } : {}),
+                        ...(notGlobs.length > 0 ? { notGlobs } : {}),
                     },
                     render: {
                         budget: GUI_SEARCH_BUDGET,
@@ -153,7 +154,7 @@ export const createWorkspaceRoutes = (services: Services) => {
                     options,
                     // Echo mirrors the CLI form — it seeds the pagination cursor id, so it must be stable for
                     // the same query+mode+scope across requests, and the glob filter is part of that scope.
-                    echo: `${verb === "q" ? "" : `${verb} `}"${input.query}"${ignored ? " --ignored" : ""}${input.literal === true ? " --literal" : ""}${input.word === true ? " --word" : ""}${input.caseSensitive === true ? " --case" : ""}${(globs ?? []).map((glob) => ` --glob '${glob}'`).join("")}${(notGlobs ?? []).map((glob) => ` --not-glob '${glob}'`).join("")}`,
+                    echo: `${verb === "q" ? "" : `${verb} `}"${input.query}"${ignored ? " --ignored" : ""}${input.literal === true ? " --literal" : ""}${input.word === true ? " --word" : ""}${input.caseSensitive === true ? " --case" : ""}${globs.map((glob) => ` --glob '${glob}'`).join("")}${notGlobs.map((glob) => ` --not-glob '${glob}'`).join("")}`,
                 },
                 signal,
             );

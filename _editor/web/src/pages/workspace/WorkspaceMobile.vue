@@ -414,7 +414,7 @@ const onPick = (event: Event): void => {
                         <input
                             v-model="search.include.value"
                             type="search"
-                            placeholder="Files to include, e.g. *.test.ts"
+                            placeholder="Files to include, e.g. package.json"
                             aria-label="Files to include"
                             class="h-10 w-full min-w-0 rounded-lg border border-line bg-canvas pl-8 pr-3 text-base text-content placeholder:text-subtle focus:border-line-strong focus:outline-none"
                         />

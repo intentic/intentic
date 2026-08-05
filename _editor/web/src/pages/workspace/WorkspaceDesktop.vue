@@ -776,10 +776,12 @@ const endResize = (event: PointerEvent): void => {
                         <input
                             v-model="search.include.value"
                             type="text"
-                            placeholder="Files to include, e.g. *.test.ts"
+                            placeholder="Files to include, e.g. package.json"
                             class="w-full min-w-0 rounded-md border border-line bg-canvas py-1 pr-2 pl-7 text-xs text-content placeholder:text-subtle focus:border-line-strong focus:outline-none"
                             aria-label="Files to include"
-                            v-tooltip.bottom="'Files to include — comma-separated globs (*.test.ts, _editor/web); ! excludes'"
+                            v-tooltip.bottom="
+                                'Files to include, comma-separated: a name (package.json, src) matches anywhere, ./ anchors it to the workspace root, and ! excludes'
+                            "
                             @keydown.esc="search.include.value = ``"
                         />
                     </div>

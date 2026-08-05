@@ -8,12 +8,19 @@ export const globToRegExp = (glob: string): RegExp => {
         const ch = pattern[i]!;
         if (ch === "*") {
             if (pattern[i + 1] === "*") {
-                // `**/` and `/**` cross directories; bare `**` too.
-                re += "(?:.*)";
+                // `**` crosses directories — but only WHOLE ones. A globstar before "api" means "an api
+                // directory anywhere", not "anything ending in api": as `.*` it also matched `_apps/napi/x.ts`,
+                // and since the search box's file filter puts a globstar in front of every name it is typed,
+                // that was a directory nobody asked for in most of its results. Followed by a slash it consumes
+                // zero or more COMPLETE segments (and may consume none); standing at the end it is the rest of
+                // the path. Same rule as VSCode's glob and ripgrep's.
                 i++;
                 if (pattern[i + 1] === "/") {
+                    re += "(?:[^/]+/)*";
                     i++;
+                    continue;
                 }
+                re += ".*";
                 continue;
             }
             re += "[^/]*";

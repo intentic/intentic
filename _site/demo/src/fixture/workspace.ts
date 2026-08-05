@@ -13,6 +13,7 @@ import type {
     WorkspaceSearchSpan,
     WorkspaceTree,
 } from "@intentic/sandbox-contract";
+import { includeGlobs } from "@intentic/sandbox-contract";
 import { acceptanceFiles } from "./acceptance";
 import { choreFiles } from "./chores";
 import { documentationFiles } from "./docs";
@@ -452,15 +453,13 @@ const searchablePaths = (include: string): string[] => {
     return [...FILES].flatMap(([path, entry]) => (typeof entry === `string` && !isIgnored(path) && admits(path) ? [path] : []));
 };
 
-/* The panel's second field — VSCode's files-to-include grammar, honoured the way the daemon honours it: commas
- * separate patterns (except inside `{ts,py}`), a leading `!` excludes, and a pattern with no wildcard is the
- * directory under it. A small matcher rather than the engine's, for the same reason the text matcher above is
- * one: this fixture holds a few dozen paths and no index. */
-// One glob token → one regex, everything else escaped as itself. `**/` may match no directory at all (so
-// `*.ts` finds a file at the root), a bare `**` runs to the end of the path, and a brace group is the
-// alternation the field's comma-split deliberately leaves intact.
+/* The panel's second field, answered from the SAME reading of what was typed as the real daemon's: includeGlobs
+ * (the contract) expands the field into path globs, and only the MATCHING of those globs is local here — for
+ * the same reason the text matcher above is local, this fixture holds a few dozen paths and no search engine. */
+// One glob token → one regex, everything else escaped as itself. A globstar before a slash spans whole
+// directories and may span none (so `*.ts` finds a file at the root); at the end it is the rest of the path.
 const GLOB_TOKENS: Record<string, string> = {
-    "**/": `(?:.*/)?`,
+    "**/": `(?:[^/]+/)*`,
     "**": `.*`,
     "*": `[^/]*`,
     "?": `[^/]`,
@@ -469,23 +468,18 @@ const GLOB_TOKENS: Record<string, string> = {
     ",": `|`,
 };
 const globRegExp = (glob: string): RegExp => {
-    const bare = glob.replace(/\/+$/, ``);
-    // A pattern with no wildcard is a directory: everything under it. A bare name with no slash means that
-    // directory wherever it sits; a path is anchored at the workspace root.
-    const directory = /[*?[\]{}]/.test(bare) ? bare : `${bare}/`;
-    const anchored = bare.includes(`/`) ? directory : `**/${directory}`;
-    const source = [...anchored.matchAll(/\*\*\/|\*\*|\*|\?|\{|\}|,|[^*?{},]+/g)]
-        .map(([token]) => GLOB_TOKENS[token] ?? token.replaceAll(/[.+^$()|[\]\\]/g, String.raw`\$&`))
+    // A leading `./` is how an anchored pattern arrives; without it the path is matched from the root anyway.
+    const source = [...glob.replace(/^\.\//, ``).matchAll(/\[[^\]]*\]|\*\*\/|\*\*|\*|\?|\{|\}|,|[^*?{}[\],]+/g)]
+        .map(([token]) => GLOB_TOKENS[token] ?? (token.startsWith(`[`) ? token : token.replaceAll(/[.+^$()|\\]/g, String.raw`\$&`)))
         .join(``);
-    return new RegExp(`^${source}${anchored.endsWith(`/`) ? `.*` : ``}$`);
+    return new RegExp(`^${source}$`);
 };
 
 const includeFilter = (include: string): ((path: string) => boolean) => {
-    // Split on the commas that separate patterns, never on the one inside `{ts,py}`.
-    const patterns = include.split(/,(?![^{]*\})/).flatMap((raw) => (raw.trim() === `` || raw.trim() === `!` ? [] : [raw.trim()]));
-    const globs = patterns.filter((pattern) => !pattern.startsWith(`!`)).map(globRegExp);
-    const notGlobs = patterns.filter((pattern) => pattern.startsWith(`!`)).map((pattern) => globRegExp(pattern.slice(1)));
-    return (path) => (globs.length === 0 || globs.some((glob) => glob.test(path))) && !notGlobs.some((glob) => glob.test(path));
+    const { globs, notGlobs } = includeGlobs(include);
+    const admits = globs.map(globRegExp);
+    const denies = notGlobs.map(globRegExp);
+    return (path) => (admits.length === 0 || admits.some((glob) => glob.test(path))) && !denies.some((glob) => glob.test(path));
 };
 
 // Fixed text unless the .* switch is on, and an unparseable regex falls back to matching itself — the same
