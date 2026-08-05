@@ -108,6 +108,17 @@ fi
 # path the entrypoint does not mount over is fine; /root is the home of the user the setup runs as anyway.
 SCRIPT_IN_HOST=/root/connect.sh
 docker cp "$SHIPPED" "$HOST_CONTAINER:$SCRIPT_IN_HOST"
+
+# connect.sh is a bootstrap shim: the flow lives in the ic CLI, which the shim downloads from the LATEST
+# GitHub Release. This tier verifies THIS COMMIT's flow (and before the first release carrying ic there is
+# nothing to download at all), so build ic from the same checkout the installer was built from and hand it in
+# via IC_BIN — the shim's own local-dev override. build-ic.sh's linux target is musl/static, which is also
+# what lets the binary run in the Alpine dind host.
+echo "==> building ic from this checkout"
+bash "$ROOT/_tools/scripts/build-ic.sh" linux-x64
+docker cp "$ROOT/_sandbox/ic/dist-bin/ic-linux-amd64" "$HOST_CONTAINER:/root/ic"
+in_host chmod +x /root/ic
+
 echo "==> running the shipped connect.sh (image: $SANDBOX_IMAGE)"
 # The env the app's setup_script() assembles, minus the setup code: PLATFORM_URL is pointed at the unroutable
 # reserved TLD precisely because nothing on this path should call it — a claim attempt fails loudly instead of
@@ -119,6 +130,7 @@ if in_host env \
     SANDBOX_IMAGE="$SANDBOX_IMAGE" \
     PLATFORM_URL="https://platform.e2e.test" \
     WEB_ORIGIN="http://localhost:47145" \
+    IC_BIN=/root/ic \
     sh "$SCRIPT_IN_HOST" -y; then
     echo "  ✓ connect.sh completed — its own gate is a 30s wait on the daemon's /health"
 else

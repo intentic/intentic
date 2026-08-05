@@ -32,4 +32,17 @@ if command -v node >/dev/null 2>&1; then
 fi
 export INTENTIC_DEV_MOUNTS
 
+# The dogfood loop should exercise the checkout's OWN ic (the host-side CLI recreate.sh shims to), not a
+# released download — a flow change and its CLI change land in one commit and are tested together. Skipped
+# when cargo isn't on PATH; the shim then downloads the released binary, which is the old behaviour.
+if [ -z "${IC_BIN:-}" ] && command -v cargo >/dev/null 2>&1; then
+    echo "intentic: building the checkout's ic CLI…"
+    if cargo build --quiet --manifest-path "$SCRIPT_DIR/../../ic/Cargo.toml"; then
+        IC_BIN="$SCRIPT_DIR/../../ic/target/debug/ic"
+        export IC_BIN
+    else
+        echo "intentic: warning — the checkout's ic build failed; falling back to the released ic." >&2
+    fi
+fi
+
 exec sh "$SCRIPT_DIR/../../../_site/site/public/scripts/recreate.sh" --dev "$@"

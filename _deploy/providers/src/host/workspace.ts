@@ -152,7 +152,7 @@ export const createWorkspaceProvider = (executor: SshExecutor = sshExecutor): Pr
             }
             await session.exec(`docker network inspect ${parsed.network} >/dev/null 2>&1 || docker network create ${parsed.network}`);
             /* Ask this host about the overlay's OPTIONAL asks before betting the launch on them — the SSH-side
-             * twin of recreate.sh's preflight, reading the same table (OPTIONAL_DIRECTIVES) so neither flow
+             * twin of the ic recreate preflight, reading the same table (OPTIONAL_DIRECTIVES) so neither flow
              * knows a token by name. The trade is the same: a server missing the nvidia runtime gets a
              * GPU-less sandbox rather than a failed `intentic deploy apply`, because the sandbox is the point
              * and the extra is not. Nothing optional asked ⇒ no round-trip. */

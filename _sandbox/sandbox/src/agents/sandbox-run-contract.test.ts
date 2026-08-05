@@ -35,19 +35,30 @@ const CONTRACT = /@intentic\/sandbox-run/;
 
 // The consumers that must SPEAK the protocol, named as a positive floor: discovery proves nobody hand-rolls
 // the shape, and this proves the flows still produce a container at all — losing a call site to a refactor
-// must not read as "nothing left to check".
+// must not read as "nothing left to check". The verbs are called from ONE place now — the ic host-side CLI
+// (Rust); the shims' floor is that they still hand over to ic at all.
 const VERB = "sandbox run-command";
-const PROTOCOL_SCRIPTS = ["_site/site/public/scripts/connect.sh", "_site/site/public/scripts/connect.ps1", "_site/site/public/scripts/recreate.sh"];
+const RUST_CONTRACT = "_sandbox/ic/src/contract.rs";
+const SHIMS: readonly (readonly [string, string])[] = [
+    ["_site/site/public/scripts/connect.sh", 'sandbox connect "$@"'],
+    ["_site/site/public/scripts/connect-host.sh", "machine enroll"],
+    ["_site/site/public/scripts/recreate.sh", "sandbox rebuild"],
+    ["_site/site/public/scripts/connect.ps1", "'sandbox', 'connect'"],
+    ["_site/site/public/scripts/recreate.ps1", "sandbox rebuild"],
+];
 const CONTRACT_IMPORTERS = ["_deploy/providers/src/host/workspace.ts", "_editor/web/src/pages/setupCompose.ts"];
 
-const SCANNED = new Set([".sh", ".ps1", ".ts", ".mjs", ".yml", ".yaml"]);
+// .rs is scanned like the script dialects: ic executes what the image emits, so a Rust file that states the
+// run shape itself is exactly the drift this test exists to catch.
+const SCANNED = new Set([".sh", ".ps1", ".ts", ".mjs", ".yml", ".yaml", ".rs"]);
 
 const walk = async (dir: string): Promise<string[]> => {
     const entries = await readdir(dir, { withFileTypes: true }).catch(() => []);
     const found = await Promise.all(
         entries.map(async (entry) => {
             if (entry.isDirectory()) {
-                return entry.name.startsWith(".") || IGNORED_DIRS.has(entry.name) ? [] : walk(join(dir, entry.name));
+                // `target` is cargo's build tree (ic, the desktop crate) — generated code, not a creation path.
+                return entry.name.startsWith(".") || entry.name === "target" || IGNORED_DIRS.has(entry.name) ? [] : walk(join(dir, entry.name));
             }
             return SCANNED.has(entry.name.slice(entry.name.lastIndexOf("."))) ? [join(dir, entry.name)] : [];
         }),
@@ -75,9 +86,13 @@ test("no file in the repo hand-rolls a sandbox container run — TS composes fro
 });
 
 test("every creation flow still speaks the contract — the positive floor under the discovery above", async () => {
-    for (const script of PROTOCOL_SCRIPTS) {
-        const content = await readFile(join(REPO_ROOT, script), "utf8");
-        expect(content.includes(VERB), `${script}: must ask the image for its run command (\`intentic ${VERB}\`)`).toBe(true);
+    // ic is where the verbs are invoked (argv elements, so the space-joined VERB never appears literally).
+    const rust = await readFile(join(REPO_ROOT, RUST_CONTRACT), "utf8");
+    expect(rust.includes('"run-command"'), `${RUST_CONTRACT}: must ask the image for its run command (\`intentic ${VERB}\`)`).toBe(true);
+    expect(rust.includes('"host-probes"'), `${RUST_CONTRACT}: must ask the image which host probes to run`).toBe(true);
+    for (const [shim, handover] of SHIMS) {
+        const content = await readFile(join(REPO_ROOT, shim), "utf8");
+        expect(content.includes(handover), `${shim}: must hand its flow over to ic (\`${handover}\`)`).toBe(true);
     }
     for (const importer of CONTRACT_IMPORTERS) {
         const content = await readFile(join(REPO_ROOT, importer), "utf8");

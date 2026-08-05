@@ -1,0 +1,19 @@
+[package]
+name = "ic"
+version = "0.0.0"
+edition = "2021"
+publish = false
+
+[dependencies]
+clap = { version = "4", features = ["derive", "env"] }
+ureq = { version = "3", features = ["json"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+sha2 = "0.10"
+tempfile = "3"
+
+# The bootstrap shims download this binary on EVERY run, so size is user-visible; thin LTO + strip for the
+# same build-time/size trade the desktop crate settled on (its Cargo.toml carries the measurements).
+[profile.release]
+strip = true
+lto = "thin"

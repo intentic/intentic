@@ -15,6 +15,7 @@
             "packages": [
                 "_sandbox/acp-bridge",
                 "_sandbox/extension-api",
+                "_sandbox/ic",
                 "_sandbox/registry",
                 "_sandbox/sandbox",
                 "_sandbox/sandbox-contract",

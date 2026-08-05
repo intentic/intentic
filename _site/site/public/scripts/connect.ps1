@@ -1,22 +1,8 @@
 <#
 .SYNOPSIS
-  intentic connect (Windows) - run the AI-agent workspace sandbox on THIS PC and expose it to your
-  browser, so a user without their own server can drive a project from their machine.
-
-.DESCRIPTION
-  The platform mints a per-project connection token and hands you a one-liner. This creates the
-  sandbox's OWN Cloudflare tunnel (sandbox-<id>.<zone> -> the daemon, plus *.preview.<zone> -> the app
-  preview), starts the published sandbox image as a long-lived, UNPRIVILEGED container (no Docker
-  socket), and runs a cloudflared sidecar. The browser then talks to the sandbox DIRECTLY over that
-  tunnel - the daemon verifies your Google sign-in, and the platform stays off the command path. The
-  setup screen binds the sandbox's public URL itself and probes it until the daemon answers.
-  Setup is reachability-only. To later deploy an app onto this PC, the platform's "Deploy on
-  this machine" action re-runs with $env:SELF_HOST='1', which stands up a Docker-in-Docker "host"
-  container the sandbox deploys onto over SSH (Windows can't be a native SSH+Docker target). Requires
-  Docker Desktop in Linux-containers mode (the sandbox image is Linux). Desktop sync chosen at setup
-  carries the local folder as $env:SYNC_DIR on the command while SYNC_PAIR_TOKEN rides the setup-code
-  claim: when SYNC_DIR is set, once the sandbox is up this also runs the standard sync bootstrap (never
-  fatal to sandbox setup).
+  intentic connect (Windows) - bootstrap shim: get Docker Desktop onto this PC, fetch the `ic` CLI, and hand
+  the flow over to `ic sandbox connect`, which does everything else - the setup-code claim, tunnels, the
+  launch, the Docker-in-Docker deploy target (SELF_HOST), desktop sync. The flow lives in _sandbox/ic.
 
 .EXAMPLE
   $env:SETUP_CODE='<code>'; irm https://intentic.dev/connect.ps1 | iex                        # intentic-provided tunnel
@@ -34,81 +20,17 @@ param(
     # Start without prompting even if other sandboxes are already running (the old always-proceed behavior).
     [switch]$Yes
 )
-# NOT 'Stop', and the reason is Windows PowerShell 5.1 - which is what `powershell.exe` still is on every
-# Windows box, and what the desktop app spawns.
-#
-# This script probes with docker constantly and branches on $LASTEXITCODE itself: a probe exiting non-zero is
-# the ANSWER, not a failure. Two host rules get in the way of that, and they are different rules:
-#   * PS 7.4+ makes a native command's non-zero EXIT honour $ErrorActionPreference. Switched off on the line
-#     below, which is the only host that has that switch.
-#   * PS 5.1 has no such switch. What it does instead is wrap a native command's STDERR in a terminating
-#     NativeCommandError the moment that stream is REDIRECTED - so under 'Stop' the `*> $null` that makes a
-#     probe quiet is precisely what kills the run. `docker network inspect` on a network that does not exist
-#     yet took down every first install on Windows, one statement before the line that would have created it.
-# Nothing here leans on 'Stop': every error this script raises is a `Write-Error` followed by `exit 1`, which
-# reads identically either way, and the Invoke-RestMethod calls throw terminating errors into their own
-# try/catch whatever this is set to. The redirections still keep the probes silent - the error records are
-# written and discarded as intended, rather than promoted to something that ends the script.
+# NOT 'Stop': this shim probes with docker and branches on $LASTEXITCODE itself - a probe exiting non-zero is
+# the ANSWER, not a failure. Windows PowerShell 5.1 (what `powershell.exe` still is, and what the desktop app
+# spawns) additionally turns a redirected native stderr into a terminating error under 'Stop'.
 $ErrorActionPreference = 'Continue'
 $PSNativeCommandUseErrorActionPreference = $false
 
-# Prefer explicit params (direct file invocation); fall back to env vars (the `irm | iex` one-liner path).
-# PlatformUrl is the platform's API origin where the setup code is redeemed (POST /setup/claim) - NOT the web-app
-# origin (app.*), which serves only static files. A single hosted domain (never self-hosted), so it defaults to
-# the API host. LOCAL DEV ONLY: to test against a platform on your own machine, pass -PlatformUrl
-# http://localhost:<apiPort> - never shown in the product UI.
-if (-not $PlatformUrl) { $PlatformUrl = if ($env:PLATFORM_URL) { $env:PLATFORM_URL } else { 'https://api.intentic.dev' } }
-if (-not $ConnectToken) { $ConnectToken = $env:CONNECT_TOKEN }
+# Explicit params (direct file invocation) win; else the env vars the `irm | iex` one-liner carries. The env
+# spelling is also what rides through to ic, so set it back for anything a param supplied.
+if ($PlatformUrl) { $env:PLATFORM_URL = $PlatformUrl }
+if ($ConnectToken) { $env:CONNECT_TOKEN = $ConnectToken }
 if (-not $SetupCode) { $SetupCode = $env:SETUP_CODE }
-# The owner the daemon TOFU-binds; normally arrives with the setup-code claim (env is the headless path).
-$OwnerEmail = $env:OWNER_EMAIL
-# The latest RELEASE image via the moving `stable` tag (pulled fresh below), never :latest - see connect.sh for
-# why (the :latest/hand-tagged builds carry internal version 0.0.0, whose @intentic/* deps are unpublished, so
-# `intentic deploy init` can't resolve them; the release only ever moves `stable` onto a published release image).
-$SandboxImage = if ($env:SANDBOX_IMAGE) { $env:SANDBOX_IMAGE } else { 'ghcr.io/intentic/sandbox:stable' }
-# The daemon's preview proxy port, exposed at *.preview.<zone>; apps declare their own ports in apps.json.
-$PreviewPort = if ($env:PREVIEW_PORT) { $env:PREVIEW_PORT } else { '5173' }
-# Dev QoL (see connect.sh): a named volume or absolute host path mounted at /agent-auth and passed as
-# AGENT_AUTH_DIR, so the AI-provider OAuth stores are shared across sandboxes and survive resets. A localhost
-# platform injects it into the one-liner; empty (production) => credentials stay in the workspace volume.
-$AgentAuthVolume = $env:INTENTIC_AGENT_AUTH_VOLUME
-# Infra secrets `intentic deploy apply` reads inside the sandbox; they ride into the sandbox container's env and are
-# never sent to the platform. CF_TOKEN (your Cloudflare API token) is REQUIRED - Cloudflare is intentic's
-# reachability fabric (the tunnel that connects services, exposes them, AND carries browser->sandbox traffic);
-# it is validated below and passed to the sandbox as the Cloudflare-standard CLOUDFLARE_API_TOKEN the CLI reads.
-$CfToken = $env:CF_TOKEN
-# Self-host: unlike Linux (where the box you ran this on becomes the deploy target), Windows can't be a native
-# SSH+Docker target, so a Docker-in-Docker "host" container below is the deploy target and we deploy onto THAT.
-# DEFAULT OFF - setup is reachability-only; set `$env:SELF_HOST='1'` (the platform's "Deploy on this machine"
-# action) to stand it up. SELF_HOST_ADDRESS/SELF_HOST_USER/HOST_SSH_KEY are derived from that container below -
-# the user never supplies an SSH key.
-$SelfHost = $env:SELF_HOST
-$HostSshKey = ''
-$SelfHostUser = ''
-$SelfHostAddress = ''
-# Browser-direct access: the sandbox is exposed at sandbox-<id>.<zone> via its OWN Cloudflare tunnel and the
-# browser talks to it directly - the daemon verifies the user's Google ID token (audience = GOOGLE_CLIENT_ID, the
-# platform's PUBLIC web client id, hardcoded here since it's a static platform value; env can override). WEB_ORIGIN
-# scopes the daemon's CORS to that same web app: the bearer guards the authenticated routes, but /health answers
-# without one and names the sandbox id, so the allowlist is what stops an arbitrary page from reading it. Both are
-# hardcoded platform constants matching the app's build (@intentic/constants PLATFORM_WEB_ORIGIN); override either
-# to self-host the SPA elsewhere, comma-separated for several origins. ZONE picks the zone.
-$GoogleClientId = if ($env:GOOGLE_CLIENT_ID) { $env:GOOGLE_CLIENT_ID } else { '481795963975-cq9msl6higcd91joidrfp8mjlkuq5fk3.apps.googleusercontent.com' }
-$WebOrigin = if ($env:WEB_ORIGIN) { $env:WEB_ORIGIN } else { 'https://app.intentic.dev' }
-$Zone = $env:ZONE
-$CloudflaredImage = if ($env:CLOUDFLARED_IMAGE) { $env:CLOUDFLARED_IMAGE } else { 'cloudflare/cloudflared:2026.7.3@sha256:e39ee8da81ad5e05d77f38d2f51c60ca51bf2a8450ac3abab50c17fdb91d91bf' }
-# The platform can PRE-PROVISION the tunnel (intentic-provided path, for users with no Cloudflare of their own):
-# it fills $env:TUNNEL_TOKEN + $env:SANDBOX_HOSTNAME into the one-liner instead of CF_TOKEN. When both are set we
-# skip all Cloudflare API work and just run the sandbox + cloudflared with the given connector token. $Subdomain
-# is the optional custom prefix for the self-provision (own-Cloudflare) path.
-$TunnelToken = $env:TUNNEL_TOKEN
-$SandboxHostname = $env:SANDBOX_HOSTNAME
-$Subdomain = $env:SUBDOMAIN
-# Desktop sync chosen at setup: SYNC_DIR (the local folder) rides the command; SYNC_PAIR_TOKEN rides the claim.
-# The pair token is seeded into the sandbox at boot as a single-use pairing, then handed to the sync bootstrap.
-$SyncDir = $env:SYNC_DIR
-$SyncPairToken = $env:SYNC_PAIR_TOKEN
-$SandboxPublicUrl = ''
 
 Write-Host 'intentic: checking Docker...'
 $DockerInstalled = $false
@@ -156,392 +78,44 @@ if ($LASTEXITCODE -ne 0) {
     }
 }
 
-# The platform's one-liner carries ONE short-lived setup code instead of raw tokens (nothing secret lands in
-# shell history); redeem it for the per-sandbox values - CONNECT_TOKEN plus either the pre-provisioned tunnel
-# (intentic path) or the zone/subdomain picks (own-Cloudflare path), as KEY=value lines. Env vars still work
-# without a code (headless/scripted installs). Redeemed after the Docker step so a docker-missing failure
-# never burns time against the code's TTL.
-if ($SetupCode) {
-    Write-Host 'intentic: redeeming the setup code...'
-    # LOCAL DEV ONLY: the dev platform's cert is a repo CA the system doesn't trust, so localhost claims skip
-    # TLS verification - never for real domains.
-    $claimArgs = @{ Method = 'Post'; Uri = "$PlatformUrl/setup/claim"; Body = @{ code = $SetupCode } }
-    if ($PlatformUrl -match '^https?://(localhost|127\.0\.0\.1)') { $claimArgs.SkipCertificateCheck = $true }
+# ---- fetch the ic CLI (keep in lockstep with recreate.ps1 - standalone irm|iex files) ----
+# Downloaded on EVERY run, so re-running the one-liner upgrades an existing install; only a failed download
+# falls back to what's installed. IC_BIN overrides for local dev. Download-then-rename: overwriting a running
+# executable fails, and a half-downloaded binary must never be what runs.
+$Ic = $env:IC_BIN
+if (-not $Ic) {
+    [Net.ServicePointManager]::SecurityProtocol = [Net.ServicePointManager]::SecurityProtocol -bor [Net.SecurityProtocolType]::Tls12
+    $IcDir = "$env:USERPROFILE\.intentic\ic\bin"
+    New-Item -ItemType Directory -Force -Path $IcDir | Out-Null
+    $IcDest = "$IcDir\ic.exe"
+    $IcBase = if ($env:IC_URL) { $env:IC_URL } else { 'https://github.com/intentic/intentic/releases/latest/download' }
+    Write-Host 'intentic: fetching the ic CLI...'
     try {
-        $claim = Invoke-RestMethod @claimArgs
+        Invoke-WebRequest -UseBasicParsing -Uri "$IcBase/ic-windows-amd64.exe" -OutFile "$IcDest.tmp"
+        Move-Item -Force "$IcDest.tmp" $IcDest
+        $Ic = $IcDest
     } catch {
-        Write-Error "could not redeem the setup code at $PlatformUrl ($($_.Exception.Message)) - refresh the platform's setup page and copy a fresh command."
-        exit 1
-    }
-    foreach ($line in ($claim -split "`n")) {
-        $line = $line.Trim()
-        if ($line -like 'CONNECT_TOKEN=*') { $ConnectToken = $line.Substring('CONNECT_TOKEN='.Length) }
-        elseif ($line -like 'TUNNEL_TOKEN=*') { $TunnelToken = $line.Substring('TUNNEL_TOKEN='.Length) }
-        elseif ($line -like 'SANDBOX_HOSTNAME=*') { $SandboxHostname = $line.Substring('SANDBOX_HOSTNAME='.Length) }
-        elseif ($line -like 'ZONE=*') { $Zone = $line.Substring('ZONE='.Length) }
-        elseif ($line -like 'SUBDOMAIN=*') { $Subdomain = $line.Substring('SUBDOMAIN='.Length) }
-        # SYNC_DIR is NOT claimed - it's the user's local folder opt-in, carried on the command as $env:SYNC_DIR.
-        elseif ($line -like 'SYNC_PAIR_TOKEN=*') { $SyncPairToken = $line.Substring('SYNC_PAIR_TOKEN='.Length) }
-        elseif ($line -like 'OWNER_EMAIL=*') { $OwnerEmail = $line.Substring('OWNER_EMAIL='.Length) }
-    }
-}
-$ProvidedTunnel = [bool]$TunnelToken -and [bool]$SandboxHostname
-
-# Per-sandbox identity, so several sandboxes coexist on one machine. The slug is the same key the public hostname
-# uses: an explicit SUBDOMAIN, else a platform-provided hostname's leftmost label, else the connect-token digest
-# that forms sandbox-<id>. So distinct tokens get distinct container/volume/network (which persist the cloned repos
-# and let the tunnel ingress + cloudflared sidecar resolve by DNS), while re-running with the same token replaces
-# just that one.
-if ($Subdomain) {
-    $Slug = $Subdomain
-} elseif ($ProvidedTunnel) {
-    $Slug = $SandboxHostname.Split('.')[0]
-} else {
-    $sha = [System.Security.Cryptography.SHA256]::Create()
-    $Slug = ([System.BitConverter]::ToString($sha.ComputeHash([System.Text.Encoding]::UTF8.GetBytes($ConnectToken))) -replace '-', '').Substring(0, 12).ToLower()
-}
-$Container = "intentic-sandbox-$Slug"
-$WorkspaceVolume = "intentic-workspace-$Slug"
-# Snapshot history + protected repo git dirs live on their own volume, mounted OUTSIDE /work so agent accidents
-# in the workspace can't destroy them.
-$HistoryVolume = "intentic-history-$Slug"
-# The in-sandbox Docker Engine's /var/lib/docker: a named volume so pulled images and dev-DB volumes survive
-# recreates - and layers land on a real filesystem (overlay2), not overlayfs-on-overlayfs.
-$DockerVolume = "intentic-docker-$Slug"
-$Network   = "intentic-workspace-$Slug"
-$TunnelContainer = "intentic-sandbox-tunnel-$Slug"
-# The stable name the tunnel ingress dials. The workspace answers to it via a --network-alias on its own per-sandbox
-# network, so the real container name stays unique (coexistence) while BOTH the platform-provisioned tunnel (whose
-# ingress origin is fixed to this name) and the own-Cloudflare tunnel below reach the daemon by one constant.
-$OriginHost = 'intentic-sandbox-workspace'
-# The Docker-in-Docker deploy target (when self-host is on): its own dockerd + sshd, reached by the sandbox at this
-# container name on the per-sandbox network. Per-slug too, so self-hosting sandboxes don't fight over one target.
-$DindContainer = "intentic-dind-host-$Slug"
-$DindImage = if ($env:DIND_IMAGE) { $env:DIND_IMAGE } else { 'ghcr.io/intentic/dind-host:latest' }
-$DindVolume = "intentic-dind-docker-$Slug"
-
-# CONNECT_TOKEN is the per-user value the setup code redeems into (or env/-ConnectToken carries directly).
-if (-not $ConnectToken) {
-    Write-Error 'CONNECT_TOKEN is required (via the setup code, env var, or -ConnectToken) - copy the one-liner from the platform''s setup screen.'
-    exit 1
-}
-# Intentic-provided sandboxes (pre-provisioned tunnel, no CF_TOKEN) are reachability-only - SELF_HOST's deploy
-# target needs your OWN Cloudflare token at apply time. Fail fast with a clear message.
-if ($ProvidedTunnel -and $SelfHost) {
-    Write-Error 'SELF_HOST needs your own Cloudflare API token (CF_TOKEN). Intentic-provided sandboxes are reachability-only - add your own Cloudflare from the workspace to deploy onto this PC.'
-    exit 1
-}
-# Cloudflare is intentic's reachability fabric (the tunnel that connects services and exposes them), so the
-# token is required and validated up front rather than failing later at `intentic deploy apply`. It never reaches the
-# platform - it rides into the sandbox below. Verify it against Cloudflare's token-verify endpoint.
-if (-not $ProvidedTunnel -and -not $CfToken) {
-    Write-Error 'CF_TOKEN is required - Cloudflare is intentic''s reachability fabric (the tunnel that connects your services and exposes them). Create a token at https://dash.cloudflare.com/profile/api-tokens with Zone:Read, DNS:Edit, Cloudflare Tunnel:Edit.'
-    exit 1
-}
-# Validate the token only when the user supplied one (own-Cloudflare path); the intentic-provided path has none.
-if ($CfToken) {
-    Write-Host 'intentic: validating Cloudflare API token...'
-    try {
-        $cfVerify = Invoke-RestMethod -Uri 'https://api.cloudflare.com/client/v4/user/tokens/verify' -Headers @{ Authorization = "Bearer $CfToken" }
-    } catch {
-        $cfVerify = $null
-    }
-    if (-not $cfVerify -or -not $cfVerify.success -or $cfVerify.result.status -ne 'active') {
-        Write-Error 'the Cloudflare API token is invalid or inactive (token verify failed). Re-check the token and its scopes (Zone:Read, DNS:Edit, Cloudflare Tunnel:Edit) at https://dash.cloudflare.com/profile/api-tokens.'
-        exit 1
-    }
-}
-
-# -- coexistence check (helpers duplicated in cleanup.ps1 - this script runs standalone via `irm | iex`, keep in
-# lockstep) -----------------------------------------------------------------------------------------------------
-function Test-Interactive { [Environment]::UserInteractive -and -not [Console]::IsInputRedirected }
-function Get-Sandboxes {
-    @(docker ps -a --filter 'name=intentic-sandbox-' --format '{{.Names}}' 2>$null) |
-        Where-Object { $_ -and $_ -notlike 'intentic-sandbox-tunnel-*' } |
-        ForEach-Object { $_ -replace '^intentic-sandbox-', '' }
-}
-# A PC can host several sandboxes at once (each suffixed by its own slug). If OTHER sandboxes already exist, don't
-# silently start one more beside them - surface them and let the user continue, clean some up first, or quit. A
-# same-slug re-run is a normal reset (replaces just that one), so the current slug is excluded. Skipped with -Yes;
-# with no console to prompt on we proceed (an explicitly requested create must not block automation).
-if (-not $Yes) {
-    $others = @(Get-Sandboxes | Where-Object { $_ -ne $Slug })
-    if ($others.Count -gt 0) {
-        Write-Host "intentic: you already have $($others.Count) other sandbox(es) on this PC:"
-        foreach ($s in $others) {
-            $st = (docker inspect -f '{{.State.Status}}' "intentic-sandbox-$s" 2>$null)
-            if (-not $st) { $st = '?' }
-            Write-Host ('  {0,-9} {1}' -f $st, $s)
-        }
-        if (Test-Interactive) {
-            Write-Host 'This starts a NEW sandbox alongside them.'
-            Write-Host '  [c] continue (start alongside)'
-            Write-Host '  [r] remove some first...'
-            Write-Host '  [q] quit'
-            $choice = Read-Host 'Choose [c/r/q]'
-            if ($choice -match '^[rR]') {
-                $CleanupScriptUrl = if ($env:CLEANUP_SCRIPT_URL) { $env:CLEANUP_SCRIPT_URL } else { 'https://intentic.dev/cleanup.ps1' }
-                Write-Host 'intentic: opening cleanup...'
-                try { & ([scriptblock]::Create((Invoke-RestMethod $CleanupScriptUrl))) } catch { Write-Warning "cleanup did not run: $($_.Exception.Message)" }
-                Write-Host 'intentic: continuing with this sandbox...'
-            } elseif ($choice -match '^[qQ]' -or [string]::IsNullOrWhiteSpace($choice)) {
-                Write-Host 'intentic: aborted - no sandbox started.'
-                exit 0
-            }
-            # c (or anything else) => start alongside
+        Remove-Item -Force "$IcDest.tmp" -ErrorAction SilentlyContinue
+        if (Test-Path $IcDest) {
+            Write-Host "note: could not download the latest ic CLI - continuing with the installed $IcDest."
+            $Ic = $IcDest
         } else {
-            Write-Warning 'no console to prompt - starting alongside them (pass -Yes to silence, or run cleanup first).'
-        }
-    }
-}
-
-# Make the sandbox image runnable (mirrors connect.sh's ensure_image). A registry-less tag (local dev:
-# intentic-sandbox:dev) can only resolve to Docker Hub, so it is never pulled - it is rebuilt from the checkout
-# this script lives in on EVERY run, not just when missing: a cached image would otherwise silently outlive
-# Dockerfile or source edits, and docker's layer cache makes an unchanged rebuild near-instant. ($PSScriptRoot
-# is empty on the irm|iex path - no checkout there, so that path runs an existing local image as-is, or errors.)
-# Registry images are pulled even when cached so the moving `stable` tag always runs the newest release. The
-# image is PUBLIC; if a stale Docker Desktop `docker login ghcr.io` makes the pull "denied", clear
-# it and retry anonymously.
-$FirstSegment = ($SandboxImage -split '/', 2)[0]
-$HasRegistry = $SandboxImage.Contains('/') -and ($FirstSegment -match '[.:]' -or $FirstSegment -eq 'localhost')
-if (-not $HasRegistry) {
-    $RepoRoot = if ($PSScriptRoot) { Resolve-Path (Join-Path $PSScriptRoot '../../../..') } else { $null }
-    $Dockerfile = if ($RepoRoot) { Join-Path $RepoRoot '_sandbox/sandbox/Dockerfile' } else { $null }
-    if (-not $Dockerfile -or -not (Test-Path $Dockerfile)) {
-        docker image inspect $SandboxImage *> $null
-        if ($LASTEXITCODE -eq 0) {
-            Write-Host "intentic: using the existing local sandbox image $SandboxImage (no intentic checkout found to rebuild it from)."
-        } else {
-            Write-Error "'$SandboxImage' is a local dev tag that isn't built, and no intentic checkout was found to build it from - run 'pnpm build:sandbox' in the repo, or remove SANDBOX_IMAGE to use the published image."
-            exit 1
-        }
-    } else {
-        Write-Host "intentic: building the local sandbox image $SandboxImage from your checkout (cached when unchanged; the first build takes a few minutes)..."
-        # The Dockerfile compiles OUTSIDE Docker: prepare-image-trees.sh builds the six baked packages into
-        # .image-out, consumed by the build as the named context `trees` (COPY --from=trees). A bare
-        # `docker build` can't resolve that context and fails, so both steps run together from the repo root.
-        Push-Location $RepoRoot
-        bash _tools/scripts/prepare-image-trees.sh
-        if ($LASTEXITCODE -eq 0) { docker build --build-context trees=.image-out -f _sandbox/sandbox/Dockerfile -t $SandboxImage . }
-        $buildExit = $LASTEXITCODE
-        Pop-Location
-        if ($buildExit -ne 0) {
-            docker image inspect $SandboxImage *> $null
-            if ($LASTEXITCODE -eq 0) {
-                Write-Host "intentic: building $SandboxImage failed (see the docker output above) - continuing with the PREVIOUS local build, which does NOT include your latest changes."
+            $installed = Get-Command ic -ErrorAction SilentlyContinue
+            if ($installed) {
+                Write-Host "note: could not download the latest ic CLI - continuing with the installed $($installed.Source)."
+                $Ic = $installed.Source
             } else {
-                Write-Error 'building the sandbox image failed (see the docker output above).'
-                exit 1
-            }
-        }
-    }
-} else {
-    Write-Host "intentic: pulling sandbox image $SandboxImage (first run can take a minute)..."
-    docker pull $SandboxImage
-    if ($LASTEXITCODE -ne 0) {
-        docker image inspect $SandboxImage *> $null
-        if ($LASTEXITCODE -eq 0) {
-            Write-Host 'intentic: pull failed but the image exists locally - using the local copy.'
-        } else {
-            Write-Host 'intentic: pull failed - clearing a stale ghcr.io login and retrying anonymously...'
-            docker logout ghcr.io *> $null
-            docker pull $SandboxImage
-            if ($LASTEXITCODE -ne 0) {
-                # A stale login was the guess above; it has now been cleared and the anonymous retry failed
-                # too, so an "unauthorized"/"denied" here is the registry refusing the package to everyone
-                # rather than anything about this machine. Say that, because the older wording sent users
-                # hunting through their own Docker config for a fault that is ours - a GHCR package is
-                # private until it is made public by hand (see publish-images.sh).
-                Write-Host "intentic: $SandboxImage could not be pulled without a login. An ""unauthorized"" or ""denied"" above"
-                Write-Host '          means the image''s registry package is not public - that is a packaging fault on our side,'
-                Write-Host '          not a problem with your machine. Report it, or if this org is yours make the package public'
-                Write-Host '          at https://github.com/orgs/intentic/packages, then re-run.'
-                Write-Error 'failed to pull the sandbox image (see the docker output above).'
+                Write-Error 'could not download the ic CLI and none is installed - check your network and re-run.'
                 exit 1
             }
         }
     }
 }
 
-# Point at the sandbox tunnel (sandbox-<id>.<zone> -> the daemon :8787, plus *.preview.<zone> -> the preview proxy
-# :$PreviewPort on the own-Cloudflare path). Either the platform pre-provisioned it with intentic's token (nothing to
-# do), or the bundled CLI creates/refreshes it with the user's token and prints the connector token below.
-if ($ProvidedTunnel) {
-    $SandboxPublicUrl = "https://$SandboxHostname"
-} else {
-    Write-Host 'intentic: creating the sandbox tunnel...'
-    # --entrypoint intentic: the image's default entrypoint is the daemon; we want the bundled CLI instead.
-    $tunnelArgs = @('run', '--rm', '--entrypoint', 'intentic', '-e', "CLOUDFLARE_API_TOKEN=$CfToken", '-e', "CONNECT_TOKEN=$ConnectToken")
-    if ($Zone) { $tunnelArgs += @('-e', "ZONE=$Zone") }
-    $tunnelArgs += @($SandboxImage, 'tunnel', 'sandbox', '--service', "http://${OriginHost}:8787", '--preview-service', "http://${OriginHost}:$PreviewPort", '--ssh-service', "ssh://${OriginHost}:22")
-    if ($Subdomain) { $tunnelArgs += @('--subdomain', $Subdomain) }
-    $tunnelOut = & docker $tunnelArgs
-    $TunnelToken = ($tunnelOut | Where-Object { $_ -like 'TUNNEL_TOKEN=*' } | Select-Object -First 1) -replace '^TUNNEL_TOKEN=', ''
-    $SandboxHostname = ($tunnelOut | Where-Object { $_ -like 'SANDBOX_HOSTNAME=*' } | Select-Object -First 1) -replace '^SANDBOX_HOSTNAME=', ''
-    if (-not $TunnelToken -or -not $SandboxHostname) {
-        Write-Error 'failed to create the sandbox tunnel (see the output above).'
-        exit 1
-    }
-    $SandboxPublicUrl = "https://$SandboxHostname"
-}
-
-# cloudflared (the sidecar below) reaches the sandbox by container name on this shared network; create it first.
-docker network inspect $Network *> $null
-if ($LASTEXITCODE -ne 0) { docker network create $Network | Out-Null }
-docker rm -f $Container *> $null
-
-# Self-host on Windows = a Docker-in-Docker "host" the sandbox deploys onto over SSH (Windows can't be a native
-# SSH+Docker target). The sandbox runs ALONGSIDE it on Docker Desktop, NOT inside it - the control plane stays an
-# unprivileged container outside its (privileged) targets, can drive several of them, and outlives any one being
-# rebuilt; it reaches this one over SSH exactly like a remote host. Stand it up on the shared network so the
-# sandbox resolves it by name; the key is generated INSIDE the target (no Windows ssh-keygen needed, and it stays
-# root-owned), and its private half rides into the sandbox as HOST_SSH_KEY. Mirrors _tools/scripts/intentic-local.sh.
-if ($SelfHost) {
-    Write-Host 'intentic: starting the Docker-in-Docker deploy target...'
-    docker rm -f $DindContainer *> $null
-    docker run -d --privileged --restart unless-stopped --name $DindContainer `
-        --network $Network `
-        -e DOCKER_TLS_CERTDIR= `
-        -v "${DindVolume}:/var/lib/docker" `
-        --dns 1.1.1.1 --dns 1.0.0.1 `
-        $DindImage | Out-Null
-    if ($LASTEXITCODE -ne 0) {
-        Write-Error 'failed to start the Docker-in-Docker deploy target (see the docker output above).'
-        exit 1
-    }
-    # Wait until `docker exec` works, then generate a fresh ed25519 key inside the target and authorize it as the
-    # target's only key (root-owned, 600 - sshd rejects loose modes). The private half is read out for the sandbox.
-    for ($i = 0; $i -lt 60; $i++) { docker exec $DindContainer true *> $null; if ($LASTEXITCODE -eq 0) { break }; Start-Sleep -Seconds 1 }
-    docker exec $DindContainer sh -c 'ssh-keygen -t ed25519 -N "" -C intentic-dind -f /root/.ssh/intentic_ed25519 >/dev/null && cat /root/.ssh/intentic_ed25519.pub > /root/.ssh/authorized_keys && chmod 600 /root/.ssh/authorized_keys' *> $null
-    if ($LASTEXITCODE -ne 0) {
-        Write-Error 'failed to provision the deploy target''s SSH key (see the docker output above).'
-        exit 1
-    }
-    $HostSshKey = (docker exec $DindContainer cat /root/.ssh/intentic_ed25519) -join "`n"
-    $SelfHostUser = 'root'
-    $SelfHostAddress = $DindContainer
-    Write-Host "intentic: deploy target '$DindContainer' is ready (the sandbox reaches it over SSH on the shared network)."
-}
-
-# Runs UNPRIVILEGED: container privileges come only from "# intentic:runtime" directives in an owner-approved
-# overlay, applied by recreate.sh on a rebuild (the docker capability's --privileged for its ISOLATED nested
-# engine, the vpn's tun + NET_ADMIN). The image bakes Docker + Compose but the engine stays dormant until that
-# grant; the host's Docker socket is never mounted. SELF_HOST_* (when self-host is on) point the sandbox's
-# `self` deploy target at the Docker-in-Docker host above.
-#
-# HOW THE CONTAINER IS RUN is not written in this script. The docker-run shape - volumes, network + alias,
-# capability posture, which env rides in - is the run contract (@intentic/sandbox-run), and the image itself
-# speaks it: the pairs below go in NUL-framed on stdin (empties are dropped CLI-side, where an empty secret
-# would shadow the workspace .env the user writes later), `intentic sandbox run-command --format json`
-# answers with the docker argv, and PowerShell splats it. Values pass as whole array elements, so spaces and
-# the multi-line HOST_SSH_KEY survive without any quoting rules of this dialect's own.
-
-# The platform as seen FROM the container, for the daemon's announce - the POST that writes daemonUrl +
-# lastSeenAt, which is the ONLY thing the setup screen waits on (it never resolves the sandbox hostname itself).
-# The daemon skips announcing entirely when PLATFORM_URL is empty, so omitting this leaves the setup screen
-# spinning forever on a sandbox that is up and reachable. A localhost dev platform is reachable from the
-# container at host.docker.internal, which Docker Desktop resolves on Windows without an --add-host.
-$PlatformUrlContainer = $PlatformUrl -replace '//localhost', '//host.docker.internal' -replace '//127\.0\.0\.1', '//host.docker.internal'
-$EnvPairs = @(
-    'WORKSPACE_ROOT=/work',
-    'HISTORY_ROOT=/history',
-    'SANDBOX_HOST=0.0.0.0',
-    'SANDBOX_PORT=8787',
-    "PREVIEW_PORT=$PreviewPort",
-    "GOOGLE_CLIENT_ID=$GoogleClientId",
-    "CONNECT_TOKEN=$ConnectToken",
-    "OWNER_EMAIL=$OwnerEmail",
-    "WEB_ORIGIN=$WebOrigin",
-    "SANDBOX_PUBLIC_URL=$SandboxPublicUrl",
-    "PLATFORM_URL=$PlatformUrlContainer",
-    "CLOUDFLARE_API_TOKEN=$CfToken",
-    "SELF_HOST_ADDRESS=$SelfHostAddress",
-    "SELF_HOST_USER=$SelfHostUser",
-    "HOST_SSH_KEY=$HostSshKey",
-    "SYNC_PAIR_TOKEN=$SyncPairToken"
-)
-if ($AgentAuthVolume) { $EnvPairs += 'AGENT_AUTH_DIR=/agent-auth' }
-$VerbArgs = @('sandbox', 'run-command', '--slug', $Slug, '--image', $SandboxImage, '--base-image', $SandboxImage, '--format', 'json')
-if ($AgentAuthVolume) { $VerbArgs += @('--mounts', "${AgentAuthVolume}:/agent-auth") }
-$ArgvJson = ($EnvPairs -join "`0") + "`0" | docker run -i --rm --entrypoint intentic $SandboxImage @VerbArgs
-if ($LASTEXITCODE -ne 0 -or -not $ArgvJson) {
-    Write-Error "$SandboxImage could not produce its run command (see the docker output above)."
-    exit 1
-}
-# Two attempts, because exactly one part of the run may fail without the sandbox being broken. The run
-# contract publishes a LOOPBACK SHORTCUT - 127.0.0.1:<port derived from the sandbox id>:8787 - so a browser on
-# this machine reaches the daemon directly instead of going out to Cloudflare and back. docker refuses the
-# WHOLE launch when something already holds that port, so the retry drops just the shortcut. Any other failure
-# fails both attempts. The failed attempt leaves a created-but-stopped container holding the name.
-# SPLATTING NEEDS A VARIABLE. `docker @($json | ConvertFrom-Json)` reads like a splat and is not one: `@(...)`
-# is the array SUBEXPRESSION operator, so the argv array reaches docker as a single argument, space-joined -
-# `docker: unknown command: docker run -d --init ...`, with the whole run line quoted back. Only `@name`
-# splats, so the array is named first.
-$RunArgs = @($ArgvJson | ConvertFrom-Json)
-docker @RunArgs | Out-Null
-if ($LASTEXITCODE -ne 0) {
-    docker rm -f $Container *> $null
-    $ArgvJson = ($EnvPairs -join "`0") + "`0" | docker run -i --rm --entrypoint intentic $SandboxImage @VerbArgs --no-local-publish
-    if ($LASTEXITCODE -ne 0 -or -not $ArgvJson) {
-        Write-Error "$SandboxImage could not produce its run command (see the docker output above)."
-        exit 1
-    }
-    $RunArgs = @($ArgvJson | ConvertFrom-Json)
-    docker @RunArgs | Out-Null
-    if ($LASTEXITCODE -ne 0) {
-        Write-Error 'failed to start the sandbox container (see the docker output above).'
-        exit 1
-    }
-    Write-Host 'intentic: started without the local shortcut (its port is taken) - this browser reaches the sandbox over its tunnel.'
-}
-
-# Start the tunnel connector: cloudflared on the shared network routes sandbox-<id>.<zone> -> the daemon and
-# *.preview.<zone> -> the app preview. It retries until the sandbox is up, so ordering is not critical.
-Write-Host 'intentic: starting the sandbox tunnel connector...'
-docker rm -f $TunnelContainer *> $null
-docker run -d --restart unless-stopped --name $TunnelContainer --network $Network `
-    $CloudflaredImage tunnel --no-autoupdate run --token $TunnelToken | Out-Null
-
-$StopList = "$Container $TunnelContainer"
-if ($SelfHost) { $StopList += " $DindContainer" }
-Write-Host 'intentic sandbox started.'
-Write-Host "Your sandbox will be reachable at $SandboxPublicUrl (DNS may take a few seconds to propagate)."
-Write-Host 'Return to the platform - setup will continue automatically once it connects.'
-
-# Desktop sync chosen at setup: the same paste covers it. Wait for the sandbox over its PUBLIC url (tunnel +
-# DNS can take a minute), then run the standard sync bootstrap - never fatal, the sandbox is already up.
-# sync.ps1's Write-Error calls throw under Stop (caught here); the agent's own failures land in $LASTEXITCODE.
-if ($SyncDir -and $SyncPairToken) {
-    Write-Host 'intentic: waiting for your sandbox to come online to set up desktop sync...'
-    $syncOk = $false
-    for ($i = 0; $i -lt 60; $i++) {
-        try {
-            Invoke-RestMethod -Uri "$SandboxPublicUrl/health" -TimeoutSec 5 | Out-Null
-            $syncOk = $true
-            break
-        } catch {
-            Start-Sleep -Seconds 3
-        }
-    }
-    if ($syncOk) {
-        $env:SANDBOX_URL = $SandboxPublicUrl; $env:PAIR_TOKEN = $SyncPairToken; $env:SYNC_DIR = $SyncDir
-        $SyncScriptUrl = if ($env:SYNC_SCRIPT_URL) { $env:SYNC_SCRIPT_URL } else { 'https://intentic.dev/sync.ps1' }
-        try {
-            irm $SyncScriptUrl | iex
-            if ($LASTEXITCODE -ne 0) { $syncOk = $false }
-        } catch {
-            $syncOk = $false
-        }
-    }
-    if (-not $syncOk) {
-        Write-Warning "desktop sync didn't finish. Your sandbox is fine - enable sync any time from the workspace's Desktop sync card."
-    }
-}
-
-if (-not $SelfHost) {
-    Write-Host 'Reachable only - no deploy target. To deploy an app onto this PC later, re-run with $env:SELF_HOST=''1''.'
-}
-Write-Host "Logs: docker logs -f $Container"
-Write-Host "Stop (keeps your /work): docker stop $StopList"
-Write-Host "Reset this sandbox (also removes its /work volume): & ([scriptblock]::Create((irm https://intentic.dev/cleanup.ps1))) -Slug $Slug -Yes"
+# Everything else - claim, tunnels, launch, the dind deploy target, sync - is ic's. The env this shell
+# carries (CF_TOKEN, SANDBOX_IMAGE, SELF_HOST, ...) rides along.
+$IcArgs = @('sandbox', 'connect')
+if ($SetupCode) { $IcArgs += $SetupCode }
+if ($Yes) { $IcArgs += '-y' }
+& $Ic @IcArgs
+exit $LASTEXITCODE

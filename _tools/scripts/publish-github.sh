@@ -97,7 +97,7 @@ upload_one() {
 }
 
 pids=()
-for f in _sandbox/sync/dist-bin/* _computers/host/dist-bin/* _editor/desktop-app/dist-bin/*; do
+for f in _sandbox/sync/dist-bin/* _computers/host/dist-bin/* _sandbox/ic/dist-bin/* _editor/desktop-app/dist-bin/*; do
   upload_one "$f" &
   pids+=("$!")
 done

@@ -19,6 +19,8 @@
 _editor/desktop-app/src-tauri/target
 _editor/desktop-app/src-tauri/gen
 _site/site/public/desktop
+# ic (the host-side CLI): its Rust build tree.
+_sandbox/ic/target
 /tmp
 **/tmp
 **/.astro-indexnow-cache.json

@@ -129,35 +129,27 @@ fn write_json<T: Serialize>(path: &Path, value: &T) {
 mod tests {
     use super::*;
 
-    /* THE DEFAULT, PINNED TO THE SCRIPTS' OWN.
+    /* THE DEFAULT, PINNED TO THE CONNECT FLOW'S OWN.
      *
      * This app spawns the shipped connect scripts precisely so the desktop and terminal paths cannot disagree
      * (scripts.rs states the case). But it passes PLATFORM_URL in explicitly, which overrides the default the
-     * script would otherwise pick for itself — so on this one value the two ARE two copies, and the copy here
+     * flow would otherwise pick for itself — so on this one value the two ARE two copies, and the copy here
      * was wrong: it pointed at the SPA, the claim POST hit a static site, and every desktop install failed on
      * `HTTP 405 Method Not Allowed` one step after "redeeming the setup code".
      *
-     * A constant cannot be verified by a Linux CI job talking to the real platform, and it first executes on a
-     * user's machine. What it CAN be checked against is the file it has to agree with, which ships in this
-     * same commit. */
+     * The default lives in the ic host-side CLI now (the scripts are bootstrap shims that forward env), so
+     * this pins against ic's source — which ships in this same repo, in this same commit. */
     #[test]
-    fn the_platform_default_is_the_one_the_connect_scripts_pick_for_themselves() {
-        let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-            .join("../../../_site/site/public/scripts");
-        let sh = std::fs::read_to_string(dir.join("connect.sh")).expect("connect.sh is readable");
-        let ps1 =
-            std::fs::read_to_string(dir.join("connect.ps1")).expect("connect.ps1 is readable");
+    fn the_platform_default_is_the_one_the_connect_flow_picks_for_itself() {
+        let connect = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../../../_sandbox/ic/src/sandbox/connect.rs");
+        let source = std::fs::read_to_string(connect).expect("ic's connect.rs is readable");
 
         assert!(
-            sh.contains(&format!("PLATFORM_URL=\"${{PLATFORM_URL:-{PLATFORM_URL}}}\"")),
-            "connect.sh no longer falls back to {PLATFORM_URL}. Whatever it picks now is what a pasted \
-             command uses, and this app has to hand the same thing to the script it spawns — the platform's \
-             API origin, never the app's, which answers a claim POST with 405.",
-        );
-        assert!(
-            ps1.contains(&format!("else {{ '{PLATFORM_URL}' }}")),
-            "connect.ps1 no longer falls back to {PLATFORM_URL} — see the message above; the PowerShell \
-             sibling has to agree with connect.sh and with this crate.",
+            source.contains(&format!("env_or(\"PLATFORM_URL\", \"{PLATFORM_URL}\")")),
+            "ic's connect flow no longer falls back to {PLATFORM_URL}. Whatever it picks now is what a \
+             pasted command uses, and this app has to hand the same thing to the flow it spawns — the \
+             platform's API origin, never the app's, which answers a claim POST with 405.",
         );
     }
 }

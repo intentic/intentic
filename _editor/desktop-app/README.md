@@ -79,9 +79,12 @@ provisioning, the sandbox lifecycle. That is ~1,400 lines whose only job is to s
 the last time it broke), and the reason the experiment was shelved.
 
 Spawning the scripts makes parity structural: the desktop path and the terminal path are the same file, and a
-fix to `connect.sh` reaches desktop users on the app's next release without anyone porting it. What is left in
-Rust is the three things a script cannot do for itself — find itself, get the elevation it needs, and say what
-it is doing to a window instead of a terminal ([`src-tauri/src/scripts.rs`](src-tauri/src/scripts.rs)).
+fix to the flow reaches desktop users without anyone porting it. The scripts themselves are bootstrap shims
+now — the flow lives in the `ic` host-side CLI (`_sandbox/ic`), which each shim fetches from the release and
+hands over to — so the app, the pasted one-liner and a hand-typed `ic` all run one implementation. What is
+left in Rust here is the three things a script cannot do for itself — find itself, get the elevation it
+needs, and say what it is doing to a window instead of a terminal
+([`src-tauri/src/scripts.rs`](src-tauri/src/scripts.rs)).
 
 | Action | What it spawns |
 | --- | --- |
@@ -93,7 +96,8 @@ it is doing to a window instead of a terminal ([`src-tauri/src/scripts.rs`](src-
 
 The scripts are **bundled as resources** from `_site/site/public/scripts/` (`tauri.conf.json` globs the whole
 directory, so a script added to the site is bundled by construction). A release of the app is cut from one
-commit, so `Intentic 1.2.0` ships `connect.sh@1.2.0`, and the updater is what keeps them fresh.
+commit, so `Intentic 1.2.0` ships `connect.sh@1.2.0`; the shims fetch the newest released `ic` at run time,
+which is how flow fixes reach app users between app updates.
 
 ## Sign-in never happens in the webview
 

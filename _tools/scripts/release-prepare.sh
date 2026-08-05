@@ -23,6 +23,9 @@ bash "$DIR/set-versions.sh" "$VERSION"
 bash "$DIR/build-agent-binaries.sh" _sandbox/sync intentic-sync linux-x64 linux-arm64 darwin-x64 darwin-arm64 windows-x64
 # The connected-computer agent ships for exactly the platforms the capability offers cards for (Windows, Linux).
 bash "$DIR/build-agent-binaries.sh" _computers/host intentic-host linux-x64 linux-arm64 windows-x64
+# The ic host-side CLI ships for every platform a connect/recreate one-liner can land on: the .sh shims cover
+# Linux + macOS, the .ps1 shims Windows. darwin needs $SDKROOT in the release image (build-ic.sh header).
+bash "$DIR/build-ic.sh" linux-x64 linux-arm64 windows-x64 darwin-x64 darwin-arm64
 # The desktop app: installers rather than a bun binary, but it stages into _editor/desktop-app/dist-bin all the same,
 # so the export below ships it verbatim.
 bash "$DIR/build-desktop.sh" "$VERSION"

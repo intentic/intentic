@@ -71,6 +71,7 @@ jobs:
       ci-base: ${{ steps.filter.outputs.ci-base }}
       ci-desktop: ${{ steps.filter.outputs.ci-desktop }}
       desktop: ${{ steps.filter.outputs.desktop }}
+      ic: ${{ steps.filter.outputs.ic }}
       images: ${{ steps.filter.outputs.images }}
       platform: ${{ steps.filter.outputs.platform }}
     steps:
@@ -163,6 +164,9 @@ jobs:
           # names it (desktop-app, desktop-smoke, ui, tsconfig) and each entry is one of them. _tools/ci-desktop
           # is here because the job's IMAGE is an input like any other.
           echo "desktop=$(match '^(_editor/desktop-app/|_site/site/public/scripts/|_editor/ui/|_tools/ci-desktop/|_tools/desktop-smoke/|_tools/tsconfig/|pnpm-lock\.yaml)')" >> "$GITHUB_OUTPUT"
+          # The ic host-side CLI (Rust) — its own crate, checked by ic-check with the same cargo gate the
+          # desktop crate gets. The scripts dir is an input too: the shims and the binary are one flow.
+          echo "ic=$(match '^(_sandbox/ic/|_site/site/public/scripts/)')" >> "$GITHUB_OUTPUT"
           # The sandbox/dind-host image closure: the baked trees plus the context COPYs and the workspace
           # packages they depend on. Groups are matched wholesale — hand-enumerating subdirs is how
           # iq/lsp/_extensions silently fell out of the trigger last time. The three groups NOT listed
@@ -388,6 +392,33 @@ jobs:
       - run: cargo fmt --manifest-path _editor/desktop-app/src-tauri/Cargo.toml --all --check
       - run: cargo clippy --manifest-path _editor/desktop-app/src-tauri/Cargo.toml --all-targets -- -D warnings
       - run: cargo test --manifest-path _editor/desktop-app/src-tauri/Cargo.toml
+
+  # The ic host-side CLI (_sandbox/ic, Rust): the binary behind the connect/recreate/connect-host bootstrap
+  # shims. Same cargo gate as the desktop crate — fmt, clippy at -D warnings, tests — in the same image (it
+  # bakes the rust toolchain); no webkit/tauri in this crate, so the build is seconds off a warm registry.
+  ic-check:
+    needs: [changes, preflight, ci-base, ci-desktop]
+    if: ${{ !cancelled() && needs.changes.outputs.ic == 'true' && needs.preflight.result == 'success' && needs.ci-base.result != 'failure' && needs.ci-desktop.result != 'failure' }}
+    runs-on: [self-hosted, intentic, desktop]
+    container:
+      image: ghcr.io/intentic/ci-desktop:latest
+      volumes:
+        - /ci-cache:/ci-cache
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+    timeout-minutes: 30
+    env:
+      CARGO_HOME: /ci-cache/cargo
+      # Its own target dir, for the same lock-and-fingerprint reasons desktop-check has its own.
+      CARGO_TARGET_DIR: /ci-cache/ic-check-target
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          clean: false
+      - run: cargo fmt --manifest-path _sandbox/ic/Cargo.toml --all --check
+      - run: cargo clippy --manifest-path _sandbox/ic/Cargo.toml --all-targets -- -D warnings
+      - run: cargo test --manifest-path _sandbox/ic/Cargo.toml
 
   # The desktop ARTIFACTS: build the Linux bundles exactly the way the release builds them, then verify what
   # came out. Two tiers, ordered by cost, each proving something the one before it cannot:
