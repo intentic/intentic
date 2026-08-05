@@ -1,4 +1,5 @@
 use tauri::{AppHandle, Manager, WebviewUrl, WebviewWindow, WebviewWindowBuilder, WindowEvent};
+use tauri_plugin_dialog::{DialogExt, MessageDialogKind};
 
 use crate::setup_link::{parse_link, Link};
 
@@ -106,13 +107,53 @@ pub fn show_workspace_at(app: &AppHandle, path: Option<&str>) {
             true
         });
     match builder.build() {
-        Ok(window) => swap_in(&window, app.get_webview_window(LAUNCHER)),
+        Ok(window) => {
+            // Closing this face steps the app into the tray rather than ending it. The window is HIDDEN, never
+            // destroyed, so reopening from the tray is instant and this webview keeps the session it signed in
+            // with instead of reloading the SPA. `Quit` in the tray menu is the only thing that ends the app.
+            let handle = app.clone();
+            window.on_window_event(move |event| {
+                if let WindowEvent::CloseRequested { api, .. } = event {
+                    api.prevent_close();
+                    hide_to_tray(&handle);
+                }
+            });
+            swap_in(&window, app.get_webview_window(LAUNCHER));
+        }
         Err(error) => eprintln!("workspace window failed to open: {error}"),
     }
 }
 
 pub fn show_workspace(app: &AppHandle) {
     show_workspace_at(app, None);
+}
+
+/// The window steps aside and the app stays up — said out loud the FIRST time it happens, and only then.
+///
+/// A window that disappears into a tray icon is only a good deal if the user can find the icon, and on Windows
+/// they often cannot: new tray icons are filed behind the overflow arrow by default, and nothing an app can do
+/// promotes itself out of there. That is how this app came to be met as the uninstaller's "Intentic is running"
+/// prompt — a process nobody could see, announcing itself at the worst possible moment. So the first hide says
+/// where the window went, where to look, and what ends the app for real.
+fn hide_to_tray(app: &AppHandle) {
+    if let Some(window) = app.get_webview_window(WORKSPACE) {
+        let _ = window.hide();
+    }
+    if !app.state::<crate::state::AppState>().claim_tray_notice() {
+        return;
+    }
+    app.dialog()
+        .message(
+            "Intentic is still running, in the system tray.\n\n\
+             Open it again from there, or right-click the tray icon and choose Quit to close it completely.\n\n\
+             On Windows the icon may be hidden behind the ^ arrow next to the clock — drag it onto the taskbar \
+             to keep it in sight.",
+        )
+        .title("Intentic is still running")
+        .kind(MessageDialogKind::Info)
+        // Never blocking: this runs on the main thread inside a window event, and waiting for an answer here
+        // is waiting on the thread that would have to draw the answer.
+        .show(|_| {});
 }
 
 /// The app's own face — the setup it was handed, and the sandboxes on this machine afterwards. The title here
@@ -130,8 +171,9 @@ pub fn show_launcher(app: &AppHandle) {
         .build();
     match result {
         Ok(window) => {
-            // Closing this face means "I am done here", not "quit" — so the workspace comes back rather than
-            // leaving a user who dismissed a failed setup with a tray icon and nothing on screen.
+            // Closing this face means "I am done here", not "quit" — so the workspace comes back. Ending the
+            // app here instead would take it away from a user one gesture after the setup they just ran, and
+            // the screen that setup was for is the one behind this window.
             let handle = app.clone();
             window.on_window_event(move |event| {
                 if matches!(event, WindowEvent::CloseRequested { .. }) {

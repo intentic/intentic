@@ -7,7 +7,7 @@ mod windows;
 
 use tauri::menu::{MenuBuilder, MenuItemBuilder};
 use tauri::tray::TrayIconBuilder;
-use tauri::{AppHandle, Emitter, Manager, RunEvent};
+use tauri::{AppHandle, Emitter, Manager};
 
 /// Every `intentic://` link — intercepted webview navigation, OS deep link, or second-instance argv — funnels
 /// through here.
@@ -106,17 +106,12 @@ pub fn run() {
         .build(tauri::generate_context!())
         .expect("intentic desktop failed to start");
 
-    app.run(|_app, event| {
-        // Closing the last window keeps the app (and its tray) alive; only Quit exits.
-        if let RunEvent::ExitRequested {
-            api, code: None, ..
-        } = event
-        {
-            api.prevent_exit();
-        }
-    });
+    app.run(|_app, _event| {});
 }
 
+/// Where the app lives once its window is closed, and the only way back out of it: closing the workspace hides
+/// rather than quits, so `Quit` here is the sole exit. That is a lot of weight on an icon the user may never
+/// have seen, which is why the first hide says in words that this menu is where the app went.
 fn create_tray(app: &AppHandle) -> tauri::Result<()> {
     let open = MenuItemBuilder::with_id("open", "Open Intentic").build(app)?;
     // "This computer", matching the window it opens — the screen covers the machine's sandboxes AND its desktop

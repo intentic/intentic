@@ -81,6 +81,20 @@ impl AppState {
         write_json(&self.config_dir.join("settings.json"), &settings);
     }
 
+    /// True exactly once per install — the first time a close hides the window instead of ending the app.
+    ///
+    /// Deliberately NOT a [`Settings`] field: the launcher UI saves that struct wholesale, so changing an
+    /// origin there would re-arm a notice the user has already read. And it claims the marker by WRITING it,
+    /// answering false if that write fails — a notice this app cannot remember having shown is one it would
+    /// show on every close, which is worse than the silence.
+    pub fn claim_tray_notice(&self) -> bool {
+        let marker = self.config_dir.join("tray-notice-shown");
+        if marker.exists() {
+            return false;
+        }
+        std::fs::write(&marker, "").is_ok()
+    }
+
     pub fn name_of(&self, slug: &str) -> Option<String> {
         self.names.lock().unwrap().get(slug).cloned()
     }

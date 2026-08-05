@@ -57,6 +57,18 @@ not, and clicking a handoff reads as the window changing screens. Two consequenc
   what appears — otherwise the app would load the SPA only to cover it a frame later.
 - **A parked setup runs on arrival.** The SPA's button is the consent; asking again on a screen the user did
   not open is what made the handoff feel like a second, unrelated installer.
+- **Closing the workspace face hides it; the app lives in the tray.** The window is hidden rather than
+  destroyed, so reopening is instant and the webview keeps the session it signed in with. Closing the launcher
+  face is a step back to the workspace. **Quit** in the tray menu is the only thing that ends the process.
+
+  The cost of that model is a process the user cannot see, and it has already been paid once: nobody found the
+  tray icon, and the app was met instead as the uninstaller's *"Intentic is running"* prompt. Windows is why —
+  it files new tray icons behind the overflow arrow by default and no app can promote itself out of there. Two
+  things answer it, and neither is optional to the design: the **first** hide explains in a dialog where the
+  window went and what ends the app ([`windows.rs`](src-tauri/src/windows.rs), `hide_to_tray` — marked once per
+  install, outside `Settings`, which the launcher UI overwrites wholesale), and the uninstaller **closes the app
+  itself** instead of asking ([`installer-hooks.nsh`](src-tauri/installer-hooks.nsh), which `installer.nsi`
+  inserts ahead of its own running-app check).
 
 ## Why it runs the scripts instead of reimplementing them
 
