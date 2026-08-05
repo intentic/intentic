@@ -28,11 +28,28 @@ docker build -q -t "$IMAGE" "$CONTEXT" >/dev/null
 failures=0
 checked=0
 
+# Container names are global to the DAEMON, and every job on the runner host shares one. A name fixed at the
+# kind is therefore a name two concurrent jobs both claim, and the second one's `docker rm -f` force-removes the
+# first one's RUNNING container — a spurious failure, and inside release-prepare.sh a spurious aborted release.
+#
+# The suffix is read from /dev/urandom rather than being $$: each job runs in its own container, so PIDs come
+# from separate namespaces and two jobs are perfectly capable of both being PID 42 — a suffix that looks unique
+# and collides exactly when it matters.
+#
+# A unique name has no next run reusing it to sweep up after a cancelled one, which is what the trap is for.
+containers=()
+RUN_TAG="$(od -An -N6 -tx1 /dev/urandom | tr -d ' \n')"
+cleanup() {
+    [ "${#containers[@]}" -eq 0 ] && return 0
+    for c in "${containers[@]}"; do docker rm -f "$c" >/dev/null 2>&1 || true; done
+}
+trap cleanup EXIT
+
 smoke() {
-    local kind="$1" container="intentic-desktop-smoke-${1}"
+    local kind="$1" container="intentic-desktop-smoke-${1}-${RUN_TAG}"
+    containers+=("$container")
     echo
     echo "==> running the ${kind} smoke"
-    docker rm -f "$container" >/dev/null 2>&1 || true
     # create + cp + start rather than `run -v "$DIST":/artifacts`: a bind mount is resolved on the DAEMON's
     # filesystem, and in CI the daemon is a separate dind service container that has never seen this job's
     # checkout — the mount would silently be an empty directory. Copying puts the artifacts across the socket,
@@ -47,7 +64,6 @@ smoke() {
     if ! docker start -a "$container"; then
         failures=$((failures + 1))
     fi
-    docker rm -f "$container" >/dev/null 2>&1 || true
 }
 
 if [ -f "$DIST/Intentic.deb" ]; then smoke deb; fi

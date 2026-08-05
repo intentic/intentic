@@ -529,11 +529,18 @@ jobs:
   # first and the sandbox READS that at runtime — the images job's sha-/latest images are built unstamped
   # (0.0.0 = dev mode), so they are NOT retaggable as a release.
   #
-  # desktop-verify is OPTIONAL: it is path-gated, and a release that touches nothing desktop-shaped must still
-  # go out. Tolerating `skipped` while requiring `success` is `optional: true`. It is not the real gate on the
-  # installers — release-prepare.sh verifies the artifacts this job builds ITSELF, because those are the bytes
-  # that get published and no other job's output can stand in for them. This edge is the cheap half: when the
-  # pipeline already knows the desktop is broken, spend zero of the release's forty minutes finding out again.
+  # desktop-verify is deliberately NOT a `needs` edge. It was one, on the theory that it was the cheap half —
+  # when the pipeline already knows the desktop is broken, don't spend the release's forty minutes finding out
+  # again. The measurement says it is not cheap and not half: desktop-verify runs build-desktop.sh and
+  # verify-desktop-install.sh, which are the exact two scripts release-prepare.sh runs itself (lines 29 and 47),
+  # and it costs 8m09s / 8m18s warm and 14m06s cold. Gating on it made a desktop-touching release pay that
+  # serially, twice.
+  #
+  # Dropping the edge costs nothing real, because that edge was never the gate on the installers. It cannot be:
+  # desktop-verify builds version 0.0.0 in its OWN target dir, so its bytes are not the published bytes, and
+  # release-prepare.sh says so at length where it re-verifies its own output. A desktop break is now discovered
+  # inside prepareCmd instead of before it — still ahead of publish-github.sh, so a broken desktop ships in
+  # neither arrangement. The job stays in the pipeline as a parallel, non-gating check.
   #
   # ci-desktop is a needs edge because this job RUNS IN that image — the same reason desktop-check and
   # desktop-verify carry it. Without it the dependency was real but undeclared, so the job started whenever
@@ -542,13 +549,12 @@ jobs:
   # the point — the image job skips in almost every pipeline, and this edge only has to bind in the ones where
   # it doesn't.
   release:
-    needs: [verify-core, desktop-verify, ci-base, ci-desktop]
+    needs: [verify-core, ci-base, ci-desktop]
     if: |
       !cancelled() && github.event_name == 'push' && github.ref == 'refs/heads/main'
       && needs.verify-core.result == 'success'
       && needs.ci-base.result != 'failure'
       && needs.ci-desktop.result != 'failure'
-      && (needs.desktop-verify.result == 'success' || needs.desktop-verify.result == 'skipped')
     runs-on: [self-hosted, intentic, desktop]
     container:
       # The desktop toolchain image: prepareCmd runs build-desktop.sh, which is a Rust build like

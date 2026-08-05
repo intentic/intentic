@@ -35,18 +35,37 @@ those three plus `ci-base` and `e2e-hermetic`. Six is that number plus one slot 
 overlap in practice: `images` starts the moment `verify-core` goes green while the other two groups are still
 running.
 
-Derive it rather than trust it — the graph is the source, and it changes:
+Derive it rather than trust it — the graph is the source, and it changes. No dependency, because `yaml` is not
+hoisted to the workspace root and `require("yaml")` from there throws:
 
 ```sh
 # widest wave of jobs with no unmet dependency
-node -e 'const Y=require("yaml"),f=require("fs");const j=Y.parse(f.readFileSync(".github/workflows/ci.yml","utf8")).jobs;
-const d=Object.fromEntries(Object.entries(j).map(([k,v])=>[k,[v.needs??[]].flat()]));const m={},L=x=>m[x]??=(d[x].length?1+Math.max(...d[x].map(L)):0);
-const w={};for(const k in j)(w[L(k)]??=[]).push(k);console.log(Math.max(...Object.values(w).map(a=>a.length)))'
+node -e 'const s=require("fs").readFileSync(".github/workflows/ci.yml","utf8").split("\n"),d={};let c=null;
+for(const l of s.slice(s.findIndex(l=>/^jobs:/.test(l))+1)){const j=l.match(/^ {2}([A-Za-z_][\w-]*):\s*$/);if(j){d[c=j[1]]=[];continue}
+const n=l.match(/^ {4}needs:\s*(.+?)\s*$/);if(n&&c)d[c]=n[1].replace(/^\[|\]$/g,"").split(",").map(x=>x.trim()).filter(Boolean)}
+const m={},L=x=>m[x]??=(d[x].length?1+Math.max(...d[x].map(L)):0),w={};for(const k in d)(w[L(k)]??=[]).push(k);
+console.log(Math.max(...Object.values(w).map(a=>a.length)))'
 ```
 
 Under-provision it and the groups queue behind each other, which is the coupling the DAG was written to
 remove: the pipeline still passes, it just serializes, and every argument about a site failure not blocking a
 platform deploy stops being true in practice.
+
+**Measured, on a host running one runner process** — 173 jobs over a 17-hour window, every one of them on a
+single instance:
+
+| | |
+| --- | --- |
+| peak jobs executing at once | **1** |
+| peak jobs waiting at once | **21** |
+| median wait before a job starts | **10m29s** |
+| p90 / max wait | **36m43s / 61m10s** |
+| host busy | 7.7h of 17h — **idle 54% of the time** |
+
+Idle and starved at once is the signature of this mistake: the work is there, the slots are not. With one
+instance the wall clock is the *sum* of every job's duration; with enough of them it is the critical path,
+which for this DAG is a little over a third of that. A 23-second `changes` job waiting 35 minutes for a slot is
+not a scheduling problem, it is a provisioning one.
 
 ---
 
@@ -107,15 +126,22 @@ Split the labels when the desktop jobs move to their own machine. Until then, bo
 
 ### The shared cache and the same-filesystem rule
 
+**The host path is `/ci-cache`, and it is not configurable.** Every workflow hardcodes the mount as
+`/ci-cache:/ci-cache`, so a cache made anywhere else is a cache nothing reads — Docker would silently create an
+empty `/ci-cache` on the host and every job would run cold against it, which is the failure that looks like
+"the cache is configured and yet nothing is warm".
+
 ```sh
-mkdir -p /srv/actions/ci-cache
+mkdir -p /ci-cache
 ```
 
-Put the work directories **on the same filesystem** as it — that is what `--work /srv/actions/work-$N`
-above is for, with `/srv/actions` as one volume. Verify after the first run:
+Put the work directories **on the same filesystem** as it — that is what `--work /srv/actions/work-$N` above is
+for. If `/srv` is its own volume, either give `/ci-cache` a bind mount onto that volume or move the work dirs
+back onto the root one; the check below is what tells you which situation you are in. Verify after the first
+run:
 
 ```sh
-stat -c '%d %n' /srv/actions/ci-cache /srv/actions/work-1
+stat -c '%d %n' /ci-cache /srv/actions/work-1
 ```
 
 ### Jobs run in a container, and need two mounts
@@ -127,7 +153,7 @@ declared or the job is cold and Docker-less:
 container:
   image: ghcr.io/intentic/ci-base:latest
   volumes:
-    - /srv/actions/ci-cache:/ci-cache          # the shared stores
+    - /ci-cache:/ci-cache                      # the shared stores
     - /var/run/docker.sock:/var/run/docker.sock # the host daemon — no dind service
   credentials:
     username: ${{ github.actor }}
