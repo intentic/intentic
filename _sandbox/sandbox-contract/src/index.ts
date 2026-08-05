@@ -1,0 +1,151 @@
+import type { ContractRoute } from "./routes.js";
+import { contractRoutes, routeNameForRequest } from "./routes.js";
+import { activityContract } from "./contracts/activity.contract.js";
+import { agentContract } from "./contracts/agent.contract.js";
+import { agentsContract } from "./contracts/agents.contract.js";
+import { automationsContract } from "./contracts/automations.contract.js";
+import { capabilitiesContract } from "./contracts/capabilities.contract.js";
+import { choresContract } from "./contracts/chores.contract.js";
+import { ciContract } from "./contracts/ci.contract.js";
+import { claudeContract } from "./contracts/claude.contract.js";
+import { codexContract } from "./contracts/codex.contract.js";
+import { draftsContract } from "./contracts/drafts.contract.js";
+import { endpointsContract } from "./contracts/endpoints.contract.js";
+import { extensionsContract } from "./contracts/extensions.contract.js";
+import { geminiContract } from "./contracts/gemini.contract.js";
+import { gitContract } from "./contracts/git.contract.js";
+import { grokContract } from "./contracts/grok.contract.js";
+import { historyContract } from "./contracts/history.contract.js";
+import { intenticContract } from "./contracts/intentic.contract.js";
+import { inventoryContract } from "./contracts/inventory.contract.js";
+import { kimiContract } from "./contracts/kimi.contract.js";
+import { komodoContract } from "./contracts/komodo.contract.js";
+import { logsContract } from "./contracts/logs.contract.js";
+import { loopsContract } from "./contracts/loops.contract.js";
+import { memoryContract } from "./contracts/memory.contract.js";
+import { panelsContract } from "./contracts/panels.contract.js";
+import { portsContract } from "./contracts/ports.contract.js";
+import { publicContract } from "./contracts/public.contract.js";
+import { prepushContract } from "./contracts/prepush.contract.js";
+import { pushContract } from "./contracts/push.contract.js";
+import { secretsContract } from "./contracts/secrets.contract.js";
+import { sessionsContract } from "./contracts/sessions.contract.js";
+import { settingsContract } from "./contracts/settings.contract.js";
+import { systemContract } from "./contracts/system.contract.js";
+import { translatorContract } from "./contracts/translator.contract.js";
+import { usageContract } from "./contracts/usage.contract.js";
+import { vpnContract } from "./contracts/vpn.contract.js";
+import { workflowsContract } from "./contracts/workflows.contract.js";
+import { workspaceContract } from "./contracts/workspace.contract.js";
+
+export { activityContract } from "./contracts/activity.contract.js";
+export { agentContract } from "./contracts/agent.contract.js";
+export { agentsContract } from "./contracts/agents.contract.js";
+export { automationsContract } from "./contracts/automations.contract.js";
+export { capabilitiesContract } from "./contracts/capabilities.contract.js";
+export { choresContract } from "./contracts/chores.contract.js";
+export { ciContract } from "./contracts/ci.contract.js";
+export { claudeContract } from "./contracts/claude.contract.js";
+export { codexContract } from "./contracts/codex.contract.js";
+export { draftsContract } from "./contracts/drafts.contract.js";
+export { endpointsContract } from "./contracts/endpoints.contract.js";
+export { extensionsContract } from "./contracts/extensions.contract.js";
+export { geminiContract } from "./contracts/gemini.contract.js";
+export { gitContract } from "./contracts/git.contract.js";
+export { grokContract } from "./contracts/grok.contract.js";
+export { historyContract } from "./contracts/history.contract.js";
+/* Deliberately NOT part of `sandboxContract` below: that map is the daemon's own HTTP surface, and this one is
+ * spoken the other way round — over a connected computer's WebSocket, with the MACHINE implementing it. */
+export { hostContract } from "./contracts/host.contract.js";
+export { intenticContract } from "./contracts/intentic.contract.js";
+export { inventoryContract } from "./contracts/inventory.contract.js";
+export { kimiContract } from "./contracts/kimi.contract.js";
+export { komodoContract } from "./contracts/komodo.contract.js";
+export { logsContract } from "./contracts/logs.contract.js";
+export { loopsContract } from "./contracts/loops.contract.js";
+export { memoryContract } from "./contracts/memory.contract.js";
+export { panelsContract } from "./contracts/panels.contract.js";
+export { portsContract } from "./contracts/ports.contract.js";
+export { publicContract } from "./contracts/public.contract.js";
+export { prepushContract } from "./contracts/prepush.contract.js";
+export { pushContract } from "./contracts/push.contract.js";
+export { secretsContract } from "./contracts/secrets.contract.js";
+export { sessionsContract } from "./contracts/sessions.contract.js";
+export { settingsContract } from "./contracts/settings.contract.js";
+export { systemContract } from "./contracts/system.contract.js";
+export { translatorContract } from "./contracts/translator.contract.js";
+export { usageContract } from "./contracts/usage.contract.js";
+export { vpnContract } from "./contracts/vpn.contract.js";
+export { workflowsContract } from "./contracts/workflows.contract.js";
+export { workspaceContract } from "./contracts/workspace.contract.js";
+export * from "./events.js";
+export * from "./sse.js";
+export * from "./routes.js";
+export * from "./workspace-state.js";
+export * from "./state-portability.js";
+export * from "./history-state.js";
+export * from "./agent-catalog.js";
+export * from "./host-protocol.js";
+export * from "./hostnames.js";
+export * from "./model-order.js";
+export * from "./path-refs.js";
+export * from "./quick-model.js";
+export * from "./output-fields.js";
+export * from "./schemas.js";
+export * from "./terminal-protocol.js";
+export * from "./title.js";
+export * from "./workflow-faults.js";
+
+// The aggregated contract — implemented on the server by the per-domain route factories and consumed by the
+// browser's typed oRPC client (ContractRouterClient<typeof sandboxContract>). The wire paths it declares are
+// mounted at the sandbox root, so /health and /workspace/raw (plain Hono routes) sit alongside it.
+export const sandboxContract = {
+    activity: activityContract,
+    agent: agentContract,
+    agents: agentsContract,
+    automations: automationsContract,
+    capabilities: capabilitiesContract,
+    chores: choresContract,
+    ci: ciContract,
+    claude: claudeContract,
+    codex: codexContract,
+    drafts: draftsContract,
+    endpoints: endpointsContract,
+    extensions: extensionsContract,
+    sessions: sessionsContract,
+    settings: settingsContract,
+    intentic: intenticContract,
+    gemini: geminiContract,
+    git: gitContract,
+    grok: grokContract,
+    kimi: kimiContract,
+    komodo: komodoContract,
+    history: historyContract,
+    workspace: workspaceContract,
+    inventory: inventoryContract,
+    logs: logsContract,
+    loops: loopsContract,
+    memory: memoryContract,
+    panels: panelsContract,
+    ports: portsContract,
+    public: publicContract,
+    prepush: prepushContract,
+    push: pushContract,
+    secrets: secretsContract,
+    system: systemContract,
+    translator: translatorContract,
+    usage: usageContract,
+    vpn: vpnContract,
+    workflows: workflowsContract,
+};
+
+// Every route in THIS build of the contract, and the names the daemon advertises on its hello frame. Bound here
+// rather than in routes.ts so that module stays a pure function of whatever contract it is handed — importing
+// `sandboxContract` from there would close a load-time cycle back through this file. See routes.ts for why a
+// daemon advertises its route surface at all.
+export const SANDBOX_ROUTES: readonly ContractRoute[] = contractRoutes(sandboxContract);
+export const SANDBOX_ROUTE_NAMES: readonly string[] = SANDBOX_ROUTES.map((route) => route.name);
+
+// The contract route a concrete browser request belongs to, bound to this build's route table.
+export const sandboxRouteName = (method: string, pathWithQuery: string): string | undefined =>
+    routeNameForRequest(SANDBOX_ROUTES, method, pathWithQuery);

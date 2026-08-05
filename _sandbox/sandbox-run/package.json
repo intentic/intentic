@@ -1,0 +1,61 @@
+{
+    "name": "@intentic/sandbox-run",
+    "version": "0.0.0",
+    "description": "The sandbox container's run contract — names, capability posture, env allowlist, runtime directives, and the docker-run emitter every creation path composes from",
+    "license": "MIT",
+    "type": "module",
+    "repository": {
+        "type": "git",
+        "url": "git+https://github.com/intentic/intentic.git",
+        "directory": "_sandbox/sandbox-run"
+    },
+    "files": [
+        "dist"
+    ],
+    "publishConfig": {
+        "access": "public",
+        "registry": "https://registry.npmjs.org/"
+    },
+    "exports": {
+        ".": {
+            "types": "./dist/index.d.ts",
+            "import": {
+                "@intentic/src": "./src/index.ts",
+                "default": "./dist/index.js"
+            },
+            "require": {
+                "@intentic/src": "./src/index.ts",
+                "default": "./dist/index.js"
+            }
+        },
+        "./quote": {
+            "types": "./dist/quote.d.ts",
+            "import": {
+                "@intentic/src": "./src/quote.ts",
+                "default": "./dist/quote.js"
+            },
+            "require": {
+                "@intentic/src": "./src/quote.ts",
+                "default": "./dist/quote.js"
+            }
+        }
+    },
+    "scripts": {
+        "build": "tsgo",
+        "typecheck": "tsgo --noEmit -p tsconfig.test.json",
+        "watch": "tsgo --build --watch",
+        "test": "vitest run",
+        "test:watch": "vitest"
+    },
+    "dependencies": {
+        "@intentic/constants": "workspace:*",
+        "tslib": "catalog:"
+    },
+    "devDependencies": {
+        "@intentic/testing": "workspace:*",
+        "@intentic/tsconfig": "workspace:*",
+        "@types/node": "catalog:",
+        "@typescript/native-preview": "catalog:",
+        "vitest": "catalog:"
+    }
+}

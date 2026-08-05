@@ -1,0 +1,223 @@
+import { type Computer, type ComputerGap, type MachineReport, MachineReportSchema, type MachineSandbox } from "@intentic/sandbox-contract";
+import type { Services } from "../composition.js";
+import { enrolledMachines, machineReports } from "../platform/sync.js";
+import { hostSummaries } from "./host.routes.js";
+
+/* THE COMPUTERS VIEW'S DATA — every machine on the other end of this sandbox, however it is reachable.
+ *
+ * Two independent doors, and this is where they meet:
+ *
+ *   • The desktop-sync agent VOLUNTEERS its report on the ports poll it already makes. Costs the daemon nothing,
+ *     needs no capability, and is how most users' machines appear here.
+ *   • A `host` capability lets the daemon ASK. That is the only sanctioned channel from a sandbox to a machine —
+ *     the docker socket is never mounted (see @intentic/sandbox-run's posture comment) and the docker capability
+ *     grants a NESTED engine, so a sandbox can never see its siblings by itself. It adds the two things the
+ *     volunteered report cannot carry: the machine's containers, and machines with no sync agent at all.
+ *
+ * The pulled half deliberately runs the SAME `intentic-sync status --json` the desktop app spawns, rather than a
+ * second implementation of the same questions. One producer is what stops the terminal answer and the two
+ * on-screen answers from drifting — the argument the desktop app already makes for spawning connect.sh. */
+
+// How long a pulled report is served before the machine is asked again. Every open Computers tab polls this
+// route, and the far end is somebody's laptop over a WebSocket — so the cost of the tab must not scale with how
+// long it is left open. Comfortably shorter than the sync agent's own reporting cadence, so the pulled half is
+// never the stale one.
+const PULL_TTL_MS = 10_000;
+
+// Reading a machine's own state is a fast local command. Anything slower is a machine in trouble, and the tab is
+// better off saying so than holding the request open.
+const PULL_TIMEOUT_MS = 15_000;
+
+const pulled = new Map<string, { readonly at: number; readonly result: PullResult }>();
+
+export type PullResult = { readonly report: MachineReport } | { readonly gap: ComputerGap };
+
+/* `run_command` answers in PROSE — an exit line, then the streams under `--- stdout ---` fences (see the host
+ * agent's describeResult). That is right for the agent, which is its only other caller, and it means a machine
+ * reader has to find its JSON inside a human answer.
+ *
+ * Rather than parse the fences, take the last line that is a JSON object: the report is emitted by
+ * `JSON.stringify` on one line, and no other line in that answer can be one. It survives the fence wording
+ * changing, a shell that prepends a banner, and a stderr warning riding along. */
+const safeJson = (line: string): unknown => {
+    try {
+        return JSON.parse(line);
+    } catch {
+        return undefined;
+    }
+};
+
+export const reportFrom = (text: string): MachineReport | undefined => {
+    for (const line of text.split(/\r?\n/).toReversed()) {
+        const trimmed = line.trim();
+        if (!trimmed.startsWith("{") || !trimmed.endsWith("}")) {
+            continue;
+        }
+        // Brace-shaped is not JSON-shaped: a shell that echoed `{...}` at us, or a progress line wearing braces,
+        // must skip to the next candidate rather than take down the whole read with a parse throw.
+        const parsed = safeJson(trimmed);
+        if (parsed === undefined) {
+            continue;
+        }
+        const report = MachineReportSchema.safeParse(parsed);
+        if (report.success) {
+            return report.data;
+        }
+    }
+    return undefined;
+};
+
+// The text of an MCP tool result, plus whether the machine refused it. A refusal is a VALUE on this path (the
+// host agent's own rule), so "Run commands is off" arrives here as ordinary content rather than as a throw.
+const toolText = (answer: unknown): { text: string; refused: boolean } => {
+    const result = (answer as { result?: { content?: { text?: unknown }[]; isError?: unknown } }).result;
+    const text = (result?.content ?? []).map((part) => (typeof part.text === "string" ? part.text : "")).join("\n");
+    return { text, refused: result?.isError === true };
+};
+
+const runCommand = async (services: Services, id: string, command: string): Promise<{ text: string; refused: boolean }> =>
+    toolText(
+        await services.hostHub.mcp(id, {
+            jsonrpc: "2.0",
+            id: 1,
+            method: "tools/call",
+            params: { name: "run_command", arguments: { command, timeoutMs: PULL_TIMEOUT_MS } },
+        }),
+    );
+
+/* The machine's containers, which the sync agent never reports (a sync agent enumerating a machine's other
+ * sandboxes to one of them is the disclosure the whole design avoids by construction). Asking through a host
+ * capability is different: the owner ticked a switch that says this sandbox may run commands there.
+ *
+ * Docker's own `--format` gives one JSON object per line, so this needs no field parsing of its own. A machine
+ * with no Docker answers non-zero and contributes nothing — not an error, just a computer that runs no sandboxes. */
+const dockerRows = async (services: Services, id: string): Promise<MachineSandbox[]> => {
+    const { text } = await runCommand(services, id, `docker ps -a --filter name=^intentic-sandbox- --format '{{json .}}'`);
+    const rows = text
+        .split(/\r?\n/)
+        .map((line) => line.trim())
+        .filter((line) => line.startsWith("{"))
+        .flatMap((line) => {
+            const parsed = safeJson(line) as { Names?: unknown; State?: unknown; Image?: unknown } | undefined;
+            return typeof parsed?.Names === "string" ? [{ names: parsed.Names, state: String(parsed.State), image: String(parsed.Image) }] : [];
+        });
+    /* A workspace container and its tunnel sidecar share the `intentic-sandbox-` prefix, and a user's own
+     * subdomain may legitimately BE `tunnel-something` — so a name is only a sidecar when the workspace container
+     * it would belong to actually exists. The same rule the desktop app applies natively; nothing here guesses. */
+    const isSidecar = (name: string): boolean => {
+        const slug = name.startsWith("intentic-sandbox-tunnel-") ? name.slice("intentic-sandbox-tunnel-".length) : undefined;
+        return slug !== undefined && rows.some((row) => row.names === `intentic-sandbox-${slug}`);
+    };
+    return rows
+        .filter((row) => !isSidecar(row.names))
+        .map((row) => {
+            const slug = row.names.slice("intentic-sandbox-".length);
+            const tunnel = rows.find((candidate) => candidate.names === `intentic-sandbox-tunnel-${slug}`);
+            const sandbox: MachineSandbox = { slug, container: row.names, running: row.state === "running", image: row.image };
+            // Assigned rather than spread-in, so a sandbox with no sidecar at all has no `tunnelRunning` KEY —
+            // absent and false are different facts here (reached over the user's own proxy vs. tunnel down).
+            if (tunnel !== undefined) {
+                sandbox.tunnelRunning = tunnel.state === "running";
+            }
+            return sandbox;
+        });
+};
+
+// Ask one connected machine what it looks like. Every failure mode is a NAMED gap rather than an absence, because
+// each is a different errand for whoever is reading the tab.
+const pull = async (services: Services, id: string): Promise<PullResult> => {
+    const { text, refused } = await runCommand(services, id, `intentic-sync status --json`);
+    if (refused) {
+        // The host agent refuses out-of-scope calls as a value naming the switch. Anything else refused here is
+        // still, from the reader's side, "this machine would not answer" — and the tab's remedy is the same.
+        return { gap: "scope-off" };
+    }
+    const report = reportFrom(text);
+    if (report === undefined) {
+        return { gap: "no-agent" };
+    }
+    // The containers are the reason to have asked at all; a machine that answers the report but not docker still
+    // contributes everything else.
+    const sandboxes = await dockerRows(services, id).catch(() => []);
+    return { report: { ...report, sandboxes, agents: { ...report.agents, host: services.hostHub.state(id).version } } };
+};
+
+const pullCached = async (services: Services, id: string): Promise<PullResult> => {
+    const cached = pulled.get(id);
+    const now = Date.now();
+    if (cached !== undefined && now - cached.at < PULL_TTL_MS) {
+        return cached.result;
+    }
+    const result = await pull(services, id).catch((): PullResult => ({ gap: "offline" }));
+    pulled.set(id, { at: now, result });
+    return result;
+};
+
+/* THE RECONCILIATION, as a pure function of the three things that feed it — which machines are enrolled, what
+ * they volunteered, and what each host capability answered. Pure because this is the part with a judgement in it,
+ * and a judgement is worth testing without a WebSocket, a tmpdir and a capability store standing behind it.
+ *
+ * It is deliberately conservative: a sync enrollment and a host capability collapse into ONE row only when both
+ * produced a report and those reports agree on the hostname. Anything weaker is a guess, and the guess that goes
+ * wrong merges two collaborators' laptops into a single row on a shared sandbox. */
+export const mergeComputers = (
+    enrolled: readonly string[],
+    volunteered: readonly { machine: string; report: MachineReport }[],
+    hosts: readonly { id: string; online: boolean; result: PullResult }[],
+): Computer[] => {
+    // Driven by the ENROLLMENT list, not the report list: a machine that has never posted still gets a row, which
+    // is the whole difference between "your laptop's agent is too old to report" and the sandbox quietly
+    // pretending the laptop is not there.
+    const rows: Computer[] = enrolled.map((machine) => {
+        const report = volunteered.find((entry) => entry.machine === machine)?.report;
+        return {
+            key: report?.hostname ?? machine,
+            label: machine,
+            syncEnrolled: true,
+            ...(report === undefined ? {} : { report }),
+        };
+    });
+
+    for (const host of hosts) {
+        const report = "report" in host.result ? host.result.report : undefined;
+        const existing = report === undefined ? undefined : rows.find((row) => row.key === report.hostname);
+        if (existing !== undefined) {
+            // The same box through both doors. The pulled report wins because it alone carries the containers;
+            // the sync-enrolled label stays because it is the name this sandbox has always shown for the machine.
+            Object.assign(existing, { hostId: host.id, online: host.online, report });
+            continue;
+        }
+        rows.push({
+            key: report?.hostname ?? host.id,
+            label: host.id,
+            syncEnrolled: false,
+            hostId: host.id,
+            online: host.online,
+            ...(report === undefined ? { gap: "gap" in host.result ? host.result.gap : "offline" } : { report }),
+        });
+    }
+
+    // An enrolled machine with no report says so, rather than rendering as a computer that has no folders and no
+    // ports — which is exactly what one running an agent too old to report would otherwise look like.
+    for (const row of rows) {
+        if (row.report === undefined && row.gap === undefined) {
+            row.gap = "unreported";
+        }
+    }
+    return rows;
+};
+
+// The IO half: read both doors, ask every host that is actually up, and hand the three lists to the merge above.
+export const computers = async (services: Services): Promise<Computer[]> => {
+    const hosts = await hostSummaries(services);
+    const answered = await Promise.all(
+        hosts.map(async (host) => ({
+            id: host.id,
+            online: host.online,
+            // An offline machine is never asked: the call would hang until the hub's own timeout to produce an
+            // answer that is already knowable.
+            result: host.online ? await pullCached(services, host.id) : ({ gap: "offline" } as const),
+        })),
+    );
+    return mergeComputers(await enrolledMachines(services.config.historyRoot), await machineReports(services.config.historyRoot), answered);
+};

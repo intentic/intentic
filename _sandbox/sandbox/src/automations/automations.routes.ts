@@ -1,0 +1,145 @@
+import { randomBytes } from "node:crypto";
+import { automationsContract } from "@intentic/sandbox-contract";
+import { implement, ORPCError } from "@orpc/server";
+import { Cron } from "croner";
+import { streamAgent } from "../agent/agent.routes.js";
+import { CI_EVENT_TYPES, CI_PROVIDER } from "../ci/events.js";
+import type { Services } from "../composition.js";
+import type { OrpcContext } from "../context.js";
+import { reconcileListenerProcesses } from "../extensions/extension-processes.js";
+import { listenerProvidersOf } from "../extensions/installed-extensions.js";
+import { threadKey } from "../sessions/thread-sessions.js";
+import type { AutomationRecord } from "./automations-store.js";
+import { fireAutomation } from "./scheduler.js";
+
+// An invalid cron can only come from a hand-edited manifest (upsert rejects it) — surface "no next run"
+// rather than failing the whole list. Event automations have no next run; they fire on their webhook.
+const nextRunOf = (automation: AutomationRecord): number | undefined => {
+    if (!automation.enabled || automation.trigger.kind !== "schedule") {
+        return undefined;
+    }
+    try {
+        return new Cron(automation.trigger.cron).nextRun()?.getTime();
+    } catch {
+        return undefined;
+    }
+};
+
+// The automations manifest routes. `upsert` validates the cron with the scheduler's own parser, so what's
+// accepted here is exactly what will fire.
+export const createAutomationsRoutes = (services: Services) => {
+    const i = implement(automationsContract).$context<OrpcContext>();
+    return {
+        list: i.list.handler(async () => ({
+            // The records are this handler's own fresh read, so annotating them in place is safe.
+            automations: (await services.automations.list()).map((automation) => {
+                const nextRun = nextRunOf(automation);
+                return nextRun !== undefined ? Object.assign(automation, { nextRun }) : automation;
+            }),
+        })),
+        upsert: i.upsert.handler(async ({ input }) => {
+            if (input.trigger.kind === "schedule") {
+                try {
+                    new Cron(input.trigger.cron).nextRun();
+                } catch {
+                    throw new ORPCError("BAD_REQUEST", { message: "invalid cron expression" });
+                }
+            }
+            // A listener trigger's provider/eventType are open strings in the schema — validate them here against
+            // what's actually installed: the core gateway-less sources (`webchat`, which narrows to no event
+            // types, and `ci`, whose events the daemon's own webhook receiver dispatches) plus every provider an
+            // extension declares via contributes.listener, and that provider's declared event types.
+            if (input.trigger.kind === "listener") {
+                const { provider, eventType } = input.trigger;
+                const declared = await listenerProvidersOf(services);
+                declared.set(CI_PROVIDER, CI_EVENT_TYPES);
+                const eventTypes = declared.get(provider);
+                if (provider !== "webchat" && eventTypes === undefined) {
+                    throw new ORPCError("BAD_REQUEST", {
+                        message: `unknown listener provider "${provider}" — install the extension that declares it`,
+                    });
+                }
+                if (eventType !== undefined && eventTypes !== undefined && !eventTypes.has(eventType)) {
+                    throw new ORPCError("BAD_REQUEST", { message: `provider "${provider}" has no event type "${eventType}"` });
+                }
+            }
+            // Event: keep the round-tripped token (the enabled toggle re-posts the trigger) or mint the
+            // webhook's auth token — /automations/{id}/fire compares against it. Listener triggers need no
+            // provisioning: the listeners reconcile tick picks them up within its interval.
+            const automation =
+                input.trigger.kind === "event" && input.trigger.token === undefined
+                    ? { ...input, trigger: { ...input.trigger, token: randomBytes(24).toString("base64url") } }
+                    : input;
+            await services.automations.upsert(automation);
+            // The first enabled listener automation is what materializes its provider's gateway process (and the
+            // last one's removal below stops it) — detached, the gateway's own poll handles the rest.
+            void reconcileListenerProcesses(services);
+            return { ok: true } as const;
+        }),
+        remove: i.remove.handler(async ({ input }) => {
+            if (!(await services.automations.remove(input.id))) {
+                throw new ORPCError("NOT_FOUND", { message: "no automation with that id" });
+            }
+            void reconcileListenerProcesses(services);
+            return { ok: true } as const;
+        }),
+        // Run now — see the contract for why this fires the real path, runs the guard, skips only the approval
+        // gate, and fires even when the automation is switched off.
+        run: i.run.handler(async ({ input }) => {
+            const automation = await services.automations.get(input.id);
+            if (automation === undefined) {
+                throw new ORPCError("NOT_FOUND", { message: "no automation with that id" });
+            }
+            void fireAutomation(services, automation, streamAgent, { cleared: "approval" }).catch((error: unknown) =>
+                services.logger.error({ err: error, automation: automation.id }, "by-hand automation run failed"),
+            );
+            return { ok: true } as const;
+        }),
+        pendingList: i.pendingList.handler(async () => ({ approvals: await services.approvals.list() })),
+        // Approve a held wake: run it now with its snapshotted payload (`cleared: "both"` — its guard ran when the
+        // wake was held and the owner has now approved it), then drop the queue entry. Detached like the /fire
+        // webhook — the turn outlives this request.
+        approve: i.approve.handler(async ({ input }) => {
+            const pending = await services.approvals.get(input.id);
+            if (pending === undefined) {
+                throw new ORPCError("NOT_FOUND", { message: "no pending approval with that id" });
+            }
+            const automation = await services.automations.get(pending.automationId);
+            await services.approvals.remove(input.id);
+            if (automation === undefined) {
+                throw new ORPCError("NOT_FOUND", { message: "the automation for that approval no longer exists" });
+            }
+            void fireAutomation(services, automation, streamAgent, {
+                cleared: "both",
+                ...(pending.payload !== undefined ? { payload: pending.payload } : {}),
+                // The provenance the held fire snapshotted: an approved external wake opens the same surfaced
+                // conversation the auto path would have.
+                ...(pending.origin !== undefined ? { origin: pending.origin } : {}),
+                ...(pending.title !== undefined ? { title: pending.title } : {}),
+                // …and its THREAD, so an approved message continues the visitor's chat instead of opening a
+                // second card and a second worktree for it. Absent for a wake that owned no thread.
+                ...(pending.conversationId !== undefined ? { conversationId: pending.conversationId } : {}),
+                ...(pending.sessionId !== undefined ? { sessionId: pending.sessionId } : {}),
+            })
+                // Teach the thread what this run taught us, exactly as the dispatcher does for an auto fire —
+                // otherwise every approved message resumes the session the thread had when it was HELD, and the
+                // agent meets the visitor again on each one. The origin carries the thread's own coordinates,
+                // so this works for any source with continuing threads, not just the Doorbell.
+                .then(async (settled) => {
+                    const origin = pending.origin;
+                    if (origin?.channelId === undefined || settled.sessionId === undefined) {
+                        return;
+                    }
+                    await services.threadSessions.settle(threadKey(origin.provider, origin.automationId, origin.channelId), settled.sessionId, Date.now());
+                })
+                .catch((error: unknown) => services.logger.error({ err: error, automation: automation.id }, "approved automation run failed"));
+            return { ok: true } as const;
+        }),
+        reject: i.reject.handler(async ({ input }) => {
+            if (!(await services.approvals.remove(input.id))) {
+                throw new ORPCError("NOT_FOUND", { message: "no pending approval with that id" });
+            }
+            return { ok: true } as const;
+        }),
+    };
+};

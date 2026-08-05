@@ -1,0 +1,200 @@
+#!/usr/bin/env node
+// The in-sandbox VPN command — what the agent's skill teaches and what an owner can run in a terminal tab.
+//
+// It deliberately owns NO vpn logic: every subcommand is one call to the daemon's /vpn routes, which are the
+// same routes the browser's Status card drives. That is the whole point — a tunnel the agent dials appears in
+// the UI, a tunnel the user drops disappears for the agent, and there is exactly one implementation of what
+// connecting means (see _sandbox/sandbox/src/vpn/).
+//
+// Auth is the per-boot agent token from /run/intentic/agent.token, which app.ts admits ONLY to /vpn. So this
+// command can dial and drop the tunnels the owner configured, and cannot read the credentials behind them.
+
+import { readFileSync } from "node:fs";
+
+const TOKEN_PATH = "/run/intentic/agent.token";
+const base = `http://127.0.0.1:${process.env.SANDBOX_PORT ?? "8787"}`;
+
+const USAGE = `vpn — inspect and control this sandbox's VPN tunnels
+
+  vpn list                          every configured VPN with its live state
+  vpn status <name>                 one tunnel, same detail
+  vpn connect <name> [--otp CODE]   dial it (--otp for gateways that ask for a one-time code)
+  vpn disconnect <name>             drop it
+
+  --json                            machine-readable output for list/status
+
+VPNs are configured by the sandbox owner under Capabilities ▸ VPN.`;
+
+const die = (message) => {
+    process.stderr.write(`${message}\n`);
+    process.exit(1);
+};
+
+// Read lazily, not at startup: `vpn --help` has to work in any shell, including one where the daemon isn't
+// running yet — only an actual call needs the token.
+const token = () => {
+    try {
+        return readFileSync(TOKEN_PATH, "utf8").trim();
+    } catch {
+        return die(`vpn: no daemon token at ${TOKEN_PATH} — is the intentic daemon running in this container?`);
+    }
+};
+
+const call = async (path, init = {}) => {
+    const response = await fetch(`${base}${path}`, {
+        ...init,
+        headers: { "x-intentic-agent": token(), ...(init.body === undefined ? {} : { "content-type": "application/json" }), ...init.headers },
+    }).catch((error) => die(`vpn: cannot reach the daemon at ${base} (${error.message})`));
+    return response;
+};
+
+// A non-2xx from the daemon carries its own message — surface that rather than a bare status code.
+const failure = async (response) => {
+    const body = await response.json().catch(() => null);
+    return body?.message ?? body?.error ?? `request failed (${response.status})`;
+};
+
+const readJson = async (path) => {
+    const response = await call(path);
+    if (!response.ok) {
+        die(`vpn: ${await failure(response)}`);
+    }
+    return response.json();
+};
+
+// "14m" / "3h 20m" / "2d 4h" — an uptime a human reads at a glance.
+const ago = (since) => {
+    if (typeof since !== "number") {
+        return undefined;
+    }
+    const minutes = Math.max(0, Math.round((Date.now() - since) / 60000));
+    if (minutes < 60) {
+        return `${minutes}m`;
+    }
+    const hours = Math.floor(minutes / 60);
+    return hours < 24 ? `${hours}h ${minutes % 60}m` : `${Math.floor(hours / 24)}d ${hours % 24}h`;
+};
+
+const STATE_MARK = { connected: "●", connecting: "◐", disconnected: "○", unavailable: "◌", failed: "✕" };
+
+const renderLink = (link) => {
+    const head = `${STATE_MARK[link.state] ?? "○"} ${link.id}  ${link.state}  (${link.provider}${link.gateway ? ` · ${link.gateway}` : ""})`;
+    const facts = [
+        link.interface ? `iface ${link.interface}` : undefined,
+        link.address ? `addr ${link.address}` : undefined,
+        link.routes?.length ? `routes ${link.routes.join(", ")}` : undefined,
+        link.dns?.length ? `dns ${link.dns.join(", ")}` : undefined,
+        ago(link.since) ? `up ${ago(link.since)}` : undefined,
+        link.autoConnect ? "auto-connect" : undefined,
+    ].filter(Boolean);
+    return [head, ...(facts.length > 0 ? [`    ${facts.join(" · ")}`] : []), ...(link.detail ? [`    ${link.detail}`] : [])].join("\n");
+};
+
+// The daemon streams a connect as SSE `data: <json>` frames (the shared IntenticLine shape). Printed as they
+// arrive so a slow dial shows progress instead of silence, and an error frame ends the command non-zero.
+const streamConnect = async (id, otp) => {
+    const response = await call(`/vpn/${encodeURIComponent(id)}/connect`, {
+        method: "POST",
+        body: JSON.stringify(otp === undefined ? {} : { otp }),
+    });
+    if (!response.ok || response.body === null) {
+        die(`vpn: ${await failure(response)}`);
+    }
+    let buffer = "";
+    let failed;
+    for await (const chunk of response.body) {
+        buffer += Buffer.from(chunk).toString("utf8");
+        // SSE frames are blank-line separated; keep the trailing partial in the buffer.
+        const frames = buffer.split("\n\n");
+        buffer = frames.pop() ?? "";
+        for (const frame of frames) {
+            const data = frame
+                .split("\n")
+                .filter((line) => line.startsWith("data:"))
+                .map((line) => line.slice(5).trim())
+                .join("");
+            if (data === "") {
+                continue;
+            }
+            let line;
+            try {
+                line = JSON.parse(data);
+            } catch {
+                continue;
+            }
+            if (line.kind === "error") {
+                failed = line.message ?? "connect failed";
+            } else if (typeof line.message === "string") {
+                process.stdout.write(`${line.message}\n`);
+            }
+        }
+    }
+    if (failed !== undefined) {
+        die(`vpn: ${failed}`);
+    }
+};
+
+const main = async () => {
+    const argv = process.argv.slice(2);
+    const json = argv.includes("--json");
+    const otpAt = argv.indexOf("--otp");
+    const otp = otpAt === -1 ? undefined : argv[otpAt + 1];
+    // Drop flags, and the value that follows --otp. Guarded on otpAt !== -1: an unguarded `otpAt + 1` is 0 when
+    // there is no --otp, which would silently swallow the command itself.
+    const positional = argv.filter((arg, index) => !arg.startsWith("--") && (otpAt === -1 || index !== otpAt + 1));
+    const [command, name] = positional;
+
+    if (command === undefined || command === "help" || argv.includes("--help") || argv.includes("-h")) {
+        process.stdout.write(`${USAGE}\n`);
+        return;
+    }
+    // Reject an unknown verb BEFORE the name check below, so a typo reads as a typo rather than as a
+    // missing argument to a command that doesn't exist.
+    if (!["list", "status", "connect", "disconnect"].includes(command)) {
+        die(`vpn: unknown command "${command}"\n\n${USAGE}`);
+    }
+
+    if (command === "list") {
+        const { links } = await readJson("/vpn");
+        if (json) {
+            process.stdout.write(`${JSON.stringify(links, null, 2)}\n`);
+            return;
+        }
+        process.stdout.write(
+            links.length === 0
+                ? "No VPNs configured. The sandbox owner adds them under Capabilities ▸ VPN.\n"
+                : `${links.map(renderLink).join("\n")}\n`,
+        );
+        return;
+    }
+
+    if (name === undefined) {
+        die(`vpn: ${command} needs a VPN name — run \`vpn list\` to see them.`);
+    }
+
+    if (command === "status") {
+        const { links } = await readJson("/vpn");
+        const link = links.find((candidate) => candidate.id === name);
+        if (link === undefined) {
+            die(`vpn: no VPN named "${name}" — run \`vpn list\` to see them.`);
+        }
+        process.stdout.write(`${json ? JSON.stringify(link, null, 2) : renderLink(link)}\n`);
+        return;
+    }
+
+    if (command === "connect") {
+        if (otpAt !== -1 && (otp === undefined || otp.startsWith("--"))) {
+            die("vpn: --otp needs the one-time code as its value, e.g. --otp 123456");
+        }
+        await streamConnect(name, otp);
+        return;
+    }
+
+    const response = await call(`/vpn/${encodeURIComponent(name)}/disconnect`, { method: "POST", body: "{}" });
+    if (!response.ok) {
+        die(`vpn: ${await failure(response)}`);
+    }
+    process.stdout.write(`Disconnected ${name}.\n`);
+};
+
+await main();
