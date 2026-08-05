@@ -54,7 +54,10 @@ test("connectWithRetry propagates the last connect error once the deadline passe
             throw new Error(`ECONNRESET #${attempts}`);
         },
     };
-    await expect(connectWithRetry(executor, target, { timeoutMs: 20, intervalMs: 5 })).rejects.toThrow(/ECONNRESET #\d+/);
+    // The deadline is read AFTER the first connect, so this budget is what buys the retry the assertion below
+    // is about. At 20ms a loaded runner could stall past it between those two lines and give up after one
+    // attempt — the retry never happened, and the failure read as "connectWithRetry does not retry".
+    await expect(connectWithRetry(executor, target, { timeoutMs: 250, intervalMs: 5 })).rejects.toThrow(/ECONNRESET #\d+/);
     expect(attempts).toBeGreaterThan(1);
 });
 

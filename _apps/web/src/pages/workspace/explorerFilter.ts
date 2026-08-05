@@ -18,7 +18,7 @@ import type { WorkspaceTreeEntry } from "@intentic-app/api-contract";
 // node-side classifier this browser copy can't import), widened by the Go/Rust `_test.` suffix.
 //
 // Deliberately conservative, because a filter that eats a source file is worse than one that leaves a test in:
-// `.test.`/`.spec.` need the dot on BOTH sides, so `test-utils.ts` and `latest.ts` stay, and a bare `test.ts`
+// `.test.`/`.spec.` need the dot on BOTH sides, so `testbed.ts` and `latest.ts` stay, and a bare `test.ts`
 // stays too — that name is as often a fixture or an entry point as it is a test.
 const TEST_FILE = /\.(test|spec)\.|^test_|_test\./;
 const TEST_DIRS = new Set([`__tests__`, `__test__`, `test`, `tests`, `spec`, `specs`, `e2e`]);

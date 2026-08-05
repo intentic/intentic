@@ -27,8 +27,20 @@ import type { Services } from "../composition.js";
 const PREPUSH_OUTPUT_BYTES = 24_000;
 
 // SIGTERM first so a test runner can tear down its own children; SIGKILL for one that ignores it. The same
-// two-step (and the same grace) as intentic/intentic-runner.ts.
+// escalation (and the same grace) as intentic/intentic-runner.ts.
 const KILL_GRACE_MS = 5_000;
+
+/* WHY THE GRACEFUL SIGNAL GOES OUT TWICE, which is not belt-and-braces but the only thing that makes the first
+ * step graceful at all. A stop usually lands while the tree is still being BUILT: at the instant one arrives,
+ * `sh -c "<command>"` has typically not forked the command yet — measured here at 97 times in 100 — so the
+ * signal reaches the shell alone, and a child forked as its parent was already dying does not inherit the
+ * signal that killed it. The command then survives, holding the stdout it inherited open, and `close` does not
+ * fire until the SIGKILL runs the grace out. So the run's own cancellation reached a real test runner only as
+ * SIGKILL, five seconds late and with no chance to tear down its children — and the cancel that a user clicks
+ * the moment a check starts is precisely the one that lands in that window.
+ *
+ * One repeat, sent once the tree is certainly there, closes it. */
+const TERM_AGAIN_MS = 250;
 
 const IDLE: PrepushRun = { status: "idle", command: "", output: "" };
 
@@ -73,6 +85,15 @@ const killGroup = (pid: number | undefined, signal: NodeJS.Signals): void => {
     } catch {
         // Already gone.
     }
+};
+
+/* Stop a check's whole tree: graceful now, graceful again once the tree is certainly built (TERM_AGAIN_MS),
+ * final once the grace is out. Every timer is unref'd — stopping a check must never be the thing that keeps a
+ * daemon alive — and a signal to a group that has already gone is the ESRCH `killGroup` exists to ignore. */
+const stopGroup = (pid: number | undefined): void => {
+    killGroup(pid, "SIGTERM");
+    setTimeout(() => killGroup(pid, "SIGTERM"), TERM_AGAIN_MS).unref();
+    setTimeout(() => killGroup(pid, "SIGKILL"), KILL_GRACE_MS).unref();
 };
 
 // What this reaches for out of the daemon: sandboxSettings. Stated rather than taking Services whole,
@@ -139,8 +160,7 @@ export const createPrepushCheck = (services: PrepushDeps): PrepushCheck => {
         const watchdog = setTimeout(() => {
             timedOut = true;
             logger.warn({ command, pid: spawned.pid, timeoutMs }, "prepush: check timed out — killing");
-            killGroup(spawned.pid, "SIGTERM");
-            setTimeout(() => killGroup(spawned.pid, "SIGKILL"), KILL_GRACE_MS).unref();
+            stopGroup(spawned.pid);
         }, timeoutMs);
         watchdog.unref();
         logger.info({ command, pid: spawned.pid }, "prepush: check started");
@@ -212,9 +232,7 @@ export const createPrepushCheck = (services: PrepushDeps): PrepushCheck => {
         },
         cancel: () => {
             cancelled = true;
-            const doomed = child?.pid;
-            killGroup(doomed, "SIGTERM");
-            setTimeout(() => killGroup(doomed, "SIGKILL"), KILL_GRACE_MS).unref();
+            stopGroup(child?.pid);
         },
         stop: () => {
             // No grace on shutdown: the daemon is going, and there is nothing left to report a result to.

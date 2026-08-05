@@ -59,11 +59,45 @@ const watchRoot = (root: string): string[][] => {
     return batches;
 };
 
+// Long enough after a batch that a straggler from the same window has landed too — the watcher debounces at
+// 250ms, and everything here that clears `batches` has to outlast that or it clears them into the next
+// assertion.
+const settle = (): Promise<void> => new Promise((resolve) => setTimeout(resolve, 600));
+
+/* ATTACHING IS ASYNCHRONOUS, so waiting a constant for it is the one thing this file must not do. Setting a
+ * watcher up runs a `git rev-parse` and then chokidar's own initial scan, and on a loaded machine that outruns
+ * any number written here. What made it a bad flake rather than a slow test is that a ref moved before the
+ * watch exists is reported by NOTHING: the case then waited out its entire budget for a batch that was never
+ * coming, and failed as "timed out waiting for a ref batch" — which reads as the watcher being broken.
+ *
+ * Which is why the probe REPEATS. One move and a wait is the same bet in a different place: fire it a moment
+ * too early and there is nothing left to report it. So keep moving a ref until a move comes back — the batch
+ * is the proof, and it costs exactly what attaching took. Each `move` puts the repo back as it found it, so
+ * the case still starts from the state it was written against. */
+const attached = async (batches: string[][], move: () => Promise<void>): Promise<void> => {
+    const deadline = Date.now() + 10_000;
+    while (batches.length === 0) {
+        if (Date.now() >= deadline) {
+            throw new Error("the ref watch never reported a probe move");
+        }
+        await move();
+        await new Promise((resolve) => setTimeout(resolve, 100));
+    }
+    await settle();
+    batches.length = 0;
+};
+
+// A ref move that leaves nothing behind: the branch is created and deleted, and both halves are a real write
+// under `refs/`, which is what the watch is on.
+const probeBranch = (dir: string) => async (): Promise<void> => {
+    await git(dir, ["branch", "refwatch-probe"]);
+    await git(dir, ["branch", "-D", "refwatch-probe"]);
+};
+
 test("a commit in the root repo is reported", async () => {
     const root = await workspace();
     const batches = watchRoot(root);
-    // Give the watcher time to attach before the write it is meant to see.
-    await new Promise((resolve) => setTimeout(resolve, 300));
+    await attached(batches, probeBranch(root));
 
     await writeFile(join(root, "a.txt"), "two\n");
     await git(root, ["commit", "-am", "second"]);
@@ -75,7 +109,7 @@ test("a commit in the root repo is reported", async () => {
 test("a branch created and then deleted is reported", async () => {
     const root = await workspace();
     const batches = watchRoot(root);
-    await new Promise((resolve) => setTimeout(resolve, 300));
+    await attached(batches, probeBranch(root));
 
     await git(root, ["branch", "feature"]);
     await waitFor(() => batches.length > 0);
@@ -108,12 +142,20 @@ test("a checkout inside a linked worktree is reported, HEAD being per-worktree",
     const watch = createRefWatch(root, (listener) => (listener(["linked"]), () => undefined));
     closers.push(watch.close);
     watch.subscribe((repos) => batches.push(repos));
-    await new Promise((resolve) => setTimeout(resolve, 300));
+
+    /* Attachment is proven on the SAME per-worktree HEAD this case is about, then put back — the branch probe
+     * the other cases use would only have proved the common dir's watch, which is the half this one exists to
+     * distrust. */
+    const linked = join(root, "linked");
+    await attached(batches, async () => {
+        await git(linked, ["checkout", "--detach"]);
+        await git(linked, ["checkout", "other"]);
+    });
 
     /* Detaching writes the linked worktree's OWN HEAD in its per-worktree admin dir and touches NO ref in the
      * common dir — so this passes only if the gitdir is resolved and watched separately from the common dir.
      * (Checking out a branch would have written a common-dir ref too and let a half-right watcher through.) */
-    await git(join(root, "linked"), ["checkout", "--detach"]);
+    await git(linked, ["checkout", "--detach"]);
 
     await waitFor(() => batches.some((batch) => batch.includes("linked")));
 });
@@ -121,7 +163,7 @@ test("a checkout inside a linked worktree is reported, HEAD being per-worktree",
 test("a burst of commits coalesces into one batch", async () => {
     const root = await workspace();
     const batches = watchRoot(root);
-    await new Promise((resolve) => setTimeout(resolve, 300));
+    await attached(batches, probeBranch(root));
 
     for (const text of ["two", "three", "four"]) {
         await writeFile(join(root, "a.txt"), `${text}\n`);
@@ -129,8 +171,8 @@ test("a burst of commits coalesces into one batch", async () => {
     }
 
     await waitFor(() => batches.length > 0);
-    // Settle past the debounce window so a straggler batch would have landed by the assertion.
-    await new Promise((resolve) => setTimeout(resolve, 600));
+    // Past the debounce window, so a straggler batch would have landed by the assertion.
+    await settle();
     expect(batches.every((batch) => batch.length === 1 && batch[0] === "root")).toBe(true);
     // The point of the debounce: three commits are not three round trips to every connected browser.
     expect(batches.length).toBeLessThan(3);

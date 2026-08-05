@@ -137,7 +137,25 @@ test("a cancelled run is cancelled, not failed", async () => {
     await check.run();
     await vi.waitFor(async () => expect((await check.state()).status).toBe("running"), { timeout: 5_000 });
     check.cancel();
-    await vi.waitFor(async () => expect((await check.state()).status).toBe("cancelled"), { timeout: 5_000 });
+    // Clear of the SIGKILL grace rather than equal to it. At 5s this asserted a tighter bound than the module
+    // promises — a cancel that has to escalate settles AT the grace, so the run this test exists for arrived
+    // one millisecond after the assertion gave up, and the failure read as "cancel is broken".
+    await vi.waitFor(async () => expect((await check.state()).status).toBe("cancelled"), { timeout: 8_000 });
+}, 20_000);
+
+/* THE WINDOW A CANCEL ACTUALLY LANDS IN. `sh -c "<command>"` has usually not forked the command yet when the
+ * user's click arrives — so the first SIGTERM reaches the shell alone, and the command it spawns a moment later
+ * never inherits it. This holds that window open on purpose (the shell ignores the first signal, then starts the
+ * command it was too early to cover) and asserts the run still stops WELL INSIDE the grace: settling only when
+ * the SIGKILL lands is the check killing a runner outright, which is precisely what the graceful step exists to
+ * avoid. */
+test("a cancel reaches a command the shell had not spawned yet", async () => {
+    const { services } = fakeServices({ prepushCommand: "trap '' TERM; sleep 0.05; trap - TERM; exec sleep 30" });
+    const check = createPrepushCheck(services);
+    await check.run();
+    await vi.waitFor(async () => expect((await check.state()).status).toBe("running"), { timeout: 5_000 });
+    check.cancel();
+    await vi.waitFor(async () => expect((await check.state()).status).toBe("cancelled"), { timeout: 3_000 });
 }, 20_000);
 
 // The timeout's own SIGTERM must not be reported as the user cancelling — the one outcome this check most needs
