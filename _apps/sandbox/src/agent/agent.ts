@@ -1467,7 +1467,8 @@ export async function* runAgent(
     // have no pools to read — and no account to file a reading under (agent.routes persists only attributed
     // frames).
     const oauthToken = request.oauthToken;
-    const readUsage = oauthToken === undefined ? undefined : (): Promise<UsageWindow[]> => readClaudeUsage(oauthToken, usageFetch);
+    const readUsage =
+        oauthToken === undefined ? undefined : (): Promise<UsageWindow[]> => readClaudeUsage(oauthToken, usageFetch).then((reading) => reading.windows);
 
     const pump = (async () => {
         try {

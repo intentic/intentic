@@ -1,9 +1,9 @@
 import type { AccountUsage } from "@intentic/sandbox-contract";
 import { pino } from "pino";
-import { expect, test } from "vitest";
+import { expect, test, vi } from "vitest";
 import type { ClaudeStore, StoredAccount } from "../claude/claude-credentials.js";
 import type { AccountUsageStore } from "./account-usage.js";
-import { claudeUsageWindows, createClaudeUsageRefresher } from "./claude-usage.js";
+import { claudeUsageWindows, createClaudeUsageRefresher, readClaudeUsage } from "./claude-usage.js";
 
 /* The Anthropic OAuth usage payload, pinned — a private endpoint rather than a published contract, so what
  * these tests defend is the MAPPING: every pool the account has arrives as its own window, named the way the
@@ -109,6 +109,14 @@ test("an unreadable payload is no reading at all", () => {
     expect(claudeUsageWindows({ limits: "soon" })).toEqual([]);
 });
 
+test("a 429 carries the endpoint's own stay-away; without a readable one it is a plain failure", async () => {
+    const limited = (async () => ({ ok: false, status: 429, headers: new Headers({ "retry-after": "30" }) })) as unknown as typeof fetch;
+    expect(await readClaudeUsage("tok", limited)).toEqual({ windows: [], retryAfterMs: 30_000 });
+
+    const bare = (async () => ({ ok: false, status: 429, headers: new Headers() })) as unknown as typeof fetch;
+    expect(await readClaudeUsage("tok", bare)).toEqual({ windows: [] });
+});
+
 /* ---- the sweep ---------------------------------------------------------------------------------------------
  * What keeps a row as current as the provider's own screen. Two accounts, one fake endpoint, and no filesystem:
  * the store seams are the whole surface this touches. */
@@ -203,6 +211,41 @@ test("a refused read leaves the last good snapshot standing", async () => {
     const { store, usage, recorded } = memoryStores([account("a")], { a: known });
     await createClaudeUsageRefresher({ store, usage, fetchFn: endpoint({}, false) }).refresh();
     expect(recorded[`a`]).toBe(known);
+});
+
+/* The failure the freshness bound cannot see: inside the endpoint's stay-away every retry is a guaranteed 429
+ * that keeps the window alive — which is how pressing the refresh button made a stale reading STALER. So the
+ * stay-away binds the forced read too, and the sweep returns only once the endpoint said it would answer. */
+test("a rate-limited account is left alone — even forced — until the endpoint's stay-away has passed", async () => {
+    vi.useFakeTimers();
+    try {
+        let reads = 0;
+        const { store, usage, recorded } = memoryStores([account("a")]);
+        const refresher = createClaudeUsageRefresher({
+            store,
+            usage,
+            fetchFn: (async () => {
+                reads += 1;
+                return reads === 1
+                    ? { ok: false, status: 429, headers: new Headers({ "retry-after": "600" }) }
+                    : { ok: true, json: () => Promise.resolve(LIVE_PAYLOAD) };
+            }) as unknown as typeof fetch,
+        });
+
+        await refresher.refresh();
+        expect(reads).toBe(1);
+        expect(recorded).toEqual({});
+
+        await refresher.refresh(undefined, true);
+        expect(reads).toBe(1);
+
+        vi.advanceTimersByTime(601_000);
+        await refresher.refresh();
+        expect(reads).toBe(2);
+        expect(recorded[`a`]?.windows).toHaveLength(3);
+    } finally {
+        vi.useRealTimers();
+    }
 });
 
 test("the account list is answered on time even when the endpoint is not", async () => {

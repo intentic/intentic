@@ -136,17 +136,37 @@ export const claudeUsageWindows = (payload: unknown): UsageWindow[] => {
     return listed.length > 0 ? listed : windowsFromPools(body);
 };
 
+export interface ClaudeUsageReading {
+    readonly windows: UsageWindow[];
+    // The endpoint's own stay-away on a 429, in ms. The one failure a caller must not shrug off as "no
+    // reading": retrying inside this window is a guaranteed 429 and keeps the window alive.
+    readonly retryAfterMs?: number;
+}
+
 /* Best-effort by construction, on both triggers: a usage read must never be able to fail — or stall, hence the
  * timeout — a turn that has already produced its answer, nor an account list that has an answer of its own.
- * Every failure reads as "no reading", which the caller turns into "keep the last one". */
-export const readClaudeUsage = async (oauthToken: string, fetchFn: typeof fetch, timeoutMs = 10_000): Promise<UsageWindow[]> => {
-    const payload = await fetchFn(USAGE_ENDPOINT, {
-        headers: { Authorization: `Bearer ${oauthToken}`, "anthropic-beta": "oauth-2025-04-20" },
-        signal: AbortSignal.timeout(timeoutMs),
-    })
-        .then((response) => (response.ok ? (response.json() as Promise<unknown>) : undefined))
-        .catch(() => undefined);
-    return payload === undefined ? [] : claudeUsageWindows(payload);
+ * Every failure reads as "no reading", which the caller turns into "keep the last one" — except a rate limit,
+ * which arrives with the endpoint's own answer to "when may I ask again" and is passed through for the sweep
+ * to honour. */
+export const readClaudeUsage = async (oauthToken: string, fetchFn: typeof fetch, timeoutMs = 10_000): Promise<ClaudeUsageReading> => {
+    try {
+        const response = await fetchFn(USAGE_ENDPOINT, {
+            headers: { Authorization: `Bearer ${oauthToken}`, "anthropic-beta": "oauth-2025-04-20" },
+            signal: AbortSignal.timeout(timeoutMs),
+        });
+        if (response.status === 429) {
+            // Anthropic answers in whole seconds. A malformed or absent header reads as a plain failure —
+            // the next sweep retries on its own cadence.
+            const seconds = Number(response.headers.get("retry-after"));
+            return { windows: [], ...(Number.isFinite(seconds) && seconds > 0 ? { retryAfterMs: seconds * 1000 } : {}) };
+        }
+        if (!response.ok) {
+            return { windows: [] };
+        }
+        return { windows: claudeUsageWindows((await response.json()) as unknown) };
+    } catch {
+        return { windows: [] };
+    }
 };
 
 /* ---- keeping the readings current -------------------------------------------------------------------------
@@ -199,6 +219,11 @@ export const createClaudeUsageRefresher = (deps: {
      * caches the successes; this is what stops an endpoint that is down (or an account whose plan reports
      * nothing) from being retried on every single account list. */
     const attemptedAt = new Map<string, number>();
+    /* The endpoint's stay-away, per account. Unlike the freshness bound above, a FORCED read honours this one
+     * too: force exists for the person who doubts the number on screen, but inside this window the endpoint
+     * has already said what it will answer — a guaranteed 429 that keeps the window alive. Retrying on demand
+     * here is how pressing the refresh button made the reading STALER. */
+    const blockedUntil = new Map<string, number>();
     /* The sweep in flight, so a page load that arrives during one joins it instead of starting a second.
      *
      * A FORCED READ NEVER JOINS ONE. That sweep chose its accounts before the question was asked, so an account
@@ -213,11 +238,15 @@ export const createClaudeUsageRefresher = (deps: {
         if (token === undefined) {
             return;
         }
-        const windows = await readClaudeUsage(token, fetchFn, READ_TIMEOUT_MS);
+        const reading = await readClaudeUsage(token, fetchFn, READ_TIMEOUT_MS);
+        if (reading.retryAfterMs !== undefined) {
+            blockedUntil.set(id, Date.now() + reading.retryAfterMs);
+            return;
+        }
         // A read that failed or found no pool at all leaves the last good snapshot standing: an empty window
         // list would read as "measured, and this account has no limits" — the opposite of what happened.
-        if (windows.length > 0) {
-            await deps.usage.record(id, { windows, measuredAt: Date.now() });
+        if (reading.windows.length > 0) {
+            await deps.usage.record(id, { windows: reading.windows, measuredAt: Date.now() });
         }
     };
 
@@ -228,6 +257,7 @@ export const createClaudeUsageRefresher = (deps: {
             (account) =>
                 // A revoked credential cannot read anything; asking would only mint a 401 per sweep.
                 account.needsReauth !== true &&
+                (blockedUntil.get(account.id) ?? 0) <= now &&
                 (force || Math.max(stored[account.id]?.measuredAt ?? 0, attemptedAt.get(account.id) ?? 0) < now - FRESH_MS),
         );
         // A sandbox holds a handful of Claude accounts (the fleets are on the routed providers, which bound
