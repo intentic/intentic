@@ -1,0 +1,11 @@
+{
+    "compilerOptions": {
+        "types": ["node"],
+        "outDir": "./dist",
+        "rootDir": "./src",
+        "tsBuildInfoFile": "./.cache/tsbuildinfo"
+    },
+    "include": ["./src/**/*"],
+    "references": [{ "path": "../../_deploy/resources" }, { "path": "../../_sandbox/sandbox-contract" }],
+    "extends": "@intentic/tsconfig/tsconfig.base.json"
+}

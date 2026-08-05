@@ -1,0 +1,53 @@
+{
+    "name": "@intentic-app/api",
+    "version": "0.0.0",
+    "private": true,
+    "type": "module",
+    "main": "src/main.ts",
+    "scripts": {
+        "dev": "bun --watch --env-file=../../.env ./src/main.ts",
+        "start": "bun ./src/main.ts",
+        "typecheck": "tsgo --noEmit",
+        "docker:release": "bash ../../_tools/scripts/docker-release.sh api --prune",
+        "test": "vitest run"
+    },
+    "dependencies": {
+        "@better-auth/stripe": "catalog:",
+        "@hono/otel": "catalog:",
+        "@intentic-app/api-contract": "workspace:*",
+        "@intentic-app/localhost-https": "workspace:*",
+        "@intentic-app/prisma": "workspace:*",
+        "@intentic/constants": "workspace:*",
+        "@intentic/sandbox-contract": "workspace:*",
+        "@intentic/sandbox-run": "workspace:*",
+        "@opentelemetry/api": "catalog:",
+        "@opentelemetry/context-async-hooks": "catalog:",
+        "@opentelemetry/core": "catalog:",
+        "@opentelemetry/exporter-trace-otlp-proto": "catalog:",
+        "@opentelemetry/resources": "catalog:",
+        "@opentelemetry/sdk-trace-node": "catalog:",
+        "@opentelemetry/semantic-conventions": "catalog:",
+        "@orpc/openapi": "catalog:",
+        "@orpc/server": "catalog:",
+        "@prisma/adapter-pg": "catalog:",
+        "@prisma/client": "catalog:",
+        "@puristic/env": "catalog:",
+        "better-auth": "catalog:",
+        "hono": "catalog:",
+        "pg": "catalog:",
+        "pino": "catalog:",
+        "pino-pretty": "catalog:",
+        "prisma": "catalog:",
+        "stripe": "catalog:",
+        "tslib": "catalog:",
+        "zod": "catalog:"
+    },
+    "devDependencies": {
+        "@intentic/tsconfig": "workspace:*",
+        "@types/bun": "catalog:",
+        "@types/pg": "catalog:",
+        "@typescript/native-preview": "catalog:",
+        "bun": "catalog:",
+        "vitest": "catalog:"
+    }
+}

@@ -1,0 +1,86 @@
+{
+    "name": "@intentic/sandbox-contract",
+    "version": "0.0.0",
+    "description": "oRPC wire contract for the intentic sandbox daemon — shared by the daemon and its browser client",
+    "license": "MIT",
+    "type": "module",
+    "repository": {
+        "type": "git",
+        "url": "git+https://github.com/intentic/intentic.git",
+        "directory": "_sandbox/sandbox-contract"
+    },
+    "files": [
+        "dist",
+        "src"
+    ],
+    "publishConfig": {
+        "access": "public",
+        "registry": "https://registry.npmjs.org/"
+    },
+    "exports": {
+        ".": {
+            "types": "./dist/index.d.ts",
+            "import": {
+                "@intentic/src": "./src/index.ts",
+                "default": "./dist/index.js"
+            },
+            "require": {
+                "@intentic/src": "./src/index.ts",
+                "default": "./dist/index.js"
+            }
+        },
+        "./chores": {
+            "types": "./dist/chores/index.d.ts",
+            "import": {
+                "@intentic/src": "./src/chores/index.ts",
+                "default": "./dist/chores/index.js"
+            },
+            "require": {
+                "@intentic/src": "./src/chores/index.ts",
+                "default": "./dist/chores/index.js"
+            }
+        },
+        "./tunnel-ids": {
+            "types": "./dist/tunnel-ids.d.ts",
+            "import": {
+                "@intentic/src": "./src/tunnel-ids.ts",
+                "default": "./dist/tunnel-ids.js"
+            },
+            "require": {
+                "@intentic/src": "./src/tunnel-ids.ts",
+                "default": "./dist/tunnel-ids.js"
+            }
+        },
+        "./session-names": {
+            "types": "./dist/session-names.d.ts",
+            "import": {
+                "@intentic/src": "./src/session-names.ts",
+                "default": "./dist/session-names.js"
+            },
+            "require": {
+                "@intentic/src": "./src/session-names.ts",
+                "default": "./dist/session-names.js"
+            }
+        }
+    },
+    "scripts": {
+        "build": "tsgo",
+        "typecheck": "tsgo --noEmit -p tsconfig.test.json",
+        "watch": "tsgo --build --watch",
+        "test": "vitest run",
+        "test:watch": "vitest"
+    },
+    "dependencies": {
+        "@intentic/extension-api": "workspace:*",
+        "@intentic/registry": "workspace:*",
+        "@orpc/contract": "catalog:",
+        "tslib": "catalog:",
+        "zod": "catalog:"
+    },
+    "devDependencies": {
+        "@intentic/tsconfig": "workspace:*",
+        "@types/node": "catalog:",
+        "@typescript/native-preview": "catalog:",
+        "vitest": "catalog:"
+    }
+}

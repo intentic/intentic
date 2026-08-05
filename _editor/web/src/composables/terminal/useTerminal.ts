@@ -1,0 +1,662 @@
+import { ref, type Ref, watch } from "vue";
+import { showWorkTerminals } from "./useWorkTerminals";
+import { addPendingTerminal, dropPendingTerminal, refreshTerminals } from "./terminalsQuery";
+import { pruneTerminalMeta } from "./terminalMeta";
+import {
+    createTerminalSession,
+    disposeTerminalSession,
+    mountTerminalSession,
+    parkTerminalSession,
+    persistScrollback,
+    type TerminalSession,
+} from "./terminalSession";
+
+/* Multi-tab terminal state for the terminal panel (pages/TerminalPanel.vue): an instance (createTerminalTabs)
+ * over ONE module-level session cache, so a session's xterm/socket/scrollback survives unmount, collapse, and
+ * navigation — shells and dev-server terminals get identical live-tab semantics. The TerminalTabsSource
+ * describes the tab set: how to list sessions, and how to create/kill them. `kind` gates restart (shells
+ * only — restarting a dev-server tab is Start's job) and the background-process split: "process" sessions
+ * never tab by themselves — they live in `processes` (the popover's list) and tab only as read-only log
+ * views via viewProcess, whose × merely hides them (killing a background process is the popover's explicit
+ * Stop, never a tab close). "agent" and "job" sessions follow the same shape for a different reason: they are
+ * evidence about work that ran rather than tabs the user keeps, so unless `showWorkTerminals` is on they tab
+ * only once explicitly opened, and only until they finish — see useWorkTerminals and `revealed` below.
+ *
+ * Tabs arrange into GROUPS (VSCode's split terminals): `groups` is the strip order, each entry an ordered
+ * list of session names rendered side by side in one pane when active. Grouping is pure client view state
+ * (tmux sees flat sessions), persisted per storageKey; the daemon's list stays the truth for which sessions
+ * exist — reconcile drops dead names and appends newcomers as their own single-tab groups. */
+
+export interface TerminalTab {
+    readonly name: string;
+    // Shown on the pill; absent ⇒ the pill shows its position index (numbered shells).
+    readonly label?: string;
+    // false dims the pill (an untracked session, e.g. a finished one-shot job) and offers it to the sweep.
+    // Required, like the daemon's own field: a tab whose liveness is merely unknown has never existed.
+    readonly running: boolean;
+    // A user shell (numbered, restartable) vs a dev-server panel session (labeled, restarted via Start) vs an
+    // AI-managed agent session (labeled, sparkles icon) the Claude agent's Bash commands run in vs a job
+    // session (labeled) the daemon runs user-triggered flows in (capability adds, infra check) vs a managed
+    // background process (an extension's declared processes, dockerd — read-only log views).
+    readonly kind: "shell" | "panel" | "agent" | "job" | "process";
+    // A process row that maps to an installed extension's declared process — the address for its
+    // /extensions start/stop routes (absent on docker and orphaned sessions).
+    readonly extensionId?: string;
+    readonly processName?: string;
+}
+
+// The surfaces WORK runs on, as opposed to the PLACES the user keeps: an agent's Bash shell and the daemon's
+// job sessions are records of something that ran, and the strip treats them accordingly (hiddenFromStrip,
+// retireFinished).
+const isWork = (tab: TerminalTab): boolean => tab.kind === `agent` || tab.kind === `job`;
+
+export interface TerminalTabsSource {
+    readonly list: () => Promise<TerminalTab[]>;
+    readonly create?: () => string;
+    // Resolves once the daemon has answered and the source has settled the shared session list against that
+    // answer — which is the only reason it is async at all. The tab is gone from the strip long before then
+    // (endSession is synchronous), so nothing awaits it for the view; callers `void` it. NEVER rejects, for
+    // that same reason: a kill that failed is the source's to reconcile and report, and a promise nobody
+    // awaits is the one place a throw goes nowhere.
+    readonly kill?: (name: string) => Promise<void>;
+}
+
+// A background process's tab is a LOG VIEW: stdin off, keystrokes never reach the PTY. The container sizes the
+// PTY at birth (even for a tab that stays hidden — it would mount here).
+const createPane = (tab: TerminalTab, onExit: (name: string) => void, spawnWithin: HTMLElement | undefined): TerminalSession =>
+    createTerminalSession(tab.name, onExit, tab.kind === `process`, spawnWithin);
+
+// Sandbox switch: every cached socket points at the OLD daemon — drop them all and bump the epoch so a
+// mounted surface resets its tab state and relists against the new daemon.
+export const disposeAllSessions = (): void => {
+    for (const session of cache.values()) {
+        disposeTerminalSession(session);
+    }
+    cache.clear();
+    epoch.value += 1;
+};
+
+// The shared session cache — one xterm + socket per session name, owned by no surface. An entry is disposed
+// only when its session deliberately ends (tab ×, restart, or the daemon's exit frame); a mere unmount detaches
+// the DOM host and keeps streaming. sessionOf rebinds a cached session's exit handler to the instance that
+// touched it last, so an exit always updates a LIVE surface's tab state.
+const cache = new Map<string, TerminalSession>();
+
+// The live session behind a tab name, for the surfaces that act on a terminal rather than on the tab set — the
+// grid's own context menu (copy / paste / scrollback). Undefined for a name nothing has mounted.
+export const terminalSessionOf = (name: string): TerminalSession | undefined => cache.get(name);
+
+// Bumped whenever the cache is wiped wholesale (sandbox switch) — mounted surfaces watch it.
+const epoch = ref(0);
+
+// Snapshot every live terminal's scrollback on reload/navigation — createTerminalSession restores it.
+window.addEventListener(`pagehide`, () => {
+    for (const session of cache.values()) {
+        persistScrollback(session);
+    }
+});
+
+export interface TerminalTabs {
+    readonly order: Ref<TerminalTab[]>;
+    // The strip: ordered groups of session names; a group of one is a plain tab, more are split side by side.
+    readonly groups: Ref<string[][]>;
+    // The managed background processes ("process" kind) from the last list — the processes popover's rows.
+    readonly processes: Ref<TerminalTab[]>;
+    // The FOCUSED session — keystrokes land here; its group is the mounted pane.
+    readonly activeName: Ref<string | undefined>;
+    // Resolves true when attaching auto-created the first shell (an empty managed panel opens with one, unless
+    // `awaited` names the session the panel was opened for — see attach).
+    readonly attach: (el: HTMLElement, awaited?: string) => Promise<boolean>;
+    readonly detach: () => void;
+    readonly refresh: () => Promise<void>;
+    // Focus a specific session, refreshing the list first when it isn't tabbed yet (a row's terminal button).
+    readonly focus: (name: string) => Promise<void>;
+    // Surface a session as a tab (relist until it appears) without mounting it — never steals the active tab.
+    readonly surface: (name: string) => Promise<void>;
+    // Open (and focus) a background process's read-only log view as a tab.
+    readonly viewProcess: (name: string) => Promise<void>;
+    readonly switchTab: (name: string) => void;
+    // Inject input into the active session (the touch extra-keys row) — same path as a keystroke.
+    readonly sendInput: (data: string) => void;
+    // Merge the named sessions (strip order) into one split group at the first one's position.
+    readonly joinTabs: (names: string[]) => void;
+    // Move one session out of its split group into its own tab, right after the group.
+    readonly unsplit: (name: string) => void;
+    readonly newTab?: () => void;
+    readonly closeTab?: (name: string) => void;
+    // Open a fresh shell INSIDE the named session's group, splitting the pane (VSCode's Split Terminal).
+    readonly splitTab?: (name: string) => void;
+    // Kill several sessions at once (the strip's multi-selection).
+    readonly killTabs?: (names: string[]) => void;
+    readonly restart?: () => void;
+}
+
+// One surface's tab state. `storageKey` namespaces the remembered active tab + grouping; `onEmpty` fires when
+// the last tab ends (the panel closes itself).
+export const createTerminalTabs = (source: TerminalTabsSource, storageKey: string, onEmpty: () => void): TerminalTabs => {
+    const activeKey = `ui-${storageKey}-terminal-active`;
+    const groupsKey = `ui-${storageKey}-terminal-groups`;
+    const order = ref<TerminalTab[]>([]);
+    const processes = ref<TerminalTab[]>([]);
+    // Process sessions the user opened a log view for — the only "process" sessions that appear in `order`.
+    const viewedProcesses = new Set<string>();
+    // Work sessions (agent + job) revealed by an explicit open while the preference is off. Held for this
+    // surface's lifetime only, exactly like `viewedProcesses`: a reveal is "show me THIS, now", so it must not
+    // outlive the panel or need pruning once the session is gone.
+    //
+    // That lifetime is the whole fix for the panel that used to reopen onto a row of corpses. A reveal is an
+    // answer to a question the user asked while watching; close the panel, walk away for a day of agent turns,
+    // and the set comes back empty — so there is nothing to tidy, rather than a broom to reach for.
+    const revealed = new Set<string>();
+    const activeName = ref<string | undefined>(undefined);
+    let container: HTMLElement | undefined;
+    // The session names whose hosts are currently in the container — the active group's members.
+    let mountedNames: string[] = [];
+
+    const readGroups = (): string[][] => {
+        try {
+            const parsed: unknown = JSON.parse(window.localStorage.getItem(groupsKey) ?? `[]`);
+            if (Array.isArray(parsed)) {
+                return parsed.filter((group): group is string[] => Array.isArray(group) && group.every((name) => typeof name === `string`));
+            }
+        } catch {
+            // fall through to empty
+        }
+        return [];
+    };
+    const groups = ref<string[][]>(readGroups());
+    const persistGroups = (): void => {
+        try {
+            window.localStorage.setItem(groupsKey, JSON.stringify(groups.value));
+        } catch {
+            // Storage may be unavailable (private mode); the in-memory ref still holds.
+        }
+    };
+
+    const groupOf = (name: string): string[] => groups.value.find((group) => group.includes(name)) ?? [name];
+
+    // The kinds that are listed by the daemon but do not tab on their own: a background process (its lifecycle
+    // belongs to the processes popover) and — unless the user asked for them — the terminals WORK runs in, the
+    // agent's shells and the daemon's jobs. All become tabs the moment they are explicitly opened, and only
+    // then. `retireFinished` below is the other half: a reveal lasts as long as there is something to watch.
+    const hiddenFromStrip = (tab: TerminalTab): boolean => {
+        if (tab.kind === `process`) {
+            return !viewedProcesses.has(tab.name);
+        }
+        return isWork(tab) && !showWorkTerminals.value && !revealed.has(tab.name);
+    };
+
+    // A revealed session that has FINISHED gives its reveal up: the question the reveal answered ("what is this
+    // doing?") no longer has an answer, and the pill would otherwise sit there dimmed until the panel closed —
+    // which is the litter this whole rule exists to prevent. Two sessions are spared, both for the same reason
+    // (nobody has had their look yet):
+    //   · the tab the user is on RIGHT NOW — yanking a terminal out from under someone mid-read would be its own
+    //     bug, so it stays until they switch away (see `switchTab`)
+    //   · one that is not on the strip yet — a reveal of an ALREADY-finished session (the chat's Bash card on a
+    //     turn that has ended, the Capabilities page on an install that just landed) is decided in the same
+    //     relist that first lists it, and retiring it there would make the click do nothing at all
+    // Called on every relist, which is where a liveness change lands.
+    const retireFinished = (tabs: TerminalTab[]): void => {
+        const onStrip = new Set(order.value.map((tab) => tab.name));
+        for (const tab of tabs) {
+            if (isWork(tab) && !tab.running && onStrip.has(tab.name) && tab.name !== activeName.value) {
+                revealed.delete(tab.name);
+            }
+        }
+    };
+
+    // Takes the TAB, not just a name: what kind of pane a session needs is the daemon's answer, and a name
+    // alone can't say. Cache hits ignore the kind entirely — a session's medium never changes under it.
+    const sessionOf = (tab: TerminalTab): TerminalSession => {
+        const cached = cache.get(tab.name);
+        if (cached !== undefined) {
+            // Sessions outlive the instance that created them (the panel remounts across v-if / mobile route) —
+            // rebind so this instance's tab list is the one an exit frame updates.
+            cached.onExit = endSession;
+            return cached;
+        }
+        const session = createPane(tab, endSession, container);
+        cache.set(tab.name, session);
+        return session;
+    };
+
+    // Mount `name`'s whole group into the container — one flex cell per member, side by side — and focus
+    // `name`. The shared core moves each persistent host across (xterm is open()ed exactly once) and resyncs
+    // its PTY grid; a focusin on any cell (clicking into a split) retargets keystroke routing and the strip
+    // highlight without remounting.
+    const mount = (name: string | undefined): void => {
+        if (name === undefined || container === undefined || !order.value.some((tab) => tab.name === name)) {
+            return;
+        }
+        const listed = new Map(order.value.map((tab) => [tab.name, tab]));
+        const group = groupOf(name).filter((member) => listed.has(member));
+        for (const mounted of mountedNames) {
+            const session = cache.get(mounted);
+            if (session !== undefined) {
+                parkTerminalSession(session);
+            }
+        }
+        container.replaceChildren();
+        container.classList.toggle(`term-split`, group.length > 1);
+        for (const member of group) {
+            const tab = listed.get(member);
+            if (tab === undefined) {
+                continue;
+            }
+            const cell = document.createElement(`div`);
+            cell.className = `term-cell`;
+            // Which session this pane is — how a right-click anywhere in the grid finds the terminal under the
+            // pointer rather than assuming the focused one (they differ in a split).
+            cell.dataset[`session`] = member;
+            cell.addEventListener(`focusin`, () => {
+                activeName.value = member;
+                window.localStorage.setItem(activeKey, member);
+            });
+            container.append(cell);
+            mountTerminalSession(sessionOf(tab), cell, member === name);
+        }
+        mountedNames = group;
+        activeName.value = name;
+        window.localStorage.setItem(activeKey, name);
+    };
+
+    // Reconcile the persisted grouping against the listed tabs: dead names drop out, empty groups collapse,
+    // and every newly-listed session gets its own single-tab group at the end of the strip.
+    const reconcileGroups = (tabs: TerminalTab[]): void => {
+        const tabbed = new Set(tabs.map((tab) => tab.name));
+        const kept = groups.value.map((group) => group.filter((name) => tabbed.has(name))).filter((group) => group.length > 0);
+        const grouped = new Set(kept.flat());
+        for (const tab of tabs) {
+            if (!grouped.has(tab.name)) {
+                kept.push([tab.name]);
+            }
+        }
+        groups.value = kept;
+        persistGroups();
+    };
+
+    // Re-list the surface's sessions. Every tabbed session connects immediately — a hidden tab still streams,
+    // so switching to it is instant (tmux redraws at the fitted size). Background processes stay out of the
+    // tab set (and hold no idle sockets) until a log view is opened for them.
+    //
+    // `container` is the liveness gate, checked on BOTH sides of the await: detach() clears it, so a list still
+    // in flight when the panel tears down (a fast Ctrl+` off/on) can't write this dead instance's grouping back
+    // to localStorage, and — via mount() — can't append a session's host into a detached container, which would
+    // STEAL it from the instance that replaced us and leave the live panel a blank pane.
+    const refresh = async (): Promise<void> => {
+        if (container === undefined) {
+            return;
+        }
+        const listed = await source.list();
+        if (container === undefined) {
+            return;
+        }
+        pruneTerminalMeta(new Set(listed.map((tab) => tab.name)));
+        processes.value = listed.filter((tab) => tab.kind === `process`);
+        // Before the filter, not after: a session that just finished has to lose its reveal in time for THIS
+        // list to drop it, or it would linger a whole relist longer than the work it was showing.
+        retireFinished(listed);
+        const tabs = listed.filter((tab) => !hiddenFromStrip(tab));
+        order.value = tabs;
+        reconcileGroups(tabs);
+        for (const tab of tabs) {
+            sessionOf(tab);
+        }
+        const tabbed = new Set(tabs.map((tab) => tab.name));
+        if (activeName.value === undefined || !tabbed.has(activeName.value)) {
+            // What the panel opens ONTO. A finished session is a dead pane whose whole content is an epitaph, so
+            // it is the last thing worth restoring someone to — prefer the remembered tab only while it is still
+            // alive, then the first live one, and settle for a corpse only when every tab is one.
+            const remembered = window.localStorage.getItem(activeKey) ?? undefined;
+            const live = tabs.find((tab) => tab.running);
+            const restorable = tabs.find((tab) => tab.name === remembered && tab.running);
+            mount((restorable ?? live ?? tabs[0])?.name);
+        } else if (mountedNames.some((name) => !tabbed.has(name))) {
+            // The focused session survived but a groupmate vanished from the list (killed elsewhere) — remount
+            // the shrunken group so its host doesn't linger.
+            mount(activeName.value);
+        }
+    };
+
+    // Sandbox switch while mounted: the sessions are already disposed — drop the stale tab state and relist
+    // against the new daemon. (createTerminalTabs runs in component setup, so the watcher dies with the surface.)
+    watch(epoch, () => {
+        order.value = [];
+        processes.value = [];
+        groups.value = [];
+        viewedProcesses.clear();
+        activeName.value = undefined;
+        mountedNames = [];
+        void refresh();
+    });
+
+    // The preference toggled while the panel is open (the bar menu, the palette, the Settings row): relist, so
+    // the work terminals arrive as tabs — or leave — under the hand that just asked for it. Turning it off drops
+    // them from `order` and `groups`; refresh() re-mounts around the survivors if the focused tab was one of
+    // them, and their sockets stay parked in the cache in case the user flips back.
+    watch(showWorkTerminals, () => {
+        void refresh().then(() => {
+            // Hiding the last tab would leave the panel around a blank pane (only endSession retires it), which
+            // is the one case where the strip can empty without a session ending — so it opens a shell instead,
+            // the same thing attach() does for an empty panel.
+            if (order.value.length === 0 && source.create !== undefined) {
+                newTab();
+            }
+        });
+    });
+
+    // `awaited` is the session the panel was OPENED FOR (Start, Run tests, a capability install — whatever set
+    // the focus request that brought the panel up). It suppresses the empty-panel shell: that session's tab is
+    // seconds away, and spawning a `web-*` shell to fill the gap puts a stray "1" beside the tab the user
+    // actually asked for — plus a real tmux session behind it — for every Start on an otherwise-empty panel.
+    const attach = async (el: HTMLElement, awaited?: string): Promise<boolean> => {
+        container = el;
+        await refresh();
+        // Torn down (or re-attached) while the list was in flight — spawning the empty panel's opening shell
+        // here would leave a real tmux session nobody asked for and nothing shows, which is how a rapid Ctrl+`
+        // used to silt the sandbox up with orphan `web-*` shells.
+        if (container !== el) {
+            return false;
+        }
+        if (order.value.length === 0 && awaited === undefined && source.create !== undefined) {
+            newTab();
+            return true;
+        }
+        return false;
+    };
+
+    // Remove the mounted hosts from the DOM without touching any session — sockets, xterms, scrollback stay
+    // alive. (The cell wrappers die with the panel's own DOM.) Dropping `container` is what retires this
+    // instance: detach is only ever the unmount, and every async path re-checks it before touching the DOM.
+    const detach = (): void => {
+        for (const mounted of mountedNames) {
+            const session = cache.get(mounted);
+            if (session !== undefined) {
+                parkTerminalSession(session);
+            }
+        }
+        mountedNames = [];
+        container = undefined;
+    };
+
+    // A session ended (tab ×, or the daemon's exit frame): dispose its client state, drop the tab, focus a
+    // neighbour — its own group's survivor first — or hand off to onEmpty when it was the last.
+    const endSession = (name: string): void => {
+        viewedProcesses.delete(name);
+        revealed.delete(name);
+        // Whether or not the daemon ever listed it, this name is spent — a claim left standing would keep the
+        // session in the shared list (and in the rail's count) until the page reloaded.
+        dropPendingTerminal(name);
+        const session = cache.get(name);
+        if (session !== undefined) {
+            disposeTerminalSession(session);
+            cache.delete(name);
+        }
+        const group = groups.value.find((members) => members.includes(name));
+        groups.value = groups.value.map((members) => members.filter((member) => member !== name)).filter((members) => members.length > 0);
+        persistGroups();
+        const remaining = order.value.filter((tab) => tab.name !== name);
+        order.value = remaining;
+        // An empty strip retires the panel however the last tab went — ahead of the mounted check, which only
+        // decides whether anything needs REmounting. (A last tab that was never mounted — the panel closed
+        // before its list landed — used to leave the panel open around nothing.)
+        if (remaining.length === 0) {
+            mountedNames = [];
+            activeName.value = undefined;
+            onEmpty();
+            return;
+        }
+        if (!mountedNames.includes(name)) {
+            return;
+        }
+        mountedNames = mountedNames.filter((member) => member !== name);
+        if (activeName.value === name || activeName.value === undefined) {
+            activeName.value = undefined;
+            const survivor = group?.find((member) => remaining.some((tab) => tab.name === member));
+            mount(survivor ?? remaining[0]?.name);
+            return;
+        }
+        // A non-focused split member died — remount the shrunken group around the still-focused session.
+        mount(activeName.value);
+    };
+
+    // Open a background process's read-only log view as a tab and focus it (the processes popover's View logs).
+    const viewProcess = async (name: string): Promise<void> => {
+        viewedProcesses.add(name);
+        await refresh();
+        mount(name);
+    };
+
+    // Relist until `name` is listed. A flow ANNOUNCES its session before that session exists: the daemon names
+    // the terminal it is about to work in as its stream's first frame, and the tmux session itself is born with
+    // the flow's first command a moment later. One relist therefore asks too early — and the surface that asked
+    // was left showing whatever it had (an empty panel, or a stray shell), with the tab arriving only on the
+    // panel's ten-second poll, by which time a short install had been over for nine of them. Bounded, so a name
+    // that never materializes stops asking; the poll remains the backstop.
+    const relistUntilListed = async (name: string): Promise<void> => {
+        for (let attempt = 0; attempt < 8; attempt++) {
+            if (attempt > 0) {
+                await new Promise((resolve) => setTimeout(resolve, 250));
+                // The shared list answers from a one-second freshness window (terminalsQuery), so retries
+                // spaced tighter than that would re-read the very answer they are retrying — "no such session",
+                // four times, without asking the daemon once. Retrying IS the statement that the cached list is
+                // out of date, so give it up before asking again.
+                await refreshTerminals();
+            }
+            await refresh();
+            if (order.value.some((tab) => tab.name === name)) {
+                return;
+            }
+        }
+    };
+
+    const focus = async (name: string): Promise<void> => {
+        if (!order.value.some((tab) => tab.name === name)) {
+            // Focusing IS the explicit open that reveals a hidden work terminal (the chat's Bash card, the
+            // work-terminals popover, the Capabilities page's running install) — recorded before the relist,
+            // which is what decides whether it tabs. Unconditional: the set is only ever consulted for agent/job
+            // sessions, so a shell or panel name landing in it changes nothing.
+            revealed.add(name);
+            await relistUntilListed(name);
+        }
+        // A background-process session never tabs directly — route it through its read-only log view
+        // (`panel-docker`, an extension's gateway).
+        if (processes.value.some((process) => process.name === name)) {
+            await viewProcess(name);
+            return;
+        }
+        mount(name);
+    };
+
+    // Make a session that just appeared (the agent's `agent-<id>` the moment it runs Bash) show up as a tab
+    // WITHOUT mounting it — refresh() keeps the current active tab, so focus isn't stolen. The relist covers
+    // tmux-run's session-create lag; the common case (already listed) exits on its first check.
+    const surface = async (name: string): Promise<void> => {
+        // Only the agent channel surfaces, and by default its shells don't tab (useWorkTerminals) — so the
+        // retry loop has nothing to wait for. One relist still earns its keep: it writes the shared session
+        // list, which is what makes the work-terminals popover show the turn's shell the moment it starts
+        // rather than up to a poll later.
+        if (!showWorkTerminals.value) {
+            await refresh();
+            return;
+        }
+        await relistUntilListed(name);
+    };
+
+    // Switching away is the "looking up" that ends a finished work terminal's stay: its reveal was held only
+    // because it was the tab on screen (see retireFinished). Relist only when that actually let one go, so an
+    // ordinary switch between shells still costs nothing.
+    const switchTab = (name: string): void => {
+        mount(name);
+        const held = revealed.size;
+        retireFinished(order.value);
+        if (revealed.size !== held) {
+            void refresh();
+        }
+    };
+
+    // Programmatic input into the active session, routed through xterm's input handler (fires the same onData
+    // that a keystroke does), so the touch extra-keys row reuses the existing socket wiring.
+    const sendInput = (data: string): void => {
+        const name = activeName.value;
+        const session = name === undefined ? undefined : cache.get(name);
+        if (session !== undefined) {
+            session.term.input(data, true);
+        }
+    };
+
+    // Merge the named sessions into one split group at the first involved group's strip position (VSCode's
+    // Join Terminals on a multi-selection). Callers pass names in strip order, so the merged pane reads the
+    // same left-to-right as the strip did.
+    const joinTabs = (names: string[]): void => {
+        if (names.length < 2) {
+            return;
+        }
+        const joining = new Set(names);
+        const next: string[][] = [];
+        let placed = false;
+        for (const group of groups.value) {
+            const kept = group.filter((member) => !joining.has(member));
+            if (kept.length < group.length && !placed) {
+                next.push([...names]);
+                placed = true;
+            }
+            if (kept.length > 0) {
+                next.push(kept);
+            }
+        }
+        if (!placed) {
+            return;
+        }
+        groups.value = next;
+        persistGroups();
+        mount(activeName.value !== undefined && joining.has(activeName.value) ? activeName.value : names[0]);
+    };
+
+    // Move one session out of its split group into its own tab, placed right after the group it left.
+    const unsplit = (name: string): void => {
+        const index = groups.value.findIndex((group) => group.includes(name) && group.length > 1);
+        if (index === -1) {
+            return;
+        }
+        const next = groups.value.map((group, at) => (at === index ? group.filter((member) => member !== name) : group));
+        next.splice(index + 1, 0, [name]);
+        groups.value = next;
+        persistGroups();
+        mount(name);
+    };
+
+    if (source.create === undefined || source.kill === undefined) {
+        return {
+            order,
+            groups,
+            processes,
+            activeName,
+            attach,
+            detach,
+            refresh,
+            focus,
+            surface,
+            viewProcess,
+            switchTab,
+            sendInput,
+            joinTabs,
+            unsplit,
+        };
+    }
+    const create = source.create;
+    const kill = source.kill;
+    // Creation is implicit — opening the socket runs `tmux new-session -A` — so for the length of that
+    // handshake the daemon does not list the session. The claim (addPendingTerminal) is what carries it across:
+    // it counts on the rail the moment the tab appears, and it survives the relists that would otherwise drop
+    // the tab out from under a live socket. Retired by endSession, or by the first list that names it.
+    // The claim carries a full SESSION, not merely the tab the strip needs: `activityAt` is the one field the
+    // daemon would have filled in had it listed this name yet, and it is simply now — the browser created it a
+    // moment ago. (Inferred rather than annotated: the query's `TerminalSession` and this module's xterm-side
+    // one are different types under the same name.)
+    const claim = (name: string): TerminalTab => {
+        const tab = { name, kind: `shell` as const, running: true, activityAt: Date.now() };
+        addPendingTerminal(tab);
+        sessionOf(tab);
+        return tab;
+    };
+    // Open a fresh tab and switch to it.
+    const newTab = (): void => {
+        const tab = claim(create());
+        order.value = [...order.value, tab];
+        groups.value = [...groups.value, [tab.name]];
+        persistGroups();
+        mount(tab.name);
+    };
+    // Split the pane: open a fresh shell INSIDE `name`'s group, right after it, and focus it.
+    const splitTab = (name: string): void => {
+        const tab = claim(create());
+        order.value = [...order.value, tab];
+        const grouped = groups.value.some((group) => group.includes(name));
+        groups.value = grouped
+            ? groups.value.map((group) => {
+                  const at = group.indexOf(name);
+                  return at === -1 ? group : group.toSpliced(at + 1, 0, tab.name);
+              })
+            : [...groups.value, [name, tab.name]];
+        persistGroups();
+        mount(tab.name);
+    };
+    // Close a tab (its × button): kill the tmux session for good, then drop its client state. A process log
+    // view only hides — stopping a background process is the popover's explicit Stop, never a tab close. The
+    // kill runs unawaited: the strip is right immediately (endSession), and the source settles the shared
+    // session list once the daemon confirms.
+    const closeTab = (name: string): void => {
+        if (!viewedProcesses.has(name)) {
+            void kill(name);
+        }
+        endSession(name);
+    };
+    // The strip's multi-selection kill — one closeTab per name; endSession refocuses as the set shrinks.
+    const killTabs = (names: string[]): void => {
+        for (const name of names) {
+            closeTab(name);
+        }
+    };
+    // Restart the active shell: kill its session and open a fresh one IN ITS PLACE — same group, same slot —
+    // (auto-reconnect handles a mere dropped socket, so this is for "give me a clean shell").
+    const restart = (): void => {
+        const name = activeName.value;
+        if (name === undefined) {
+            return;
+        }
+        void kill(name);
+        const session = cache.get(name);
+        if (session !== undefined) {
+            disposeTerminalSession(session);
+            cache.delete(name);
+        }
+        const tab = claim(create());
+        order.value = [...order.value.filter((entry) => entry.name !== name), tab];
+        groups.value = groups.value.map((group) => group.map((member) => (member === name ? tab.name : member)));
+        persistGroups();
+        activeName.value = undefined;
+        mount(tab.name);
+    };
+    return {
+        order,
+        groups,
+        processes,
+        activeName,
+        attach,
+        detach,
+        refresh,
+        focus,
+        surface,
+        viewProcess,
+        switchTab,
+        sendInput,
+        joinTabs,
+        unsplit,
+        newTab,
+        closeTab,
+        splitTab,
+        killTabs,
+        restart,
+    };
+};

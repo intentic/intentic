@@ -1,0 +1,11 @@
+{
+    "compilerOptions": {
+        "outDir": "./dist",
+        "rootDir": "./src",
+        "tsBuildInfoFile": "./.cache/tsbuildinfo"
+    },
+    "include": ["./src/**/*"],
+    "exclude": ["./src/**/*.test.ts"],
+    "references": [{ "path": "../../_sandbox/extension-api" }, { "path": "../../_sandbox/sandbox-contract" }],
+    "extends": "@intentic/tsconfig/tsconfig.base.json"
+}

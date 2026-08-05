@@ -1,0 +1,17 @@
+{
+    "compilerOptions": {
+        // oRPC + decorator-style libs rely on optional props being assignable from undefined.
+        "exactOptionalPropertyTypes": false,
+        // Run straight from source with Bun — no emit; this config only type-checks, so it must not
+        // inherit the base's declaration emit (which forces non-portable-type checks on inferred exports).
+        "composite": false,
+        "declaration": false,
+        "declarationMap": false,
+        "noEmit": true,
+        "rootDir": "./src",
+        "tsBuildInfoFile": "./.cache/tsbuildinfo",
+        "types": ["bun"]
+    },
+    "include": ["./src/**/*"],
+    "extends": "@intentic/tsconfig/tsconfig.base.json"
+}
