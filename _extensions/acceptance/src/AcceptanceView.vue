@@ -434,10 +434,15 @@ const run = async (model: PickedModel): Promise<void> =>
                                  daemon runs one per repo, so this is where its state, its address and its Start
                                  belong — stated once, rather than once per story group in a dialog. The address a
                                  repo's UNGROUPED stories are walked at rides here too, for want of a `group/` row
-                                 of their own; grouped stories carry theirs on that row. -->
+                                 of their own; grouped stories carry theirs on that row. The span is that row's
+                                 hover scope: a group chip's quiet default reveals itself on the row it sits in,
+                                 and a heading's action cluster is not one — without it, the top level's "aim
+                                 elsewhere" could never be reached with a pointer at all. -->
                     <template #actions>
-                        <TargetChip v-if="entry.rooted" :repo="entry.repo" group="" :targets="targets" />
-                        <DevServerChip :repo="entry.repo" :targets="targets" :blocked="stalled.has(entry.repo)" />
+                        <span class="group flex items-center gap-2">
+                            <TargetChip v-if="entry.rooted" :repo="entry.repo" group="" :targets="targets" />
+                            <DevServerChip :repo="entry.repo" :targets="targets" :blocked="stalled.has(entry.repo)" />
+                        </span>
                     </template>
 
                     <!-- `py-2.5` and the `h-5` line box are StoryRow's own geometry, so the rows that

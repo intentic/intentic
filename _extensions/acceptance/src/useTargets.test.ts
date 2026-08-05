@@ -189,6 +189,42 @@ describe(`useTargets`, () => {
         expect(targets.isElsewhere(`site`, `marketing`)).toBe(true);
     });
 
+    /* WHAT THE GROUP'S ROW HAS TO SAY OUT LOUD. The chip is quiet by default, so this predicate is the whole
+     * difference between "the run refuses and the fix is one click away" and the failure it was reported as:
+     * everything green, Run dead, and the control that unblocks it invisible until hovered. */
+    it(`tells a group serving several apps that it needs an address, and stops once it has one`, async () => {
+        const targets = await read([panel({ repo: `intentic`, running: true, healthy: true, servers: MONOREPO })]);
+
+        expect(targets.needsAddress(`intentic`, `01-arrive`)).toBe(true);
+        targets.aimAt(`intentic`, `01-arrive`, `http://localhost:4321`);
+        expect(targets.needsAddress(`intentic`, `01-arrive`)).toBe(false);
+    });
+
+    // The alarm belongs where the remedy is, and the remedy for these two is Start, on the heading.
+    it(`says nothing about a group whose repo is merely stopped or still starting`, async () => {
+        const stopped = await read([panel({ repo: `app`, running: false })]);
+        expect(stopped.needsAddress(`app`, `checkout`)).toBe(false);
+
+        const starting = await read([panel({ repo: `app`, running: true, healthy: false, port: 5173 })]);
+        expect(starting.needsAddress(`app`, `checkout`)).toBe(false);
+    });
+
+    // A repo the daemon runs nothing for has no Start to offer, so the address really is this row's to give.
+    it(`asks for an address on a repo with no dev server, until one is remembered`, async () => {
+        const bare = await read([panel({ repo: `docs`, hasPanel: false })]);
+        expect(bare.needsAddress(`docs`, `guides`)).toBe(true);
+
+        const known = await read([panel({ repo: `docs`, hasPanel: false })], { "docs/guides": `https://staging.example.dev` });
+        expect(known.needsAddress(`docs`, `guides`)).toBe(false);
+    });
+
+    // The ordinary repo: one dev server, every group inheriting it, nothing to state.
+    it(`asks for nothing while the repo's own dev server answers for the group`, async () => {
+        const targets = await read([panel({ repo: `app`, running: true, healthy: true, servers: [{ url: `http://localhost:5173` }] })]);
+
+        expect(targets.needsAddress(`app`, `checkout`)).toBe(false);
+    });
+
     it(`hands a group back to the dev server when its typed address is cleared`, async () => {
         const targets = await read([panel({ repo: `app`, running: true, healthy: true, servers: [{ url: `http://localhost:5173` }] })]);
 

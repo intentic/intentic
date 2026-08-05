@@ -172,6 +172,17 @@ export function useTargets(
             const address = addressOf(repo, group);
             return address !== undefined && address !== localUrl(repo);
         },
+        /* THIS GROUP HAS NOWHERE TO GO, AND THIS ROW IS WHERE IT IS FIXED. The chip is quiet by default — the
+         * heading above already says where the repo's dev server is — so an un-aimed group has to say so out
+         * loud, or the run refuses with its only remedy hidden behind a hover.
+         *
+         * A repo whose server is merely STOPPED OR STILL STARTING is deliberately not this. That blocks the run
+         * too, but the fix is Start, Start lives on the heading, and raising the alarm here would put it where
+         * the remedy isn't. What is left is the case that stranded a real run: a repo serving SEVERAL apps with
+         * this group pointed at none of them — plainly up, green on its heading, and unrunnable until this row
+         * says which app it walks. */
+        needsAddress: (repo: string, group: string): boolean =>
+            addressOf(repo, group) === undefined && ![`stopped`, `starting`].includes(stateOf(repo)),
         // Undefined hands the group back to its repo's dev server; a blank string is the deliberate "not there"
         // an emptied field means, and stays blank.
         aimAt: (repo: string, group: string, url: string | undefined): void => {

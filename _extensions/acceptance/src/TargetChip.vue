@@ -30,10 +30,14 @@ const popover = ref<InstanceType<typeof Popover> | null>(null);
 const toggle = (event: Event): void => popover.value?.toggle(event);
 
 /* SPOKEN, rather than left to the hover affordance, in exactly the two cases where the heading above has not
- * already answered: this group points somewhere other than the repo's dev server, or the repo has no dev server
- * for it to point at. Note what is NOT here — a stopped server. That blocks the run, but the fix is Start and Start
- * lives on the heading, so shouting about it here would put the alarm somewhere the remedy isn't. */
-const stated = (): boolean => targets.isElsewhere(repo, group) || targets.stateOf(repo) === `none`;
+ * already answered: this group points somewhere other than the repo's dev server, or it has nothing to point at
+ * that this row can fix (see needsAddress — a stopped server is not that, because Start lives on the heading).
+ *
+ * THE SECOND CLAUSE USED TO READ `stateOf === none`, which quietly left out the very case this chip's existence
+ * is argued from: a repo serving several apps, none of them yet chosen for this group. The group was blocked, the
+ * run button was dead, the heading was green, and the one control that could unblock it was the invisible
+ * hover affordance below. */
+const stated = (): boolean => targets.isElsewhere(repo, group) || targets.needsAddress(repo, group);
 </script>
 
 <template>
