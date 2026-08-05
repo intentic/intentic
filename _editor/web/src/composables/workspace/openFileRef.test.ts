@@ -64,7 +64,7 @@ describe(`clicking a file the agent mentioned`, () => {
         resolved.mockReturnValue({ path: `_editor/web/src/pages/Foo.vue` });
         clickFileLink(surface("Gone from `pages/Foo.vue`."));
         await vi.waitFor(() => expect(openFile).toHaveBeenCalledWith(`_editor/web/src/pages/Foo.vue`));
-        expect(push).toHaveBeenCalledWith({ name: `workspace`, params: { path: [`_apps`, `web`, `src`, `pages`, `Foo.vue`] } });
+        expect(push).toHaveBeenCalledWith({ name: `workspace`, params: { path: [`_editor`, `web`, `src`, `pages`, `Foo.vue`] } });
     });
 
     it(`leaves a modified click to the browser, so ⌘/ctrl-click still opens a real new tab`, () => {

@@ -15,7 +15,7 @@ test("query tokens drop stopwords and anything shorter than three characters", (
 
 test("path tokens split on separators and camelCase humps", () => {
     expect(pathTokens("_editor/web/src/pages/workspace/viewers/FileViewer.vue")).toEqual([
-        "apps",
+        "editor",
         "web",
         "src",
         "pages",
