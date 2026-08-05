@@ -25,7 +25,9 @@ const { fileNesting } = useFileNesting();
 const { groupByModule } = useChangeGrouping();
 // The explorer's two filters — the same preferences the workspace toolbar's funnel flips, which is where someone
 // already staring at node_modules will reach for them; this is where they'll look for them afterwards.
-const { showIgnored, toggleShowIgnored, hideTests, toggleHideTests } = useLayout();
+// skipImports has no such second home: it decides where a diff OPENS, so a control on the diff itself would look
+// like it did nothing at all. This page is the only place it can be asked for.
+const { showIgnored, toggleShowIgnored, hideTests, toggleHideTests, skipImports, toggleSkipImports } = useLayout();
 
 // Import a VSCode theme JSON → recolor the app's chrome tokens live (the biggest "familiar for developers" lever).
 const { active: importedTheme, importThemeJson, clearImportedTheme } = useImportedTheme();
@@ -125,9 +127,10 @@ const treatPreview = (entry: { name: string; type: "file" | "dir" }) =>
             </Row>
         </RowGroup>
 
-        <!-- Changes — how a review list reads. Here as well as on the panel itself (the Changes header's own
-             toggle writes the same preference), for the same reason the explorer's switches are in both places:
-             this is where someone looks for it once they know it exists. -->
+        <!-- Changes — how a review reads: its list of files, and where each diff opens. Grouping is here as well
+             as on the panel itself (the Changes header's own toggle writes the same preference), for the same
+             reason the explorer's switches are in both places: this is where someone looks for it once they know
+             it exists. Both apply to the workspace's Changes tab and an agent's review alike. -->
         <RowGroup label="Changes">
             <Row
                 as="label"
@@ -136,6 +139,16 @@ const treatPreview = (entry: { name: string; type: "file" | "dir" }) =>
                 description="Head each run of changed files with the package it lives in, and let the row be the file rather than a repo-relative path. Applies to agent reviews too."
             >
                 <template #control><ToggleSwitch v-model="groupByModule" /></template>
+            </Row>
+            <Row
+                as="label"
+                icon="forward"
+                title="Open past the imports"
+                description="Open every diff on the first change that isn't an import, instead of on the import list at the top of the file. The imports are still there to scroll up to, and a file whose only changes are imports opens on those."
+            >
+                <template #control>
+                    <ToggleSwitch :model-value="skipImports" @update:model-value="toggleSkipImports()" />
+                </template>
             </Row>
         </RowGroup>
 

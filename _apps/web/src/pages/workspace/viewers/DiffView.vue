@@ -4,6 +4,7 @@ import type * as Monaco from "monaco-editor-core";
 import { computed, onBeforeUnmount, onMounted, ref, shallowRef, watch } from "vue";
 import { useLayout } from "../../../composables/useLayout";
 import { stripComments } from "../../../composables/workspace/codeComments";
+import { firstChangeBeyondImports, importLines } from "../../../composables/workspace/codeImports";
 import { useMonaco } from "../../../composables/workspace/useMonaco";
 import { highlightLangFor } from "../fileType";
 
@@ -15,13 +16,15 @@ import { highlightLangFor } from "../fileType";
  *
  * Comments are stripped from both sides unless the reader asks for them (useLayout.showComments, off by default):
  * the diff is then computed on code alone, so comment churn stops registering as change at all. Both reading
- * settings are the reader's, held in useLayout and driven by DiffToolbar, which every host renders above this. */
+ * settings are the reader's, held in useLayout and driven by DiffToolbar, which every host renders above this.
+ * A third — where the diff OPENS (useLayout.skipImports) — is set in Settings rather than up there: it decides
+ * where this lands the reader on the way in, so a control over the code would look like it did nothing. */
 
 const { before, after, path } = defineProps<{ before?: string; after?: string; path: string }>();
 
 const { mobile } = useDevice();
 const { ensureMonaco, ensureLanguage } = useMonaco();
-const { showComments, toggleShowComments, diffLayout } = useLayout();
+const { showComments, toggleShowComments, diffLayout, skipImports } = useLayout();
 // The stored preference is a desktop one: two panes cannot fit a phone, so mobile is always inline regardless.
 const split = computed(() => !mobile.value && diffLayout.value === `split`);
 
@@ -57,6 +60,49 @@ const render = async (editor: Monaco.editor.IStandaloneDiffEditor): Promise<void
     editor.getOriginalEditor().updateOptions({ lineNumbers: left.lineNumbers });
     editor.getModifiedEditor().updateOptions({ lineNumbers: right.lineNumbers });
     commentsOnly.value = left.text === right.text && (before ?? ``) !== (after ?? ``);
+};
+
+/* Land the reader on a change instead of line 1: the change is often mid-file, and Monaco opens at the top,
+ * leaving it to be found by scrolling. Which change is the reader's preference — the first one, or (skipImports)
+ * the first that touches something other than an import, since a file's import list is the change a review keeps
+ * opening on and never the one it came for. A change-less result — an identical file, or a diff whose every
+ * change was a comment — reveals nothing either way. Call this straight after `render` fills the models. */
+const reveal = async (editor: Monaco.editor.IStandaloneDiffEditor): Promise<void> => {
+    if (!skipImports.value) {
+        // Filling the models marked the diff out of date synchronously, and revealFirstDiff waits out the
+        // (asynchronous) recomputation itself — so this reveals the diff `render` just loaded, never the
+        // empty-vs-empty one the blank models scheduled.
+        editor.revealFirstDiff();
+        return;
+    }
+    /* Choosing the hunk ourselves means doing that waiting here. Subscribed before this function awaits anything,
+     * so the update it resolves on is the one those same synchronous fills scheduled: a worker's answer can only
+     * arrive in a later task, and the scan below is what we spend the wait on. */
+    const recomputed = new Promise<void>((resolve) => {
+        const subscription = editor.onDidUpdateDiff(() => {
+            subscription.dispose();
+            resolve();
+        });
+    });
+    const [left, right] = await Promise.all([importLines(original?.getValue() ?? ``, lang), importLines(modified?.getValue() ?? ``, lang)]);
+    await recomputed;
+    if (disposed) {
+        return; // unmounted (fast file-switch) while the sides were scanned
+    }
+    const target = firstChangeBeyondImports(
+        editor.getLineChanges() ?? [],
+        { lines: original?.getLinesContent() ?? [], imports: left },
+        { lines: modified?.getLinesContent() ?? [], imports: right },
+    );
+    if (target === undefined) {
+        return;
+    }
+    // A deleted run has no line of its own on the right — Monaco reports the line it followed, which is 0 when
+    // the file lost its very first lines.
+    const line = Math.max(target.modifiedStartLineNumber, 1);
+    const pane = editor.getModifiedEditor();
+    pane.setPosition({ lineNumber: line, column: 1 }); // and F7 carries on from there
+    pane.revealLineInCenter(line);
 };
 
 onMounted(async () => {
@@ -106,17 +152,12 @@ onMounted(async () => {
     if (disposed) {
         return; // unmounted (fast file-switch) while the sides were stripped
     }
-    /* Land the reader on the first hunk instead of line 1: the change is often mid-file, and Monaco opens at
-     * the top, leaving it to be found by scrolling. Filling the models above marked the diff out of date
-     * synchronously, and revealFirstDiff waits out the (asynchronous) recomputation itself — so this reveals
-     * the diff `render` just loaded, never the empty-vs-empty one the blank models scheduled. A change-less
-     * result — an identical file, or a diff whose every change was a comment — reveals nothing. */
-    editor.revealFirstDiff();
-
-    // VSCode's diff-navigation keys, on the focused (modified) pane.
+    // VSCode's diff-navigation keys, on the focused (modified) pane. Registered before the reveal, which may
+    // wait on the diff computation — these are the way through a file that is still settling.
     const modifiedEditor = editor.getModifiedEditor();
     modifiedEditor.addCommand(m.KeyCode.F7, () => editor.goToDiff(`next`));
     modifiedEditor.addCommand(m.KeyMod.Shift | m.KeyCode.F7, () => editor.goToDiff(`previous`));
+    await reveal(editor);
 });
 
 // Crossing the breakpoint (rotation, split-screen) or flipping the toolbar's toggle swaps side-by-side ↔
@@ -132,7 +173,7 @@ watch(showComments, async () => {
     const wasChangeless = commentsOnly.value;
     await render(diff.value);
     if (wasChangeless) {
-        diff.value.revealFirstDiff();
+        await reveal(diff.value);
     }
 });
 

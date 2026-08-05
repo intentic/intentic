@@ -1,4 +1,4 @@
-import { useHighlighter } from "@intentic/ui";
+import { isBlank, scopedAs, type Token, walkTokens } from "./codeTokens";
 
 /* The comment-free view of a file that the diff surface shows by default (useLayout.showComments).
  *
@@ -8,16 +8,8 @@ import { useHighlighter } from "@intentic/ui";
  * swallows it. The cost is that the models no longer line up with the file, so each side reports the source line
  * every line it kept came from and the gutter renders those instead of the model's own numbering.
  *
- * The comment spans come from the same TextMate grammar Shiki already loaded to COLOR the file — every language
- * we ship highlighting for gets this for free, and there is no per-language comment table to drift. Types are
- * derived off useHighlighter rather than imported from shiki, which is a dependency of @intentic/ui only. */
-
-type ShikiCore = NonNullable<Awaited<ReturnType<ReturnType<typeof useHighlighter>[`ensureLang`]>>>;
-type Grammar = ReturnType<ShikiCore[`getLanguage`]>;
-type Tokenized = ReturnType<Grammar[`tokenizeLine`]>;
-type Token = Tokenized[`tokens`][number];
-// The tokenizer's carry between lines — null starts a file, and a block comment's open stays on it until its close.
-type RuleStack = Parameters<Grammar[`tokenizeLine`]>[1];
+ * The comment spans come from the TextMate grammar Shiki already loaded to COLOR the file — see codeTokens for
+ * the walk, which the import scan shares. */
 
 // One side of a diff: the text to show, and the 1-based source line each of its lines came from.
 export type CodeSide = { text: string; lines: number[] };
@@ -31,23 +23,9 @@ export const modelLineOf = (lines: readonly number[], line: number): number => {
     return index < 0 ? Math.max(lines.length, 1) : index + 1;
 };
 
-// The guard @shikijs/monaco puts on the same grammars, for the same reason: a minified bundle opened as a diff
-// must not cost the frame. Past it, the line is kept exactly as it is.
-const MAX_TOKENIZED_LINE = 20_000;
-
-// The hang guard, spent across the WHOLE file rather than per line. A per-line limit charges the first line for
-// compiling the grammar's regexes — on a loaded machine that alone outruns any frame-sized budget, and the line it
-// lands on is emitted verbatim, so the file comes back part-stripped with no sign anything went wrong. Stripping
-// is awaited before the diff renders rather than run inside a frame, so the budget is generous: it exists to stop
-// a pathological grammar, and blowing it abandons the file (undefined — shown verbatim) instead of half-doing it.
-const STRIP_TIME_BUDGET = 5_000;
-
-// A token stack is a comment when any scope in it is `comment` or below. The deepest scope of a `//` run names the
-// punctuation or the content, but its parent is always `comment.line…` / `comment.block…`. Leading indentation is
-// scoped `punctuation.whitespace.comment.leading…`, which deliberately does NOT match — it is whitespace either way.
-const isComment = (scopes: readonly string[]): boolean => scopes.some((scope) => scope === `comment` || scope.startsWith(`comment.`));
-
-const isBlank = (line: string): boolean => line.trim() === ``;
+// A token stack is a comment when any scope in it is `comment` or below. Leading indentation is scoped
+// `punctuation.whitespace.comment.leading…`, which deliberately does NOT match — it is whitespace either way.
+const isComment = (scopes: readonly string[]): boolean => scopedAs(scopes, `comment`);
 
 // The line without its trailing comment, or undefined when the comment was all it held. Only a TRAILING run is
 // cut: a comment wedged between code (`f(/* n */ 1)`) stays, rather than splicing the statement around it.
@@ -70,49 +48,28 @@ const stripLine = (line: string, tokens: readonly Token[]): string | undefined =
     return kept === `` ? undefined : kept;
 };
 
-// `text` with every comment removed, or undefined when we ship no grammar for `lang` and so have nothing to go on
-// (an unknown extension, plaintext) — the caller then shows the file verbatim.
+// `text` with every comment removed, or undefined when the walk couldn't finish — no grammar for `lang` (an
+// unknown extension, plaintext) or out of budget, and a part-stripped file is worse than the file itself. The
+// caller then shows the file verbatim.
 export const stripComments = async (text: string, lang: string | undefined): Promise<CodeSide | undefined> => {
-    if (lang === undefined) {
-        return undefined;
-    }
-    const core = await useHighlighter().ensureLang(lang);
-    if (core === undefined) {
-        return undefined;
-    }
-    const grammar = core.getLanguage(lang);
     const kept: string[] = [];
     const lines: number[] = [];
-    let stack: RuleStack = null;
     let dropped = false;
-    const deadline = performance.now() + STRIP_TIME_BUDGET;
-    for (const [index, line] of text.split(`\n`).entries()) {
-        const left = deadline - performance.now();
-        if (left <= 0) {
-            return undefined; // out of budget — a part-stripped file is worse than the file itself
-        }
-        // The rest of the budget is also this line's limit, so one pathological line cannot outrun it.
-        // Annotated because `stack` is written from this result a few lines down, and a loop-carried inference
-        // between the two is a cycle the checker refuses.
-        const result: Tokenized | undefined = line.length < MAX_TOKENIZED_LINE ? grammar.tokenizeLine(line, stack, left) : undefined;
-        if (result?.stoppedEarly === true) {
-            return undefined;
-        }
-        if (result !== undefined) {
-            stack = result.ruleStack;
-        }
-        // An untokenized line has no comment we can see, so it stays whole — and `stack` stays where it was, which
-        // is what keeps an open block comment open across it.
-        const code = result === undefined ? line : stripLine(line, result.tokens);
+    const walked = await walkTokens(text, lang, (line, tokens, index) => {
+        // An untokenized line has no comment we can see, so it stays whole.
+        const code = tokens === undefined ? line : stripLine(line, tokens);
         // A comment block almost always sits between two blank lines; removing it would leave both behind, so a
         // blank that now follows a removal and a blank collapses into the one already there.
         if (code === undefined || (dropped && isBlank(code) && isBlank(kept.at(-1) ?? ``))) {
             dropped = true;
-            continue;
+            return;
         }
         dropped = false;
         kept.push(code);
         lines.push(index + 1);
+    });
+    if (!walked) {
+        return undefined;
     }
     return { text: kept.join(`\n`), lines };
 };

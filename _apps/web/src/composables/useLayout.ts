@@ -71,6 +71,14 @@ const HIDE_FILE_COMMENTS_KEY = `ui-file-hide-comments`;
 // two panes don't fit a phone — so the stored value is the desktop preference and survives a trip through one.
 const DIFF_LAYOUT_KEY = `ui-diff-layout`;
 
+// Where a diff OPENS, the third of the reader's diff settings. Monaco lands on the first change, which is the
+// import list far more often than it is the change the file was opened for — every review then starts with the
+// same scroll past the same block. On, the diff opens on the first change that touches something other than an
+// import instead (a file whose only changes ARE imports still opens on them — there is nothing else to show).
+// Off by default: landing on the first change is what every diff tool does, and a reader who hasn't asked for
+// this must not have their diffs quietly scrolled somewhere else. Persists.
+const SKIP_IMPORTS_KEY = `ui-diff-skip-imports`;
+
 /* Owns shell-layout state shared across areas (module-level singleton): where the chat panel sits relative to
  * the workspace (bound onto a `data-chat-position` attribute whose CSS grid swaps
  * off it — mirroring how useTheme drives `data-mode`), the chat panel width, the workspace explorer
@@ -142,6 +150,7 @@ const editMode = ref<boolean>(readBool(EDIT_MODE_KEY));
 const showComments = ref<boolean>(readBool(SHOW_COMMENTS_KEY));
 const hideFileComments = ref<boolean>(readBool(HIDE_FILE_COMMENTS_KEY));
 const diffLayout = ref<DiffLayout>(readEnum(DIFF_LAYOUT_KEY, [`split`, `unified`] as const, `split`));
+const skipImports = ref<boolean>(readBool(SKIP_IMPORTS_KEY));
 
 const set = (value: ChatPosition): void => {
     position.value = value;
@@ -241,6 +250,11 @@ const setDiffLayout = (value: DiffLayout): void => {
     write(DIFF_LAYOUT_KEY, value);
 };
 
+const toggleSkipImports = (): void => {
+    skipImports.value = !skipImports.value;
+    write(SKIP_IMPORTS_KEY, skipImports.value ? `1` : `0`);
+};
+
 export function useLayout() {
     return {
         position,
@@ -256,6 +270,7 @@ export function useLayout() {
         showComments,
         hideFileComments,
         diffLayout,
+        skipImports,
         set,
         toggle,
         setChatWidth,
@@ -275,5 +290,6 @@ export function useLayout() {
         toggleShowComments,
         toggleHideFileComments,
         setDiffLayout,
+        toggleSkipImports,
     };
 }
