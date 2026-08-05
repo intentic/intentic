@@ -146,7 +146,7 @@ test("a package's sidecar sockets collapse into the one server the app is on", (
 });
 
 test("servers at the repo root share one slot too — a scaffolded app is its own package", () => {
-    expect(oneServerPerDir([{ url: `http://localhost:3000` }, { url: `http://localhost:3001` }])).toEqual([{ url: `http://localhost:3000` }]);
+    expect(oneServerPerDir<{ url: string; dir?: string }>([{ url: `http://localhost:3000` }, { url: `http://localhost:3001` }])).toEqual([{ url: `http://localhost:3000` }]);
 });
 
 test("panelKey maps nested ids to a DNS/tmux-safe label and rejects unsafe names", () => {
