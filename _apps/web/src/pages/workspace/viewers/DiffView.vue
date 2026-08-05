@@ -37,6 +37,11 @@ let disposed = false;
 // The file changed, but not once the comments come out — an empty diff has to say why it is empty.
 const commentsOnly = ref(false);
 
+// Unchanged lines kept next to a change: what a collapsed region leaves either side of the code it hides, and
+// the gap above the hunk a diff opens on. One number, because it is one answer to how much of the code around a
+// change a reader needs to place it.
+const CONTEXT_LINES = 3;
+
 const step = (forward: boolean): void => diff.value?.goToDiff(forward ? `next` : `previous`);
 
 // One side as its pane should show it. Stripping shortens the model, so the gutter has to render the source line
@@ -63,37 +68,38 @@ const render = async (editor: Monaco.editor.IStandaloneDiffEditor): Promise<void
 };
 
 /* Land the reader on a change instead of line 1: the change is often mid-file, and Monaco opens at the top,
- * leaving it to be found by scrolling. Which change is the reader's preference — the first one, or (skipImports)
+ * leaving it to be found by scrolling. WHICH change is the reader's preference — the first one, or (skipImports)
  * the first that touches something other than an import, since a file's import list is the change a review keeps
  * opening on and never the one it came for. A change-less result — an identical file, or a diff whose every
  * change was a comment — reveals nothing either way. Call this straight after `render` fills the models. */
 const reveal = async (editor: Monaco.editor.IStandaloneDiffEditor): Promise<void> => {
-    if (!skipImports.value) {
-        // Filling the models marked the diff out of date synchronously, and revealFirstDiff waits out the
-        // (asynchronous) recomputation itself — so this reveals the diff `render` just loaded, never the
-        // empty-vs-empty one the blank models scheduled.
-        editor.revealFirstDiff();
-        return;
-    }
-    /* Choosing the hunk ourselves means doing that waiting here. Subscribed before this function awaits anything,
-     * so the update it resolves on is the one those same synchronous fills scheduled: a worker's answer can only
-     * arrive in a later task, and the scan below is what we spend the wait on. */
+    /* Monaco diffs in a worker, so the hunks are not there yet — its own revealFirstDiff waits that out
+     * internally, and choosing a hunk instead means waiting for it here. Subscribed before this function awaits
+     * anything, so the update it resolves on is the one the models `render` just filled scheduled: a worker's
+     * answer can only arrive in a later task, and the scan below is what we spend the wait on. */
     const recomputed = new Promise<void>((resolve) => {
         const subscription = editor.onDidUpdateDiff(() => {
             subscription.dispose();
             resolve();
         });
     });
-    const [left, right] = await Promise.all([importLines(original?.getValue() ?? ``, lang), importLines(modified?.getValue() ?? ``, lang)]);
+    // Only the skipping reader pays for the import scan — a tokenize pass over each side.
+    const scan = skipImports.value
+        ? await Promise.all([importLines(original?.getValue() ?? ``, lang), importLines(modified?.getValue() ?? ``, lang)])
+        : undefined;
     await recomputed;
     if (disposed) {
         return; // unmounted (fast file-switch) while the sides were scanned
     }
-    const target = firstChangeBeyondImports(
-        editor.getLineChanges() ?? [],
-        { lines: original?.getLinesContent() ?? [], imports: left },
-        { lines: modified?.getLinesContent() ?? [], imports: right },
-    );
+    const changes = editor.getLineChanges() ?? [];
+    const target =
+        scan === undefined
+            ? changes[0]
+            : firstChangeBeyondImports(
+                  changes,
+                  { lines: original?.getLinesContent() ?? [], imports: scan[0] },
+                  { lines: modified?.getLinesContent() ?? [], imports: scan[1] },
+              );
     if (target === undefined) {
         return;
     }
@@ -102,7 +108,12 @@ const reveal = async (editor: Monaco.editor.IStandaloneDiffEditor): Promise<void
     const line = Math.max(target.modifiedStartLineNumber, 1);
     const pane = editor.getModifiedEditor();
     pane.setPosition({ lineNumber: line, column: 1 }); // and F7 carries on from there
-    pane.revealLineInCenter(line);
+    /* Scrolled to, rather than revealed: every reveal Monaco offers buys a gap above the change out of the
+     * viewport — half of it for revealInCenter (which is what its own diff navigation uses), a fifth for
+     * revealNearTop. That gap is unchanged code the reader has no reason to be looking at, and on a tall pane it
+     * is most of the screen. The change goes to the top with the same few lines of context the collapsed regions
+     * keep, so what fills the viewport under it is the change itself. */
+    pane.setScrollTop(pane.getTopForLineNumber(Math.max(line - CONTEXT_LINES, 1)));
 };
 
 onMounted(async () => {
@@ -136,7 +147,7 @@ onMounted(async () => {
         // Horizontal only ever appears for what wrapping can't fold (a long token).
         scrollbar: { vertical: `hidden`, verticalScrollbarSize: 0 },
         // Collapse runs of unchanged lines to a few lines of context, like the old collapseUnchanged.
-        hideUnchangedRegions: { enabled: true, contextLineCount: 3, minimumLineCount: 3, revealLineCount: 20 },
+        hideUnchangedRegions: { enabled: true, contextLineCount: CONTEXT_LINES, minimumLineCount: 3, revealLineCount: 20 },
         scrollBeyondLastLine: false,
         renderMarginRevertIcon: false,
         fontFamily: mono,
