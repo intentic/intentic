@@ -402,18 +402,11 @@ const grab = (event: PointerEvent): void => {
                     <Icon name="arrow-circle-up" class="mr-0.5 text-2xs" />{{ formatTokens(agent.inputTokens)
                     }}<template v-if="agent.outputTokens !== undefined"> / {{ formatTokens(agent.outputTokens) }}</template>
                 </span>
-                <!-- The card's cost is this agent's lifetime total; the Usage tab is where it breaks down by day
-                     and model. A nested button, so the click opens the breakdown instead of the agent (the drag
-                     gesture already excludes buttons). -->
-                <button
-                    v-if="agent.costUsd !== undefined"
-                    type="button"
-                    class="cursor-pointer transition-colors hover:text-content hover:underline"
-                    v-tooltip.top="'Open the usage breakdown'"
-                    @click.stop="router.push({ name: `sandbox`, params: { tab: `usage` }, query: { agent: agent.id } })"
-                >
-                    {{ formatCost(agent.costUsd) }}
-                </button>
+                <!-- The card's cost is this agent's lifetime total, read only — the Usage tab still breaks it
+                     down by day and model, but reaching it from here put a route change inside the chip row a
+                     click aims THROUGH on its way to focusing the agent, and the misfires cost more than the
+                     shortcut saved. -->
+                <span v-if="agent.costUsd !== undefined">{{ formatCost(agent.costUsd) }}</span>
                 <span v-if="agent.diff !== undefined && agent.diff.files > 0">
                     <Icon name="copy" class="mr-0.5 text-2xs" />{{ agent.diff.files }}
                 </span>
