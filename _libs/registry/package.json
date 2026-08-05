@@ -1,6 +1,6 @@
 {
     "name": "@intentic/registry",
-    "version": "0.0.0",
+    "version": "1.0.0",
     "description": "The extension-registry file format — a git repo of sha-pinned pointers, shared by the daemon, the site gallery and the scanner",
     "license": "MIT",
     "type": "module",

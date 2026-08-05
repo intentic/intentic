@@ -1,5 +1,5 @@
 import { join } from "node:path";
-import { shellQuote } from "@intentic/sandbox-run/quote";
+import { shellQuote } from "../terminal/terminal-run.js";
 import type { CapabilityCtx } from "./capability.js";
 
 // Basic auth every major git host accepts for PATs (GitHub, GitLab). Rides the runner's env (GIT_CONFIG_* →

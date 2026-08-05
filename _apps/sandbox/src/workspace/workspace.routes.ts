@@ -7,7 +7,7 @@ import type { Services } from "../composition.js";
 import type { OrpcContext } from "../context.js";
 import { repoGitDir } from "../history/history.js";
 import { detectScheme } from "../ports/port-probe.js";
-import { shellQuote } from "@intentic/sandbox-run/quote";
+import { shellQuote } from "../terminal/terminal-run.js";
 import { appPanelKey, buildAppSpec, discoverApps } from "./app-previews.js";
 import { classifyWorkspace } from "./classify.js";
 import { readModules } from "./modules.js";

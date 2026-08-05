@@ -9,44 +9,13 @@ export interface Sink {
     readonly write: (chunk: string) => void;
 }
 
-const REDACTED = "«redacted»";
-
-/* The length of the longest suffix of `text` that is a PROPER PREFIX of some registered value — the only part
- * of what we are about to emit that could still become a secret once the next chunk arrives.
- *
- * This is what makes the hold-back cheap: ordinary output ends in no such suffix and flows straight through,
- * so progress lines during a long apply are not delayed. Only a genuinely ambiguous tail waits. */
-const ambiguousTail = (text: string, values: ReadonlySet<string>): number => {
-    let longest = 0;
-    for (const value of values) {
-        for (let length = Math.min(value.length - 1, text.length); length > longest; length--) {
-            if (text.endsWith(value.slice(0, length))) {
-                longest = length;
-                break;
-            }
-        }
-    }
-    return longest;
-};
-
-/* Masks known secret VALUES out of everything a command writes (provider logs, ndjson events, results) —
- * providers stream raw command output, which can echo tokens/passwords. Values register after the env and
- * generated secrets load (they aren't known when the sink is built), so `wrap` early, `add` when loaded.
- *
- * Masking is per-STREAM, not per-chunk. A plain replace on each chunk leaks any value that straddles a chunk
- * boundary — and the caller does not choose those boundaries: a provider streaming a remote command's output
- * gets them from the kernel's read sizes, so the same secret masks or leaks depending on timing. Holding the
- * ambiguous tail back until the next write makes the result depend on the bytes instead.
- *
- * `flush` is therefore part of the contract, not a nicety: whatever is still held when the command ends has
- * to be written, or the last line of output goes missing. Commands call it from their `finally`. */
-export const createRedactor = (): {
-    readonly wrap: (sink: Sink) => Sink;
-    readonly add: (values: readonly (string | undefined)[]) => void;
-    readonly flush: () => void;
-} => {
+// Masks known secret VALUES out of everything a command writes (provider logs, ndjson events, results) —
+// providers stream raw command output, which can echo tokens/passwords. Values register after the env and
+// generated secrets load (they aren't known when the sink is built), so `wrap` early, `add` when loaded.
+// ponytail: plain substring replace per chunk — a multi-line value split across two write() chunks slips
+// through; log lines are short and values are single-line tokens today.
+export const createRedactor = (): { readonly wrap: (sink: Sink) => Sink; readonly add: (values: readonly (string | undefined)[]) => void } => {
     const values = new Set<string>();
-    const drains: (() => void)[] = [];
     return {
         add: (incoming) => {
             for (const value of incoming) {
@@ -56,33 +25,15 @@ export const createRedactor = (): {
                 }
             }
         },
-        wrap: (sink) => {
-            let held = "";
-            const emit = (final: boolean): void => {
-                let masked = held;
+        wrap: (sink) => ({
+            write: (chunk) => {
+                let masked = chunk;
                 for (const value of values) {
-                    masked = masked.split(value).join(REDACTED);
+                    masked = masked.split(value).join("«redacted»");
                 }
-                const hold = final ? 0 : ambiguousTail(masked, values);
-                held = masked.slice(masked.length - hold);
-                const ready = masked.slice(0, masked.length - hold);
-                if (ready !== "") {
-                    sink.write(ready);
-                }
-            };
-            drains.push(() => emit(true));
-            return {
-                write: (chunk) => {
-                    held += chunk;
-                    emit(false);
-                },
-            };
-        },
-        flush: () => {
-            for (const drain of drains) {
-                drain();
-            }
-        },
+                sink.write(masked);
+            },
+        }),
     };
 };
 

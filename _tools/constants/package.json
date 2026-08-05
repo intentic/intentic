@@ -1,6 +1,6 @@
 {
     "name": "@intentic/constants",
-    "version": "0.0.0",
+    "version": "1.0.0",
     "description": "Shared constants for the intentic packages — ports, paths, and image references the daemon, CLIs and desktop app all agree on",
     "license": "MIT",
     "type": "module",

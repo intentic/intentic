@@ -7,7 +7,6 @@ import { hasPendingRef, parseInputs, sshSchema, sshTarget } from "../core/inputs
 import { listStampedContainers } from "../core/list-stamped.js";
 import type { SshExecutor, SshSession } from "../core/ssh.js";
 import { sshExecutor } from "../core/ssh.js";
-import { shellQuote } from "@intentic/sandbox-run/quote";
 
 const forgejoSchema = sshSchema.extend({
     internalIp: z.string(),
@@ -114,9 +113,7 @@ export const createForgejoProvider = (executor: SshExecutor = sshExecutor): Prov
             if (runnerToken === "" || gitToken === "" || packagesToken === "") {
                 return undefined;
             }
-            const stampHash = (
-                await session.exec(`docker inspect --format ${shellQuote(`{{index .Config.Labels "${HASH_KEY}"}}`)} ${CONTAINER}`)
-            ).stdout.trim();
+            const stampHash = (await session.exec(`docker inspect --format '{{index .Config.Labels "${HASH_KEY}"}}' ${CONTAINER}`)).stdout.trim();
             return {
                 outputs: outputsFor(parsed, runnerToken, gitToken, packagesToken),
                 detail: { image: await runningImage(session) },

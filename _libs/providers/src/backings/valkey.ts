@@ -6,7 +6,6 @@ import { hasPendingRef, parseInputs, sshSchema, sshTarget } from "../core/inputs
 import { listStampedContainers } from "../core/list-stamped.js";
 import type { SshSession } from "../core/ssh.js";
 import { type SshExecutor, sshExecutor } from "../core/ssh.js";
-import { shellQuote } from "@intentic/sandbox-run/quote";
 
 const KIND = "valkey";
 const READY_TIMEOUT_MS = 60_000;
@@ -62,7 +61,7 @@ const ensureFiles = async (session: SshSession, id: string, hash: string, parsed
 };
 
 const readyProbe = (id: string, parsed: ValkeyInputs): string =>
-    `cid=$(docker ps -q --filter "label=intentic.id=${id}"); [ -n "$cid" ] && docker exec "$cid" valkey-cli -a ${shellQuote(parsed.adminPassword)} ping | grep -q PONG`;
+    `cid=$(docker ps -q --filter "label=intentic.id=${id}"); [ -n "$cid" ] && docker exec "$cid" valkey-cli -a '${parsed.adminPassword}' ping | grep -q PONG`;
 
 // A Valkey backing instance (i.want.cache). read returns the resource once the container answers PONG (so a
 // noop re-derives internalHost/port); diff drives an image-pin bump; apply is idempotent. Per-app ACL users

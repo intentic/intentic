@@ -3,8 +3,7 @@ import { readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { expect, test } from "vitest";
-import { createTerminalRunner, terminalExec } from "./terminal-run.js";
-import { shellQuote } from "@intentic/sandbox-run/quote";
+import { createTerminalRunner, shellQuote, terminalExec } from "./terminal-run.js";
 
 // These run the no-tmux fallback (the wrapper isn't baked into dev/test machines): plain bash -c with the
 // same {code, output} contract the tmux path returns — the exact runner capability tests wire into their ctx.

@@ -55,12 +55,6 @@ Dashed arrows are development-only — needed to build or test, not to run.
   ] }
 ```
 
-## What it hands over rather than letting an extension build
-
-Some things stay the app's however useful they would be to copy: a screen's frame, a command, a file viewer, the terminal — and the one that keeps getting rebuilt, the model picker.
-
-An extension that needs to say which provider, account and model a run will spend asks for the app's own picker instead of drawing its own list. Only the app's list knows which providers this sandbox can actually reach, which accounts still have headroom, and which sign-ins have quietly stopped working. Anything an extension draws itself is a worse version of that: the two that tried both ended up offering runs that failed minutes later on a credential their list had never mentioned.
-
 ## Where it is used
 
 Imported by every extension. The manifest it defines is also the approval screen you see before installing one.

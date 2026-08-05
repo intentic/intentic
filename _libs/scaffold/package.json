@@ -1,6 +1,6 @@
 {
     "name": "@intentic/scaffold",
-    "version": "0.0.0",
+    "version": "1.0.0",
     "description": "Shared scaffold for an intentic workspace — the intent-repo skeleton + deploy.config managed-region render/parse, used by the CLI's `init` and the sandbox daemon",
     "license": "MIT",
     "type": "module",

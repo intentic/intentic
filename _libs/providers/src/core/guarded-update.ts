@@ -1,5 +1,4 @@
 import type { SshSession } from "./ssh.js";
-import { shellQuote } from "@intentic/sandbox-run/quote";
 
 // The restic env-file the backup provider writes (RESTIC_PASSWORD + backend creds). A guarded update reuses
 // it rather than re-threading the secrets onto every service node.
@@ -23,7 +22,7 @@ export interface GuardedUpdateOpts {
 }
 
 const resticRun = (opts: GuardedUpdateOpts, volume: string, mode: ":ro" | "", args: string): string =>
-    `docker run --rm --env-file ${RESTIC_ENV} -v ${shellQuote(`${volume}:/v${mode}`)} ${shellQuote(opts.resticImage)} -r ${shellQuote(opts.repo)} ${args}`;
+    `docker run --rm --env-file ${RESTIC_ENV} -v ${volume}:/v${mode} ${opts.resticImage} -r '${opts.repo}' ${args}`;
 
 // Wrap a stateful service's image bump in a transaction: snapshot the volumes, try the new image, and on a
 // health failure roll the image AND the data back to the pre-update state, then rethrow. The snapshot taken

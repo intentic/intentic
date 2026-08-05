@@ -25,15 +25,6 @@ Dependencies are limited **by lint** (`.oxlintrc.json`, scoped to `_extensions/*
 `@intentic/extension-api`, `@intentic/extension-ui`, and `@intentic/sandbox-contract`. Reaching into
 `@intentic-app/*` or the app internals is a boundary violation and fails the build.
 
-**Before drawing a control, check whether `api` already owns it.** Some surfaces are the shell's and an
-extension only asks for them: `api.terminal`, `api.chat`, `api.documents` — and `api.models`, the app's own
-provider/account/harness/model picker, which every run-starting view uses (`api.models.pick` to choose,
-`api.models.describe` to name a choice already saved). These are APIs rather than kit components because they
-are live reads of what the sandbox has connected, so a control an extension draws itself can only offer a worse
-list — the automations form had four rows of chips that could not offer a model endpoint, could not offer an
-installed ACP agent, and happily pinned an account with no headroom left. `permissions.conformance.test.ts`
-fails any extension that reaches `/{provider}/models` or `/{provider}/accounts` on its own.
-
 ## The extensions
 
 | Extension | Kind | What it contributes |

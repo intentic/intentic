@@ -1,7 +1,6 @@
 import { randomBytes } from "node:crypto";
 import { hostname } from "node:os";
 import type { SshExecutor, SshResult, SshTarget } from "@intentic/providers";
-import { shellQuote } from "@intentic/sandbox-run/quote";
 
 // A host-side advisory lock that serializes `apply` (and the `prune` that follows it) against a host, so two
 // concurrent runs — a laptop and CI, or two operators — cannot interleave mutations and corrupt infra. The
@@ -53,7 +52,7 @@ const acquireScript = (holder: string, nonce: string, ttl: number): string =>
 LOCK=${LOCK_DIR}
 META=$LOCK/meta.json
 write() {
-  printf '{"holder":"%s","nonce":"%s","expiresAt":%s}\\n' ${shellQuote(holder)} ${shellQuote(nonce)} "$(( $(date +%s) + ${ttl} ))" > "$META"
+  printf '{"holder":"%s","nonce":"%s","expiresAt":%s}\\n' '${holder}' '${nonce}' "$(( $(date +%s) + ${ttl} ))" > "$META"
   chmod 600 "$META" 2>/dev/null || true
 }
 if mkdir "$LOCK" 2>/dev/null; then write; echo ACQUIRED; exit 0; fi
@@ -65,19 +64,19 @@ echo "HELD $CUR"; exit 1`;
 
 const verifyScript = (nonce: string, ttl: number): string =>
     `${header("verify", nonce, ttl)}CUR=$(sed -n 's/.*"nonce":"\\([^"]*\\)".*/\\1/p' ${LOCK_DIR}/meta.json 2>/dev/null)
-[ "$CUR" = ${shellQuote(nonce)} ] && echo OK || echo "LOST $CUR"`;
+[ "$CUR" = '${nonce}' ] && echo OK || echo "LOST $CUR"`;
 
 const renewScript = (holder: string, nonce: string, ttl: number): string =>
     `${header("renew", nonce, ttl)}LOCK=${LOCK_DIR}
 META=$LOCK/meta.json
 CUR=$(sed -n 's/.*"nonce":"\\([^"]*\\)".*/\\1/p' "$META" 2>/dev/null)
-if [ "$CUR" = ${shellQuote(nonce)} ]; then printf '{"holder":"%s","nonce":"%s","expiresAt":%s}\\n' ${shellQuote(holder)} ${shellQuote(nonce)} "$(( $(date +%s) + ${ttl} ))" > "$META"; echo OK; else echo "LOST $CUR"; fi`;
+if [ "$CUR" = '${nonce}' ]; then printf '{"holder":"%s","nonce":"%s","expiresAt":%s}\\n' '${holder}' '${nonce}' "$(( $(date +%s) + ${ttl} ))" > "$META"; echo OK; else echo "LOST $CUR"; fi`;
 
 const releaseScript = (nonce: string, ttl: number): string =>
     `${header("release", nonce, ttl)}LOCK=${LOCK_DIR}
 META=$LOCK/meta.json
 CUR=$(sed -n 's/.*"nonce":"\\([^"]*\\)".*/\\1/p' "$META" 2>/dev/null)
-if [ "$CUR" = ${shellQuote(nonce)} ]; then rm -f "$META"; rmdir "$LOCK" 2>/dev/null; echo RELEASED; else echo "SKIP $CUR"; fi`;
+if [ "$CUR" = '${nonce}' ]; then rm -f "$META"; rmdir "$LOCK" 2>/dev/null; echo RELEASED; else echo "SKIP $CUR"; fi`;
 
 const run = async (executor: SshExecutor, target: SshTarget, command: string): Promise<SshResult> => {
     const session = await executor.connect(target);

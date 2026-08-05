@@ -1,7 +1,7 @@
 {
     "name": "@intentic/host",
-    "version": "0.0.0",
-    "description": "Local agent that lets an intentic sandbox work on this computer \u2014 one outbound WebSocket, an MCP tool surface, and scopes enforced here",
+    "version": "1.0.0",
+    "description": "Local agent that lets an intentic sandbox work on this computer — one outbound WebSocket, an MCP tool surface, and scopes enforced here",
     "license": "MIT",
     "type": "module",
     "repository": {

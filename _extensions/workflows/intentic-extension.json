@@ -16,6 +16,10 @@
         ]
     },
     "contributes": {
-        "views": [{ "id": "workflows", "label": "Workflows", "surface": "rail" }]
+        "views": [{ "id": "workflows", "label": "Workflows", "surface": "rail" }],
+        "files": [
+            { "path": ".intentic/workflows.json", "invalidates": ["workflows"] },
+            { "path": ".intentic/workflow-runs.json", "invalidates": ["workflows", "workflow-runs"] }
+        ]
     }
 }

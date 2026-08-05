@@ -7,7 +7,6 @@ import { promisify } from "node:util";
 import { createResidentEngine, type HealthRequest, type QueryRequest } from "@intentic/iq-engine";
 
 import { HEALTH_LIMIT } from "@intentic/sandbox-contract";
-import { shellQuote } from "@intentic/sandbox-run/quote";
 
 import { DEFAULT_TEMPLATE_REF, DEFAULT_TEMPLATE_SOURCE } from "@intentic/scaffold";
 
@@ -628,13 +627,13 @@ test("workspace.addApps launches `intentic scaffold add-app` as a one-shot tmux 
         }),
     ).toEqual({ ok: true });
     // One detached one-shot job, keyed <repo>--add_apps (underscore ⇒ never collides with an app panel key
-    // <repo>--<app>), running the CLI over the same @intentic/scaffold path — each arg shell-quoted, and the
+    // <repo>--<app>), running the CLI over the same @intentic/scaffold path — each arg single-quoted, and the
     // template-key entry (api) collapses to a bare key while the renamed one (shop-web) keeps template:name.
     expect(jobs).toEqual([
         {
             key: "shop--add_apps",
             spec: {
-                command: `intentic scaffold add-app --dir ${shellQuote(repoDir)} --apps ${shellQuote("api,web:shop-web")} --source ${shellQuote(DEFAULT_TEMPLATE_SOURCE)} --ref ${shellQuote(DEFAULT_TEMPLATE_REF)}`,
+                command: `intentic scaffold add-app --dir '${repoDir}' --apps 'api,web:shop-web' --source '${DEFAULT_TEMPLATE_SOURCE}' --ref '${DEFAULT_TEMPLATE_REF}'`,
                 cwd: repoDir,
                 oneShot: true,
             },

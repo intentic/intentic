@@ -1,7 +1,6 @@
 import { setTimeout as sleep } from "node:timers/promises";
 import type { Provider, ResolvedInputs } from "@intentic/engine";
 import { HASH_KEY } from "@intentic/graph";
-import { envLine, shellQuote } from "@intentic/sandbox-run/quote";
 import { z } from "zod";
 import { guardedUpdate } from "../core/guarded-update.js";
 import { gitProvider, hasPendingRef, parseInputs, sshSchema, sshTarget } from "../core/inputs.js";
@@ -164,39 +163,32 @@ const ensureFiles = async (session: SshSession, parsed: KomodoInputs, images: Re
     await session.exec(`mkdir -p ${STATE_DIR}`);
     await session.exec(`cat > ${STATE_DIR}/compose.yaml <<'COMPOSE_EOF'\n${composeYaml(images, id, hash)}COMPOSE_EOF`);
     await session.exec(`cat > ${STATE_DIR}/config.toml <<'CONFIG_EOF'\n${configToml(parsed)}CONFIG_EOF`);
-    // Each line is a separate printf argument so one KEY=value lands per line. Joining with "\n" into a single
-    // arg would print the literal characters \n (printf %s does not interpret escapes), leaving compose unable
-    // to parse the file — the image tags would come through blank.
-    //
-    // Everything whose value is known HERE goes through envLine + shellQuote, including the admin password and
-    // domain that used to ride in `echo "KEY=${value}"` — a double-quoted shell string, where a `$(…)` in
-    // either ran on the host at deploy time. Only the three values the HOST generates stay in the shell block,
-    // because only they need a substitution to happen over there.
-    const envPairs: [string, string][] = [
-        ["TZ", "Etc/UTC"],
-        ["KOMODO_LOCAL_AUTH", "true"],
-        ["KOMODO_CONFIG_PATH", "/config/config.toml"],
-        ["KOMODO_INIT_ADMIN_USERNAME", parsed.adminUser],
-        ["KOMODO_DATABASE_ADDRESS", "ferretdb:27017"],
-        ["KOMODO_FIRST_SERVER_NAME", "Local"],
-        ["KOMODO_FIRST_SERVER_ADDRESS", "https://periphery:8120"],
+    // Each line is a separate printf argument so `printf '%s\n'` emits one KEY=value per line. Joining with
+    // "\n" into a single arg would print the literal characters \n (printf %s does not interpret escapes),
+    // leaving compose unable to parse the file — the image tags would come through blank.
+    const staticEnv = [
+        "TZ=Etc/UTC",
+        "KOMODO_LOCAL_AUTH=true",
+        "KOMODO_CONFIG_PATH=/config/config.toml",
+        `KOMODO_INIT_ADMIN_USERNAME=${parsed.adminUser}`,
+        "KOMODO_DATABASE_ADDRESS=ferretdb:27017",
+        "KOMODO_FIRST_SERVER_NAME=Local",
+        "KOMODO_FIRST_SERVER_ADDRESS=https://periphery:8120",
         // How often Komodo polls a deployment's registry tag for a new digest; with auto_update set, a CI push
         // goes live within this window even if the workflow's notify step is unavailable.
-        ["KOMODO_RESOURCE_POLL_INTERVAL", "1-min"],
-        ["KOMODO_HOST", `https://${parsed.domain}`],
-        ["KOMODO_INIT_ADMIN_PASSWORD", parsed.adminPassword],
-        ["KOMODO_DATABASE_USERNAME", "komodo"],
-    ];
-    const staticEnv = envPairs.map(([key, value]) => shellQuote(envLine(key, value))).join(" ");
-    // Host-generated secrets: hex, so the single quotes are the .env delimiter and nothing needs escaping
-    // inside them. The value is passed as a printf ARGUMENT rather than spliced into the format string, so a
-    // `%` in a future generator can never be read as a conversion.
+        "KOMODO_RESOURCE_POLL_INTERVAL=1-min",
+    ]
+        .map((line) => `'${line}'`)
+        .join(" ");
     const generated = [
-        `printf "KOMODO_PASSKEY='%s'\\n" "$(openssl rand -hex 32)"`,
-        `printf "KOMODO_JWT_SECRET='%s'\\n" "$(openssl rand -hex 32)"`,
-        `printf "KOMODO_DATABASE_PASSWORD='%s'\\n" "$(openssl rand -hex 16)"`,
+        `echo "KOMODO_HOST=https://${parsed.domain}"`,
+        `echo "KOMODO_INIT_ADMIN_PASSWORD=${parsed.adminPassword}"`,
+        `echo "KOMODO_PASSKEY=$(openssl rand -hex 32)"`,
+        `echo "KOMODO_JWT_SECRET=$(openssl rand -hex 32)"`,
+        'echo "KOMODO_DATABASE_USERNAME=komodo"',
+        `echo "KOMODO_DATABASE_PASSWORD=$(openssl rand -hex 16)"`,
     ].join("; ");
-    await session.exec(`test -f ${STATE_DIR}/.env || { printf '%s' ${staticEnv} > ${STATE_DIR}/.env; { ${generated}; } >> ${STATE_DIR}/.env; }`);
+    await session.exec(`test -f ${STATE_DIR}/.env || { printf '%s\\n' ${staticEnv} > ${STATE_DIR}/.env; { ${generated}; } >> ${STATE_DIR}/.env; }`);
 };
 
 // Probe Core FROM THE HOST over SSH (Core publishes 9120 on the host), so the check works regardless of

@@ -8,6 +8,8 @@
     "permissions": {
         "sandbox": [
             "GET /automations",
+            "GET /*/models",
+            "GET /*/accounts",
             "GET /ci/runs",
             "POST /automations",
             "DELETE /automations/*",

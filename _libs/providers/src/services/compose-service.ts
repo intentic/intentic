@@ -1,7 +1,6 @@
 import { setTimeout as sleep } from "node:timers/promises";
 import type { Provider, ResolvedInputs } from "@intentic/engine";
 import { HASH_KEY } from "@intentic/graph";
-import { envLine, shellQuote } from "@intentic/sandbox-run/quote";
 import { z } from "zod";
 import { containerLabel } from "../core/backing-ssh.js";
 import { hasPendingRef, parseInputs, sshSchema, sshTarget } from "../core/inputs.js";
@@ -56,6 +55,8 @@ const READY_INTERVAL_MS = 4_000;
 // unbounded and would grow with the host's uptime; `intentic deploy logs` tails these back over SSH. One line per
 // service in each template, right under its `restart:`.
 export const SERVICE_LOGGING = `    logging: { driver: json-file, options: { max-size: 10m, max-file: "3" } }`;
+
+const shellQuote = (value: string): string => `'${value.replace(/'/g, `'\\''`)}'`;
 
 const running = async (session: SshSession, id: string): Promise<boolean> => {
     const result = await session.exec(`docker ps --filter "label=intentic.id=${id}" --format '{{.Names}}'`);
@@ -128,20 +129,11 @@ export const createComposeServiceProvider = <S extends typeof serviceSchema>(spe
         if (entries.length === 0) {
             return;
         }
-        /* Two layers, one call each. The old format quoted the SHELL layer (shellQuote on the value) but wrote
-         * the .env layer itself as `KEY='%s'`, so a value containing a single quote closed the line early and
-         * the file read back as something other than what was stored — its own ponytail said as much. envLine
-         * now renders the whole line, picking a delimiter the value does not contain, and shellQuote carries
-         * that line to the host as one argv word.
-         *
-         * A value the catalog leaves undefined is generated ON THE HOST and never passes through here at all;
-         * `openssl rand -hex 32` yields hex, which contains no delimiter either layer cares about. */
+        // Each line lands as KEY='value': compose treats single-quoted .env values as literal, so a `$` in a
+        // value (bcrypt hashes) never hits compose interpolation. ponytail: a literal value containing a single
+        // quote would break the line — every catalog value is machine-generated (hex/base64/bcrypt) today.
         const prints = entries
-            .map((entry) =>
-                entry.value === undefined
-                    ? `printf "${entry.key}='%s'\\n" "$(openssl rand -hex 32)"`
-                    : `printf '%s' ${shellQuote(envLine(entry.key, entry.value))}`,
-            )
+            .map((entry) => `printf "${entry.key}='%s'\\n" ${entry.value === undefined ? `"$(openssl rand -hex 32)"` : shellQuote(entry.value)}`)
             .join("; ");
         await write(`test -f ${stateDir}/.env || { { ${prints}; } > ${stateDir}/.env && chmod 600 ${stateDir}/.env; }`, `write ${stateDir}/.env`);
     };

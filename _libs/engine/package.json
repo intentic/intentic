@@ -1,6 +1,6 @@
 {
     "name": "@intentic/engine",
-    "version": "0.0.0",
+    "version": "1.0.0",
     "description": "Stateless reconcile engine: plan/apply, the Provider SPI, and the reconcile loop.",
     "license": "MIT",
     "type": "module",

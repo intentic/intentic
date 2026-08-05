@@ -35,9 +35,9 @@ test("restores via restic with the snapshot + repo + password, then drops the sc
     expect(
         commands.some(
             (c) =>
-                c.includes("-r s3:s3.example.com/bucket") &&
-                c.includes("restore latest --target /restore") &&
-                c.includes("RESTIC_PASSWORD=restic-pw"),
+                c.includes("-r 's3:s3.example.com/bucket'") &&
+                c.includes("restore 'latest' --target /restore") &&
+                c.includes("RESTIC_PASSWORD='restic-pw'"),
         ),
     ).toBe(true);
     expect(commands.some((c) => c.includes("docker volume rm intentic-restore"))).toBe(true);
@@ -75,7 +75,7 @@ test("never runs restic forget / prune / repo deletion (snapshots are the user's
 test("throws if the restic restore fails", async () => {
     const failing: SshExecutor = {
         connect: async () => ({
-            exec: async (command): Promise<SshResult> => ({ stdout: "", stderr: "boom", code: command.includes("restore latest") ? 1 : 0 }),
+            exec: async (command): Promise<SshResult> => ({ stdout: "", stderr: "boom", code: command.includes("restore 'latest'") ? 1 : 0 }),
             dispose: async () => {},
         }),
     };

@@ -2,7 +2,6 @@ import { execFile, spawn } from "node:child_process";
 import { lstat, mkdir, readdir, rm } from "node:fs/promises";
 import { basename, join } from "node:path";
 import { IGNORED_DIRS } from "@intentic/workspace-ignore";
-import { shellQuote } from "@intentic/sandbox-run/quote";
 import type { Logger } from "pino";
 import { promisify } from "node:util";
 
@@ -138,6 +137,9 @@ const overlayOptions = (lower: string, upper: string, work: string): string => {
     return `lowerdir=${lower},upperdir=${upper},workdir=${work}`;
 };
 
+// POSIX single-quote escaping for the bootstrap script — every path rides as one word.
+const quote = (value: string): string => `'${value.replaceAll("'", `'\\''`)}'`;
+
 /* WHY AN ANCHOR RATHER THAN WRAPPING THE AGENT DIRECTLY.
  *
  * `unshare` around the CLI would put the agent in a namespace, and its Bash tool straight back OUT of it: a
@@ -179,17 +181,17 @@ export const isolationScript = (plan: IsolationPlan, trailer: string = ANCHOR_TR
     const lines = [
         `set -e`,
         `mount --make-rprivate /`,
-        `mkdir -p ${shellQuote(MAIN_MOUNT)}`,
-        `mount --bind ${shellQuote(plan.root)} ${shellQuote(MAIN_MOUNT)}`,
-        `mount --bind ${shellQuote(plan.worktree)} ${shellQuote(plan.root)}`,
+        `mkdir -p ${quote(MAIN_MOUNT)}`,
+        `mount --bind ${quote(plan.root)} ${quote(MAIN_MOUNT)}`,
+        `mount --bind ${quote(plan.worktree)} ${quote(plan.root)}`,
     ];
     const shared = join(plan.root, SHARED_STATE);
-    lines.push(`mkdir -p ${shellQuote(shared)}`, `mount --bind ${shellQuote(join(MAIN_MOUNT, SHARED_STATE))} ${shellQuote(shared)}`);
+    lines.push(`mkdir -p ${quote(shared)}`, `mount --bind ${quote(join(MAIN_MOUNT, SHARED_STATE))} ${quote(shared)}`);
     // Conditional rather than plan-driven: the shelf is optional by nature (most workspaces have none), and a
     // `set -e` script must not die over a directory whose absence means nothing. The `if` is the whole guard.
     const shelf = join(plan.root, SHELF);
     lines.push(
-        `if [ -d ${shellQuote(join(MAIN_MOUNT, SHELF))} ]; then mkdir -p ${shellQuote(shelf)}; mount --bind ${shellQuote(join(MAIN_MOUNT, SHELF))} ${shellQuote(shelf)}; mount -o remount,bind,ro ${shellQuote(shelf)}; fi`,
+        `if [ -d ${quote(join(MAIN_MOUNT, SHELF))} ]; then mkdir -p ${quote(shelf)}; mount --bind ${quote(join(MAIN_MOUNT, SHELF))} ${quote(shelf)}; mount -o remount,bind,ro ${quote(shelf)}; fi`,
     );
     for (const rel of plan.mirrors) {
         const target = join(plan.root, rel);
@@ -199,8 +201,8 @@ export const isolationScript = (plan: IsolationPlan, trailer: string = ANCHOR_TR
         const upper = join(layer, "upper");
         const work = join(layer, "work");
         lines.push(
-            `mkdir -p ${shellQuote(target)} ${shellQuote(upper)} ${shellQuote(work)}`,
-            `mount -t overlay ${OVERLAY_FS_NAME} -o ${shellQuote(overlayOptions(join(MAIN_MOUNT, rel), upper, work))} ${shellQuote(target)}`,
+            `mkdir -p ${quote(target)} ${quote(upper)} ${quote(work)}`,
+            `mount -t overlay ${OVERLAY_FS_NAME} -o ${quote(overlayOptions(join(MAIN_MOUNT, rel), upper, work))} ${quote(target)}`,
         );
     }
     lines.push(trailer);
@@ -222,7 +224,7 @@ export const nsenterArgv = (anchorPid: number, cwd: string, command: string, arg
 
 // The same thing as ONE shell word, for the callers that compose a command STRING rather than an argv — the
 // Bash tool's tmux rewrite, whose pane runs a shell line. Quoted so a path with a space can't split it.
-export const nsenterPrefix = (anchorPid: number, cwd: string): string => `nsenter --mount=/proc/${anchorPid}/ns/mnt --wd=${shellQuote(cwd)} -- `;
+export const nsenterPrefix = (anchorPid: number, cwd: string): string => `nsenter --mount=/proc/${anchorPid}/ns/mnt --wd=${quote(cwd)} -- `;
 
 /* THE ONE PROCESS THAT MUST NOT BE BORN INSIDE A TURN'S NAMESPACE — the tmux server.
  *
@@ -266,7 +268,7 @@ export const daemonMountNs = `/proc/${process.pid}/ns/mnt`;
 const probeScript = (dir: string): string =>
     [
         `set -e`,
-        `mount -t overlay ${OVERLAY_FS_NAME} -o ${shellQuote(overlayOptions(join(dir, "lower"), join(dir, "upper"), join(dir, "work")))} ${shellQuote(join(dir, "merged"))}`,
+        `mount -t overlay ${OVERLAY_FS_NAME} -o ${quote(overlayOptions(join(dir, "lower"), join(dir, "upper"), join(dir, "work")))} ${quote(join(dir, "merged"))}`,
     ].join("\n");
 
 export const isolationAvailable = async (historyRoot: string): Promise<boolean> => {

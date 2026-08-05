@@ -1,6 +1,6 @@
 {
     "name": "@intentic/iq",
-    "version": "0.0.0",
+    "version": "1.0.0",
     "description": "iq — agent-native workspace search CLI: one intent-first entry point over lexical, structural, semantic, and git engines",
     "license": "MIT",
     "type": "module",

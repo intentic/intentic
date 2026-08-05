@@ -4,7 +4,7 @@ import { gitCommitAll, gitInit, INTENT_GITIGNORE, scaffoldDeployConfig, TARGET_G
 import type { Services } from "../composition.js";
 import { AGENT_GIT_AUTHOR, terminalGit } from "../git/git.js";
 import { repoGitDir } from "../history/history.js";
-import { shellQuote } from "@intentic/sandbox-run/quote";
+import { shellQuote } from "../terminal/terminal-run.js";
 import { readTemplatesConfig } from "./templates-config.js";
 
 // Capability-triggered repo scaffolding (devops / monorepo adds). The repos' UIs live in the web app's

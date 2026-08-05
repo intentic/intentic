@@ -109,9 +109,6 @@ export const planCommand = buildCommand<PlanFlags>({
             ]);
         } finally {
             clearTimeout(deadline);
-            // Write back whatever the redactor is still holding as a possible secret prefix, or the
-            // command's last line goes missing. Runs on the error path too — a throw must not eat output.
-            redactor.flush();
             // Tear down the executor's cloudflared forwarders. Without this the forwarder child keeps the
             // event loop alive FOREVER after out.result() — the CLI never exits (cli.ts has no process.exit),
             // the daemon's SSE never closes, and every preview "stalls" 120s after its last frame.

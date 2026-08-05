@@ -1,5 +1,4 @@
 import type { Provider, ResolvedInputs } from "@intentic/engine";
-import { shellQuote } from "@intentic/sandbox-run/quote";
 import { z } from "zod";
 import { containerId } from "../core/backing-ssh.js";
 import { hasPendingRef, parseInputs, sshSchema, sshTarget } from "../core/inputs.js";
@@ -25,10 +24,7 @@ const url = (parsed: NamespaceInputs): string => `redis://${parsed.username}:${p
 // Run valkey-cli in the instance container authenticated as admin, returning trimmed stdout. Throws on a
 // non-zero exit so a real error propagates rather than reading as "absent".
 const cli = async (session: SshSession, cid: string, parsed: NamespaceInputs, args: string): Promise<string> => {
-    // NOTE: correct quoting keeps the password out of the SHELL's hands, not out of the host's process table —
-    // `-a` puts it on the remote argv where `ps` still reads it. That exposure is tracked separately; this call
-    // no longer lets an apostrophe in the password run the rest of the line as a command.
-    const result = await session.exec(`docker exec ${cid} valkey-cli -a ${shellQuote(parsed.adminPassword)} --no-auth-warning ${args}`);
+    const result = await session.exec(`docker exec ${cid} valkey-cli -a '${parsed.adminPassword}' --no-auth-warning ${args}`);
     if (result.code !== 0) {
         throw new Error(`valkey-cli failed (${result.code}): ${result.stderr.trim()}`);
     }

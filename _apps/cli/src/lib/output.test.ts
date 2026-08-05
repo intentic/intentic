@@ -86,58 +86,5 @@ test("a redactor masks registered secret values out of every write, ignoring sho
     const out = createOutput(redactor.wrap(s), "text");
     redactor.add(["s3cr3t-token", "22", undefined]);
     out.log("auth with s3cr3t-token on port 22");
-    redactor.flush();
     expect(s.chunks.join("")).toContain("auth with \u00abredacted\u00bb on port 22");
-});
-
-/* The chunk boundaries below are not the caller's to choose: providers stream a remote command's output, so
- * the split lands wherever the kernel's read sizes put it. A redactor that masks per chunk therefore leaks or
- * doesn't depending on timing \u2014 these assert on the STREAM. */
-
-test("a secret split across two writes is still masked", () => {
-    const s = sink();
-    const redactor = createRedactor();
-    const wrapped = redactor.wrap(s);
-    redactor.add(["s3cr3t-token"]);
-    wrapped.write("auth with s3cr3t");
-    // Nothing containing the first half may have reached the sink yet \u2014 that half is a possible secret prefix.
-    expect(s.chunks.join("")).not.toContain("s3cr3t");
-    wrapped.write("-token on port 22\n");
-    redactor.flush();
-    expect(s.chunks.join("")).toBe("auth with \u00abredacted\u00bb on port 22\n");
-});
-
-test("a multi-line secret split mid-value is masked across the boundary", () => {
-    const s = sink();
-    const redactor = createRedactor();
-    const wrapped = redactor.wrap(s);
-    const key = "-----BEGIN KEY-----\nabc\ndef\n-----END KEY-----";
-    redactor.add([key]);
-    for (const chunk of [`installing\n${key.slice(0, 25)}`, key.slice(25), "\ndone\n"]) {
-        wrapped.write(chunk);
-    }
-    redactor.flush();
-    expect(s.chunks.join("")).toBe("installing\n\u00abredacted\u00bb\ndone\n");
-});
-
-test("ordinary output is not delayed \u2014 only a tail that could still become a secret waits", () => {
-    const s = sink();
-    const redactor = createRedactor();
-    const wrapped = redactor.wrap(s);
-    redactor.add(["s3cr3t-token"]);
-    wrapped.write("applying host-a\n");
-    // No suffix of this is a prefix of the secret, so it flows straight through rather than waiting for a
-    // later write \u2014 a long apply's progress lines must not stall behind the redactor.
-    expect(s.chunks.join("")).toBe("applying host-a\n");
-});
-
-test("flush writes back a held tail that never turned out to be a secret", () => {
-    const s = sink();
-    const redactor = createRedactor();
-    const wrapped = redactor.wrap(s);
-    redactor.add(["s3cr3t-token"]);
-    // Ends mid-way through a possible secret, and the command then ends. Without flush this line is lost.
-    wrapped.write("the prefix is s3cr3t");
-    redactor.flush();
-    expect(s.chunks.join("")).toBe("the prefix is s3cr3t");
 });

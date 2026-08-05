@@ -12,6 +12,7 @@ import {
     sandboxNames,
     sandboxRunArgv,
     sandboxRunCommand,
+    shellQuote,
 } from "./index.js";
 
 const names = sandboxNames("abc-123");
@@ -81,8 +82,10 @@ test("environment hash, runtime directives, extra mounts and replayed env ride i
     expect(command.endsWith("env:tag")).toBe(true);
 });
 
-test("the emitted command survives the values that broke line-based plumbing: a multi-line key", () => {
-    // shellQuote's own cases live in quote.test.ts; this is about the emitter passing every argv word through it.
+test("quoting survives the values that broke line-based plumbing: quotes and multi-line keys", () => {
+    // A plain word stays bare — the emitted command reads exactly like the hand-written scripts always did.
+    expect(shellQuote("--cap-add=SYS_ADMIN")).toBe("--cap-add=SYS_ADMIN");
+    expect(shellQuote(`it's`)).toBe(`'it'\\''s'`);
     const key = "-----BEGIN OPENSSH PRIVATE KEY-----\nabc\n-----END OPENSSH PRIVATE KEY-----";
     const command = sandboxRunCommand({ names, image: "i", baseImage: "i", env: [["HOST_SSH_KEY", key]] });
     expect(command).toContain(`'HOST_SSH_KEY=${key}'`);

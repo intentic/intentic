@@ -1,6 +1,6 @@
 {
     "name": "@intentic/extension-api",
-    "version": "0.0.0",
+    "version": "1.0.0",
     "description": "The versioned public API intentic extensions compile against — manifest schema, detection facts and the host API",
     "license": "MIT",
     "type": "module",

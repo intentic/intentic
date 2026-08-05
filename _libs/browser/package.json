@@ -1,7 +1,7 @@
 {
     "name": "@intentic/browser",
-    "version": "0.0.0",
-    "description": "Drive a Chromium browser from Node over CDP \u2014 open pages, read them as structured text, click and type by element reference. No dependencies.",
+    "version": "1.0.0",
+    "description": "Drive a Chromium browser from Node over CDP — open pages, read them as structured text, click and type by element reference. No dependencies.",
     "license": "MIT",
     "type": "module",
     "repository": {

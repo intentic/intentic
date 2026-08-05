@@ -1,7 +1,6 @@
 import { execFile } from "node:child_process";
 import { existsSync } from "node:fs";
 import { promisify } from "node:util";
-import { shellQuote } from "@intentic/sandbox-run/quote";
 
 // THE PRINCIPLE: every real shell action the daemon executes for a user-triggered flow runs inside a visible
 // tmux session surfaced in the app's terminals panel — no invisible child_process for user actions. Reads,
@@ -21,6 +20,10 @@ const execFileAsync = promisify(execFile);
 // Where the image bakes the wrapper (Dockerfile). Absent in local dev/tests — the runner then degrades to a
 // plain invisible `bash -c` with the same result contract, and `visible` gates the terminal frames.
 export const TMUX_RUN_BIN = "/usr/local/bin/tmux-run";
+
+// POSIX single-quote escaping — a value rides as one argv word through a composed shell line. The canonical
+// home for every daemon site that builds a shell command string (agent hook rewrite, panel job commands).
+export const shellQuote = (value: string): string => `'${value.replaceAll("'", `'\\''`)}'`;
 
 // What ships back over the wrapper's stdout (the tail — full output stays in the pane + pane log), and the
 // execFile ceiling above it.

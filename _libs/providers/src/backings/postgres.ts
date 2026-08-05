@@ -1,6 +1,5 @@
 import type { Provider, ResolvedInputs } from "@intentic/engine";
 import { HASH_KEY } from "@intentic/graph";
-import { envLine, shellQuote } from "@intentic/sandbox-run/quote";
 import { z } from "zod";
 import { composeDown, composeUp, containerImage, containerLabel, restampBacking, stateDir, waitReady } from "../core/backing-ssh.js";
 import { hasPendingRef, parseInputs, sshSchema, sshTarget } from "../core/inputs.js";
@@ -58,12 +57,7 @@ const ensureFiles = async (session: SshSession, id: string, hash: string, parsed
     const dir = stateDir(KIND, id);
     await session.exec(`mkdir -p ${dir}`);
     await session.exec(`cat > ${dir}/compose.yaml <<'COMPOSE_EOF'\n${composeYaml(id, hash, parsed)}COMPOSE_EOF`);
-    // compose interpolates this file into `POSTGRES_PASSWORD: $POSTGRES_PASSWORD` above, so the value passes a
-    // .env parser AND a host shell. The old form quoted neither: an apostrophe ended the shell word, and a `$`
-    // would have been eaten by compose's interpolation had it survived — a superuser password silently not the
-    // one that got baked into the data directory on first init.
-    const line = shellQuote(envLine("POSTGRES_PASSWORD", parsed.adminPassword));
-    await session.exec(`test -f ${dir}/.env || { printf '%s' ${line} > ${dir}/.env && chmod 600 ${dir}/.env; }`);
+    await session.exec(`test -f ${dir}/.env || printf 'POSTGRES_PASSWORD=%s\\n' '${parsed.adminPassword}' > ${dir}/.env && chmod 600 ${dir}/.env`);
 };
 
 const readyProbe = (id: string): string =>

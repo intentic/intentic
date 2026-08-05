@@ -1,6 +1,6 @@
 {
     "name": "@intentic/desktop",
-    "version": "0.0.0",
+    "version": "1.0.0",
     "description": "Drive a desktop from Node: capture the screen, move the pointer, click, type and scroll — Windows and Linux, no native modules",
     "license": "MIT",
     "type": "module",

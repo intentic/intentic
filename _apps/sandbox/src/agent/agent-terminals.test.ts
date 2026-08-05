@@ -1,6 +1,6 @@
 import { agentSessionName } from "@intentic/sandbox-contract/session-names";
 import { expect, test } from "vitest";
-import { shellQuote } from "@intentic/sandbox-run/quote";
+import { shellQuote } from "../terminal/terminal-run.js";
 import { syncHookOutput } from "../testing.js";
 import { bashTmuxHooks } from "./agent-terminals.js";
 
@@ -93,7 +93,7 @@ test("an isolated turn's Bash joins the turn's namespace, inside the tmux wrappe
     // command the pane runs crosses into the namespace (with the demotion, which is the command's own).
     // Without this, `sed -i` would rewrite the shared tree while the same turn's Edit tool wrote to the worktree.
     expect(command).toBe(
-        wrap("sed -i s/a/b/ x.ts", `nsenter --mount=/proc/4321/ns/mnt --wd=${shellQuote("/work")} -- ${demoted("sed -i s/a/b/ x.ts")}`, "edit"),
+        wrap("sed -i s/a/b/ x.ts", `nsenter --mount=/proc/4321/ns/mnt --wd='/work' -- ${demoted("sed -i s/a/b/ x.ts")}`, "edit"),
     );
 });
 

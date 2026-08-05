@@ -1,6 +1,6 @@
 {
     "name": "@intentic/workspace-ignore",
-    "version": "0.0.0",
+    "version": "1.0.0",
     "description": "Layered workspace ignore model — security floor (secrets, .git, browser profiles), junk denylist, accumulated .gitignore",
     "license": "MIT",
     "type": "module",
