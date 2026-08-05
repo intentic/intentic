@@ -147,6 +147,7 @@ catalog:
   "@types/pg": 8.20.0
   "@types/ssh2": 1.15.5
   "@types/tar-stream": 3.1.4
+  "@types/web-push": 3.6.4
   "@types/ws": 8.18.1
   "@typescript/native-preview": 7.0.0-dev.20260707.2
   "@vitejs/plugin-vue": 6.0.8
@@ -219,6 +220,7 @@ catalog:
   vue: 3.5.40
   vue-router: 5.2.0
   vue-tsc: 3.3.9
+  web-push: 3.6.7
   wrangler: 4.118.0
   ws: 8.21.1
   xlsx: 0.18.5

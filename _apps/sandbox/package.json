@@ -59,7 +59,7 @@
         "playwright": "catalog:",
         "tar-stream": "catalog:",
         "tslib": "catalog:",
-        "web-push": "^3.6.7",
+        "web-push": "catalog:",
         "ws": "catalog:",
         "yaml": "catalog:",
         "zod": "catalog:"
@@ -73,7 +73,7 @@
         "@types/node": "catalog:",
         "@types/ssh2": "catalog:",
         "@types/tar-stream": "catalog:",
-        "@types/web-push": "^3.6.4",
+        "@types/web-push": "catalog:",
         "@types/ws": "catalog:",
         "@typescript/native-preview": "catalog:",
         "pino-pretty": "catalog:",
