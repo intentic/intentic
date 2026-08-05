@@ -1,7 +1,6 @@
 #!/usr/bin/env bash
 # semantic-release prepareCmd: build the release closure, stamp versions, cross-compile the machine agents and
-# the desktop installers, and export the whole public surface to the GitHub mirror. Two ordering rules keep
-# this fast:
+# the desktop installers, then tag the release and attach them to it. Two ordering rules keep this fast:
 #   1. Build BEFORE stamping. Versions live only in package.json (read at runtime, never compiled into dist),
 #      but package.json is a turbo hash input — stamping first invalidates the whole closure and forces the
 #      release to rebuild what release:verify just built. Building first replays verify's cache instead.
@@ -46,8 +45,8 @@ bash "$DIR/build-desktop.sh" "$VERSION"
 # tests in commands.rs.
 bash "$DIR/verify-desktop-install.sh"
 
-# The public export, and the last step of the release: it attaches everything in the dist-bin dirs above to a
-# GitHub Release — the one download surface for the machine agents and the desktop installers — then pushes the
-# `v<version>` tag whose arrival is what publishes the npm packages (GitHub Actions, provenance, tokenless —
-# .github/workflows/npm-publish.yml in the mirror).
+# The publish, and the last step of the release: it pushes the `v<version>` tag whose arrival is what publishes
+# the npm packages (GitHub Actions, provenance, tokenless — .github/workflows/npm-publish.yml), then attaches
+# everything in the dist-bin dirs above to a GitHub Release — the one download surface for the machine agents
+# and the desktop installers.
 bash "$DIR/publish-github.sh" "$VERSION"

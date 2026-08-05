@@ -3,9 +3,9 @@
 # This makes the release safe to re-run: a failed run just re-publishes whatever didn't land yet.
 #
 # Runs in GitHub Actions (.github/workflows/npm-publish.yml), on the `v*` tag that publish-github.sh pushes to
-# the public mirror. Auth is TOKENLESS: npm exchanges the workflow's OIDC id-token for a short-lived
+# this repository. Auth is TOKENLESS: npm exchanges the workflow's OIDC id-token for a short-lived
 # credential, so there is no NPM_TOKEN to rotate, and every tarball carries a provenance attestation linking
-# it to the public commit and workflow run that built it. Each package must have this repository and this
+# it to the commit and workflow run that built it. Each package must have this repository and this
 # workflow registered as its trusted publisher on npmjs.com — one that hasn't been fails here in the token
 # exchange, which is the correct outcome: a package nobody can attest is not published.
 #
@@ -19,7 +19,7 @@ DIR="$(cd "$(dirname "$0")" && pwd)"
 source "$DIR/packages.sh"
 cd "$DIR/../.."
 
-# Versions are stamped by set-versions.sh before the mirror is exported, so by the time this runs every
+# Versions are stamped by set-versions.sh before the tag is pushed, so by the time this runs every
 # package.json already carries $VERSION. Checked rather than assumed: a mismatch means the tag and the tree
 # disagree, and the tarball would go out under a version nobody asked for.
 names=()

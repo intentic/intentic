@@ -54,28 +54,21 @@ This monorepo also contains a standalone **deployment engine** — a declarative
 
 It is **not part of the intentic product.** It is one of the many tools a specialized agent can reach for — no more a "feature" than `psql` or `docker` — and it lives in this repo only for convenience. Its walkthrough, capabilities, and known limits are documented separately in **[docs/deploy-engine.md](docs/deploy-engine.md)**.
 
-## The public mirror
+## The release surface
 
-Everything that runs on the user's machine is published as MIT source at
-**[github.com/intentic/intentic](https://github.com/intentic/intentic)** — the sandbox, the CLIs, the desktop
-app, the extensions, and the libs they stand on. The platform half of this repo (`_apps/{api,web,site,demo}`
-and its libs) stays here.
+**One repository — [github.com/intentic/intentic](https://github.com/intentic/intentic) — and nothing is
+exported anywhere else.** A release is a tag on the commit CI already built, and two things hang off it:
 
-It is a **snapshot per release, not a history mirror**: the release job materialises the public path set into a
-scratch tree and lands it as one commit tagged `v<version>`, so nothing about a file's past is ever exported
-and no force-push is ever needed. Three files carry the whole mechanism:
+- `_tools/scripts/publish-github.sh` — run from `release-prepare.sh`: tag `v<version>`, then a GitHub Release
+  with the desktop installers and the machine-agent binaries attached. That Release is the anonymous download
+  channel behind `curl https://intentic.dev/sync | sh`.
+- `.github/workflows/npm-publish.yml` — triggered by that tag: builds the closure and publishes all 23 packages
+  with provenance over npm's OIDC trusted publishing, so there is no npm token in this repo's CI at all.
 
-- `_tools/scripts/public.sh` — the manifest: what goes out, what is pruned, and the overlay of files the mirror
-  has that this repo doesn't (its README, its root `package.json`, its GitHub Actions workflow).
-- `_tools/scripts/publish-github.sh` — the export, run from `release-prepare.sh`: commit, tag, GitHub Release
-  with the installers and machine-agent binaries attached.
-- `_tools/scripts/verify-mirror.sh` — the guard: materialise, reconcile the subset lockfile, install frozen,
-  type-check. **A public package that grows a workspace dependency on a private one fails here**, which is the
-  one failure mode a subset has and this repo cannot see. No CI job runs it today — run it by hand before a
-  release when the public path set or a public package's dependencies moved.
-
-The pushed tag is also what publishes to npm: GitHub Actions builds the closure and publishes all 23 packages
-with provenance over npm's OIDC trusted publishing, so there is no npm token in this repo's CI at all.
+This used to be an export to a separate public mirror repo, with a path manifest and a subset guard. When
+development moved onto the same repository the mirror targeted, the export published over the development tree
+instead of alongside it — `release: v1.0.0` took `.github/workflows`, `_apps/api` and `.githooks` with it. The
+mirror, its manifest and its guard are gone; there is no second tree to keep in step.
 
 ## Architecture & contributing
 

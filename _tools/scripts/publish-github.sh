@@ -1,38 +1,36 @@
 #!/usr/bin/env bash
-# Export this release to the PUBLIC mirror at github.com/intentic/intentic: one commit, one tag, one GitHub
-# Release with the installers attached. Runs from release-prepare.sh after the versions are stamped and the
-# binaries are built, and is what makes the whole public surface move at once —
+# Publish this release: one tag, one GitHub Release with the installers attached. Runs from release-prepare.sh
+# after the versions are stamped and the binaries are built, and is what makes the public surface move at once —
 #
-#   • the mirror's tree becomes the source anyone can read (the development repository is member-only);
 #   • the pushed `v*` tag triggers .github/workflows/npm-publish.yml, which is where the @intentic/* packages
-#     are published now — with provenance, tokenless, attested to the commit this script just pushed;
+#     are published — with provenance, tokenless, attested to the commit the tag names;
 #   • the Release is the download surface for the desktop installers and the machine-agent binaries — the
 #     anonymous download channel behind `curl https://intentic.dev/sync | sh` and `.../computer | sh`.
 #
-# It exports the WORKING TREE, never history: the mirror gets a snapshot per release (public.sh), so nothing
-# that was ever committed and removed can surface, and no force-push is ever needed.
+# There is ONE repository. An earlier arrangement exported a public subset to a separate mirror repo, and when
+# development moved onto that same repo the export published straight over main — the v1.0.0 snapshot took
+# .github/workflows and _apps/api with it. The tag below names the commit CI already checked out, so there is
+# no second tree to keep in step and nothing to force-push.
 #
-# CI setup: GITHUB_TOKEN, a masked CI variable holding a fine-grained PAT for intentic/intentic with Contents:
-# read+write. Locally, without it, the export SKIPS so a release-prepare.sh dry-run stays runnable — but IN CI
-# a missing token is fatal. It has to be: this script's tag is the only trigger for the npm publish, so a quiet
-# skip on a real release ships nothing to npm and still reports green, which is how v1.177.0-v1.179.0 were
-# tagged with no packages behind them.
+# CI setup: GITHUB_TOKEN, a masked CI variable holding a fine-grained PAT with Contents: read+write. Locally,
+# without it, this SKIPS so a release-prepare.sh dry-run stays runnable — but IN CI a missing token is fatal. It
+# has to be: this script's tag is the only trigger for the npm publish, so a quiet skip on a real release ships
+# nothing to npm and still reports green, which is how v1.177.0-v1.179.0 were tagged with no packages behind them.
 #   bash _tools/scripts/publish-github.sh 1.177.0
 set -euo pipefail
 VERSION="${1:?usage: publish-github.sh <version>}"
 DIR="$(cd "$(dirname "$0")" && pwd)"
-source "$DIR/public.sh"
 cd "$DIR/../.."
 
-REPO="${GITHUB_MIRROR_REPO:-intentic/intentic}"
+REPO="${GITHUB_REPOSITORY:-intentic/intentic}"
 TAG="v${VERSION}"
 
 if [ -z "${GITHUB_TOKEN:-}" ]; then
   if [ -n "${CI:-}" ]; then
-    echo "GITHUB_TOKEN is unset — the mirror export is the npm release's only trigger, so this is fatal in CI." >&2
+    echo "GITHUB_TOKEN is unset — this tag is the npm release's only trigger, so this is fatal in CI." >&2
     exit 1
   fi
-  echo "  skip     GitHub mirror (no GITHUB_TOKEN, not CI)"
+  echo "  skip     GitHub tag + Release (no GITHUB_TOKEN, not CI)"
   exit 0
 fi
 
@@ -63,36 +61,16 @@ notes="$(
   section Other -v '^(feat|fix)(\(|!?:)'
 )"
 
-# --- materialise the tree -----------------------------------------------------------------------------------
-mirror="$(mktemp -d)"
-trap 'rm -rf "$mirror"' EXIT
-
-echo "==> cloning ${REPO}"
-# Partial rather than shallow: a blobless clone is just as cheap to fetch but keeps the full commit history, so
-# the push below is an ordinary fast-forward with no shallow-push edge cases.
-git clone --quiet --filter=blob:none "https://x-access-token:${GITHUB_TOKEN}@github.com/${REPO}.git" "$mirror"
-branch="$(git -C "$mirror" symbolic-ref --short HEAD)"
-
-if git -C "$mirror" rev-parse --verify --quiet "refs/tags/${TAG}" >/dev/null; then
-  echo "  skip     ${TAG} already on the mirror"
+# --- the tag ------------------------------------------------------------------------------------------------
+# It names the commit CI checked out. Pushed BEFORE the Release below, because the tag is what npm-publish.yml
+# waits on and the Release is only the download surface.
+if git ls-remote --exit-code --tags origin "refs/tags/${TAG}" >/dev/null 2>&1; then
+  echo "  skip     ${TAG} already on origin"
 else
-  # Wipe and re-materialise rather than sync: `git add -A` then records the removals too, so a file that left
-  # the public set leaves the mirror in the same commit that stopped exporting it.
-  find "$mirror" -mindepth 1 -maxdepth 1 ! -name .git -exec rm -rf {} +
-  materialize_public "$mirror"
-  # The exported lockfile is the monorepo's, which still carries the private packages' importers and the root's
-  # release-only devDependencies. Reconciling it against the subset is what makes `--frozen-lockfile` work in
-  # GitHub Actions; seeding from the full one keeps every resolution that survives identical.
-  echo "==> reconciling the subset lockfile"
-  (cd "$mirror" && pnpm install --lockfile-only --ignore-scripts)
-
-  git -C "$mirror" add -A
-  git -C "$mirror" \
-    -c user.name="intentic release" -c user.email="releases@intentic.dev" \
-    commit --quiet --allow-empty -m "release: ${TAG}" -m "$notes"
-  git -C "$mirror" tag -a "$TAG" -m "$notes"
-  echo "==> pushing ${TAG} to ${REPO} (${branch})"
-  git -C "$mirror" push --quiet origin "HEAD:${branch}" "refs/tags/${TAG}"
+  git rev-parse --verify --quiet "refs/tags/${TAG}" >/dev/null ||
+    git -c user.name="intentic release" -c user.email="releases@intentic.dev" tag -a "$TAG" -m "$notes"
+  echo "==> pushing ${TAG} to ${REPO}"
+  git push --quiet origin "refs/tags/${TAG}"
 fi
 
 # --- the Release + its assets -------------------------------------------------------------------------------
