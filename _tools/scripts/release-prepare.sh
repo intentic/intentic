@@ -38,15 +38,15 @@ bash "$DIR/build-desktop.sh" "$VERSION"
 # link opened the Sandbox Manager (waited 45s)` and `the original instance died while handling the link`,
 # release started at 12:34:12, and forty minutes later the installers with that bug were on the GitHub Release.
 # Verifying the release's OWN output is the only version of this check that cannot be outrun — a failure here
-# aborts semantic-release before publish-github.sh, so there is no tag, no Release, and no npm publish.
+# aborts semantic-release before it tags, so there is no tag, no Release, and no npm publish.
 #
 # Linux only, and that is the honest limit: running Intentic-setup.exe needs Windows. Until a Windows runner
 # exists the NSIS installer is covered by tier 1 as an archive, and the .ps1 setup path only by the argv unit
 # tests in commands.rs.
 bash "$DIR/verify-desktop-install.sh"
 
-# The publish, and the last step of the release: it pushes the `v<version>` tag whose arrival is what publishes
-# the npm packages (GitHub Actions, provenance, tokenless — .github/workflows/npm-publish.yml), then attaches
-# everything in the dist-bin dirs above to a GitHub Release — the one download surface for the machine agents
-# and the desktop installers.
-bash "$DIR/publish-github.sh" "$VERSION"
+# This script ENDS HERE, with the artifacts built, verified and unpublished. Nothing below the prepare step
+# belongs in it: semantic-release creates and pushes the `v<version>` tag itself the moment prepare returns, so
+# a script that also tagged would hand it a tag that already exists — which is exactly what happened, `fatal:
+# tag 'v1.2.0' already exists`, on every release that ever cut a version. publish-github.sh moved to publishCmd
+# in .releaserc.json, which runs after that tag is on the remote.

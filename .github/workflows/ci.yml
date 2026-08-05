@@ -586,8 +586,9 @@ jobs:
   # Dropping the edge costs nothing real, because that edge was never the gate on the installers. It cannot be:
   # desktop-verify builds version 0.0.0 in its OWN target dir, so its bytes are not the published bytes, and
   # release-prepare.sh says so at length where it re-verifies its own output. A desktop break is now discovered
-  # inside prepareCmd instead of before it — still ahead of publish-github.sh, so a broken desktop ships in
-  # neither arrangement. The job stays in the pipeline as a parallel, non-gating check.
+  # inside prepareCmd instead of before it — still ahead of the tag semantic-release pushes when prepare
+  # returns, so a broken desktop ships in neither arrangement. The job stays in the pipeline as a parallel,
+  # non-gating check.
   #
   # ci-desktop is a needs edge because this job RUNS IN that image — the same reason desktop-check and
   # desktop-verify carry it. Without it the dependency was real but undeclared, so the job started whenever

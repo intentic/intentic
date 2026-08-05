@@ -59,9 +59,9 @@ It is **not part of the intentic product.** It is one of the many tools a specia
 **One repository — [github.com/intentic/intentic](https://github.com/intentic/intentic) — and nothing is
 exported anywhere else.** A release is a tag on the commit CI already built, and two things hang off it:
 
-- `_tools/scripts/publish-github.sh` — run from `release-prepare.sh`: tag `v<version>`, then a GitHub Release
-  with the desktop installers and the machine-agent binaries attached. That Release is the anonymous download
-  channel behind `curl https://intentic.dev/sync | sh`.
+- `_tools/scripts/publish-github.sh` — semantic-release's publishCmd, run once the `v<version>` tag it pushed is
+  on the remote: a GitHub Release with the desktop installers and the machine-agent binaries attached. That
+  Release is the anonymous download channel behind `curl https://intentic.dev/sync | sh`.
 - `.github/workflows/npm-publish.yml` — triggered by that tag: builds the closure and publishes all 23 packages
   with provenance over npm's OIDC trusted publishing, so there is no npm token in this repo's CI at all.
 

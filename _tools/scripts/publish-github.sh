@@ -1,21 +1,18 @@
 #!/usr/bin/env bash
-# Publish this release: one tag, one GitHub Release with the installers attached. Runs from release-prepare.sh
-# after the versions are stamped and the binaries are built, and is what makes the public surface move at once —
-#
-#   • the pushed `v*` tag triggers .github/workflows/npm-publish.yml, which is where the @intentic/* packages
-#     are published — with provenance, tokenless, attested to the commit the tag names;
-#   • the Release is the download surface for the desktop installers and the machine-agent binaries — the
-#     anonymous download channel behind `curl https://intentic.dev/sync | sh` and `.../computer | sh`.
+# One GitHub Release, with the installers and the machine-agent binaries attached: the download surface behind
+# `curl https://intentic.dev/sync | sh` and `.../computer | sh`. semantic-release's publishCmd, so the `v*` tag
+# it hangs off is already on the remote — pushed by semantic-release itself the moment prepare returned, which
+# is also what triggers .github/workflows/npm-publish.yml (provenance, tokenless, attested to the tagged commit).
 #
 # There is ONE repository. An earlier arrangement exported a public subset to a separate mirror repo, and when
 # development moved onto that same repo the export published straight over main — the v1.0.0 snapshot took
-# .github/workflows and _apps/api with it. The tag below names the commit CI already checked out, so there is
-# no second tree to keep in step and nothing to force-push.
+# .github/workflows and _apps/api with it. The tag names the commit CI already checked out, so there is no
+# second tree to keep in step and nothing to force-push.
 #
 # CI setup: GITHUB_TOKEN, a masked CI variable holding a fine-grained PAT with Contents: read+write. Locally,
-# without it, this SKIPS so a release-prepare.sh dry-run stays runnable — but IN CI a missing token is fatal. It
-# has to be: this script's tag is the only trigger for the npm publish, so a quiet skip on a real release ships
-# nothing to npm and still reports green, which is how v1.177.0-v1.179.0 were tagged with no packages behind them.
+# without it, this SKIPS so a release dry-run stays runnable — but IN CI a missing token is fatal. It has to be:
+# a quiet skip on a real release leaves a tagged version whose installers nobody can download and still reports
+# green, which is the shape of how v1.177.0-v1.179.0 were tagged with no packages behind them.
 #   bash _tools/scripts/publish-github.sh 1.177.0
 set -euo pipefail
 VERSION="${1:?usage: publish-github.sh <version>}"
@@ -45,7 +42,11 @@ api() {
 # Rebuilt from the commit range rather than taken from semantic-release: its notes reach exec plugins only as a
 # templated command string, and release notes are exactly the free text that breaks when it is spliced into a
 # shell command. The grouping below is the same conventional-commit grouping, computed where the quoting is safe.
-prev="$(git describe --tags --abbrev=0 --match 'v[0-9]*' 2>/dev/null || true)"
+#
+# `--exclude "$TAG"` is load-bearing now that this runs in publishCmd: THIS release's tag is already on HEAD by
+# the time we get here, so an unfiltered `git describe` answers with it and the range collapses to nothing —
+# a Release with empty notes. What is wanted is the release before this one.
+prev="$(git describe --tags --abbrev=0 --match 'v[0-9]*' --exclude "$TAG" 2>/dev/null || true)"
 range="${prev:+${prev}..}HEAD"
 
 section() { # <heading> <grep-args...>
@@ -61,19 +62,12 @@ notes="$(
   section Other -v '^(feat|fix)(\(|!?:)'
 )"
 
-# --- the tag ------------------------------------------------------------------------------------------------
-# It names the commit CI checked out. Pushed BEFORE the Release below, because the tag is what npm-publish.yml
-# waits on and the Release is only the download surface.
-if git ls-remote --exit-code --tags origin "refs/tags/${TAG}" >/dev/null 2>&1; then
-  echo "  skip     ${TAG} already on origin"
-else
-  git rev-parse --verify --quiet "refs/tags/${TAG}" >/dev/null ||
-    git -c user.name="intentic release" -c user.email="releases@intentic.dev" tag -a "$TAG" -m "$notes"
-  echo "==> pushing ${TAG} to ${REPO}"
-  git push --quiet origin "refs/tags/${TAG}"
-fi
-
 # --- the Release + its assets -------------------------------------------------------------------------------
+# The tag is NOT created here. semantic-release creates and pushes it between prepare and publish — "create the
+# tag before calling the publish plugins as some require the tag to exists" is its own comment — and this script
+# is one of those plugins. Tagging here as well is what made every real release die at `fatal: tag 'vX.Y.Z'
+# already exists`: the Release and its assets went out, then semantic-release aborted on the second tag, taking
+# the container images and the `stable` pointer down with it.
 release_id="$(api "https://api.github.com/repos/${REPO}/releases/tags/${TAG}" 2>/dev/null | node -pe 'JSON.parse(require("fs").readFileSync(0,"utf8")).id' 2>/dev/null || true)"
 if [ -z "$release_id" ]; then
   echo "==> creating release ${TAG}"
