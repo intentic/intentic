@@ -10,7 +10,10 @@
      line (`w-full` until `md`), so the actions wrap underneath instead of squeezing the title. Sharing the
      line is what turned "Waiting for your sandbox to report in…" into a three-line column beside a "Check
      now" button — a title that has to be read vertically reads as a broken layout, and the button it was
-     making room for is the one thing on that card a user might tap. -->
+     making room for is the one thing on that card a user might tap.
+     On that second line the actions align LEFT (`ml-auto` only from md), because right is where the title
+     isn't: a lone (i) hint pinned to the far corner of an otherwise empty row reads as a stray control, not
+     as the caption of the heading above it. -->
 <script setup lang="ts">
 import { type IconName } from "../icons/iconSets.js";
 
@@ -31,7 +34,7 @@ const { step, icon, title, done = false } = defineProps<{ step?: number; icon?: 
                 </span>
                 <h2 class="min-w-0 font-semibold leading-tight">{{ title }}</h2>
             </div>
-            <div v-if="$slots['actions']" class="ml-auto flex items-center gap-2">
+            <div v-if="$slots['actions']" class="flex items-center gap-2 md:ml-auto">
                 <slot name="actions" />
             </div>
         </div>

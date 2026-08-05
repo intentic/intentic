@@ -8,8 +8,9 @@
      devices — the address of this very page — and the laptop that opens it resumes the same sandbox at the same
      step with the command already on screen. The mail carries no code and no command (see setup-email.ts); it
      is a bookmark the user posts to themselves.
-     The command stays visible underneath. Copying it on a phone is not always a mistake: people drive servers
-     from Termius and Blink, and for them the phone IS the terminal. That path just stops being the loud one. -->
+     The command is still there, one tap below this (see Setup.vue's disclosure). Copying it on a phone is not
+     always a mistake: people drive servers from Termius and Blink, and for them the phone IS the terminal.
+     That path is simply folded away until someone says it is theirs. -->
 <script setup lang="ts">
 import { cmp } from "@intentic/ui";
 import Button from "primevue/button";
@@ -48,16 +49,20 @@ const send = async (): Promise<void> => {
 </script>
 
 <template>
-    <div class="flex flex-col gap-2.5 rounded-lg border border-line bg-overlay/40 p-3">
+    <!-- NO CARD OF ITS OWN. This used to be a bordered, tinted panel inside step 3's card, with a full-width
+         button inside that — three nested boxes to say one sentence and offer one action, on the narrowest
+         screen the app has. The step card is the box; this is simply its first line and its first button. -->
+    <div class="flex flex-col gap-2.5">
         <!-- The heading a phone needed all along: which device this step belongs to. Stated BEFORE the command
              rather than as a correction after it, because the mistake it prevents is silent — someone who has
-             not realised the command runs elsewhere never does anything this page can react to. -->
-        <p class="flex items-start gap-2.5 text-xs text-content">
+             not realised the command runs elsewhere never does anything this page can react to.
+             One clause, because the button under it says the rest: a second sentence telling the reader to
+             send themselves the link, directly above a button labelled "Email me the link", is the label read
+             twice. And it goes away once the mail is out — the confirmation names the same machine, so keeping
+             it would be the third line in a row to say "computer". -->
+        <p v-if="!sent" class="flex items-start gap-2.5 text-xs text-muted">
             <Icon name="desktop" class="mt-0.5 shrink-0 text-link" />
-            <span class="min-w-0">
-                This runs on a <span class="font-medium">computer</span>, not on your phone — it needs a terminal and Docker.
-                <template v-if="!sent">Send yourself the link and pick it up there.</template>
-            </span>
+            <span class="min-w-0">Not on your phone — this needs a terminal and Docker.</span>
         </p>
 
         <template v-if="sent">
@@ -71,8 +76,7 @@ const send = async (): Promise<void> => {
                         >Sent to <span class="break-words">{{ email }}</span
                         >.</span
                     >
-                    Open it on the computer that will host your sandbox — leave this page open and it'll jump to your workspace the moment that
-                    machine connects.
+                    Open it on the computer that will host your sandbox — your workspace opens the moment it connects.
                 </span>
             </p>
             <!-- Quiet, because the common reason to press it twice is impatience with a mail that is already on

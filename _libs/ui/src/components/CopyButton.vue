@@ -5,7 +5,10 @@
      EMPHASIS AND WIDTH ARE SEPARATE QUESTIONS, which is why there are two flags. `stretch` used to carry
      both, so a caller who needed "this is the action to take" had no way to say it without also claiming the
      whole row — and setup's stuck-wait banner, where copying the command again IS the way out, ended up
-     wearing the quiet chip meant for a copy-as-convenience beside content. -->
+     wearing the quiet chip meant for a copy-as-convenience beside content.
+     TONE is a third question and needs no flag of its own: `severity` falls through to the Button like any
+     other attr, for the emphasised copy that must not outshout the card's own primary action (setup's phone
+     command, sitting under the email handoff that is the recommended path there). -->
 <script setup lang="ts">
 import Button from "primevue/button";
 import { computed, ref } from "vue";

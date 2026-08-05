@@ -64,8 +64,10 @@ import { type AttachOutcome, daemonUrlProblem, nameFromDaemonUrl, normalizeDaemo
 const sandbox = useSandbox();
 const router = useRouter();
 const route = useRoute();
-// Drives the two places a phone needs different CONTENT rather than different layout (which the md: classes
-// below handle): the run tabs' labels and the size of the controls that carry them.
+// A phone gets a DIFFERENT step 3, not a narrower one — the command runs on a machine this browser is not, so
+// the handoff is the step and the command folds behind a disclosure (see `commandVisible`). The rest of what
+// this drives is content the md: classes below cannot reach: the run tabs' labels, and the size and emphasis
+// of the controls that carry them.
 const { mobile } = useDevice();
 const { user, entitlements, refreshPlan } = useAuth();
 const { getIdToken, warmIdToken } = useGoogleIdentity();
@@ -222,10 +224,15 @@ const hasDocker = ref(false);
  * A browser that is NOT the app still gets the link (the OS routes it to an installed app) plus somewhere to
  * download one; the pasted command stays the primary path there, because it is the one that always works. */
 const desktop = computed(() => desktopVersion() !== undefined);
-// Inside the app the command is still one click away — a server is a perfectly ordinary place to want the
-// sandbox, and the app cannot run it there.
-const showServerCommand = ref(false);
-const commandVisible = computed(() => !desktop.value || showServerCommand.value);
+/* THE COMMAND IS FOLDED AWAY ON THE TWO DEVICES WHERE IT IS NOT THE PATH, behind the same one-line disclosure
+ * on both: in the app the button above already runs it (a server is still an ordinary place to want the
+ * sandbox, and the app cannot run it there), and on a phone there is no shell to paste into — the handoff is
+ * the step there, and the command under it was six controls of scenery around a clipboard write that leads
+ * nowhere. Neither reader is shut out: a phone driving a server over SSH is one tap from the same command,
+ * and the tap is labelled for exactly that person. Everywhere else the command IS the step, and there is
+ * nothing to unfold. */
+const showCommand = ref(false);
+const commandVisible = computed(() => (desktop.value || mobile.value ? showCommand.value : true));
 // Compose declares its own env, so neither switch under the command applies to it — but "no tab is on screen
 // at all" is a different thing from "the compose tab is", and only the second one hides the sync option.
 const composeShown = computed(() => commandVisible.value && runTab.value === `compose`);
@@ -1248,7 +1255,16 @@ watch(commandReady, (ready) => {
                  knowing but not worth reading right now (what gets created, what is written outside Docker, how
                  to remove all of it) moved to SetupRunDetails, which is docked in a column of its own from xl
                  and folded into the (i) below it. That is also what fixed the hint landing ON the command it
-                 described, on exactly the screens with room to put it beside instead. -->
+                 described, on exactly the screens with room to put it beside instead.
+
+                 AND ON A PHONE, WHAT YOU DO IS NOT THE COMMAND. The card here is one sentence, one button and
+                 one line of state: the step happens on a computer this browser is not, so the email handoff is
+                 the whole of it. The command and everything that dresses it — three tabs, a code block, a copy
+                 button, two checkboxes, a dev note — sat between that button and the state line, five bordered
+                 surfaces deep (card → panel → button, plus the tab track and the code frame), all of it in
+                 service of a clipboard the target machine cannot read. It is now one line's worth of
+                 disclosure, addressed to the one reader it is true for: someone holding an SSH session. -->
+
                     <StepSection v-if="created && lane === `provision`" :step="3" :title="runTitle">
                         <template #actions>
                             <!-- Below xl only: from there up the same content is docked in its own column (see the
@@ -1286,24 +1302,34 @@ watch(commandReady, (ready) => {
                                 <Button label="Set it up now" class="self-start" @click="runHere">
                                     <template #icon><Icon name="bolt" /></template>
                                 </Button>
-                                <button
-                                    type="button"
-                                    class="self-start text-xs text-muted underline hover:text-content"
-                                    @click="showServerCommand = !showServerCommand"
-                                >
-                                    {{ showServerCommand ? `Hide the server command` : `Running it on a server instead? Show the command` }}
-                                </button>
                             </template>
 
                             <!-- On a phone, the step's actual next move — see SetupHandoff.vue. It goes ABOVE the
                                  command because the command is the thing it is redirecting people away from, and a
-                                 correction printed underneath what it corrects is read second or not at all. -->
-                            <SetupHandoff
-                                v-if="mobile && commandVisible && created"
-                                :sandbox-id="created.id"
-                                :email="user?.email ?? ``"
-                                @sent="onEmailed"
-                            />
+                                 correction printed underneath what it corrects is read second or not at all. It is
+                                 no longer gated on the command being on screen: it is what the step IS here, and the
+                                 command is the thing folded behind it. -->
+                            <SetupHandoff v-if="mobile && created" :sandbox-id="created.id" :email="user?.email ?? ``" @sent="onEmailed" />
+
+                            <!-- ONE LINE WHERE THERE USED TO BE A SECTION. Both devices that don't run the command
+                                 here get the same offer, worded for the reader who takes it: a server the app can't
+                                 reach, or a shell app on the phone (Termius, Blink, a tmux session someone never
+                                 closed). Everything the command needs — its tabs, its options, its dev note — lives
+                                 inside the disclosure, so a phone that isn't driving a server never sees any of it. -->
+                            <button
+                                v-if="desktop || mobile"
+                                type="button"
+                                :class="cmp.linkButton(`gap-2 text-muted hover:text-content hover:no-underline`)"
+                                @click="showCommand = !showCommand"
+                            >
+                                <Icon name="terminal" class="shrink-0" />
+                                <span class="min-w-0">
+                                    <template v-if="showCommand">Hide the command</template>
+                                    <template v-else-if="desktop">Running it on a server instead? Show the command</template>
+                                    <template v-else>Have a terminal here? Show the command</template>
+                                </span>
+                                <Icon :name="showCommand ? `chevron-up` : `chevron-down`" class="shrink-0 text-subtle" />
+                            </button>
 
                             <div v-if="commandVisible" class="flex flex-col gap-2">
                                 <!-- One line, because the title already gave the instruction and nobody reads the second
@@ -1312,40 +1338,25 @@ watch(commandReady, (ready) => {
                              why it is no longer above a button whose whole selling point is that there is no
                              terminal. In the app (where this computer already has a button of its own) the machine
                              that runs this is by construction not the one reading it.
-                             On a phone the handoff above has already said which machine, so this line stops
-                             repeating it and does the one job left: naming who copying is still FOR. Phones drive
-                             servers — Termius, Blink, a tmux session someone never closed — and for that reader
-                             the clipboard lands exactly where it should. -->
-                                <p class="flex items-start gap-2.5 text-xs text-muted">
+                             Not on a phone: the line that opened this disclosure already said who copying is for,
+                             and repeating it here would be the third sentence in a card about a fourth device. -->
+                                <p v-if="!mobile" class="flex items-start gap-2.5 text-xs text-muted">
                                     <Icon name="terminal" class="mt-0.5 shrink-0 text-link" />
                                     <span class="min-w-0">
-                                        <template v-if="mobile"
-                                            >Or, if you have an SSH session open on this phone, copy it and paste it there.</template
-                                        >
-                                        <template v-else-if="desktop"
+                                        <template v-if="desktop"
                                             >Copy it, then paste it into a terminal on the machine that will host your sandbox.</template
                                         >
                                         <template v-else>Paste it into a terminal — this computer, or any server you have a shell on.</template>
                                     </span>
                                 </p>
                                 <!-- On a phone the picker takes a full row of its own: three pill tabs sharing a
-                             340px line wrapped every label to two lines.
-                             The copy button no longer does. It used to be `stretch` — full width, the loudest
-                             control on the card — on the reasoning that copying is the whole task on a phone.
-                             That is what turned out to be wrong: the clipboard it writes to is not the one the
-                             command has to be pasted from, so the most emphatic affordance in the flow was
-                             pointing at a dead end. It keeps `cta`, which is touch-sized without claiming the
-                             row, and the emphasis moved to the handoff above. -->
+                             340px line wrapped every label to two lines. The copy button leaves that row with
+                             it — a chip stranded on a line of its own under the tabs, one row above the thing
+                             it copies, was the loose end on this card. Beside the tabs on a desktop, under the
+                             command on a phone; either way it is next to what it acts on. -->
                                 <div class="flex flex-col gap-2 md:flex-row md:flex-wrap md:items-center md:justify-between">
                                     <Segmented v-model="runTab" :options="runTabOptions" :stretch="mobile" />
-                                    <CopyButton
-                                        v-if="runTab !== `compose`"
-                                        class="self-start md:self-auto"
-                                        :text="selectedCommand"
-                                        :label="mobile ? `Copy command` : `Copy`"
-                                        :cta="mobile"
-                                        @copied="onCopied"
-                                    />
+                                    <CopyButton v-if="!mobile && runTab !== `compose`" :text="selectedCommand" label="Copy" @copied="onCopied" />
                                 </div>
                                 <SetupCompose v-if="runTab === `compose` && composeArgs" :args="composeArgs" />
                                 <template v-else>
@@ -1363,6 +1374,18 @@ watch(commandReady, (ready) => {
                                         :wrap="true"
                                         :copyable="false"
                                         :clamp-lines="mobile ? 4 : undefined"
+                                    />
+                                    <!-- Full width and touch-sized, directly under the command: the reader who
+                                 opened this disclosure came for the clipboard, so here — and only here — copying
+                                 is the action. `secondary`, because the primary on this card is the email
+                                 handoff above it and two filled buttons make the reader choose twice. -->
+                                    <CopyButton
+                                        v-if="mobile"
+                                        :text="selectedCommand"
+                                        label="Copy command"
+                                        :stretch="true"
+                                        severity="secondary"
+                                        @copied="onCopied"
                                     />
                                     <!-- Local dev only: platformEnv() injects SANDBOX_IMAGE=intentic-sandbox:dev — connect.sh
                                  rebuilds it from this checkout on every run (layer-cached), so the pasted command is
@@ -1392,14 +1415,15 @@ watch(commandReady, (ready) => {
                                  of its peers state in one. It is the same kind of thing they are — something that
                                  changes what this command does — so it now reads as one, and the folder it mirrors
                                  to is the caption rather than a sentence of its own.
-                                 Sync outlives the command, though: it rides the desktop handoff too, so it stays on
-                                 screen in the app where the command is folded away. Only the compose tab drops it,
-                                 because that file declares its own env. -->
+                                 Sync outlives the command in the APP, where it rides the desktop handoff too — so it
+                                 stays on screen there with the command folded away. On a phone it does not: nothing
+                                 is enrolled from here, and the machine that opens the emailed link asks again. Only
+                                 the compose tab drops it outright, because that file declares its own env. -->
                             <!-- The <label> stops at the option's NAME rather than wrapping the whole row: a
                                  label toggles on any click inside it, and these captions carry a folder path
                                  and a `sudo` mention — text people select and read. Clicking a row's name still
                                  hits a 200px target; selecting its caption no longer rewrites the command. -->
-                            <div v-if="!composeShown" class="flex flex-col gap-1.5 text-2xs text-muted">
+                            <div v-if="!composeShown && (commandVisible || desktop)" class="flex flex-col gap-1.5 text-2xs text-muted">
                                 <div class="flex flex-wrap items-center gap-x-2 gap-y-1">
                                     <label class="flex cursor-pointer items-center gap-2">
                                         <Checkbox v-model="syncEnabled" :binary="true" size="small" />
@@ -1534,6 +1558,12 @@ watch(commandReady, (ready) => {
                                         <span class="font-medium">Still nothing.</span> This has to be pasted into a terminal on the machine that will
                                         run your sandbox.
                                     </span>
+                                    <!-- A phone with the command still folded away has not been told anything wrong
+                                         yet — it simply hasn't taken the one step the card offers. -->
+                                    <span v-else-if="mobile" class="min-w-0">
+                                        <span class="font-medium">Still nothing.</span> Email yourself the link above and open it on the computer that
+                                        will host your sandbox.
+                                    </span>
                                     <span v-else-if="launched" class="min-w-0">
                                         <span class="font-medium">Still nothing.</span> Check the Intentic window — it shows what the setup is doing,
                                         and any error it hit.
@@ -1567,9 +1597,13 @@ watch(commandReady, (ready) => {
                          pull legitimately takes minutes. -->
                             <p v-if="slowBuild" class="flex items-start gap-2 text-2xs text-warning">
                                 <Icon name="exclamation-circle" class="mt-0.5 shrink-0" />
+                                <!-- Where the answer is depends on what actually ran it — the app streams its own
+                                     log, everything else has a terminal. Asking `commandVisible` instead used to
+                                     send a phone whose command is folded away to an app window that only exists on
+                                     a desktop. -->
                                 <span class="min-w-0"
-                                    >Picked up a while ago, still no sandbox. Check {{ commandVisible ? `that terminal` : `the Intentic window` }} for
-                                    an error — it's safe to re-run.</span
+                                    >Picked up a while ago, still no sandbox. Check {{ launched ? `the Intentic window` : `that terminal` }} for an
+                                    error — it's safe to re-run.</span
                                 >
                             </p>
                         </div>
