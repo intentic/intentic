@@ -28,10 +28,12 @@ vi.hoisted(() => {
 });
 
 // The page is URL-driven; the vpn card is what this file is about, so the route names it and nothing navigates.
-// Partial, because the real router module is pulled in transitively and still has to build itself.
+// The empty `query` is not padding — the rail's slice and the grid's filter are read off it, so a route without
+// one is a route vue-router never hands out. Partial, because the real router module is pulled in transitively
+// and still has to build itself.
 vi.mock(import(`vue-router`), async (importOriginal) => ({
     ...(await importOriginal()),
-    useRoute: () => ({ params: { card: `vpn` } }) as never,
+    useRoute: () => ({ params: { card: `vpn` }, query: {} }) as never,
     useRouter: () => ({ push: vi.fn(), replace: vi.fn() }) as never,
 }));
 

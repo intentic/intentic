@@ -97,7 +97,7 @@ const routes: RouteRecordRaw[] = [
             {
                 path: `capabilities/:card?`,
                 name: `capabilities`,
-                meta: { title: `Add a capability` },
+                meta: { title: `Capabilities` },
                 component: () => import(`../pages/Capabilities.vue`),
             },
             { path: `sandbox/:tab?`, name: `sandbox`, meta: { title: `Sandbox` }, component: () => import(`../pages/SandboxHub.vue`) },
