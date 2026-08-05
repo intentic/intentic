@@ -399,15 +399,19 @@ const openInWorkspace = (file: AgentReviewFile): void => {
     if (body === undefined) {
         return;
     }
-    openDiff({
-        key: `agent:${agentId}:${file.repo}`,
-        scope: file.repo,
-        label: file.label,
-        status: file.change.status,
-        path: file.change.path,
-        ...body,
-        ...diffRawUrls({ source: `agent`, agent: agentId, repo: file.repo }, file.change.path, file.change.status),
-    });
+    openDiff(
+        {
+            key: `agent:${agentId}:${file.repo}`,
+            scope: file.repo,
+            label: file.label,
+            status: file.change.status,
+            path: file.change.path,
+            ...body,
+            ...diffRawUrls({ source: `agent`, agent: agentId, repo: file.repo }, file.change.path, file.change.status),
+        },
+        // The button says "open this over there" — a tab that vanished on the next look would be the opposite.
+        `keep`,
+    );
     void router.push({ name: `workspace` });
 };
 

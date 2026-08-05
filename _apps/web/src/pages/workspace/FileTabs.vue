@@ -11,12 +11,21 @@ import { basename } from "@intentic/ui/path";
  * active id (useWorkspaceTabs), and embeds this strip in its tab row (which provides the bar's
  * border/background). A file tab shows its type icon, basename, and a close ×; a dirty file shows a dot in
  * the close slot (→ × on hover). A diff tab shows its status letter + basename; a plan tab shows the plan
- * icon + its title; neither is ever dirty. */
+ * icon + its title; neither is ever dirty. The one tab in the preview slot is drawn italic and promoted out of
+ * it by a double-click, exactly as VSCode does. */
 
-const { tabs, active } = defineProps<{ tabs: readonly WorkspaceTab[]; active?: string | null }>();
+// `preview` is the one transient tab, if any (see OpenMode): drawn italic, like VSCode's, because it is going
+// to be replaced by the next file the user looks at.
+const { tabs, active, preview } = defineProps<{ tabs: readonly WorkspaceTab[]; active?: string | null; preview?: string | null }>();
 // `contextmenu` carries the right-clicked tab's id, or undefined when the click landed on the strip's empty
-// space — the parent owns both menus, so it decides which rows a tab-less right-click deserves.
-const emit = defineEmits<{ select: [id: string]; close: [id: string]; contextmenu: [id: string | undefined, event: Event] }>();
+// space — the parent owns both menus, so it decides which rows a tab-less right-click deserves. `keep` is the
+// double-click that makes a preview tab permanent.
+const emit = defineEmits<{
+    select: [id: string];
+    keep: [id: string];
+    close: [id: string];
+    contextmenu: [id: string | undefined, event: Event];
+}>();
 
 const { isDirty } = useEditBuffers();
 const { explorerStyle } = useExplorerStyle();
@@ -37,7 +46,7 @@ const tabLabel = (tab: WorkspaceTab): string => {
     }
     return tab.kind === `health` ? basename(tab.repo) : basename(tab.path);
 };
-const tabHint = (tab: WorkspaceTab): string => {
+const tabSubject = (tab: WorkspaceTab): string => {
     if (tab.kind === `plan`) {
         return tab.title;
     }
@@ -52,6 +61,9 @@ const tabHint = (tab: WorkspaceTab): string => {
     }
     return tab.kind === `diff` ? `${tab.label} (diff)` : tab.path;
 };
+// The preview tab's tooltip carries the gesture that keeps it: a double-click is the one affordance the tab
+// itself has no room to show, and the italic alone doesn't say what to do about it.
+const tabHint = (tab: WorkspaceTab): string => (tab.id === preview ? `${tabSubject(tab)} · double-click to keep open` : tabSubject(tab));
 
 const onClose = (event: Event, id: string): void => {
     // The × sits inside the tab, so stop the click from also selecting it.
@@ -150,6 +162,7 @@ watch(
                 :class="{ 'ftab-on': tab.id === active }"
                 v-tooltip.bottom="tabHint(tab)"
                 @click="emit('select', tab.id)"
+                @dblclick="emit('keep', tab.id)"
                 @contextmenu.prevent.stop="emit('contextmenu', tab.id, $event)"
             >
                 <Icon
@@ -165,7 +178,7 @@ watch(
                      one this app has never heard of) — an unknown name renders the set's fallback, never an error. -->
                 <Icon v-else-if="tab.kind === 'document'" :name="tab.icon as IconName" class="text-2xs text-link" />
                 <ChangeStatusMark v-else :status="tab.status" />
-                <span class="max-w-40 truncate">{{ tabLabel(tab) }}</span>
+                <span class="max-w-40 truncate" :class="{ italic: tab.id === preview }">{{ tabLabel(tab) }}</span>
                 <span class="relative flex h-3 w-3 shrink-0 items-center justify-center" @click="onClose($event, tab.id)">
                     <Icon
                         name="circle-fill"

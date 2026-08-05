@@ -122,6 +122,7 @@ const {
     activeId,
     activeTab,
     openLine,
+    previewId,
     openFile,
     openAtLine,
     openDiff,
@@ -129,6 +130,7 @@ const {
     openHealth,
     openDocument,
     selectTab,
+    keepTab,
     closedTabs,
     closeTabIds,
     reopenClosedTab,
@@ -272,6 +274,9 @@ const tabMenuItems = computed<MenuItem[]>(() => {
     const others = new Set(tabs.value.filter((tab) => tab.id !== id).map((tab) => tab.id));
     const toRight = new Set(tabs.value.slice(index + 1).map((tab) => tab.id));
     return [
+        // Promoting the preview tab, beside the double-click that does the same thing: the gesture is invisible,
+        // and a menu is where someone goes to find out what a tab can do.
+        ...(id === previewId.value ? [{ label: `Keep Open`, command: () => keepTab(id) }, { separator: true }] : []),
         { label: `Close`, icon: `times`, shortcut: commandShortcut(`workspace.closeTab`), command: () => closeTab(id) },
         {
             label: `Close Others`,
@@ -850,7 +855,15 @@ const endResize = (event: PointerEvent): void => {
                     >
                         <Icon name="bars" class="text-sm" />
                     </button>
-                    <FileTabs :tabs="tabs" :active="activeId" @select="selectTab" @close="closeTab" @contextmenu="openTabMenu" />
+                    <FileTabs
+                        :tabs="tabs"
+                        :active="activeId"
+                        :preview="previewId"
+                        @select="selectTab"
+                        @keep="keepTab"
+                        @close="closeTab"
+                        @contextmenu="openTabMenu"
+                    />
                     <div class="flex shrink-0 items-center gap-2 px-2">
                         <span v-if="actionError" class="max-w-64 truncate text-2xs text-danger" v-tooltip.bottom.overflow="actionError">{{
                             actionError

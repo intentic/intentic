@@ -5,6 +5,7 @@ import { diffRawUrls } from "../../composables/workspace/diffRaw";
 import { useHistory } from "../../composables/workspace/useHistory";
 import { ChangeStatusMark, cmp, type IconName, timeAgo } from "@intentic/ui";
 import type { DiffPayload } from "@intentic/extension-api";
+import type { OpenMode } from "./workspaceTabs";
 
 /* The checkpoint timeline — a mode of the workspace's ONE left sidebar (Workspace.vue owns the aside, the
  * resize handle, and the Files|Changes|Checkpoints mode switch): the daemon's checkpoints of /work, NOT git
@@ -16,7 +17,9 @@ import type { DiffPayload } from "@intentic/extension-api";
  * restorable. */
 
 const { snapshots, error, isLoading, refetch, diff, fileDiff, restore, busy, actionError } = useHistory();
-const emit = defineEmits<{ "open-diff": [payload: DiffPayload] }>();
+// The gesture decides the tab: a click is a look (the strip's preview tab, replaced by the next file looked at),
+// a double-click keeps it. See workspaceTabs' OpenMode.
+const emit = defineEmits<{ "open-diff": [payload: DiffPayload, mode: OpenMode] }>();
 
 const selectedId = ref<string | undefined>(undefined);
 const changes = ref<readonly SnapshotChange[]>([]);
@@ -53,23 +56,27 @@ const select = (snapshot: WorkspaceSnapshot): void => {
         .finally(() => (diffLoading.value = false));
 };
 
-const openDiff = (change: SnapshotChange): void => {
+const openDiff = (change: SnapshotChange, mode: OpenMode): void => {
     const snapshotId = selectedId.value;
     if (snapshotId === undefined) {
         return;
     }
     void fileDiff(snapshotId, change.scope, change.path).then((body) => {
-        emit(`open-diff`, {
-            key: snapshotId,
-            scope: change.scope,
-            label: changeLabel(change),
-            status: change.status,
-            path: change.path,
-            ...body,
-            // A checkpoint over an image ships no text either — the bytes come from /diff/raw, against this same
-            // checkpoint so the preview shows what the row is about, not the file's current state on disk.
-            ...diffRawUrls({ source: `checkpoint`, snapshot: snapshotId, scope: change.scope }, change.path, change.status),
-        });
+        emit(
+            `open-diff`,
+            {
+                key: snapshotId,
+                scope: change.scope,
+                label: changeLabel(change),
+                status: change.status,
+                path: change.path,
+                ...body,
+                // A checkpoint over an image ships no text either — the bytes come from /diff/raw, against this
+                // same checkpoint so the preview shows what the row is about, not the file's state on disk.
+                ...diffRawUrls({ source: `checkpoint`, snapshot: snapshotId, scope: change.scope }, change.path, change.status),
+            },
+            mode,
+        );
     });
 };
 
@@ -119,7 +126,8 @@ const confirmRestore = (id: string): void => {
                         :key="`${change.scope}/${change.path}`"
                         type="button"
                         class="cv-file flex w-full items-center gap-1.5 rounded px-1 py-0.5 text-left transition-colors hover:bg-overlay max-md:min-h-11"
-                        @click="openDiff(change)"
+                        @click="openDiff(change, 'preview')"
+                        @dblclick="openDiff(change, 'keep')"
                     >
                         <ChangeStatusMark :status="change.status" />
                         <!-- <bdi> keeps a leading "_" ("_apps/…") from being reordered to the far right by dir="rtl";

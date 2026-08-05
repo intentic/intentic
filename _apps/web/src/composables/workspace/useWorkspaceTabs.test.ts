@@ -32,7 +32,16 @@ sessionStorage.setItem(
 
 const { useWorkspaceTabs } = await import("./useWorkspaceTabs");
 
-const { tabs, activeId, openDiff, openFile, selectTab, closedTabs, closeTabIds, reopenClosedTab } = useWorkspaceTabs();
+const { tabs, activeId, previewId, openDiff, openFile, keepTab, selectTab, closedTabs, closeTabIds, reopenClosedTab } = useWorkspaceTabs();
+const diffPayload = (path: string) => ({
+    key: `working:root`,
+    scope: `root`,
+    label: path,
+    status: `modified` as const,
+    path,
+    before: `a`,
+    after: `b`,
+});
 const stored = (): { active: string | null; tabs: { id: string }[] } => JSON.parse(sessionStorage.getItem(KEY) ?? `{}`);
 
 it(`comes back with the tabs and focus the last visit left`, () => {
@@ -52,7 +61,7 @@ it(`persists an opened tab`, async () => {
 // the next load, so it is never stored — and the focus it held lands on its last surviving neighbour rather
 // than on a tab that won't be there.
 it(`leaves a diff out, and the focus it held with it`, async () => {
-    openDiff({ key: `working:root`, scope: `root`, label: `main.ts`, status: `modified`, path: `src/main.ts`, before: `a`, after: `b` });
+    openDiff(diffPayload(`src/main.ts`), `keep`);
     await nextTick();
 
     expect(tabs.value.some((tab) => tab.kind === `diff`)).toBe(true);
@@ -109,4 +118,49 @@ it(`does nothing when nothing has been closed`, () => {
 
     expect(tabs.value.map((tab) => tab.id)).toEqual([`src/main.ts`, `health:root`, `README.md`]);
     expect(activeId.value).toBe(`README.md`);
+});
+
+/* The preview slot. Reading down the Changes list used to leave one pinned tab per file merely looked at, so a
+ * row click now opens into a single slot that the next look takes over — and the gestures that mean "I want
+ * this one" (a double-click on the tab or on the row) hand the tab over to the strip proper. */
+it(`replaces the previewed diff with the next one looked at, in its place`, () => {
+    const kept = tabs.value.map((tab) => tab.id);
+
+    openDiff(diffPayload(`src/a.ts`), `preview`);
+    const first = activeId.value;
+
+    expect(tabs.value.map((tab) => tab.id)).toEqual([...kept, first]);
+    expect(previewId.value).toBe(first);
+
+    openDiff(diffPayload(`src/b.ts`), `preview`);
+
+    expect(tabs.value.map((tab) => tab.id)).toEqual([...kept, activeId.value]);
+    expect(previewId.value).toBe(activeId.value);
+});
+
+it(`hands the tab over on a double-click, and previews the next one beside it`, () => {
+    const promoted = activeId.value ?? ``;
+    keepTab(promoted);
+
+    expect(previewId.value).toBeNull();
+
+    openDiff(diffPayload(`src/c.ts`), `preview`);
+
+    expect(tabs.value.map((tab) => tab.id)).toEqual([`src/main.ts`, `health:root`, `README.md`, promoted, activeId.value]);
+});
+
+// The other half of the same gesture: double-clicking the row re-opens the diff it is already previewing, and
+// that second open is the one asking to keep it — one tab, no slot.
+it(`releases the slot when the previewed row is re-opened to keep`, () => {
+    openDiff(diffPayload(`src/c.ts`), `keep`);
+
+    expect(previewId.value).toBeNull();
+    expect(tabs.value.filter((tab) => tab.id === activeId.value)).toHaveLength(1);
+});
+
+it(`empties the slot when the preview tab is closed`, () => {
+    openDiff(diffPayload(`src/d.ts`), `preview`);
+    closeTabIds(new Set([previewId.value ?? ``]));
+
+    expect(previewId.value).toBeNull();
 });

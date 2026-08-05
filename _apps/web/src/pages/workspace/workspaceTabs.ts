@@ -42,6 +42,24 @@ export type WorkspaceTab =
 
 export const diffTabId = (key: string, scope: string, path: string): string => `diff:${key}:${scope}/${path}`;
 
+/* How an open treats the strip. `keep` is an ordinary tab — the user asked for it and it stays until they close
+ * it. `preview` is the strip's single transient slot (VSCode's italic tab), for a look-at-this gesture like
+ * clicking a row in Changes: the NEXT preview takes its place, so reading through twenty changed files leaves
+ * one tab behind instead of twenty nobody meant to keep. Double-clicking promotes a preview to `keep`. */
+export type OpenMode = "keep" | "preview";
+
+// Where a newly opened tab lands. One that is already open is refreshed in place — a diff's content moves on
+// between two looks, and re-opening must never stack a second tab for the same id. Otherwise it takes the
+// position of the tab it replaces (the outgoing preview, so the slot stays put), or the end of the strip.
+export const placeTab = (tabs: readonly WorkspaceTab[], tab: WorkspaceTab, replaceId: string | null): readonly WorkspaceTab[] => {
+    const open = tabs.findIndex((existing) => existing.id === tab.id);
+    if (open !== -1) {
+        return tabs.with(open, tab);
+    }
+    const slot = replaceId === null ? -1 : tabs.findIndex((existing) => existing.id === replaceId);
+    return slot === -1 ? [...tabs, tab] : tabs.with(slot, tab);
+};
+
 // Close a set of tabs (single ×, "Close Others", "Close to the Right", "Close All"). Drops the closed tabs, reports
 // which file paths need their edit buffer forgotten, and only re-picks the active tab when it was one of the closed
 // ones — falling back to the last remaining tab (VSCode behaviour), or null when nothing is left.

@@ -1,7 +1,7 @@
 import { computed, ref, watch } from "vue";
 import { documentTabId } from "../../core-views/documentRegistry";
 import type { DiffPayload } from "@intentic/extension-api";
-import { closeTabs, diffTabId, type LineJump, type WorkspaceTab } from "../../pages/workspace/workspaceTabs";
+import { closeTabs, diffTabId, type LineJump, type OpenMode, placeTab, type WorkspaceTab } from "../../pages/workspace/workspaceTabs";
 import { useSandbox } from "../sandbox/useSandbox";
 import { readTabStrip, type StoredWorkspaceTab, writeTabStrip } from "./workspaceSnapshot";
 
@@ -20,6 +20,11 @@ const activeTab = computed(() => tabs.value.find((tab) => tab.id === activeId.va
 // Every jump is a NEW object (seq++), so the viewer reacts even when the same hit is clicked again.
 const openLine = ref<LineJump | undefined>(undefined);
 let jumpSeq = 0;
+/* The strip's preview slot: the id of the tab that is only being LOOKED at (see OpenMode), or null. At most one
+ * exists, the next preview takes its place, and nothing else about it is special — it is an ordinary tab that
+ * happens to be transient, so closing, cycling and the context menu all still act on it as they do on any
+ * other. Never persisted: a restored strip is the tabs the user chose to keep. */
+const previewId = ref<string | null>(null);
 
 // --- Tab persistence ---------------------------------------------------------------------------
 /* The strip is where the user left off, so it comes back per sandbox on a reload (workspaceSnapshot holds the
@@ -38,6 +43,7 @@ const restoreTabs = (): void => {
     tabs.value = stored?.tabs ?? [];
     activeId.value = stored?.active ?? null;
     openLine.value = undefined;
+    previewId.value = null;
 };
 restoreTabs();
 
@@ -77,9 +83,22 @@ const openAtLine = (path: string, line: number): void => {
     openLine.value = { line, seq: ++jumpSeq };
 };
 
-// A changed file from the Changes or History panel opens as a diff tab in the main area. Re-opening the same
-// source's file refreshes its content in place rather than stacking a duplicate tab.
-const openDiff = (payload: DiffPayload): void => {
+// Promote the preview tab into an ordinary one — the double-click VSCode uses, on the tab or on the row that
+// opened it. Named by id because the gesture lands on a tab, and only the tab holding the slot gives it up.
+const keepTab = (id: string): void => {
+    if (previewId.value === id) {
+        previewId.value = null;
+    }
+};
+
+/* A changed file from the Changes or History panel opens as a diff tab in the main area. Re-opening the same
+ * source's file refreshes its content in place rather than stacking a duplicate tab.
+ *
+ * Reviewing is the reading gesture the strip could not survive: a click per changed file left a tab per changed
+ * file, all of them pinned by a look. So a row click opens in `preview` mode — the previous preview gives up
+ * its place to this one — and the deliberate gestures (a double-click, an extension, "open in workspace") ask
+ * to `keep`, which also releases the slot when the tab holding it is the one being kept. */
+const openDiff = (payload: DiffPayload, mode: OpenMode): void => {
     const id = diffTabId(payload.key, payload.scope, payload.path);
     const tab: WorkspaceTab = {
         kind: `diff`,
@@ -97,10 +116,13 @@ const openDiff = (payload: DiffPayload): void => {
         deletions: payload.deletions,
     };
     openLine.value = undefined;
-    tabs.value = tabs.value.some((existing) => existing.id === id)
-        ? tabs.value.map((existing) => (existing.id === id ? tab : existing))
-        : [...tabs.value, tab];
+    tabs.value = placeTab(tabs.value, tab, mode === `preview` ? previewId.value : null);
     activeId.value = id;
+    if (mode === `preview`) {
+        previewId.value = id;
+        return;
+    }
+    keepTab(id);
 };
 
 // A plan the chat agent proposed opens as a rendered markdown preview (Claude Code VSCode style). One preview
@@ -109,9 +131,7 @@ const openPlan = (conversationId: string, title: string, text: string): void => 
     const id = `plan:${conversationId}`;
     const tab: WorkspaceTab = { kind: `plan`, id, title, text };
     openLine.value = undefined;
-    tabs.value = tabs.value.some((existing) => existing.id === id)
-        ? tabs.value.map((existing) => (existing.id === id ? tab : existing))
-        : [...tabs.value, tab];
+    tabs.value = placeTab(tabs.value, tab, null);
     activeId.value = id;
 };
 
@@ -149,9 +169,7 @@ const openDocument = (extension: string, provider: string, path: string, title: 
     openLine.value = undefined;
     // Refreshed in place when it is already open: the offer's title can move under it (a package renamed, a draft
     // published), and the tab should say what the row says.
-    tabs.value = tabs.value.some((existing) => existing.id === id)
-        ? tabs.value.map((existing) => (existing.id === id ? tab : existing))
-        : [...tabs.value, tab];
+    tabs.value = placeTab(tabs.value, tab, null);
     activeId.value = id;
 };
 
@@ -194,6 +212,9 @@ const closeTabIds = (ids: ReadonlySet<string>): readonly string[] => {
     }
     tabs.value = nextTabs;
     activeId.value = nextActiveId;
+    if (previewId.value !== null && ids.has(previewId.value)) {
+        previewId.value = null;
+    }
     return forgetPaths;
 };
 
@@ -224,6 +245,7 @@ export function useWorkspaceTabs() {
         activeId,
         activeTab,
         openLine,
+        previewId,
         openFile,
         openAtLine,
         openDiff,
@@ -232,6 +254,7 @@ export function useWorkspaceTabs() {
         openHealth,
         openDocument,
         selectTab,
+        keepTab,
         closedTabs,
         closeTabIds,
         reopenClosedTab,

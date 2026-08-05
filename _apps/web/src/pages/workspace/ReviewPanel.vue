@@ -28,6 +28,7 @@ import SuggestedSessionBox from "../../agents/SuggestedSessionBox.vue";
 import { fixPrompt, fixSummary } from "./prepushFix";
 import type { DiffPayload } from "@intentic/extension-api";
 import { moduleGroups, rowName, type ModuleGroup } from "./changeModules";
+import type { OpenMode } from "./workspaceTabs";
 import { useChangeGrouping } from "../../composables/workspace/useChangeGrouping";
 import { useModules } from "../../composables/workspace/useModules";
 
@@ -76,7 +77,9 @@ const { settings: sandboxSettings } = useSandboxSettings();
 // alongside a failure.
 const scannable = computed(() => changes.repos.value.filter((repo) => repo.error === undefined));
 const unscannable = computed(() => changes.repos.value.filter((repo) => repo.error !== undefined));
-const emit = defineEmits<{ "open-diff": [payload: DiffPayload] }>();
+// The mode rides along because it is the GESTURE that decides it: a click is a look (a preview tab, replaced by
+// the next file looked at), a double-click asks to keep the tab. See workspaceTabs' OpenMode.
+const emit = defineEmits<{ "open-diff": [payload: DiffPayload, mode: OpenMode] }>();
 
 const collapsed = ref<ReadonlySet<string>>(new Set());
 const toggleGroup = (repo: string): void => {
@@ -315,19 +318,23 @@ const ICON_BUTTON = cmp.iconButton(`disabled:opacity-40`);
 // worktree-vs-index. The side rides the tab key too, so a partially staged file's two diffs open as two tabs
 // instead of one silently replacing the other. A binary row carries its two sides' byte URLs as well — the
 // response flags an image, it cannot contain one, and this row is what knows which diff to fetch it from.
-const openDiff = (repo: string, side: GitDiffSide, change: GitChange): void => {
+const openDiff = (repo: string, side: GitDiffSide, change: GitChange, mode: OpenMode): void => {
     void changes.fileDiff(repo, change.path, side).then((body) => {
-        emit(`open-diff`, {
-            key: `working:${repo}:${side}`,
-            scope: repo,
-            label: side === `staged` ? `${changeLabel(repo, change)} (staged)` : changeLabel(repo, change),
-            status: change.status,
-            path: change.path,
-            additions: change.additions,
-            deletions: change.deletions,
-            ...body,
-            ...diffRawUrls({ source: `working`, repo, side }, change.path, change.status),
-        });
+        emit(
+            `open-diff`,
+            {
+                key: `working:${repo}:${side}`,
+                scope: repo,
+                label: side === `staged` ? `${changeLabel(repo, change)} (staged)` : changeLabel(repo, change),
+                status: change.status,
+                path: change.path,
+                additions: change.additions,
+                deletions: change.deletions,
+                ...body,
+                ...diffRawUrls({ source: `working`, repo, side }, change.path, change.status),
+            },
+            mode,
+        );
     });
 };
 
@@ -388,10 +395,12 @@ const clickRow = (row: Row, change: GitChange, event: MouseEvent): void => {
         anchor.value = key;
         return;
     }
-    // A plain click is "look at this one": it collapses the selection and opens the diff, like any file list.
+    // A plain click is "look at this one": it collapses the selection and opens the diff, like any file list —
+    // as the strip's preview tab, since reading down a change list is the whole point of this panel and every
+    // row of it used to leave a tab behind. Double-clicking the row keeps the tab (below).
     selected.value = new Set([key]);
     anchor.value = key;
-    openDiff(row.repo, row.side, change);
+    openDiff(row.repo, row.side, change, `preview`);
 };
 
 // Drop keys whose row no longer exists — committed, staged across to the other side, discarded, vanished.
@@ -1358,8 +1367,8 @@ const WARNING = `flex items-start gap-1.5 rounded-md border border-warning/40 bg
                     <div class="min-w-0 flex-1">
                         <p class="text-2xs font-medium text-warning">A {{ group.operation }} is in progress</p>
                         <p class="text-2xs text-muted">
-                            Resolve the conflicts and stage them to continue, or abort to return this repository to
-                            where the {{ group.operation }} began.
+                            Resolve the conflicts and stage them to continue, or abort to return this repository to where the
+                            {{ group.operation }} began.
                         </p>
                     </div>
                     <button
@@ -1463,6 +1472,7 @@ const WARNING = `flex items-start gap-1.5 rounded-md border border-warning/40 bg
                                         type="button"
                                         class="flex min-w-0 flex-1 items-center gap-1.5 py-0.5 pl-0.5 text-left max-md:min-h-11"
                                         @click="clickRow({ repo: group.repo, side: section.side, path: change.path }, change, $event)"
+                                        @dblclick="openDiff(group.repo, section.side, change, 'keep')"
                                     >
                                         <ChangeStatusMark :status="change.status" />
                                         <!-- Under a module header the row is the FILE — the header already carries

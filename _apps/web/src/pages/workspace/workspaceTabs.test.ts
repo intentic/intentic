@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { closeTabs, type WorkspaceTab } from "./workspaceTabs";
+import { closeTabs, placeTab, type WorkspaceTab } from "./workspaceTabs";
 
 const file = (path: string): WorkspaceTab => ({ kind: `file`, id: path, path });
 const diff = (id: string, path: string): WorkspaceTab => ({ kind: `diff`, id, label: path, status: `modified`, path });
@@ -36,5 +36,31 @@ describe(`closeTabs`, () => {
     it(`leaves the active id untouched when the closed tab is not active`, () => {
         const result = closeTabs(tabs, `a.ts`, new Set([`b.ts`]));
         expect(result.nextActiveId).toBe(`a.ts`);
+    });
+});
+
+describe(`placeTab`, () => {
+    const incoming = diff(`diff:2:s/d.ts`, `d.ts`);
+
+    it(`appends when nothing is being replaced`, () => {
+        expect(ids(placeTab(tabs, incoming, null))).toEqual([`a.ts`, `b.ts`, `diff:1:s/c.ts`, `diff:2:s/d.ts`]);
+    });
+
+    // The preview slot keeps its POSITION as the user reads down a list — a tab that jumped to the end on every
+    // click would move the thing being looked at out from under the pointer.
+    it(`takes the replaced tab's place in the strip`, () => {
+        expect(ids(placeTab(tabs, incoming, `b.ts`))).toEqual([`a.ts`, `diff:2:s/d.ts`, `diff:1:s/c.ts`]);
+    });
+
+    it(`appends when the tab to replace is gone (its × was clicked)`, () => {
+        expect(ids(placeTab(tabs, incoming, `closed.ts`))).toEqual([`a.ts`, `b.ts`, `diff:1:s/c.ts`, `diff:2:s/d.ts`]);
+    });
+
+    // Re-opening what is already open refreshes it where it is: one tab per id, always, whatever is being replaced.
+    it(`refreshes an already-open tab in place`, () => {
+        const refreshed = diff(`diff:1:s/c.ts`, `c.ts`);
+        const result = placeTab(tabs, refreshed, `a.ts`);
+        expect(ids(result)).toEqual([`a.ts`, `b.ts`, `diff:1:s/c.ts`]);
+        expect(result[2]).toBe(refreshed);
     });
 });
