@@ -12,13 +12,16 @@ import { hostConfPath, hostKeyPath, hostsDir, removeSshHost, writeSshHost } from
 //   - HTTPS (always): a `~/.git-credentials` line so repos cloned over https (what the app clones) pull/push with
 //     no extra scope — this alone makes git work, so it's set up FIRST and never blocks on ssh.
 //   - SSH (best-effort): an ed25519 key generated in the sandbox and registered to the account via the token. Only
-//     AFTER a successful registration do we write the ssh-config alias (`IdentitiesOnly yes` forces that key), so
-//     `git clone ssh://git@<host>/owner/repo` authenticates. Registration needs a key-write permission (github:
-//     classic PAT `write:public_key` OR a fine-grained token with "Git SSH keys: write"; gitlab: the api scope).
-//   - SSH refused → we DON'T leave a config forcing an unregistered key (that's the `Permission denied (publickey)`
-//     trap). Instead a git `insteadOf` rewrite maps `ssh://git@<host>/` and `git@<host>:` onto https, so ssh-form
-//     remotes keep working over the https credential, and a warning names how to enable native ssh. The two paths
-//     clear each other's artifacts, so a scope-fixed re-add flips back to native ssh.
+//     once the key is known to be ON the account do we write the ssh-config alias (`IdentitiesOnly yes` forces that
+//     key), so `git clone ssh://git@<host>/owner/repo` authenticates. Registration needs a key-write permission
+//     (github: classic PAT `write:public_key` OR a fine-grained token with "Git SSH keys: write"; gitlab: the api
+//     scope) — and when it's refused we ask ssh whether the key is there anyway, because the warning's own remedy
+//     is for the owner to add it by hand, and only ssh can see that they did.
+//   - Key genuinely absent → we DON'T leave a config forcing an unregistered key (that's the
+//     `Permission denied (publickey)` trap). Instead a git `insteadOf` rewrite maps `ssh://git@<host>/` and
+//     `git@<host>:` onto https, so ssh-form remotes keep working over the https credential, and a warning names how
+//     to enable native ssh. The two paths clear each other's artifacts, so a fixed token — or a hand-added key —
+//     flips back to native ssh on the next re-add.
 // Keyed by host, so github.com and a self-hosted gitlab coexist. The key title is fixed so re-apply is idempotent.
 //
 // Half of this state is on a VOLUME and half is not, which is what restoreGitAccess exists for: the keypair and
@@ -51,11 +54,14 @@ export const gitHostOf = (config: CliConfig): GitHost => {
     return { provider: "gitlab", host: new URL(url).host, apiBase: `${url.replace(/\/+$/, "")}/api/v4`, token, httpsUser: "oauth2" };
 };
 
-// The account-key REST calls are the only un-testable seam (network + a live token), so they're injectable; keygen
+// The account calls are the only un-testable seam (network + a live token), so they're injectable; keygen
 // and git-config run for real (both are local and available in test envs).
 export interface GitAccessDeps {
     readonly uploadKey: (host: GitHost, publicKey: string, title: string) => Promise<void>;
     readonly deleteKey: (host: GitHost, title: string) => Promise<void>;
+    // Whether the host already accepts this key — asked of ssh itself, not of the account API, so a token that
+    // may not even READ the key list still gets a truthful answer.
+    readonly keyAuthenticates: (host: GitHost, keyPath: string) => Promise<boolean>;
 }
 
 const fileExists = (path: string): Promise<boolean> =>
@@ -155,7 +161,31 @@ const deleteKeyReal = async (host: GitHost, title: string): Promise<void> => {
     }
 };
 
-const realDeps: GitAccessDeps = { uploadKey: uploadKeyReal, deleteKey: deleteKeyReal };
+// Does the host let this key in? `-T` asks for no command, `IdentitiesOnly` + `-i` offer exactly the key we
+// care about (never an agent's), `BatchMode` keeps a passphrase or a host-key question from hanging a boot.
+// Read out of the OUTPUT rather than the exit code: both providers refuse a shell, so github answers its
+// "Hi <user>!" greeting with exit 1 — indistinguishable from a genuine refusal by code alone.
+const keyAuthenticatesReal = async (host: GitHost, keyPath: string): Promise<boolean> => {
+    const args = [
+        "-o",
+        "BatchMode=yes",
+        "-o",
+        "StrictHostKeyChecking=accept-new",
+        "-o",
+        "IdentitiesOnly=yes",
+        "-i",
+        keyPath,
+        "-T",
+        `git@${host.host}`,
+    ];
+    const output = await directExec("ssh", args).then(
+        ({ stdout }) => stdout,
+        (error: { readonly stdout?: string; readonly stderr?: string }) => `${error.stdout ?? ""}${error.stderr ?? ""}`,
+    );
+    return /successfully authenticated|welcome to gitlab/i.test(output);
+};
+
+const realDeps: GitAccessDeps = { uploadKey: uploadKeyReal, deleteKey: deleteKeyReal, keyAuthenticates: keyAuthenticatesReal };
 
 // The https base every ssh-form remote for this host is rewritten onto (keyed here so github.com and a self-hosted
 // gitlab don't collide). Trailing slash so `git@<host>:owner/repo` and `ssh://git@<host>/owner/repo` both land on
@@ -190,24 +220,32 @@ const disableHttpsRewrite = async (host: GitHost, exec: ExecInTerminal): Promise
     await exec("git", ["config", "--global", "--unset-all", rewriteKey(host)]);
 };
 
-// Returns undefined when native ssh is wired (key registered), or a warning when registration was refused and
-// ssh-form remotes were routed onto https instead. HTTPS is configured first and unconditionally so git works
-// regardless of the ssh outcome; the ssh-config alias is written ONLY after a successful registration so we never
-// force an unregistered key (the `Permission denied (publickey)` trap). `exec` is the caller's visible terminal
-// runner — every git config / ssh-keygen shows in the capability's job session (all argv here is secret-free).
+// Returns undefined when native ssh is wired, or a warning when the key is neither registerable nor already
+// registered and ssh-form remotes were routed onto https instead. HTTPS is configured first and unconditionally
+// so git works regardless of the ssh outcome; the ssh-config alias is written ONLY once the key is known to be on
+// the account, so we never force one that isn't (the `Permission denied (publickey)` trap). `exec` is the caller's
+// visible terminal runner — every git config / ssh-keygen shows in the capability's job session (all argv here is
+// secret-free).
 export const setupGitAccess = async (host: GitHost, exec: ExecInTerminal, deps: GitAccessDeps = realDeps): Promise<string | undefined> => {
     await ensureHttpsCredential(host, exec);
     const publicKey = await ensureKeyPair(host, exec);
-    try {
-        await deps.uploadKey(host, publicKey, KEY_TITLE);
-    } catch (err) {
-        // Registration refused: don't leave a config forcing the unregistered key — drop any stale alias (keeping
+    const refusal = await deps.uploadKey(host, publicKey, KEY_TITLE).then(
+        () => undefined,
+        (err: unknown) => err,
+    );
+    // A refused upload does NOT settle it. sshRegistrationWarning's second line asks the owner to add the key to
+    // their account by hand, and for a token that can't manage keys that is the whole remaining path — but the
+    // upload is the only thing this used to ask, so an owner who did exactly as told still got https, on that
+    // apply and on every rebuild after it (restore reads the alias, which never got written). So ask ssh instead
+    // of assuming: whoever put the key on the account, it is on the account.
+    if (refusal !== undefined && !(await deps.keyAuthenticates(host, hostKeyPath(host.host)))) {
+        // Genuinely not there: don't leave a config forcing the unregistered key — drop any stale alias (keeping
         // the keypair for a later scope-fixed re-add) and route ssh-form remotes over the working https credential.
         await rm(hostConfPath(host.host), { force: true });
         await enableHttpsRewrite(host, exec);
-        return sshRegistrationWarning(host, publicKey, err);
+        return sshRegistrationWarning(host, publicKey, refusal);
     }
-    // Registered: native ssh works. Wire the alias and drop any https rewrite left by an earlier failed apply.
+    // On the account: native ssh works. Wire the alias and drop any https rewrite left by an earlier failed apply.
     await writeSshHost(host.host, { host: host.host, user: "git", port: 22, identityFile: hostKeyPath(host.host) });
     await disableHttpsRewrite(host, exec);
     return undefined;

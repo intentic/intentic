@@ -186,7 +186,11 @@ const httpsRewrite = async (host: string): Promise<string[]> => {
 test("git setup: writes a 0600 key + ssh alias + https creds, registers the public half, and returns no warning", async () => {
     const home = gitHome();
     const uploads: { publicKey: string; title: string }[] = [];
-    const deps: GitAccessDeps = { uploadKey: async (_host, publicKey, title) => void uploads.push({ publicKey, title }), deleteKey: async () => {} };
+    const deps: GitAccessDeps = {
+        uploadKey: async (_host, publicKey, title) => void uploads.push({ publicKey, title }),
+        deleteKey: async () => {},
+        keyAuthenticates: async () => false,
+    };
     const host = gitHostOf({ provider: "github", token: "gh-tok", git: "on" });
 
     expect(await setupGitAccess(host, directExec, deps)).toBeUndefined();
@@ -207,6 +211,7 @@ test("git setup reroutes ssh over https + warns (no throw) when ssh-key registra
             throw new Error("GitHub SSH key upload failed (404): Not Found");
         },
         deleteKey: async () => {},
+        keyAuthenticates: async () => false,
     };
     const host = gitHostOf({ provider: "github", token: "scopeless", git: "on" });
 
@@ -219,9 +224,32 @@ test("git setup reroutes ssh over https + warns (no throw) when ssh-key registra
     expect(await httpsRewrite("github.com")).toEqual(["git@github.com:", "ssh://git@github.com/"]);
 });
 
+test("git setup wires native ssh anyway when the refused key is already on the account (added by hand)", async () => {
+    const home = gitHome();
+    const probed: string[] = [];
+    // The token can't manage keys — the state a `repo`-only PAT leaves — but the owner followed the warning and
+    // pasted the public half into their account, so ssh lets the key in.
+    const deps: GitAccessDeps = {
+        uploadKey: async () => {
+            throw new Error("GitHub SSH key upload failed (404): Not Found");
+        },
+        deleteKey: async () => {},
+        keyAuthenticates: async (_host, keyPath) => probed.push(keyPath) > 0,
+    };
+    const host = gitHostOf({ provider: "github", token: "scopeless", git: "on" });
+
+    expect(await setupGitAccess(host, directExec, deps)).toBeUndefined();
+
+    expect(probed).toEqual([hostKey(home, "github.com")]);
+    // The alias is what every later boot reads, so writing it here is what makes the hand-added key survive a
+    // rebuild instead of silently dropping back to https.
+    expect(readFileSync(hostConf(home, "github.com"), "utf8")).toContain("Host github.com");
+    expect(await httpsRewrite("github.com")).toEqual([]);
+});
+
 test("git setup (gitlab): host + https user derive from the instance url", async () => {
     const home = gitHome();
-    const deps: GitAccessDeps = { uploadKey: async () => {}, deleteKey: async () => {} };
+    const deps: GitAccessDeps = { uploadKey: async () => {}, deleteKey: async () => {}, keyAuthenticates: async () => false };
     const host = gitHostOf({ provider: "gitlab", token: "gl-tok", url: "https://gitlab.example.com", git: "on" });
 
     await setupGitAccess(host, directExec, deps);
@@ -233,7 +261,7 @@ test("git setup (gitlab): host + https user derive from the instance url", async
 test("git teardown: deletes the account key and removes the local key, ssh alias and https line", async () => {
     const home = gitHome();
     let deleted = 0;
-    const deps: GitAccessDeps = { uploadKey: async () => {}, deleteKey: async () => void (deleted += 1) };
+    const deps: GitAccessDeps = { uploadKey: async () => {}, deleteKey: async () => void (deleted += 1), keyAuthenticates: async () => false };
     const host = gitHostOf({ provider: "github", token: "gh-tok", git: "on" });
     await setupGitAccess(host, directExec, deps);
 
@@ -247,7 +275,7 @@ test("git teardown: deletes the account key and removes the local key, ssh alias
 test("git teardown is a no-op (no account call) when nothing was ever set up", async () => {
     gitHome();
     let deleted = 0;
-    const deps: GitAccessDeps = { uploadKey: async () => {}, deleteKey: async () => void (deleted += 1) };
+    const deps: GitAccessDeps = { uploadKey: async () => {}, deleteKey: async () => void (deleted += 1), keyAuthenticates: async () => false };
     await teardownGitAccess(gitHostOf({ provider: "github", token: "x", git: "off" }), directExec, deps);
     expect(deleted).toBe(0);
 });
@@ -263,7 +291,11 @@ test("status: a git-access connector pends while the container holds no git cred
     // The skill (on /work) survived the recreate; the credentials (in HOME) did not.
     expect(await cliHandler.status(ctx, "gitlab", gitlabOn)).toEqual({ state: "pending", detail: "git access needs a re-add" });
 
-    await setupGitAccess(gitHostOf(gitlabOn), directExec, { uploadKey: async () => {}, deleteKey: async () => {} });
+    await setupGitAccess(gitHostOf(gitlabOn), directExec, {
+        uploadKey: async () => {},
+        deleteKey: async () => {},
+        keyAuthenticates: async () => false,
+    });
 
     expect(await cliHandler.status(ctx, "gitlab", gitlabOn)).toEqual({ state: "active" });
 });
@@ -273,7 +305,11 @@ test("git restore: a recreated container gets its credentials back without regis
     gitHome();
     await linkSshHosts(history);
     const uploads: string[] = [];
-    const deps: GitAccessDeps = { uploadKey: async (_host, publicKey) => void uploads.push(publicKey), deleteKey: async () => {} };
+    const deps: GitAccessDeps = {
+        uploadKey: async (_host, publicKey) => void uploads.push(publicKey),
+        deleteKey: async () => {},
+        keyAuthenticates: async () => false,
+    };
     const host = gitHostOf(gitlabOn);
     await setupGitAccess(host, directExec, deps);
     expect(uploads).toHaveLength(1);
@@ -298,7 +334,11 @@ test("git restore: a recreated container gets its credentials back without regis
 test("git restore falls back to the full setup when no keypair was persisted", async () => {
     const home = gitHome();
     const uploads: string[] = [];
-    const deps: GitAccessDeps = { uploadKey: async (_host, publicKey) => void uploads.push(publicKey), deleteKey: async () => {} };
+    const deps: GitAccessDeps = {
+        uploadKey: async (_host, publicKey) => void uploads.push(publicKey),
+        deleteKey: async () => {},
+        keyAuthenticates: async () => false,
+    };
 
     await restoreGitAccess(gitHostOf(gitlabOn), directExec, deps);
 
@@ -317,6 +357,7 @@ test("git restore keeps ssh-form remotes on https when the key had never been re
             throw new Error("GitLab SSH key upload failed (403): insufficient_scope");
         },
         deleteKey: async () => {},
+        keyAuthenticates: async () => false,
     };
     const host = gitHostOf(gitlabOn);
     expect(await setupGitAccess(host, directExec, refused)).toContain("api scope");
@@ -337,7 +378,7 @@ test("git access whose ssh alias was taken out from under it pends instead of re
     await writeWorkspaceFile(skillPath(root, "gitlab"), "---\nname: gitlab\n---\n");
     await linkSshHosts(mkdtempSync(join(tmpdir(), "git-cap-history-")));
     const host = gitHostOf(gitlabOn);
-    await setupGitAccess(host, directExec, { uploadKey: async () => {}, deleteKey: async () => {} });
+    await setupGitAccess(host, directExec, { uploadKey: async () => {}, deleteKey: async () => {}, keyAuthenticates: async () => false });
     expect(await cliHandler.status(ctx, "gitlab", gitlabOn)).toEqual({ state: "active" });
 
     // What a second daemon repointing the managed dir at ITS history root leaves behind: the https credential
@@ -355,7 +396,11 @@ test("restoreConnectorGitAccess walks the manifest: git connectors only, one fai
     await linkSshHosts(history);
     // Wire gitlab first, then recreate — so the boot pass takes the offline branch it takes in production
     // (this is the only call path that uses the real account deps; a persisted key must never reach for one).
-    await setupGitAccess(gitHostOf(gitlabOn), directExec, { uploadKey: async () => {}, deleteKey: async () => {} });
+    await setupGitAccess(gitHostOf(gitlabOn), directExec, {
+        uploadKey: async () => {},
+        deleteKey: async () => {},
+        keyAuthenticates: async () => false,
+    });
     const home = gitHome();
     await linkSshHosts(history);
     const warnings: string[] = [];
