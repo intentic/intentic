@@ -19,6 +19,7 @@ import { useChatPopout } from "../composables/chat/useChatPopout";
 import { useSandboxSettings } from "../composables/sandbox/useSandboxSettings";
 import { openWorkTerminal, useWorkTerminals } from "../composables/terminal/useWorkTerminals";
 import ChatAttachmentStrip from "./ChatAttachmentStrip.vue";
+import ChatDecisionButton from "./ChatDecisionButton.vue";
 import ChatTodoList from "./ChatTodoList.vue";
 import ChatToolCard from "./ChatToolCard.vue";
 import ChatToolGroup from "./ChatToolGroup.vue";
@@ -770,13 +771,10 @@ const onEditKeydown = (event: KeyboardEvent): void => {
                      simply not available there. The query is on the transcript column (ChatPanel's
                      @container), so it answers to a dragged panel edge and to the pop-out window alike. -->
                 <ChatAttachmentStrip v-if="attachmentsAside" :attachments="attachmentThumbs" class="mr-1 hidden shrink-0 self-start @lg:flex" />
-                <!-- Frame and scroller are two elements: the chip below must not scroll away with the text
-                     when an open bubble runs past its cap (see .chat-prompt-bubble). -->
-                <div
-                    v-if="message.text"
-                    class="chat-prompt-bubble chat-surface rounded-lg"
-                    :class="{ 'chat-prompt-clamped': overflowing && !expanded }"
-                >
+                <!-- Frame and scroller are two elements, and `relative` belongs on the FRAME: past the cap the
+                     text below scrolls, and the clamp fade and the open/close chip are positioned against this
+                     box precisely so they don't scroll away with it. -->
+                <div v-if="message.text" class="chat-surface relative rounded-lg" :class="{ 'chat-prompt-clamped': overflowing && !expanded }">
                     <div
                         ref="bubble"
                         class="chat-prompt-text scrollbar-thin whitespace-pre-wrap px-3 py-2 text-xs leading-relaxed text-content"
@@ -898,14 +896,8 @@ const onEditKeydown = (event: KeyboardEvent): void => {
                 <div v-if="message.plan.status === 'pending'" class="flex flex-wrap items-center gap-2 border-t border-line px-3.5 py-2.5">
                     <!-- One approval, not a posture menu: saying yes to a plan is saying yes to the work in it,
                          and the container is the isolation boundary. -->
-                    <button type="button" class="plan-approve" @click="decidePlan(message, true)">
-                        <Icon name="check" class="text-xs" />
-                        Approve
-                    </button>
-                    <button type="button" class="plan-reject" @click="decidePlan(message, false)">
-                        <Icon name="pencil" class="text-xs" />
-                        No, keep planning
-                    </button>
+                    <ChatDecisionButton tone="primary" icon="check" @click="decidePlan(message, true)">Approve</ChatDecisionButton>
+                    <ChatDecisionButton tone="secondary" icon="pencil" @click="decidePlan(message, false)">No, keep planning</ChatDecisionButton>
                 </div>
             </div>
 
@@ -1058,20 +1050,14 @@ const onEditKeydown = (event: KeyboardEvent): void => {
                     </div>
 
                     <div v-if="message.question.status === 'pending'" class="flex items-center gap-2 pt-1">
-                        <button
-                            type="button"
-                            class="plan-approve plan-sm disabled:cursor-default disabled:opacity-50"
-                            :disabled="!canSubmit"
-                            @click="submitAnswers"
+                        <ChatDecisionButton tone="primary" icon="check" compact :disabled="!canSubmit" @click="submitAnswers"
+                            >Submit</ChatDecisionButton
                         >
-                            <Icon name="check" class="text-2xs" />
-                            Submit
-                        </button>
                         <!-- Dismissing ends the turn (see Conversation.cancelQuestion), which the label alone
                              does not say — so the tooltip does, before the click rather than after it. -->
-                        <button type="button" class="plan-reject plan-sm" v-tooltip.bottom="'Also stops the turn'" @click="cancelQuestion(message)">
-                            Dismiss
-                        </button>
+                        <ChatDecisionButton tone="secondary" compact v-tooltip.bottom="'Also stops the turn'" @click="cancelQuestion(message)"
+                            >Dismiss</ChatDecisionButton
+                        >
                     </div>
                 </div>
             </div>
@@ -1098,20 +1084,25 @@ const onEditKeydown = (event: KeyboardEvent): void => {
                 </div>
 
                 <div v-if="message.permission.status === 'pending'" class="flex flex-wrap items-center gap-2 border-t border-line px-3.5 py-2.5">
-                    <button type="button" class="plan-approve" @click="decidePermission(message, 'once')">
-                        <Icon name="check" class="text-xs" />
-                        Allow once
-                    </button>
-                    <button v-if="message.permission.alwaysLabel" type="button" class="plan-reject" @click="decidePermission(message, 'always')">
-                        <Icon name="lock" class="text-xs" />
-                        {{ message.permission.alwaysLabel }}
-                    </button>
+                    <ChatDecisionButton tone="primary" icon="check" @click="decidePermission(message, 'once')">Allow once</ChatDecisionButton>
+                    <!-- An approval in the secondary tone: the card is asking for the one-off allow, and a second
+                         filled button beside it would make the pair read as a coin flip (see ChatDecisionButton). -->
+                    <ChatDecisionButton
+                        v-if="message.permission.alwaysLabel"
+                        tone="secondary"
+                        icon="lock"
+                        @click="decidePermission(message, 'always')"
+                        >{{ message.permission.alwaysLabel }}</ChatDecisionButton
+                    >
                     <!-- Same as the question card's Dismiss: a refusal with nothing to redirect the agent to
                          ends the turn rather than leaving it to work around the answer it was just given. -->
-                    <button type="button" class="plan-reject" v-tooltip.bottom="'Also stops the turn'" @click="decidePermission(message, 'deny')">
-                        <Icon name="times" class="text-xs" />
-                        No
-                    </button>
+                    <ChatDecisionButton
+                        tone="secondary"
+                        icon="times"
+                        v-tooltip.bottom="'Also stops the turn'"
+                        @click="decidePermission(message, 'deny')"
+                        >No</ChatDecisionButton
+                    >
                 </div>
             </div>
 

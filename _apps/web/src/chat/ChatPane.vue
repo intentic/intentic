@@ -1537,7 +1537,7 @@ watch(
                                     <button
                                         v-if="streaming"
                                         type="button"
-                                        class="composer-send composer-stop shrink-0"
+                                        class="composer-send composer-stop shrink-0 max-md:h-11 max-md:w-11"
                                         @click="stop"
                                         v-tooltip.top="stopHint"
                                         :aria-label="stopLabel"
@@ -1550,7 +1550,7 @@ watch(
                                      so there is no state in which this button is missing. -->
                                     <button
                                         type="submit"
-                                        class="composer-send shrink-0"
+                                        class="composer-send shrink-0 max-md:h-11 max-md:w-11"
                                         :disabled="!canSend"
                                         v-tooltip.top="sendHint"
                                         aria-label="Send"

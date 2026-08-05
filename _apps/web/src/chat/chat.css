@@ -81,13 +81,6 @@
     max-height: calc(6 * 1.625 * var(--text-xs) + 1rem);
     overflow: hidden;
 }
-/* The box the clamp fade and the open/close chip are positioned against — the bubble's frame, NOT its
-   scroller. The distinction is the whole point of the split: past the cap .chat-prompt-text scrolls, and
-   anything anchored inside a scroller scrolls away with the text. The frame never moves, so the chip stays
-   on the bubble's bottom-right in both states without a sticky-in-a-scroller trick. */
-.chat-prompt-bubble {
-    position: relative;
-}
 /* The open/close control rides ON the bubble, over the 1.75rem of gradient the clamp already spends saying
    "there is more of this" — the two say the same thing, so they share the same pixels. Below the bubble it
    was a row of its own: ~24px of chrome under a 133px recall budget, on the one row of the transcript that
@@ -272,9 +265,6 @@
     border-right: 1px solid var(--color-line);
     font-variant-numeric: tabular-nums;
 }
-.chat-code-view {
-    flex: none;
-}
 /* Never wrap — a wrapped line would take two rows in the code but one in the gutter and drift them apart. */
 .chat-code .shiki,
 .chat-code .shiki code {
@@ -294,48 +284,6 @@
 [data-mode="dark"] .chat-code .shiki,
 [data-mode="dark"] .chat-code .shiki span {
     color: var(--shiki-dark) !important;
-}
-.plan-approve,
-.plan-reject {
-    display: inline-flex;
-    align-items: center;
-    gap: 0.45rem;
-    height: 2.125rem;
-    padding: 0 0.9rem;
-    border-radius: var(--radius-md);
-    font-size: var(--text-xs);
-    font-weight: 600;
-    cursor: pointer;
-    transition:
-        background-color 0.15s,
-        color 0.15s,
-        border-color 0.15s;
-}
-.plan-approve {
-    background: color-mix(in srgb, var(--color-primary-fill) 10%, transparent);
-    color: var(--color-primary-fill);
-    border: 1px solid color-mix(in srgb, var(--color-primary-fill) 20%, transparent);
-}
-.plan-approve:hover {
-    background: color-mix(in srgb, var(--color-primary-fill) 18%, transparent);
-    border-color: color-mix(in srgb, var(--color-primary-fill) 35%, transparent);
-}
-.plan-reject {
-    background: transparent;
-    color: var(--color-content);
-    border: 1px solid var(--color-line-strong);
-}
-.plan-reject:hover {
-    background: color-mix(in srgb, var(--color-content) 8%, transparent);
-    border-color: var(--color-content);
-}
-/* The question card's Submit / Dismiss sit inline with smaller controls (option rows, the Other field),
-   so they run a touch tighter than the plan/permission decisions. Desktop only — the mobile block below
-   still lifts .plan-approve/.plan-reject back to full 2.75rem touch targets. */
-.plan-sm {
-    height: 1.875rem;
-    padding: 0 0.75rem;
-    font-size: var(--text-2xs);
 }
 .chat-tab {
     color: var(--color-muted);
@@ -449,6 +397,19 @@
     background-color: color-mix(in srgb, var(--color-content) 22%, transparent); /* unlit hover */
     filter: brightness(1.15); /* lit-bar hover feedback (inline bg wins over class bg) */
 }
+/* Touch sizing, stated here rather than at the two call sites because the snap-down gap is a structural
+   selector (the bar's own right-padding, see above) and has nowhere in a class attribute to live. Deliberately
+   viewport-based (device class), unlike the @container variants in the template that thin out labels by panel
+   width — don't unify the two. */
+@media (max-width: 767.98px) {
+    .composer-effort-seg {
+        height: 1.1rem;
+        width: 0.5rem;
+    }
+    .composer-effort-seg:not(:last-child) {
+        padding-right: 0.3rem; /* chunkier snap-down gap for touch */
+    }
+}
 .composer-send {
     display: inline-flex;
     align-items: center;
@@ -499,27 +460,4 @@
 }
 .chat-panel.is-resizing {
     user-select: none;
-}
-
-/* Mobile touch sizing: 44px send/stop and plan-decision targets, chunkier effort segments. The utility
-   classes handle the Vue-templated buttons; these cover the fixed-size CSS components (send button, the
-   v-html plan buttons rendered by ChatMessageView). Deliberately viewport-based (device class), unlike the
-   @container variants in the template that thin out labels by panel width — don't unify the two. */
-@media (max-width: 767.98px) {
-    .composer-send {
-        height: 2.75rem;
-        width: 2.75rem;
-    }
-    .plan-approve,
-    .plan-reject {
-        height: 2.75rem;
-        padding: 0 1.25rem;
-    }
-    .composer-effort-seg {
-        height: 1.1rem;
-        width: 0.5rem;
-    }
-    .composer-effort-seg:not(:last-child) {
-        padding-right: 0.3rem; /* chunkier snap-down gap for touch */
-    }
 }

@@ -48,7 +48,7 @@ watch(
 <template>
     <div class="chat-code scrollbar-thin ml-4">
         <div class="chat-code-gutter" aria-hidden="true">{{ gutter }}</div>
-        <div class="chat-code-view">
+        <div class="flex-none">
             <div v-if="html" v-html="html"></div>
             <pre v-else class="shiki"><code>{{ code }}</code></pre>
         </div>
