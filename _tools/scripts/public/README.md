@@ -57,6 +57,15 @@ pnpm build && pnpm test
 pnpm build:sandbox    # the sandbox image, from source
 ```
 
+Dogfooding the daemon — build the image and swap a running sandbox onto it, keeping its `/work`, tunnel and
+settings. Pass the slug when the machine runs more than one:
+
+```sh
+pnpm rebuild:sandbox [slug]   # build the image, then swap
+pnpm swap:sandbox [slug]      # swap onto the image already built
+pnpm dev:sandbox              # the watch loop: rebuild + swap on every change
+```
+
 Requires **Node 24** and **pnpm 11**. Conventions for working in the tree — where tests live, how packages
 type-check, what the editing rules are — are in [AGENTS.md](AGENTS.md).
 
