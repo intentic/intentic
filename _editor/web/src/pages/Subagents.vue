@@ -212,87 +212,95 @@ watch(messages, () => {
             <!-- No divider down its right edge, for the reason the pop-out rail has none: the lane slabs are
                  the structure, and a hairline against a column of them is a second edge saying what the first
                  already said. -->
-            <aside class="scrollbar-thin flex w-72 shrink-0 flex-col gap-2 overflow-y-auto p-2">
-                <!-- WHAT NARROWED THIS LIST, and the way out of it. A filtered rail that does not say it is
-                     filtered is how a reader concludes the sandbox has only ever run two agents. -->
-                <RouterLink
-                    v-if="focus !== undefined"
-                    :to="{ name: `subagents` }"
-                    class="flex shrink-0 items-center gap-1.5 rounded-md border border-line px-2 py-1 text-2xs text-muted transition-colors hover:border-line-strong hover:text-content"
-                >
-                    <Icon name="comments" class="shrink-0 text-2xs" />
-                    <span class="min-w-0 flex-1 truncate">{{ focusTitle }}</span>
-                    <span class="shrink-0 text-link">Show all</span>
-                </RouterLink>
-                <template v-for="lane in lanes" :key="lane.label">
-                    <RailLane v-if="lane.rows.length > 0" :label="lane.label" :dot="lane.dot" :count="lane.rows.length">
-                        <div class="flex min-w-0 flex-col gap-1.5">
-                            <RailCard
-                                v-for="session in lane.rows"
-                                :key="session.id"
-                                :title="titleOf(session)"
-                                :provider="providerOf(session)"
-                                :status="STATUS[session.status]"
-                                :live="liveOf(session)"
-                                :now="now"
-                                :selected="session.id === selected"
-                                @click="select(session.id)"
-                            >
-                                <template v-if="hasFacts(session)" #meta>
-                                    <!-- Backgrounded: the parent went on working instead of waiting. The fact
-                                         that explains a child still running under a turn that looks finished. -->
-                                    <span
-                                        v-if="session.background === true && subagentLive(session)"
-                                        v-tooltip.top="`Its parent went on working instead of waiting for it`"
-                                        class="shrink-0 rounded-full bg-overlay px-1.5 py-px font-semibold text-subtle"
-                                        >bg</span
-                                    >
-                                    <!-- Whose turn started it. Dropped once the list is already narrowed to one
-                                         agent: repeating the answer on every row is not an answer. Cut short
-                                         rather than given room — every child of one turn repeats it, so it is
-                                         the fact on this line least worth a second row of card height. -->
-                                    <span v-if="focus === undefined && parentOf(session) !== undefined" class="flex min-w-0 items-center gap-1">
-                                        <Icon name="comments" class="shrink-0 text-2xs" />
-                                        <span class="max-w-24 truncate">{{ parentOf(session) }}</span>
-                                    </span>
-                                    <span v-if="session.agentType !== undefined" class="shrink-0">{{ session.agentType }}</span>
-                                    <!-- The MODEL is not on this line, and the omission is the reason the line
-                                         fits one row: the tile already wears whose runtime it is, and the exact
-                                         model is a thing you read once, on the header of the transcript you
-                                         opened — not fourteen times down a rail. -->
-                                    <!-- HOW FAR IT HAS GOT, as one chip rather than two: what it has done and
-                                         what that has cost answer a single question here ("is this one
-                                         working, or is it stuck?"), they are read together, and at this width
-                                         a second glyph is what pushed the line onto a second row. Its tokens
-                                         are ITS OWN — a parent's cost line and the sum of its children's are
-                                         two different true numbers, and this is where a child's are
-                                         attributed. -->
-                                    <span
-                                        v-if="(session.toolUses ?? 0) > 0 || (session.tokens ?? 0) > 0"
-                                        v-tooltip.top="`Tool calls · tokens`"
-                                        class="shrink-0 tabular-nums"
-                                    >
-                                        <Icon name="list-check" class="mr-0.5 text-2xs" />{{
-                                            [session.toolUses, session.tokens === undefined ? undefined : formatTokens(session.tokens)]
-                                                .filter((part) => part !== undefined && part !== 0)
-                                                .join(` · `)
-                                        }}
-                                    </span>
-                                    <!-- The age keeps to the settled rows: a live one's clock is the activity
-                                         line's ticking elapsed, and two clocks on one card disagree by
-                                         construction. It FLOWS with the facts rather than taking the chat
-                                         rail's right-aligned slot — a wrapping line pushes an `ml-auto` item
-                                         onto a row of its own, and "3m" alone on a row is a fifth of a card's
-                                         height spent on the least of its facts. -->
-                                    <span v-if="!subagentLive(session) && session.activityAt > 0" class="shrink-0">{{
-                                        relativeTime(session.activityAt)
-                                    }}</span>
-                                </template>
-                            </RailCard>
-                        </div>
-                    </RailLane>
-                </template>
-            </aside>
+            <!-- THE GUTTER IS ON THE FRAME, NOT ON THE SCROLLER — the shape the docked rail uses (ChatTabs
+                 pads the sheet, ChatTabList's scroller has no padding of its own), and here it is load-bearing:
+                 a scroll container's padding insets where its sticky children COME TO REST but not where it
+                 CLIPS, so with the padding on the scroller the lane's cap pinned eight pixels below the top of
+                 the rail and every card scrolled through the strip above it — a sliver of card, selection ring
+                 and all, riding over the header. -->
+            <div class="flex w-72 shrink-0 flex-col p-2">
+                <aside class="scrollbar-thin flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto">
+                    <!-- WHAT NARROWED THIS LIST, and the way out of it. A filtered rail that does not say it is
+                         filtered is how a reader concludes the sandbox has only ever run two agents. -->
+                    <RouterLink
+                        v-if="focus !== undefined"
+                        :to="{ name: `subagents` }"
+                        class="flex shrink-0 items-center gap-1.5 rounded-md border border-line px-2 py-1 text-2xs text-muted transition-colors hover:border-line-strong hover:text-content"
+                    >
+                        <Icon name="comments" class="shrink-0 text-2xs" />
+                        <span class="min-w-0 flex-1 truncate">{{ focusTitle }}</span>
+                        <span class="shrink-0 text-link">Show all</span>
+                    </RouterLink>
+                    <template v-for="lane in lanes" :key="lane.label">
+                        <RailLane v-if="lane.rows.length > 0" :label="lane.label" :dot="lane.dot" :count="lane.rows.length">
+                            <div class="flex min-w-0 flex-col gap-1.5">
+                                <RailCard
+                                    v-for="session in lane.rows"
+                                    :key="session.id"
+                                    :title="titleOf(session)"
+                                    :provider="providerOf(session)"
+                                    :status="STATUS[session.status]"
+                                    :live="liveOf(session)"
+                                    :now="now"
+                                    :selected="session.id === selected"
+                                    @click="select(session.id)"
+                                >
+                                    <template v-if="hasFacts(session)" #meta>
+                                        <!-- Backgrounded: the parent went on working instead of waiting. The fact
+                                             that explains a child still running under a turn that looks finished. -->
+                                        <span
+                                            v-if="session.background === true && subagentLive(session)"
+                                            v-tooltip.top="`Its parent went on working instead of waiting for it`"
+                                            class="shrink-0 rounded-full bg-overlay px-1.5 py-px font-semibold text-subtle"
+                                            >bg</span
+                                        >
+                                        <!-- Whose turn started it. Dropped once the list is already narrowed to one
+                                             agent: repeating the answer on every row is not an answer. Cut short
+                                             rather than given room — every child of one turn repeats it, so it is
+                                             the fact on this line least worth a second row of card height. -->
+                                        <span v-if="focus === undefined && parentOf(session) !== undefined" class="flex min-w-0 items-center gap-1">
+                                            <Icon name="comments" class="shrink-0 text-2xs" />
+                                            <span class="max-w-24 truncate">{{ parentOf(session) }}</span>
+                                        </span>
+                                        <span v-if="session.agentType !== undefined" class="shrink-0">{{ session.agentType }}</span>
+                                        <!-- The MODEL is not on this line, and the omission is the reason the line
+                                             fits one row: the tile already wears whose runtime it is, and the exact
+                                             model is a thing you read once, on the header of the transcript you
+                                             opened — not fourteen times down a rail. -->
+                                        <!-- HOW FAR IT HAS GOT, as one chip rather than two: what it has done and
+                                             what that has cost answer a single question here ("is this one
+                                             working, or is it stuck?"), they are read together, and at this width
+                                             a second glyph is what pushed the line onto a second row. Its tokens
+                                             are ITS OWN — a parent's cost line and the sum of its children's are
+                                             two different true numbers, and this is where a child's are
+                                             attributed. -->
+                                        <span
+                                            v-if="(session.toolUses ?? 0) > 0 || (session.tokens ?? 0) > 0"
+                                            v-tooltip.top="`Tool calls · tokens`"
+                                            class="shrink-0 tabular-nums"
+                                        >
+                                            <Icon name="list-check" class="mr-0.5 text-2xs" />{{
+                                                [session.toolUses, session.tokens === undefined ? undefined : formatTokens(session.tokens)]
+                                                    .filter((part) => part !== undefined && part !== 0)
+                                                    .join(` · `)
+                                            }}
+                                        </span>
+                                        <!-- The age keeps to the settled rows: a live one's clock is the activity
+                                             line's ticking elapsed, and two clocks on one card disagree by
+                                             construction. It FLOWS with the facts rather than taking the chat
+                                             rail's right-aligned slot — a wrapping line pushes an `ml-auto` item
+                                             onto a row of its own, and "3m" alone on a row is a fifth of a card's
+                                             height spent on the least of its facts. -->
+                                        <span v-if="!subagentLive(session) && session.activityAt > 0" class="shrink-0">{{
+                                            relativeTime(session.activityAt)
+                                        }}</span>
+                                    </template>
+                                </RailCard>
+                            </div>
+                        </RailLane>
+                    </template>
+                </aside>
+            </div>
 
             <div class="flex min-w-0 flex-1 flex-col">
                 <!-- WHAT IT IS, in the card's own vocabulary (the tile, the title, the status glyph) so the row

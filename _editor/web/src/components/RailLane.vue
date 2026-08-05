@@ -9,6 +9,11 @@
      this tall is read a screen at a time and a card only means "finished" while the lane it belongs to is
      still on screen. Its text starts where a card's content does, so the lane reads down one left edge.
 
+     THE SCROLLER A LANE SITS IN MUST NOT CARRY TOP PADDING. A scroll container's padding insets where its
+     sticky children come to rest but not where it clips, so a padded scroller pins this header below its own
+     top edge and leaves a strip the cards scroll through in full view above the cap. Pad the frame AROUND the
+     scroller instead — ChatTabs pads the sheet, pages/Subagents.vue the rail's column.
+
      The count is a STRING because a filtered lane says "3 of 12": the denominator is the lane, not what
      survived the query, and a lane that silently shrinks is a lane that has stopped saying anything. -->
 <script setup lang="ts">
