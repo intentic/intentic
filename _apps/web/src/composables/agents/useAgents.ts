@@ -1,6 +1,7 @@
 import type { AgentSummary } from "@intentic/sandbox-contract";
 import { computed, ref, shallowRef, watch } from "vue";
 import { awaitingUser, blocked, type ClientAgentStatus, type FleetLane, laneOf, turnInFlight, unregistered } from "./agentStatus";
+import type { Conversation } from "../chat/conversation";
 import { openAgentConversation, useChat } from "../chat/useChat";
 import { queryClient } from "../queryPersistence";
 import { sandboxJson } from "../sandbox/sandboxClient";
@@ -20,6 +21,12 @@ import { errorMessage } from "../useAsyncAction";
 // daemon re-frames the roster about once a second for every running turn — so the board's cost scaled with
 // agents × turns × their fields, which is exactly when the /agents view was reported to get sticky.
 const registry = shallowRef<AgentSummary[]>([]);
+
+// The OTHER half of the fleet — the agents filed away. Declared here, beside the roster it is the counterpart
+// of, because `fleet` reads it: an archived session whose tab holds unsent words is lifted back onto the board.
+// What the list is, when it is read, and why it is pull-only rather than streamed is under "--- Archive" below.
+const archived = ref<FleetAgent[]>([]);
+const archiveLoading = ref(false);
 
 /* --- Roster ordering ----------------------------------------------------------------------------------------
  * The fleet is published as full snapshots, and THREE sources produce them: the /events stream, an explicit
@@ -209,6 +216,10 @@ export interface FleetAgent extends Omit<AgentSummary, "status"> {
     readonly status: AgentSummary["status"] | ClientAgentStatus;
     readonly open: boolean;
     readonly unread: boolean;
+    // The user has words in this chat that have not gone out (Conversation.unsent). A fact about the OPEN TAB,
+    // so it is false for every agent this window isn't holding — including one being written to on another
+    // device, whose composer this browser has no account of.
+    readonly unsent: boolean;
 }
 
 // How many finished entries a Finished lane shows before the rest collapse behind one row. The lane's job is
@@ -248,6 +259,25 @@ export const windowFinished = <T>(
     return { shown: [...shown, pinned], hidden: beyond.length - 1 };
 };
 
+/* WHERE A CARD WITH NO REGISTRY ENTRY STANDS. Three answers, and the order of the tests is the whole of it:
+ *   · streaming — a draft racing its first turn (begin → roster frame) already reads as running;
+ *   · an error — the refusal that kept it off the roster in the first place (the daemon turned the request
+ *     away, so no entry was ever made): not a draft waiting to be typed into but a card for work that never
+ *     started, which is what `failed` says;
+ *   · a TRANSCRIPT or a session — this conversation has a past, so it was reopened from History rather than
+ *     newly made. `resumed`, and the reason that standing exists: it used to answer `draft` here, which put a
+ *     three-week-old chat at the head of the Active lane dressed as work about to begin.
+ * Everything left is what "draft" was always meant to mean — an empty tab the user is about to type into. */
+const clientStatus = (conversation: Conversation): ClientAgentStatus | "running" => {
+    if (conversation.streaming.value) {
+        return `running`;
+    }
+    if (conversation.error.value !== null) {
+        return `failed`;
+    }
+    return conversation.messages.value.length > 0 || conversation.session.value !== undefined ? `resumed` : `draft`;
+};
+
 // Attention first, then live turns + fresh drafts, then most recently active.
 const weight = (entry: FleetAgent): number =>
     blocked(entry) ? 0 : turnInFlight(entry) || entry.status === `awaiting` || entry.status === `draft` ? 1 : 2;
@@ -256,6 +286,11 @@ const fleet = computed<FleetAgent[]>(() => {
     const { conversations } = useChat();
     const openIds = new Set(conversations.value.map((conversation) => conversation.conversationId));
     const carded = new Set(registry.value.map((agent) => agent.id));
+    // The tabs of this window holding words that have not gone out — the one thing the daemon's roster cannot
+    // know, and the reason the two halves below are joined against it rather than against `openIds` alone.
+    const unsentIds = new Set(
+        conversations.value.filter((conversation) => conversation.unsent.value).map((conversation) => conversation.conversationId),
+    );
     // A draft is a conversation the fleet has never heard of — NOT one that is merely absent from the live
     // roster, which is also true of every agent the user has archived and of every agent at all while the
     // events stream is down. `carded` is the join's own guard: an id the registry half already rendered must
@@ -265,29 +300,54 @@ const fleet = computed<FleetAgent[]>(() => {
         .map((conversation): FleetAgent => {
             const draft: FleetAgent = {
                 id: conversation.conversationId,
-                // A draft racing its first turn (begin → roster frame) already reads as running. An UNSENT
-                // error on one is the refusal that kept it off the roster in the first place (the daemon turned
-                // the request away, so no entry was ever made): that is not a draft waiting to be typed into,
-                // it is a card for work that never started, and `failed` is what says so — see ClientAgentStatus.
-                status: conversation.streaming.value ? `running` : conversation.error.value === null ? `draft` : `failed`,
+                status: clientStatus(conversation),
                 provider: conversation.provider.value,
                 harness: conversation.harness.value,
                 updatedAt: 0,
                 attention: { plan: false, question: false, permission: false, conflict: false },
                 open: true,
                 unread: false,
+                unsent: conversation.unsent.value,
             };
             if (conversation.title.value !== null) {
                 draft.title = conversation.title.value;
             }
+            // The session a RESUMED card stands for. Named here so nothing else reports it a second time: the
+            // board's search lists conversations no card carries ("In earlier chats"), and without this the
+            // chat the user just opened from that very list went on being offered underneath its own card.
+            if (conversation.session.value !== undefined) {
+                draft.sessionId = conversation.session.value.id;
+            }
             return draft;
         });
+    /* ARCHIVED, AND BACK ON THE BOARD ANYWAY — the sessions the user has started writing in.
+     *
+     * Reading an agent out of the archive opens its chat by design, and typing there is the most ordinary thing
+     * to do next. But the board had no card for it (the roster drops archived agents), so clearing the search
+     * that found it left the half-written message with nowhere to be seen from — the user's own words, filed
+     * away under a query they no longer remember. It is lifted for exactly as long as the words are there and
+     * files itself back the moment they are sent or cleared.
+     *
+     * NOTHING IS WRITTEN. Typing does not un-archive, re-register, or touch the entry's recency — the daemon's
+     * account of this agent is the same before and after. The card is a view of an open tab, no more, and it
+     * says "archived" on its face (AgentCard reads archivedAt) so it can't be mistaken for live work. */
+    const held: FleetAgent[] = [];
+    for (const agent of archived.value) {
+        if (unsentIds.has(agent.id) && !carded.has(agent.id)) {
+            // A COPY, never the archive list's own entry: `open` and `unsent` are true of this window's tab and
+            // not of the filed-away agent, and writing them onto the stored row would leave the archive claiming
+            // both long after the tab is closed.
+            held.push({ ...agent, open: true, unsent: true });
+        }
+    }
     return [
         ...registry.value.map((agent) => ({
             ...agent,
             open: openIds.has(agent.id),
             unread: !turnInFlight(agent) && agent.updatedAt > (agent.seenAt ?? 0),
+            unsent: unsentIds.has(agent.id),
         })),
+        ...held,
         ...drafts,
     ].toSorted((a, b) => weight(a) - weight(b) || b.updatedAt - a.updatedAt);
 });
@@ -416,10 +476,20 @@ const lanes = computed<Record<FleetLane, FleetAgent[]>>(() => {
         (a, b) => Number(b.status === `draft`) - Number(a.status === `draft`) || (a.startedAt ?? a.updatedAt) - (b.startedAt ?? b.updatedAt),
     );
     grouped.attention.sort((a, b) => b.updatedAt - a.updatedAt);
-    // Ready-to-land cards lead Finished: they are the one kind of finished card still owed a press, and the
-    // lane windows to a handful (FINISHED_WINDOW) — recency alone would let other agents finishing push a
-    // held card behind the fold, where "waiting for you" quietly becomes "forgotten".
-    grouped.finished.sort((a, b) => Number(b.status === `ready`) - Number(a.status === `ready`) || b.updatedAt - a.updatedAt);
+    /* UNSENT FIRST, then ready-to-land, then recency. Both exceptions are the same argument, made about the
+     * fold: this lane windows to a handful (FINISHED_WINDOW), and recency alone lets whatever finished a minute
+     * ago push either kind of card behind it — where "waiting for you" quietly becomes "forgotten".
+     *
+     * A ready card is owed a press. An UNSENT one is owed a sentence, and it goes first because it is the more
+     * easily lost of the two: the press is on a card the daemon will keep offering for as long as the branch
+     * exists, while the half-written message lives in this window alone. Ordering them this way is also what
+     * makes the promise cheap to keep — a card holding words the user wrote can only fall behind the fold when
+     * MORE THAN A WINDOW'S WORTH of such cards exist, at which point they are hiding each other rather than
+     * being hidden by unrelated work. */
+    grouped.finished.sort(
+        (a, b) =>
+            Number(b.unsent) - Number(a.unsent) || Number(b.status === `ready`) - Number(a.status === `ready`) || b.updatedAt - a.updatedAt,
+    );
     return grouped;
 });
 
@@ -463,9 +533,10 @@ const refresh = async (): Promise<void> => {
  *
  * A tab CAN still show an archived agent: reading one from the archive view opens it by design, and a follow-up
  * message un-archives it (see the daemon's registry.begin). Such a tab says what it is, with the way back on it
- * (ChatTabs, ChatPanel). */
-const archived = ref<FleetAgent[]>([]);
-const archiveLoading = ref(false);
+ * (ChatTabs, ChatPanel) — and if the user has started WRITING in it, its card comes back to the board for as
+ * long as those words are there (see `fleet`).
+ *
+ * The two refs the list lives in are declared far above, next to the roster, because `fleet` reads them. */
 
 // A sandbox SWITCH is the one thing the archive list must not survive: another daemon's archive on this board
 // would offer restores of agents this one has never heard of. Deliberately NOT folded into resetAgents — that
@@ -490,10 +561,12 @@ export const loadArchived = async (): Promise<void> => {
         archiveLoading.value = true;
         try {
             const body = await sandboxJson<{ agents: AgentSummary[] }>(`/agents/archived`);
-            // Widened to FleetAgent here rather than at render: an archived agent has no open tab and nothing
-            // unread by construction (it left the board), so the two card fields are constants, not a merge.
-            // Object.assign, not a spread — this array is this call's own freshly-parsed JSON.
-            archived.value = body.agents.map((agent) => Object.assign(agent, { open: false, unread: false }));
+            // Widened to FleetAgent here rather than at render: an archived agent has nothing unread by
+            // construction (it left the board), and the archive list's own rows are drawn for agents that are
+            // not open — the one archived agent that IS open, because the user is writing in it, is rebuilt by
+            // `fleet` with those two fields answered live. Object.assign, not a spread — this array is this
+            // call's own freshly-parsed JSON.
+            archived.value = body.agents.map((agent) => Object.assign(agent, { open: false, unread: false, unsent: false }));
         } catch {
             // Leave whatever was listed last; the view reports its own emptiness.
         } finally {
@@ -608,7 +681,7 @@ const archive = async (ids?: readonly string[]): Promise<void> => {
         );
         archived.value = [
             // Object.assign, not a spread — `moved` is this call's own freshly-parsed JSON.
-            ...moved.map((agent) => Object.assign(agent, { open: false, unread: false })),
+            ...moved.map((agent) => Object.assign(agent, { open: false, unread: false, unsent: false })),
             ...archived.value.filter((agent) => !gone.has(agent.id)),
         ];
         // Archiving several cards in a row is ONE intent, so consecutive archives merge into one undo (see

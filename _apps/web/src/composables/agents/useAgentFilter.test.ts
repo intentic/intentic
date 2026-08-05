@@ -194,7 +194,7 @@ describe(`useAgentFilter`, () => {
 
     it(`surfaces archived matches, which are off the roster entirely`, async () => {
         setAgents([agent(`a1`, { title: `tidy the readme` })], 1);
-        useAgents().archived.value = [{ ...agent(`old`, { title: `the landAgent rewrite`, archivedAt: 2 }), open: false, unread: false }];
+        useAgents().archived.value = [{ ...agent(`old`, { title: `the landAgent rewrite`, archivedAt: 2 }), open: false, unread: false, unsent: false }];
         const filter = filterIn();
         filter.query.value = `landagent`;
         await settle();

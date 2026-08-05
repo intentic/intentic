@@ -52,6 +52,7 @@ const ready = (status: FleetAgent[`status`] = `ready`): FleetAgent => ({
     attention: NO_ATTENTION,
     open: false,
     unread: false,
+    unsent: false,
 });
 
 /* AN AGENT ON ITS FIRST TURN, delegating. Nothing is counted yet — no cost, no tokens, no completed turns, no
@@ -67,6 +68,7 @@ const delegating = (): FleetAgent => ({
     attention: NO_ATTENTION,
     open: false,
     unread: false,
+    unsent: false,
     activity: { tool: `Agent` },
     subagents: { running: 8, total: 8 },
 });
@@ -119,6 +121,7 @@ const refused = (): FleetAgent => ({
     attention: NO_ATTENTION,
     open: true,
     unread: false,
+    unsent: false,
 });
 
 const landButton = (el: HTMLElement): HTMLButtonElement | undefined =>

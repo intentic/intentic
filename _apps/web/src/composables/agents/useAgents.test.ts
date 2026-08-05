@@ -38,6 +38,7 @@ describe("windowFinished", () => {
             attention: { plan: false, question: false, permission: false, conflict: false },
             open: false,
             unread: false,
+            unsent: false,
         }));
     const ids = (agents: readonly FleetAgent[]): string[] => agents.map((agent) => agent.id);
     // The board reads its entries' own id; the chat list reaches through a wrapper for its conversation's (see
@@ -351,7 +352,7 @@ describe("draft cards", () => {
     it("leaves it off the board when its tab is opened from the archive", () => {
         const { archived, open } = useAgents();
         const entry = { ...registered(`a1`), archivedAt: 2_000 };
-        archived.value = [{ ...entry, open: false, unread: false }];
+        archived.value = [{ ...entry, open: false, unread: false, unsent: false }];
 
         open(entry);
 
@@ -368,6 +369,122 @@ describe("draft cards", () => {
         resetAgents();
 
         expect(activeIds()).toEqual([]);
+    });
+
+    /* A CONVERSATION REOPENED FROM HISTORY IS NOT A DRAFT. It has no registry entry — the agent that ran it is
+     * long gone, or it was a plain chat — so it lands in this same client-only half, and calling that a draft
+     * put a three-week-old conversation at the HEAD of the Active lane wearing "Draft": the board announcing
+     * the user's own history as work about to begin. Nothing is running and nothing is owed, which is
+     * `finished`. */
+    it("cards a conversation reopened from History as an earlier chat, not as a fresh draft", () => {
+        const conversation = new Conversation(`old-chat`);
+        conversation.session.value = { id: `sess-1`, provider: `claude`, account: undefined, harness: `native` };
+        useChat().conversations.value = [...useChat().conversations.value, conversation];
+
+        expect(activeIds()).toEqual([]);
+        expect(useAgents().lanes.value.finished.map((entry) => ({ id: entry.id, status: entry.status }))).toEqual([
+            { id: `old-chat`, status: `resumed` },
+        ]);
+    });
+
+    /* WORDS THE USER HAS NOT SENT KEEP AN ARCHIVED SESSION ON THE BOARD.
+     *
+     * Reading an agent out of the archive opens its chat by design, and typing there is the ordinary next move.
+     * The board had no card for it, so clearing the search that found it left the half-written message with
+     * nowhere to be seen from — the report this came from. It is lifted for exactly as long as the words are
+     * there, says "archived" on its face (archivedAt survives the lift), and nothing is written daemon-side. */
+    it("lifts an archived session back onto the board while its chat holds an unsent message", () => {
+        const { archived, open } = useAgents();
+        const entry = { ...registered(`a1`), archivedAt: 2_000 };
+        archived.value = [{ ...entry, open: false, unread: false, unsent: false }];
+        open(entry);
+        const conversation = useChat().conversations.value.find((candidate) => candidate.conversationId === `a1`)!;
+
+        conversation.draft.value = `and one more thing —`;
+
+        expect(useAgents().lanes.value.finished.map((card) => ({ id: card.id, unsent: card.unsent, archived: card.archivedAt }))).toEqual([
+            { id: `a1`, unsent: true, archived: 2_000 },
+        ]);
+    });
+
+    // ...and it files itself straight back when they go. Whitespace is not a message — send() refuses it too, so
+    // a stray space must not be what keeps a card on the board for the rest of the day.
+    it("puts it back in the archive the moment the message is cleared", () => {
+        const { archived, open } = useAgents();
+        const entry = { ...registered(`a1`), archivedAt: 2_000 };
+        archived.value = [{ ...entry, open: false, unread: false, unsent: false }];
+        open(entry);
+        const conversation = useChat().conversations.value.find((candidate) => candidate.conversationId === `a1`)!;
+        conversation.draft.value = `and one more thing —`;
+
+        conversation.draft.value = `   `;
+
+        expect(useAgents().lanes.value.finished).toEqual([]);
+    });
+});
+
+/* THE FOLD, AND WHAT IT MAY NOT SWALLOW. The Finished lane windows to FINISHED_WINDOW cards while it is being
+ * browsed, ordered by recency — so an old session is behind the fold by definition, which is fine right up
+ * until the user starts writing in one. Those words live in this window and nowhere else, so the ordering puts
+ * them in front of the fold and the only thing that can push one behind it is MORE unsent messages than the
+ * window has room for: at that point they are hiding each other rather than being hidden by unrelated work. */
+describe("the finished fold", () => {
+    const landed = (id: string, updatedAt: number): AgentSummary => ({
+        id,
+        status: `landed`,
+        provider: `claude`,
+        harness: `native`,
+        updatedAt,
+        attention: { plan: false, question: false, permission: false, conflict: false },
+    });
+    const shownIds = (): string[] =>
+        windowFinished(useAgents().lanes.value.finished, undefined, (entry) => entry.id).shown.map((entry) => entry.id);
+
+    beforeEach(() => {
+        resetAgents();
+        useAgents().archived.value = [];
+        const other = new Conversation();
+        other.registered.value = true;
+        useChat().conversations.value = [other];
+    });
+
+    // The reported case, at the store level: the session the user searched up is the oldest thing in the lane,
+    // so the fold has it — until they start writing, at which point it leads the lane instead.
+    it("holds the oldest finished card in front of the fold when its chat has a message waiting", () => {
+        const oldest = `a${FINISHED_WINDOW + 1}`;
+        const conversation = new Conversation(oldest);
+        conversation.registered.value = true;
+        useChat().conversations.value = [...useChat().conversations.value, conversation];
+        setAgents(
+            Array.from({ length: FINISHED_WINDOW + 2 }, (_, at) => landed(`a${at}`, 1_000 - at)),
+            1,
+        );
+        expect(shownIds()).not.toContain(oldest);
+
+        conversation.draft.value = `picking this back up:`;
+
+        expect(useAgents().lanes.value.finished[0]?.id).toBe(oldest);
+        expect(shownIds()).toContain(oldest);
+    });
+
+    // Ordering, not pinning: the cards holding words lead the lane (newest of them first, the lane's own rule),
+    // and the window then falls where it falls. Past a window's worth of them the fold is back, which is the
+    // honest outcome — the lane is a browsing list, not a promise to draw everything at once.
+    it("orders every unsent card ahead of the sent ones", () => {
+        const held = [`a6`, `a7`, `a8`].map((id) => {
+            const conversation = new Conversation(id);
+            conversation.registered.value = true;
+            conversation.draft.value = `later`;
+            return conversation;
+        });
+        useChat().conversations.value = [...useChat().conversations.value, ...held];
+
+        setAgents(
+            Array.from({ length: 9 }, (_, at) => landed(`a${at}`, 1_000 - at)),
+            1,
+        );
+
+        expect(useAgents().lanes.value.finished.slice(0, 3).map((entry) => entry.id)).toEqual([`a6`, `a7`, `a8`]);
     });
 });
 
@@ -736,7 +853,7 @@ describe("the archive list", () => {
 
     it("is cleared by resetArchive alone — a stream failure must not blank the archive door", async () => {
         const { archived } = useAgents();
-        archived.value = [Object.assign(archivedAgent(`a`), { open: false, unread: false })];
+        archived.value = [Object.assign(archivedAgent(`a`), { open: false, unread: false, unsent: false })];
 
         // The liveness loop's failure path: the roster resets, the archive list keeps its last reading.
         resetAgents();

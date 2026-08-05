@@ -80,16 +80,13 @@ const activeId = ref<string>(``);
 /* An untouched "New agent" tab exists only while the focus is ON it. The tab and the fleet board's draft card
  * are one conversation under two skins, so an abandoned empty draft doesn't just crowd the strip — it squats in
  * the board's Active lane looking like work in flight. Anything at all in it makes it real and it stays:
- * composer text (whitespace alone isn't text — send() refuses it too), an attachment staged or still uploading,
- * a queued message, a transcript, a session, a running turn, a rename, an unread error, or a fleet
- * registration. */
+ * anything unsent (Conversation.unsent — composer text, a staged attachment, a queued message), a transcript,
+ * a session, a running turn, a rename, an unread error, or a fleet registration. */
 const untouchedDraft = (conversation: Conversation): boolean =>
     !conversation.registered.value &&
     !conversation.streaming.value &&
+    !conversation.unsent.value &&
     conversation.messages.value.length === 0 &&
-    conversation.draft.value.trim() === `` &&
-    conversation.attachments.value.length === 0 &&
-    conversation.queued.value.length === 0 &&
     conversation.session.value === undefined &&
     conversation.title.value === null &&
     conversation.error.value === null;
@@ -1271,15 +1268,16 @@ const closeTabs = (ids: ReadonlySet<string>): void => {
  *   · the FOCUSED chat — the sweep runs on a clock the user cannot see, and a panel that empties itself
  *     mid-read is the worst thing an unattended cleaner can do. It reads as archived (ChatTabList's box mark)
  *     and closes like any other tab when the user is done with it.
- *   · one holding UNSENT INPUT — composer text, a staged attachment, a message queued behind a turn. Every
- *     other thing a chat holds survives a close; these do not. */
-const unsent = (conversation: Conversation): boolean =>
-    conversation.draft.value.trim() !== `` || conversation.attachments.value.length > 0 || conversation.queued.value.length > 0;
-
+ *   · one holding UNSENT INPUT (Conversation.unsent) — every other thing a chat holds survives a close; those
+ *     words do not. The board makes the same promise from the other side: a session holding them keeps its
+ *     card, so a sweep that spares the tab can't leave the fleet reporting the work as gone. */
 const closeRetired = (ids: ReadonlySet<string>): void => {
     const retired = new Set(
         conversations.value
-            .filter((conversation) => ids.has(conversation.conversationId) && conversation.conversationId !== activeId.value && !unsent(conversation))
+            .filter(
+                (conversation) =>
+                    ids.has(conversation.conversationId) && conversation.conversationId !== activeId.value && !conversation.unsent.value,
+            )
             .map((conversation) => conversation.conversationId),
     );
     if (retired.size > 0) {

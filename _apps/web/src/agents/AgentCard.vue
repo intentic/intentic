@@ -161,7 +161,17 @@ const model = computed(() => {
     }
     return category.value === undefined ? undefined : providerLabel(props.agent.provider);
 });
-const displayTitle = computed(() => props.agent.title ?? (props.agent.status === `draft` ? `New agent` : `Untitled agent`));
+// A nameless card, named for what it IS: a tab waiting to be typed into, a past conversation whose session
+// never earned a title, or an agent whose own naming has yet to land.
+const displayTitle = computed(() => {
+    if (props.agent.title !== undefined) {
+        return props.agent.title;
+    }
+    if (props.agent.status === `draft`) {
+        return `New agent`;
+    }
+    return props.agent.status === `resumed` ? `Untitled chat` : `Untitled agent`;
+});
 // The title with the filter's term marked, and one plain run when no filter is on.
 const titleRuns = computed(() => markSegments(displayTitle.value, props.query?.toLowerCase() ?? ``));
 const matchRuns = computed(() => (props.match === undefined ? undefined : markSegments(props.match, props.query?.toLowerCase() ?? ``)));
@@ -353,6 +363,21 @@ const grab = (event: PointerEvent): void => {
                 </span>
             </p>
 
+            <!-- WORDS OF THE USER'S STILL SITTING IN THIS CHAT'S COMPOSER (FleetAgent.unsent). Leads the body,
+                 above even provenance: everything else on this card is the agent's account of itself, and this
+                 one line is the reader's own unfinished business — the only thing here that no one but them can
+                 clear. It is the whole reason such a card is on the board at all (see `fleet`, which lifts an
+                 ARCHIVED session back onto the lanes for it), so a card that came back without saying why would
+                 read as the archive leaking.
+                 The composer's own send glyph, in the link hue the board spends on "an offer to act" (the same
+                 one Ready-to-land wears) — nothing is wrong here, so none of the warning colours apply. The
+                 text itself is deliberately NOT shown: a board is read at a glance, often over someone's
+                 shoulder, and a half-written message is the most private thing this app holds. -->
+            <p v-if="agent.unsent" class="flex min-w-0 items-center gap-1.5 text-2xs text-link" v-tooltip.top="'You have an unsent message here'">
+                <Icon name="send" class="shrink-0 text-2xs" />
+                <span class="truncate font-medium">Unsent message</span>
+            </p>
+
             <!-- Provenance, ahead of the model/branch line: for an agent the user never started, "who asked for
                  this" outranks what it runs on. Both render nothing for a user-started agent. -->
             <OriginMark :origin="agent.origin" />
@@ -495,7 +520,11 @@ const grab = (event: PointerEvent): void => {
                 >
                     {{ review }}<Icon name="arrow-right" class="text-2xs" />
                 </button>
-                <span v-else-if="lane === 'finished' && agent.status !== 'draft'" class="inline-flex shrink-0 items-center gap-1 text-muted">
+                <!-- Only a card with a registry entry behind it may say the work COMPLETED — that is the
+                     daemon's account of a turn, and the client-only standings have none to draw on. A chat
+                     reopened from History sits in this lane too (nothing is running, nothing is owed) and knows
+                     nothing about how it ended; its chip already says what it is. -->
+                <span v-else-if="lane === 'finished' && !unregistered(agent.status)" class="inline-flex shrink-0 items-center gap-1 text-muted">
                     <Icon name="check" class="text-2xs" />Completed
                 </span>
                 <span class="flex-1"></span>

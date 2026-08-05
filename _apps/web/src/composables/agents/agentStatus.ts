@@ -19,19 +19,23 @@ import type { AgentAttention, AgentOrigin, AgentStatus, AgentSummary, LoopState 
  * lets the panel, the rail and the tests all reach the same answer without any of them dragging in the app
  * shell (useAgents pulls useChat pulls the router). */
 
-/* THE TWO STANDINGS THE DAEMON NEVER ASSIGNS — a conversation the fleet has not registered, in the two shapes
+/* THE THREE STANDINGS THE DAEMON NEVER ASSIGNS — a conversation the fleet has not registered, in the shapes
  * that difference comes in. `draft` is one that has not been sent yet; `failed` is one whose send was REFUSED,
- * so it never became an agent and never will until the user sends again.
+ * so it never became an agent and never will until the user sends again; `resumed` is a past conversation
+ * reopened from History, whose agent entry is long gone (or never existed — a plain chat).
  *
  * They are told apart because they belong in different lanes and offer different things. A draft is the tab you
  * are about to type into and reads as Active; a refused one is a dead end that needs the user, and reading it
  * as a draft is what left the board carrying cards that looked like work in flight, sorted ABOVE the agents
- * actually working, with no action on them at all. What they share — no registry entry, so nothing to archive,
+ * actually working, with no action on them at all. A RESUMED one is the same mistake in its oldest form: a
+ * conversation from three weeks ago, with a full transcript behind it, was arriving as a "Draft" at the head of
+ * the Active lane — the board announcing the user's own history as brand-new work. It is finished, because it
+ * is: nothing is running and nothing is owed. What all three share — no registry entry, so nothing to archive,
  * review, land or drop — is `unregistered` below.
  *
- * Neither may be widened into AgentStatus: the wire enum is the daemon's account of agents it HAS, and these
- * two are by definition the cards it has never heard of. */
-export type ClientAgentStatus = "draft" | "failed";
+ * None may be widened into AgentStatus: the wire enum is the daemon's account of agents it HAS, and these
+ * three are by definition the cards it has never heard of. */
+export type ClientAgentStatus = "draft" | "failed" | "resumed";
 
 // Enough of an agent to place one. Every predicate below takes this and nothing more, so a caller holding a
 // FleetAgent, a roster AgentSummary or a test literal can all ask the same question.
@@ -47,12 +51,20 @@ export interface AgentStanding {
 // Takes the status alone, like agentStatusMeta and unlike the lane predicates: it is a question about which
 // half of the world the card came from, and the callers that need it most (the tab `open` builds, the detail
 // page's `registered`) hold a status without an attention block to pair it with.
-export const unregistered = (status: AgentStatus | ClientAgentStatus): boolean => status === `draft` || status === `failed`;
+export const unregistered = (status: AgentStatus | ClientAgentStatus): boolean =>
+    status === `draft` || status === `failed` || status === `resumed`;
 
 export const agentStatusMeta = (status: AgentStatus | ClientAgentStatus): { icon: IconName; spin?: boolean; label: string; class: string } => {
     // Not `pencil` — that's the card's rename affordance; the draft glyph is a not-yet-started marker.
     if (status === `draft`) {
         return { icon: `circle`, label: `Draft`, class: `text-subtle` };
+    }
+    // A conversation reopened from History. It says where it came from rather than how it ended, because how it
+    // ended is not knowable here — the entry that would have said is gone, which is the whole reason this
+    // standing exists. The glyph is the one the search footer files these under ("In earlier chats"), so the
+    // row and the card it turns into wear the same mark.
+    if (status === `resumed`) {
+        return { icon: `history`, label: `Earlier chat`, class: `text-subtle` };
     }
     // The send was refused, so there is no turn to have failed and nothing of the user's is at risk — warning
     // rather than the `error` danger, the same reading `interrupted` gets for the same reason. What separates
@@ -198,7 +210,8 @@ export const laneOf = (agent: AgentStanding): FleetLane => {
     }
     // landed | idle — the work is in the workspace (or there was none) — and `ready`, work HELD on the branch
     // because auto-land is off. Ready is finished, not attention: the turn is over and nothing is failing —
-    // the user opted into a deliberate land, and the card carries that press itself.
+    // the user opted into a deliberate land, and the card carries that press itself. `resumed` lands here too,
+    // and it is the same reading: a conversation reopened from History has nothing running and owes nothing.
     return `finished`;
 };
 

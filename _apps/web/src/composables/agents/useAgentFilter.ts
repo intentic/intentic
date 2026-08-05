@@ -175,9 +175,20 @@ export function useAgentFilter() {
     const matches = (agent: FleetAgent): boolean => !active.value || hitOf(agent) !== undefined;
     const snippetOf = (agent: FleetAgent): string | undefined => hitOf(agent)?.snippet;
 
-    // Matching agents that are OFF the board — the archive. The board would otherwise answer "no matches"
-    // for something sitting one click away, which is the failure a filter is least forgiven for.
-    const archivedMatches = computed(() => (active.value ? archived.value.filter((agent) => hitOf(agent) !== undefined) : []));
+    /* Matching agents that are OFF the board — the archive. The board would otherwise answer "no matches"
+     * for something sitting one click away, which is the failure a filter is least forgiven for.
+     *
+     * "Off the board" is a live question, not a synonym for "archived": an archived session the user has
+     * started writing in is lifted back onto the lanes for as long as those words are there (see useAgents'
+     * `fleet`). Listing it here as well would report one chat as two results — the card the query kept, and a
+     * row underneath claiming the same chat is somewhere else. */
+    const archivedMatches = computed(() => {
+        if (!active.value) {
+            return [];
+        }
+        const onBoard = new Set(useAgents().fleet.value.map((agent) => agent.id));
+        return archived.value.filter((agent) => !onBoard.has(agent.id) && hitOf(agent) !== undefined);
+    });
 
     // Matching conversations that no agent owns. Sessions carried by a fleet agent are dropped here so a
     // single conversation can't be reported twice — once as its card and once as an anonymous history row.

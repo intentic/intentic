@@ -254,6 +254,19 @@ export class Conversation {
     // above the composer so nothing the user wrote is ever invisible, and persisted with the draft.
     readonly queued = ref<QueuedMessage[]>([]);
 
+    /* WORDS OF THE USER'S THAT HAVE NOT GONE OUT — composer text (whitespace alone isn't text; send() refuses
+     * it too), a staged or still-uploading attachment, a message queued behind a running turn.
+     *
+     * Everything else a chat holds is recoverable: the transcript is in the session store, the branch is on
+     * disk, a closed tab reopens from History. These three are not — they live in this window and nowhere
+     * else. So they are the one thing that makes a conversation the app must not quietly lose track of, and
+     * three surfaces read this one flag to say so: the retention sweep refuses to close such a tab, the fleet
+     * board keeps its card on screen (it is why an ARCHIVED session comes back to the board), and both
+     * finished lanes hold it in front of their fold. */
+    readonly unsent = computed<boolean>(
+        () => this.draft.value.trim() !== `` || this.attachments.value.length > 0 || this.queued.value.length > 0,
+    );
+
     /* The harness retrying INSIDE the live turn (provider_retry). Distinct from a failure in the way that
      * matters most to a waiting user: nothing has failed and nothing has been lost — this turn is still running.
      * Rendered as a status beside the streaming indicator and dropped the moment the turn produces anything or

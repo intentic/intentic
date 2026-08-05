@@ -193,7 +193,11 @@ const lanes = computed<Record<FleetLane, OpenChat[]>>(() => {
             (a.agent?.startedAt ?? lastActive(a)) - (b.agent?.startedAt ?? lastActive(b)),
     );
     grouped.attention.sort((a, b) => lastActive(b) - lastActive(a));
-    grouped.finished.sort((a, b) => lastActive(b) - lastActive(a));
+    // ...and Finished leads with the chats holding words that never went out, for the board's own reason: this
+    // lane windows too (below), and a half-written message must not be what falls behind the fold.
+    grouped.finished.sort(
+        (a, b) => Number(b.conversation.unsent.value) - Number(a.conversation.unsent.value) || lastActive(b) - lastActive(a),
+    );
     return grouped;
 });
 const LANES: readonly { key: FleetLane; label: string; dot: string }[] = [
@@ -361,6 +365,7 @@ const hasMeta = (entry: OpenChat): boolean =>
             unreadBadge(entry.agent) !== undefined ||
             (entry.agent.diff !== undefined && (entry.agent.diff.insertions > 0 || entry.agent.diff.deletions > 0)) ||
             entry.agent.updatedAt > 0)) ||
+    entry.conversation.unsent.value ||
     originOf(entry.conversation) !== undefined ||
     isArchived(entry.conversation) ||
     modelOf(entry) !== undefined ||
@@ -771,6 +776,19 @@ const closeTab = (event: Event, id: string): void => {
                                      puts its OriginMark in the card body. -->
                                 <OriginMark :origin="originOf(c)" compact />
                                 <WorkflowMark :workflow="agent?.workflow" compact />
+                                <!-- Words of the user's still in this chat's composer — the board's own mark
+                                     (AgentCard) at the width a rail row can spend on it: the glyph alone, in
+                                     the same link hue, with the sentence in its tooltip. Beside the archived
+                                     box on purpose, since the pair is what an old chat being written into
+                                     wears. -->
+                                <span
+                                    v-if="c.unsent.value"
+                                    v-tooltip.top="'You have an unsent message here'"
+                                    class="flex shrink-0 items-center text-link"
+                                    aria-label="Unsent message"
+                                >
+                                    <Icon name="send" class="text-2xs" />
+                                </span>
                                 <span v-if="isArchived(c)" class="flex shrink-0 items-center" aria-label="Archived">
                                     <Icon name="box" class="text-2xs text-subtle" />
                                 </span>

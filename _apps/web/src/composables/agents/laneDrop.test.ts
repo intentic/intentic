@@ -19,6 +19,7 @@ describe("dropActionFor", () => {
         attention: none,
         open: false,
         unread: false,
+        unsent: false,
         ...over,
     });
 
