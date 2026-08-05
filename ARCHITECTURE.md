@@ -68,10 +68,10 @@ flowchart TB
   Google ID token, verified against Google's JWKS, and the daemon binds its owner **on first use**:
   the first authenticated request must carry the `x-intentic-connect` connect token (and, when setup
   seeded an expected owner, match that account's email), then the owner email persists in
-  `/work/.intentic/owner.json` ([auth.ts](_apps/sandbox/src/auth/auth.ts)). Because a Google ID token
+  `/work/.intentic/owner.json` ([auth.ts](_sandbox/sandbox/src/auth/auth.ts)). Because a Google ID token
   lives ~an hour and renewing it needs Google UI, it is only the **sign-in** credential: the browser
   exchanges it at `system.session` for a **daemon-minted session** (HMAC-signed with a secret that
-  never leaves the sandbox, [session.ts](_apps/sandbox/src/auth/session.ts)) and presents that on
+  never leaves the sandbox, [session.ts](_sandbox/sandbox/src/auth/session.ts)) and presents that on
   every call, renewing it silently — Google reappears only for a first visit, an account switch, or a
   long-idle return. First-bind always takes a fresh Google proof, never a session. Additional
   collaborators are granted via `/work/.intentic/members.json`, and owner/membership are re-checked
@@ -101,7 +101,7 @@ sequenceDiagram
 
 ### The sandbox daemon
 
-The daemon ([_apps/sandbox](_apps/sandbox)) is the whole per-user product surface, not just a chat
+The daemon ([_sandbox/sandbox](_sandbox/sandbox)) is the whole per-user product surface, not just a chat
 endpoint. One Node process serves the oRPC contract on `:8787` and a preview proxy on `:5173`;
 terminals, panel dev servers, and agent shell commands all run in a shared `tmux` server so they
 survive reconnects. Its subsystems:
@@ -109,25 +109,25 @@ survive reconnects. Its subsystems:
 - **Agent backends** — Claude (agent SDK, spawned per turn), Codex, Grok/opencode, Kimi Code, and Gemini. Kimi
   and Google's models are re-served from subscription OAuth through the bundled translator on the Claude Code
   harness
-  ([agent/](_apps/sandbox/src/agent/)), plus an anonymous website **webchat** widget over SSE. The four runtimes
+  ([agent/](_sandbox/sandbox/src/agent/)), plus an anonymous website **webchat** widget over SSE. The four runtimes
   behind that seam (the Claude Code loop, Codex's exec surface, OpenCode, ACP) do not do the same things, so
   what each one *can* do is **declared**, not inferred: `capabilitiesOf(provider, harness)`
-  ([sandbox-contract/agent-catalog.ts](_libs/sandbox-contract/src/agent-catalog.ts)) is one row per runtime —
+  ([sandbox-contract/agent-catalog.ts](_sandbox/sandbox-contract/src/agent-catalog.ts)) is one row per runtime —
   steering, permissions, questions, MCP, effort, isolation, commands, terminals, recovery — and both sides of
   the wire read it. The daemon gates its seams on it and strips the controls a runtime would silently drop
-  ([agent/turn-plan.ts](_apps/sandbox/src/agent/turn-plan.ts)); the composer offers only the modes and knobs
+  ([agent/turn-plan.ts](_sandbox/sandbox/src/agent/turn-plan.ts)); the composer offers only the modes and knobs
   something applies, and names the rest as what this provider can't do. A capability is listed only if
   something reads it, and `agent-catalog.test.ts` walks PROVIDERS × HARNESSES so a new provider cannot arrive
   without a row
-  ([webchat/](_apps/sandbox/src/webchat/)). A chat turn executes as a **detached run**
-  ([agent/turn-runs.ts](_apps/sandbox/src/agent/turn-runs.ts)): `POST /agent` acks with a run id and the
+  ([webchat/](_sandbox/sandbox/src/webchat/)). A chat turn executes as a **detached run**
+  ([agent/turn-runs.ts](_sandbox/sandbox/src/agent/turn-runs.ts)): `POST /agent` acks with a run id and the
   frames land in a seq-stamped log, which any number of clients render via `/agent/attach`
   (replay-from-cursor, then live) — so a turn survives reloads and dropped connections, and every window or
   device on the conversation streams it concurrently. Only `/agent/stop` cancels it. A turn also survives **the
   daemon**: every in-flight turn and automation fire is written to a **turn journal** on the history volume
-  ([agent/turn-journal.ts](_apps/sandbox/src/agent/turn-journal.ts)) and cleared when it settles, so whatever
+  ([agent/turn-journal.ts](_sandbox/sandbox/src/agent/turn-journal.ts)) and cleared when it settles, so whatever
   is still there at boot is exactly what the process died under — and `resumeInterruptedTurns`
-  ([agent/turn-resume.ts](_apps/sandbox/src/agent/turn-resume.ts)) re-runs it on the session holding its
+  ([agent/turn-resume.ts](_sandbox/sandbox/src/agent/turn-resume.ts)) re-runs it on the session holding its
   partial work. That matters because intentic's own flows cause the deaths: every update, environment approval
   and `dev-sandbox.sh` swap recreates the container, so approving the Dockerfile change an agent asked for used
   to cost the run that asked for it. Off by default (`autoResumeOnRestart`) because a re-run spends the owner's
@@ -136,18 +136,18 @@ survive reconnects. Its subsystems:
   reads `interrupted` and an automation's row shows an `interrupted` run.
   The frame log itself stays in memory on purpose — the transcript's durable copy is the provider's session
   store, which every client replays from before it attaches.
-- **Terminals** — interactive PTYs over WebSocket ([terminal/terminal.ts](_apps/sandbox/src/terminal/terminal.ts)).
+- **Terminals** — interactive PTYs over WebSocket ([terminal/terminal.ts](_sandbox/sandbox/src/terminal/terminal.ts)).
 - **Panels & previews** — per-repo dev servers behind `preview-<panel>-<id>.<zone>` hostnames
-  ([panels/](_apps/sandbox/src/panels/)); plus generic **port forwarding** for anything run in a terminal
+  ([panels/](_sandbox/sandbox/src/panels/)); plus generic **port forwarding** for anything run in a terminal
   (a procfs scan lists listening ports, an explicit forward maps one onto a fixed slot behind
   `port-<slot>-<id>.<zone>`, and Ctrl+clicking a `localhost:<port>` link in a terminal rides this
-  automatically) ([ports/](_apps/sandbox/src/ports/)). Port targets get Host/Origin rewritten to
+  automatically) ([ports/](_sandbox/sandbox/src/ports/)). Port targets get Host/Origin rewritten to
   `localhost:<port>` at the proxy, so stock dev-server host checks pass unconfigured. Desktop-sync users get the
   stronger guarantee automatically: the sync agent's port-mirror watcher binds those same ports on their own
   machine's localhost (see `@intentic/sync`), the only path where a frontend hard-coded to
   `localhost:<other-port>` works untouched.
 - **Automations** — cron schedules, webhooks (`/automations/:id/fire`), and event listeners
-  ([automations/](_apps/sandbox/src/automations/)). Any of them can be fired by hand with **Run now**
+  ([automations/](_sandbox/sandbox/src/automations/)). Any of them can be fired by hand with **Run now**
   (`POST /automations/:id/run`), down the same path the real trigger takes — a schedule stays a headless
   main-tree wake, and its guard still runs, because a test-fire that proved something else ran would prove
   nothing about the 3 a.m. one. Only the approval gate is skipped (the click is the approval), and a *disabled*
@@ -155,27 +155,27 @@ survive reconnects. Its subsystems:
   the session it ran in, so the row's run history opens the transcript — the answer to "it failed overnight and
   I can't see why".
 - **Doorbell** — a chat bubble a customer embeds on their own website, talking to a `webchat` listener
-  automation ([webchat/](_apps/sandbox/src/webchat/), widget in
-  [\_libs/webchat-widget](_libs/webchat-widget)). It is the inbound-HTTP mirror of the gateway-process pattern:
+  automation ([webchat/](_sandbox/sandbox/src/webchat/), widget in
+  [\_sandbox/webchat-widget](_sandbox/webchat-widget)). It is the inbound-HTTP mirror of the gateway-process pattern:
   no extension holds a connection, because the connection is a `<script>` tag on someone else's page. Four
   routes are exempt from the bearer middleware — `widget.js`, and per-automation `config` / `challenge` /
-  `message` — and that set, written as **one predicate** in [app.ts](_apps/sandbox/src/app.ts), is the whole of
+  `message` — and that set, written as **one predicate** in [app.ts](_sandbox/sandbox/src/app.ts), is the whole of
   what an anonymous internet user can reach on a daemon. The visitor holds no credential in any mode: even
   with Google sign-in on, the ID token is verified daemon-side against the *site's own* client id (intentic's
   cannot list every customer domain) and becomes a claim in the prompt, never a grant. Admission is the
   trigger's `allowedOrigins` plus a per-conversation rate limit and an optional bot check — Cloudflare
   Turnstile, or a built-in proof of work for sites with no Cloudflare account, spent once per visitor thread.
   Each thread maps to ONE sandbox conversation, resumed by session id
-  ([webchat-sessions.ts](_apps/sandbox/src/webchat/webchat-sessions.ts)), so a five-message support chat is one
+  ([webchat-sessions.ts](_sandbox/sandbox/src/webchat/webchat-sessions.ts)), so a five-message support chat is one
   fleet card the owner can watch live and take over — not five worktrees with amnesia. And because an
   automation turn runs `bypassPermissions` by default, a Doorbell's real boundary is `Automation.allowedTools`,
   carried into the SDK's own allowlist: prompt wording is advice, an empty toolbox is not. The config fetch
-  doubles as the **install probe** ([webchat-installs.ts](_apps/sandbox/src/webchat/webchat-installs.ts)):
+  doubles as the **install probe** ([webchat-installs.ts](_sandbox/sandbox/src/webchat/webchat-installs.ts)):
   every widget load records its origin and whether it was admitted, which is the only thing that can tell a
   working Doorbell nobody has written to from a snippet that was never pasted — and turns the commonest
   mistake of all (`example.com` listed, `www.example.com` not) into a named origin with an Allow button.
 - **CI pipelines** — the workspace repos' GitHub Actions / GitLab pipelines, as both an automation source and a
-  UI surface ([ci/](_apps/sandbox/src/ci/)). A repo participates when its remote's hostname matches a connected
+  UI surface ([ci/](_sandbox/sandbox/src/ci/)). A repo participates when its remote's hostname matches a connected
   github/gitlab capability (`projects.ts` — self-hosted GitLab included, via the capability's instance url). A
   reconciler keeps a webhook on every mapped repo pointing at the public receiver `/ci/webhook/:host`,
   authenticated by a per-sandbox secret in `.intentic/ci.json` (GitHub signs the body, GitLab echoes the
@@ -190,54 +190,54 @@ survive reconnects. Its subsystems:
   proxy rerun/cancel to the vendor, and **Fix with agent** (`POST /ci/fix`) opens an isolated conversation
   seeded with the failed jobs' log tails — a fleet card like any other agent.
 - **Push notifications** — the daemon is the sender, because it is the only tier that knows what the agent is
-  doing ([push/](_apps/sandbox/src/push/)). It owns a per-sandbox VAPID keypair and one subscription per
+  doing ([push/](_sandbox/sandbox/src/push/)). It owns a per-sandbox VAPID keypair and one subscription per
   subscribed browser, stored on the **history volume** rather than under `/work/.intentic`: the private key can
   forge notifications to the owner's devices, so it sits outside the agent's reach. Three moments notify — a
   turn settled, a turn parked on the user (plan/question/permission), and an automation held for approval —
   and every one is suppressed while anyone is present and non-idle on the sandbox (`idleEverywhere`, read off
   the same presence roster `/events` maintains), so a turn you watch finish tells you nothing. The service
-  worker ([_apps/web/public/sw.js](_apps/web/public/sw.js)) is registered lazily and caches nothing; a
+  worker ([_editor/web/public/sw.js](_editor/web/public/sw.js)) is registered lazily and caches nothing; a
   subscription is per-browser, and lives on the web origin while the sender is the daemon on its tunnel —
   which works because a push endpoint is an absolute URL minted by the browser's own push service.
 - **Capabilities** — everything a user adds to the sandbox (connectors, vpn, mcp, plugins, …),
-  one unified model with a per-kind handler ([capabilities/](_apps/sandbox/src/capabilities/)) — see
+  one unified model with a per-kind handler ([capabilities/](_sandbox/sandbox/src/capabilities/)) — see
   [Capabilities](#capabilities).
-- **VPN** — putting the sandbox on a private network ([vpn/](_apps/sandbox/src/vpn/)) — see [VPN](#vpn).
+- **VPN** — putting the sandbox on a private network ([vpn/](_sandbox/sandbox/src/vpn/)) — see [VPN](#vpn).
 - **Members** — shared access for invited collaborators, enforced by the daemon
-  ([auth.ts](_apps/sandbox/src/auth/auth.ts)).
+  ([auth.ts](_sandbox/sandbox/src/auth/auth.ts)).
 - **Workspace file service** — search, tree, watch, diff, and chunked multi-GB uploads
-  ([workspace/](_apps/sandbox/src/workspace/)); desktop sync is Mutagen over tunnel SSH
-  (`ssh-<id>.<zone>`, paired via `@intentic/sync`). Enrollment ([platform/sync.ts](_apps/sandbox/src/platform/sync.ts))
+  ([workspace/](_sandbox/sandbox/src/workspace/)); desktop sync is Mutagen over tunnel SSH
+  (`ssh-<id>.<zone>`, paired via `@intentic/sync`). Enrollment ([platform/sync.ts](_sandbox/sandbox/src/platform/sync.ts))
   carries a **mode**: `sync` (bidirectional file sync, SINGLE-HOLDER — two machines two-way-syncing `/work`
   would race) or `mirror` (port mirroring only, UNLIMITED — forwards are per-machine and independent, so every
   collaborator mirrors the ports to their own localhost at once). The **owner** may enroll either; a **member**
   is capped to `mirror` at pairing-mint. Each enrolled machine gets its own key in `authorized_keys` and its own
   `/ports`-scoped sync token, so machines revoke independently (self-revoke on uninstall; owner clears all).
 - **History** — git snapshots every 60 s + per agent turn, on a `/history` volume mounted *outside*
-  `/work` so an agent `rm -rf` can't reach it ([history/](_apps/sandbox/src/history/)). The same volume holds
+  `/work` so an agent `rm -rf` can't reach it ([history/](_sandbox/sandbox/src/history/)). The same volume holds
   the managed ssh dir (`/history/ssh-hosts`, symlinked to `~/.ssh/intentic-hosts` at boot by
-  [`linkSshHosts`](_apps/sandbox/src/capabilities/ssh-hosts.ts)): container recreates — every rebuild, update
+  [`linkSshHosts`](_sandbox/sandbox/src/capabilities/ssh-hosts.ts)): container recreates — every rebuild, update
   and `dev-sandbox.sh` swap — wipe `/root`, so a git-provider identity or an `ssh` capability's key kept there
   died on each one while the manifest still read "connected". What genuinely can't be persisted (`~/.gitconfig`,
   `~/.git-credentials`) is re-derived from the manifest at boot by
-  [`restoreConnectorGitAccess`](_apps/sandbox/src/capabilities/cli/git-access.ts), the git counterpart to
+  [`restoreConnectorGitAccess`](_sandbox/sandbox/src/capabilities/cli/git-access.ts), the git counterpart to
   `reconnectVpns`. Every one of these HOME-level convergences — the ssh dir, the `~/.claude` session stores,
   `authorized_keys`, the git credentials — runs only for the daemon holding the container's HOME claim
-  ([`claimContainerHome`](_apps/sandbox/src/platform/home-owner.ts)): HOME is shared by every process in the
+  ([`claimContainerHome`](_sandbox/sandbox/src/platform/home-owner.ts)): HOME is shared by every process in the
   container, so a SECOND daemon started inside it (a dev run rooted under `/tmp`) otherwise repoints all of it
   at its own empty roots and takes the live sandbox's git access, transcripts and desktop enrollment down
   without an error anywhere.
 - **Environment overlays** — agent-proposed Dockerfile layers, applied only after owner approval
-  ([environment/](_apps/sandbox/src/environment/)).
+  ([environment/](_sandbox/sandbox/src/environment/)).
 - **Discord** — chat/stream/voice integration, now an image-baked extension: a gateway `process` +
   `listener` in [\_extensions/discord](_extensions/discord).
 
 **One image, two ways to start.** The sandbox `connect.sh` runs on your PC and the one the
 `i.want.workspace` provider deploys onto a remote host (over SSH) are the *same image*. The desktop app
-([_apps/desktop](_apps/desktop)) is not a third way: it *spawns that same `connect.sh`*, which is what makes
+([_editor/desktop-app](_editor/desktop-app)) is not a third way: it *spawns that same `connect.sh`*, which is what makes
 its onboarding identical to the pasted one rather than a second implementation to keep in step. Either way the
 tunnel is named `sandbox-<id>` where `<id> = sha256(connectToken).slice(0, 12)`
-([tunnel-ids.ts](_libs/sandbox-contract/src/tunnel-ids.ts)), and it is provisioned one of two ways:
+([tunnel-ids.ts](_sandbox/sandbox-contract/src/tunnel-ids.ts)), and it is provisioned one of two ways:
 
 - **Own Cloudflare** — `connect.sh` runs `intentic tunnel sandbox` against the *user's* zone:
   `sandbox-<id>.<zone>` for the daemon, `ssh-<id>.<zone>` for desktop sync, plus the `*.<zone>`
@@ -280,8 +280,8 @@ Why a tunnel, rather than "just use SSH and make Cloudflare optional":
   reason-about-able; a second internal/SSH mode would mean two reachability models and a combinatorial matrix.
 
 This is enforced in code, not just convention: the SDK types require `expose: Cloudflare`, and both
-`resolveNeeds` ([needs.ts](_libs/need-resolver/src/needs.ts)) and `emit`
-([emit.ts](_libs/state-resolver/src/emit/emit.ts)) throw when it is missing — there is no alternative ingress.
+`resolveNeeds` ([needs.ts](_deploy/need-resolver/src/needs.ts)) and `emit`
+([emit.ts](_deploy/state-resolver/src/emit/emit.ts)) throw when it is missing — there is no alternative ingress.
 The Cloudflare API token is supplied at **connect** time (it rides `connect.sh` into the sandbox) and consumed
 at **provision** time by `intentic deploy apply`. It never reaches the platform except for one request-scoped call at
 setup — the platform lists the token's zones so the user can pick which one the sandbox tunnel uses (the browser
@@ -302,10 +302,10 @@ Intent ──► NeedResolver ──► Needs ──► StateResolver ──► 
    `i.want.*` (what intentic owns end-to-end — created, reconciled, pruned, destroyed: `app`, `service`,
    `workspace`, `database`, `cache`, `auth`, `objectStorage`, `user`, `team`), each
    app wired to its host/Cloudflare via `on` / `expose`. Captured as a serializable `IntentSet`.
-   ([_libs/sdk/src/stack.ts](_libs/sdk/src/stack.ts))
+   ([_deploy/sdk/src/stack.ts](_deploy/sdk/src/stack.ts))
 2. **Need resolver** — derives the abstract capabilities the intent requires: `source-control`,
    `docker-registry`, `infra-control` (control plane), `deployment-target`, `domain` (application plane).
-   (`resolveNeeds` in [_libs/need-resolver/src/needs.ts](_libs/need-resolver/src/needs.ts))
+   (`resolveNeeds` in [_deploy/need-resolver/src/needs.ts](_deploy/need-resolver/src/needs.ts))
 3. **State resolver** — assigns each need its catalog option and compiles the emitted nodes into one
    **desired state** (a `DesiredStateGraph`). The catalog maps capabilities to the concrete things that
    satisfy them; one option may cover several (Forgejo provides both source-control and docker-registry).
@@ -315,11 +315,11 @@ Intent ──► NeedResolver ──► Needs ──► StateResolver ──► 
    host SSH credential ever reaches a hosted forge and the host stays outbound-only. The intent fully
    determines the result — within the selected catalog there is exactly one option per capability, so
    resolution stays deterministic. (`resolveState` in
-   [_libs/state-resolver/src/state.ts](_libs/state-resolver/src/state.ts), over `catalogFor` in
-   [catalog.ts](_libs/state-resolver/src/lib/catalog.ts) and the nodes emitted by
-   [emit.ts](_libs/state-resolver/src/emit/emit.ts))
+   [_deploy/state-resolver/src/state.ts](_deploy/state-resolver/src/state.ts), over `catalogFor` in
+   [catalog.ts](_deploy/state-resolver/src/lib/catalog.ts) and the nodes emitted by
+   [emit.ts](_deploy/state-resolver/src/emit/emit.ts))
 4. **Execute** — apply the desired state and re-read it, looping until a plan reads all-noop ("state reads
-   true"). (`reconcile` in [_libs/engine/src/reconcile/reconcile-loop.ts](_libs/engine/src/reconcile/reconcile-loop.ts), over
+   true"). (`reconcile` in [_deploy/engine/src/reconcile/reconcile-loop.ts](_deploy/engine/src/reconcile/reconcile-loop.ts), over
    `apply`/`plan` and the Provider SPI)
 5. **Prune** — after convergence, deletion converges too, from two sources: the baseline diff (resources in
    the last-applied artifact the new one no longer declares) and the **collection scan** — each provider's
@@ -329,19 +329,19 @@ Intent ──► NeedResolver ──► Needs ──► StateResolver ──► 
    input (stateful backings by default) are never deleted, and `intentic deploy destroy --yes` is the same prune
    against the empty graph. Drift detection is also stamp-based: every resource carries an `intentic.hash`
    of its serialized inputs, and a mismatch reads as an update regardless of the provider's own diff.
-   (`prune`/`pruneOrphans` in [prune.ts](_libs/engine/src/reconcile/prune.ts), `collectOrphans` in
-   [orphans.ts](_libs/engine/src/reconcile/orphans.ts), stamps in [stamp.ts](_libs/graph/src/stamp.ts))
+   (`prune`/`pruneOrphans` in [prune.ts](_deploy/engine/src/reconcile/prune.ts), `collectOrphans` in
+   [orphans.ts](_deploy/engine/src/reconcile/orphans.ts), stamps in [stamp.ts](_deploy/graph/src/stamp.ts))
 
 A `DesiredStateGraph` is the central data structure: a serializable, dependency-ordered set of resource
-nodes with refs, secrets, and readiness gates. ([_libs/graph/src/types.ts](_libs/graph/src/types.ts))
+nodes with refs, secrets, and readiness gates. ([_deploy/graph/src/types.ts](_deploy/graph/src/types.ts))
 
 ## Output contract (driving the CLI as a service)
 
 The engine separates two seams on `EngineConfig`: `log` carries providers' free-form strings, and
 `onEvent` emits structured `EngineEvent`s for lifecycle progress — `node` (apply/plan, start/done with
 the action), `readiness`, `iteration`, `prune`, and `orphan`
-([types.ts](_libs/engine/src/types.ts)). The CLI selects a renderer from `INTENTIC_OUTPUT`
-(`text` | `json` | `ndjson`) in [output.ts](_apps/cli/src/lib/output.ts): `text` is the human default
+([types.ts](_deploy/engine/src/types.ts)). The CLI selects a renderer from `INTENTIC_OUTPUT`
+(`text` | `json` | `ndjson`) in [output.ts](_deploy/cli/src/lib/output.ts): `text` is the human default
 (unchanged), `json` serializes the command's returned outcome once, and `ndjson` streams each event as
 a line then a terminal `result`. The final result is built from the engine's return values
 (`PlanOutcome`/`ConvergeResult`/`PruneOutcome` and `collectAccess`), never from events — so a control
@@ -349,7 +349,7 @@ plane gets both live progress and a parseable summary, and embedders consume `En
 
 ## Control plane vs application plane
 
-Every need carries a `plane` — its role, independent of where it runs ([needs.ts](_libs/need-resolver/src/needs.ts)):
+Every need carries a `plane` — its role, independent of where it runs ([needs.ts](_deploy/need-resolver/src/needs.ts)):
 
 - **Control plane** — the deploy machinery: `source-control` + `docker-registry` (Forgejo by default,
   GitHub/GitLab when declared) and `infra-control` (Komodo, on every stack) — git/CI plus the deploy
@@ -357,12 +357,12 @@ Every need carries a `plane` — its role, independent of where it runs ([needs.
   (`deploy.config.ts`) and `desired-state` repo (the artifact + execution status) drive it: `intentic
   resolve` runs the flow above and writes the artifact, `intentic deploy apply` executes it. A remote, PR-managed
   control plane (a standalone Forgejo watching the intent repo) is a planned later evolution of this same
-  flow. ([_apps/cli/src/resolve/resolve.ts](_apps/cli/src/resolve/resolve.ts), [artifact.ts](_apps/cli/src/lib/artifact.ts),
-  [app.ts](_apps/cli/src/app.ts))
+  flow. ([_deploy/cli/src/resolve/resolve.ts](_deploy/cli/src/resolve/resolve.ts), [artifact.ts](_deploy/cli/src/lib/artifact.ts),
+  [app.ts](_deploy/cli/src/app.ts))
 - **Application plane** — what actually serves an app: its `deployment-target` (the app's runtime on the
   host) and its `domain` (the Cloudflare tunnel + DNS routes). Both are *derived from* `i.want.app` and
-  emitted alongside the control-plane stack. ([_libs/state-resolver/src/resolvers/platform.ts](_libs/state-resolver/src/resolvers/platform.ts),
-  [_libs/providers/](_libs/providers/src/))
+  emitted alongside the control-plane stack. ([_deploy/state-resolver/src/resolvers/platform.ts](_deploy/state-resolver/src/resolvers/platform.ts),
+  [_deploy/providers/](_deploy/providers/src/))
 
 The whole per-host support stack is self-contained: its control-plane Forgejo is just another reconciled
 node, so `apply` needs no pre-existing control plane. A future remote control plane would reuse the same
@@ -381,28 +381,28 @@ graph ──► resources ──► engine ──► providers
 
 | Package | Tier | Role |
 | --- | --- | --- |
-| [`@intentic/graph`](_libs/graph) | lib | Product-agnostic IR: refs, secrets, readiness, `DesiredStateGraph`, and the compiler. |
-| [`@intentic/resources`](_libs/resources) | lib | The closed resource vocabulary shared by the state resolver, engine, and providers: `ResourceType`, `ResolvedNode`, and `OUTPUTS`. |
-| [`@intentic/need-resolver`](_libs/need-resolver) | lib | The need resolver: intent → needs. Owns the authored intent/input shapes, `resolveNeeds`, and `Capability`/`Need`/`Plane`. |
-| [`@intentic/state-resolver`](_libs/state-resolver) | lib | The state resolver: needs → desired state, over the option catalog. `resolveState`, the catalog, `emit`, and the platform/app/route/id derivation. |
-| [`@intentic/sdk`](_libs/sdk) | lib | Authoring surface (`i.have.host` / `i.have.cloudflare` + `i.want.app`); `defineIntent` (→ `IntentSet`) and `defineStack` (one graph). |
-| [`@intentic/engine`](_libs/engine) | lib | Stateless reconcile engine: `plan`/`apply`, the Provider SPI, and the `reconcile` loop. |
-| [`@intentic/providers`](_libs/providers) | lib | Real Provider SPI impls: control plane (Forgejo, GitHub, GitLab, Komodo, repo/CI), network (Cloudflare tunnels + routes), hosts (SSH/Docker, deployment, workspace), backings (Postgres, Valkey, Garage, Authentik), services (SigNoz, Outline, Paperless, OpenProject, Invoice Ninja, Infisical), integrations (Discord, Stripe), ops (restic backup). |
-| [`@intentic/sandbox-contract`](_libs/sandbox-contract) | lib | oRPC wire contract for the sandbox daemon — shared by the daemon and its browser client (the platform consumes it from npm). |
-| [`@intentic/scaffold`](_libs/scaffold) | lib | Shared workspace scaffold: the intent-repo skeleton + deploy.config managed-region render/parse, used by the CLI's `init` and the sandbox daemon. |
-| [`@intentic/cli`](_apps/cli) | **app** | The `bin: intentic` toolbox — three command groups: `tunnel` (`sandbox`/`host` — the sandbox's own Cloudflare tunnels, used by connect.sh), `deploy` (`init`/`resolve`/`plan`/`apply`/`destroy`/`adopt`/`restore`/`secrets`/`deployments`/`logs` — the bundled deployment engine), and `scaffold` (`monorepo`/`add-app`) ([app.ts](_apps/cli/src/app.ts)). |
-| [`@intentic/sandbox`](_apps/sandbox) | **app** (image) | The per-project multi-agent dev workspace daemon (see [The sandbox daemon](#the-sandbox-daemon)), reached by the browser directly over its own Cloudflare tunnel. |
-| [`@intentic/sync`](_apps/sync) | **app** | Local background agent keeping a directory bidirectionally in sync with a remote sandbox — one HTTP enrollment call, then Mutagen over tunnel SSH. The daemon grants a **mode** at enrollment (file `sync`, or `mirror`-only for collaborators — see the workspace file service above), and the agent adapts: `sync` runs file sync + mirroring, `mirror` skips file sync and only forwards ports. `setup` auto-starts a **port-mirror watcher** (a detached, pidfile-guarded loop) that binds the sandbox's workspace ports onto the desktop's SAME localhost ports via Mutagen TCP forwards, polling the daemon's `/ports` (read with the enrollment-minted, `/ports`-scoped sync token) so newly-started dev servers appear automatically, and **registers it for login autostart** (launchd / the per-user Windows Run key, as Mutagen's own daemon does / XDG autostart) so it resumes after a reboot. Each `setup` first **retires the previous pairing** — it stops the resident watcher (which would otherwise keep serving the new config on the agent binary that run just replaced) and terminates every session under this agent's name prefix: forwards, because Mutagen holds a dead sandbox's localhost ports until told otherwise and the next pairing would read them as "busy", and the previous file-sync session, because Mutagen re-dials a disconnected one every 15s for as long as the daemon lives. On Windows the watcher runs with a **windowless console** rather than detached — a detached process has no console at all, and Windows gives each console child of one (the bridge's `git` → `ssh` → `cloudflared`, every tick) a new console *window*. Revocation is symmetric: after consecutive definitive token rejections (the owner clicked Disable, or the sandbox lost the enrollment) the watcher **tears itself down** — forwards, pidfile, and the autostart entry — instead of polling a dead enrollment forever. Remote dev servers then behave exactly like local ones — localhost URLs, cookies, and CORS included — with no command to run, ever, and **every collaborator can mirror the same sandbox at once**. The state home, autostart mechanisms, self-relaunch and detached-loop spawn are [`@intentic/local-agent`](_libs/local-agent)'s. |
-| [`@intentic/desktop`](_libs/desktop) | lib | Drive a desktop from Node — capture the screen, move the pointer, click, type, press chords, scroll, drag — on Windows and Linux with **no native modules** (the consumer ships as one compiled binary, so node-gyp is not an option). Windows goes through PowerShell into `user32.dll`: `SetCursorPos`/`mouse_event` for the pointer, `keybd_event` for chords, and `SendKeys` for text ONLY — it is the one that handles arbitrary unicode and the one that cannot press the Windows key, so the split is not arbitrary. Linux is two backends behind one interface: X11 synthesises input freely via `xdotool`, Wayland refuses to, so the pointer needs `ydotool` (`/dev/uinput`) and text/keys prefer `wtype` (no privileges) — a missing tool raises an error carrying its exact install line. Knows NOTHING about agents, scopes or sandboxes: it takes coordinates and makes a computer do something, and whether that is allowed is asked before these methods are called (`@intentic/host`'s tools/computer.ts). That separation is what makes the policy testable at all, since a real click can only be verified by a human watching a screen. It also operates APPLICATIONS rather than only pixels — list the open windows (app, title, bounds, focus), focus one, launch an app or URL, read and write the clipboard — which is what makes GUI work reliable rather than blind: typing lands in the FOCUSED window, so an agent that cannot enumerate or focus is guessing every time. Windows enumerates through `Get-Process` plus a P/Invoke for the rectangle and the foreground handle; X11 through `wmctrl`/`xdotool`; Wayland only on wlroots compositors via `swaymsg -t get_tree`, because a compositor refusing to let one client enumerate another's windows is the same protection that stops it synthesising input — everything else gets a sentence saying so instead of an empty list that reads as "nothing is open". Two details it owns: coordinates are SCREENSHOT pixels and `frame()` reports the virtual desktop's origin (negative on a monitor left of the primary), so multi-monitor stops being a source of silent misclicks; and one key vocabulary (X11 keysyms plus the aliases people type — `enter`, `esc`, `win`, `cmd`) is rendered three ways, so no caller is platform-aware. |
-| [`@intentic/browser`](_libs/browser) | lib | Drive a Chromium browser over CDP — open pages, read them as STRUCTURED TEXT, click and type by element reference. No dependencies: the protocol is JSON and `fetch`/`WebSocket` are globals, which matters because this ships inside a compiled binary where a native-addon library proved unloadable (see @intentic/desktop). The point is references instead of coordinates: a snapshot returns every visible element with its role, accessible name and current value, and actions name an element rather than a position — so the same instruction survives scrolling, resizing, re-rendering and a different screen, none of which a pixel click survives. Refs are short-lived by design (they index an array parked on the page, replaced by the next snapshot), so a ref taken before a navigation fails loudly instead of clicking whatever now occupies that slot. It drives a SEPARATE browser instance with its own profile under `~/.intentic/host/browser`, never the user's own: a browser only speaks CDP if it was started with a debugging port, and restarting theirs to add one would close every tab they had open — so their session is never automated, and the agent's logins are ones the user performed deliberately in a window they could watch. |
-| [`@intentic/local-agent`](_libs/local-agent) | lib | The plumbing every intentic CLI that lives on a USER'S OWN COMPUTER needs, and none of what any of them does: the `~/.intentic/<name>` state home and the 0700/0600 floor everything written into it gets; how a CLI re-invokes itself; login autostart per OS; and the detached background loop found again by pidfile. Its three consumers — `@intentic/host`, `@intentic/sync`, `@intentic/acp-bridge` — were written months apart, and each copy of this was made from the last one, which is a shape with a known ending: the second copy is a snapshot of the first on the day it was taken, and every fix after that lands in one of them. It already had. Sync wrote its token file **world-readable** because its config module was copied from host's before that floor existed; host has no macOS autostart because it was copied from a sync that did not have one yet, and wrote an XDG entry macOS never reads; and the Windows console rule, the compiled-binary `argv` rule and "report what the tool actually said" were each written out at length in two files, in prose, cross-referencing the other agent by name — including in this table. The autostart mechanisms are all the user's OWN (per-user Windows Run key, launchd LaunchAgent, XDG entry): no elevation, no password prompt, no machine-wide change. Windows gets the DETACHED command and the supervising mechanisms get the FOREGROUND one, because Explorer starts a Run entry in the interactive session where the loop would park a console window on the desktop from login until shutdown. macOS is opt-in per agent, so one that has not been exercised there says so instead of writing a file nothing reads. Knows nothing about sandboxes, tunnels, enrollment or MCP. |
-| [`@intentic/host`](_apps/host) | **app** | Local agent that lets the sandbox's agent WORK ON the user's own computer — the machine half of the `host` capability (the sandbox half is [hosts/](_apps/sandbox/src/hosts)). The machine cannot be dialled (NAT, proxy, closed lid), so it dials US: one outbound WebSocket, authenticated by an enrollment token carried in its first FRAME (never a URL, which would put a durable key to somebody's laptop into edge logs). After that frame the socket is **oRPC**: the machine SERVES `hostContract` (`describe`/`setScopes`/`ping`/`mcp`) and the daemon holds the client — the adapter attaches to either peer, so who dialled and who serves are independent, and correlation, argument validation and error shape belong to the link rather than to hand-rolled frames. Exactly one procedure is deliberately untyped: `mcp`, which carries MCP JSON-RPC **verbatim** in both directions, because a contract that described each tool would force the daemon to know every schema and end a machine's ability to learn a tool without a daemon release. The tool surface (`run_command`, `read_file`, `write_file`, `list_dir`, `trash_file`, `screenshot`, `describe`) therefore lives in THIS binary, and there is deliberately no delete tool (trash is recoverable). **Scopes are enforced here**, never in the sandbox: the daemon pushes the owner's switches down on every connect and on every edit, and a call outside them comes back as a readable refusal naming the switch — so a compromised sandbox, or an agent talked into something by what it read, still cannot exceed the grant. Every call is appended to an audit log on the machine, which survives `uninstall` because it is the user's record. Installation and lifecycle — the `~/.intentic/host` state home and its 0600 credential floor, self-relaunch, login autostart, the detached loop and its windowless-console Windows spawn — come from [`@intentic/local-agent`](_libs/local-agent), which is where those lessons now live as code rather than as prose cross-referencing `@intentic/sync`. |
+| [`@intentic/graph`](_deploy/graph) | lib | Product-agnostic IR: refs, secrets, readiness, `DesiredStateGraph`, and the compiler. |
+| [`@intentic/resources`](_deploy/resources) | lib | The closed resource vocabulary shared by the state resolver, engine, and providers: `ResourceType`, `ResolvedNode`, and `OUTPUTS`. |
+| [`@intentic/need-resolver`](_deploy/need-resolver) | lib | The need resolver: intent → needs. Owns the authored intent/input shapes, `resolveNeeds`, and `Capability`/`Need`/`Plane`. |
+| [`@intentic/state-resolver`](_deploy/state-resolver) | lib | The state resolver: needs → desired state, over the option catalog. `resolveState`, the catalog, `emit`, and the platform/app/route/id derivation. |
+| [`@intentic/sdk`](_deploy/sdk) | lib | Authoring surface (`i.have.host` / `i.have.cloudflare` + `i.want.app`); `defineIntent` (→ `IntentSet`) and `defineStack` (one graph). |
+| [`@intentic/engine`](_deploy/engine) | lib | Stateless reconcile engine: `plan`/`apply`, the Provider SPI, and the `reconcile` loop. |
+| [`@intentic/providers`](_deploy/providers) | lib | Real Provider SPI impls: control plane (Forgejo, GitHub, GitLab, Komodo, repo/CI), network (Cloudflare tunnels + routes), hosts (SSH/Docker, deployment, workspace), backings (Postgres, Valkey, Garage, Authentik), services (SigNoz, Outline, Paperless, OpenProject, Invoice Ninja, Infisical), integrations (Discord, Stripe), ops (restic backup). |
+| [`@intentic/sandbox-contract`](_sandbox/sandbox-contract) | lib | oRPC wire contract for the sandbox daemon — shared by the daemon and its browser client (the platform consumes it from npm). |
+| [`@intentic/scaffold`](_sandbox/scaffold) | lib | Shared workspace scaffold: the intent-repo skeleton + deploy.config managed-region render/parse, used by the CLI's `init` and the sandbox daemon. |
+| [`@intentic/cli`](_deploy/cli) | **app** | The `bin: intentic` toolbox — three command groups: `tunnel` (`sandbox`/`host` — the sandbox's own Cloudflare tunnels, used by connect.sh), `deploy` (`init`/`resolve`/`plan`/`apply`/`destroy`/`adopt`/`restore`/`secrets`/`deployments`/`logs` — the bundled deployment engine), and `scaffold` (`monorepo`/`add-app`) ([app.ts](_deploy/cli/src/app.ts)). |
+| [`@intentic/sandbox`](_sandbox/sandbox) | **app** (image) | The per-project multi-agent dev workspace daemon (see [The sandbox daemon](#the-sandbox-daemon)), reached by the browser directly over its own Cloudflare tunnel. |
+| [`@intentic/sync`](_sandbox/sync) | **app** | Local background agent keeping a directory bidirectionally in sync with a remote sandbox — one HTTP enrollment call, then Mutagen over tunnel SSH. The daemon grants a **mode** at enrollment (file `sync`, or `mirror`-only for collaborators — see the workspace file service above), and the agent adapts: `sync` runs file sync + mirroring, `mirror` skips file sync and only forwards ports. `setup` auto-starts a **port-mirror watcher** (a detached, pidfile-guarded loop) that binds the sandbox's workspace ports onto the desktop's SAME localhost ports via Mutagen TCP forwards, polling the daemon's `/ports` (read with the enrollment-minted, `/ports`-scoped sync token) so newly-started dev servers appear automatically, and **registers it for login autostart** (launchd / the per-user Windows Run key, as Mutagen's own daemon does / XDG autostart) so it resumes after a reboot. Each `setup` first **retires the previous pairing** — it stops the resident watcher (which would otherwise keep serving the new config on the agent binary that run just replaced) and terminates every session under this agent's name prefix: forwards, because Mutagen holds a dead sandbox's localhost ports until told otherwise and the next pairing would read them as "busy", and the previous file-sync session, because Mutagen re-dials a disconnected one every 15s for as long as the daemon lives. On Windows the watcher runs with a **windowless console** rather than detached — a detached process has no console at all, and Windows gives each console child of one (the bridge's `git` → `ssh` → `cloudflared`, every tick) a new console *window*. Revocation is symmetric: after consecutive definitive token rejections (the owner clicked Disable, or the sandbox lost the enrollment) the watcher **tears itself down** — forwards, pidfile, and the autostart entry — instead of polling a dead enrollment forever. Remote dev servers then behave exactly like local ones — localhost URLs, cookies, and CORS included — with no command to run, ever, and **every collaborator can mirror the same sandbox at once**. The state home, autostart mechanisms, self-relaunch and detached-loop spawn are [`@intentic/local-agent`](_computers/local-agent)'s. |
+| [`@intentic/desktop`](_computers/desktop) | lib | Drive a desktop from Node — capture the screen, move the pointer, click, type, press chords, scroll, drag — on Windows and Linux with **no native modules** (the consumer ships as one compiled binary, so node-gyp is not an option). Windows goes through PowerShell into `user32.dll`: `SetCursorPos`/`mouse_event` for the pointer, `keybd_event` for chords, and `SendKeys` for text ONLY — it is the one that handles arbitrary unicode and the one that cannot press the Windows key, so the split is not arbitrary. Linux is two backends behind one interface: X11 synthesises input freely via `xdotool`, Wayland refuses to, so the pointer needs `ydotool` (`/dev/uinput`) and text/keys prefer `wtype` (no privileges) — a missing tool raises an error carrying its exact install line. Knows NOTHING about agents, scopes or sandboxes: it takes coordinates and makes a computer do something, and whether that is allowed is asked before these methods are called (`@intentic/host`'s tools/computer.ts). That separation is what makes the policy testable at all, since a real click can only be verified by a human watching a screen. It also operates APPLICATIONS rather than only pixels — list the open windows (app, title, bounds, focus), focus one, launch an app or URL, read and write the clipboard — which is what makes GUI work reliable rather than blind: typing lands in the FOCUSED window, so an agent that cannot enumerate or focus is guessing every time. Windows enumerates through `Get-Process` plus a P/Invoke for the rectangle and the foreground handle; X11 through `wmctrl`/`xdotool`; Wayland only on wlroots compositors via `swaymsg -t get_tree`, because a compositor refusing to let one client enumerate another's windows is the same protection that stops it synthesising input — everything else gets a sentence saying so instead of an empty list that reads as "nothing is open". Two details it owns: coordinates are SCREENSHOT pixels and `frame()` reports the virtual desktop's origin (negative on a monitor left of the primary), so multi-monitor stops being a source of silent misclicks; and one key vocabulary (X11 keysyms plus the aliases people type — `enter`, `esc`, `win`, `cmd`) is rendered three ways, so no caller is platform-aware. |
+| [`@intentic/browser`](_computers/browser) | lib | Drive a Chromium browser over CDP — open pages, read them as STRUCTURED TEXT, click and type by element reference. No dependencies: the protocol is JSON and `fetch`/`WebSocket` are globals, which matters because this ships inside a compiled binary where a native-addon library proved unloadable (see @intentic/desktop). The point is references instead of coordinates: a snapshot returns every visible element with its role, accessible name and current value, and actions name an element rather than a position — so the same instruction survives scrolling, resizing, re-rendering and a different screen, none of which a pixel click survives. Refs are short-lived by design (they index an array parked on the page, replaced by the next snapshot), so a ref taken before a navigation fails loudly instead of clicking whatever now occupies that slot. It drives a SEPARATE browser instance with its own profile under `~/.intentic/host/browser`, never the user's own: a browser only speaks CDP if it was started with a debugging port, and restarting theirs to add one would close every tab they had open — so their session is never automated, and the agent's logins are ones the user performed deliberately in a window they could watch. |
+| [`@intentic/local-agent`](_computers/local-agent) | lib | The plumbing every intentic CLI that lives on a USER'S OWN COMPUTER needs, and none of what any of them does: the `~/.intentic/<name>` state home and the 0700/0600 floor everything written into it gets; how a CLI re-invokes itself; login autostart per OS; and the detached background loop found again by pidfile. Its three consumers — `@intentic/host`, `@intentic/sync`, `@intentic/acp-bridge` — were written months apart, and each copy of this was made from the last one, which is a shape with a known ending: the second copy is a snapshot of the first on the day it was taken, and every fix after that lands in one of them. It already had. Sync wrote its token file **world-readable** because its config module was copied from host's before that floor existed; host has no macOS autostart because it was copied from a sync that did not have one yet, and wrote an XDG entry macOS never reads; and the Windows console rule, the compiled-binary `argv` rule and "report what the tool actually said" were each written out at length in two files, in prose, cross-referencing the other agent by name — including in this table. The autostart mechanisms are all the user's OWN (per-user Windows Run key, launchd LaunchAgent, XDG entry): no elevation, no password prompt, no machine-wide change. Windows gets the DETACHED command and the supervising mechanisms get the FOREGROUND one, because Explorer starts a Run entry in the interactive session where the loop would park a console window on the desktop from login until shutdown. macOS is opt-in per agent, so one that has not been exercised there says so instead of writing a file nothing reads. Knows nothing about sandboxes, tunnels, enrollment or MCP. |
+| [`@intentic/host`](_computers/host) | **app** | Local agent that lets the sandbox's agent WORK ON the user's own computer — the machine half of the `host` capability (the sandbox half is [hosts/](_sandbox/sandbox/src/hosts)). The machine cannot be dialled (NAT, proxy, closed lid), so it dials US: one outbound WebSocket, authenticated by an enrollment token carried in its first FRAME (never a URL, which would put a durable key to somebody's laptop into edge logs). After that frame the socket is **oRPC**: the machine SERVES `hostContract` (`describe`/`setScopes`/`ping`/`mcp`) and the daemon holds the client — the adapter attaches to either peer, so who dialled and who serves are independent, and correlation, argument validation and error shape belong to the link rather than to hand-rolled frames. Exactly one procedure is deliberately untyped: `mcp`, which carries MCP JSON-RPC **verbatim** in both directions, because a contract that described each tool would force the daemon to know every schema and end a machine's ability to learn a tool without a daemon release. The tool surface (`run_command`, `read_file`, `write_file`, `list_dir`, `trash_file`, `screenshot`, `describe`) therefore lives in THIS binary, and there is deliberately no delete tool (trash is recoverable). **Scopes are enforced here**, never in the sandbox: the daemon pushes the owner's switches down on every connect and on every edit, and a call outside them comes back as a readable refusal naming the switch — so a compromised sandbox, or an agent talked into something by what it read, still cannot exceed the grant. Every call is appended to an audit log on the machine, which survives `uninstall` because it is the user's record. Installation and lifecycle — the `~/.intentic/host` state home and its 0600 credential floor, self-relaunch, login autostart, the detached loop and its windowless-console Windows spawn — come from [`@intentic/local-agent`](_computers/local-agent), which is where those lessons now live as code rather than as prose cross-referencing `@intentic/sync`. |
 
 The libs + the CLI publish to npm; **`sandbox` ships as a Docker image** to GHCR
 (`ghcr.io/intentic/sandbox`) — published by
 [_tools/scripts/publish-images.sh](_tools/scripts/publish-images.sh) (which also publishes the `dind-host` test-host
 image): `latest` + commit SHA on push to main, `<version>` + the moving `stable` tag on release.
-[`images.ts`](_libs/state-resolver/src/lib/images.ts) records it at `:stable` — the deliberate unpinned
+[`images.ts`](_deploy/state-resolver/src/lib/images.ts) records it at `:stable` — the deliberate unpinned
 exception among the otherwise digest-pinned deployed images (never `:latest`), so released sandboxes
 track releases without a graph change. The registry package is public so tenant hosts pull it
 unauthenticated; both `connect.sh` (your PC) and the `workspace` provider (a server) run this image
@@ -418,19 +418,19 @@ dependency edges into `@intentic/*` all go through `sandbox-contract` (and one t
 
 | Package | Role |
 | --- | --- |
-| [`@intentic-app/web`](_apps/web) | The Vue 3 SPA shell — the editor UI (rail · workspace tree + file viewers + Monaco · chat). Signs in against the platform, then drives the sandbox daemon **directly** over its tunnel. The **extension host** lives here. |
-| [`@intentic-app/api`](_apps/api) | The thin platform: Better Auth sign-in + the `setup.*` handshake + Stripe. Off the command path (see topology above). |
-| [`@intentic/desktop-app`](_apps/desktop) | The Windows/Linux desktop app (Tauri 2). Its workspace window IS the hosted SPA, with no IPC — the only channel in is an intercepted `intentic://` link. The native half runs the SHIPPED scripts (`connect.sh`, `recreate.sh`, `cleanup.sh` and their PowerShell twins) rather than reimplementing them, so the desktop and terminal paths are the same file; and because the daemon holds no host Docker socket, this app is the only thing that can turn "paste this command on the machine that runs your sandbox" into a button. Sign-in happens in the user's real browser and returns over the deep link (Google refuses embedded webviews). See [_apps/desktop/README.md](_apps/desktop/README.md). |
-| [`@intentic/sandbox`](_apps/sandbox) | The per-user daemon (documented under [The sandbox daemon](#the-sandbox-daemon)) — also the app plane's whole backend: workspace files, chat, terminals, panels, search, settings, and the daemon-side half of the extension system. |
-| [`@intentic/sandbox-contract`](_libs/sandbox-contract) | **The keystone wire contract** — the oRPC route + schema surface shared by the daemon, the web client, and every UI extension (~15 dependents). It is deliberately *the* first-party data contract: because everything that consumes it is in-repo and compiled together, a wire change is caught by the compiler and fixed atomically, so there is no separate "stable API" shim to maintain. |
-| [`@intentic-app/api-contract`](_libs/api-contract) | The platform (web↔api) oRPC contract. |
-| [`@intentic/ui`](_libs/ui) | The app design system (PrimeVue + Tailwind primitives). |
-| [`@intentic-app/capability-catalog`](_libs/capability-catalog) | Capability/connector catalog data rendered by the web. |
+| [`@intentic-app/web`](_editor/web) | The Vue 3 SPA shell — the editor UI (rail · workspace tree + file viewers + Monaco · chat). Signs in against the platform, then drives the sandbox daemon **directly** over its tunnel. The **extension host** lives here. |
+| [`@intentic-app/api`](_platform/api) | The thin platform: Better Auth sign-in + the `setup.*` handshake + Stripe. Off the command path (see topology above). |
+| [`@intentic/desktop-app`](_editor/desktop-app) | The Windows/Linux desktop app (Tauri 2). Its workspace window IS the hosted SPA, with no IPC — the only channel in is an intercepted `intentic://` link. The native half runs the SHIPPED scripts (`connect.sh`, `recreate.sh`, `cleanup.sh` and their PowerShell twins) rather than reimplementing them, so the desktop and terminal paths are the same file; and because the daemon holds no host Docker socket, this app is the only thing that can turn "paste this command on the machine that runs your sandbox" into a button. Sign-in happens in the user's real browser and returns over the deep link (Google refuses embedded webviews). See [_editor/desktop-app/README.md](_editor/desktop-app/README.md). |
+| [`@intentic/sandbox`](_sandbox/sandbox) | The per-user daemon (documented under [The sandbox daemon](#the-sandbox-daemon)) — also the app plane's whole backend: workspace files, chat, terminals, panels, search, settings, and the daemon-side half of the extension system. |
+| [`@intentic/sandbox-contract`](_sandbox/sandbox-contract) | **The keystone wire contract** — the oRPC route + schema surface shared by the daemon, the web client, and every UI extension (~15 dependents). It is deliberately *the* first-party data contract: because everything that consumes it is in-repo and compiled together, a wire change is caught by the compiler and fixed atomically, so there is no separate "stable API" shim to maintain. |
+| [`@intentic-app/api-contract`](_platform/api-contract) | The platform (web↔api) oRPC contract. |
+| [`@intentic/ui`](_editor/ui) | The app design system (PrimeVue + Tailwind primitives). |
+| [`@intentic-app/capability-catalog`](_platform/capability-catalog) | Capability/connector catalog data rendered by the web. |
 
 ### Extension system
 
 The app is a **lean core + an extension system**, the same bet VSCode makes. An extension is a package
-with an `intentic-extension.json` manifest at its root ([manifest.ts](_libs/extension-api/src/manifest.ts));
+with an `intentic-extension.json` manifest at its root ([manifest.ts](_sandbox/extension-api/src/manifest.ts));
 identity is derived, never declared (`extensionIdOf = ${publisher}.${name}`). The manifest is the
 **approval + gating surface**: the install dialog shows exactly the declared contribution points, and the
 host refuses any runtime registration the approved manifest never declared. Contribution points cover both
@@ -438,18 +438,18 @@ UI (`views`, `viewers`, `commands`, `settings`) and daemon/agent surface (`proce
 `environment`, `connectors`, `listener`, `bin`). A UI extension ships a prebuilt ESM `entry` bundle and an
 `activate(api, context)` function; there is no ambient global — the host `IntenticApi` arrives as the
 `activate` argument, and everything registered is a `Disposable` pushed onto `context.subscriptions` so
-deactivation unwinds cleanly ([api.ts](_libs/extension-api/src/api.ts)).
+deactivation unwinds cleanly ([api.ts](_sandbox/extension-api/src/api.ts)).
 
 Two boundaries are load-bearing and easy to confuse — the distinction is the most important architectural
 line in the app:
 
-- **`_apps/web/src/extension-host/`** — the real host. It loads git-installed third-party bundles
+- **`_editor/web/src/extension-host/`** — the real host. It loads git-installed third-party bundles
   (`GET /extensions` → engines check → authenticated bundle fetch → `import()` → `activate`) and the
-  compiled-in first-party extensions ([extension-host/builtins.ts](_apps/web/src/extension-host/builtins.ts)),
-  **both through the same manifest-gated `createExtensionApi`** ([apiImpl.ts](_apps/web/src/extension-host/apiImpl.ts)).
+  compiled-in first-party extensions ([extension-host/builtins.ts](_editor/web/src/extension-host/builtins.ts)),
+  **both through the same manifest-gated `createExtensionApi`** ([apiImpl.ts](_editor/web/src/extension-host/apiImpl.ts)).
   A builtin extension can touch only the public `IntenticApi`, never app internals — that is the dogfooding
   boundary that keeps the first-party extensions honest.
-- **`_apps/web/src/core-views/coreViews.ts`** — three *core* view contributions (`infrastructure`,
+- **`_editor/web/src/core-views/coreViews.ts`** — three *core* view contributions (`infrastructure`,
   `live-status`, `directory-ui`) that are extension-*shaped* but stay in the app because each is genuinely
   coupled to platform/onboarding or the file-open iframe bridge. They register through the same runtime
   registry but consume privileged internals **by design**, and the file documents exactly why each one
@@ -459,10 +459,10 @@ The **data plane** an extension talks to is `sandbox-contract` over an authentic
 (`api.sandbox.request/json` — auth injected host-side, tokens never seen by the bundle). An extension's
 reach into daemon routes is **declared in its manifest and gated by the host**, so coupling is explicit and
 reviewable rather than ambient. The narrow `facts.ts` surface
-([facts.ts](_libs/extension-api/src/facts.ts)) is only the stable **detection** vocabulary a view's
+([facts.ts](_sandbox/extension-api/src/facts.ts)) is only the stable **detection** vocabulary a view's
 `detect()` reads to decide when to activate — not the data plane. The SDK is published as two npm packages:
-[`@intentic/extension-api`](_libs/extension-api) (types + manifest schema) and
-[`@intentic/extension-ui`](_libs/extension-ui) (a host-provided slice of the app design system, resolved at
+[`@intentic/extension-api`](_sandbox/extension-api) (types + manifest schema) and
+[`@intentic/extension-ui`](_editor/extension-ui) (a host-provided slice of the app design system, resolved at
 runtime via an import map so every extension shares the shell's one Vue/PrimeVue instance).
 
 What an extension **bundles** is exactly its declared contributions: a prebuilt ESM `entry` (UI) with
@@ -479,12 +479,12 @@ agent's PATH); `listener` (a realtime event provider its gateway process impleme
 
 First-party extensions live in `_extensions/` and reach the product by one of **three load paths** — but by
 **one list**: every extension, whatever its path, is enumerated by `installedExtensions()`
-([installed-extensions.ts](_apps/sandbox/src/extensions/installed-extensions.ts)) and served by
+([installed-extensions.ts](_sandbox/sandbox/src/extensions/installed-extensions.ts)) and served by
 `GET /extensions`, which is what the Sandbox hub's Extensions tab renders and what the on/off switch acts on.
 
 - **Compiled into the web bundle** — the UI extensions (`acceptance`, `activity`, `automations`, `logs`,
   `memory`, `pipelines`, `preview`, `repo-apps`, `viewers`), statically imported and keyed by manifest id
-  ([extension-host/builtins.ts](_apps/web/src/extension-host/builtins.ts)). They ship no `entry` over the
+  ([extension-host/builtins.ts](_editor/web/src/extension-host/builtins.ts)). They ship no `entry` over the
   wire — the bundle IS the SPA — but their manifest is baked into the image beside the daemon-side ones, so
   the daemon lists them and the loader's only question per extension is where its code comes from. The two
   ways image and bundle can disagree are surfaced as states, not silence: `missing` (manifest, no module) and
@@ -514,7 +514,7 @@ gap to close now.
 ### Capabilities
 
 Everything a user adds to a sandbox is a **capability**: one `{ id, kind, config }` entry in a single
-discriminated union (`CapabilitySchema` in [schemas.ts](_libs/sandbox-contract/src/schemas.ts)) over the
+discriminated union (`CapabilitySchema` in [schemas.ts](_sandbox/sandbox-contract/src/schemas.ts)) over the
 kinds — `devops`, `monorepo`, `mcp`, `service`, `integration`, `cli`, `plugin`, `extension`, `ssh`, `vpn`,
 `docker`, `browser`, `host`, `agent`, `endpoint`. There is deliberately **no top-level taxonomy** of "skills vs connectors vs
 environments vs secrets": those are overlapping *ingredients*, not disjoint categories (a connector is a
@@ -524,16 +524,16 @@ VSCode makes with "everything is an extension", disclosed per item instead of cl
 machinery is uniform:
 
 - **One manifest** — `/work/.intentic/capabilities.json` is the source of truth for what's active
-  ([capabilities-store.ts](_apps/sandbox/src/capabilities/capabilities-store.ts)); secrets live in it and
+  ([capabilities-store.ts](_sandbox/sandbox/src/capabilities/capabilities-store.ts)); secrets live in it and
   are denylisted from agent reads, and list responses echo them only as `hasToken`/`hasSecret` booleans.
 - **One lifecycle** — `add` (streams its apply progress live), `remove`, `status`, `setSecret`
-  ([capabilities.contract.ts](_libs/sandbox-contract/src/contracts/capabilities.contract.ts), orchestrated
-  by [capabilities.routes.ts](_apps/sandbox/src/capabilities/capabilities.routes.ts): precondition check →
+  ([capabilities.contract.ts](_sandbox/sandbox-contract/src/contracts/capabilities.contract.ts), orchestrated
+  by [capabilities.routes.ts](_sandbox/sandbox/src/capabilities/capabilities.routes.ts): precondition check →
   streamed `apply` → manifest upsert → environment recompose).
 - **One total registry** — `Record<CapabilityKind, CapabilityHandler>` where a handler is
   `{ requires?, fragment?, apply, status, remove? }`
-  ([registry.ts](_apps/sandbox/src/capabilities/registry.ts),
-  [capability.ts](_apps/sandbox/src/capabilities/capability.ts)) — a new kind is a compile error
+  ([registry.ts](_sandbox/sandbox/src/capabilities/registry.ts),
+  [capability.ts](_sandbox/sandbox/src/capabilities/capability.ts)) — a new kind is a compile error
   until it is handled everywhere, including the effects deriver and the secret/echo switches.
 
 **The catalog is extensible; the handlers are core.** This is the line the whole `/capabilities` grid is
@@ -545,7 +545,7 @@ manifest that grants itself privilege, so **no handler is contributable, ever**.
 instead is a **card**: the data that varies between two cards served by the *same* handler.
 
 Four kinds are card-driven, and the restriction is the `CapabilityContributionSchema` discriminated union
-([manifest.ts](_libs/extension-api/src/manifest.ts)) rather than prose — a manifest naming any other kind
+([manifest.ts](_sandbox/extension-api/src/manifest.ts)) rather than prose — a manifest naming any other kind
 fails to parse:
 
 | Contributable kind | What the card carries | Who ships the first-party ones |
@@ -556,13 +556,13 @@ fails to parse:
 | `agent` | field defaults only — a preset over one config shape | `acp-agents` |
 
 Everything else keeps a static card in `CAPABILITY_CATALOG`
-([capability-catalog](_libs/capability-catalog/src/index.ts)), and every one of those is one-to-one with a
+([capability-catalog](_platform/capability-catalog/src/index.ts)), and every one of those is one-to-one with a
 handler it cannot be separated from. `integration` is the instructive case: its card *looks* like pure data,
 but it becomes an `i.have.<provider>` entry that only the desired-state resolver's closed
 `InventoryProviderSchema` vocabulary understands — so the vocabulary belongs to the deploy engine, not to a
 manifest, and Stripe stays static.
 
-The web's grid ([Capabilities.vue](_apps/web/src/pages/Capabilities.vue)) merges the static cards with cards
+The web's grid ([Capabilities.vue](_editor/web/src/pages/Capabilities.vue)) merges the static cards with cards
 **derived** from the **enabled** extensions' `contributes.capabilities` (`contributionCard()`). Enabled, not
 merely installed: a switched-off extension stays listed so its switch stays reachable, but the daemon wires
 none of its contributions up, so a card from one would advertise an add that fails. So a derived card exists
@@ -575,21 +575,21 @@ a card that could restate them is a card that could get them wrong: the kind's *
 traces a stored capability back to the card that made it), and the connected-computer **scope switches**
 (the grant does not vary by OS, so two platform packs cannot drift on it and neither can a third-party one).
 Contributed SKILL.md files get two substitutions on apply (`renderSkill()` in
-[contributions.ts](_apps/sandbox/src/capabilities/contributions.ts)): `${id}` → the instance name, so a
+[contributions.ts](_sandbox/sandbox/src/capabilities/contributions.ts)): `${id}` → the instance name, so a
 host pack's examples read `mcp__my-laptop__run_command`; and `${tools}` → the kind's core tool-surface note,
 which is core precisely because the same note duplicated across N packs is a note that drifts.
 
 **Effects — what adding actually does, as data.** Kinds differ wildly in consequence (an extension runs
 code with your session; a vpn bakes an image fragment with runtime directives; a cli connector just writes a
 skill and stores a secret), so the consequences are a first-class taxonomy: the `CapabilityEffect` union, derived by
-`capabilityEffects()` ([effects.ts](_libs/capability-catalog/src/effects.ts)) from kind + live config +
+`capabilityEffects()` ([effects.ts](_platform/capability-catalog/src/effects.ts)) from kind + live config +
 connector/extension contributions — the same data the handlers consume, so there is no per-card effects
 list to maintain. It lives in the CATALOG, beside the cards that declare the same kinds, rather than in the wire
 contract: nothing on the wire carries an effect, only the browser computes them, so a kind's user-facing story
 (its card, its fields, what adding it does) is one package to open. A `Record<CapabilityKind, …>` table rather
 than a switch, so a new kind is one entry with the same exhaustiveness the compiler enforced before. Rendered as
 the "This will add to your sandbox" panel
-([CapabilityEffects.vue](_apps/web/src/components/CapabilityEffects.vue)) before the add, as compact strips
+([CapabilityEffects.vue](_editor/web/src/components/CapabilityEffects.vue)) before the add, as compact strips
 on connected instances, and as grid badges for the consequential ones (image / runtime / trusted-code).
 
 | Effect | Mechanics |
@@ -610,7 +610,7 @@ on connected instances, and as grid badges for the consequential ones (image / r
 code-authored and may carry privileged `# intentic:runtime` directives; extension/connector checkout
 fragments are restricted to RUN/ENV instructions — the whole "what can an extension bake into the image"
 security surface is `invalidExtensionFragment`
-([fragment-sources.ts](_apps/sandbox/src/environment/fragment-sources.ts)). `composeEnvironment` folds
+([fragment-sources.ts](_sandbox/sandbox/src/environment/fragment-sources.ts)). `composeEnvironment` folds
 every active entry's fragments (a cli entry resolves its connector's fragment through the registry; an
 extension entry its `contributes.environment`) into the overlay Dockerfile (`FROM` the base image), and an
 owner-run rebuild applies it — until then the capability reads `pending` and the UI routes to the
@@ -623,12 +623,12 @@ draft for its tool also makes two agents needing ffmpeg converge on one entry. `
 drafts plus the already-approved custom section into the one proposal the owner reviews (approval *replaces*
 the custom section, so carrying it forward is what stops an approve from silently uninstalling everything
 before it), and approve/reject clear the drafts. A `PreToolUse` hook
-([agent-installs.ts](_apps/sandbox/src/agent/agent-installs.ts)) is what starts the flow: an image-scoped
+([agent-installs.ts](_sandbox/sandbox/src/agent/agent-installs.ts)) is what starts the flow: an image-scoped
 `apt-get install`/`pip install`/`npm -g` is met with a one-per-turn note that the install dies with the
 container and a draft is how it survives. It steers rather than blocks — project-scoped installs and venvs
 are ordinary and are left alone.
 
-Per-kind mechanics ([handlers/](_apps/sandbox/src/capabilities/handlers/)):
+Per-kind mechanics ([handlers/](_sandbox/sandbox/src/capabilities/handlers/)):
 
 | Kind | On add |
 | --- | --- |
@@ -653,8 +653,8 @@ Per-kind mechanics ([handlers/](_apps/sandbox/src/capabilities/handlers/)):
 A VPN is the one capability whose *stored* form and *live* form come apart, so it is modelled as two surfaces
 rather than one. **Adding** a VPN is an ordinary capability (`vpn`): credentials plus `autoConnect`, in the
 manifest, per the table above. **Connecting** one is a runtime operation on the `/vpn` routes
-([vpn.contract.ts](_libs/sandbox-contract/src/contracts/vpn.contract.ts),
-[vpn/](_apps/sandbox/src/vpn/)) — because a single stored connection is dialled and dropped many times, its
+([vpn.contract.ts](_sandbox/sandbox-contract/src/contracts/vpn.contract.ts),
+[vpn/](_sandbox/sandbox/src/vpn/)) — because a single stored connection is dialled and dropped many times, its
 result is far richer than a `CapabilityStatus` (assigned address, routed CIDRs, pushed DNS, uptime), and a
 2FA-gated dial needs a per-attempt code that must never be persisted.
 
@@ -664,7 +664,7 @@ tunnel the agent dropped, one the operator dropped, and one whose gateway died a
 daemon restart observes the truth instead of a stale guess.
 
 Three protocols, one driver each, total over the provider union
-([vpn-drivers.ts](_apps/sandbox/src/vpn/vpn-drivers.ts)) so a new arm on the contract is a compile error until
+([vpn-drivers.ts](_sandbox/sandbox/src/vpn/vpn-drivers.ts)) so a new arm on the contract is a compile error until
 it is implemented:
 
 | Provider | Client | Notes |
@@ -679,14 +679,14 @@ overlay (rebuild.sh appends each directive token it reads without deduplicating,
 fail the run).
 
 **The agent drives the same routes the browser does.** `/usr/local/bin/vpn`
-([bin/vpn](_apps/sandbox/bin/vpn)) is a thin client over `/vpn`, taught by the shared `vpn` skill, so a tunnel
+([bin/vpn](_sandbox/sandbox/bin/vpn)) is a thin client over `/vpn`, taught by the shared `vpn` skill, so a tunnel
 the agent dials appears in the operator's UI with nothing synchronising the two — there is one implementation
 of what connecting means. It authenticates with a per-boot token from `/run/intentic/agent.token`
-([agent-token.ts](_apps/sandbox/src/auth/agent-token.ts)) that `app.ts` admits **only** to `/vpn`: the agent
+([agent-token.ts](_sandbox/sandbox/src/auth/agent-token.ts)) that `app.ts` admits **only** to `/vpn`: the agent
 may dial and drop the tunnels the owner configured, and can never read the credentials behind them.
 
 A user holding an exported FortiClient configuration imports it rather than re-keying endpoints
-([forticlient-config.ts](_apps/sandbox/src/vpn/forticlient-config.ts)). Credentials in that file are wrapped in
+([forticlient-config.ts](_sandbox/sandbox/src/vpn/forticlient-config.ts)). Credentials in that file are wrapped in
 FortiClient's machine-bound `EncX` encryption and are **not** recoverable, so every encrypted value is dropped
 and reported as a field the user must supply — importing an unusable value would be worse than asking.
 
@@ -695,8 +695,8 @@ and reported as a field the user must supply — importing an unusable value wou
 Two recent subsystems are **agent-facing subprocess CLIs baked into the sandbox image** — the agent invokes
 them by spawning a process, never by import:
 
-- **iq** ([`@intentic/iq`](_apps/iq) + [`@intentic/iq-engine`](_libs/iq-engine) +
-  [`@intentic/iq-recall`](_libs/iq-recall) + [`@intentic/iq-bench`](_tools/iq-bench)) — an agent-native
+- **iq** ([`@intentic/iq`](_search/iq) + [`@intentic/iq-engine`](_search/iq-engine) +
+  [`@intentic/iq-recall`](_search/iq-recall) + [`@intentic/iq-bench`](_search/iq-bench)) — an agent-native
   workspace-search engine: a local index (SQLite) fused across lexical (ripgrep), structural (ast-grep),
   semantic (local embed + rerank), and git signals, rendered to a token-budgeted ranked answer. It replaces
   an agent's grep/find chains with one call. The **CLI** stays a subprocess (the agent's Bash calls), but the
@@ -704,13 +704,13 @@ them by spawning a process, never by import:
   `createResidentEngine` instance in-process (index DB held open, sweep cached, revalidation driven by the
   workspace watcher), sharing the on-disk index with the CLI. Search is a **core editor feature**; iq is
   merely the interchangeable engine behind that route.
-- **lsp** ([`@intentic/lsp`](_apps/lsp)) — an agent-facing TypeScript CLI (`lsp rename`, `lsp diag`) over the
+- **lsp** ([`@intentic/lsp`](_search/lsp)) — an agent-facing TypeScript CLI (`lsp rename`, `lsp diag`) over the
   TS language service, advertised to the agent through a gated skill file. TypeScript/JavaScript only. Like
   iq, the CLI is a subprocess but the service is **resident**: `lsp daemon <root>` holds one warm
   LanguageService per tsconfig (sharing a document registry, so lib.d.ts is parsed once for the monorepo) and
   keeps the markers for edited files current on a debounce, exactly as VS Code's tsserver does for open
   buffers. Both callers — the agent's `lsp diag` and the daemon's post-edit hook
-  ([agent-diagnostics.ts](_apps/sandbox/src/agent/agent-diagnostics.ts), which imports
+  ([agent-diagnostics.ts](_sandbox/sandbox/src/agent/agent-diagnostics.ts), which imports
   `@intentic/lsp/client`) — converge on one socket per repository *as each caller sees it* (the socket is
   keyed on the root's `dev:ino`, so an isolated worktree mounted over the same path gets its own daemon that
   sees its own tree). It matters because the cold path was ~0.8-1.3s per edit against this monorepo and the
@@ -755,7 +755,7 @@ Who pays for scale is a design decision, not an accident:
 
 A local `deploy.config.ts` (see [_tools/examples/deploy.config.ts](_tools/examples/deploy.config.ts)) must
 `export const intent = defineIntent(...)`; `resolve` derives the desired state from it
-([resolve.ts](_apps/cli/src/resolve/resolve.ts)). `defineStack(...)` is the one-shot,
+([resolve.ts](_deploy/cli/src/resolve/resolve.ts)). `defineStack(...)` is the one-shot,
 single-graph form used when a single deterministic graph is wanted directly.
 
 ## Conventions (so the layout is predictable)
@@ -764,31 +764,36 @@ single-graph form used when a single deterministic graph is wanted directly.
   `forgejo-api.ts`). Tests are **co-located** next to their source.
 - **Test naming:** `*.test.ts` = unit; `*.engine.test.ts` = integration driven through the real engine;
   `*.e2e.test.ts` = gated real run against live services. A gated suite does not hand-roll its gate — it
-  declares the switch and the credentials it needs with `e2eTier` ([_libs/testing/src/e2e.ts](_libs/testing/src/e2e.ts))
+  declares the switch and the credentials it needs with `e2eTier` ([_tools/testing/src/e2e.ts](_tools/testing/src/e2e.ts))
   and stands down, saying which variable it wanted, when the environment is short of one. See
   [What each tier needs](#what-each-tier-needs).
-- **Tiers:** `_libs/` = libraries, `_apps/` = runnable products, `_tools/` = shared config + repo-wide
-  maintainer scripts (`_tools/scripts/`). The pnpm-workspace glob is `_*/*`. App-specific scripts live in
-  that app's `scripts/` dir (e.g. `_apps/sandbox/scripts/`); the user-facing connect/sync/cleanup scripts
-  are tracked site assets in `_apps/site/public/scripts/`, served at intentic.dev vanity URLs by
-  [worker.ts](_apps/site/worker.ts).
+- **Groups:** every `_`-prefixed root directory is a package group, and the group is the DOMAIN, not the
+  kind — `_editor/` (the screen you look at), `_sandbox/` (the per-project box + its wire contracts),
+  `_computers/` (runs on the user's own machine), `_search/` (code search), `_deploy/` (the bundled deploy
+  tool — not product surface), `_platform/` (the hosted account plane), `_site/` (the public website),
+  `_extensions/` (loadable units only), `_tools/` (plumbing + repo-wide maintainer scripts,
+  `_tools/scripts/`). A package's directory name is its unscoped npm name; whether it is an app or a lib is
+  its package.json's business. pnpm-workspace.yaml globs the groups explicitly. App-specific scripts live in
+  that app's `scripts/` dir (e.g. `_sandbox/sandbox/scripts/`); the user-facing connect/sync/cleanup scripts
+  are tracked site assets in `_site/site/public/scripts/`, served at intentic.dev vanity URLs by
+  [worker.ts](_site/site/worker.ts).
 - **Imports:** import from the true source (no re-exports/aliases). The `@intentic/src` package export
   condition resolves workspace imports straight to `src/`, so agents can edit across packages without
   building.
 - The compiled shape of the example/fixture is pinned by
-  [_libs/sdk/src/deploy.config.test.ts](_libs/sdk/src/deploy.config.test.ts) against
-  [_libs/sdk/src/__fixtures__/deploy.graph.ts](_libs/sdk/src/__fixtures__/deploy.graph.ts).
+  [_deploy/sdk/src/deploy.config.test.ts](_deploy/sdk/src/deploy.config.test.ts) against
+  [_deploy/sdk/src/__fixtures__/deploy.graph.ts](_deploy/sdk/src/__fixtures__/deploy.graph.ts).
 
 See [AGENTS.md](AGENTS.md) for the code-style rules every change must follow.
 
 ## Local end-to-end testing
 
-`createProviders()` ([_libs/providers/src/providers.ts](_libs/providers/src/providers.ts)) assembles the
+`createProviders()` ([_deploy/providers/src/providers.ts](_deploy/providers/src/providers.ts)) assembles the
 full `ResourceType → Provider` map — the single seam between a compiled graph and execution. Passing
-fakes drives the whole suite in-memory ([suite.engine.test.ts](_libs/providers/src/suite.engine.test.ts));
+fakes drives the whole suite in-memory ([suite.engine.test.ts](_deploy/providers/src/suite.engine.test.ts));
 passing nothing uses the real SSH/Cloudflare/Forgejo/Komodo implementations.
 
-[cli.e2e.test.ts](_apps/cli/src/cli.e2e.test.ts) is a **manual, real** run that drives the actual CLI
+[cli.e2e.test.ts](_deploy/cli/src/cli.e2e.test.ts) is a **manual, real** run that drives the actual CLI
 exactly as an operator would. It boots a Docker-in-Docker "host"
 ([_tools/dind-host/Dockerfile](_tools/dind-host/Dockerfile)) via `testcontainers`, scaffolds with `init`, authors a
 `deploy.config.ts` pointed at the host's mapped SSH port (with a per-run generated key), fills
@@ -819,18 +824,18 @@ pnpm e2e
 
 ### The hermetic tier (no secrets, runs on every MR)
 
-[hermetic.e2e.test.ts](_apps/cli/src/hermetic.e2e.test.ts) covers the deployment path that actually
+[hermetic.e2e.test.ts](_deploy/cli/src/hermetic.e2e.test.ts) covers the deployment path that actually
 breaks in the field — the **derived** Forgejo + runner + Komodo control plane coming up on a real Docker
 host — with zero external dependencies. Two existing seams make it hermetic: an authored `zone` in
 `i.have.cloudflare` resolves the artifact fully offline (the dummy token is never sent anywhere), and
 `apply --target host-git,host-git-runner,host-deploy` reconciles a slice whose inputs reference nothing
-but the host (pinned by a contract test in [_libs/sdk/src/index.test.ts](_libs/sdk/src/index.test.ts)).
+but the host (pinned by a contract test in [_deploy/sdk/src/index.test.ts](_deploy/sdk/src/index.test.ts)).
 The suite boots the same DinD host, then asserts: offline resolve derives the platform nodes; the targeted
 apply converges with the real engine-level SSH readiness gate; a second apply is all-noop; `adopt
 --baseUrl http://<host>:<mapped-3000>` pushes the intent + desired-state repos into the real Forgejo and
 sets the Actions secrets, idempotently; and a reproduced readiness failure (the service healthy on
 localhost but its `internalUrl` firewalled — the field failure class) prints the SSH diagnostic sweep
-(`readinessDiagnostics` in [_libs/providers/src/core/ssh-diagnostics.ts](_libs/providers/src/core/ssh-diagnostics.ts):
+(`readinessDiagnostics` in [_deploy/providers/src/core/ssh-diagnostics.ts](_deploy/providers/src/core/ssh-diagnostics.ts):
 docker state, the node's logs, listeners, addresses, one verbose probe) before the
 `ReadinessTimeoutError` propagates. The same sweep runs on any real `intentic deploy apply` readiness timeout.
 
@@ -845,14 +850,14 @@ remains an explicit transport override for reaching Forgejo over an already-mapp
 
 `pnpm e2e` asks every gated tier to run at once, which only works because a tier that cannot reach its
 service stands down instead of failing. Each declares its own requirement with `e2eTier`
-([_libs/testing/src/e2e.ts](_libs/testing/src/e2e.ts)) — the opt-in switch it reads, and the credentials it
+([_tools/testing/src/e2e.ts](_tools/testing/src/e2e.ts)) — the opt-in switch it reads, and the credentials it
 is useless without:
 
 | Tier | Suite | Needs beyond a Docker daemon |
 | --- | --- | --- |
-| sandbox-daemon | [sandbox.e2e.test.ts](_apps/sandbox/src/sandbox.e2e.test.ts) | nothing |
-| cloudflare | [cli.e2e.test.ts](_apps/cli/src/cli.e2e.test.ts) | `CLOUDFLARE_API_TOKEN` (+ `CLOUDFLARE_ZONE` to pick the zone) |
-| discord | [discord.e2e.test.ts](_apps/sandbox/src/discord.e2e.test.ts) | `DISCORD_E2E_BOT_TOKEN` + `_SENDER_TOKEN` + `_CHANNEL_ID`; `ANTHROPIC_API_KEY` or `CLAUDE_CODE_OAUTH_TOKEN` unlocks the real-agent-turn spec |
+| sandbox-daemon | [sandbox.e2e.test.ts](_sandbox/sandbox/src/sandbox.e2e.test.ts) | nothing |
+| cloudflare | [cli.e2e.test.ts](_deploy/cli/src/cli.e2e.test.ts) | `CLOUDFLARE_API_TOKEN` (+ `CLOUDFLARE_ZONE` to pick the zone) |
+| discord | [discord.e2e.test.ts](_sandbox/sandbox/src/discord.e2e.test.ts) | `DISCORD_E2E_BOT_TOKEN` + `_SENDER_TOKEN` + `_CHANNEL_ID`; `ANTHROPIC_API_KEY` or `CLAUDE_CODE_OAUTH_TOKEN` unlocks the real-agent-turn spec |
 
 A tier that is asked to run and finds a credential missing puts the variable's name in its own suite title,
 which is what vitest prints beside the `↓` — so the nightly's log states which tiers ran without anything
@@ -863,7 +868,7 @@ variable absent from `turbo.json` never reaches the suite, however CI is configu
 Two tiers deliberately sit outside that command, each under its own turbo task, and neither declares
 credentials because neither needs any:
 
-- **hermetic** ([hermetic.e2e.test.ts](_apps/cli/src/hermetic.e2e.test.ts), `pnpm e2e:hermetic`) — needing no
+- **hermetic** ([hermetic.e2e.test.ts](_deploy/cli/src/hermetic.e2e.test.ts), `pnpm e2e:hermetic`) — needing no
   secrets at all is exactly what earns it a run on every merge request rather than nightly, so it reads its
   own switch and must not wake with the gated ones.
 - **browser** ([_tools/e2e](_tools/e2e), `pnpm e2e:browser`) — a dev-machine tier. Its whole stack answers on
@@ -872,7 +877,7 @@ credentials because neither needs any:
 
 ## Demo
 
-`pnpm demo:up` / `demo:down` / `demo:clear` ([_apps/cli/src/demo.ts](_apps/cli/src/demo.ts)) drive the
+`pnpm demo:up` / `demo:down` / `demo:clear` ([_deploy/cli/src/demo.ts](_deploy/cli/src/demo.ts)) drive the
 real CLI (`init`/`resolve`/`apply`) against a Docker-in-Docker "host", standing up Forgejo + Komodo behind
 a Cloudflare tunnel so the result can be browsed. It is a **maintainer tool**, not a zero-setup demo: it
 provisions against a real Cloudflare zone (`CLOUDFLARE_ZONE`, default `intentic.dev`) using

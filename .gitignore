@@ -15,21 +15,21 @@
 **/pnpm-debug.log*
 
 # desktop (Tauri): the Rust build tree, tauri-build's codegen, and installers staged into the site for a
-# local download test (_apps/desktop/scripts/stage-local-downloads.sh).
-_apps/desktop/src-tauri/target
-_apps/desktop/src-tauri/gen
-_apps/site/public/desktop
+# local download test (_editor/desktop-app/scripts/stage-local-downloads.sh).
+_editor/desktop-app/src-tauri/target
+_editor/desktop-app/src-tauri/gen
+_site/site/public/desktop
 /tmp
 **/tmp
 **/.astro-indexnow-cache.json
 
-# The interactive demo builds into the marketing site's public/ (see _apps/demo/vite.config.ts), which Astro
+# The interactive demo builds into the marketing site's public/ (see _site/demo/vite.config.ts), which Astro
 # copies into its dist — a build artifact living inside a tracked directory, so it is named rather than covered
 # by the dist globs above.
-_apps/site/public/demo
+_site/site/public/demo
 
 # Benchmark output — every iq-bench run writes a timestamped dir here; the datasets are the input worth keeping.
-_tools/iq-bench/results
+_search/iq-bench/results
 
 # env / secrets
 **/.env

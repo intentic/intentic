@@ -43,8 +43,8 @@
         "**/out-tsc",
         "**/tmp",
         "**/assets/js/env.js",
-        "_apps/web/public/ext-shims",
-        "_apps/sandbox/operator-templates"
+        "_editor/web/public/ext-shims",
+        "_sandbox/sandbox/operator-templates"
     ],
     "overrides": [
         {
@@ -71,8 +71,17 @@
                                 "message": "Extensions may depend only on @intentic/extension-api, @intentic/extension-ui, and @intentic/sandbox-contract — the extension SDK + the shared wire contract. Reaching any other @intentic/* package couples the extension to app/engine internals. See _extensions/README.md."
                             },
                             {
-                                "group": ["@intentic-app/*", "**/_apps/**", "**/_libs/**"],
-                                "message": "Extensions must not reach the app plane (@intentic-app/*) or app/lib internals. Use @intentic/extension-ui for UI and @intentic/sandbox-contract for wire types. See _extensions/README.md."
+                                "group": [
+                                    "@intentic-app/*",
+                                    "**/_computers/**",
+                                    "**/_deploy/**",
+                                    "**/_editor/**",
+                                    "**/_platform/**",
+                                    "**/_sandbox/**",
+                                    "**/_search/**",
+                                    "**/_site/**"
+                                ],
+                                "message": "Extensions must not reach the app plane (@intentic-app/*) or other packages' internals by path. Use @intentic/extension-ui for UI and @intentic/sandbox-contract for wire types. See _extensions/README.md."
                             }
                         ]
                     }

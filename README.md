@@ -67,7 +67,7 @@ exported anywhere else.** A release is a tag on the commit CI already built, and
 
 This used to be an export to a separate public mirror repo, with a path manifest and a subset guard. When
 development moved onto the same repository the mirror targeted, the export published over the development tree
-instead of alongside it — `release: v1.0.0` took `.github/workflows`, `_apps/api` and `.githooks` with it. The
+instead of alongside it — `release: v1.0.0` took `.github/workflows`, `_platform/api` and `.githooks` with it. The
 mirror, its manifest and its guard are gone; there is no second tree to keep in step.
 
 ## Architecture & contributing

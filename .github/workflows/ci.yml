@@ -162,12 +162,17 @@ jobs:
           # desktop-check's whole input closure — `turbo run build test --filter=@intentic/desktop-app... --dry`
           # names it (desktop-app, desktop-smoke, ui, tsconfig) and each entry is one of them. _tools/ci-desktop
           # is here because the job's IMAGE is an input like any other.
-          echo "desktop=$(match '^(_apps/desktop/|_apps/site/public/scripts/|_libs/ui/|_tools/ci-desktop/|_tools/desktop-smoke/|_tools/tsconfig/|pnpm-lock\.yaml)')" >> "$GITHUB_OUTPUT"
+          echo "desktop=$(match '^(_editor/desktop-app/|_site/site/public/scripts/|_editor/ui/|_tools/ci-desktop/|_tools/desktop-smoke/|_tools/tsconfig/|pnpm-lock\.yaml)')" >> "$GITHUB_OUTPUT"
           # The sandbox/dind-host image closure: the baked trees plus the context COPYs and the workspace
-          # packages they depend on. _extensions and _tools are matched wholesale — hand-enumerating subdirs is
-          # how iq/lsp/_extensions silently fell out of the trigger last time.
-          echo "images=$(match '^(_apps/(sandbox|cli|iq|lsp)/|_libs/|_extensions/|_tools/|turbo\.json|pnpm-lock\.yaml)')" >> "$GITHUB_OUTPUT"
-          echo "platform=$(match '^(_apps/(api|web)/|_libs/|_extensions/|_tools/|turbo\.json|pnpm-lock\.yaml)')" >> "$GITHUB_OUTPUT"
+          # packages they depend on. Groups are matched wholesale — hand-enumerating subdirs is how
+          # iq/lsp/_extensions silently fell out of the trigger last time. The three groups NOT listed
+          # (_editor, _platform, _site) hold no dependency of any image-bound package (checked against the
+          # four apps' workspace: deps); re-check that claim when moving a package between groups.
+          echo "images=$(match '^(_sandbox/|_deploy/|_search/|_computers/|_extensions/|_tools/|turbo\.json|pnpm-lock\.yaml)')" >> "$GITHUB_OUTPUT"
+          # Platform (api+web) closure, same wholesale-group principle: web/api workspace: deps live in
+          # _platform, _editor, _sandbox, _deploy (resources, via api-contract), _extensions and _tools —
+          # never in _computers, _search or _site.
+          echo "platform=$(match '^(_platform/|_editor/|_sandbox/|_deploy/|_extensions/|_tools/|turbo\.json|pnpm-lock\.yaml)')" >> "$GITHUB_OUTPUT"
 
   # The checks that read the checkout and nothing else, ahead of the install every other job starts with.
   #
@@ -306,7 +311,7 @@ jobs:
   # packages the old job covered, for `typecheck` and for `build test` alike. Re-run that comparison when
   # adding a group; a package in no group is a package nothing checks, and turbo will not say so.
   #
-  # The groups deliberately OVERLAP on _libs/*, because turbo's `pkg...` includes a package's dependencies: a
+  # The groups deliberately OVERLAP on shared packages (_sandbox contracts, _deploy resources, _tools), because turbo's `pkg...` includes a package's dependencies: a
   # shared lib break fails every group that depends on it, which is the correct blast radius. The duplicated
   # work is a turbo cache replay off the shared /ci-cache dir, not a second build.
   # The OSS core: every npm-published package plus the sandbox image's tree. Gates `images` and `release`.
@@ -380,9 +385,9 @@ jobs:
       # because this job OWNS the desktop packages — the verify matrix subtracts them, so their build happens
       # HERE or nowhere. No separate typecheck: desktop-app's build IS `vue-tsc --noEmit && vite build`.
       - run: pnpm turbo run build test --filter=@intentic/desktop-app... --filter=@intentic/desktop-smoke... --continue=dependencies-successful
-      - run: cargo fmt --manifest-path _apps/desktop/src-tauri/Cargo.toml --all --check
-      - run: cargo clippy --manifest-path _apps/desktop/src-tauri/Cargo.toml --all-targets -- -D warnings
-      - run: cargo test --manifest-path _apps/desktop/src-tauri/Cargo.toml
+      - run: cargo fmt --manifest-path _editor/desktop-app/src-tauri/Cargo.toml --all --check
+      - run: cargo clippy --manifest-path _editor/desktop-app/src-tauri/Cargo.toml --all-targets -- -D warnings
+      - run: cargo test --manifest-path _editor/desktop-app/src-tauri/Cargo.toml
 
   # The desktop ARTIFACTS: build the Linux bundles exactly the way the release builds them, then verify what
   # came out. Two tiers, ordered by cost, each proving something the one before it cannot:
@@ -515,7 +520,7 @@ jobs:
           path: |
             .image-out/iq-models
             .image-out/.iq-models-complete
-          key: iq-models-${{ hashFiles('_libs/iq-engine/scripts/fetch-model.mjs') }}
+          key: iq-models-${{ hashFiles('_search/iq-engine/scripts/fetch-model.mjs') }}
 
       - run: bash _tools/scripts/prepare-image-trees.sh
       # `shell: bash` because the job's default is `sh`, where the `${VAR::N}` slice below is a Bad substitution.
@@ -662,6 +667,6 @@ jobs:
           path: |
             .image-out/iq-models
             .image-out/.iq-models-complete
-          key: iq-models-${{ hashFiles('_libs/iq-engine/scripts/fetch-model.mjs') }}
+          key: iq-models-${{ hashFiles('_search/iq-engine/scripts/fetch-model.mjs') }}
 
       - run: pnpm exec semantic-release

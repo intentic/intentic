@@ -44,7 +44,7 @@ are looking at, seconds ago.
 
 What this catches is almost never an error in the code you changed. It is another package's fixture naming a
 shape the interface just stopped having, or a golden anchor pinned to a line you moved: change
-`_libs/iq-engine`, break `_apps/sandbox` and `_tools/iq-bench`, and the suite you ran next to your edit says
+`_search/iq-engine`, break `_sandbox/sandbox` and `_search/iq-bench`, and the suite you ran next to your edit says
 nothing about it. Verifying only the package you touched is exactly how main spent 1h48m red across ten landed
 commits, then went green for four minutes before the next one — and how, across three days, 67 of 100 main
 pipelines failed with the `test` job.

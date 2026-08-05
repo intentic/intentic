@@ -11,7 +11,7 @@
 **/tmp
 pnpm-lock.yaml
 **/assets/js/env.js
-_apps/sandbox/operator-templates
+_sandbox/sandbox/operator-templates
 
 # Local tooling config, not project source.
 .claude
