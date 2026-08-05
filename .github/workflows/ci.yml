@@ -74,7 +74,7 @@ jobs:
       images: ${{ steps.filter.outputs.images }}
       platform: ${{ steps.filter.outputs.platform }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           # Full history: a pull request's base.sha can sit arbitrarily far back and the diff below needs it
           # present. Cheap after the first run — the workspace persists, so this is an incremental fetch.
@@ -90,7 +90,7 @@ jobs:
       # beside it, not after it. Guarded on the same branch the probe is, so the one pipeline that cannot use
       # a registry credential — a pull request from a fork, whose GITHUB_TOKEN is downgraded to read — never
       # has to present one.
-      - uses: docker/login-action@v3
+      - uses: docker/login-action@v4
         if: github.ref == 'refs/heads/main'
         with:
           registry: ghcr.io
@@ -168,7 +168,7 @@ jobs:
         username: ${{ github.actor }}
         password: ${{ secrets.GITHUB_TOKEN }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           # Same reason as the `changes` job: this one also runs in every pipeline, and a clean checkout here
           # is a cold install charged to whichever job lands on this workspace next.
@@ -187,13 +187,13 @@ jobs:
     runs-on: [self-hosted, intentic]
     timeout-minutes: 60
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           # This job needs no install, but it runs on a workspace other jobs reuse — cleaning it would charge
           # the next one a cold install. The build context is _tools/ci-base, whose tracked files checkout
           # force-updates either way.
           clean: false
-      - uses: docker/login-action@v3
+      - uses: docker/login-action@v4
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
@@ -233,11 +233,11 @@ jobs:
     runs-on: [self-hosted, intentic]
     timeout-minutes: 90
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           # As in ci-base: nothing here reads node_modules, but cleaning the workspace costs the next job.
           clean: false
-      - uses: docker/login-action@v3
+      - uses: docker/login-action@v4
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
@@ -323,7 +323,7 @@ jobs:
       # each other's leaf crate and each pays a fresh LTO.
       CARGO_TARGET_DIR: /ci-cache/desktop-check-target
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           clean: false
       - uses: ./.github/actions/pnpm-setup
@@ -373,7 +373,7 @@ jobs:
       INTENTIC_HOST_IMAGE: ghcr.io/intentic/dind-host:latest
       SANDBOX_E2E_IMAGE: ghcr.io/intentic/sandbox:latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           clean: false
       - uses: ./.github/actions/pnpm-setup
@@ -403,12 +403,12 @@ jobs:
       INTENTIC_HOST_IMAGE: ghcr.io/intentic/dind-host:latest
       INTENTIC_LOG_DIR: ${{ github.workspace }}/.e2e-hermetic-logs
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           clean: false
       - uses: ./.github/actions/pnpm-setup
       - run: pnpm e2e:hermetic
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         if: failure()
         with:
           name: e2e-hermetic-logs
@@ -447,11 +447,11 @@ jobs:
       # probes per image. Adding a registry here means adding a login step for it too.
       REGISTRIES: ghcr.io/intentic
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           clean: false
       - uses: ./.github/actions/pnpm-setup
-      - uses: docker/login-action@v3
+      - uses: docker/login-action@v4
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
@@ -463,7 +463,7 @@ jobs:
       # per pipeline. It stays an Actions cache rather than moving to /ci-cache for one reason: the directory
       # has to land inside .image-out, and this job and `release` run CONCURRENTLY — one shared directory
       # would need the fetch to be race-safe first.
-      - uses: actions/cache@v4
+      - uses: actions/cache@v6
         with:
           path: |
             .image-out/iq-models
@@ -505,11 +505,11 @@ jobs:
       KOMODO_API_KEY: ${{ secrets.KOMODO_API_KEY }}
       KOMODO_API_SECRET: ${{ secrets.KOMODO_API_SECRET }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           clean: false
       - uses: ./.github/actions/pnpm-setup
-      - uses: docker/login-action@v3
+      - uses: docker/login-action@v4
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
@@ -589,13 +589,13 @@ jobs:
       # nothing currently produces, and this is the one variable standing between here and it.
       TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           # semantic-release reads the whole history to work out the next version.
           fetch-depth: 0
           clean: false
       - uses: ./.github/actions/pnpm-setup
-      - uses: docker/login-action@v3
+      - uses: docker/login-action@v4
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
@@ -603,7 +603,7 @@ jobs:
 
       # Same key as the `images` job — semantic-release's publishCmd runs the same prepare-image-trees.sh, and
       # a release that re-downloads the models is the same wasted fetch.
-      - uses: actions/cache@v4
+      - uses: actions/cache@v6
         with:
           path: |
             .image-out/iq-models

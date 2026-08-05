@@ -42,7 +42,7 @@ jobs:
         username: ${{ github.actor }}
         password: ${{ secrets.GITHUB_TOKEN }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           # Keep node_modules between runs — the Actions equivalent of GIT_CLEAN_FLAGS: -ffdx -e node_modules.
           # A clean checkout deletes 69k files and the install then re-links them from nothing; letting the

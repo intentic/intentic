@@ -78,6 +78,11 @@ sudo ./svc.sh install && sudo ./svc.sh start
 Get `<registration-token>` from **Settings → Actions → Runners → New self-hosted runner** (it expires in an
 hour), or mint one from the API.
 
+**Runner 2.327.1 is a floor, not a preference.** Every action the workflows use runs on the node24 runtime,
+and a runner below that version cannot execute one — the job fails before the first step. `releases/latest`
+above clears it, and nothing here passes `--disableupdate`, so a runner that has been running keeps clearing
+it on its own. Pinning an older tarball, or turning self-update off, is what would break the pipeline.
+
 ### The two labels, and why every runner gets both
 
 `runs-on` is an AND over labels, and the workflows use exactly two sets:
