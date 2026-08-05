@@ -94,13 +94,26 @@ curl -fSL "https://github.com/actions/runner/releases/download/v$VERSION/actions
 
 mkdir -p ~/actions-runner-$N ~/actions-work-$N && cd ~/actions-runner-$N
 tar xzf ~/.actions-runner.tar.gz
-./config.sh --url https://github.com/intentic/intentic \
+./config.sh --url https://github.com/intentic \
             --token <registration-token> \
             --name $(uname -n)-$N \
             --labels intentic,desktop \
             --work ~/actions-work-$N \
             --unattended --replace
 sudo ./svc.sh install $USER && sudo ./svc.sh start
+```
+
+**`--url` has to match the scope the token came from.** A token minted on the ORG's runner page pairs with
+`https://github.com/intentic`; one minted on the REPO's pairs with `https://github.com/intentic/intentic`.
+Crossing them fails as an unexplained `404 Not Found` from `POST api.github.com/actions/runner-registration`,
+which reads like an expired token and is really a scope mismatch — the token is fine, the URL is wrong. The
+existing runners are org-registered, so the org form above is the one that keeps them in one list. To tell the
+two apart without guessing:
+
+```sh
+curl -s -o /dev/null -w '%{http_code}\n' -X POST https://api.github.com/actions/runner-registration \
+  -H "Authorization: RemoteAuth <registration-token>" -H 'Content-Type: application/json' \
+  -d '{"url":"https://github.com/intentic","runner_event":"register"}'   # 200 = org-scoped token
 ```
 
 **The download URL has to name the version.** There is no
@@ -113,8 +126,9 @@ broken URL.
 the tarball. `sudo ./svc.sh: command not found` therefore means the configure step above it failed.
 
 `config.sh` must run as the normal user (it refuses under `sudo`); only `svc.sh` takes it. Get
-`<registration-token>` from **Settings → Actions → Runners → New self-hosted runner** — it expires in an hour,
-but one token registers as many runners as you like within that window.
+`<registration-token>` from the **organisation's** Settings → Actions → Runners → New self-hosted runner, to
+match the `--url` above. It expires in an hour, but within that window it is reusable: one token registers as
+many runners as you like, and minting a new one does not invalidate it.
 
 **Runner 2.327.1 is a floor, not a preference.** Every action the workflows use runs on the node24 runtime,
 and a runner below that version cannot execute one — the job fails before the first step. Resolving the version
