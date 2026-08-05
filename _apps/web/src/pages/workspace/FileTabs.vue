@@ -128,10 +128,39 @@ const onThumbUp = (event: PointerEvent): void => {
     (event.target as HTMLElement).releasePointerCapture(event.pointerId);
 };
 
+/* Keeping the focused tab in view. Almost nothing that focuses a tab is inside this strip — a row in the file
+ * tree, a Changes or Checkpoints row, a restored strip on reload — so once the strip overflows, the tab any of
+ * them opens can sit past its right edge, and a strip that stays put reads as a click that did nothing.
+ * `nearest` moves the least it can and no-ops on a tab already visible, so clicking a tab here never shifts it
+ * out from under the pointer. */
+const tabEls = new Map<string, HTMLElement>();
+const setTabEl = (id: string, el: unknown): void => {
+    if (el) {
+        tabEls.set(id, el as HTMLElement);
+    } else {
+        tabEls.delete(id);
+    }
+};
+
+// A newly opened tab is one tick away from existing, so the reveal waits for the DOM the focus change produced.
+const revealActive = async (): Promise<void> => {
+    await nextTick();
+    if (active === null || active === undefined) {
+        return;
+    }
+    tabEls.get(active)?.scrollIntoView({ block: `nearest`, inline: `nearest` });
+};
+// `immediate` is the reload: the strip mounts already focused, on a tab that may be well past the right edge.
+watch(() => active, revealActive, { immediate: true });
+
 let observer: ResizeObserver | undefined;
 onMounted(() => {
     updateThumb();
-    observer = new ResizeObserver(updateThumb);
+    observer = new ResizeObserver(() => {
+        updateThumb();
+        // A strip that just got narrower (explorer reopened, window resized) can leave the focused tab behind it.
+        void revealActive();
+    });
     if (scroller.value !== undefined) {
         observer.observe(scroller.value);
     }
@@ -158,6 +187,7 @@ watch(
             <div
                 v-for="tab in tabs"
                 :key="tab.id"
+                :ref="(el) => setTabEl(tab.id, el)"
                 class="ftab group flex shrink-0 items-center gap-1.5 px-3 py-1.5 text-xs"
                 :class="{ 'ftab-on': tab.id === active }"
                 v-tooltip.bottom="tabHint(tab)"
