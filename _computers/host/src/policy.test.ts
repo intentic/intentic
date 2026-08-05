@@ -4,7 +4,7 @@ import type { HostScopes } from "@intentic/sandbox-contract";
 import { expect, test } from "vitest";
 import { assertPath, assertScope, rootsOf, ScopeError, withinRoots } from "./policy.js";
 
-const scopes = (overrides: Partial<HostScopes> = {}): HostScopes => ({ shell: "on", write: "on", screen: "on", control: "on", ...overrides });
+const scopes = (overrides: Partial<HostScopes> = {}): HostScopes => ({ shell: "on", write: "on", screen: "on", control: "on", sandboxes: "on", ...overrides });
 
 test("no declared roots means the home directory, which is what the card promises", () => {
     expect(rootsOf(scopes())).toEqual([resolve(homedir())]);
@@ -38,5 +38,6 @@ test("each switch refuses by naming the control on the card, not a mechanism", (
     expect(() => assertScope(scopes({ shell: "off" }), "shell")).toThrow(/Run commands/);
     expect(() => assertScope(scopes({ write: "off" }), "write")).toThrow(/Create and change files/);
     expect(() => assertScope(scopes({ screen: "off" }), "screen")).toThrow(/See the screen/);
+    expect(() => assertScope(scopes({ sandboxes: "off" }), "sandboxes")).toThrow(/Manage sandboxes on this computer/);
     expect(() => assertScope(scopes(), "shell")).not.toThrow();
 });

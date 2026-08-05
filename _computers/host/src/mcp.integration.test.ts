@@ -6,7 +6,7 @@ import type { HostScopes } from "@intentic/sandbox-contract";
 import { afterEach, expect, test, vi } from "vitest";
 import { handleMcpMessage } from "./mcp.js";
 
-const scopes = (overrides: Partial<HostScopes> = {}): HostScopes => ({ shell: "on", write: "on", screen: "on", control: "on", ...overrides });
+const scopes = (overrides: Partial<HostScopes> = {}): HostScopes => ({ shell: "on", write: "on", screen: "on", control: "on", sandboxes: "on", ...overrides });
 
 // Without a vitest config there is no unstubEnvs, so a stub outlives its test and the home leaks down the file.
 afterEach(() => vi.unstubAllEnvs());

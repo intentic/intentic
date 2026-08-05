@@ -2539,6 +2539,11 @@ export const HostScopesSchema = z.object({
      * `write`, and for the same reason — a user who has not thought about it should not discover the agent has
      * been driving their desktop. */
     control: hostScope.default("off"),
+    /* Start, stop and restart the Intentic sandboxes running on this machine — the grant that makes one sandbox
+     * the machine's supervisor. Its own switch rather than a use of `shell` because it is NARROWER: a user can
+     * hand an agent the sandbox fleet without handing it a shell, and the fleet operations are named rather than
+     * whatever a model improvises with docker. Default off, like every switch that changes the machine. */
+    sandboxes: hostScope.default("off"),
     // One directory per line. Empty ⇒ the machine's home directory, which is what the agent reports at connect.
     roots: z.string().optional(),
 });

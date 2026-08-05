@@ -1,4 +1,12 @@
-import { type Computer, type ComputerGap, type MachineReport, MachineReportSchema, type MachineSandbox } from "@intentic/sandbox-contract";
+import {
+    type Computer,
+    type ComputerGap,
+    type MachineReport,
+    MachineReportSchema,
+    type MachineSandbox,
+    MachineSandboxSchema,
+} from "@intentic/sandbox-contract";
+import { z } from "zod";
 import type { Services } from "../composition.js";
 import { enrolledMachines, machineReports } from "../platform/sync.js";
 import { hostSummaries } from "./host.routes.js";
@@ -75,58 +83,38 @@ const toolText = (answer: unknown): { text: string; refused: boolean } => {
     return { text, refused: result?.isError === true };
 };
 
-const runCommand = async (services: Services, id: string, command: string): Promise<{ text: string; refused: boolean }> =>
+const callTool = async (services: Services, id: string, name: string, args: Record<string, unknown>): Promise<{ text: string; refused: boolean }> =>
     toolText(
         await services.hostHub.mcp(id, {
             jsonrpc: "2.0",
             id: 1,
             method: "tools/call",
-            params: { name: "run_command", arguments: { command, timeoutMs: PULL_TIMEOUT_MS } },
+            params: { name, arguments: args },
         }),
     );
 
+const MachineSandboxRowsSchema = z.array(MachineSandboxSchema);
+
 /* The machine's containers, which the sync agent never reports (a sync agent enumerating a machine's other
  * sandboxes to one of them is the disclosure the whole design avoids by construction). Asking through a host
- * capability is different: the owner ticked a switch that says this sandbox may run commands there.
+ * capability is different: the owner ticked a switch that says this sandbox may look there.
  *
- * Docker's own `--format` gives one JSON object per line, so this needs no field parsing of its own. A machine
- * with no Docker answers non-zero and contributes nothing — not an error, just a computer that runs no sandboxes. */
-const dockerRows = async (services: Services, id: string): Promise<MachineSandbox[]> => {
-    const { text } = await runCommand(services, id, `docker ps -a --filter name=^intentic-sandbox- --format '{{json .}}'`);
-    const rows = text
-        .split(/\r?\n/)
-        .map((line) => line.trim())
-        .filter((line) => line.startsWith("{"))
-        .flatMap((line) => {
-            const parsed = safeJson(line) as { Names?: unknown; State?: unknown; Image?: unknown } | undefined;
-            return typeof parsed?.Names === "string" ? [{ names: parsed.Names, state: String(parsed.State), image: String(parsed.Image) }] : [];
-        });
-    /* A workspace container and its tunnel sidecar share the `intentic-sandbox-` prefix, and a user's own
-     * subdomain may legitimately BE `tunnel-something` — so a name is only a sidecar when the workspace container
-     * it would belong to actually exists. The same rule the desktop app applies natively; nothing here guesses. */
-    const isSidecar = (name: string): boolean => {
-        const slug = name.startsWith("intentic-sandbox-tunnel-") ? name.slice("intentic-sandbox-tunnel-".length) : undefined;
-        return slug !== undefined && rows.some((row) => row.names === `intentic-sandbox-${slug}`);
-    };
-    return rows
-        .filter((row) => !isSidecar(row.names))
-        .map((row) => {
-            const slug = row.names.slice("intentic-sandbox-".length);
-            const tunnel = rows.find((candidate) => candidate.names === `intentic-sandbox-tunnel-${slug}`);
-            const sandbox: MachineSandbox = { slug, container: row.names, running: row.state === "running", image: row.image };
-            // Assigned rather than spread-in, so a sandbox with no sidecar at all has no `tunnelRunning` KEY —
-            // absent and false are different facts here (reached over the user's own proxy vs. tunnel down).
-            if (tunnel !== undefined) {
-                sandbox.tunnelRunning = tunnel.state === "running";
-            }
-            return sandbox;
-        });
+ * Asked of the machine's own `list_sandboxes` tool, which owns the sidecar merging and answers the row JSON
+ * directly — the machine is the one producer of "what runs on me", for this reader, for the agent and for its
+ * own manage_sandbox. An agent too old to have the tool refuses it, which reads here exactly like a machine
+ * that runs no sandboxes — and its age is already visible on the row (agents.host). */
+export const sandboxesFromTool = (text: string, refused: boolean): MachineSandbox[] => {
+    if (refused) {
+        return [];
+    }
+    const rows = MachineSandboxRowsSchema.safeParse(safeJson(text.trim()));
+    return rows.success ? rows.data : [];
 };
 
 // Ask one connected machine what it looks like. Every failure mode is a NAMED gap rather than an absence, because
 // each is a different errand for whoever is reading the tab.
 const pull = async (services: Services, id: string): Promise<PullResult> => {
-    const { text, refused } = await runCommand(services, id, `intentic-sync status --json`);
+    const { text, refused } = await callTool(services, id, "run_command", { command: "intentic-sync status --json", timeoutMs: PULL_TIMEOUT_MS });
     if (refused) {
         // The host agent refuses out-of-scope calls as a value naming the switch. Anything else refused here is
         // still, from the reader's side, "this machine would not answer" — and the tab's remedy is the same.
@@ -136,9 +124,11 @@ const pull = async (services: Services, id: string): Promise<PullResult> => {
     if (report === undefined) {
         return { gap: "no-agent" };
     }
-    // The containers are the reason to have asked at all; a machine that answers the report but not docker still
-    // contributes everything else.
-    const sandboxes = await dockerRows(services, id).catch(() => []);
+    // The containers are the reason to have asked at all; a machine that answers the report but not the fleet
+    // still contributes everything else.
+    const sandboxes = await callTool(services, id, "list_sandboxes", {})
+        .then((answer) => sandboxesFromTool(answer.text, answer.refused))
+        .catch((): MachineSandbox[] => []);
     return { report: { ...report, sandboxes, agents: { ...report.agents, host: services.hostHub.state(id).version } } };
 };
 
@@ -220,4 +210,19 @@ export const computers = async (services: Services): Promise<Computer[]> => {
         })),
     );
     return mergeComputers(await enrolledMachines(services.config.historyRoot), await machineReports(services.config.historyRoot), answered);
+};
+
+/* One management action on one machine's sandbox — the Computers tab's buttons. The machine enforces the
+ * "Manage sandboxes" switch and answers a refusal as a value naming it, which travels to the tab verbatim; this
+ * side only drops the machine's cached pull, so the very next poll shows the fleet as the action left it rather
+ * than as the TTL remembers it. */
+export const manageMachineSandbox = async (
+    services: Services,
+    id: string,
+    op: "start" | "stop" | "restart",
+    slug: string,
+): Promise<{ message: string; refused: boolean }> => {
+    const { text, refused } = await callTool(services, id, "manage_sandbox", { op, slug });
+    pulled.delete(id);
+    return { message: text, refused };
 };

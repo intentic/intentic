@@ -8,6 +8,7 @@ import { listDirectory, readTextFile, trashFile, writeTextFile } from "./tools/f
 import { focusWindow, listWindows, openTarget, readClipboard, writeClipboard } from "./tools/apps.js";
 import { clickElement, fillElement, listTabs, openPage, pressKey, readPage, selectTab, snapshotPage } from "./tools/browser.js";
 import { act, describeAction, settle, type ComputerInput } from "./tools/computer.js";
+import { asSandboxOp, listSandboxes, manageSandbox } from "./tools/sandboxes.js";
 import { describeResult, runCommand } from "./tools/shell.js";
 import { HOST_VERSION } from "./version.js";
 
@@ -217,6 +218,25 @@ const TOOLS: readonly ToolDefinition[] = [
             "Capture what is on this computer's screen right now, as an image. Use it to read a dialog, check on a window, or see what the user is describing. Requires the 'See the screen' permission.",
         inputSchema: { type: "object", properties: {} },
     },
+    {
+        name: "list_sandboxes",
+        description:
+            "The Intentic sandboxes on this computer, as JSON — each one's slug, whether it is running, and whether its tunnel is up. Only sandbox containers; nothing else on the machine is listed. Requires 'Run commands' or 'Manage sandboxes on this computer'.",
+        inputSchema: { type: "object", properties: {} },
+    },
+    {
+        name: "manage_sandbox",
+        description:
+            "Start, stop or restart one Intentic sandbox on this computer, by its slug from list_sandboxes. Stopping one interrupts whoever is working in it — and stopping the sandbox you are calling from severs your own connection. Requires the 'Manage sandboxes on this computer' permission, which is OFF unless the user turned it on.",
+        inputSchema: {
+            type: "object",
+            properties: {
+                op: { type: "string", enum: ["start", "stop", "restart"] },
+                slug: { type: "string", description: "The sandbox's slug, from list_sandboxes." },
+            },
+            required: ["op", "slug"],
+        },
+    },
 ];
 
 const textResult = (text: string, isError = false): Record<string, unknown> => ({ content: [{ type: "text", text }], isError });
@@ -319,6 +339,10 @@ const callTool = async (name: string, args: Record<string, unknown>, scopes: Hos
                 : textResult(await readClipboard(desktop(), scopes));
         case "screenshot":
             return await screenshotResult(scopes);
+        case "list_sandboxes":
+            return textResult(await listSandboxes(scopes));
+        case "manage_sandbox":
+            return textResult(await manageSandbox(asSandboxOp(args["op"]), asString(args["slug"], "slug"), scopes));
         case "computer": {
             const input = args as unknown as ComputerInput;
             await act(desktop(), input, scopes);

@@ -30,6 +30,19 @@ export function useComputers(): { computers: ComputedRef<Computer[]>; error: Com
     };
 }
 
+export type SandboxOp = `start` | `stop` | `restart`;
+
+// One action on one machine's sandbox. The machine itself enforces the "Manage sandboxes" switch; a refusal
+// arrives as this promise's rejection, carrying the machine's own sentence naming the switch to flip.
+export async function manageMachineSandbox(hostId: string, slug: string, op: SandboxOp): Promise<string> {
+    const result = await sandboxJson<{ message: string }>(`/system/computers/${encodeURIComponent(hostId)}/sandboxes/${encodeURIComponent(slug)}`, {
+        method: `POST`,
+        headers: { "content-type": `application/json` },
+        body: JSON.stringify({ op }),
+    });
+    return result.message;
+}
+
 /* How stale a machine's own reading may be before the view stops presenting it as now. The sync agent reports
  * every ~15s and the daemon re-pulls every 10s, so anything past a minute means the machine stopped talking —
  * its lid closed, its agent died — and the rows below it describe a computer that has moved on.

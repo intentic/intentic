@@ -162,7 +162,7 @@ const KIND_EFFECTS: Record<CapabilityKind, (input: CapabilityEffectInput) => rea
         return effects;
     },
     host: (input) => {
-        // Reads are the floor (a machine you cannot read is not connected to anything); the other three are the
+        // Reads are the floor (a machine you cannot read is not connected to anything); the rest are the
         // card's toggles. Unset ⇒ the schema's defaults, which is what the form posts before it is touched.
         const grants = [
             ...(input.config["shell"] === "off" ? [] : ["run commands"]),
@@ -170,6 +170,7 @@ const KIND_EFFECTS: Record<CapabilityKind, (input: CapabilityEffectInput) => rea
             ...(input.config["write"] === "on" ? ["write and trash files"] : []),
             ...(input.config["screen"] === "off" ? [] : ["capture the screen"]),
             ...(input.config["control"] === "on" ? ["use the mouse and keyboard"] : []),
+            ...(input.config["sandboxes"] === "on" ? ["start and stop its sandboxes"] : []),
         ];
         return [{ kind: "machine", platform: String(input.config["platform"] ?? ""), grants }, { kind: "skill", name: input.id }, { kind: "mcp" }];
     },

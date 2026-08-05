@@ -199,6 +199,16 @@ const HOST_SCOPE_FIELDS: readonly CapabilityField[] = [
         ],
     },
     {
+        key: "sandboxes",
+        label: "Manage sandboxes on this computer",
+        default: "off",
+        options: [
+            { value: "off", label: "Blocked" },
+            { value: "on", label: "Allowed" },
+        ],
+        hint: "Start, stop and restart the Intentic sandboxes running on this machine — narrower than Run commands, and enough to delegate the machine's sandbox fleet to this one.",
+    },
+    {
         key: "roots",
         label: "Folders it may touch",
         optional: true,

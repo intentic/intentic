@@ -39,6 +39,8 @@ you live and where the repository is; this is their own machine, reached over a 
 | \`mcp__\${id}__browser_click\` / \`browser_fill\` / \`browser_key\` | Act on the page by ref. |
 | \`mcp__\${id}__browser_tabs\` | List the browser's tabs, or switch to one. |
 | \`mcp__\${id}__computer\` | Use the mouse and keyboard: click, type, press a chord, scroll, drag. |
+| \`mcp__\${id}__list_sandboxes\` | The Intentic sandboxes on this machine: which are running, which are stopped, tunnel state. |
+| \`mcp__\${id}__manage_sandbox\` | Start, stop or restart one of them by slug. Requires the 'Manage sandboxes on this computer' permission — and stopping the sandbox you are running in severs your own connection. |
 
 ## Rules that are not negotiable
 

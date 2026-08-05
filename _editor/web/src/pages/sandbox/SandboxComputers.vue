@@ -1,11 +1,12 @@
 <script setup lang="ts">
-import type { Computer } from "@intentic/sandbox-contract";
+import type { Computer, MachineSandbox } from "@intentic/sandbox-contract";
 import { Card, cmp, MachineDetail, RowGroup, StatusBadge, type StatusVariant, timeAgo } from "@intentic/ui";
+import Button from "primevue/button";
 import { computed, onMounted, ref } from "vue";
 import { useRoute } from "vue-router";
 import BridgeTokensCard from "./BridgeTokensCard.vue";
 import DesktopSyncCard from "./DesktopSyncCard.vue";
-import { reportStale, useComputers } from "../../composables/sandbox/useComputers";
+import { manageMachineSandbox, reportStale, type SandboxOp, useComputers } from "../../composables/sandbox/useComputers";
 import { useNow } from "../../composables/useNow";
 
 /* The Sandbox hub's "Computers" tab — what is on the other end of this sandbox.
@@ -24,7 +25,7 @@ import { useNow } from "../../composables/useNow";
 
 const route = useRoute();
 const highlight = ref(false);
-const { computers, error } = useComputers();
+const { computers, error, refetch } = useComputers();
 
 // One clock for the whole render, so every row's staleness is judged against the same instant rather than each
 // against the moment its own computed happened to run — and the app's one clock, so it stops with this tab.
@@ -70,6 +71,32 @@ const reach = (computer: Computer): string =>
         .join(" · ");
 
 const sorted = computed(() => computers.value.toSorted((a, b) => a.label.localeCompare(b.label)));
+
+/* The management buttons, shown only where they can work: the machine is reachable as a connected computer right
+ * now. The daemon adds no judgement and neither does this — a click travels to the machine, and the machine's own
+ * refusal (the "Manage sandboxes on this computer" switch is off, say) is shown under the row verbatim. */
+const manageable = (computer: Computer): boolean => computer.hostId !== undefined && computer.online === true;
+
+const rowKey = (computer: Computer, box: MachineSandbox): string => `${computer.key}:${box.slug}`;
+const busy = ref<string | undefined>();
+const actionError = ref<{ key: string; message: string } | undefined>();
+
+const act = async (computer: Computer, box: MachineSandbox, op: SandboxOp): Promise<void> => {
+    if (computer.hostId === undefined || busy.value !== undefined) {
+        return;
+    }
+    const key = rowKey(computer, box);
+    busy.value = `${key}:${op}`;
+    actionError.value = undefined;
+    try {
+        await manageMachineSandbox(computer.hostId, box.slug, op);
+        refetch();
+    } catch (failure) {
+        actionError.value = { key, message: failure instanceof Error ? failure.message : String(failure) };
+    } finally {
+        busy.value = undefined;
+    }
+};
 </script>
 
 <template>
@@ -107,11 +134,44 @@ const sorted = computed(() => computers.value.toSorted((a, b) => a.label.localeC
                      deliberately not mounted). So this section is absent rather than empty for most machines. -->
                 <div v-if="computer.report && computer.report.sandboxes.length > 0" class="flex flex-col gap-1.5">
                     <span class="text-2xs font-medium text-muted">Sandboxes on this computer</span>
-                    <div v-for="box in computer.report.sandboxes" :key="box.container" class="flex flex-wrap items-baseline gap-x-2 text-2xs">
-                        <StatusBadge :variant="box.running ? `success` : `neutral`" size="xs" :label="box.running ? `running` : `stopped`" />
-                        <span class="truncate font-mono text-content">{{ box.name ?? box.slug }}</span>
-                        <!-- Absent tunnel and stopped tunnel are different facts; only the second is a warning. -->
-                        <span v-if="box.tunnelRunning === false" class="text-warning">· tunnel off</span>
+                    <div v-for="box in computer.report.sandboxes" :key="box.container" class="flex flex-col gap-0.5">
+                        <div class="flex flex-wrap items-center gap-x-2 text-2xs">
+                            <StatusBadge :variant="box.running ? `success` : `neutral`" size="xs" :label="box.running ? `running` : `stopped`" />
+                            <span class="truncate font-mono text-content">{{ box.name ?? box.slug }}</span>
+                            <!-- Absent tunnel and stopped tunnel are different facts; only the second is a warning. -->
+                            <span v-if="box.tunnelRunning === false" class="text-warning">· tunnel off</span>
+                            <span v-if="manageable(computer)" class="ml-auto flex items-center gap-1">
+                                <Button
+                                    v-if="!box.running"
+                                    label="Start"
+                                    size="small"
+                                    :text="true"
+                                    :loading="busy === `${rowKey(computer, box)}:start`"
+                                    :disabled="busy !== undefined"
+                                    @click="act(computer, box, `start`)"
+                                />
+                                <template v-else>
+                                    <Button
+                                        label="Restart"
+                                        size="small"
+                                        :text="true"
+                                        :loading="busy === `${rowKey(computer, box)}:restart`"
+                                        :disabled="busy !== undefined"
+                                        @click="act(computer, box, `restart`)"
+                                    />
+                                    <Button
+                                        label="Stop"
+                                        size="small"
+                                        severity="danger"
+                                        :text="true"
+                                        :loading="busy === `${rowKey(computer, box)}:stop`"
+                                        :disabled="busy !== undefined"
+                                        @click="act(computer, box, `stop`)"
+                                    />
+                                </template>
+                            </span>
+                        </div>
+                        <p v-if="actionError?.key === rowKey(computer, box)" :class="cmp.alertDanger(`text-2xs`)">{{ actionError.message }}</p>
                     </div>
                 </div>
             </div>

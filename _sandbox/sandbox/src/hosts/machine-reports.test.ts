@@ -1,6 +1,6 @@
 import type { MachineReport } from "@intentic/sandbox-contract";
 import { expect, test } from "vitest";
-import { mergeComputers, type PullResult, reportFrom } from "./machine-reports.js";
+import { mergeComputers, type PullResult, reportFrom, sandboxesFromTool } from "./machine-reports.js";
 
 const report = (hostname: string, overrides: Partial<MachineReport> = {}): MachineReport => ({
     hostname,
@@ -49,6 +49,20 @@ test("finds nothing when the command printed no report", () => {
 test("keeps looking past a line that only looked like JSON", () => {
     const answer = `--- stdout ---\n${JSON.stringify(report("laptop"))}\n{ tail garbage }`;
     expect(reportFrom(answer)?.hostname).toBe("laptop");
+});
+
+/* Unlike run_command, list_sandboxes answers its JSON bare — the machine's own tool produced it for this exact
+ * reader. What still needs pinning is the skew: a machine running an agent from before the tool refuses it, and
+ * that must read as a machine with no listable sandboxes, never as a failed pull. */
+test("reads the fleet the machine's own tool answered", () => {
+    const fleet = [{ slug: "work", container: "intentic-sandbox-work", running: true, image: "img" }];
+    expect(sandboxesFromTool(JSON.stringify(fleet, undefined, 2), false)).toEqual(fleet);
+});
+
+test("an agent without the tool, or an answer that is not the fleet, contributes no sandboxes", () => {
+    expect(sandboxesFromTool(`This computer has no tool called "list_sandboxes".`, true)).toEqual([]);
+    expect(sandboxesFromTool("not json", false)).toEqual([]);
+    expect(sandboxesFromTool(`{"slug":"work"}`, false)).toEqual([]);
 });
 
 test("keeps an enrolled machine that has never reported, and says why it is empty", () => {

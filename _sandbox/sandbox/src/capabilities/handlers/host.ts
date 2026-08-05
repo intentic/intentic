@@ -26,6 +26,7 @@ export const hostHandler: CapabilityHandler = {
             write: host.write,
             screen: host.screen,
             control: host.control,
+            sandboxes: host.sandboxes,
             ...(host.roots !== undefined ? { roots: host.roots } : {}),
         };
     },

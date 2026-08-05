@@ -46,7 +46,7 @@ class FakeSocket {
     }
 }
 
-const scopes = (overrides: Partial<HostScopes> = {}): HostScopes => ({ shell: "on", write: "on", screen: "on", control: "on", ...overrides });
+const scopes = (overrides: Partial<HostScopes> = {}): HostScopes => ({ shell: "on", write: "on", screen: "on", control: "on", sandboxes: "on", ...overrides });
 
 // The whole wiring: machine hosts the contract, "daemon" holds the client — over one socket, as in production.
 const connectedPair = (initial: HostScopes = scopes()) => {

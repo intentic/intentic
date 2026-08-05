@@ -56,7 +56,7 @@ export const describeText = async (scopes: HostScopes): Promise<string> => {
             `Shell for run_command: ${facts.shell}`,
             `Home: ${facts.home}`,
             `Folders you may read and write: ${facts.roots.join(", ")}`,
-            `Permissions: run commands ${scopes.shell}, write files ${scopes.write}, see the screen ${scopes.screen}`,
+            `Permissions: run commands ${scopes.shell}, write files ${scopes.write}, see the screen ${scopes.screen}, manage sandboxes ${scopes.sandboxes}`,
         ].join("\n") + session
     );
 };

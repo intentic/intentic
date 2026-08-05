@@ -160,9 +160,9 @@ describe("capabilityEffects", () => {
         const [machine] = capabilityEffects({
             kind: "host",
             id: "desktop",
-            config: { platform: "linux", shell: "off", write: "on", screen: "off" },
+            config: { platform: "linux", shell: "off", write: "on", screen: "off", sandboxes: "on" },
         });
-        expect(machine).toEqual({ kind: "machine", platform: "linux", grants: ["read files", "write and trash files"] });
+        expect(machine).toEqual({ kind: "machine", platform: "linux", grants: ["read files", "write and trash files", "start and stop its sandboxes"] });
     });
 
     it("keeps a browser profile per platform", () => {

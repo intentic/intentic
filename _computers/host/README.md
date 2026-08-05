@@ -48,6 +48,7 @@ the machine answers.
 | `read_file` / `list_dir` | Bounded by the allowed folders. |
 | `write_file` / `trash_file` | Also need the write switch, which is **off** unless the user turned it on. There is no delete tool — `trash_file` moves the file somewhere recoverable. |
 | `screenshot` | Windows via .NET; Linux via grim/spectacle/import/scrot, picked by session type. |
+| `list_sandboxes` / `manage_sandbox` | The Intentic sandboxes running on this machine: list them, start/stop/restart one (tunnel sidecar included). Managing takes its own switch, **off** by default — narrower than `run_command`, so the machine's fleet can be delegated to a sandbox without handing it a shell. Listing is subsumed by either switch. |
 
 ## Commands
 
