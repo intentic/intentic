@@ -39,14 +39,14 @@ export const README_TAIL = "README.md";
 
 const MANIFESTS = ["package.json", "Cargo.toml", "pyproject.toml", "go.mod"];
 const SKIP_DIRS = new Set(["node_modules", ".git", "dist", "build", "target", ".cache", ".next", "coverage", "vendor", "__pycache__"]);
-/* A manifest inside one of these is a FIXTURE, not a package — `_libs/iq-recall/src/__fixtures__/workspace` has a
+/* A manifest inside one of these is a FIXTURE, not a package — `_search/iq-recall/src/__fixtures__/workspace` has a
  * package.json because a test needs one to read. These dirs are still WALKED (their lines count toward the package
  * that owns them, and their names are how `hasTests` is detected); they just cannot themselves be a package. */
 const NON_PACKAGE_SEGMENTS = new Set(["__fixtures__", "__mocks__", "__snapshots__", "__tests__", "fixtures", "test", "tests", "spec"]);
 const SOURCE_EXTENSIONS = new Set(["ts", "tsx", "js", "jsx", "mjs", "cjs", "vue", "rs", "py", "go", "sql", "css", "svelte"]);
 // A generated bundle or a lockfile would dominate a size comparison while telling the reader nothing.
 const MAX_MEASURED_BYTES = 512 * 1024;
-// Deep enough for `_apps/web/src/...`-shaped monorepos, shallow enough that a stray checkout cannot walk forever.
+// Deep enough for `_editor/web/src/...`-shaped monorepos, shallow enough that a stray checkout cannot walk forever.
 const MAX_DEPTH = 5;
 // A one-liner is a tooltip and a list row. Past this it is a paragraph that has been let loose.
 const ONE_LINER_MAX = 200;

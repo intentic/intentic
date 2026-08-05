@@ -15,7 +15,7 @@ The user's own machines — Windows and Linux — as something the agent can ope
 
 ## How it fits
 
-Purely declarative. The machine agent that makes this possible lives in `_apps/host`; this package is what tells
+Purely declarative. The machine agent that makes this possible lives in `_computers/host`; this package is what tells
 an agent that such a machine exists and how to use it.
 
 ## Conventions & gotchas

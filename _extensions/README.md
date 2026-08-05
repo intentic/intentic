@@ -2,7 +2,7 @@
 
 The intentic app is a **lean core + an extension system** (the VSCode bet). This directory holds the
 first-party extensions — real, in-repo extension packages that dogfood the same public
-[`@intentic/extension-api`](../_libs/extension-api) a third-party bundle would use. See the extension system
+[`@intentic/extension-api`](../_sandbox/extension-api) a third-party bundle would use. See the extension system
 in [ARCHITECTURE.md](../ARCHITECTURE.md) for how the host loads and gates them.
 
 ## What an extension is
@@ -62,22 +62,22 @@ fails any extension that reaches `/{provider}/models` or `/{provider}/accounts` 
 ## How they load — three paths, one list
 
 Every extension below is enumerated by
-[installedExtensions()](../_apps/sandbox/src/extensions/installed-extensions.ts) and served by
+[installedExtensions()](../_sandbox/sandbox/src/extensions/installed-extensions.ts) and served by
 `GET /extensions`, whatever its code's origin — that single list is what the Sandbox hub's Extensions tab
 renders and what the on/off switch acts on. The paths differ only in where the *code* comes from:
 
 - **Compiled into the web bundle** (the UI extensions): statically imported into
-  [_apps/web/src/extension-host/builtins.ts](../_apps/web/src/extension-host/builtins.ts), keyed by manifest
+  [_editor/web/src/extension-host/builtins.ts](../_editor/web/src/extension-host/builtins.ts), keyed by manifest
   id, and activated at shell boot through the same manifest-gated host as any other extension. Their
   `intentic-extension.json` is baked into the image beside the daemon-side ones, so the daemon lists them
   even though it runs none of their code. Adding a new first-party UI extension = a new package here + one
   entry there + one `COPY` in the Dockerfile; miss the last and the tab shows the extension as `unlisted`,
   miss the middle one and it shows as `missing`. (Note the three *core* view contributions in
-  `_apps/web/src/core-views/coreViews.ts` are **not** extensions — they're privileged in-app views coupled to
+  `_editor/web/src/core-views/coreViews.ts` are **not** extensions — they're privileged in-app views coupled to
   platform internals; see that file and ARCHITECTURE.md.)
 - **Baked into the sandbox image** (`connectors`, `social`, `computers`, `acp-agents`, `discord`, `slack`,
   `imap`): the whole checkout copied to `/opt/extensions` by the sandbox
-  [Dockerfile](../_apps/sandbox/Dockerfile) and read via `EXTENSIONS_DIR` — present in every sandbox,
+  [Dockerfile](../_sandbox/sandbox/Dockerfile) and read via `EXTENSIONS_DIR` — present in every sandbox,
   `builtin: true` on `GET /extensions`, not removable, no capability entry. This is how the `/capabilities`
   grid's derived cards exist out of the box — and why switching one of these packs off removes exactly its
   cards and nothing else.

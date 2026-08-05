@@ -3,7 +3,7 @@ import { WorkspaceChildrenSchema } from "@intentic/sandbox-contract";
 import { README_TAIL, stagingDir } from "./paths.js";
 
 /* What a repo's STAGED document set actually contains, as tails relative to the set's root (`repo.json`,
- * `_libs/graph/README.md`, …).
+ * `_deploy/graph/README.md`, …).
  *
  * Two callers need exactly this, which is why it is one function rather than two walks: PUBLISH copies every tail
  * into the repo, and a generation run's ADVANCE step asks "which packages already have a document?" to decide
@@ -15,7 +15,7 @@ import { README_TAIL, stagingDir } from "./paths.js";
  * set nests as deep as the package paths do. Bounded by MAX_LEVELS so a surprising tree cannot turn a render into
  * an unbounded request fan-out. */
 
-// `_apps/web` is two levels; a monorepo nesting packages three deep under a group directory is the realistic
+// `_editor/web` is two levels; a monorepo nesting packages three deep under a group directory is the realistic
 // worst case. Past that the set is not shaped like anything this extension writes.
 const MAX_LEVELS = 5;
 

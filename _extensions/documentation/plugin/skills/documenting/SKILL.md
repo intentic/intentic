@@ -9,7 +9,7 @@ description: This workspace's architecture-documentation conventions — a packa
 invalidates it and the diff that fixes it are the same diff. Only the repository-level map lives apart:
 
 ```
-_libs/graph/
+_deploy/graph/
 ├── README.md      the package's page — the one authored document        (authored)
 ├── package.json
 └── src/

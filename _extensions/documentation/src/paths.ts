@@ -109,7 +109,7 @@ export const SCAN_RUNS = 10;
  * the caller so this module stays pure and testable. */
 export const runIdAt = (epochMs: number): string => `r${epochMs.toString(36)}`;
 
-/* A package directory → a slug usable in a conversation id AND a run subdirectory. `_libs/graph` must not
+/* A package directory → a slug usable in a conversation id AND a run subdirectory. `_deploy/graph` must not
  * become two path segments, so separators collapse to dashes; anything outside the id charset goes too, and a
  * dir that reduces to nothing (a non-Latin name) falls back to `pkg` with the caller's uniqueness suffix still
  * doing its work. */

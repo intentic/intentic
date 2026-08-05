@@ -13,8 +13,8 @@ export default defineConfig({
          * That fails silently, which is the part worth the comment. It is not a load error — the tests run,
          * against a schema several changes old. This suite went on passing a `WorkflowSchema.safeParse` of a
          * template that no longer matched the contract at all, and only noticed when a field the stale build
-         * still required was removed. Same reasoning as _apps/web/source-aliases.ts, one package wide. */
-        alias: { "@intentic/sandbox-contract": here(`../../_libs/sandbox-contract/src/index.ts`) },
+         * still required was removed. Same reasoning as _editor/web/source-aliases.ts, one package wide. */
+        alias: { "@intentic/sandbox-contract": here(`../../_sandbox/sandbox-contract/src/index.ts`) },
     },
     test: {
         include: ["./src/**/*.test.ts"],

@@ -21,7 +21,7 @@ import type { useTargets } from "./useTargets";
  *
  * ONE REPO IS NOT ALWAYS ONE ADDRESS. A monorepo whose `dev` script fans a turbo run out across its packages
  * serves several, and the heading shows the count with the list a click away — each row named by the package that
- * bound it, because `_apps/web` against `_apps/site` is the only thing that tells three localhost ports apart.
+ * bound it, because `_editor/web` against `_site/site` is the only thing that tells three localhost ports apart.
  * The heading deliberately does not pick one: which app a group's stories belong to is the group's own fact, and
  * it says so on its own row. */
 

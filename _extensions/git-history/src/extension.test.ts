@@ -42,7 +42,7 @@ describe(`ext-git-history`, () => {
 
         expect(provider.detect(`intentic`)).toEqual({ icon: `sitemap`, tooltip: `Open git history`, title: `History` });
         // A package inside the monorepo is a directory, not a repository — it has files, but no history of its own.
-        expect(provider.detect(`intentic/_apps/web`)).toBeUndefined();
+        expect(provider.detect(`intentic/_editor/web`)).toBeUndefined();
         expect(provider.detect(`not-a-repo`)).toBeUndefined();
     });
 

@@ -21,7 +21,7 @@ export interface TreeEntry {
 
 const isEvidence = (name: string): boolean => name.startsWith(`vitest.config.`) || name.includes(`.test.`);
 
-// Root-relative project dirs (e.g. "intentic/_libs/engine"), sorted; the repo root itself when evidence sits
+// Root-relative project dirs (e.g. "intentic/_deploy/engine"), sorted; the repo root itself when evidence sits
 // above any nested package.json. The repo id is its root-relative dir, so the node is found by walking the
 // tree along the id's segments (nested ids like "clients/foo" descend one level per segment).
 export const vitestProjects = (tree: readonly TreeEntry[], repo: string): string[] => {

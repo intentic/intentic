@@ -12,7 +12,7 @@ import { documentedDirs, listStagedTails } from "./stagedTree.js";
  * so a vue-query inside a view could never answer. Nothing observes an unmounted view, so the file-change push
  * cannot serve this either — it invalidates queries, and there is no query here to invalidate.
  *
- * Keyed by WORKSPACE path (`intentic/_apps/acp-bridge`), not by (repo, dir): that is the vocabulary the tree
+ * Keyed by WORKSPACE path (`intentic/_sandbox/acp-bridge`), not by (repo, dir): that is the vocabulary the tree
  * speaks, and it is what the tab stores. A repo's own row is in here too, under the repo's path — the repository
  * overview (`repo.md`) is a document like any other, and the row that has health and history should have it too.
  *

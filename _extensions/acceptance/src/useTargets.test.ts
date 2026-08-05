@@ -32,9 +32,9 @@ const panel = (over: Partial<PanelSummary> & { repo: string }): PanelSummary => 
 // The intentic repo as the daemon reports it: one `pnpm dev`, a turbo fan-out, three pinned ports and two
 // schemes. The case that made the panel spin "Starting…" forever.
 const MONOREPO = [
-    { url: `https://localhost:47145`, dir: `_apps/web` },
-    { url: `https://localhost:6480`, dir: `_apps/api` },
-    { url: `http://localhost:4321`, dir: `_apps/site` },
+    { url: `https://localhost:47145`, dir: `_editor/web` },
+    { url: `https://localhost:6480`, dir: `_platform/api` },
+    { url: `http://localhost:4321`, dir: `_site/site` },
 ];
 
 const hostFor = (panels: readonly PanelSummary[]): IntenticApi =>
@@ -102,7 +102,7 @@ describe(`useTargets`, () => {
      * the address comes from what the daemon FOUND listening, scheme and all. */
     it(`takes the address from what is serving, not from the port the daemon handed out`, async () => {
         const { stateOf, localUrl } = await read([
-            panel({ repo: `app`, running: true, healthy: true, port: 39481, servers: [{ url: `https://localhost:47145`, dir: `_apps/web` }] }),
+            panel({ repo: `app`, running: true, healthy: true, port: 39481, servers: [{ url: `https://localhost:47145`, dir: `_editor/web` }] }),
         ]);
 
         expect(stateOf(`app`)).toBe(`ready`);

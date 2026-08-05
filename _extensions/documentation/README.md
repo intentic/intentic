@@ -53,7 +53,7 @@ dependency graph cannot say — a request's path, a state machine, an ordering.
 ```
 
 Staging still mirrors, so publishing is a copy per tail and never a translation — a staged
-`.intentic/docs/intentic/_libs/graph/README.md` lands at `intentic/_libs/graph/README.md`. It is a workspace-root
+`.intentic/docs/intentic/_deploy/graph/README.md` lands at `intentic/_deploy/graph/README.md`. It is a workspace-root
 path so N isolated agents can write into it at once and it can ride the daemon's file-change push
 (`contributes.files`); an in-repo path cannot, because a manifest is static and repo names are not known when it
 is written. [src/paths.ts](src/paths.ts) holds the one function that decides a tail's destination, and it is the
@@ -143,7 +143,7 @@ belongs to the Workspace, and two open document tabs would fight over one key. A
 - [plugin/skills/documenting/SKILL.md](plugin/skills/documenting/SKILL.md) — the conventions, taught to every turn
 
 The figure vocabulary itself lives in the design system, since the app renders it:
-[`_libs/ui/src/markdown/figures.ts`](../../_libs/ui/src/markdown/figures.ts) and `MarkdownFigure.vue`.
+[`_editor/ui/src/markdown/figures.ts`](../../_editor/ui/src/markdown/figures.ts) and `MarkdownFigure.vue`.
 
 ## The URL is the state
 
@@ -159,7 +159,7 @@ so a link carrying "show me your draft" would either mislead the recipient or sh
 
 This rides on `api.route` in the public extension API, added for this view because `/ext/:ext/:key?` has exactly one
 free path segment and it already means "which activation" — a view with internal navigation has nowhere else to put
-it. See `_libs/extension-api/src/route.ts` for the query rules and `route.test.ts` for the invariant that matters:
+it. See `_sandbox/extension-api/src/route.ts` for the query rules and `route.test.ts` for the invariant that matters:
 patching your own key never disturbs another view's.
 
 ## Gotchas

@@ -20,7 +20,7 @@ import { listStagedTails } from "./stagedTree.js";
  * A LIMIT WORTH KNOWING, because it is not fixable from here. If something was ALREADY staged in this repo before
  * publishing, it rides along in the commit — a bare commit records the whole index, not just the paths we added.
  * The daemon's status route cannot distinguish that case: `GitStatus.files` carries porcelain lines that
- * `_libs/scaffold/src/git.ts` has already `.trim()`ed, and trimming is exactly what destroys the leading column
+ * `_sandbox/scaffold/src/git.ts` has already `.trim()`ed, and trimming is exactly what destroys the leading column
  * that says "staged". So `preflight()` reports every change that is not one of the paths this publish will
  * write, and the UI names the number before the owner commits, rather than pretending to a precision the wire
  * does not carry. A staged-paths

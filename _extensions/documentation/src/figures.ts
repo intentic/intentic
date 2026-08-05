@@ -33,7 +33,7 @@ const accents = (repoDoc: RepoDoc | undefined): ReadonlyMap<string, string> => {
     return byDir;
 };
 
-// The last segment of a package dir. `_libs/graph` is "graph" on a node label — the prefix is the same for every
+// The last segment of a package dir. `_deploy/graph` is "graph" on a node label — the prefix is the same for every
 // package in the group and spends width saying nothing.
 const leaf = (dir: string): string => dir.slice(dir.lastIndexOf(`/`) + 1);
 

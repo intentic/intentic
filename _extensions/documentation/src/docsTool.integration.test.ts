@@ -40,15 +40,15 @@ beforeAll(() => {
     git(`config`, `user.email`, `t@t.t`);
     git(`config`, `user.name`, `t`);
 
-    mkdirSync(join(root, `_libs/graph/src`), { recursive: true });
+    mkdirSync(join(root, `_deploy/graph/src`), { recursive: true });
     write(`package.json`, `{ "name": "root" }\n`);
     write(`docs/architecture/repo.json`, `{ "repo": "", "provenance": { "sourceRev": "x", "generatedAt": 1 } }\n`);
     write(`docs/architecture/repo.md`, `# root\n`);
-    write(`_libs/graph/package.json`, `{ "name": "@t/graph" }\n`);
-    write(`_libs/graph/src/compile.ts`, `export const compile = () => 1;\n`);
-    write(`_libs/graph/src/types.ts`, `export type G = 1;\n`);
+    write(`_deploy/graph/package.json`, `{ "name": "@t/graph" }\n`);
+    write(`_deploy/graph/src/compile.ts`, `export const compile = () => 1;\n`);
+    write(`_deploy/graph/src/types.ts`, `export type G = 1;\n`);
     write(
-        `_libs/graph/README.md`,
+        `_deploy/graph/README.md`,
         [
             `# @t/graph`,
             ``,
@@ -75,29 +75,29 @@ afterAll(() => rmSync(root, { recursive: true, force: true }));
 
 describe(`intentic-docs against a real repository`, () => {
     it(`takes the one-liner from the lead sentence, not the lead paragraph`, () => {
-        const entry = check().entries.find((candidate) => candidate.dir === `_libs/graph`);
+        const entry = check().entries.find((candidate) => candidate.dir === `_deploy/graph`);
         expect(entry?.oneLiner).toBe(`The shape of "what should exist" — the engine's core data structure.`);
     });
 
     it(`reads anchors from the key-files section only, resolving them against the repository root`, () => {
-        const entry = check().entries.find((candidate) => candidate.dir === `_libs/graph`);
+        const entry = check().entries.find((candidate) => candidate.dir === `_deploy/graph`);
         // Package-relative in the file (so the link works on GitHub) and repo-relative out of the tool.
         expect(entry?.anchors).toEqual([
-            { path: `_libs/graph/src/compile.ts`, what: `RawNode map → validated graph.`, line: 42 },
-            { path: `_libs/graph/src/types.ts`, what: `the IR types.` },
+            { path: `_deploy/graph/src/compile.ts`, what: `RawNode map → validated graph.`, line: 42 },
+            { path: `_deploy/graph/src/types.ts`, what: `the IR types.` },
         ]);
     });
 
     it(`starts a freshly written page at zero commits behind`, () => {
-        const entry = check().entries.find((candidate) => candidate.dir === `_libs/graph`);
+        const entry = check().entries.find((candidate) => candidate.dir === `_deploy/graph`);
         expect(entry).toMatchObject({ behind: 0, stale: false });
     });
 
     it(`counts a commit that changes the package without its README`, () => {
-        write(`_libs/graph/src/compile.ts`, `export const compile = () => 2;\n`);
+        write(`_deploy/graph/src/compile.ts`, `export const compile = () => 2;\n`);
         git(`add`, `-A`);
         git(`commit`, `-qm`, `change the code only`);
-        const entry = check().entries.find((candidate) => candidate.dir === `_libs/graph`);
+        const entry = check().entries.find((candidate) => candidate.dir === `_deploy/graph`);
         expect(entry).toMatchObject({ behind: 1, stale: true });
         expect(entry?.reason).toBe(`1 commit has touched this package since its README was written`);
     });
@@ -105,18 +105,18 @@ describe(`intentic-docs against a real repository`, () => {
     /* THE RULE THE WHOLE LAYOUT EXISTS FOR: updating the README in the same commit as the code clears the debt,
      * with nothing to bump and nothing to remember. */
     it(`returns to zero when the README moves in the same commit as the code`, () => {
-        write(`_libs/graph/src/compile.ts`, `export const compile = () => 3;\n`);
-        write(`_libs/graph/README.md`, `# @t/graph\n\nStill the core data structure.\n\n## Key files\n\n- [src/types.ts](src/types.ts) — the IR types.\n`);
+        write(`_deploy/graph/src/compile.ts`, `export const compile = () => 3;\n`);
+        write(`_deploy/graph/README.md`, `# @t/graph\n\nStill the core data structure.\n\n## Key files\n\n- [src/types.ts](src/types.ts) — the IR types.\n`);
         git(`add`, `-A`);
         git(`commit`, `-qm`, `change the code and its page together`);
-        expect(check().entries.find((candidate) => candidate.dir === `_libs/graph`)).toMatchObject({ behind: 0, stale: false });
+        expect(check().entries.find((candidate) => candidate.dir === `_deploy/graph`)).toMatchObject({ behind: 0, stale: false });
     });
 
     it(`fails validation on an anchor that does not resolve, and names it`, () => {
-        write(`_libs/graph/README.md`, `# @t/graph\n\nOne sentence.\n\n## Key files\n\n- [src/gone.ts](src/gone.ts) — deleted.\n`);
+        write(`_deploy/graph/README.md`, `# @t/graph\n\nOne sentence.\n\n## Key files\n\n- [src/gone.ts](src/gone.ts) — deleted.\n`);
         const result = validate();
         expect(result.status).toBe(1);
-        expect(result.output).toContain(`_libs/graph/src/gone.ts, which does not exist`);
+        expect(result.output).toContain(`_deploy/graph/src/gone.ts, which does not exist`);
     });
 
     it(`fails validation on a package with no README, and on a page that never describes itself`, () => {
@@ -124,7 +124,7 @@ describe(`intentic-docs against a real repository`, () => {
         write(`_libs/quiet/package.json`, `{ "name": "@t/quiet" }\n`);
         expect(validate().output).toContain(`_libs/quiet has no README.md`);
 
-        write(`_libs/graph/README.md`, `# @t/graph\n\n## Key files\n\n- [src/types.ts](src/types.ts) — the IR types.\n`);
+        write(`_deploy/graph/README.md`, `# @t/graph\n\n## Key files\n\n- [src/types.ts](src/types.ts) — the IR types.\n`);
         expect(validate().output).toContain(`has no lead sentence`);
     });
 

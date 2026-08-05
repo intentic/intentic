@@ -8,7 +8,7 @@
      component accents and the amber of a page that has drifted.
 
      What the eye gets instead of chrome is rhythm — a sticky component heading, then rows that differ only in
-     the part that is not shared: `_libs/` is dimmed, `sandbox-contract` is not, because the prefix is the same
+     the part that is not shared: `_sandbox/` is dimmed, `sandbox-contract` is not, because the prefix is the same
      word on nine rows in a row and the leaf is what anybody is actually reading.
 
      The gutter, the whisper-scrollbar and the sticky headings all moved into <NavRail> when the activity rail
@@ -53,7 +53,7 @@ const total = computed(() => sections.value.reduce((count, section) => count + s
 
 interface NavRow {
     readonly dir: string;
-    // The path split where it stops being shared: `_libs/` is the same word on nine rows in a row, and the leaf
+    // The path split where it stops being shared: `_sandbox/` is the same word on eleven rows in a row, and the leaf
     // is what anybody is actually reading, so the two halves are drawn at different weights.
     readonly prefix: string;
     readonly leaf: string;

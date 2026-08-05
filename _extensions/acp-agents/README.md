@@ -14,7 +14,7 @@ The coding agents you can run in a sandbox besides Claude — OpenCode, Gemini, 
 
 ## How it fits
 
-ACP is the Agent Client Protocol: one wire format several agent vendors speak. `_apps/acp-bridge` is what
+ACP is the Agent Client Protocol: one wire format several agent vendors speak. `_sandbox/acp-bridge` is what
 actually talks it; this package is the declaration that makes those agents selectable.
 
 The generic `acp-agent` capability is the interesting one — it is how an agent this repo has never heard of

@@ -26,7 +26,7 @@ describe(`splitRepo`, () => {
     const repos = [``, `intentic`, `intentic/vendor`];
 
     it(`picks the deepest repo that contains the path`, () => {
-        expect(splitRepo(`intentic/_apps/acp-bridge`, repos)).toEqual({ repo: `intentic`, dir: `_apps/acp-bridge` });
+        expect(splitRepo(`intentic/_sandbox/acp-bridge`, repos)).toEqual({ repo: `intentic`, dir: `_sandbox/acp-bridge` });
         // Nested inside another repo — the root and `intentic` both contain it, and neither is the answer.
         expect(splitRepo(`intentic/vendor/thing`, repos)).toEqual({ repo: `intentic/vendor`, dir: `thing` });
     });
@@ -49,9 +49,9 @@ describe(`the two document trees`, () => {
     /* A package's page is its own README, in the package — while the MAP still lives under `docs/architecture/`.
      * That split is the whole layout, and it is expressed once, here, so publishing stays a copy per tail. */
     it(`publishes a package page onto the package, not into the docs directory`, () => {
-        const tail = packagePageTail(`_libs/graph`);
-        expect(publishedPath(`intentic`, tail)).toBe(`intentic/_libs/graph/README.md`);
-        expect(publishedPath(``, tail)).toBe(`_libs/graph/README.md`);
+        const tail = packagePageTail(`_deploy/graph`);
+        expect(publishedPath(`intentic`, tail)).toBe(`intentic/_deploy/graph/README.md`);
+        expect(publishedPath(``, tail)).toBe(`_deploy/graph/README.md`);
     });
 
     it(`publishes the map's own tails under the docs directory`, () => {
@@ -61,8 +61,8 @@ describe(`the two document trees`, () => {
     });
 
     it(`mirrors staged tails so publishing is a copy, never a translation`, () => {
-        const tail = packagePageTail(`_libs/graph`);
-        expect(stagingPath(`intentic`, tail)).toBe(`.intentic/docs/intentic/_libs/graph/README.md`);
+        const tail = packagePageTail(`_deploy/graph`);
+        expect(stagingPath(`intentic`, tail)).toBe(`.intentic/docs/intentic/_deploy/graph/README.md`);
         // The tail — the part publish carries across — is the end of the path on both sides.
         expect(publishedPath(`intentic`, tail).endsWith(tail)).toBe(true);
         expect(stagingPath(`intentic`, tail).endsWith(tail)).toBe(true);
@@ -89,8 +89,8 @@ describe(`slugs and conversation ids`, () => {
     it(`collapses a package path into a single id-safe segment`, () => {
         // A slug lands in a conversation id (which becomes a branch name), so a separator would make it two path
         // segments.
-        expect(slugOf(`_libs/graph`)).toBe(`libs-graph`);
-        expect(slugOf(`_apps/web`)).toBe(`apps-web`);
+        expect(slugOf(`_deploy/graph`)).toBe(`deploy-graph`);
+        expect(slugOf(`_editor/web`)).toBe(`editor-web`);
         expect(slugOf(`packages/@scope/thing`)).toBe(`packages-scope-thing`);
     });
 
@@ -110,7 +110,7 @@ describe(`slugs and conversation ids`, () => {
     it(`shares one prefix across every conversation in a run, so the fleet join needs no stored ids`, () => {
         const runId = runIdAt(1_785_000_000_000);
         expect(mapConversationId(runId).startsWith(runPrefix(runId))).toBe(true);
-        expect(conversationIdOf(runId, slugOf(`_libs/graph`)).startsWith(runPrefix(runId))).toBe(true);
+        expect(conversationIdOf(runId, slugOf(`_deploy/graph`)).startsWith(runPrefix(runId))).toBe(true);
         // And not with a different run's.
         expect(conversationIdOf(runIdAt(1_785_000_001_000), `x`).startsWith(runPrefix(runId))).toBe(false);
     });

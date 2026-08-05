@@ -13,20 +13,20 @@ describe(`parseRepoDoc`, () => {
         const doc = parseRepoDoc(
             withProvenance({
                 repo: `intentic`,
-                components: [{ id: `wire`, name: `The wire`, oneLiner: `One sentence.`, packages: [`_libs/sandbox-contract`], accent: `1` }],
+                components: [{ id: `wire`, name: `The wire`, oneLiner: `One sentence.`, packages: [`_sandbox/sandbox-contract`], accent: `1` }],
                 glossary: [{ term: `panel`, means: `A repo's dev server.` }],
-                reading: [`_libs/sandbox-contract`, `_apps/sandbox`],
+                reading: [`_sandbox/sandbox-contract`, `_sandbox/sandbox`],
             }),
         );
         expect(doc?.components[0]).toEqual({
             id: `wire`,
             name: `The wire`,
             oneLiner: `One sentence.`,
-            packages: [`_libs/sandbox-contract`],
+            packages: [`_sandbox/sandbox-contract`],
             accent: `1`,
         });
         expect(doc?.glossary).toEqual([{ term: `panel`, means: `A repo's dev server.` }]);
-        expect(doc?.reading).toEqual([`_libs/sandbox-contract`, `_apps/sandbox`]);
+        expect(doc?.reading).toEqual([`_sandbox/sandbox-contract`, `_sandbox/sandbox`]);
     });
 
     it(`accepts the workspace root repo, whose name is legitimately empty`, () => {
@@ -76,10 +76,10 @@ describe(`parseDocIndex`, () => {
                 generatedAt: 5,
                 entries: [
                     {
-                        dir: `_libs/graph`,
+                        dir: `_deploy/graph`,
                         name: `@intentic/graph`,
                         oneLiner: `The desired-state IR.`,
-                        anchors: [{ path: `_libs/graph/src/compile.ts`, line: 42, what: `RawNode map → graph.` }],
+                        anchors: [{ path: `_deploy/graph/src/compile.ts`, line: 42, what: `RawNode map → graph.` }],
                         files: 11,
                         loc: 563,
                         hasTests: true,
@@ -90,14 +90,14 @@ describe(`parseDocIndex`, () => {
                         behind: 0,
                     },
                 ],
-                edges: [{ from: `_apps/cli`, to: `_libs/graph`, dev: false }],
+                edges: [{ from: `_deploy/cli`, to: `_deploy/graph`, dev: false }],
                 orphans: [`gone`],
                 undocumented: [`b`],
             }),
         );
-        expect(index?.entries[0]).toMatchObject({ dir: `_libs/graph`, name: `@intentic/graph`, loc: 563, hasTests: true, stale: true });
-        expect(index?.entries[0]?.anchors[0]).toEqual({ path: `_libs/graph/src/compile.ts`, line: 42, what: `RawNode map → graph.` });
-        expect(index?.edges).toEqual([{ from: `_apps/cli`, to: `_libs/graph`, dev: false }]);
+        expect(index?.entries[0]).toMatchObject({ dir: `_deploy/graph`, name: `@intentic/graph`, loc: 563, hasTests: true, stale: true });
+        expect(index?.entries[0]?.anchors[0]).toEqual({ path: `_deploy/graph/src/compile.ts`, line: 42, what: `RawNode map → graph.` });
+        expect(index?.edges).toEqual([{ from: `_deploy/cli`, to: `_deploy/graph`, dev: false }]);
         expect(index?.orphans).toEqual([`gone`]);
         expect(index?.undocumented).toEqual([`b`]);
     });
@@ -128,7 +128,7 @@ describe(`componentOfPackage`, () => {
         repo: `r`,
         components: [
             { id: `wire`, name: `The wire`, oneLiner: `x`, packages: [`_libs/contract`] },
-            { id: `app`, name: `The app`, oneLiner: `y`, packages: [`_apps/web`, `_apps/api`] },
+            { id: `app`, name: `The app`, oneLiner: `y`, packages: [`_editor/web`, `_platform/api`] },
         ],
         glossary: [],
         reading: [],
@@ -138,7 +138,7 @@ describe(`componentOfPackage`, () => {
     it(`inverts the map's component → packages relation`, () => {
         // The file declares one direction (the direction a human authors in); every reader wants the other. It is
         // derived so the file never holds the same fact twice.
-        expect(componentOfPackage(doc, `_apps/api`)?.id).toBe(`app`);
+        expect(componentOfPackage(doc, `_platform/api`)?.id).toBe(`app`);
         expect(componentOfPackage(doc, `_libs/contract`)?.id).toBe(`wire`);
     });
 
