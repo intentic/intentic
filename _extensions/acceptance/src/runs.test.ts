@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { conversationIdOf, parseManifest, parseResult, reposOf, runIdAt, runManifestOf, storyDir } from "./runs";
+import { conversationIdOf, parseManifest, parseResult, reposOf, runIdAt, runManifestOf, storyDir, storyStanding } from "./runs";
 import type { Story } from "./stories";
 
 // The daemon's own guard on AgentTurn.conversationId — it lands in branch names (agent/<id>) and filesystem
@@ -134,5 +134,36 @@ describe(`parseResult`, () => {
 
     it.each([`not json`, `{"story":"login"}`, `{"verdict":"probably"}`, `null`])(`treats %s as no result yet rather than a verdict`, (text) => {
         expect(parseResult(text)).toBeUndefined();
+    });
+});
+
+/* WHAT A STORY'S ROW SAYS, and the case both surfaces used to get wrong. A test session refused on its first
+ * request writes nothing at all — no verdict, no report, no screenshot — so the standing is the only thing
+ * either surface can show for it, and both showed the story as though nothing had been attempted: the list left
+ * it blank, the report called it neutral. A run whose every session died then read as a run nobody had started. */
+describe(`storyStanding`, () => {
+    it(`calls a story whose session died untested, in the tone of something to look at`, () => {
+        expect(storyStanding(undefined, `error`)).toEqual({ label: `untested`, variant: `danger` });
+    });
+
+    it(`keeps a written verdict whatever became of the session afterwards`, () => {
+        // The agent judged the story and its session then failed — on the report it was writing, on a later
+        // turn, on anything. The judgement stands: it is the thing the run exists to produce.
+        expect(storyStanding(`pass`, `error`)).toEqual({ label: `pass`, variant: `success` });
+        expect(storyStanding(`fail`, `idle`)).toEqual({ label: `fail`, variant: `danger` });
+        // `blocked` stays warning, not danger — the app was unreachable, which is not this story being broken.
+        expect(storyStanding(`blocked`, undefined)).toEqual({ label: `blocked`, variant: `warning` });
+    });
+
+    it(`reads a live session as progress`, () => {
+        expect(storyStanding(undefined, `running`)).toEqual({ label: `testing`, variant: `info` });
+        expect(storyStanding(undefined, `awaiting`)).toEqual({ label: `testing`, variant: `info` });
+    });
+
+    it(`says nothing about a story nothing has happened to`, () => {
+        expect(storyStanding(undefined, undefined)).toBeUndefined();
+        // A settled session that wrote no verdict is the run's own business (the report says how far it got);
+        // in a stories list it is not a standing, and inventing one would age into a permanent stale label.
+        expect(storyStanding(undefined, `idle`)).toBeUndefined();
     });
 });

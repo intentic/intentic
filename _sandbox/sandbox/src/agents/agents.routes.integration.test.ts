@@ -103,7 +103,10 @@ test("a thrown workspace turn settles its surfaced card as an error", async () =
         { kind: "error", message: "adapter crashed" },
         { kind: "done" },
     ]);
-    expect((await client.agents.list()).agents[0]).toMatchObject({ id: "workspace-error", status: "error" });
+    // And the roster carries WHY, not just that: the sentence is the whole of what a card, a run row or a
+    // notification can say about a turn that produced nothing else, and reaching it through the transcript is
+    // the trip this field exists to spare the reader.
+    expect((await client.agents.list()).agents[0]).toMatchObject({ id: "workspace-error", status: "error", failure: "adapter crashed" });
     expect((await client.agents.list()).agents[0]).not.toHaveProperty("branch");
 });
 

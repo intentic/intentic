@@ -232,11 +232,7 @@ export const harnessReadyProviders = async (services: Services): Promise<Record<
  * that has published nothing has no default to fall back to, and that is a refusal rather than a turn sent with
  * an empty model — which the harness would answer by resolving its own Anthropic alias, at an endpoint that has
  * never heard of it. */
-const resolveEndpointCredentials = async (
-    services: Services,
-    id: string,
-    model: string | undefined,
-): Promise<HarnessCredentialsResult> => {
+const resolveEndpointCredentials = async (services: Services, id: string, model: string | undefined): Promise<HarnessCredentialsResult> => {
     const capability = await services.capabilities.get(id);
     if (capability === undefined || capability.kind !== "endpoint") {
         return { ok: false, message: `Unknown model endpoint "${id}" — add it as an Endpoint capability first.` };
@@ -259,7 +255,8 @@ const resolveEndpointCredentials = async (
     if (services.config.translator.url === "") {
         return {
             ok: false,
-            message: "This sandbox has no model translator, so an OpenAI-compatible endpoint can't run here. Run a sandbox built from the published image.",
+            message:
+                "This sandbox has no model translator, so an OpenAI-compatible endpoint can't run here. Run a sandbox built from the published image.",
         };
     }
     return {
@@ -317,14 +314,20 @@ export const resolveHarnessCredentials = async (
             },
         };
     }
-    // An unnamed account is chosen by HEADROOM, not by connection order — see accountWithHeadroom. The order
-    // handed over is the store's own (connectedAt), which stays the tiebreak between equals, so a sandbox whose
-    // accounts all read the same still behaves exactly as it did.
+    /* An unnamed account is chosen by HEADROOM, and by what the provider has already refused — see
+     * accountWithHeadroom. The order handed over is the store's own (connectedAt), which stays the tiebreak
+     * between equals, so a sandbox whose accounts all read the same still behaves exactly as it did.
+     *
+     * The refusal is read here rather than inside the picker because this is the layer that knows which PROVIDER
+     * the turn is for; a claude turn must not be steered by the last thing Kimi said. Only a native Claude turn
+     * consults it at all — a routed turn spends the translator's own subscriptions, which it balances itself. */
+    const refusal = (await services.providerRefusals.read())["claude"];
     const accountId =
         input.account ??
         (await accountWithHeadroom(
             services.accountUsage,
             (await services.claudeStore.list()).map((account) => account.id),
+            refusal?.kind === "limit" ? undefined : refusal?.account,
         ));
     // A refresh that fails joins the other refusals rather than throwing past the caller: a stored account whose
     // token can no longer be renewed is the same class of problem as one that was never connected, and both end

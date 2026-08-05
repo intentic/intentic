@@ -492,6 +492,13 @@ export const AgentSummarySchema = z.object({
     // First prompt, sanitized to one bounded line.
     title: z.string().optional(),
     status: AgentStatusSchema,
+    /* WHY THE LAST TURN FAILED — the sentence it died on, carried beside the `error` status because that word
+     * on its own is not an answer. A session refused on its first request (an organization with Claude Code
+     * switched off, a spent allowance, a model the endpoint has never heard of) reached every surface as a grey
+     * "error" and a link into the transcript, so the one place the reason existed was the dead conversation
+     * itself — which is exactly where an unattended run, started from a fan-out nobody is watching, is least
+     * likely to be read. Absent unless the last turn ended in failure, and cleared the moment it runs again. */
+    failure: z.string().optional(),
     provider: AgentProviderSchema,
     harness: AgentHarnessSchema,
     // What the agent's last turn ran with — the model, its reasoning effort, whether extended thinking was on,

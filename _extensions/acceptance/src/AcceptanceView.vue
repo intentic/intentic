@@ -16,7 +16,7 @@ import {
 import { computed, onMounted, ref } from "vue";
 import { markAcceptanceSeen } from "./attention";
 import DevServerChip from "./DevServerChip.vue";
-import { reposOf, RUNS_DIR, SCAN_RUNS, type Verdict, verdictTone } from "./runs";
+import { reposOf, RUNS_DIR, SCAN_RUNS, storyStanding, type Verdict } from "./runs";
 import RunControls from "./RunControls.vue";
 import RunReport from "./RunReport.vue";
 import { type Story, storyMarkdown, targetKeyOf } from "./stories";
@@ -235,14 +235,12 @@ const statuses = computed<Readonly<Record<string, { readonly label: string; read
             if (found.has(entry.path)) {
                 continue;
             }
-            const verdict = verdicts.value[run.manifest.runId]?.[entry.slug];
-            if (verdict !== undefined) {
-                found.set(entry.path, { label: verdict, variant: verdictTone(verdict) });
-                continue;
-            }
-            const agent = run.agents.find((item) => item.id === entry.conversationId);
-            if (agent?.status === `running` || agent?.status === `awaiting`) {
-                found.set(entry.path, { label: `testing`, variant: `info` });
+            const standing = storyStanding(
+                verdicts.value[run.manifest.runId]?.[entry.slug],
+                run.agents.find((item) => item.id === entry.conversationId)?.status,
+            );
+            if (standing !== undefined) {
+                found.set(entry.path, standing);
             }
         }
     }
@@ -287,7 +285,12 @@ const tally = (run: RunRow): { readonly label: string; readonly variant: StatusV
         return verdict === undefined ? [] : [verdict];
     });
     if (results.length === 0) {
-        return { label: run.agents.some((agent) => agent.status === `error`) ? `errored` : `no results`, variant: `neutral` };
+        // A run every session of which died is a failure of the RUN, not a quiet "nothing came back": it wears
+        // the danger tone so a fan-out that never reached the app is told apart at a glance from one that
+        // walked it and wrote nothing.
+        return run.agents.some((agent) => agent.status === `error`)
+            ? { label: `errored`, variant: `danger` }
+            : { label: `no results`, variant: `neutral` };
     }
     const failed = results.filter((verdict) => verdict === `fail`).length;
     const blocked = results.filter((verdict) => verdict === `blocked`).length;

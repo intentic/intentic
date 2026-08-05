@@ -37,3 +37,7 @@ tested" is the honest evidence for offering the area.
   survive a redesign that would have broken a selector.
 - Runs are evidence, not documents: they are point-in-time and live under `.intentic/`, unlike the architecture
   pages, which are maintained artifacts that belong in the repo.
+- A session that DIED is a first-class outcome, not a blank. It writes no verdict and no report, so both surfaces
+  read its standing from the fleet instead (`storyStanding`, and the session's own `failure` sentence on the
+  row): a run refused on its first request — a spent plan, a seat with Claude Code switched off — otherwise
+  reported itself as a run nobody had started.

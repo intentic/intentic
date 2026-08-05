@@ -2,7 +2,7 @@
 import { Button, Card, cmp, Icon, Markdown, StatusBadge, type StatusVariant, timeAgo } from "@intentic/extension-ui";
 import { computed, onBeforeUnmount, reactive, ref, watch } from "vue";
 import { host } from "./host";
-import { storyDir, type Verdict, verdictTone } from "./runs";
+import { storyDir, storyStanding } from "./runs";
 import type { LiveBrowser, RunRow, StoryOutcome } from "./useRuns";
 
 /* One run, story by story: the verdict, the walkthrough the agent wrote, and the screenshots it took at each
@@ -56,16 +56,27 @@ const browserOf = (slug: string): LiveBrowser | undefined => {
     return id === undefined ? undefined : browsers[id];
 };
 
+const agentOf = (slug: string) => run.agents.find((entry) => entry.id === conversationOf(slug));
+
+/* WHY A STORY WAS NEVER WALKED — the session's own last words, which the fleet carries only while its card
+ * still reads as failed. A run whose sessions were refused on their first request (a spent plan, an
+ * organization with Claude Code switched off) reported itself here as a grey "error" and "No report was
+ * written", so the one place the reason existed was a transcript nobody opens for a fan-out of ten. */
+const failureOf = (slug: string): string | undefined => agentOf(slug)?.failure;
+
+/* This row's badge — the shared standing (runs.ts) with the two answers only a report can give: a run whose
+ * artifacts are still being read, and a story whose session is not on the roster at all. Everything the stories
+ * list also shows comes from the shared one, so the two surfaces cannot disagree about the same story again. */
 const verdictBadge = (slug: string): { readonly label: string; readonly variant: StatusVariant } => {
-    const verdict: Verdict | undefined = outcomes[slug]?.result?.verdict;
-    if (verdict !== undefined) {
-        return { label: verdict, variant: verdictTone(verdict) };
+    const agent = agentOf(slug);
+    const standing = storyStanding(outcomes[slug]?.result?.verdict, agent?.status);
+    if (standing !== undefined) {
+        return standing;
     }
-    const agent = run.agents.find((entry) => entry.id === conversationOf(slug));
     if (agent === undefined) {
         return { label: loading ? `…` : `no session`, variant: `neutral` };
     }
-    return { label: agent.status, variant: agent.status === `running` || agent.status === `awaiting` ? `info` : `neutral` };
+    return { label: agent.status, variant: `neutral` };
 };
 
 const openSession = (slug: string): void => {
@@ -77,7 +88,7 @@ const openSession = (slug: string): void => {
 
 // Live only: a settled session has nothing to stop, and the button would then be an offer to do nothing.
 const isLive = (slug: string): boolean => {
-    const status = run.agents.find((entry) => entry.id === conversationOf(slug))?.status;
+    const status = agentOf(slug)?.status;
     return status === `running` || status === `awaiting`;
 };
 
@@ -103,8 +114,7 @@ const activityOf = (slug: string): string | undefined => {
     if (url !== undefined && url !== ``) {
         return url;
     }
-    const agent = run.agents.find((entry) => entry.id === conversationOf(slug));
-    const activity = agent?.activity;
+    const activity = agentOf(slug)?.activity;
     return (
         activity?.todo ?? (activity?.tool === undefined ? undefined : `${activity.tool}${activity.target === undefined ? `` : ` ${activity.target}`}`)
     );
@@ -203,7 +213,13 @@ const addresses = computed(() => Object.entries(run.manifest.targets).map(([key,
                         <Icon :name="open.has(story.slug) ? `chevron-down` : `chevron-right`" class="shrink-0 text-subtle" />
                         <span class="min-w-0 flex-1">
                             <span class="block truncate text-sm text-content">{{ story.title }}</span>
-                            <span class="block truncate font-mono text-2xs text-subtle">
+                            <!-- The session's last words REPLACE the activity line for a story that died: a
+                                 dead session has no activity left to report, and the row's one subordinate
+                                 line is worth more spent on why it stopped than on the repo it belongs to. -->
+                            <span v-if="failureOf(story.slug)" class="block truncate text-2xs text-danger" v-tooltip.top="failureOf(story.slug)">
+                                {{ failureOf(story.slug) }}
+                            </span>
+                            <span v-else class="block truncate font-mono text-2xs text-subtle">
                                 {{ story.repo }}<template v-if="activityOf(story.slug)"> · {{ activityOf(story.slug) }}</template>
                             </span>
                         </span>
@@ -238,6 +254,11 @@ const addresses = computed(() => Object.entries(run.manifest.targets).map(([key,
                     <div v-if="outcomes[story.slug]?.report" :ref="(el) => (reportEl[story.slug] = el as HTMLElement)" style="--prose-measure: 68ch">
                         <Markdown :source="outcomes[story.slug]?.report ?? ``" />
                     </div>
+                    <!-- A story whose session DIED is the one case where there is something to read without a
+                         report, and it is the reader's whole answer: the provider's own sentence, in the alert
+                         the rest of this view uses for a failure. Sending them to the session for it (which is
+                         all this panel used to do) means opening a transcript whose only content is this line. -->
+                    <div v-else-if="failureOf(story.slug)" :class="cmp.alertDanger()">{{ failureOf(story.slug) }}</div>
                     <div v-else :class="cmp.emptyState()">
                         {{
                             verdictBadge(story.slug).variant === `info`

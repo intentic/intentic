@@ -63,31 +63,48 @@ export const accountLimitReset = async (store: AccountUsageStore, account: strin
  * session namer, which had never once written a title: its quick-model call went to the same spent account on
  * every turn while two others sat with room, and the CLI answered 429 each time.
  *
- * Three tiers, because "no reading" and "a reading of 100%" are different facts and ordering them together
- * would lose the distinction that matters:
+ * Four tiers, because "no reading", "a reading of 100%" and "it said no" are different facts and ordering them
+ * together would lose the distinction that matters:
  *   0  measured with room     — proven to have headroom, best first
  *   1  never measured         — no evidence either way. Below a proven-good account rather than above it: an
  *                              account no turn has run on is exactly how one goes spent without anyone seeing,
  *                              which is the state this was found in.
- *   2  measured at the cap    — known spent, and the only tier that is worse than knowing nothing.
- * Ties keep the caller's order, which is connectedAt, so the pick stays stable rather than flapping between
- * equals turn to turn and fragmenting attribution across accounts. */
-export const accountWithHeadroom = async (store: AccountUsageStore, accounts: readonly string[]): Promise<string | undefined> => {
+ *   2  measured at the cap    — known spent, and worse than knowing nothing.
+ *   3  refused a turn         — the account the provider itself turned away, and last precisely because its
+ *                              METER LOOKS BEST. A seat whose organization has switched Claude Code off is
+ *                              refused before it can spend a token, so its utilization stops moving while every
+ *                              working account's climbs — and this picker, reading only headroom, then handed it
+ *                              every unattributed turn there was, each dying on the same 403. Twenty runs in one
+ *                              evening went that way. Only `refused` reaches this tier: a spent plan is already
+ *                              described by the numbers above, while an entitlement or credential refusal is the
+ *                              kind no reading can contradict (see provider-refusals.ts).
+ * Within a tier the account with the LOWEST spend wins, so unattributed work spreads toward room rather than
+ * piling onto whichever account happens to be first; equal spends keep the caller's order (connectedAt), which
+ * keeps the pick stable rather than flapping between equals and fragmenting attribution. */
+export const accountWithHeadroom = async (
+    store: AccountUsageStore,
+    accounts: readonly string[],
+    // The account with a refusal still standing against it, when there is one — see tier 3. Undefined leaves the
+    // ranking exactly as it was.
+    refused?: string,
+): Promise<string | undefined> => {
     const [first] = accounts;
+    // One account is the answer whatever it has refused: there is nothing to fall back TO, and a turn that runs
+    // and fails says why (the card and the run carry the sentence now), which beats refusing before it starts
+    // on the strength of a refusal that may be a week old.
     if (first === undefined || accounts.length === 1) {
         return first;
     }
     // `read()` has already dropped every window the provider has since reset, so what is left is what the plan
     // still counts against this account.
     const usage = await store.read();
-    const ranked = accounts.map((account, order) => {
+    const ranked = accounts.map((account) => {
         const windows = usage[account]?.windows ?? [];
         const spent = windows.reduce((worst, window) => Math.max(worst, window.utilization), 0);
-        return { account, order, tier: windows.length === 0 ? 1 : spent >= 100 ? 2 : 0, spent };
+        return { account, tier: account === refused ? 3 : windows.length === 0 ? 1 : spent >= 100 ? 2 : 0, spent };
     });
-    return ranked.reduce((best, next) =>
-        next.tier !== best.tier ? (next.tier < best.tier ? next : best) : next.spent < best.spent ? next : best,
-    ).account;
+    return ranked.reduce((best, next) => (next.tier !== best.tier ? (next.tier < best.tier ? next : best) : next.spent < best.spent ? next : best))
+        .account;
 };
 
 export const fileAccountUsageStore = (path: string): AccountUsageStore => {

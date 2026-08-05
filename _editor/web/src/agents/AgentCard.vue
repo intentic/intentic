@@ -378,6 +378,17 @@ const grab = (event: PointerEvent): void => {
                 <span class="truncate font-medium">Unsent message</span>
             </p>
 
+            <!-- WHY IT DIED. The daemon carries this only while the card still reads as failed (AgentSummary's
+                 `failure`), so no state check belongs here — its presence IS the state. Above provenance and
+                 the model line because on a red card nothing else on it is what the reader came for: without
+                 this the board said "Error", and the sentence naming the spent plan or the organization that
+                 switched Claude Code off lived only inside the dead session. Two lines, then the full text on
+                 hover: a provider's explanation is a sentence, and a fragment of one is not an explanation. -->
+            <p v-if="agent.failure" class="flex min-w-0 items-start gap-1.5 text-2xs text-danger" v-tooltip.top="agent.failure">
+                <Icon name="exclamation-circle" class="mt-px shrink-0 text-2xs" />
+                <span class="line-clamp-2 min-w-0 flex-1 leading-4">{{ agent.failure }}</span>
+            </p>
+
             <!-- Provenance, ahead of the model/branch line: for an agent the user never started, "who asked for
                  this" outranks what it runs on. Both render nothing for a user-started agent. -->
             <OriginMark :origin="agent.origin" />

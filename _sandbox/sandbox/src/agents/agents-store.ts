@@ -98,6 +98,11 @@ export const PersistedAgentSchema = z.object({
         }),
     ),
     status: PersistedAgentStatusSchema,
+    // Why the last turn failed — the EVIDENCE behind an errored card, the same role `conflicts` below plays for
+    // a refused land (see AgentSummarySchema). Persisted rather than held in the turn's runtime state because
+    // the reader who needs it most arrives hours later, at a card nobody watched fail; a fresh turn rebuilds the
+    // entry without it, which is what clears it.
+    failure: z.string().optional(),
     // Per-agent override of the sandbox-wide autoLand setting, absent ⇒ inherit — see AgentSummarySchema.
     // Persisted because it must govern turns that finish with no browser attached (automations included).
     autoLand: z.boolean().optional(),

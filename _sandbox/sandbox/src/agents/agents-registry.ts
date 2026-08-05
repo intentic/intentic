@@ -15,6 +15,16 @@ import type { LandStandings } from "./standing.js";
 // same last-frame-wins contract as presence), which system.routes relays onto /events.
 
 const MAX_TITLE_LENGTH = 80;
+/* Long enough for the provider's own explanation — the entitlement refusal that prompted this field runs to 140
+ * characters and names both ways out of it — and short enough that a stack trace or an HTML error page cannot
+ * ride into the roster, which every connected browser re-reads in full on every card change. */
+const MAX_FAILURE_LENGTH = 400;
+// One bounded line, for the same reason a title is one: this is read in a card's width and in a run's row, and a
+// message that arrives with a newline in it would break both. Empty in ⇒ nothing to say, which reads as absent.
+const sanitizeFailure = (message: string): string | undefined => {
+    const clean = message.replaceAll(/\s+/gu, " ").trim().slice(0, MAX_FAILURE_LENGTH);
+    return clean === "" ? undefined : clean;
+};
 // The source ranking as a number, so promoteTitle's comparison is one `<=`. An entry written before it had a
 // source reads as `derived`, i.e. as replaceable by anything better.
 const TITLE_RANK: Record<AgentTitleSource, number> = { derived: 0, model: 1, plan: 2, user: 3 };
@@ -37,6 +47,9 @@ interface RuntimeState {
     // one of those as "the user answered" is what kept an agent asking a question out of the Attention lane.
     pauses: Map<string, "plan" | "question" | "permission">;
     errored: boolean;
+    // The sentence the last error frame carried, flushed onto the entry at finish so the card can say why
+    // rather than only that. Last one wins: a turn that fails twice died of the second.
+    failure: string | undefined;
     /* The user pressed Stop and the abort has landed — this turn is on its way out but not out yet.
      *
      * It is runtime state rather than a status write because the turn is still LIVE: aborting the provider only
@@ -82,6 +95,7 @@ const freshRuntime = (): RuntimeState => ({
     running: false,
     pauses: new Map(),
     errored: false,
+    failure: undefined,
     stopping: false,
     resuming: false,
     activity: undefined,
@@ -201,8 +215,12 @@ export interface AgentsRegistry {
      * interrupted turn left behind.
      *
      * A no-op while a turn is running: the resume lost a race to the user's own send, and that turn's begin has
-     * already cleared the wait and owns the entry this would otherwise write over. */
-    readonly abandonResume: (id: string, now: number) => Promise<void>;
+     * already cleared the wait and owns the entry this would otherwise write over.
+     *
+     * `reason` is what the card then says. The two callers are the only ones who know which of the two endings
+     * this is, and a card that has been promising to come back for an hour owes the reader more than the word
+     * "error" when it stops. */
+    readonly abandonResume: (id: string, now: number, reason: string) => Promise<void>;
     /* Re-derive every live agent's land standing and publish the roster if any of them moved. Called wherever
      * the answer can have changed without this daemon doing it — most of all the roster READ, which is what
      * heals a card after work reached the main tree by a road the daemon never saw (a hand-merge in a
@@ -308,6 +326,10 @@ export const createAgentsRegistry = (store: AgentsStore, standings: LandStanding
                 conflict: status === "conflict",
             },
             ...(entry.sessionId !== undefined ? { sessionId: entry.sessionId } : {}),
+            // Only while the card still READS as failed. A branch whose standing has moved on (the work landed
+            // by another road, the delta went away) is answered by `landing` above, and an explanation left
+            // under it would be describing a turn the board no longer shows as the last word.
+            ...(entry.failure !== undefined && status === "error" ? { failure: entry.failure } : {}),
             ...(entry.origin !== undefined ? { origin: entry.origin } : {}),
             ...(entry.title !== undefined ? { title: entry.title } : {}),
             ...(entry.model !== undefined ? { model: entry.model } : {}),
@@ -747,6 +769,7 @@ export const createAgentsRegistry = (store: AgentsStore, standings: LandStanding
                         return;
                     }
                     state.errored = true;
+                    state.failure = sanitizeFailure(event.message);
                     break;
                 default:
                     return; // delta/thinking/etc — not card-visible, skip the broadcast.
@@ -790,13 +813,19 @@ export const createAgentsRegistry = (store: AgentsStore, standings: LandStanding
             // turn (possibly right after a daemon restart), and must still write the status through.
             if (entry !== undefined) {
                 const sessionId = state?.pendingSessionId ?? entry.sessionId;
+                // Dropped from the carried entry and re-added only under the status it explains — the same
+                // shape recordLanded clears `conflicts` with, and for the same reason: this finish is the one
+                // that decides how the turn ended, so an explanation it did not write is one for a death that
+                // is no longer being reported.
+                const { failure: _ended, ...carried } = entry;
                 replace({
-                    ...entry,
+                    ...carried,
                     // How the turn ENDED, which is all this field says now: an observed error frame, the user's
                     // own Stop, else the clean ending that hands the question to standing.ts. A stop outranks
                     // nothing — the abort's own unwind no longer reaches here as an error (see agent.routes'
                     // frame loop), so an errored stop means the turn had already failed when it was stopped.
                     status: state?.errored === true ? "error" : wasStopped ? "stopped" : "idle",
+                    ...(state?.errored === true && state.failure !== undefined ? { failure: state.failure } : {}),
                     costUsd: entry.costUsd + (state?.pendingCostUsd ?? 0),
                     inputTokens: entry.inputTokens + (state?.pendingInputTokens ?? 0),
                     outputTokens: entry.outputTokens + (state?.pendingOutputTokens ?? 0),
@@ -814,6 +843,7 @@ export const createAgentsRegistry = (store: AgentsStore, standings: LandStanding
                     state.pendingSubagents = 0;
                     state.pendingSessionId = undefined;
                     state.errored = false;
+                    state.failure = undefined;
                 }
                 await persist();
             }
@@ -823,14 +853,15 @@ export const createAgentsRegistry = (store: AgentsStore, standings: LandStanding
             await reprobe();
             broadcast();
         },
-        abandonResume: async (id, now) => {
+        abandonResume: async (id, now, reason) => {
             const entry = entryOf(id);
             const state = runtime.get(id);
             if (entry === undefined || state?.resuming !== true || state.running) {
                 return;
             }
             state.resuming = false;
-            replace({ ...entry, status: "error", updatedAt: now });
+            const failure = sanitizeFailure(reason);
+            replace({ ...entry, status: "error", ...(failure !== undefined ? { failure } : {}), updatedAt: now });
             await persist();
             broadcast();
         },

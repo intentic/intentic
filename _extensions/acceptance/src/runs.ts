@@ -111,6 +111,32 @@ export type Verdict = "pass" | "fail" | "blocked";
 export const verdictTone = (verdict: Verdict): "success" | "danger" | "warning" =>
     verdict === `pass` ? `success` : verdict === `fail` ? `danger` : `warning`;
 
+/* WHERE ONE STORY OF ONE RUN STANDS, from the two facts that answer it: what the agent WROTE, and what its
+ * session is doing. Shared by the run's report and the stories list because they were deriving it separately and
+ * had drifted into disagreeing about the case that matters — a session that DIED. The report called it a neutral
+ * "error" beside a plain "no report was written", and the list said nothing at all, leaving a story whose test
+ * never ran looking exactly like one nobody had ever tested. Both were the same wrong answer: silence.
+ *
+ * A verdict outranks the session, always: a story the agent judged is judged, whatever became of the session
+ * afterwards. Below that, a live session is progress and a dead one is a failure of the RUN — `untested` rather
+ * than `fail`, because the promise was never examined and calling that a broken promise would send the reader to
+ * a file that may be perfectly fine. Undefined ⇒ nothing to show: no verdict, no session, nothing happening. */
+export const storyStanding = (
+    verdict: Verdict | undefined,
+    status: string | undefined,
+): { readonly label: string; readonly variant: "success" | "danger" | "warning" | "info" | "neutral" } | undefined => {
+    if (verdict !== undefined) {
+        return { label: verdict, variant: verdictTone(verdict) };
+    }
+    if (status === `running` || status === `awaiting`) {
+        return { label: `testing`, variant: `info` };
+    }
+    if (status === `error`) {
+        return { label: `untested`, variant: `danger` };
+    }
+    return undefined;
+};
+
 export interface StoryResult {
     readonly story: string;
     readonly title?: string;

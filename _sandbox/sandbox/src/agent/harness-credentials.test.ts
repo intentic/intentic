@@ -1,5 +1,8 @@
+import type { ProviderRefusal } from "@intentic/sandbox-contract";
 import { expect, test } from "vitest";
-import { harnessEnv } from "./harness-credentials.js";
+import type { Services } from "../composition.js";
+import { services } from "../route-testing.js";
+import { harnessEnv, resolveHarnessCredentials } from "./harness-credentials.js";
 
 /* What a harness process is told about models, and the reason it matters beyond the turn's own `--model`: a
  * routed turn reaches a translator that serves ONE model, and every other model name the harness can resolve
@@ -42,4 +45,58 @@ test("a custom endpoint with no resolved model pins nothing rather than an empty
     expect(env["ANTHROPIC_BASE_URL"]).toBe("https://router.example");
     expect(env["ANTHROPIC_DEFAULT_SONNET_MODEL"]).toBeUndefined();
     expect(env["CLAUDE_CODE_SUBAGENT_MODEL"]).toBeUndefined();
+});
+
+/* WHICH ACCOUNT AN UNNAMED TURN LANDS ON — every unattended run in the sandbox, since only a composer names one.
+ *
+ * The pick is by headroom, and headroom alone is exactly what an entitlement refusal defeats: an account the
+ * organization has switched Claude Code off for is turned away before it spends a token, so its meter stays the
+ * best-looking one on file and it wins every pick, forever. This is the layer that knows the turn's provider, so
+ * it is the layer that reads the refusal and hands it down. */
+const twoAccounts = (refusal: ProviderRefusal | undefined): Services =>
+    services({
+        claudeStore: {
+            // No refresh token ⇒ ensureFreshToken answers with what is stored, so this test resolves a
+            // credential without a network round trip.
+            read: async (id: string) => ({ id, label: id, connectedAt: 0, accessToken: `token-${id}` }),
+            list: async () => [
+                { id: "refused", label: "refused", connectedAt: 0 },
+                { id: "working", label: "working", connectedAt: 1 },
+            ],
+        },
+        // The refused account looks untouched precisely BECAUSE it is refused — nothing it was handed ever ran.
+        accountUsage: {
+            read: async () => ({
+                refused: { measuredAt: 0, windows: [{ kind: "seven_day", utilization: 3 }] },
+                working: { measuredAt: 0, windows: [{ kind: "seven_day", utilization: 74 }] },
+            }),
+            record: async () => {},
+            clear: async () => {},
+        },
+        providerRefusals: { read: async () => (refusal === undefined ? {} : { claude: refusal }), record: async () => {}, clear: async () => {} },
+    });
+
+const resolved = async (refusal: ProviderRefusal | undefined, account?: string) =>
+    await resolveHarnessCredentials(twoAccounts(refusal), { agent: "claude", ...(account !== undefined ? { account } : {}) });
+
+test("an unnamed turn skips the account whose organization has refused it", async () => {
+    const result = await resolved({ at: Date.now(), kind: "entitlement", message: "organization has disabled Claude Code", account: "refused" });
+    expect(result.ok && result.credentials.account).toBe("working");
+});
+
+test("a spent allowance does not bench an account — the meters already describe that", async () => {
+    // A `limit` refusal is the one kind a later reading CAN contradict, and the windows above already rank the
+    // two accounts. Benching on it as well would retire an account for a window that has since reopened.
+    const result = await resolved({ at: Date.now(), kind: "limit", message: "usage limit reached", account: "refused" });
+    expect(result.ok && result.credentials.account).toBe("refused");
+});
+
+test("a named account is still the account that runs, refused or not", async () => {
+    // The composer's own pick, which is a person choosing with the refusal on screen beside it — this gate is
+    // for the callers that name nobody.
+    const result = await resolved(
+        { at: Date.now(), kind: "entitlement", message: "organization has disabled Claude Code", account: "refused" },
+        "refused",
+    );
+    expect(result.ok && result.credentials.account).toBe("refused");
 });

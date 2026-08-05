@@ -252,7 +252,11 @@ const fireAuthResume = async (services: Services, wake: WakeFn, failure: AuthFai
     // API just refused — which would fail identically the moment the turn respawned. The card has been holding
     // itself open for this since the turn stopped, so settle it: nothing is coming, and a human is needed.
     if (replacement === undefined || replacement === failure.refusedToken) {
-        await services.agents.abandonResume(conversationId, Date.now());
+        await services.agents.abandonResume(
+            conversationId,
+            Date.now(),
+            "The Claude sign-in this turn ran on could not be renewed — reconnect the account, then send again.",
+        );
         return;
     }
     if ((await startConversationTurn(services, wake, resumedTurn(failure, RESUME_NOTES.auth))) !== undefined) {
@@ -286,7 +290,11 @@ const runOutagePass = async (services: Services, wake: WakeFn, now: number): Pro
         if (now - failure.recordedAt > OUTAGE_STALE_AFTER_MS) {
             pendingOutage.delete(conversationId);
             // And the card stops saying it is coming back, for the same reason — see abandonResume.
-            await services.agents.abandonResume(conversationId, now);
+            await services.agents.abandonResume(
+                conversationId,
+                now,
+                `${failure.provider} was down when this turn ran and the hour it had to come back has passed — send again to pick it up.`,
+            );
             continue;
         }
         if (!resumeAfterOutage || !outageRetryDue(failure.provider, now)) {

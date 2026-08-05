@@ -672,11 +672,48 @@ describe("agents registry", () => {
         await registry.begin(turn(), 1_000);
         registry.observe("c1", { kind: "error", code: "claude-token-refused", message: "API Error: 401", autoResume: "scheduled" });
         await registry.finish("c1", 2_000);
-        await registry.abandonResume("c1", 3_000);
+        await registry.abandonResume("c1", 3_000, "The Claude sign-in this turn ran on could not be renewed.");
         expect(registry.get("c1")?.status).toBe("error");
+        // And it says which ending this was. The card has been promising to come back for as long as the
+        // scheduler kept trying; "error" alone, at the end of that, is the least it could tell the reader.
+        expect(registry.get("c1")?.failure).toBe("The Claude sign-in this turn ran on could not be renewed.");
         // Idempotent, because the scheduler's passes are: a second call has no wait left to close.
-        await registry.abandonResume("c1", 4_000);
+        await registry.abandonResume("c1", 4_000, "The Claude sign-in this turn ran on could not be renewed.");
         expect(registry.get("c1")?.status).toBe("error");
+    });
+
+    /* WHY, NOT JUST THAT. The condition this exists for is a session refused on its first request: it writes no
+     * report, takes no screenshot and never reaches the app, so the provider's own sentence is the only account
+     * of it there will ever be — and it used to live nowhere but the transcript of a conversation nobody opens.
+     * An unattended fan-out is exactly the case: ten sessions, ten identical deaths, ten transcripts. */
+    it("keeps the sentence a failed turn died on, so the card can say why", async () => {
+        const registry = createAgentsRegistry(memoryStore(), standings());
+        await registry.init();
+        await registry.begin(turn(), 1_000);
+        registry.observe("c1", {
+            kind: "error",
+            code: "claude-not-entitled",
+            message: "Your organization has disabled Claude subscription access for Claude Code",
+        });
+        await registry.finish("c1", 2_000);
+        expect(registry.get("c1")?.status).toBe("error");
+        expect(registry.get("c1")?.failure).toBe("Your organization has disabled Claude subscription access for Claude Code");
+    });
+
+    // The other half, and the one that keeps the field honest: an explanation is about the LAST turn, so a
+    // conversation that runs again cleanly must stop carrying the death it recovered from.
+    it("drops the explanation the moment the conversation runs again", async () => {
+        const registry = createAgentsRegistry(memoryStore(), standings());
+        await registry.init();
+        await registry.begin(turn(), 1_000);
+        registry.observe("c1", { kind: "error", message: "API Error: 403 organization not allowed" });
+        await registry.finish("c1", 2_000);
+        expect(registry.get("c1")?.failure).not.toBeUndefined();
+        await registry.begin(turn({ prompt: "try again" }), 3_000);
+        await registry.finish("c1", 4_000);
+        expect(registry.get("c1")?.status).toBe("idle");
+        expect(registry.get("c1")?.failure).toBeUndefined();
+        expect(registry.entry("c1")?.failure).toBeUndefined();
     });
 
     // The race the guard exists for: the user's own send beats the scheduler to the conversation, so the resume
@@ -688,7 +725,7 @@ describe("agents registry", () => {
         registry.observe("c1", { kind: "error", code: "claude-token-refused", message: "API Error: 401", autoResume: "scheduled" });
         await registry.finish("c1", 2_000);
         await registry.begin(turn({ prompt: "try again" }), 3_000);
-        await registry.abandonResume("c1", 4_000);
+        await registry.abandonResume("c1", 4_000, "The Claude sign-in this turn ran on could not be renewed.");
         expect(registry.get("c1")?.status).toBe("running");
     });
 

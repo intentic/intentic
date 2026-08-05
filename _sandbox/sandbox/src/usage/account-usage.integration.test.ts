@@ -160,3 +160,25 @@ test("one account, or none, needs no reading at all", async () => {
     expect(await accountWithHeadroom(store, ["only"])).toBe("only");
     expect(await accountWithHeadroom(store, [])).toBeUndefined();
 });
+
+/* THE TRAP THE METER CANNOT SEE. An account the provider refuses outright — an organization with Claude Code
+ * switched off — never gets to spend anything, so its utilization freezes while every working account's climbs.
+ * Read on headroom alone it therefore looks like the freshest account in the sandbox, wins every unnamed pick,
+ * and dies on the same 403 each time: twenty unattended runs went that way in one evening before this tier
+ * existed. Being refused has to outrank looking untouched. */
+test("passes over the account the provider has refused, however good its meter looks", async () => {
+    const { store } = tempStore();
+    await store.record("refused", { measuredAt: Date.now(), windows: [window({ utilization: 2 })] });
+    await store.record("working", { measuredAt: Date.now(), windows: [window({ utilization: 88 })] });
+    expect(await accountWithHeadroom(store, ["refused", "working"], "refused")).toBe("working");
+    // Named nobody ⇒ ranked as before, which is the whole of what a sandbox with nothing refused should see.
+    expect(await accountWithHeadroom(store, ["refused", "working"])).toBe("refused");
+});
+
+test("still runs the only account there is, refused or not", async () => {
+    // Nothing to fall back to, and a refusal on file may be a week old — so the turn goes, and its failure now
+    // says why (agents-registry's `failure`) instead of the sandbox refusing on the strength of old news.
+    const { store } = tempStore();
+    await store.record("only", { measuredAt: Date.now(), windows: [window({ utilization: 5 })] });
+    expect(await accountWithHeadroom(store, ["only"], "only")).toBe("only");
+});

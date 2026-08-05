@@ -202,3 +202,19 @@ it(`draws an agent whose turn is being resumed as work still in flight`, () => {
     expect(card.querySelector(`[data-icon="spinner"]`)).not.toBeNull();
     expect(buttonLabelled(card, `Archive agent`)).toBeUndefined();
 });
+
+/* WHY IT DIED, ON THE CARD. An unattended session refused on its first request — an organization with Claude
+ * Code switched off, a spent plan, a model an endpoint has never heard of — used to reach the board as the word
+ * "Error" and a link into a transcript whose entire content was the sentence the card should have carried. The
+ * fan-out that provoked this ran ten sessions at once and lost every one of them the same way, so the reader's
+ * only route to the reason was ten separate conversations. */
+it(`says why a session died, on the card that reports it died`, () => {
+    const card = mount({ ...ready(`error`), failure: `Your organization has disabled Claude subscription access for Claude Code` });
+    expect(card.textContent).toContain(`Your organization has disabled Claude subscription access`);
+});
+
+// The daemon carries `failure` only while the card still reads as failed, so presence IS the state and the card
+// needs no second check — but a healthy card must not grow an empty red line out of the same markup.
+it(`keeps the line off a card with nothing to explain`, () => {
+    expect(mount(ready()).querySelector(`[data-icon="exclamation-circle"]`)).toBeNull();
+});
