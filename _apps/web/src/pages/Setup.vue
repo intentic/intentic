@@ -1152,10 +1152,12 @@ watch(commandReady, (ready) => {
                     <!-- Step 2: how to reach the sandbox (intentic domain collapses to a summary; own-CF form on demand). -->
                     <StepSection v-if="created && lane === `provision`" :step="2" :done="setup !== null" title="How should we reach your sandbox?">
                         <!-- The "why a token?" hint rides the step header, the one place this page puts hints (step 3's
-                     "What this does"), instead of a second heading inside the body: "Cloudflare API token"
-                     above a field labelled "API token" said the same thing twice and cost a phone a whole row. -->
+                     reference panel), instead of a second heading inside the body: "Cloudflare API token"
+                     above a field labelled "API token" said the same thing twice and cost a phone a whole row.
+                     A bare (i) in the corner, like step 3's: the two hints are the same offer on the same
+                     card in the same place, and a caption on one of them made it a different kind of thing. -->
                         <template #actions>
-                            <InfoHint v-if="mode === `own`" label="Why the Cloudflare API token is required" text="Why this token">
+                            <InfoHint v-if="mode === `own`" label="Why the Cloudflare API token is required">
                                 <p class="mb-1 text-sm font-semibold text-content">Why this token?</p>
                                 <p class="mb-3 text-2xs leading-relaxed text-muted">
                                     intentic reaches your sandbox over a private Cloudflare tunnel — no open inbound ports.
@@ -1268,8 +1270,12 @@ watch(commandReady, (ready) => {
                     <StepSection v-if="created && lane === `provision`" :step="3" :title="runTitle">
                         <template #actions>
                             <!-- Below xl only: from there up the same content is docked in its own column (see the
-                         aside at the foot of this template), where it never lands on the command. -->
-                            <InfoHint class="xl:hidden" label="What running your sandbox does" text="What this does">
+                         aside at the foot of this template), where it never lands on the command.
+                         A bare (i) in the card's corner, not a captioned "What this does" chip: the caption
+                         was a third row of text competing with the step's own instruction, and it sat where
+                         a phone had to read past it to reach the button. The icon is the universal "more
+                         about this" and it costs the card nothing. -->
+                            <InfoHint class="xl:hidden" label="What running your sandbox does">
                                 <SetupRunDetails :sync-enabled="syncEnabled" :cleanup="cleanupCommand" />
                             </InfoHint>
                         </template>
@@ -1504,19 +1510,26 @@ watch(commandReady, (ready) => {
                      user has done nothing look identical to one where Docker is four minutes into an image
                      pull, and "your workspace opens automatically" is a promise about the second that reads, in
                      the first, as permission to sit still.
-                     So the icon leads, and for the idle state it is a DOT rather than a ring: an unfilled
-                     circle beside a line of status text is read as a spinner that has stopped turning, which
-                     is a bug report, not a state. A small filled dot is a status light — it is not supposed to
-                     move, and nobody waits for it to.
+                     So the icon leads, and it SPINS IN EVERY STATE, because in every state something is
+                     genuinely running: the registry poll, every 3s, for as long as this card is on screen.
+                     The idle state used to get a static dot instead, to keep a spinner from claiming progress
+                     the platform wasn't making — but that reads as a page that has stopped, and the fix for
+                     "the platform is doing this for you" belongs in the WORDS, which is where it is now: the
+                     line names the person whose move it is. Colour carries the difference the spin doesn't —
+                     subtle while we're waiting on the user, info once it's out of their hands, success once a
+                     machine has it.
                      There is no "Check now" here any more. The registry is polled every 3s regardless, so the
                      button re-asked a question already being asked and bought nothing but its own presence —
                      and because the poll shares `checking`, it spent every third second flipping itself to
                      "Checking…" and back, which is a card that looks broken while it works perfectly. -->
                         <div v-if="waiting" class="flex flex-col gap-2 border-t border-line pt-3">
                             <p class="flex items-start gap-2 text-xs" :class="handoff === `claimed` ? `text-content` : `text-muted`">
-                                <Icon v-if="handoff === `claimed`" name="spinner" spin class="mt-0.5 shrink-0 text-success" />
-                                <Icon v-else-if="handoff === `handed`" name="spinner" spin class="mt-0.5 shrink-0 text-info" />
-                                <Icon v-else name="circle-fill" class="mt-1 shrink-0 text-[0.5rem] text-subtle" />
+                                <Icon
+                                    name="spinner"
+                                    spin
+                                    class="mt-0.5 shrink-0"
+                                    :class="handoff === `claimed` ? `text-success` : handoff === `handed` ? `text-info` : `text-subtle`"
+                                />
                                 <span class="min-w-0">
                                     <template v-if="handoff === `claimed`">
                                         <span class="font-medium text-success">Your machine picked it up.</span> Starting Docker — the first run takes
@@ -1531,8 +1544,17 @@ watch(commandReady, (ready) => {
                                     <template v-else-if="handoff === `handed`">
                                         <span class="font-medium text-content">Copied.</span> Paste it into that terminal and press Enter.
                                     </template>
+                                    <!-- "Nothing is running yet" described the SANDBOX and told the reader nothing
+                                         they could act on — the one fact this state has is whose move it is, so
+                                         it says that instead. In the app there is no command to name and the
+                                         button has a label, so it names the button. -->
+                                    <template v-else-if="desktop && !commandVisible">
+                                        <span class="font-medium text-content">Waiting for you to start it.</span> Nothing runs until you press "Set
+                                        it up now" above.
+                                    </template>
                                     <template v-else>
-                                        <span class="font-medium text-content">Nothing is running yet.</span> We'll notice the moment it starts.
+                                        <span class="font-medium text-content">Waiting for you to run the command.</span> We'll notice the moment your
+                                        sandbox starts.
                                     </template>
                                 </span>
                             </p>

@@ -91,7 +91,10 @@ onBeforeUnmount(hide);
 
 <template>
     <span ref="trigger" class="relative inline-flex" @mouseenter="show" @mouseleave="hide" @focusin="show" @focusout="hide">
-        <span class="inline-flex cursor-help items-center gap-1.5 text-muted transition-colors hover:text-content" tabindex="0">
+        <!-- `-m-1.5 p-1.5` is a thumb's worth of target around a 16px icon that costs the layout nothing: the
+             padding is what a tap has to land in (this element carries the tabindex, and touch opens the card
+             by focusing it), and the negative margin gives the space back to the row it sits in. -->
+        <span class="-m-1.5 inline-flex cursor-help items-center gap-1.5 p-1.5 text-muted transition-colors hover:text-content" tabindex="0">
             <Icon name="info-circle" role="img" :aria-label="label" />
             <span v-if="text" class="text-xs font-medium">{{ text }}</span>
         </span>
