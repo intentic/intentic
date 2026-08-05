@@ -51,10 +51,15 @@ import { workspacePaths } from "./workspace/workspace.js";
  * real turn path around it: the extension/cli env scan off disk, the worktree compose, the land pass. On a
  * loaded runner (CI runs this package's 143 files alongside the rest of the monorepo) it outruns vi.waitFor's
  * 1s default often enough to have made these the suite's flakiest tests. This budget bounds a hang; it does not
- * measure latency — and it stays under the 5s default test timeout so an overrun still reports as the assertion
- * that did not settle rather than as a dead test.
+ * measure latency — so it is set against the ceiling of the suite that actually runs it.
+ *
+ * That ceiling is the INTEGRATION one (60s): every caller is app.integration.test.ts, which reaches the machine
+ * exactly as this comment describes. 4s was chosen to stay under the 5s UNIT budget so an overrun would report
+ * as the assertion that did not settle rather than as a dead test — but that ceiling never applied here, and
+ * the 4s it bought went back to measuring the runner: three verify jobs building at once outran it and broke
+ * main. Well clear of the tail above, still a fraction of the 60s a genuine hang reports within.
  */
-export const TURN_SETTLES = { timeout: 4_000 } as const;
+export const TURN_SETTLES = { timeout: 30_000 } as const;
 
 /* Where the agent worktrees' MAIN checkouts would be — a path under tmpdir that is never created, so on every
  * host it is definitively absent. This suite drives the ROUTES; the worktree and land git mechanics have their

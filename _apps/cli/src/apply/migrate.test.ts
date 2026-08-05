@@ -103,7 +103,7 @@ test("migrateHosts snapshots the old host, streams the repo, and restores on the
     // New host: repo unpacked, then restored.
     expect(onNew.some((c) => c.includes("tar xzf /in/migrate-repo.tgz"))).toBe(true);
     expect(onNew.some((c) => c.includes("docker volume create intentic-restore"))).toBe(true);
-    expect(onNew.some((c) => c.includes("restore 'latest' --target /restore"))).toBe(true);
+    expect(onNew.some((c) => c.includes("restore latest --target /restore"))).toBe(true);
 });
 
 test("migrateHosts refuses when the old machine is unreachable and the repo lives on it", async () => {

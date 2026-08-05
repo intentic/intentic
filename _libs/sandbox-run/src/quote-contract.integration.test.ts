@@ -17,7 +17,13 @@ import { expect, test } from "vitest";
  *
  * Following the precedent of sandbox-run-contract.test.ts, the IMPORT is the guarantee. A file that has the
  * quoters in hand and still hand-rolls one is a code-review problem; a file that never heard of them is the
- * failure this test exists to make impossible to add. */
+ * failure this test exists to make impossible to add.
+ *
+ * `.integration.` because the discovery IS the machine: this reads every .ts file in the repo, and how long
+ * several thousand file reads take is a fact about the runner's disk and how many other suites are on it, not
+ * about the code under test. Under the 5s unit budget it passed in 233ms on a developer's box and timed out on
+ * a CI runner building three verify jobs at once. prepass.mjs holds machine-touching suites to this name but
+ * looks for mkdtemp/child_process/git/docker, and a plain `readdir` sweep is none of those. */
 
 const REPO_ROOT = join(import.meta.dirname, "..", "..", "..");
 
