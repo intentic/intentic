@@ -6,15 +6,13 @@ import { host } from "./host";
 /* The sandbox's workflow manifest (.intentic/workflows.json) and run ledger (.intentic/workflow-runs.json),
  * read/written through the daemon's /workflows routes. All daemon access goes through the host api.
  *
- * POLLED WHILE ANYTHING IS RUNNING, and only then. A workflow run is the longest-lived thing in the product —
- * a step is a loop and a loop is many turns — and there is no push channel that announces "step 3 of 7 just
- * finished". The manifest's `files` contributions invalidate on the daemon writing either file, which covers
- * most of it; the poll is what covers the gap while a single step grinds for ten minutes and the graph should
- * still be showing its iteration count moving. Idle, it costs nothing: no run in flight, no interval.
+ * NOT POLLED. Both files are on the daemon's file-change push — the scheduler writes the ledger several times
+ * per step, the watcher batches each write into a `workspaceChanged` frame, and the browser invalidates the
+ * `workflows` / `workflow-runs` keys (core's WORKSPACE_STATE_FILES table; core owns those keys because the
+ * fleet board reads them whether or not this extension is enabled). Between writes nothing about a run
+ * changes, so there is nothing for an interval to discover — a poll here could only re-read the answer the
+ * push already delivered, seconds later.
  */
-
-// Fast enough that a finished step lights up while you are still looking at it, slow enough to be free.
-const LIVE_POLL_MS = 4_000;
 
 export function useWorkflows() {
     const api = host();
@@ -32,9 +30,6 @@ export function useWorkflows() {
         queryKey: runsKey,
         queryFn: async (): Promise<WorkflowRun[]> => WorkflowRunsListSchema.parse(await api.sandbox.json(`/workflows/runs`)).runs,
         enabled,
-        // Read off the query handed in rather than off `runsQuery` — naming the query inside its own options
-        // is a cycle, and the honest reading is that the interval is a function of the DATA.
-        refetchInterval: (current) => (current.state.data?.some((run) => run.state === `running`) === true ? LIVE_POLL_MS : false),
     });
 
     const invalidate = async (): Promise<void> => {

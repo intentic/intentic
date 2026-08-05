@@ -106,18 +106,15 @@ const STATE_FILES = [
         why: "Declared by the intentic.automations extension's contributes.files — `automation-approvals` is its query key, not core's.",
         portability: "carry",
     },
-    {
-        path: ".intentic/workflows.json",
-        invalidates: [],
-        why: "Declared by the intentic.workflows extension's contributes.files — `workflows` is its query key, not core's.",
-        portability: "carry",
-    },
-    {
-        path: ".intentic/workflow-runs.json",
-        invalidates: [],
-        why: "Declared by the intentic.workflows extension's contributes.files — `workflows` and `workflow-runs` are its query keys, not core's.",
-        portability: "carry",
-    },
+    /* The workflow designs and their run ledger became CORE keys the day runs got cards on the fleet board and
+     * a mode of the chat panel (web's useWorkflowRuns): those surfaces exist whether or not the workflows
+     * extension is enabled, so their freshness cannot ride an extension's contributes.files — an owner turning
+     * the extension off would have frozen the board's run cards mid-run. This push is the ONLY live feed the
+     * run surfaces have: the scheduler writes the ledger several times per step and nothing polls for it.
+     * The runs file invalidates `workflows` too, because GET /workflows embeds each design's runs
+     * (WorkflowSummary) — a settled step changes that answer as surely as an edited design does. */
+    { path: ".intentic/workflows.json", invalidates: ["workflows"], portability: "carry" },
+    { path: ".intentic/workflow-runs.json", invalidates: ["workflows", "workflow-runs"], portability: "carry" },
     {
         path: ".intentic/loops.json",
         invalidates: [],
@@ -286,4 +283,13 @@ export const staleQueryKeys = (paths: readonly string[], contributed: readonly F
             .filter((file) => file.invalidates.length > 0 && paths.some((path) => path.startsWith(file.path)))
             .flatMap((file) => file.invalidates),
     ),
+];
+
+/* Every query key any watched file feeds — what a NEW /events connection invalidates wholesale (core's table
+ * plus the running extensions'). The file push is these keys' ONLY live feed, and a `workspaceChanged` frame
+ * produced while the stream was down is a frame nobody will ever resend — so each key's view would sit stale
+ * until the file's NEXT write, indefinitely for anything that settled while the browser was away. Re-asking on
+ * connect bounds the damage at one cheap read per key, which is what lets those views go entirely unpolled. */
+export const fileBoundQueryKeys = (contributed: readonly FileContribution[]): readonly string[] => [
+    ...new Set([...WORKSPACE_STATE_FILES, ...contributed].flatMap((file) => file.invalidates)),
 ];

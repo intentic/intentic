@@ -1,4 +1,4 @@
-import { staleQueryKeys, type SystemEvent } from "@intentic/sandbox-contract";
+import { fileBoundQueryKeys, staleQueryKeys, type SystemEvent } from "@intentic/sandbox-contract";
 import { contributedFileBindings } from "../../extension-host/fileBindings";
 import { emitRefsChanged } from "../../extension-host/refEvents";
 import { resetEditBuffers } from "../workspace/useEditBuffers";
@@ -60,6 +60,14 @@ export const applySystemEvent = (event: SystemEvent, sandboxId: string): void =>
             if (workspaceReplaced(sandboxId, event.workspaceId) || daemonRebuilt(sandboxId, event.build)) {
                 // Reset, not remove: active observers must refetch rather than render an empty cache.
                 void queryClient.resetQueries({ predicate: sandboxQueryPredicate(sandboxId) });
+            }
+            /* Every file-bound view re-asks on a new connection, because the file push is its ONLY live feed
+             * and this stream's predecessor may have died holding frames: a workflow step that settled, a
+             * draft that appeared, an automation that fired — all written to disk, pushed once, and pushed to
+             * nobody. Those views are deliberately unpolled, so without this a missed frame was not a delay,
+             * it was staleness with no end. One cheap read per key, deduped, only on (re)connect. */
+            for (const key of fileBoundQueryKeys(contributedFileBindings())) {
+                void queryClient.invalidateQueries({ queryKey: [key] });
             }
             return;
         }

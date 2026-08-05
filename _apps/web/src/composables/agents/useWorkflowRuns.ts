@@ -16,15 +16,18 @@ import type { FleetAgent } from "./useAgents";
  * missing row, and it is deliberately a row of its own rather than a sixth agent: a run has no transcript, no
  * worktree and no turn, and pretending otherwise would put Land and Archive on a thing that has neither.
  *
- * THE POLL IS THE EXTENSION'S, FOR THE EXTENSION'S REASON. Steps finish minutes apart and no event announces
- * one, so a live run is polled and an idle workspace costs nothing. The window is a touch wider than the
- * extension's: this is a background row on a board, not the page you opened to watch.
+ * NOT POLLED — PUSHED. The scheduler writes the ledger several times per step, every write rides the daemon's
+ * file-change push (`workspaceChanged` → the `workflow-runs` key, core's WORKSPACE_STATE_FILES table), and
+ * between writes nothing about a run changes, so there is nothing for an interval to discover. The keys are
+ * CORE's, not the extension's, precisely because this board renders runs whether or not the workflows
+ * extension is enabled — a freshness that rode its contributes.files froze the cards the day the owner turned
+ * it off. A dropped /events stream is healed on reconnect (systemEvents' hello invalidation), so a missed
+ * frame costs one round-trip, never an indefinitely stale board.
  */
 
-const LIVE_POLL_MS = 6_000;
-
 // Shared by every caller, because vue-query keys the cache by them: the board and the composer each build
-// their own query objects and land on ONE fetch and one poll between them.
+// their own query objects and land on ONE fetch between them. The daemon's file-change push invalidates by
+// these exact names — see WORKSPACE_STATE_FILES.
 const runsKey = [`workflow-runs`] as const;
 const designsKey = [`workflows`] as const;
 
@@ -115,11 +118,10 @@ export function useWorkflowRuns() {
     const queryClient = useQueryClient();
     const invalidate = (): Promise<void> => queryClient.invalidateQueries({ queryKey: runsKey });
 
-    // Every run the ledger holds, newest first. Polled only while something is going — see the header.
+    // Every run the ledger holds, newest first. Kept fresh by the ledger's file-change push — see the header.
     const { query: runsQuery } = useSandboxQuery<WorkflowRun[]>({
         queryKey: runsKey,
         queryFn: async () => WorkflowRunsListSchema.parse(await sandboxJson(`/workflows/runs`)).runs,
-        refetchInterval: (current) => (current.state.data?.some((run) => run.state === `running`) === true ? LIVE_POLL_MS : false),
     });
 
     // The saved designs, for the composer's picker. Not polled: a design changes when somebody edits it in the
