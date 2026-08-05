@@ -40,6 +40,7 @@ import {
     GitDiffSideSchema,
     GitBranchesSchema,
     GitBranchSchema,
+    CommitResultSchema,
     GitChangeSchema,
     GitChangesSchema,
     GitCommitDiffSchema,
@@ -250,6 +251,9 @@ export type RepoPaths = z.infer<typeof RepoPathsSchema>;
 // Who an agent id named in a repo's `origins` is — the review carries it, the fleet roster can't (archived).
 export type OriginAgent = z.infer<typeof OriginAgentSchema>;
 export type GitChangesResponse = z.infer<typeof GitChangesSchema>;
+// What a commit answers with: whether it recorded anything, plus that repo's review row as the commit left it
+// (absent ⇒ the repo has nothing left to show), so the panel replaces one repo instead of re-reading them all.
+export type CommitResult = z.infer<typeof CommitResultSchema>;
 export type GitCommit = z.infer<typeof GitCommitSchema>;
 export type GitLogResponse = z.infer<typeof GitLogSchema>;
 export type GitCommitDiffResponse = z.infer<typeof GitCommitDiffSchema>;

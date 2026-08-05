@@ -1421,7 +1421,7 @@ export const GitFileDiffQuerySchema = RepoParamSchema.extend({ path: z.string().
 export const GitStatusSchema = z.object({ branch: z.string(), dirty: z.boolean(), files: z.array(z.string()) });
 export const GitFilesSchema = z.object({ files: z.array(z.string()) });
 export const GitFileSchema = z.object({ path: z.string(), content: z.string() });
-export const CommitResultSchema = z.object({ committed: z.boolean() });
+// CommitResultSchema is declared further down, after the RepoChanges/OriginAgent shapes a commit answers with.
 
 // One repo's slice of a workspace-wide git action: the whole repo, or only the repo-relative paths named. The
 // same pair the per-repo routes take as {repo} + `paths`, in the one shape a caller that spans repos can send.
@@ -1600,6 +1600,25 @@ export const GitChangesSchema = z.object({
     originAgents: z.record(z.string(), OriginAgentSchema).optional(),
 });
 export type GitChanges = z.infer<typeof GitChangesSchema>;
+
+/* WHAT THE COMMIT LEFT BEHIND — the committed repo's review row, re-read inside the same repo lock that made
+ * the commit, so the panel replaces that repo's rows from THIS answer instead of asking for a fresh
+ * workspace-wide scan afterwards.
+ *
+ * That scan is the daemon's most expensive read (a repo walk plus a `git status` per repo, ~11 git spawns each,
+ * for every repo including the ones the commit never touched) and the user sat watching the rows they had just
+ * committed until it returned. The commit itself is milliseconds of git; the wait was this.
+ *
+ * `changes` ABSENT means the repo has nothing the panel would show any more — the same inclusion rule the scan
+ * applies, decided in the same place, so a repo the scan would have dropped drops here too. `originAgents`
+ * covers the ids this repo's `origins` names and only those, on GitChangesSchema's terms; the panel merges it
+ * over what it already holds rather than replacing, since the other repos' rows still name their own agents. */
+export const CommitResultSchema = z.object({
+    committed: z.boolean(),
+    changes: RepoChangesSchema.optional(),
+    originAgents: z.record(z.string(), OriginAgentSchema).optional(),
+});
+export type CommitResult = z.infer<typeof CommitResultSchema>;
 
 // One file an agent touched, plus whether that change is ALREADY in the main tree. The review lists the
 // agent's CUMULATIVE output (base → worktree), not just the not-yet-landed remainder, because landing is not

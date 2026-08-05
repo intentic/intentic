@@ -1,4 +1,5 @@
 import type {
+    CommitResult,
     FileDiffResponse,
     GitActionResult,
     GitChangesResponse,
@@ -16,6 +17,7 @@ import { sandboxKey } from "../sandbox/useSandbox";
 import { useSandboxQuery } from "../sandbox/useSandboxQuery";
 import { errorMessage } from "../useAsyncAction";
 import { outgoingWork } from "./outgoingWork";
+import { spliceRepoChanges } from "./spliceRepoChanges";
 import { resetEditBuffers } from "./useEditBuffers";
 
 /* The Changes review — VSCode's SCM model over the workspace's real repos, including git's index: each repo
@@ -176,27 +178,51 @@ const invalidateChanges = (): Promise<void> => queryClient.invalidateQueries({ q
 const post = <T>(repo: string, action: string, body: Record<string, unknown>): Promise<T> =>
     sandboxJson<T>(`/git/${encodeURIComponent(repo)}/${action}`, jsonBody(`POST`, body));
 
+/* The commit's own answer, folded into the cached review set (the rule itself is spliceRepoChanges). Nothing is
+ * written when the cache is empty: there is nothing to splice into, and seeding it here would paint a one-repo
+ * review over a panel that has never loaded — the query's own fetch is what fills it.
+ *
+ * CANCEL FIRST, because a scan can be in flight right now and it started before the commit. The panel refetches
+ * on every workspace-change batch and in this product an agent is usually writing, so a review read overlapping
+ * a commit is ordinary rather than exotic — and one that resolves after this write lands re-paints the rows the
+ * commit just removed, with data that was already stale when it was requested. Cancelling drops that answer
+ * instead of letting it win on arrival; a scan that starts AFTER this reads a tree that already has the commit
+ * in it, so only the overlap needs handling. */
+const applyCommitResult = async (repo: string, result: CommitResult): Promise<void> => {
+    const queryKey = sandboxKey(`git`, `changes`);
+    await queryClient.cancelQueries({ queryKey });
+    queryClient.setQueryData<GitChangesResponse>(queryKey, (held) => (held === undefined ? held : spliceRepoChanges(held, repo, result)));
+};
+
 // Commit. git can't span repos, so each group gets its own real commit on its own branch, all sharing the
-// message — one refresh for the whole batch. `stageFirst` is VSCode's "stage all and commit", for the case where
-// nothing is staged yet, and the group says HOW MUCH: the whole repo through the daemon's `all` shape (`git
-// commit -a`, the only reading that also reaches rows the daemon truncated past its budget), or exactly the
-// `paths` the panel's origin filter narrowed to. Either way the daemon stages inside the repo lock and then
-// records the whole index — never a partial commit, which is what keeps it honest about what the rows showed.
+// message. `stageFirst` is VSCode's "stage all and commit", for the case where nothing is staged yet, and the
+// group says HOW MUCH: the whole repo through the daemon's `all` shape (`git commit -a`, the only reading that
+// also reaches rows the daemon truncated past its budget), or exactly the `paths` the panel's origin filter
+// narrowed to. Either way the daemon stages inside the repo lock and then records the whole index — never a
+// partial commit, which is what keeps it honest about what the rows showed.
 //
 // Without `stageFirst` the index alone decides, and `paths` is not sent: the panel's target is the staged repos.
+//
+// NO REFETCH ON THE HAPPY PATH, unlike every other verb here. Each commit answers with its own repo's rows and
+// they are spliced in as it lands, so by the time the batch is done the review is already correct — where the
+// workspace-wide rescan this replaces re-read every repo the commit never touched, on the daemon's most
+// contended path, while the user watched the rows they had just committed sit there. A REFUSED commit is the
+// one case with nothing to splice and a repo that may still have moved (`commit -a` stages before it commits),
+// so that alone falls back to the full read.
 const commitRepos = (groups: readonly RepoPaths[], message: string, stageFirst: boolean): Promise<void> =>
     runBatch(
         groups.map((group) => ({
             scope: COMMIT_SCOPE,
             action: `Commit failed`,
             run: async (): Promise<void> => {
-                await post(group.repo, `commit`, {
+                const result = await post<CommitResult>(group.repo, `commit`, {
                     message,
                     ...(!stageFirst ? {} : group.paths === undefined ? { all: true } : { paths: group.paths }),
                 });
+                await applyCommitResult(group.repo, result);
             },
         })),
-        invalidateChanges,
+        () => (failures.value.has(COMMIT_SCOPE) ? invalidateChanges() : Promise.resolve()),
     );
 
 // Discard a selection: tracked content returns to HEAD, untracked files are deleted. A group with no `paths`

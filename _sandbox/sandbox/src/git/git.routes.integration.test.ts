@@ -213,6 +213,59 @@ test("git.commit records the index by default and stages everything first for `a
     expect(calls).toEqual([`index ${workspace.root} m1`, `all ${join(workspace.root, "intent")} m2`]);
 });
 
+/* The commit answers with the repo it just wrote, so the panel replaces one repo's rows instead of firing the
+ * workspace-wide rescan it used to — the read that made "I clicked Commit" take seconds while the user watched
+ * the rows they had just committed sit there.
+ *
+ * Both halves of the inclusion rule are the claim. A repo with work LEFT (here an untracked file, which
+ * `commit -a` never sweeps, and a branch now one commit ahead) comes back with its row so the panel can redraw
+ * it; a repo with nothing left comes back WITHOUT one, which is how the panel knows to drop the group rather
+ * than leave an empty one behind. The clean case is the same `undefined` the workspace scan filters on, decided
+ * in the same place, so the two can't disagree about what a repo showing nothing means. */
+test("git.commit answers with the committed repo's post-commit rows, and omits them when nothing is left", async () => {
+    const workspace = tempWorkspace([{ name: "intent" }, { name: "spent" }]);
+    const left = join(workspace.root, "intent");
+    const client = clientFor(
+        createApp(
+            services({
+                workspace,
+                git: {
+                    ...services().git,
+                    commitIndex: async () => true,
+                    changedFiles: async (dir) =>
+                        dir === left
+                            ? { branch: "main", conflicted: [], staged: [], unstaged: [{ path: "notes.md", status: "added" }] }
+                            : { branch: "main", conflicted: [], staged: [], unstaged: [] },
+                    remoteState: async (dir) =>
+                        dir === left ? { remote: "origin", branch: "main", upstream: "origin/main", ahead: 1, behind: 0 } : { ahead: 0, behind: 0 },
+                },
+                agentOrigins: {
+                    forRepo: async (_repo, dir) => (dir === left ? { "notes.md": ["a1"] } : {}),
+                    identify: (ids) => Object.fromEntries([...ids].map((id) => [id, { title: "Write notes", provider: "claude" }])),
+                },
+            }),
+        ),
+    );
+    expect(await client.git.commit({ repo: "intent", message: "m1" })).toEqual({
+        committed: true,
+        changes: {
+            repo: "intent",
+            branch: "main",
+            conflicted: [],
+            staged: [],
+            unstaged: [{ path: "notes.md", status: "added" }],
+            remote: { remote: "origin", branch: "main", upstream: "origin/main", ahead: 1, behind: 0 },
+            origins: { "notes.md": ["a1"] },
+        },
+        // Only the agents THIS repo names — the panel merges them over what the other repos' rows already
+        // carry, rather than replacing a map the one-repo answer cannot have covered.
+        originAgents: { a1: { title: "Write notes", provider: "claude" } },
+    });
+    // Clean tree, no remote work: the row is gone, and saying so is the whole point — the panel drops the group
+    // on this answer instead of waiting for a scan to stop listing it.
+    expect(await client.git.commit({ repo: "spent", message: "m2" })).toEqual({ committed: true });
+});
+
 // The reason the browser no longer refuses to commit while an agent runs: the ONE thing that was genuinely
 // unsafe about it — a commit interleaving with the `git apply` an agent's land performs on the same tree — is
 // prevented here instead, on the same per-repo chain `land` already takes. A UI gate could only guess at this
@@ -345,7 +398,11 @@ test("git.operation reports a halted repo, and git.abort ends it after checkpoin
     expect(await client.git.abort({ repo: "app" })).toEqual({ ok: true });
     // The checkpoint lands BEFORE the abort, because the conflict resolution being discarded is real work.
     expect(snapshots).toEqual(["user before aborting rebase in app"]);
-    expect(calls).toEqual([`peek ${join(workspace.root, "app")}`, `peek ${join(workspace.root, "app")}`, `abort ${join(workspace.root, "app")} rebase`]);
+    expect(calls).toEqual([
+        `peek ${join(workspace.root, "app")}`,
+        `peek ${join(workspace.root, "app")}`,
+        `abort ${join(workspace.root, "app")} rebase`,
+    ]);
 
     // Now that it has ended, the repo reports clean and a second Abort is a value rather than a throw — two
     // people on the same repo is ordinary, and the loser of that race should not see a stack trace.
