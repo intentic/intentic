@@ -264,13 +264,36 @@ const nextWithinGrace = async (next: Promise<IteratorResult<SDKMessage, void>>):
     }
 };
 
+/* The background work a turn's end must WAIT for, by the task machine's own discriminant. These run inside
+ * the turn's CLI process, so a stream ended while one is live kills it mid-flight — the failure the user meets
+ * as "the session process exited and took all 14 agents with it", minutes after the model said it would come
+ * back with their results. A backgrounded shell is deliberately absent: it runs in the turn's tmux session,
+ * which the daemon owns and outlives the turn, and holding on one would keep a turn spinning for as long as a
+ * dev server runs. `monitor` is ambient by design and lives exactly as long as the session — never waited on. */
+const HELD_TASK_TYPES: ReadonlySet<string> = new Set(["subagent", "workflow", "local_workflow"]);
+
 // The SDK message stream, ended at the right turn boundary. Unsteered (or never-steered) streams end at the
 // first result, as before. Once a steer was delivered, each result instead arms the grace race above; when it
 // goes silent, closing the input queue ends the SDK's streaming input and the stream drains to its natural
 // end (settling the subprocess) — a turn that slipped in during the race still streams in full.
+//
+// A result with backgrounded CHILDREN still in flight is not the boundary either: they die with the
+// subprocess, and the CLI wakes the model with a task notification when one settles — so the stream is held
+// open and the wake turn (the "I'll come back with results") rides it like a steered follow-up. Membership
+// comes from the SDK's own level signal (background_tasks_changed, replace semantics — a missed edge cannot
+// wedge a stale hold), and once the last child settles, either a wake turn announces itself within the grace
+// window or none is coming and closing the input drains the stream as above.
 async function* sdkTurns(stream: AsyncIterable<SDKMessage>, steering: SteeringQueue | undefined): AsyncGenerator<SDKMessage> {
     const iterator = stream[Symbol.asyncIterator]();
     let awaitingNextTurn = false;
+    // Live in-process background work, off the latest level signal. Counts only what the boundary waits for.
+    let heldTasks = 0;
+    // A result passed while children were live: the stream is being held open for the CLI's wake turn.
+    let held = false;
+    // A main-thread model frame since the last result — a turn mid-stream always produces more messages, so
+    // only the idle gaps BETWEEN turns are raced against the grace window while held. Children's own frames
+    // (parented) keep arriving throughout the hold and must not read as a turn underway.
+    let midTurn = false;
     // A pending next() that lost the grace race is re-awaited on the following pass, never abandoned.
     let pending: Promise<IteratorResult<SDKMessage, void>> | undefined;
     try {
@@ -287,14 +310,37 @@ async function* sdkTurns(stream: AsyncIterable<SDKMessage>, steering: SteeringQu
                     continue;
                 }
                 step = winner;
+            } else if (held && !midTurn && heldTasks === 0) {
+                // The last child settled between turns: either the CLI's wake turn announces itself now, or no
+                // wake is coming and closing the input is what lets the stream drain to its end.
+                const winner = await nextWithinGrace(nextPromise);
+                if (winner === undefined) {
+                    held = false;
+                    steering?.close();
+                    pending = nextPromise;
+                    continue;
+                }
+                step = winner;
             } else {
                 step = await nextPromise;
             }
             if (step.done === true) {
                 return;
             }
-            yield step.value;
-            if (step.value.type === "result") {
+            const message = step.value;
+            if (message.type === "system" && message.subtype === "background_tasks_changed") {
+                heldTasks = message.tasks.filter((task) => HELD_TASK_TYPES.has(task.task_type)).length;
+            } else if ((message.type === "assistant" || message.type === "stream_event" || message.type === "user") && message.parent_tool_use_id === null) {
+                midTurn = true;
+            }
+            yield message;
+            if (message.type === "result") {
+                midTurn = false;
+                if (heldTasks > 0) {
+                    held = true;
+                    continue;
+                }
+                held = false;
                 if (steering === undefined || steering.delivered === 0) {
                     // Close before returning (not just in runAgent's finally) so a steer racing this result
                     // reports undelivered instead of landing in a queue nothing will ever consume.

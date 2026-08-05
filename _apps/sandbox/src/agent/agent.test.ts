@@ -1109,6 +1109,133 @@ test("after the last result a steered stream settles: the grace window closes th
     expect(steering.push("too late")).toBe(false);
 });
 
+/* THE TURN THAT SAID "I'LL COME BACK WITH RESULTS", and the boundary that used to kill it. A backgrounded
+ * child lives inside the turn's CLI process, so ending the stream at the first result took every running
+ * child with it — 14 agents dead the moment the parent finished its sentence. The stream is held open
+ * instead: the child settles, the CLI injects its task notification, and the wake turn's frames arrive on
+ * this same stream like a steered follow-up. */
+test("a result with a backgrounded child in flight holds the stream open for the wake turn", async () => {
+    resetSubagents();
+    const events = await collect(
+        { ...request, conversationId: "c-hold" },
+        fakeQuery(
+            {
+                type: "system",
+                subtype: "task_started",
+                session_id: "s",
+                task_id: "task-1",
+                tool_use_id: "call-1",
+                subagent_type: "Explore",
+                description: "audit chapter 4",
+            },
+            {
+                type: "system",
+                subtype: "background_tasks_changed",
+                session_id: "s",
+                tasks: [{ task_id: "task-1", task_type: "subagent", description: "audit chapter 4" }],
+            },
+            { type: "result", subtype: "success", total_cost_usd: 0.1 },
+            // Minutes later the child settles: its report lands, the level empties, and the CLI wakes the
+            // model with the injected notification — a main-thread turn that must reach the client in full.
+            {
+                type: "system",
+                subtype: "task_notification",
+                session_id: "s",
+                task_id: "task-1",
+                tool_use_id: "call-1",
+                status: "completed",
+                summary: "found 3 gaps",
+            },
+            { type: "system", subtype: "background_tasks_changed", session_id: "s", tasks: [] },
+            { type: "user", session_id: "s", parent_tool_use_id: null, message: { role: "user", content: "<task-notification>…" } },
+            { type: "stream_event", session_id: "s", event: { type: "content_block_delta", delta: { type: "text_delta", text: "Consolidating." } } },
+            { type: "result", subtype: "success", total_cost_usd: 0.2 },
+        ),
+    );
+    expect(events).toEqual([
+        { kind: "session", sessionId: "s" },
+        { kind: "subagent", id: "call-1", subagentKind: "subagent", agentType: "Explore", description: "audit chapter 4" },
+        { kind: "usage", costUsd: 0.1 },
+        { kind: "subagent_update", id: "call-1", status: "completed", summary: "found 3 gaps" },
+        { kind: "delta", text: "Consolidating." },
+        { kind: "usage", costUsd: 0.2 },
+        { kind: "done" },
+    ]);
+});
+
+// The other way a hold can end: every child settled and no wake turn announced itself within the grace
+// window — closing the input is what lets the stream drain, exactly like the steered settle above. The
+// child's own report still made it out before the end.
+test("children settled with no wake turn: the grace window closes the input so the stream drains", async () => {
+    resetSubagents();
+    const steering = new SteeringQueue();
+    const drained: string[] = [];
+    const sdkLike: QueryFn = async function* (args) {
+        yield {
+            type: "system",
+            subtype: "task_started",
+            session_id: "s",
+            task_id: "task-1",
+            tool_use_id: "call-1",
+            subagent_type: "Explore",
+            description: "audit chapter 4",
+        } as SDKMessage;
+        yield {
+            type: "system",
+            subtype: "background_tasks_changed",
+            session_id: "s",
+            tasks: [{ task_id: "task-1", task_type: "subagent", description: "audit chapter 4" }],
+        } as unknown as SDKMessage;
+        yield { type: "result", subtype: "success" } as SDKMessage;
+        yield {
+            type: "system",
+            subtype: "task_notification",
+            session_id: "s",
+            task_id: "task-1",
+            tool_use_id: "call-1",
+            status: "completed",
+            summary: "found 3 gaps",
+        } as unknown as SDKMessage;
+        yield { type: "system", subtype: "background_tasks_changed", session_id: "s", tasks: [] } as unknown as SDKMessage;
+        // Like the real SDK, the stream now waits on the input; only the input ending lets it finish.
+        for await (const message of args.prompt as AsyncIterable<SDKUserMessage>) {
+            drained.push(String(message.message.content));
+        }
+    };
+    const events = await collect({ ...request, conversationId: "c-nowake", steering }, sdkLike);
+    expect(events).toEqual([
+        { kind: "session", sessionId: "s" },
+        { kind: "subagent", id: "call-1", subagentKind: "subagent", agentType: "Explore", description: "audit chapter 4" },
+        { kind: "subagent_update", id: "call-1", status: "completed", summary: "found 3 gaps" },
+        { kind: "done" },
+    ]);
+    expect(drained).toEqual(["add a /ping route"]);
+    expect(steering.push("too late")).toBe(false);
+});
+
+// A backgrounded shell survives the turn on its own — it runs in the turn's tmux session, which the daemon
+// owns — and holding on one would keep a turn spinning for as long as a dev server runs. Only in-process
+// children move the boundary; this stream ends at its result, and the trailing frame proves it was not held.
+test("a backgrounded shell does not hold the turn open", async () => {
+    const events = await collect(
+        request,
+        fakeQuery(
+            {
+                type: "system",
+                subtype: "background_tasks_changed",
+                session_id: "s",
+                tasks: [{ task_id: "task-9", task_type: "shell", description: "pnpm dev" }],
+            },
+            { type: "result", subtype: "success" },
+            { type: "stream_event", session_id: "s", event: { type: "content_block_delta", delta: { type: "text_delta", text: "never" } } },
+        ),
+    );
+    expect(events).toEqual([
+        { kind: "session", sessionId: "s" },
+        { kind: "done" },
+    ]);
+});
+
 const throwing: QueryFn = async function* () {
     yield { type: "system", session_id: "s" } as SDKMessage;
     throw new Error("stream blew up");
