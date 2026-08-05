@@ -25,6 +25,7 @@ import type { DiffPayload } from "@intentic/extension-api";
 import type { OpenMode } from "./workspaceTabs";
 import { PUBLIC_DIR, REFERENCE_DIR } from "@intentic/workspace-ignore/constants";
 import { filesToEntries } from "./dropEntries";
+import { explorerShows } from "./explorerFilter";
 import { iconForEntry } from "@intentic/ui";
 import FileViewer from "./viewers/FileViewer.vue";
 import HistoryPanel from "./HistoryPanel.vue";
@@ -174,15 +175,19 @@ watch(
 const listing = computed<readonly WorkspaceTreeEntry[]>(() => {
     // A walked dir carries its children inline; an unlisted one's arrive via loadChildren (keyed by path).
     const children = dir.value === `` ? tree.value : (entriesByPath.value.get(dir.value)?.children ?? lazyChildren.value.get(dir.value) ?? []);
-    // The explorer's ignored-entry switch is shared with desktop (one browser, one preference), so a phone
+    // The explorer's filter switches are shared with desktop (one browser, one set of preferences), so a phone
     // drilling into a folder shows the same set of entries the tree would.
-    const shown = layout.showIgnored.value ? children : children.filter((node) => node.ignored !== true);
+    const shown = children.filter((node) => explorerShows(node, layout.showIgnored.value, layout.hideTests.value));
     const query = filter.value.trim().toLowerCase();
     return query === `` ? shown : shown.filter((node) => node.name.toLowerCase().includes(query));
 });
 const dirLoading = computed(() => dir.value !== `` && lazyLoading.value.has(dir.value));
 // How many entries the daemon's cap cut from the open dir's listing — 0 (the common case) shows nothing.
 const dirHidden = computed(() => (dir.value === `` ? rootHidden.value : (lazyHidden.value.get(dir.value) ?? 0)));
+
+// The toolbar funnel's sheet — the desktop filter menu's two rows, thumb-sized. Stays open across a tap: both
+// switches repaint the listing behind it, so the answer to "did that do what I wanted" is already on screen.
+const filterSheet = ref(false);
 
 // --- Long-press row actions (the ContextMenu equivalents) --------------------------------------
 const sheetEntry = ref<WorkspaceTreeEntry | undefined>(undefined);
@@ -306,19 +311,18 @@ const onPick = (event: Event): void => {
             <div class="flex shrink-0 items-center gap-2 border-b border-line bg-card px-2 py-1.5">
                 <Segmented v-model="segment" size="sm" :options="segmentOptions" />
                 <span class="flex-1"></span>
-                <!-- Ignored entries in or out of the listing (node_modules, dist, gitignored paths, refs/) — the
-                     desktop toolbar's chip, thumb-sized. Files segment only, since that's all it changes; no
-                     tooltip to lean on here, so the icon carries the state and the label spells it out. -->
+                <!-- What the listing leaves out — the desktop toolbar's funnel, thumb-sized, opening a sheet
+                     instead of a menu. Drill-down only: during a content search the row under the field carries
+                     its own Ignored chip, and two controls for one idea on one screen is one too many. -->
                 <button
-                    v-if="segment === 'files'"
+                    v-if="segment === 'files' && !contentMode"
                     type="button"
                     class="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg transition-colors active:bg-overlay"
-                    :class="layout.showIgnored.value ? 'text-link' : 'text-muted'"
-                    :aria-pressed="layout.showIgnored.value"
-                    :aria-label="layout.showIgnored.value ? 'Hide ignored files' : 'Show ignored files'"
-                    @click="layout.toggleShowIgnored()"
+                    :class="layout.showIgnored.value || layout.hideTests.value ? 'text-link' : 'text-muted'"
+                    aria-label="Filter what the explorer lists"
+                    @click="filterSheet = true"
                 >
-                    <Icon :name="layout.showIgnored.value ? `eye` : `eye-slash`" class="text-base" />
+                    <Icon name="filter" class="text-base" />
                 </button>
                 <!-- The Changes list's reading: paths, or a header per module with the file on the row. Beside
                      the ignored-files chip because it is the same kind of control — a way of looking, flipped
@@ -510,6 +514,35 @@ const onPick = (event: Event): void => {
 
             <UploadProgress v-if="uploadScanning || uploadFiles.length > 0 || uploadSkipped !== undefined" />
         </template>
+
+        <!-- The toolbar funnel's rows. A checked row draws its mark; the gutter holds the space either way, so
+             the label cannot shift as the switch flips. -->
+        <BottomSheet v-model="filterSheet" header="Filter">
+            <div class="flex flex-col gap-0.5">
+                <button
+                    type="button"
+                    class="flex h-12 items-center gap-3 rounded-lg px-3 text-left text-sm active:bg-overlay"
+                    :aria-pressed="layout.showIgnored.value"
+                    @click="layout.toggleShowIgnored()"
+                >
+                    <span class="flex w-4 shrink-0 justify-center">
+                        <Icon v-show="layout.showIgnored.value" name="check" class="text-base text-muted" />
+                    </span>
+                    Show ignored files
+                </button>
+                <button
+                    type="button"
+                    class="flex h-12 items-center gap-3 rounded-lg px-3 text-left text-sm active:bg-overlay"
+                    :aria-pressed="layout.hideTests.value"
+                    @click="layout.toggleHideTests()"
+                >
+                    <span class="flex w-4 shrink-0 justify-center">
+                        <Icon v-show="layout.hideTests.value" name="check" class="text-base text-muted" />
+                    </span>
+                    Hide tests
+                </button>
+            </div>
+        </BottomSheet>
 
         <!-- Long-press row actions — the desktop tree's context menu, thumb-sized. -->
         <BottomSheet :model-value="sheetEntry !== undefined" @update:model-value="sheetEntry = undefined" :header="sheetEntry?.name">

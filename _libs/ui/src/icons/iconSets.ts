@@ -58,6 +58,7 @@ export type IconName =
     | "file"
     | "file-edit"
     | "file-pdf"
+    | "filter"
     | "folder"
     | "folder-open"
     | "forward"
@@ -165,6 +166,7 @@ export const ICONS: Record<IconName, string> = {
     file: "ri:file-line",
     "file-edit": "ri:file-edit-line",
     "file-pdf": "ri:file-pdf-line",
+    filter: "ri:filter-3-line",
     folder: "ri:folder-line",
     "folder-open": "ri:folder-open-line",
     forward: "ri:forward-end-line",

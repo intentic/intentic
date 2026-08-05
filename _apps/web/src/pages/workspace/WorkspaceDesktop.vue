@@ -94,9 +94,9 @@ const filter = ref(``);
  *   Smart — iq's fused retrieval: the query is a question, its words scored separately against the index and
  *           reranked. Finds the file that ANSWERS the words; finds nothing to underline in them.
  *
- * The Ignored chip widens whichever of the two is on screen — the tree under Name, the search under Text/Smart —
- * to node_modules/.gitignore'd paths, off in both by default. The match switches beside it belong to Text alone:
- * they change what the pattern means. */
+ * The funnel beside the scopes holds what the list on screen leaves out — the tree's under Name, the search's
+ * under Text/Smart — all off by default. The match switches inside the field belong to Text alone: they change
+ * what the pattern means. */
 const searchScope = ref<"name" | SearchScope>(`name`);
 const contentMode = computed(() => searchScope.value !== `name`);
 const textMode = computed(() => searchScope.value === `text`);
@@ -209,6 +209,33 @@ const clearFilter = (): void => {
     filter.value = ``;
     searchScope.value = `name`;
 };
+
+/* The explorer's filters, behind one funnel. They used to be a single "Ignored" chip that swapped meaning with
+ * the scope; a menu takes that pair of long labels off a 256px-wide toolbar and gives the second filter — tests
+ * — somewhere to live that isn't another chip competing for the same row.
+ *
+ * The rows follow the scope, because each one has to change what is on screen when it is clicked: under Name
+ * that is the tree (both filters apply), under Text/Smart it is the daemon's match list, which the tree's own
+ * switches don't reach — the search widens over ignored paths or it doesn't, and tests come back either way.
+ * A row that changed nothing visible would be worse than no row. */
+const filterMenu = ref<{ show: (event: Event) => void }>();
+const filterMenuItems = computed<MenuItem[]>(() =>
+    contentMode.value
+        ? [
+              {
+                  label: `Search ignored files`,
+                  checked: search.includeIgnored.value,
+                  command: () => (search.includeIgnored.value = !search.includeIgnored.value),
+              },
+          ]
+        : [
+              { label: `Show ignored files`, checked: layout.showIgnored.value, command: () => layout.toggleShowIgnored() },
+              { label: `Hide tests`, checked: layout.hideTests.value, command: () => layout.toggleHideTests() },
+          ],
+);
+// Lit whenever the list on screen is NOT the default one, so a tree missing its specs — or a search that walked
+// node_modules — never reads as the workspace itself having changed.
+const filtersActive = computed(() => (contentMode.value ? search.includeIgnored.value : layout.showIgnored.value || layout.hideTests.value));
 
 // Right-click tab menu (VSCode-style). It acts on the right-clicked tab (`menuTabId`), which "Close Others"/"Close to
 // the Right" keep. `pendingClose` holds the set awaiting the unsaved-changes confirm; its dirty paths feed the dialog.
@@ -331,8 +358,8 @@ const openTabMenu = (id: string | undefined, event: Event): void => {
 // terminal (terminalSession's key hook), so a bare-Ctrl chord would steal a readline/tmux key; Mod+B (VSCode's
 // sidebar toggle) IS the tmux prefix so the explorer toggles on Ctrl+Shift+B instead, and everything else
 // stays in the Ctrl+Shift family the terminal panel's commands established. Changes opens on Ctrl+Shift+D
-// (D = diff; VSCode's Ctrl+Shift+G is terminal.join's "G = group"); Show Files / Checkpoints / Refresh / Toggle
-// Ignored Files ship unbound (palette-only), as VSCode leaves rarely-chorded views.
+// (D = diff; VSCode's Ctrl+Shift+G is terminal.join's "G = group"); Show Files / Checkpoints / Refresh / the two
+// explorer filters ship unbound (palette-only), as VSCode leaves rarely-chorded views.
 const closeActiveTab = (): void => {
     if (activeId.value !== null) {
         closeTab(activeId.value);
@@ -405,9 +432,10 @@ const WORKSPACE_COMMANDS: readonly Omit<RegisteredCommand, `owner`>[] = [
     // The root repo's health report — the palette route to what a nested repo opens from its own tree row.
     { command: `workspace.codebaseHealth`, title: `Show Codebase Health`, icon: `wave-pulse`, handler: () => openHealth(`root`) },
     { command: `workspace.toggleSidebar`, title: `Toggle Explorer`, icon: `bars`, keybinding: `Ctrl+Shift+B`, handler: () => layout.toggleSidebar() },
-    // The explorer toolbar's Ignored chip, reachable from the palette — and from anywhere the sidebar is
-    // collapsed, where the chip isn't on screen to click.
+    // The explorer's two filters, reachable from the palette — and from anywhere the sidebar is collapsed, where
+    // the toolbar's funnel isn't on screen to click.
     { command: `workspace.toggleIgnored`, title: `Toggle Ignored Files`, icon: `eye`, handler: () => layout.toggleShowIgnored() },
+    { command: `workspace.toggleTests`, title: `Toggle Test Files`, icon: `filter`, handler: () => layout.toggleHideTests() },
     // The tab family is shared with the chat and terminal strips and resolved by focus (tabSurface.ts). The
     // workspace is the FALLBACK surface, so its gate is "the keystroke came from neither of the other two" —
     // a chord pressed with focus on the shell chrome, the explorer or the editor still closes an editor tab,
@@ -666,7 +694,7 @@ const endResize = (event: PointerEvent): void => {
                 </div>
                 <ReviewPanel v-if="layout.sidebarPanel.value === 'changes'" @open-diff="openDiff" />
                 <HistoryPanel v-else-if="layout.sidebarPanel.value === 'history'" @open-diff="openDiff" />
-                <!-- Search header: input hero on row 1; scope switch + ignored-scope toggle on row 2. One `filter`
+                <!-- Search header: input hero on row 1; scope switch + the filter funnel on row 2. One `filter`
                      ref, three scopes (name = instant client-side tree filter, text/smart = debounced daemon search).
                      The leading icon doubles as the content-search spinner; the ✕ (and Esc) clear text AND snap scope
                      back to name. The Aa/ab/.* switches sit INSIDE the field, where every editor puts them, and only
@@ -733,41 +761,19 @@ const endResize = (event: PointerEvent): void => {
                             ]"
                         />
                         <span class="flex-1"></span>
+                        <!-- What this list leaves out. Dark is the default set (the project alone — node_modules,
+                             dist and .turbo out of the way, specs where their sources are); lit says a switch is
+                             on, and the menu says which. -->
                         <button
-                            v-if="contentMode"
                             type="button"
-                            class="flex shrink-0 items-center gap-1 rounded-md px-1.5 py-0.5 text-2xs font-medium text-muted transition-colors hover:text-content"
-                            :class="{ 'bg-primary-600/15 text-link': search.includeIgnored.value }"
-                            :aria-pressed="search.includeIgnored.value"
-                            v-tooltip.bottom="
-                                search.includeIgnored.value
-                                    ? 'Including ignored files — node_modules, gitignored paths, the refs/ reference shelf'
-                                    : 'Skipping ignored files — node_modules, gitignored paths, the refs/ reference shelf'
-                            "
-                            @click="search.includeIgnored.value = !search.includeIgnored.value"
+                            class="flex shrink-0 items-center rounded-md px-1.5 py-0.5 transition-colors"
+                            :class="filtersActive ? 'bg-primary-600/15 text-link' : 'text-muted hover:text-content'"
+                            aria-haspopup="menu"
+                            aria-label="Filter what the explorer lists"
+                            v-tooltip.bottom="'Filter'"
+                            @click="filterMenu?.show($event)"
                         >
-                            <Icon class="text-2xs" :name="search.includeIgnored.value ? `eye` : `eye-slash`" />
-                            Ignored
-                        </button>
-                        <!-- The tree's own take on the same set, and it reads the same way round as the search chip
-                             above: dark is the default (the project alone — node_modules/dist/.turbo out of the
-                             way), lit means we're peeking at what the agent also sees, ignored entries listed and
-                             grayed. -->
-                        <button
-                            v-else
-                            type="button"
-                            class="flex shrink-0 items-center gap-1 rounded-md px-1.5 py-0.5 text-2xs font-medium text-muted transition-colors hover:text-content"
-                            :class="{ 'bg-primary-600/15 text-link': layout.showIgnored.value }"
-                            :aria-pressed="layout.showIgnored.value"
-                            v-tooltip.bottom="
-                                layout.showIgnored.value
-                                    ? 'Showing ignored files — node_modules, gitignored paths, the refs/ reference shelf'
-                                    : 'Hiding ignored files — node_modules, gitignored paths, the refs/ reference shelf'
-                            "
-                            @click="layout.toggleShowIgnored()"
-                        >
-                            <Icon class="text-2xs" :name="layout.showIgnored.value ? `eye` : `eye-slash`" />
-                            Ignored
+                            <Icon name="filter" class="text-xs" />
                         </button>
                         <!-- The root repo's codebase health. Root IS a repo (ensureRootRepo versions the whole
                              workspace), but the tree draws no row for it, so this affordance can't ride a row the
@@ -948,6 +954,8 @@ const endResize = (event: PointerEvent): void => {
 
         <!-- Right-click tab menu + the confirm shown before a bulk close discards unsaved edits. -->
         <ContextMenu ref="tabMenu" :model="tabMenuItems" :min-width="13" />
+        <!-- The explorer toolbar's funnel, opened by a left click on it rather than by a right click on a row. -->
+        <ContextMenu ref="filterMenu" :model="filterMenuItems" :min-width="11" />
         <ConfirmDialog
             :open="pendingClose !== undefined"
             :header="pendingCloseDirty.length === 1 ? 'Discard unsaved changes?' : `Discard unsaved changes in ${pendingCloseDirty.length} files?`"

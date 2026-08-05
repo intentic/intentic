@@ -68,6 +68,11 @@ const IGNORED_TREE: WorkspaceTreeEntry[] = [
     { name: `dist`, path: `dist`, type: `dir`, ignored: true },
     file(`README.md`),
 ];
+// The same shape as the tests a package actually carries: a spec beside its source, and a folder of them.
+const TEST_TREE: WorkspaceTreeEntry[] = [
+    dir(`src`, [file(`src/main.ts`), file(`src/main.test.ts`), dir(`src/__tests__`, [file(`src/__tests__/fixture.ts`)])]),
+    file(`README.md`),
+];
 
 let app: App | undefined;
 
@@ -111,9 +116,12 @@ beforeEach(() => {
 afterEach(() => {
     app?.unmount();
     app = undefined;
-    // useLayout is a module-level singleton — put the ignored-entry switch back to its default for the next test.
+    // useLayout is a module-level singleton — put both filter switches back to their defaults for the next test.
     if (layout.showIgnored.value) {
         layout.toggleShowIgnored();
+    }
+    if (layout.hideTests.value) {
+        layout.toggleHideTests();
     }
 });
 
@@ -186,5 +194,26 @@ describe(`the ignored-entry toggle`, () => {
         const el = await mount({ tree: IGNORED_TREE });
 
         expect(rows(el)).toEqual([`src`, `main.ts`, `main.js`, `dist`, `README.md`]);
+    });
+});
+
+// The toolbar's other filter, and the one that takes out files nothing ignores: a spec beside its source and the
+// folder of them next door are both what makes a package read as twice the code it is.
+describe(`the hide-tests toggle`, () => {
+    it(`lists tests by default`, async () => {
+        restoreFrom([`src`]);
+
+        const el = await mount({ tree: TEST_TREE });
+
+        expect(rows(el)).toEqual([`src`, `main.ts`, `main.test.ts`, `__tests__`, `README.md`]);
+    });
+
+    it(`takes the spec and its folder out once it is on`, async () => {
+        restoreFrom([`src`]);
+        layout.toggleHideTests();
+
+        const el = await mount({ tree: TEST_TREE });
+
+        expect(rows(el)).toEqual([`src`, `main.ts`, `README.md`]);
     });
 });

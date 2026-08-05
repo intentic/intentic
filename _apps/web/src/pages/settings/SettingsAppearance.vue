@@ -23,9 +23,9 @@ const { iconRailSize } = useIconRailSize();
 const { fileNesting } = useFileNesting();
 // The review lists' reading — the same preference the Changes panel's own header toggle flips.
 const { groupByModule } = useChangeGrouping();
-// The explorer's ignored-entry switch — the same preference the workspace toolbar's Ignored chip flips, which is
-// where someone already staring at node_modules will reach for it; this is where they'll look for it afterwards.
-const { showIgnored, toggleShowIgnored } = useLayout();
+// The explorer's two filters — the same preferences the workspace toolbar's funnel flips, which is where someone
+// already staring at node_modules will reach for them; this is where they'll look for them afterwards.
+const { showIgnored, toggleShowIgnored, hideTests, toggleHideTests } = useLayout();
 
 // Import a VSCode theme JSON → recolor the app's chrome tokens live (the biggest "familiar for developers" lever).
 const { active: importedTheme, importThemeJson, clearImportedTheme } = useImportedTheme();
@@ -111,6 +111,16 @@ const treatPreview = (entry: { name: string; type: "file" | "dir" }) =>
             >
                 <template #control>
                     <ToggleSwitch :model-value="showIgnored" @update:model-value="toggleShowIgnored()" />
+                </template>
+            </Row>
+            <Row
+                as="label"
+                icon="filter"
+                title="Hide tests"
+                description="Leave test and spec files out of the explorer — the .test / .spec files and the __tests__ folders beside them."
+            >
+                <template #control>
+                    <ToggleSwitch :model-value="hideTests" @update:model-value="toggleHideTests()" />
                 </template>
             </Row>
         </RowGroup>

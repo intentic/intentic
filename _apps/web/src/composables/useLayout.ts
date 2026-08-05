@@ -45,6 +45,12 @@ const SIDEBAR_PANEL_KEY = `ui-workspace-sidebar-panel`;
 // content search walks. Persists.
 const SHOW_IGNORED_KEY = `ui-workspace-show-ignored`;
 
+// The explorer's other reading filter, and the reason both now sit behind one funnel in the toolbar: tests are
+// tracked project files (nothing ignores them), but a package whose specs sit next to their sources reads as
+// twice the code it is when you're finding your way around it. Off by default — hiding source is a choice, not
+// a default. See pages/workspace/explorerFilter.ts for what counts as one. Persists.
+const HIDE_TESTS_KEY = `ui-workspace-hide-tests`;
+
 // Workspace edit mode — a single global switch (not per file): when on, every editable file opens directly in the
 // CodeMirror editor instead of the read-only viewer. Persists like the panels above.
 const EDIT_MODE_KEY = `ui-workspace-edit-mode`;
@@ -125,6 +131,7 @@ const sidebarCollapsed = ref<boolean>(readBool(SIDEBAR_COLLAPSED_KEY));
 const terminalOpen = ref<boolean>(readBool(TERMINAL_OPEN_KEY));
 const sidebarPanel = ref<SidebarPanel>(readEnum(SIDEBAR_PANEL_KEY, [`files`, `changes`, `history`] as const, `files`));
 const showIgnored = ref<boolean>(readBool(SHOW_IGNORED_KEY));
+const hideTests = ref<boolean>(readBool(HIDE_TESTS_KEY));
 const editMode = ref<boolean>(readBool(EDIT_MODE_KEY));
 const showComments = ref<boolean>(readBool(SHOW_COMMENTS_KEY));
 const diffLayout = ref<DiffLayout>(readEnum(DIFF_LAYOUT_KEY, [`split`, `unified`] as const, `split`));
@@ -202,6 +209,11 @@ const toggleShowIgnored = (): void => {
     write(SHOW_IGNORED_KEY, showIgnored.value ? `1` : `0`);
 };
 
+const toggleHideTests = (): void => {
+    hideTests.value = !hideTests.value;
+    write(HIDE_TESTS_KEY, hideTests.value ? `1` : `0`);
+};
+
 const setEditMode = (on: boolean): void => {
     editMode.value = on;
     write(EDIT_MODE_KEY, on ? `1` : `0`);
@@ -227,6 +239,7 @@ export function useLayout() {
         terminalOpen,
         sidebarPanel,
         showIgnored,
+        hideTests,
         editMode,
         showComments,
         diffLayout,
@@ -244,6 +257,7 @@ export function useLayout() {
         toggleTerminalVisibility,
         setSidebarPanel,
         toggleShowIgnored,
+        toggleHideTests,
         setEditMode,
         toggleShowComments,
         setDiffLayout,
