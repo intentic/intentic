@@ -1459,25 +1459,53 @@ const replayStoredSession = async (conversation: Conversation): Promise<boolean>
             return false;
         }
     }
-    // An empty replay is not a transcript, it is the absence of one — the same distinction the mirror
-    // makes when it refuses to save a blank. Painting it would blank a good cached transcript on any
-    // daemon that answers but has nothing to say, which is exactly how a reopened tab goes empty.
-    if (restored.length > 0) {
+    /* A RUNNING TURN IS NOT IN THE RECORD, so a redraw from the record can only ever delete it. The daemon
+     * writes a turn as it SETTLES, which means the answer in hand describes every turn but the live one — and
+     * restoreMessages rebuilds the whole transcript. The live turn went with it: its prompt bubble, its tool
+     * cards, and the card it was parked on. Nothing brought them back either, because a turn parked on a card
+     * emits no further frames — leaving a spinner over a transcript that ends one turn early, with no card to
+     * answer and a reload that reproduced it rather than fixing it.
+     *
+     * Asked AFTER the awaits, because that is where a stream gets in: this read and the attach that renders the
+     * live turn are started by the same hydrate pass (and routinely by two of them at once), so the attach
+     * lands first as often as not. Standing down costs nothing — whatever is streaming attached to a transcript
+     * that was already painted, and the frames it is applying are the newer half of this same conversation.
+     *
+     * An empty replay is not a transcript either, it is the absence of one — the same distinction the mirror
+     * makes when it refuses to save a blank. Painting it would blank a good cached transcript on any
+     * daemon that answers but has nothing to say, which is exactly how a reopened tab goes empty. */
+    if (restored.length > 0 && !conversation.streaming.value) {
         conversation.restoreMessages(restored);
     }
     return true;
 };
 
+/* One hydrate at a time per conversation, and two of them at once is the ORDINARY case rather than a corner:
+ * opening a fleet agent starts one, and the pane's fleet watcher starts another the moment the roster names the
+ * conversation. Each holds its own daemon round-trip, so the slower one answers about a tab the faster one has
+ * already moved on — which is how a redraw lands on top of a turn attached in between.
+ *
+ * A second WeakSet, because `hydrating` cannot answer this: it marks a tab as hydrated FOR GOOD (the reachability
+ * sweep reads it as "already done"), while the fleet watcher's whole job is to hydrate the same tab AGAIN when the
+ * daemon says something about it changed. This one is in-flight only, and clears however the pass ends. */
+const hydrateInFlight = new WeakSet<Conversation>();
+
 // Hydrate a tab once, holding the mark only while (and after) the daemon actually answered. Exported for the
 // pane's fleet watcher (ChatPane), which calls it whenever the fleet settles or starts something about a
 // conversation this tab did not stream itself.
 export const hydrateOnce = (conversation: Conversation): void => {
+    if (hydrateInFlight.has(conversation)) {
+        return;
+    }
+    hydrateInFlight.add(conversation);
     hydrating.add(conversation);
-    void hydrate(conversation).then((current) => {
-        if (!current) {
-            hydrating.delete(conversation);
-        }
-    });
+    void hydrate(conversation)
+        .then((current) => {
+            if (!current) {
+                hydrating.delete(conversation);
+            }
+        })
+        .finally(() => hydrateInFlight.delete(conversation));
 };
 
 // Open (or focus) the tab bound to a fleet agent's conversationId, seeding identity from its registry summary.

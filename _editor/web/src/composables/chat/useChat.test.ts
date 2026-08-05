@@ -61,7 +61,7 @@ const mockConnections = (connections: { subscriptions?: Subscriptions; accounts?
 };
 const { useSandbox } = await import("../sandbox/useSandbox");
 const { setDaemonRoutes } = await import("../sandbox/useDaemonRoutes");
-const { loadAccountStatus, openAgentConversation, resetChat, useChat } = await import("./useChat");
+const { hydrateOnce, loadAccountStatus, openAgentConversation, resetChat, useChat } = await import("./useChat");
 const { useWorkspaceTabs } = await import("../workspace/useWorkspaceTabs");
 const { usageStatusByAccount } = await import("./usageStatus");
 
@@ -1181,5 +1181,123 @@ describe(`chat panes`, () => {
         resetChat();
 
         expect(useChat().panes.value).toEqual([`conv-b`]);
+    });
+});
+
+/* A TURN THAT IS STILL RUNNING IS NOT IN THE DAEMON'S RECORD, and hydration has to survive that.
+ *
+ * The record (/agents/:id/transcript) is written as turns SETTLE, so while one is in flight it holds every turn
+ * but that one — and painting it is a whole-transcript rebuild. Landing that on top of a turn a stream had
+ * already rendered took the turn with it: its prompt bubble, its tool cards, and the plan card it was parked on.
+ * Nothing redrew them, because a turn parked on a card emits no further frames. What was left on screen was a
+ * spinner over a transcript that ended one turn early, with nothing to approve — and reloading reproduced it
+ * rather than fixing it, since every open runs the same reads again.
+ *
+ * Two things had to be true for it, and both are pinned below: hydration must not run twice at once, and a
+ * replayed record must stand down rather than paint over a live turn. */
+describe(`hydrating a conversation whose turn is still running`, () => {
+    const encoder = new TextEncoder();
+    const sseFrame = (payload: unknown): Uint8Array => encoder.encode(`data: ${JSON.stringify(payload)}\n\n`);
+
+    // The record: the turn BEFORE the live one, which is all a settling-time record can hold.
+    const RECORDED = {
+        sessionId: `sess-live`,
+        messages: [
+            { role: `user`, text: `reword the notice` },
+            { role: `assistant`, text: `Reworded and verified.` },
+        ],
+    } as const;
+
+    // A run parked on its plan card: head, one frame, and no `end` — the stream stays open for as long as the
+    // agent waits on the user, which is the whole reason nothing redraws what a rebuild takes away.
+    const parkedRun = (): Response => {
+        const body = new ReadableStream<Uint8Array>({
+            start(controller) {
+                controller.enqueue(sseFrame({ kind: `attached`, run: `r1`, prompt: `add the reconcile engine`, startedAt: 1000, seq: 1 }));
+                controller.enqueue(sseFrame({ kind: `frame`, seq: 1, event: { kind: `plan`, requestId: `p1`, text: `# Reconcile engine\n\nStep 1` } }));
+            },
+        });
+        return { ok: true, body } as Response;
+    };
+
+    // The typewriter and the frame buffer drain via requestAnimationFrame; run them synchronously so a frame
+    // that arrived has landed by the time an assertion reads the transcript.
+    beforeEach(() => {
+        vi.stubGlobal(`requestAnimationFrame`, (callback: FrameRequestCallback): number => {
+            callback(0);
+            return 0;
+        });
+        vi.stubGlobal(`cancelAnimationFrame`, () => {});
+        storage.clear();
+        resetChat();
+    });
+
+    afterEach(() => {
+        vi.unstubAllGlobals();
+    });
+
+    /* Opening a fleet agent hydrates it, and the pane's fleet watcher hydrates it again the moment the roster
+     * names the conversation (ChatPane) — so two passes in flight at once is the ordinary case. Each holds its
+     * own round-trip, and the slower one answers about a tab the faster one has already moved on. */
+    it(`runs one pass at a time, so a second trigger cannot answer about a tab the first has moved on`, async () => {
+        let reads = 0;
+        sandboxRequestMock.mockImplementation((path: string) => {
+            if (path.endsWith(`/transcript`)) {
+                reads += 1;
+                return Promise.resolve({ ok: true, json: () => Promise.resolve(RECORDED) } as Response);
+            }
+            return Promise.resolve({ ok: false, status: 404, json: () => Promise.resolve({}) } as Response);
+        });
+
+        const conversation = openAgentConversation({ id: `hydrated-twice`, provider: `claude`, harness: `native` });
+        hydrateOnce(conversation);
+
+        await vi.waitFor(() => expect(conversation.messages.value).toHaveLength(2));
+        await new Promise((resolve) => setTimeout(resolve, 0));
+
+        expect(reads).toBe(1);
+    });
+
+    /* The invariant behind that, and the one that holds however the two got interleaved: a probe that finds the
+     * turn already owned by another stream reports "not attached", which is NOT "nothing is running" — and the
+     * fall-back replay must not take the running turn off the screen. */
+    it(`leaves a live turn alone when the stored replay lands after another stream engaged`, async () => {
+        const conversation = useChat().active.value;
+        // A tab with a transcript already on it: the record is only re-read on the fall-back path.
+        conversation.registered.value = true;
+        conversation.restoreMessages(RECORDED.messages);
+
+        // The hydrate's probe attaches first and is answered LAST — by then the turn belongs to the stream
+        // below, the probe stands down, and the fall-back replay runs against a conversation that is streaming.
+        let releaseProbe = (): void => undefined;
+        const probed = new Promise<void>((resolve) => {
+            releaseProbe = resolve;
+        });
+        let attaches = 0;
+        sandboxRequestMock.mockImplementation((path: string) => {
+            if (path.endsWith(`/transcript`)) {
+                return Promise.resolve({ ok: true, json: () => Promise.resolve(RECORDED) } as Response);
+            }
+            if (path !== `/agent/attach`) {
+                return Promise.resolve({ ok: false, status: 404, json: () => Promise.resolve({}) } as Response);
+            }
+            attaches += 1;
+            return attaches === 1 ? probed.then(parkedRun) : Promise.resolve(parkedRun());
+        });
+
+        hydrateOnce(conversation);
+        await vi.waitFor(() => expect(attaches).toBe(1));
+        void conversation.reattach();
+        await vi.waitFor(() => expect(conversation.messages.value.some((message) => message.plan !== undefined)).toBe(true));
+
+        releaseProbe();
+        // The fall-back read leaving the mock is not the redraw it would cause — that is another turn of the
+        // microtask queue past it, and asserting before it lands is what makes this test pass on the bug.
+        await new Promise((resolve) => setTimeout(resolve, 0));
+        await nextTick();
+
+        expect(conversation.streaming.value).toBe(true);
+        expect(conversation.messages.value.map((message) => message.text)).toContain(`add the reconcile engine`);
+        expect(conversation.messages.value.find((message) => message.plan !== undefined)?.plan?.status).toBe(`pending`);
     });
 });
