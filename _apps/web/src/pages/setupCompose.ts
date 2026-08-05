@@ -34,7 +34,7 @@ export interface ComposeArgs {
 // web-app origin (app.*), which serves only static files and 405s a POST. Mirrors connect.sh's PLATFORM_URL.
 const PLATFORM_DEFAULT = `https://api.intentic.dev`;
 // Mirrors connect.sh's CLOUDFLARED_IMAGE; the alias and per-sandbox names come from the run contract.
-const CLOUDFLARED_IMAGE = `cloudflare/cloudflared:2026.7.2`;
+const CLOUDFLARED_IMAGE = `cloudflare/cloudflared:2026.7.3@sha256:e39ee8da81ad5e05d77f38d2f51c60ca51bf2a8450ac3abab50c17fdb91d91bf`;
 
 const slugOf = (hostname: string): string => hostname.split(`.`)[0] ?? hostname;
 const isLocal = (url: string): boolean => url.includes(`//localhost`) || url.includes(`//127.0.0.1`);

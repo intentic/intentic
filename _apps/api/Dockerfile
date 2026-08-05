@@ -9,7 +9,7 @@
 #
 # Runtime config (see src/config.ts) is injected by the deployment, never baked: DATABASE_URL,
 # BETTER_AUTH_SECRET, SECRETS_KEY, WEB_ORIGIN, API_URL, GOOGLE_CLIENT_*, INTENTIC_CLOUDFLARE_*, STRIPE_*, …
-FROM oven/bun:1.3.14-slim
+FROM oven/bun:1.3.14-slim@sha256:d56a2534ffd262e92c12fd3249d3924d296d97086da773f821d7d0477435ea04
 LABEL org.opencontainers.image.source=https://github.com/intentic/intentic
 WORKDIR /app
 COPY . /app

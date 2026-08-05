@@ -96,7 +96,7 @@ $SelfHostAddress = ''
 $GoogleClientId = if ($env:GOOGLE_CLIENT_ID) { $env:GOOGLE_CLIENT_ID } else { '481795963975-cq9msl6higcd91joidrfp8mjlkuq5fk3.apps.googleusercontent.com' }
 $WebOrigin = if ($env:WEB_ORIGIN) { $env:WEB_ORIGIN } else { 'https://app.intentic.dev' }
 $Zone = $env:ZONE
-$CloudflaredImage = if ($env:CLOUDFLARED_IMAGE) { $env:CLOUDFLARED_IMAGE } else { 'cloudflare/cloudflared:2026.6.1' }
+$CloudflaredImage = if ($env:CLOUDFLARED_IMAGE) { $env:CLOUDFLARED_IMAGE } else { 'cloudflare/cloudflared:2026.7.3@sha256:e39ee8da81ad5e05d77f38d2f51c60ca51bf2a8450ac3abab50c17fdb91d91bf' }
 # The platform can PRE-PROVISION the tunnel (intentic-provided path, for users with no Cloudflare of their own):
 # it fills $env:TUNNEL_TOKEN + $env:SANDBOX_HOSTNAME into the one-liner instead of CF_TOKEN. When both are set we
 # skip all Cloudflare API work and just run the sandbox + cloudflared with the given connector token. $Subdomain

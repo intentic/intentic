@@ -7,7 +7,7 @@ import { IGNORES, sanitizeId, sshAlias } from "./ssh.js";
 
 // Pinned tool versions. cloudflared matches the sandbox image's pin so both ends speak the same tunnel protocol.
 const MUTAGEN_VERSION = "0.18.1";
-const CLOUDFLARED_VERSION = "2026.7.2";
+const CLOUDFLARED_VERSION = "2026.7.3";
 
 // The prefix every session this agent creates carries, sync and forward alike — what makes them all findable
 // again later, whichever pairing created them (see ourSyncSessions / ourForwardSessions).

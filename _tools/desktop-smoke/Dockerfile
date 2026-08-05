@@ -11,7 +11,7 @@
 # to bundle is missing here too — except the handful the AppImage excludelist deliberately leaves to the host
 # (libfribidi, libharfbuzz, libEGL …). Those are installed by smoke.sh in the appimage tier ONLY, so this image
 # stays bare for the deb's Depends.
-FROM debian:bookworm-slim
+FROM debian:bookworm-20260803-slim@sha256:abd67ffcfa541b485a3dff59865ab629aa048a6c613e639d36e7456b0b229241
 
 # Xvfb + dbus: a Tauri app is a GTK app, and GTK needs both a display and a session bus. xdg-utils carries
 # xdg-open and xdg-mime — the real OS path a deep link takes, and the thing the .desktop MIME entry feeds.

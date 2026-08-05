@@ -49,9 +49,9 @@ const jobYaml = (parsed: GlCiInputs, environment: GlCiInputs["environments"][num
     return [
         `build-${environment.name}:`,
         "  stage: build",
-        "  image: docker:27",
+        "  image: docker:29",
         "  services:",
-        "    - docker:27-dind",
+        "    - docker:29-dind",
         "  rules:",
         `    - if: '$CI_COMMIT_BRANCH == "${environment.branch}"'`,
         "  before_script:",
