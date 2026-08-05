@@ -96,21 +96,27 @@ test("host-probes names what to ask the host, and only for what the overlay aske
 
 test("--unsupported drops those directives and records why, leaving the rest of the run intact", async () => {
     const args = ["--slug", "s6", "--image", "i", "--base-image", "i", "--runtime", "# intentic:runtime --privileged --gpus=all"];
-    const honoured = await runVerb(args, "");
+    // Three independent invocations, so they go out together. Nothing here depends on the one before it, and a
+    // tsx start is the only real cost this file has: taken in sequence, this test paid it three times against
+    // the same 30s its one-spawn siblings get, which is why it — and only it — timed out on a loaded runner.
+    const [honoured, unsupported, detached] = await Promise.all([
+        runVerb(args, ""),
+        // ATTACHED, and this test is the reason the flows write it that way: the values are themselves docker
+        // flags, so the detached spelling makes the parser read `--gpus=all` as a flag of ours that doesn't exist.
+        runVerb([...args, "--unsupported=--gpus=all"], ""),
+        // Detached, it is refused outright rather than silently ignored — a flow that regresses to it prints
+        // nothing, and every caller here treats an empty run command as a hard failure.
+        runVerb([...args, "--unsupported", "--gpus=all"], ""),
+    ]);
+
     expect(honoured.stdout).toContain("--gpus=all");
     expect(honoured.stdout).toContain("SANDBOX_GPU=all");
 
-    // ATTACHED, and this test is the reason the flows write it that way: the values are themselves docker
-    // flags, so the detached spelling makes the parser read `--gpus=all` as a flag of ours that doesn't exist.
-    const { stdout } = await runVerb([...args, "--unsupported=--gpus=all"], "");
-    expect(stdout).not.toContain("--gpus");
-    expect(stdout).toContain("SANDBOX_GPU=unsupported");
+    expect(unsupported.stdout).not.toContain("--gpus");
+    expect(unsupported.stdout).toContain("SANDBOX_GPU=unsupported");
     // The privilege the nested engine actually needs is not collateral damage — only the optional one comes off.
-    expect(stdout).toContain("--privileged");
+    expect(unsupported.stdout).toContain("--privileged");
 
-    // Detached, it is refused outright rather than silently ignored — a flow that regresses to it prints
-    // nothing, and every caller here treats an empty run command as a hard failure.
-    const detached = await runVerb([...args, "--unsupported", "--gpus=all"], "");
     expect(detached.stdout).toBe("");
 }, 30_000);
 

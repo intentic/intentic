@@ -56,7 +56,10 @@ const walk = async (dir: string): Promise<string[]> => {
     const found = await Promise.all(
         entries.map(async (entry) => {
             if (entry.isDirectory()) {
-                return entry.name.startsWith(".") || IGNORED_DIRS.has(entry.name) ? [] : walk(join(dir, entry.name));
+                // `target` is cargo's build tree (ic, the desktop crate). No module of ours lives in it, and on a
+                // runner that checks out without cleaning it is tens of thousands of stats for nothing —
+                // sandbox-run-contract.test.ts skips it for the same reason.
+                return entry.name.startsWith(".") || entry.name === "target" || IGNORED_DIRS.has(entry.name) ? [] : walk(join(dir, entry.name));
             }
             return SCANNED.has(entry.name.slice(entry.name.lastIndexOf("."))) ? [join(dir, entry.name)] : [];
         }),
@@ -69,13 +72,18 @@ test("every module a comment names still exists under that name", async () => {
     const basenames = new Set(files.map((file) => file.slice(file.lastIndexOf("/") + 1)));
     const stems = new Set([...basenames].map((name) => name.slice(0, name.indexOf("."))));
 
+    // Read the tree in ONE batch rather than one await at a time. Same ~2400 files either way, but serialized
+    // they are 2400 round trips taken inside a suite that runs 230 files at once: 3736ms of a 5000ms budget in
+    // the last green run, 5015ms and a timeout in the next one, with nothing about this test having changed.
+    // Batched, the reads overlap and the cost is back to a fraction of the budget — which is what makes the
+    // budget mean "this hung" again instead of "the runner was busy".
+    const sources = await Promise.all(
+        files.filter((file) => !file.endsWith(SELF)).map(async (file) => [file, await readFile(file, "utf8").catch(() => "")] as const),
+    );
+
     let checked = 0;
     const dead: string[] = [];
-    for (const file of files) {
-        if (file.endsWith(SELF)) {
-            continue;
-        }
-        const source = await readFile(file, "utf8").catch(() => "");
+    for (const [file, source] of sources) {
         for (const token of source.match(TOKENS) ?? []) {
             if (!token.startsWith("//") && !token.startsWith("/*")) {
                 continue;
@@ -105,4 +113,7 @@ test("every module a comment names still exists under that name", async () => {
         [...new Set(dead)].toSorted(),
         "These comments name a file that does not exist — point them at the current name, or reword so the name is not a claim about this tree.",
     ).toEqual([]);
-});
+    // A stated budget, because vitest's 5s default was never a judgement about a suite that reads every source
+    // file in the repository: it is ~200ms of work on an idle machine and crossed 5s on a runner doing 230 test
+    // files at once, which failed CI for being busy rather than for being wrong. 20s still catches a hang.
+}, 20_000);

@@ -67,12 +67,13 @@ const walk = async (dir: string): Promise<string[]> => {
 };
 
 test("no file in the repo hand-rolls a sandbox container run — TS composes from the contract, scripts use the verb", async () => {
-    for (const file of await walk(REPO_ROOT)) {
-        // Test files describe the shape in order to assert it; the contract lib is the shape.
-        if (file.endsWith(".test.ts") || file.includes("_sandbox/sandbox-run/")) {
-            continue;
-        }
-        const content = await readFile(file, "utf8").catch(() => "");
+    // Test files describe the shape in order to assert it; the contract lib is the shape.
+    const files = (await walk(REPO_ROOT)).filter((file) => !file.endsWith(".test.ts") && !file.includes("_sandbox/sandbox-run/"));
+    // One batch, not one await per file — this scan timed out beside comment-refs.test.ts, on the same runner
+    // and for the same reason, and that file's read carries the measurements.
+    const sources = await Promise.all(files.map(async (file) => [file, await readFile(file, "utf8").catch(() => "")] as const));
+
+    for (const [file, content] of sources) {
         if (!WORK_MOUNT.test(content) || !STARTS_CONTAINER.test(content)) {
             continue;
         }
@@ -83,7 +84,9 @@ test("no file in the repo hand-rolls a sandbox container run — TS composes fro
         }
         expect.fail(`${rel}: hand-rolled sandbox docker run — execute \`intentic ${VERB}\` (the image speaks the run contract) instead`);
     }
-});
+    // Stated for the same reason comment-refs.test.ts states one: a whole-repo scan is not what vitest's 5s
+    // default is sized for, and both suites failed the same run on runner load rather than on a real finding.
+}, 20_000);
 
 test("every creation flow still speaks the contract — the positive floor under the discovery above", async () => {
     // ic is where the verbs are invoked (argv elements, so the space-joined VERB never appears literally).
