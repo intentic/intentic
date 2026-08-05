@@ -22,7 +22,7 @@ import { type LandContext, queueVerify, type VerifyDeps } from "../workspace/ver
 import { syncAdvisory, syncWorkspaceRepos } from "../workspace/sync-repos.js";
 import { resolveWithin } from "../workspace/workspace-files.js";
 import { startAnchor, type TurnPlacement } from "../agents/isolation.js";
-import { holdAccount } from "../claude/claude-credentials.js";
+import { holdAccount, markEntitled, markNotEntitled } from "../claude/claude-credentials.js";
 import { accountLimitReset } from "../usage/account-usage.js";
 import { isIsolated } from "../agents/agents-store.js";
 import { landAgent } from "../agents/land.js";
@@ -784,6 +784,13 @@ async function* runTurn(
                     void services.providerRefusals
                         .clear(provider, resolvedAccount)
                         .catch((error: unknown) => services.logger.warn({ err: error }, "provider refusal: settle failed"));
+                    // And the seat itself: an account that answers is an account that may serve turns again, so
+                    // an admin re-enabling Claude Code puts it back in the rotation with no reconnect.
+                    if (resolvedAccount !== undefined) {
+                        void markEntitled(services.claudeStore, resolvedAccount).catch((error: unknown) =>
+                            services.logger.warn({ err: error }, "claude account: could not clear the entitlement mark"),
+                        );
+                    }
                 }
             }
             if (event.kind === "delta") {
@@ -879,6 +886,16 @@ async function* runTurn(
                         yield { ...event, autoResume: "scheduled" };
                         continue;
                     }
+                }
+                /* THE SEAT, NOT THE CREDENTIAL. This account signs in perfectly and its organization has Claude
+                 * Code switched off, so there is nothing to re-mint and nothing to wait for — the only remedy is
+                 * to stop choosing it, which is what the mark does (claude-credentials.markNotEntitled). The turn
+                 * that discovered it still fails, with the provider's own sentence; every turn after it is
+                 * routed to an account that can answer. */
+                if (event.code === "claude-not-entitled" && resolvedAccount !== undefined) {
+                    void markNotEntitled(services.claudeStore, resolvedAccount, event.message).catch((error: unknown) =>
+                        services.logger.warn({ err: error }, "claude account: could not record the entitlement refusal"),
+                    );
                 }
                 if (event.code === "rate_limit") {
                     // An api_retry rate limit carries the SDK's own retry instant directly. Older/final refusal

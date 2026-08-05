@@ -6,7 +6,7 @@ import {
     type NativeProvider,
     PROVIDER_VENDOR,
 } from "@intentic/sandbox-contract";
-import { ensureFreshToken, replaceRejectedToken } from "../claude/claude-credentials.js";
+import { accountUsable, ensureFreshToken, replaceRejectedToken } from "../claude/claude-credentials.js";
 import { unversionedBase } from "../endpoints/endpoint-config.js";
 import { endpointModelId } from "../endpoints/endpoint-translator.js";
 import type { Services } from "../composition.js";
@@ -320,15 +320,24 @@ export const resolveHarnessCredentials = async (
      *
      * The refusal is read here rather than inside the picker because this is the layer that knows which PROVIDER
      * the turn is for; a claude turn must not be steered by the last thing Kimi said. Only a native Claude turn
-     * consults it at all — a routed turn spends the translator's own subscriptions, which it balances itself. */
+     * consults it at all — a routed turn spends the translator's own subscriptions, which it balances itself.
+     *
+     * AND OUT OF ACCOUNTS THAT CAN SERVE A TURN AT ALL, which is the harder half of the same question. The last
+     * refusal is one account and one moment — it ranks that account last and lets it back the next time nothing
+     * else is free. An account whose ORGANIZATION has Claude Code switched off is not a moment: it
+     * authenticates, publishes full headroom, refuses everything, and is therefore ALWAYS the freest account on
+     * the list. Ranking it last is not enough, because "last" is still chosen on a sandbox where the others are
+     * spent — so a marked account (markNotEntitled) comes out of the running entirely until a turn on it
+     * answers. Only if that empties the list does the whole of it stand again: a refusal naming the reason
+     * beats "no Claude account connected", which would be a lie about a sandbox that has three. A NAMED account
+     * is never filtered — the user pointing at one is entitled to its own error. */
     const refusal = (await services.providerRefusals.read())["claude"];
+    const connected = await services.claudeStore.list();
+    const stored = await Promise.all(connected.map((account) => services.claudeStore.read(account.id)));
+    const usable = stored.flatMap((account) => (account !== undefined && accountUsable(account) ? [account.id] : []));
+    const candidates = usable.length > 0 ? usable : connected.map((account) => account.id);
     const accountId =
-        input.account ??
-        (await accountWithHeadroom(
-            services.accountUsage,
-            (await services.claudeStore.list()).map((account) => account.id),
-            refusal?.kind === "limit" ? undefined : refusal?.account,
-        ));
+        input.account ?? (await accountWithHeadroom(services.accountUsage, candidates, refusal?.kind === "limit" ? undefined : refusal?.account));
     // A refresh that fails joins the other refusals rather than throwing past the caller: a stored account whose
     // token can no longer be renewed is the same class of problem as one that was never connected, and both end
     // at the same place on the surface. Reported with the store's own message, which says which of the several

@@ -216,14 +216,24 @@ const sameChats = (a: readonly string[], b: readonly string[]): boolean => a.len
  * have the answer in them. The third is a set already on screen, which is most polls; this runs on all of them.
  */
 export const runToFollow = (run: WorkflowRun, showing: readonly string[]): RunSession[] | undefined => {
-    const front = frontSessions(run);
-    if (
-        front.length === 0 ||
-        sameChats(
-            front.map((session) => session.conversationId),
-            showing,
-        )
-    ) {
+    /* THE BAND ON SCREEN IS NOT GIVEN UP FOR ONE THAT HAS NOT STARTED, which is the difference between a panel
+     * that follows a run and one that snatches. `frontSessions` answers with steps that are merely READY the
+     * moment their dependencies land — so the two attempts a reader was in the middle of comparing were
+     * replaced by an empty merge pane the instant the second one finished, seconds before that merge had a
+     * word in it. Once the panes hold this run's work, only a step that is actually RUNNING takes them.
+     *
+     * The ready-set still answers at the START, where the panes hold nothing of the run: the daemon acks with
+     * every step pending, and waiting for `running` there is what used to leave a diagram on screen instead of
+     * the sessions. So: fill from the front, move on live work. */
+    const front = paneShowsRun(run, showing) ? liveSessions(run) : frontSessions(run);
+    /* AND A BAND IS NOT NARROWED AS ITS MEMBERS LAND, which is the same rule one step finer. Two attempts do
+     * not finish together: the first one to land takes itself out of the live set, and a panel that followed
+     * that closed the pane out from under a reader mid-sentence. So the question is not "is the live set what
+     * is showing" but "is there anything live that is NOT showing" — which is true exactly when a new band has
+     * started, and false for every poll in between. */
+    // `every` answers true for the empty set too, which is the same answer for the same reason: a run with
+    // nothing live has nothing to move the panes to.
+    if (front.every((session) => showing.includes(session.conversationId))) {
         return undefined;
     }
     return front;

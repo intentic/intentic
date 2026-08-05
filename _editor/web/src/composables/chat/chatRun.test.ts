@@ -203,6 +203,27 @@ test("a live band already on screen is left alone, whatever order it is in", () 
     expect(runToFollow(design, [`wf-r1-b`, `wf-r1-a`])).toBeUndefined();
 });
 
+/* THE BAND ON SCREEN IS HELD UNTIL THE NEXT ONE ACTUALLY STARTS. The merge becomes READY the instant the second
+ * attempt lands, which is seconds before the scheduler picks it up — and following the ready-set there took two
+ * transcripts a reader was comparing away and replaced them with an empty pane. */
+test("a band that has finished is kept until the step after it is really working", () => {
+    const design = run(
+        [step(`a`), step(`b`), step(`after`, { needs: [`a`, `b`] })],
+        [{ state: `done` }, { state: `done` }, { state: `pending`, iterations: 0 }],
+    );
+    expect(runToFollow(design, [`wf-r1-a`, `wf-r1-b`])).toBeUndefined();
+    // Nothing of the run on screen is the other case, and it still fills from the ready set — that is what puts
+    // the first sessions up on the press instead of a diagram.
+    expect(runToFollow(design, [`the-composer-they-typed-into`])?.map((session) => session.conversationId)).toEqual([`wf-r1-after`]);
+});
+
+// Two attempts never land together, and the one still going is not a new band — narrowing the panes to it
+// would close the finished transcript out from under whoever was reading it.
+test("the pane of an attempt that has landed stays open while its partner finishes", () => {
+    const design = run([step(`a`), step(`b`)], [{ state: `done` }, { state: `running` }]);
+    expect(runToFollow(design, [`wf-r1-a`, `wf-r1-b`])).toBeUndefined();
+});
+
 /* A RUN THAT HAS ENDED KEEPS ITS LAST BAND ON SCREEN. "Nothing live" is true at both ends of a run and wants
  * opposite answers: at the start the panes hold chats that are not about the run, and at the end they hold the
  * work itself — which is exactly when the transcripts finally have the answer in them.
