@@ -6,6 +6,7 @@ import { useRoute } from "vue-router";
 import BridgeTokensCard from "./BridgeTokensCard.vue";
 import DesktopSyncCard from "./DesktopSyncCard.vue";
 import { reportStale, useComputers } from "../../composables/sandbox/useComputers";
+import { useNow } from "../../composables/useNow";
 
 /* The Sandbox hub's "Computers" tab — what is on the other end of this sandbox.
  *
@@ -26,14 +27,13 @@ const highlight = ref(false);
 const { computers, error } = useComputers();
 
 // One clock for the whole render, so every row's staleness is judged against the same instant rather than each
-// against the moment its own computed happened to run.
-const now = ref(Date.now());
+// against the moment its own computed happened to run — and the app's one clock, so it stops with this tab.
+const now = useNow();
 onMounted(() => {
     if (route.query[`enable`] === `desktop-sync`) {
         highlight.value = true;
         setTimeout(() => document.getElementById(`desktop-sync`)?.scrollIntoView({ behavior: `smooth`, block: `center` }), 50);
     }
-    setInterval(() => (now.value = Date.now()), 5000);
 });
 
 /* Each gap is a different errand, so each gets its own sentence rather than one "unavailable". `scope-off` is the

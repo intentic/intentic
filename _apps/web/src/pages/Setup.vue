@@ -12,6 +12,7 @@ import { apiClient } from "../composables/useApi";
 import { errorMessage } from "../composables/useAsyncAction";
 import { useAuth } from "../composables/useAuth";
 import { useGoogleIdentity } from "../composables/useGoogleIdentity";
+import { useNow } from "../composables/useNow";
 import CloudflareTokenField from "../components/CloudflareTokenField.vue";
 import { useCloudflareZones } from "../composables/extensions/useCloudflareZones";
 import { sandboxIdFromToken } from "../composables/sandbox/sandboxIdFromToken";
@@ -354,9 +355,10 @@ const handoff = computed<Handoff>(() => {
  * the command has to be run somewhere else will never do anything this page can react to, so nothing but
  * elapsed time can trigger the correction. `armedAt` is when the command became runnable — reset by a re-mint,
  * which hands out a different command. */
-const now = ref(Date.now());
 const armedAt = ref<number | undefined>(undefined);
-const clock = setInterval(() => (now.value = Date.now()), 1000);
+// The app's one wall clock, armed only while a command is on screen — nothing below reads it before then
+// (waitedMs is 0 without an armedAt, and `claimed` implies one), so an unarmed step 3 costs no tick.
+const now = useNow(() => armedAt.value !== undefined);
 watch(commandReady, (ready) => {
     armedAt.value = ready ? Date.now() : undefined;
 });
@@ -799,7 +801,6 @@ const discard = async (): Promise<void> => {
 const timer = setInterval(() => void check(), 3000);
 onUnmounted(() => {
     clearInterval(timer);
-    clearInterval(clock);
     clearTimeout(mintTimer);
 });
 

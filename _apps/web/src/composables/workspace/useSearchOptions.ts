@@ -1,4 +1,4 @@
-import { ref } from "vue";
+import { ref, watch, type Ref } from "vue";
 
 /* What the workspace search box remembers between searches (module-level singleton, persisted): the three
  * match switches every editor puts inside its search field — VSCode's Aa / ab / .* — plus how wide the search
@@ -24,33 +24,45 @@ const readBool = (key: string): boolean => {
     }
 };
 
-const write = (key: string, value: boolean): void => {
-    try {
-        localStorage.setItem(key, value ? `1` : `0`);
-    } catch {
-        // ignore
-    }
+/* One switch, seeded from storage and persisting every change — which is what makes it a plain ref every
+ * caller can flip directly, the way the rest of the persisted singletons work (useFileNesting,
+ * useChangeGrouping, useExplorerStyle all say the same thing in their own comment).
+ *
+ * Write-through belongs to the ref, not to a setter standing beside it. These four used to be paired with four
+ * `toggleX` functions whose only job was to remember to save, so the ref and the stored value were two places
+ * one preference lived: a `.value =` from anywhere but those four call sites read back fine for the rest of the
+ * session and then silently forgot on reload. */
+const persistedBool = (key: string): Ref<boolean> => {
+    const state = ref(readBool(key));
+    watch(state, (value) => {
+        try {
+            localStorage.setItem(key, value ? `1` : `0`);
+        } catch {
+            // Storage may be unavailable (private mode); the in-memory ref still holds.
+        }
+    });
+    return state;
 };
 
-const useRegex = ref<boolean>(readBool(REGEX_KEY));
-const matchCase = ref<boolean>(readBool(CASE_KEY));
-const wholeWord = ref<boolean>(readBool(WORD_KEY));
-const includeIgnored = ref<boolean>(readBool(INCLUDE_IGNORED_KEY));
-
-const toggle = (state: typeof useRegex, key: string): void => {
-    state.value = !state.value;
-    write(key, state.value);
-};
+const useRegex = persistedBool(REGEX_KEY);
+const matchCase = persistedBool(CASE_KEY);
+const wholeWord = persistedBool(WORD_KEY);
+const includeIgnored = persistedBool(INCLUDE_IGNORED_KEY);
 
 export function useSearchOptions() {
-    return {
-        useRegex,
-        matchCase,
-        wholeWord,
-        includeIgnored,
-        toggleRegex: () => toggle(useRegex, REGEX_KEY),
-        toggleMatchCase: () => toggle(matchCase, CASE_KEY),
-        toggleWholeWord: () => toggle(wholeWord, WORD_KEY),
-        toggleIncludeIgnored: () => toggle(includeIgnored, INCLUDE_IGNORED_KEY),
-    };
+    return { useRegex, matchCase, wholeWord, includeIgnored };
 }
+
+/* The three match switches, in the order every editor puts them — shipped from here beside the state they
+ * flip, because both search surfaces (the desktop field's inline row and the mobile row under it) were
+ * writing the identical list of labels, tooltips and refs out by hand, and a third would have had to guess
+ * whether the regex switch is `.*` or `re`. Same split as OS_OPTIONS: the descriptors are shared, the markup
+ * is not — a 16px glyph inside a text field and a 32px touch target have nothing in common.
+ *
+ * Each row carries the REF, not a snapshot of it plus a function to flip it: the switch is the state, so a
+ * caller reads `state.value` and assigns `state.value` like it would any other. */
+export const MATCH_TOGGLES: readonly { label: string; title: string; state: Ref<boolean> }[] = [
+    { label: `Aa`, title: `Match case`, state: matchCase },
+    { label: `ab`, title: `Match whole word`, state: wholeWord },
+    { label: `.*`, title: `Use regular expression`, state: useRegex },
+];

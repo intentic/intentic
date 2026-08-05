@@ -20,7 +20,7 @@ import { useRepos } from "../../composables/workspace/useRepos";
 import { useUploadQueue } from "../../composables/workspace/useUploadQueue";
 import { useWorkspaceRoute } from "../../composables/workspace/useWorkspaceRoute";
 import { type SearchScope, useWorkspaceSearch } from "../../composables/workspace/useWorkspaceSearch";
-import { useSearchOptions } from "../../composables/workspace/useSearchOptions";
+import { MATCH_TOGGLES, useSearchOptions } from "../../composables/workspace/useSearchOptions";
 import { useWorkspaceTabs } from "../../composables/workspace/useWorkspaceTabs";
 import { useWorkspaceTree } from "../../composables/workspace/useWorkspaceTree";
 import { filesToEntries } from "./dropEntries";
@@ -102,12 +102,6 @@ const contentMode = computed(() => searchScope.value !== `name`);
 const textMode = computed(() => searchScope.value === `text`);
 const contentScope = computed<SearchScope>(() => (searchScope.value === `smart` ? `smart` : `text`));
 const search = useSearchOptions();
-// One descriptor per switch so the row is a v-for instead of three near-identical buttons.
-const matchToggles = computed(() => [
-    { label: `Aa`, title: `Match case`, on: search.matchCase.value, flip: search.toggleMatchCase },
-    { label: `ab`, title: `Match whole word`, on: search.wholeWord.value, flip: search.toggleWholeWord },
-    { label: `.*`, title: `Use regular expression`, on: search.useRegex.value, flip: search.toggleRegex },
-]);
 const {
     groups: searchGroups,
     total: searchTotal,
@@ -697,16 +691,16 @@ const endResize = (event: PointerEvent): void => {
                                  keyboard activation is untouched. -->
                             <template v-if="textMode">
                                 <button
-                                    v-for="toggle in matchToggles"
+                                    v-for="toggle in MATCH_TOGGLES"
                                     :key="toggle.label"
                                     type="button"
                                     class="flex h-4 w-4 items-center justify-center rounded font-mono text-[0.6rem] leading-none text-subtle transition-colors hover:bg-overlay hover:text-content"
-                                    :class="{ 'bg-primary-600/20 text-link': toggle.on }"
-                                    :aria-pressed="toggle.on"
+                                    :class="{ 'bg-primary-600/20 text-link': toggle.state.value }"
+                                    :aria-pressed="toggle.state.value"
                                     v-tooltip.bottom="toggle.title"
                                     :aria-label="toggle.title"
                                     @mousedown.prevent
-                                    @click="toggle.flip()"
+                                    @click="toggle.state.value = !toggle.state.value"
                                 >
                                     {{ toggle.label }}
                                 </button>
@@ -745,7 +739,7 @@ const endResize = (event: PointerEvent): void => {
                                     ? 'Including ignored files — node_modules, gitignored paths, the refs/ reference shelf'
                                     : 'Skipping ignored files — node_modules, gitignored paths, the refs/ reference shelf'
                             "
-                            @click="search.toggleIncludeIgnored()"
+                            @click="search.includeIgnored.value = !search.includeIgnored.value"
                         >
                             <Icon class="text-2xs" :name="search.includeIgnored.value ? `eye` : `eye-slash`" />
                             Ignored

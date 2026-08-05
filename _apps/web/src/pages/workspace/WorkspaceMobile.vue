@@ -12,7 +12,7 @@ import { useChangeGrouping } from "../../composables/workspace/useChangeGrouping
 import { useChanges } from "../../composables/workspace/useChanges";
 import { useMonaco } from "../../composables/workspace/useMonaco";
 import { useUploadQueue } from "../../composables/workspace/useUploadQueue";
-import { useSearchOptions } from "../../composables/workspace/useSearchOptions";
+import { MATCH_TOGGLES, useSearchOptions } from "../../composables/workspace/useSearchOptions";
 import { useWorkspaceRoute } from "../../composables/workspace/useWorkspaceRoute";
 import { type SearchScope, useWorkspaceSearch } from "../../composables/workspace/useWorkspaceSearch";
 import { useWorkspaceTabs } from "../../composables/workspace/useWorkspaceTabs";
@@ -136,11 +136,6 @@ const contentMode = computed(() => searchScope.value !== `name`);
 const textMode = computed(() => searchScope.value === `text`);
 const contentScope = computed<SearchScope>(() => (searchScope.value === `smart` ? `smart` : `text`));
 const search = useSearchOptions();
-const matchToggles = computed(() => [
-    { label: `Aa`, title: `Match case`, on: search.matchCase.value, flip: search.toggleMatchCase },
-    { label: `ab`, title: `Match whole word`, on: search.wholeWord.value, flip: search.toggleWholeWord },
-    { label: `.*`, title: `Use regular expression`, on: search.useRegex.value, flip: search.toggleRegex },
-]);
 const {
     groups: searchGroups,
     total: searchTotal,
@@ -396,14 +391,14 @@ const onPick = (event: Event): void => {
                 <div v-if="contentMode" class="flex shrink-0 items-center gap-1.5 px-2 pb-1.5">
                     <template v-if="textMode">
                         <button
-                            v-for="toggle in matchToggles"
+                            v-for="toggle in MATCH_TOGGLES"
                             :key="toggle.label"
                             type="button"
                             class="flex h-8 w-9 items-center justify-center rounded-lg font-mono text-xs leading-none text-muted transition-colors active:bg-overlay"
-                            :class="{ 'bg-primary-600/20 text-link': toggle.on }"
-                            :aria-pressed="toggle.on"
+                            :class="{ 'bg-primary-600/20 text-link': toggle.state.value }"
+                            :aria-pressed="toggle.state.value"
                             :aria-label="toggle.title"
-                            @click="toggle.flip()"
+                            @click="toggle.state.value = !toggle.state.value"
                         >
                             {{ toggle.label }}
                         </button>
@@ -414,7 +409,7 @@ const onPick = (event: Event): void => {
                         class="flex h-8 shrink-0 items-center gap-1 rounded-lg px-2 text-2xs font-medium text-muted transition-colors active:bg-overlay"
                         :class="{ 'bg-primary-600/15 text-link': search.includeIgnored.value }"
                         :aria-pressed="search.includeIgnored.value"
-                        @click="search.toggleIncludeIgnored()"
+                        @click="search.includeIgnored.value = !search.includeIgnored.value"
                     >
                         <Icon :name="search.includeIgnored.value ? `eye` : `eye-slash`" class="text-2xs" />
                         Ignored
