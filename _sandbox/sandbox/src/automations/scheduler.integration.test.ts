@@ -1,8 +1,9 @@
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { type AgentEvent, type AgentTurn, type Automation, type SandboxSettings, SandboxSettingsSchema } from "@intentic/sandbox-contract";
+import { type AgentEvent, type AgentTurn, type Automation, SandboxSettingsSchema } from "@intentic/sandbox-contract";
 import { expect, test, vi } from "vitest";
+import type { z } from "zod";
 import { fileTurnJournal } from "../agent/turn-journal.js";
 import type { Services } from "../composition.js";
 import { unstubbed } from "@intentic/testing";
@@ -14,7 +15,7 @@ import { createAutomationsScheduler, fireAutomation, type WakeFn } from "./sched
 // plus, for the countdown scan, the registry's liveSessionIds (`live` mutates in place, as a test's fleet
 // does); `unstubbed` keeps the fake that small. The journal is a real one on a temp dir — the in-flight entry
 // is what several tests assert on.
-const fakeServices = (root: string, settings: Partial<SandboxSettings> = {}, live: string[] = []): Services =>
+const fakeServices = (root: string, settings: z.input<typeof SandboxSettingsSchema> = {}, live: string[] = []): Services =>
     unstubbed<Services>("services", {
         agents: unstubbed<Services["agents"]>("agents", { liveSessionIds: () => live }),
         automations: fileAutomationsStore(join(root, "automations.json")),

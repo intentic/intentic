@@ -271,10 +271,12 @@ const ROUTES: readonly (readonly [string, string, Handler])[] = [
     ],
     [`GET`, `/system/subagents`, () => json({ subagents: [] })],
 
-    [`GET`, `/agents`, () => json({ agents: roster.agents, rev: roster.rev } satisfies AgentsList)],
-    [`GET`, `/agents/archived`, () => json({ agents: [], rev: roster.rev } satisfies AgentsList)],
+    // `held` is the same approvals queue /automations/pending serves, projected onto the board — so the demo's
+    // "needs you" wake sits beside the running cards, as it does in the real fleet.
+    [`GET`, `/agents`, () => json({ agents: roster.agents, rev: roster.rev, held: automationApprovals(Date.now()) } satisfies AgentsList)],
+    [`GET`, `/agents/archived`, () => json({ agents: [], rev: roster.rev, held: [] } satisfies AgentsList)],
     [`GET`, `/agents/search`, ({ url }) => json(searchAgents(url.searchParams.get(`query`) ?? ``))],
-    [`POST`, `/agents/seen`, () => json({ agents: roster.agents, rev: roster.rev } satisfies AgentsList)],
+    [`POST`, `/agents/seen`, () => json({ agents: roster.agents, rev: roster.rev, held: automationApprovals(Date.now()) } satisfies AgentsList)],
     [`GET`, `/agents/{id}/diff`, ({ param }) => json(agentChanges(param(`id`)))],
     // Opening a card that is NOT mid-turn reads its transcript rather than attaching — so the one agent holding
     // a finished delta carries the conversation that produced it (fixture/transcripts.ts).
