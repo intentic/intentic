@@ -1,0 +1,17 @@
+# Tauri's built-in template, with the %u field code its Exec line omits — without one the OS starts this app
+# with no arguments and the intentic:// link it was chosen for is gone (see ../README.md, "The link surface").
+# A custom template REPLACES the built-in one, so every other field here has to stay verbatim.
+[Desktop Entry]
+Categories={{categories}}
+{{#if comment}}
+Comment={{comment}}
+{{/if}}
+Exec={{exec}} %u
+StartupWMClass={{exec}}
+Icon={{icon}}
+Name={{name}}
+Terminal=false
+Type=Application
+{{#if mime_type}}
+MimeType={{mime_type}}
+{{/if}}

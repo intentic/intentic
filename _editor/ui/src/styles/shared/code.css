@@ -1,0 +1,44 @@
+/* Chrome + theming for ui-code's Shiki output. Shiki emits its own <pre class="shiki"> with
+ * inline token colors for the light theme plus a `--shiki-dark` CSS var per token; we restyle
+ * the container to match the app's surfaces and flip token colors to the dark var when the
+ * app is in dark mode. Keyed off [data-mode="dark"] (set by useTheme) so toggling the
+ * theme recolors code with zero re-highlighting. */
+@layer components {
+    .ui-code .shiki {
+        margin: 0;
+        overflow-x: auto;
+        scrollbar-width: thin;
+        border: 1px solid var(--color-line);
+        border-radius: var(--radius-md);
+        /* Blend with the app surface (overrides Shiki's inline theme background). */
+        background-color: var(--color-canvas) !important;
+        padding: calc(var(--spacing) * 2) calc(var(--spacing) * 3);
+        font-family: var(--font-mono);
+        font-feature-settings: var(--font-mono--font-feature-settings);
+        font-size: 0.75rem;
+        line-height: 1rem;
+    }
+
+    /* Long single-line commands (e.g. the /setup one-liners) read better wrapped than scrolled. */
+    .ui-code.ui-code-wrap .shiki,
+    .ui-code.ui-code-wrap .shiki code {
+        white-space: pre-wrap;
+        overflow-wrap: break-word;
+    }
+
+    /* Clamped to `--ui-code-clamp-lines` visible lines (Code's `clampLines`), the block's own fade + toggle
+     * on top. The arithmetic lives here rather than in the component because every term of it does: `1lh` is
+     * the line-height set above, and the padding and border are this rule block's too. Only the TOP padding
+     * counts — an overflowing box paints through its bottom padding, so budgeting for that one shows half of
+     * the line the clamp meant to cut. */
+    .ui-code.ui-code-clamp .shiki,
+    .ui-code.ui-code-clamp pre {
+        max-height: calc(var(--ui-code-clamp-lines) * 1lh + var(--spacing) * 2 + 2px);
+        overflow-y: hidden;
+    }
+}
+
+[data-mode="dark"] .ui-code .shiki,
+[data-mode="dark"] .ui-code .shiki span {
+    color: var(--shiki-dark) !important;
+}

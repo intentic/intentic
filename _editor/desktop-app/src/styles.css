@@ -1,0 +1,26 @@
+/* Same cascade-layer bootstrap as the web app — see _editor/web/src/styles.css for why the order
+ * must be declared before Tailwind/PrimeVue introduce their layers. */
+@layer theme, base, primeng, components, utilities;
+
+@import "tailwindcss";
+
+@import "../../../_editor/ui/src/styles/shared/index.css";
+@import "../../../_editor/ui/src/styles/core/index.css";
+
+@source "../../../_editor/ui/src/**/*.{ts,html,vue}";
+
+@layer base {
+    * {
+        -webkit-tap-highlight-color: transparent;
+    }
+    html,
+    body {
+        overscroll-behavior: none;
+        user-select: none;
+    }
+    code,
+    pre,
+    input {
+        user-select: text;
+    }
+}

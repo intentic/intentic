@@ -1,0 +1,7 @@
+# The web image context is this app dir, but only the served artifacts enter the image: the job-side-built
+# dist, the nginx config template and the entrypoint that renders it (see Dockerfile). Source, node_modules,
+# and public/ (already bundled into dist by vite) never reach the registry.
+*
+!dist
+!nginx.conf
+!entrypoint.sh

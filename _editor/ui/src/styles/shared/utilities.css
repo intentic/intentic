@@ -1,0 +1,187 @@
+/* Custom utilities — thin scrollbars, loading placeholders and entrance animations, themed via role tokens. */
+@layer utilities {
+    /* The thin scrollbar's LOOK, and nothing else — reserving space is `.scrollbar-stable` below. The two were
+     * one class, and that made every scroller pay for a gutter most of them can never fill: these boxes NEST.
+     * The shell wraps every route in a `.scrollbar-thin` scroller, a full-height view (the fleet board, the
+     * workspace) puts its own inside that, and neither the wrapper nor the viewport around it can ever overflow
+     * — so the strips stacked at the window's right edge, measured at 35px of dead canvas on /agents. */
+    .scrollbar-thin {
+        scrollbar-width: thin;
+        scrollbar-color: var(--color-line-strong) transparent;
+    }
+
+    /* Reserve the scrollbar's strip even while the box isn't overflowing, so its content doesn't reflow sideways
+     * the moment the scrollbar appears. For the scrollers whose content actually crosses the fold under the user
+     * — a lane filling up, a list being filtered — and for nothing else: on a box that cannot overflow, this is
+     * simply a strip of dead space. The gutter tracks the drawn scrollbar's width exactly, and is inline-only
+     * per spec, so a box that scrolls horizontally gets no dead strip along its bottom. */
+    .scrollbar-stable {
+        scrollbar-gutter: stable;
+    }
+
+    .scrollbar-thin::-webkit-scrollbar {
+        width: 6px;
+        height: 6px;
+    }
+
+    .scrollbar-thin::-webkit-scrollbar-thumb {
+        background: var(--color-line-strong);
+        border-radius: 9999px;
+    }
+
+    .scrollbar-thin::-webkit-scrollbar-thumb:hover {
+        background: var(--color-muted);
+    }
+
+    .animate-fade-in {
+        animation: ui-fade-in 0.25s ease-out both;
+    }
+
+    .animate-fade-in-up {
+        animation: ui-fade-in-up 0.25s ease-out both;
+    }
+}
+
+/* Loading placeholder. The caller owns the BOX — `class="skeleton h-4 w-32 rounded-full"` — and this owns the
+   fill, the default radius and the motion, so every surface that renders a shape of the thing it is about to
+   show shimmers at one speed and one contrast instead of each view inventing its own pulse. The sweep is a
+   background-image over the fill (not opacity) so a skeleton laid on `bg-card` and one laid on `bg-canvas` read
+   the same.
+
+   In `components`, not `utilities`, for the same reason cmp.ts merges classes: the caller always wins. A tie in
+   `utilities` would resolve by source order, and this file loads after Tailwind's — which is how the first cut
+   of this rule turned every `rounded-full` avatar and stage circle into a square. */
+@layer components {
+    .skeleton {
+        border-radius: 0.25rem;
+        background-color: color-mix(in srgb, var(--color-content) 10%, transparent);
+        background-image: linear-gradient(90deg, transparent 20%, color-mix(in srgb, var(--color-content) 8%, transparent) 50%, transparent 80%);
+        background-repeat: no-repeat;
+        background-size: 250% 100%;
+        animation: ui-skeleton-sweep 1.6s ease-in-out infinite;
+    }
+}
+
+/* THE SELECTABLE ROW — one hover tint, one selected tint, for every list in the app a keyboard can walk: the
+   model picker, the design system's own PickerPanel, QuickOpen, the git graph and the file explorer.
+
+   All five had written this rule themselves, under five names (`.mp-row`, `.pk-row`, `.qo-row`, `.graphrow`,
+   `.treerow`), and the copies had drifted the way copies do: the two explorers tinted hover at 6% and the two
+   pickers at 5%, while QuickOpen had lost its hover rule altogether and lit up only under the keyboard. The
+   selected tint was the one thing all five still agreed on, which is what made the drift invisible — the state
+   people look at matched, so nobody checked the state they only feel.
+
+   A SIXTH copy outlived that sweep: chat's `.qopt`, whose hover rule was character-for-character this one and
+   whose selected tint was 14% against this 15% — one percent, invisible alone and unmissable once a picker put
+   both on screen at once (the model list here, the account rows in its own footer). It is gone; its four call
+   sites are these classes now.
+
+   WHEN NOT TO USE THIS. A tint marks the chosen row of a LIST — items sharing edges inside a container that
+   already draws its own frame, where boxing one row makes a box inside a box. A free-standing card on a canvas
+   (AgentCard on the board) is the other case entirely: it carries a border at rest, so selection has to change
+   that border and add a ring, and a fill would collide with the category and lane hues the card is already
+   using to say other things. Two shapes, two treatments, one primary — not one treatment.
+
+   `:not(:disabled)` rather than `:enabled`: a disabled row must not light up, but `:enabled` matches only form
+   elements, so a row rendered as a <div> would silently lose its hover. Focus-visible carries an inset ring
+   because a row a keyboard can reach must be able to show that it has been reached; on the lists that keep
+   focus on the CONTAINER (aria-activedescendant) it simply never fires. */
+@layer components {
+    .ui-row-select {
+        cursor: pointer;
+        transition: background-color 0.1s;
+    }
+
+    .ui-row-select:hover:not(:disabled) {
+        background: color-mix(in srgb, var(--color-content) 5%, transparent);
+    }
+
+    .ui-row-select:focus-visible {
+        outline: none;
+        box-shadow: inset 0 0 0 1px var(--color-primary-500);
+    }
+
+    /* After the hover rule, so the selected tint survives the pointer resting on it — a row that forgets it is
+       selected the moment you point at it is the one row you are most likely to be pointing at. */
+    .ui-row-select-on,
+    .ui-row-select-on:hover:not(:disabled) {
+        background: color-mix(in srgb, var(--color-primary-500) 15%, transparent);
+    }
+}
+
+/* A SCROLLBAR THAT IS ONLY THERE WHEN WANTED — for the narrow columns, where `.scrollbar-thin`'s permanently
+   `line-strong` thumb is a second vertical line running the full height of a 16rem index that is otherwise
+   drawing no lines at all. At rest this one is a whisper, enough to say the list continues past the fold; it
+   comes up to a real thumb when the pointer is anywhere in the column. The track stays transparent in both
+   states, which is also what suppresses the stepper arrows the platform scrollbar draws at each end.
+
+   Written for the documentation index and kept in its scoped <style> until three more columns wanted it. */
+@layer components {
+    .ui-softscroll {
+        scrollbar-width: thin;
+        scrollbar-color: color-mix(in srgb, var(--color-content) 10%, transparent) transparent;
+        /* The .scrollbar-stable gutter, baked in rather than opted into — here it is what lets the
+         * whisper stay a whisper: the column keeps its width whether or not a scrollbar is showing,
+         * and a 16rem index is exactly the width where 10px of reflow is unmissable. */
+        scrollbar-gutter: stable;
+        transition: scrollbar-color 0.15s ease-out;
+    }
+
+    .ui-softscroll:hover {
+        scrollbar-color: color-mix(in srgb, var(--color-content) 26%, transparent) transparent;
+    }
+}
+
+@keyframes ui-skeleton-sweep {
+    from {
+        background-position: 150% 0;
+    }
+    to {
+        background-position: -50% 0;
+    }
+}
+
+/* The tick a checkbox draws when it is ticked (primeng.css wires it to .p-checkbox-icon). Scale AND opacity,
+   not scale alone: a tick that grows from nothing at full opacity flickers at the first frame, where one that
+   fades as it grows simply arrives. */
+@keyframes ui-check-in {
+    from {
+        opacity: 0;
+        transform: scale(0.4);
+    }
+    to {
+        opacity: 1;
+        transform: scale(1);
+    }
+}
+
+/* A placeholder is by definition content the reader cannot act on yet, so its motion is pure decoration —
+   the first thing to drop for anyone who asked the OS for less of it. The fill stays: it is what says
+   "something is coming here". The checkbox's tick is the same bargain: the state it reports is carried by
+   the mark and the fill, so dropping the flourish costs nothing anyone needs. */
+@media (prefers-reduced-motion: reduce) {
+    .skeleton,
+    .p-checkbox-checked .p-checkbox-icon {
+        animation: none;
+    }
+}
+
+@keyframes ui-fade-in {
+    from {
+        opacity: 0;
+    }
+    to {
+        opacity: 1;
+    }
+}
+
+@keyframes ui-fade-in-up {
+    from {
+        opacity: 0;
+        transform: translateY(8px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}

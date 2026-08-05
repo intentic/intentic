@@ -1,0 +1,12 @@
+{
+    "compilerOptions": {
+        "types": ["node"],
+        "outDir": "./dist",
+        "rootDir": "./src",
+        "tsBuildInfoFile": "./.cache/tsbuildinfo"
+    },
+    "include": ["./src/**/*"],
+    "exclude": ["./src/**/*.test.ts", "./src/testing.ts"],
+    "references": [{ "path": "../graph" }, { "path": "../engine" }, { "path": "../../_sandbox/sandbox-run" }],
+    "extends": "@intentic/tsconfig/tsconfig.base.json"
+}

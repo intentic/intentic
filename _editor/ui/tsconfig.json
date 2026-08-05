@@ -1,0 +1,12 @@
+/* The UI lib is consumed directly from source (main/exports → ./src/index.ts); this config exists only
+ * for standalone type-checking via `pnpm --filter @intentic/ui typecheck` (vue-tsc handles the .vue SFCs). */
+{
+    "compilerOptions": {
+        "baseUrl": "./",
+        "noEmit": true,
+        "rootDir": "./src",
+        "tsBuildInfoFile": "./.cache/tsbuildinfo"
+    },
+    "include": ["./src/**/*.ts", "./src/**/*.vue"],
+    "extends": "@intentic/tsconfig/tsconfig.vue.json"
+}

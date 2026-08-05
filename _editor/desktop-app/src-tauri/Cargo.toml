@@ -1,0 +1,57 @@
+[package]
+name = "intentic-desktop"
+version = "0.0.0"
+description = "Intentic desktop — sandbox onboarding and lifecycle for Windows/Linux"
+edition = "2021"
+license = "UNLICENSED"
+publish = false
+
+[lib]
+name = "intentic_desktop_lib"
+# rlib alone. `["staticlib", "cdylib", "rlib"]` is Tauri's template default, and it is there for mobile: iOS
+# links the staticlib, Android loads the cdylib. This app ships deb/rpm/AppImage/NSIS and nothing else, main.rs
+# links the rlib, and the two unused artifacts each cost their own codegen + link pass over the whole graph —
+# 17s of every release build, plus a 216 MB libintentic_desktop_lib.a written into the shared /ci-cache target
+# dir that nothing ever reads. Add them back the day this app targets a phone.
+crate-type = ["rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+# Deliberately short. The machine work is done by the scripts this app bundles (src/scripts.rs), so there is no
+# HTTP client, no docker crate and no async runtime beyond Tauri's own — the crate that used to hold all of that
+# (intentic-desktop-core) is what made the first attempt unmaintainable.
+[dependencies]
+tauri = { version = "2", features = ["tray-icon", "image-png"] }
+tauri-plugin-dialog = "2"
+tauri-plugin-opener = "2"
+tauri-plugin-process = "2"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+url = "2"
+# The sign-in handoff's nonce (auth.rs). Tauri already pulls uuid in transitively; naming it here is what makes
+# "the state a handoff must echo" something this crate generates rather than something it improvises.
+uuid = { version = "1", features = ["v4"] }
+
+[target.'cfg(any(target_os = "linux", target_os = "windows"))'.dependencies]
+tauri-plugin-single-instance = { version = "2", features = ["deep-link"] }
+tauri-plugin-deep-link = "2"
+tauri-plugin-updater = "2"
+
+# Tuned for BUILD time, because that is the only axis this crate can lose on. `lto = true` (fat) with
+# codegen-units = 1 is the slowest release profile rustc offers, and it buys runtime speed this app cannot use:
+# it is a launcher that shells into the scripts it bundles (see the dependencies note above), so there is no hot
+# path for the optimiser to find. What it cost instead was the release: fat LTO is a SINGLE-THREADED pass over
+# all ~370 crates, re-run on every release because the stamped version invalidates this crate, and it pinned one
+# core for 3m48s (Linux) + 3m14s (Windows) of every publish while fifteen other cores idled.
+#
+# Measured on the exact CI shape (warm dependency graph, this crate invalidated, rustc 1.97.1):
+#   fat + codegen-units=1   110s   11 MB      <- was here
+#   thin + codegen-units=1   81s   12 MB
+#   thin (default units)     21s   14 MB      <- is here, with rlib-only above
+#   no LTO (default units)   17s   14 MB
+# Thin LTO keeps the cross-crate inlining that matters and parallelises; the 3 MB of installer growth is the
+# price, and it is the right way round for a download that auto-updates in the background.
+[profile.release]
+strip = true
+lto = "thin"

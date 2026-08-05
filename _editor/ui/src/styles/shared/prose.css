@@ -1,0 +1,345 @@
+/* Rendered markdown — the ONE stylesheet for renderMarkdown's output (markdown/render.ts).
+ *
+ * Every surface that shows that output styles it from here: the chat transcript (assistant turns, plan
+ * cards), the workspace file preview, and any extension view rendering <Markdown>. They render identical
+ * markup from identical code, so anything that differs between them is drift, not design — the two
+ * hand-maintained copies this replaces had diverged into a 12px scale on one side and a 14px scale on the
+ * other, and both had lost their list markers the same way.
+ *
+ * It lives in the design system, beside the component it dresses, rather than in the app: <Markdown> is
+ * shipped to extension authors, and a component whose looks depend on a stylesheet one layer up is a
+ * component that renders unstyled the first time anyone reuses it.
+ *
+ * What a surface IS allowed to differ on is the tokens below. Set them on the element that carries `md-prose`
+ * (see .chat-markdown in chat/chat.css) and every rule here re-resolves; everything is expressed in `em` or a
+ * token so one number moves a whole surface's rhythm. */
+.md-prose {
+    /* Prose size. 0.875rem is the floor for something read in paragraphs rather than glanced at. */
+    --prose-size: 0.875rem;
+    /* Mono, inline and fenced. A step under the sans around it — mono reads optically larger at the same
+       nominal size, so matching them makes code look bigger than the sentence carrying it. */
+    --prose-code: 0.8125rem;
+    --prose-lead: 1.7;
+    /* Block rhythm. `em` so it tracks --prose-size instead of pinning a second, absolute scale beside it. */
+    --prose-gap: 0.85em;
+    /* Line length. `none` by default — a surface that already caps its container (the file preview's
+       max-w-3xl) needs no second cap. Surfaces that stretch to their column set a real measure; past roughly
+       90 characters the eye loses the start of the next line. Only text blocks take it: code, tables and
+       images stay full width, where the extra room is what makes them readable. */
+    --prose-measure: none;
+
+    font-size: var(--prose-size);
+    line-height: var(--prose-lead);
+    /* Full content color, not a faded one. Long technical prose is the thing being READ on these surfaces —
+       the surrounding chrome is what recedes, and it does that by being smaller and muted, not by dimming
+       the answer. */
+    color: var(--color-content);
+}
+
+/* A block owns the space above it; the container owns its own edges. */
+.md-prose > :first-child {
+    margin-top: 0;
+}
+.md-prose > :last-child {
+    margin-bottom: 0;
+}
+
+/* A document containing FIGURES renders as alternating prose runs (`.md-run`) and figure components rather than
+   as one v-html blob, because a figure is a component and there is nowhere in an HTML string to put one. That
+   puts one level between the container and its prose, so the edge-collapse above has to reach through it —
+   otherwise a document with a figure gains a stray leading margin the same document without one does not have.
+   Only the document's own first/last block collapses; a run that merely follows a figure keeps its top margin,
+   which is what separates it from the figure. */
+.md-prose > .md-run:first-child > :first-child {
+    margin-top: 0;
+}
+.md-prose > .md-run:last-child > :last-child {
+    margin-bottom: 0;
+}
+
+.md-prose p,
+.md-prose ul,
+.md-prose ol,
+.md-prose blockquote,
+.md-prose h1,
+.md-prose h2,
+.md-prose h3,
+.md-prose h4 {
+    max-width: var(--prose-measure);
+}
+
+.md-prose p {
+    margin: var(--prose-gap) 0;
+}
+
+/* Headings. Sized in `em` off the prose size, and spaced with a big top margin and a small bottom one so a
+   heading reads as attached to the section it opens rather than floating between two.
+   600 is theirs ALONE — `strong` below sits at 500 — so that weight is a reliable "this opens a section"
+   signal rather than something a bold lead-in also says. That is what lets h4 exist at body size at all. */
+.md-prose h1,
+.md-prose h2,
+.md-prose h3,
+.md-prose h4 {
+    margin: 1.8em 0 0.6em;
+    font-weight: 600;
+    line-height: 1.3;
+    color: var(--color-content);
+    /* A long identifier in a heading must wrap rather than widen the column. */
+    overflow-wrap: break-word;
+}
+/* Emphasis inside a heading is part of the heading, not a step down from it: `## The **only** rule` must not
+   render its middle word lighter than the words either side. */
+.md-prose h1 strong,
+.md-prose h2 strong,
+.md-prose h3 strong,
+.md-prose h4 strong {
+    font-weight: inherit;
+}
+/* The ladder is ~1.15 per step (at the transcript's 13px: 19.5 / 16.6 / 14.8 / 13). Even steps matter more
+   than big ones here — the previous 1.55/1.3/1.2/1.0 put h2 and h3 1.3px apart, which at this size is not a
+   level, so a nested section read as a repeat of the one above it. */
+.md-prose h1 {
+    font-size: 1.5em;
+    letter-spacing: -0.01em;
+}
+/* h2 is where a new section starts, and it has to separate from the h3s below it — but by SPACE rather than by
+   a rule. The hairline this used to carry read as a stroke across every section of a long document, and a page
+   with six sections was six horizontal lines before a word of it was read. A top margin a third larger than the
+   other headings' does the same work: the gap above an h2 is visibly the biggest gap on the page. */
+.md-prose h2 {
+    margin-top: 2.4em;
+    font-size: 1.28em;
+    letter-spacing: -0.006em;
+}
+.md-prose h3 {
+    font-size: 1.14em;
+}
+.md-prose h4 {
+    font-size: 1em;
+}
+
+/* Lists. Tailwind's preflight sets `list-style: none` on ul/ol, and neither copy of this stylesheet ever put
+   it back — so every numbered list an agent wrote arrived as unnumbered indented paragraphs, which is exactly
+   the structure a "four defects" answer depends on. The markers are restored here, muted so they frame the
+   text without competing with it. */
+.md-prose ul {
+    list-style: disc outside;
+}
+.md-prose ol {
+    list-style: decimal outside;
+}
+.md-prose ul ul {
+    list-style: circle outside;
+}
+.md-prose ul ul ul {
+    list-style: square outside;
+}
+.md-prose ul,
+.md-prose ol {
+    margin: var(--prose-gap) 0;
+    padding-left: 1.6em;
+}
+.md-prose li {
+    margin: 0.35em 0;
+}
+.md-prose li::marker {
+    color: var(--color-muted);
+    font-variant-numeric: tabular-nums;
+}
+/* A nested list belongs to the item above it, so it sits closer than two sibling blocks would. */
+.md-prose li > ul,
+.md-prose li > ol {
+    margin: 0.35em 0;
+}
+/* A loose list gives every item a <p>; those paragraphs are the item, so they must not also take the
+   block gap or the list doubles its own spacing. */
+.md-prose li > p {
+    margin: 0.35em 0;
+}
+
+/* 500, one step over the 400 around it — not 600, which is the headings' weight. An agent's answer bolds
+   constantly (a term per bullet, a lead-in per paragraph), so at 600 every one of those read as loud as the
+   section header above it and a bullet list turned into a field of shouting fragments. 500 still lifts a term
+   out of its sentence — that is all emphasis has to do — while leaving the heading ladder legible.
+   The available rungs are 400·500·600·700 (index.html's font loads); anything between rounds up. */
+.md-prose strong {
+    font-weight: 500;
+}
+
+.md-prose blockquote {
+    margin: var(--prose-gap) 0;
+    padding: 0.15em 0 0.15em 1em;
+    border-left: 2px solid var(--color-line-strong);
+    color: var(--color-muted);
+}
+
+.md-prose hr {
+    margin: 1.8em 0;
+    border: 0;
+    border-top: 1px solid var(--color-line);
+}
+
+.md-prose img {
+    max-width: 100%;
+    border-radius: var(--radius-md);
+}
+
+/* Inline code. The chip is deliberately quiet: an answer like the ones agents write is half identifiers, and
+   at a heavier tint the page turns into a field of boxes with sentences between them. Tint low, padding tight
+   enough that a trailing comma still reads as punctuation and not as part of the token. */
+.md-prose code {
+    font-family: var(--font-mono, ui-monospace, monospace);
+    font-feature-settings: var(--font-mono--font-feature-settings);
+    font-size: var(--prose-code);
+    background: color-mix(in srgb, var(--color-content) 7%, transparent);
+    padding: 0.12em 0.3em;
+    border-radius: var(--radius-xs);
+    /* A long path or model id breaks instead of pushing the column wider than its measure. */
+    overflow-wrap: break-word;
+}
+
+/* Fenced blocks are substituted as raw markup by markdown/code.ts (they live inside v-html, so they can hold no
+   component) and wear `ui-code`, so the design system's Shiki chrome already governs the box. Only the metrics
+   are ours: code.css sizes <Code> for compact UI surfaces, which is a tier below what reading a snippet inside
+   an answer wants, and its 1.33 leading is tight for anything longer than a couple of lines. */
+.md-prose pre {
+    margin: var(--prose-gap) 0;
+    overflow-x: auto;
+    border: 1px solid var(--color-line);
+    border-radius: var(--radius-md);
+    background: var(--color-canvas);
+    padding: 0.85em;
+}
+.md-prose pre code {
+    background: transparent;
+    padding: 0;
+}
+/* A fenced block is the wrapper, its floating controls, and the <pre> — one object. The wrapper owns the
+   rhythm around it (.md-code below), so the <pre> must not take the block gap a second time. */
+.md-prose .md-code pre {
+    margin: 0;
+}
+.md-prose .ui-code .shiki {
+    font-size: var(--prose-code);
+    line-height: 1.65;
+    padding: 0.7em 0.85em;
+}
+
+.md-prose a {
+    color: var(--color-link);
+    text-decoration: none;
+}
+.md-prose a:hover {
+    text-decoration: underline;
+}
+/* A document the prose named, resolved to somewhere INSIDE the app: a workspace file (markdownFileLinks) or a
+   sibling memory note (the memory view's decorator). The dotted rule is the affordance — such a reference reads
+   as "opens here" before it is hovered, and stays distinguishable from an outbound link, which is undecorated
+   until hover. `cursor` is set explicitly because a decorator may drop the href, and an anchor without one is
+   not a pointer target. Written one level more specific than the rule above so it wins the text-decoration
+   regardless of stylesheet order. */
+.md-prose a.md-file-link {
+    cursor: pointer;
+    text-decoration: underline dotted color-mix(in srgb, var(--color-link) 45%, transparent);
+    text-underline-offset: 0.2em;
+}
+.md-prose a.md-file-link:hover {
+    text-decoration: underline solid var(--color-link);
+}
+
+/* Tables. Full width of the block, never the measure — a comparison table is read column-wise, so squeezing
+   it into a reading column is the one place narrow hurts. */
+.md-prose table {
+    width: 100%;
+    margin: var(--prose-gap) 0;
+    border-collapse: collapse;
+    font-size: var(--prose-size);
+}
+.md-prose th,
+.md-prose td {
+    padding: 0.5em 0.7em;
+    text-align: left;
+    vertical-align: top;
+    border-bottom: 1px solid var(--color-line);
+}
+.md-prose th {
+    font-weight: 600;
+    color: var(--color-content);
+    border-bottom-color: var(--color-line-strong);
+}
+.md-prose tr:last-child td {
+    border-bottom: 0;
+}
+
+/* The controls markdown/code.ts puts on a fenced block: its language and the copy button, floated over the
+   block's own top-right corner instead of sitting in a row above it. Chrome, so it costs the block no space at
+   all — a transcript of an agent's work is mostly code, and a header row spent a line of vertical rhythm on
+   every block, including the fences that carry no language to put in it.
+
+   It is revealed by hovering the block, and by focusing into it, so the button is reachable without a pointer.
+   Where there is no hover at all (touch) it is simply always visible — at full size, since a thumb has to hit
+   it. Painted on the block's own background so the first line of code never shows through it. */
+.md-code {
+    position: relative;
+    /* Fallback carried because this class sits on the block itself, not under a .md-prose selector — a
+       future surface could render one outside a prose container. */
+    margin: var(--prose-gap, 0.85em) 0;
+}
+.md-code-actions {
+    position: absolute;
+    top: 0.3rem;
+    right: 0.3rem;
+    z-index: 1;
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    border-radius: var(--radius-md);
+    padding: 0.1rem 0.15rem;
+    background: var(--color-canvas);
+    /* Dragging a selection across the block used to take "powershell Copy" with it — the bar's text was in
+       flow, between the prose and the code. */
+    user-select: none;
+}
+@media (hover: hover) {
+    .md-code-actions {
+        opacity: 0;
+        transition: opacity 0.12s ease-out;
+    }
+    .md-code:hover .md-code-actions,
+    .md-code:focus-within .md-code-actions {
+        opacity: 1;
+    }
+}
+.md-code-lang {
+    padding-left: 0.2rem;
+    font-size: 0.6875rem;
+    font-weight: 500;
+    letter-spacing: 0.02em;
+    color: var(--color-muted);
+}
+.md-code-copy {
+    cursor: pointer;
+    border: 1px solid var(--color-line);
+    border-radius: var(--radius-md);
+    padding: 0.1rem 0.45rem;
+    font-size: 0.6875rem;
+    color: var(--color-muted);
+    transition:
+        color 0.15s,
+        border-color 0.15s;
+}
+.md-code-copy:hover {
+    color: var(--color-content);
+    border-color: var(--color-line-strong);
+}
+/* The acknowledgment, which is state rather than a poke at the button (see markdown/code.ts): it holds while
+   the block re-renders underneath it, and it is the one thing here that shows without being hovered — a press
+   that lands as the pointer leaves still has to say so. */
+.md-code-copied,
+.md-code-copied:hover {
+    color: var(--color-success);
+    border-color: color-mix(in srgb, var(--color-success) 45%, transparent);
+}
+.md-code:has(.md-code-copied) .md-code-actions {
+    opacity: 1;
+}
