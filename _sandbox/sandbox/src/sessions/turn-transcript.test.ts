@@ -144,4 +144,17 @@ describe("restoredTurn", () => {
         const events: AgentEvent[] = [{ kind: "init", model: "claude-opus-4" }, { kind: "usage", costUsd: 0.1 }, { kind: "done" }];
         expect(restoredTurn({ prompt: "hi" }, events, "/work")).toEqual([{ role: "user", text: "hi" }]);
     });
+
+    /* A REFUSED TURN SAYS SO WHEN IT IS REOPENED. The provider's answer to this one is an error frame and no
+     * prose at all, so folding only the two speakers left a question with no reply under it — which is how a
+     * workflow step whose model was refused came to read as a broken session on every surface. */
+    it("keeps what went wrong, as the notice line the turn ended on", () => {
+        const refusal = "Your organization has disabled Claude subscription access for Claude Code";
+        const events: AgentEvent[] = [{ kind: "delta", text: "I'll take a look" }, { kind: "error", message: refusal }, { kind: "done" }];
+        expect(restoredTurn({ prompt: "hi" }, events, "/work")).toEqual([
+            { role: "user", text: "hi" },
+            { role: "assistant", text: "I'll take a look" },
+            { role: "notice", text: refusal },
+        ]);
+    });
 });

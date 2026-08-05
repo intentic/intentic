@@ -1,5 +1,6 @@
 import { mkdir } from "node:fs/promises";
 import type { AgentEvent, AgentTurn, Loop, LoopDocument, LoopIteration, LoopRecord, LoopState } from "@intentic/sandbox-contract";
+import { startTurnRun } from "../agent/turn-runs.js";
 import { sumUsage, type UsageFrame } from "../agent/turn-usage.js";
 import type { Services } from "../composition.js";
 import { openTurnTranscript, recordTurnTranscript } from "../sessions/turn-transcript.js";
@@ -64,40 +65,51 @@ interface IterationOutcome {
     readonly failure: string | undefined;
 }
 
-// Run one iteration's turn and reduce its frame stream to the four things the loop needs from it. The frames
-// themselves go to the transcript, like every other headless driver's do — this keeps only what decides what
-// happens next.
+/* Run one iteration's turn and reduce its frame stream to the four things the loop needs from it.
+ *
+ * IT RUNS THROUGH THE SAME DETACHED PUMP A COMPOSER'S TURN DOES (turn-runs.ts), and that is what makes a
+ * looping agent WATCHABLE. `/agent/attach` renders a conversation by finding its live run in that pump's
+ * registry — so a turn driven straight off the generator, as this used to be, is invisible to every browser in
+ * the world: the panes a workflow opens for its steps sat on "start a conversation" while the agent behind
+ * them worked, and the transcript only appeared once the whole turn had settled and something thought to
+ * re-read it. Nothing about a step makes it a different kind of turn, so it goes through the door every other
+ * turn goes through and the chat panel needs no idea that a scheduler is behind it.
+ *
+ * The pump also owns what this used to do by hand: it folds a thrown turn into the log as an error frame (so
+ * the failure arrives as a frame rather than an exception) and writes the settled transcript once the turn is
+ * whole. What is left here is the reduction — the four values that decide what happens next.
+ */
 const runIteration = async (services: Services, loop: Loop, turn: AgentTurn & { conversationId: string }, fn: TurnFn): Promise<IterationOutcome> => {
-    const events: AgentEvent[] = [];
     const report: string[] = [];
     let usage: UsageFrame | undefined;
     let sessionId: string | undefined;
     let failure: string | undefined;
-    await openTurnTranscript(services, turn);
-    try {
-        for await (const event of fn(services, turn, undefined)) {
-            events.push(event);
-            if (event.kind === "delta") {
-                report.push(event.text);
-            }
-            if (event.kind === "usage") {
-                usage = sumUsage(usage, event);
-            }
-            if (event.kind === "session") {
-                sessionId = event.sessionId;
-            }
-            if (event.kind === "error") {
-                failure = event.message;
-            }
+    // Adoption starts now and the pump waits for it before the provider runs — the send path's own order.
+    const opened = openTurnTranscript(services, turn);
+    const run = startTurnRun((input, signal) => fn(services, input, signal), turn, {
+        before: opened,
+        transcript: (events) => recordTurnTranscript(services, turn, events),
+    });
+    if (run === undefined) {
+        // Another turn is already live on this conversation — a hand-sent message, or a previous iteration
+        // whose pump has not unwound. The loop treats it as this iteration's failure and asks its own ceilings
+        // what to do next, rather than racing the turn that holds the worktree.
+        services.logger.warn({ conversationId: loop.conversationId }, "loop iteration: a turn is already running");
+        return { report: "", usage: undefined, sessionId: undefined, failure: "A turn was already running on this conversation." };
+    }
+    for await (const { event } of run.follow(0)) {
+        if (event.kind === "delta") {
+            report.push(event.text);
         }
-    } catch (error) {
-        // A thrown turn does NOT end the loop — see the call site. It is recorded as the iteration's outcome and
-        // the next iteration gets its chance, because a turn that died on a provider blip is the single most
-        // ordinary thing a loop is there to ride out.
-        failure = error instanceof Error ? error.message : "loop iteration failed";
-        services.logger.warn({ err: error, conversationId: loop.conversationId }, "loop iteration failed");
-    } finally {
-        await recordTurnTranscript(services, turn, events);
+        if (event.kind === "usage") {
+            usage = sumUsage(usage, event);
+        }
+        if (event.kind === "session") {
+            sessionId = event.sessionId;
+        }
+        if (event.kind === "error") {
+            failure = event.message;
+        }
     }
     return { report: report.join(""), usage, sessionId, failure };
 };
@@ -213,10 +225,28 @@ export const runLoop = async (services: Services, record: LoopRecord, fn: TurnFn
                 signal: abort.signal,
             });
             document = verdict.document ?? document;
+            /* WHERE NOTHING WAS VERIFIED, THE TURN'S OWN FATE IS THE VERDICT — the one exception to the rule
+             * directly above, and the reason a workflow could report every step done having run none of them.
+             *
+             * `evaluateStop` is the authority wherever there is a bar to clear. A loop that declares NEITHER an
+             * output NOR a check has no bar: `readDocument` answers `done` for a `none` output because for that
+             * loop the turn finishing IS the completion condition — and it says so without ever looking at
+             * whether a turn happened. So a step whose model was refused ("your organization has disabled
+             * Claude subscription access for Claude Code") settled `done` having said nothing at all. Three of
+             * those made a run that reported 3/3 steps complete, handed each step "(this step finished without
+             * saying anything)" as its predecessor's conclusion, and left three sessions with no reply in them.
+             * A run that lies about having run is worse than one that fails.
+             *
+             * It ENDS the loop rather than costing an iteration, unlike the ordinary "ride out a provider blip"
+             * retry the check-backed loops get: with no bar to satisfy, the next iteration would be the same
+             * unverified turn again, and the sentence the provider handed us is already the whole answer. */
+            const verified = record.output.kind !== "none" || record.checks.length > 0;
+            const refused = !verified && outcome.failure !== undefined;
+            const done = verdict.done && !refused;
             const entry: LoopIteration = {
                 n: iteration,
                 at: Date.now(),
-                outcome: verdict.done ? "done" : outcome.failure !== undefined ? "error" : "continue",
+                outcome: done ? "done" : outcome.failure !== undefined ? "error" : "continue",
                 changed,
                 /* THE TURN'S FAILURE OUTRANKS THE CHECK'S VERDICT, unless the check says the goal was met.
                  *
@@ -226,7 +256,7 @@ export const runLoop = async (services: Services, record: LoopRecord, fn: TurnFn
                  * provider already handed us. Preferring the verdict buried it, and a workflow step whose
                  * model was refused ("your organization has disabled Claude subscription access") recorded
                  * two rounds of a missing file instead — the reason nowhere, on any surface. */
-                ...(verdict.done
+                ...(done
                     ? verdict.detail !== undefined
                         ? { detail: verdict.detail }
                         : {}
@@ -237,8 +267,12 @@ export const runLoop = async (services: Services, record: LoopRecord, fn: TurnFn
                 ...(outcome.sessionId !== undefined ? { sessionId: outcome.sessionId } : {}),
             };
             await services.loops.recordIteration(conversationId, entry);
-            if (verdict.done) {
+            if (done) {
                 ended = { state: "done", ...(verdict.detail !== undefined ? { detail: verdict.detail } : {}) };
+                break;
+            }
+            if (refused) {
+                ended = { state: "error", detail: outcome.failure };
                 break;
             }
             // Checked AFTER the iteration is recorded, so the history shows the unchanged runs that earned the

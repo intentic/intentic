@@ -153,6 +153,11 @@ export const setAgents = (agents: AgentSummary[], rev: number): void => {
     }
     appliedRev = rev;
     applySnapshot(agents, rev);
+    /* AND WHAT STARTED WORKING BY ANOTHER HAND THAN THIS BROWSER'S — the other half of the same reading. A
+     * workflow's steps, an automation's wake, a turn sent from a phone: their tabs may already be open here,
+     * opened before the turn existed and therefore showing nothing. This roster is the daemon saying the turn
+     * is up, which is the moment those tabs can attach to it (useChat.attachStarted). */
+    useChat().attachStarted(new Set(agents.filter((agent) => agent.status === `running`).map((agent) => agent.id)));
 };
 
 /* Drop everything that is a promise to a PARTICULAR daemon, keeping (or not) the painted roster.

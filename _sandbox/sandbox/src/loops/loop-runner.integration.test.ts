@@ -5,6 +5,7 @@ import { join } from "node:path";
 import { type AgentEvent, type AgentTurn, type Loop, LOOP_DIR } from "@intentic/sandbox-contract";
 import { unstubbed } from "@intentic/testing";
 import { expect, test } from "vitest";
+import { turnRunOf } from "../agent/turn-runs.js";
 import type { Services } from "../composition.js";
 import { fileLoopsStore } from "./loops-store.js";
 import { loopRunning, runLoop, type TurnFn } from "./loop-runner.js";
@@ -180,6 +181,53 @@ test("an errored turn is an iteration outcome, not the end of the loop", async (
     const settled = await services.loops.get("c7");
     expect(settled?.state).toBe("exhausted");
     expect(settled?.iterations.every((entry) => entry.outcome === "error")).toBe(true);
+});
+
+/* A LOOPING AGENT IS A WATCHABLE ONE. `/agent/attach` renders a conversation by finding its live run in the
+ * turn-run registry, so a turn pumped straight off the generator is invisible to every browser: the panes a
+ * workflow opens for its steps showed "start a conversation" while the agent behind them worked. */
+test("a loop's turn is attachable while it runs, exactly as a composer's is", async () => {
+    const root = tempRoot();
+    const services = fakeServices(root);
+    let attachable = false;
+    const watching: TurnFn = async function* watch(_services, input: AgentTurn) {
+        attachable = turnRunOf(input.conversationId ?? "") !== undefined;
+        yield { kind: "done" } as AgentEvent;
+    };
+    await runLoop(services, await services.loops.start({ ...baseLoop("c13"), output: { kind: "none" }, checks: [], maxIterations: 1 }, 1), watching);
+
+    expect(attachable).toBe(true);
+});
+
+/* The other half of that rule, and the one a workflow rests on: with NOTHING declared to produce and nothing to
+ * check, "the turn finished" is the entire completion condition — so a turn the provider refused cannot be
+ * `done`. It used to be, and a three-step run of them reported 3/3 complete with three empty sessions in it. */
+test("a loop with nothing to verify ends on its turn's failure rather than calling it done", async () => {
+    const root = tempRoot();
+    const services = fakeServices(root);
+    const prompts: string[] = [];
+    const refusal = "Your organization has disabled Claude subscription access for Claude Code";
+    const refused = fakeTurn(prompts, [{ kind: "error", message: refusal }, { kind: "done" }]);
+    // A workflow step's own shape (workflow-runner's loopForStep): no output, no checks, one round.
+    const record = await services.loops.start({ ...baseLoop("c11"), output: { kind: "none" }, checks: [], maxIterations: 1 }, 1);
+    const settlement = await runLoop(services, record, refused);
+
+    expect(settlement.state).toBe("error");
+    expect(settlement.detail).toBe(refusal);
+    const settled = await services.loops.get("c11");
+    expect(settled?.state).toBe("error");
+    expect(settled?.iterations.at(0)?.outcome).toBe("error");
+});
+
+test("a loop with nothing to verify is still done the moment a turn finishes cleanly", async () => {
+    const root = tempRoot();
+    const services = fakeServices(root);
+    const prompts: string[] = [];
+    const record = await services.loops.start({ ...baseLoop("c12"), output: { kind: "none" }, checks: [], maxIterations: 1 }, 1);
+    const settlement = await runLoop(services, record, fakeTurn(prompts));
+
+    expect(prompts).toHaveLength(1);
+    expect(settlement.state).toBe("done");
 });
 
 test("a `continue` loop resumes the session its last iteration reported; a `fresh` one never does", async () => {

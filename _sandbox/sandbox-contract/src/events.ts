@@ -164,7 +164,12 @@ export interface RestoredToolCall {
 // interleaving — prose, the tool cards that prose introduced, then the next block of prose — rather than
 // collapsing a turn's whole narration into a single bubble with its tools hanging off the end.
 export const RestoredMessageSchema = z.object({
-    role: z.enum(["user", "assistant"]),
+    /* `notice` is neither side of the conversation: it is something that HAPPENED to the turn, recorded so a
+     * reopened session can say it. The one that matters is a refused turn — a provider that answers "your
+     * organization has disabled Claude subscription access" produced no assistant text, so a transcript of the
+     * two speakers alone ends on the user's message and the session reads as broken. It is the same muted line
+     * the live client draws for the codes it does not turn red (ChatRole's `notice`). */
+    role: z.enum(["user", "assistant", "notice"]),
     text: z.string(),
     // Files the user attached to this turn (user bubbles only) as workspace-relative paths, recovered from
     // the stored prompt's attachment note — so a reopened tab redraws chips, not the injected protocol text.

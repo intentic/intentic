@@ -134,6 +134,15 @@ const foldFrames = (events: readonly AgentEvent[], tag: string | undefined): Res
         }
         if (event.kind === "delta") {
             open().text += event.text;
+        } else if (event.kind === "error") {
+            /* WHAT HAPPENED TO THE TURN, kept — and the frame whose absence made a refused session look broken
+             * rather than refused. A provider that answers "your organization has disabled Claude subscription
+             * access for Claude Code" sends this and no prose, so a fold of the two speakers alone recorded the
+             * user's message and nothing else: reopening the step showed a question with no reply, on every
+             * surface, with the reason only ever visible to whoever happened to be watching it live. It closes
+             * the open bubble first, because it is what ended that block. */
+            flush();
+            out.push({ role: "notice", text: event.message });
         } else if (event.kind === "text_end") {
             retire();
         } else if (event.kind === "thinking") {

@@ -3,7 +3,6 @@ import { useAgents } from "../agents/useAgents";
 import { sandboxJson } from "../sandbox/sandboxClient";
 import { type RunSession, showRun } from "./chatRun";
 import { openAgentConversation, useChat } from "./useChat";
-import { useChatPopout } from "./useChatPopout";
 
 /* OPENING A RUN INTO THE CHAT, from wherever it was pressed — the fleet board's card, the rail's row, a column
  * of the diagram. One act, one module, because the three surfaces must not drift on it: a run opened from the
@@ -47,10 +46,12 @@ export const openRunSessions = (sessions: readonly RunSession[]): boolean => {
 
 /* Show a run: `live`, always, whatever state it is in.
  *
- * POPPED OUT FIRST, because that mode needs the room. The panes only exist in the window (a docked column is
- * ~22rem and a second pane in it would be two slivers), and the diagram takes the pane area — so a run opened
- * into a docked panel would set a split nobody can see and then draw nothing. Idempotent: a no-op when the
- * window is already up.
+ * IT OPENS NO WINDOW, and that is the correction. It used to pop the panel out first, on the argument that a
+ * run needs the room — which bought a second copy of the whole app booting, a docked column vanishing out from
+ * under the press, and ten seconds of empty frame before anything of the run was on screen. Starting a workflow
+ * is starting agent work, and starting agent work has never opened a window: the sessions arrive as sessions,
+ * in the panel the reader is already in, and popping out stays what it is everywhere else — something the
+ * reader asks for when they want the room.
  *
  * IT NO LONGER DECIDES WHAT IS ON SCREEN, and that is the fix. It used to read the run's live sessions here and
  * fall back to the diagram when there were none — which was EVERY run started from a composer, because the
@@ -66,7 +67,6 @@ export const openRunSessions = (sessions: readonly RunSession[]): boolean => {
  * empty run bar over the panes — rather than waiting for the board's poll to come round.
  */
 export const openRunInChat = async (run: WorkflowRun | string): Promise<void> => {
-    useChatPopout().popOut();
     if (typeof run !== `string`) {
         showRun(run.runId, `live`);
         return;

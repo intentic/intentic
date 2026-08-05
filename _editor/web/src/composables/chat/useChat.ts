@@ -1271,6 +1271,27 @@ const closeTabs = (ids: ReadonlySet<string>): void => {
  *   · one holding UNSENT INPUT (Conversation.unsent) — every other thing a chat holds survives a close; those
  *     words do not. The board makes the same promise from the other side: a session holding them keeps its
  *     card, so a sweep that spares the tab can't leave the fleet reporting the work as gone. */
+/* A TURN THIS BROWSER DID NOT START, on a tab that is already open — attach to it.
+ *
+ * A tab hydrates when it opens, and that is the only moment it ever asked the daemon what was going on. Fine
+ * for a chat you type into, and wrong for every session started somewhere else: a workflow's steps are opened
+ * the instant the run exists, a beat BEFORE the scheduler starts their turns, so the attach probe finds
+ * nothing and the pane sits on "start a conversation" while the agent behind it works. Nothing re-asked, so
+ * the only cure was clicking the card again — which is what "one window left with no content" was.
+ *
+ * The roster is the signal, and it arrives on the events stream rather than on a timer (useAgents.setAgents):
+ * the daemon publishes a card the moment a turn opens. Only a tab with NOTHING in it is touched — a transcript
+ * already painted has its own reconciliation, and a streaming one IS the stream.
+ */
+const attachStarted = (ids: ReadonlySet<string>): void => {
+    for (const conversation of conversations.value) {
+        if (!ids.has(conversation.conversationId) || conversation.streaming.value || conversation.messages.value.length > 0) {
+            continue;
+        }
+        hydrateOnce(conversation);
+    }
+};
+
 const closeRetired = (ids: ReadonlySet<string>): void => {
     const retired = new Set(
         conversations.value
@@ -1505,6 +1526,10 @@ export const hydrateOnce = (conversation: Conversation): void => {
                 hydrating.delete(conversation);
             }
         })
+        // A hydrate that could not reach the daemon leaves the tab exactly as it stands, and the reachability
+        // watch below runs it again when the connection is back. Caught rather than left to reject: nothing
+        // awaits this call, so an unreachable daemon was raising an unhandled rejection per open tab.
+        .catch(() => hydrating.delete(conversation))
         .finally(() => hydrateInFlight.delete(conversation));
 };
 
@@ -1943,6 +1968,7 @@ export function useChat() {
         setActive,
         closeTabs,
         closeRetired,
+        attachStarted,
         send,
         queued,
         removeQueued,

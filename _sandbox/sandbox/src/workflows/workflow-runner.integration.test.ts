@@ -176,6 +176,31 @@ test("a failed step skips everything downstream of it and leaves the branch besi
     expect(settled?.steps.find((entry) => entry.stepId === "after-bad")?.detail).toContain(`"bad"`);
 });
 
+/* THE RUN THAT USED TO LIE. A step that declares no output and no checks is the ordinary shape a design gets
+ * written in, and for that step "the turn finished" is the whole bar — so a turn the provider REFUSED was
+ * settling `done` with an empty report, the step after it was handed "(this step finished without saying
+ * anything)", and the run reported every step complete having run none of them. The refusal is the answer. */
+test("a step whose model was refused fails the run instead of reporting a done step with nothing in it", async () => {
+    const root = tempRoot();
+    const services = fakeServices(root);
+    const refusal = "Your organization has disabled Claude subscription access for Claude Code";
+    const design = workflow([step("attempt", { output: { kind: "none" } }), step("after", { needs: ["attempt"], output: { kind: "none" } })]);
+    const run = await services.workflowRuns.start(openRun(design, 1));
+    // eslint-disable-next-line require-yield
+    await runWorkflow(services, run, async function* refused() {
+        yield { kind: "error", message: refusal } as AgentEvent;
+        yield { kind: "done" } as AgentEvent;
+    });
+
+    const settled = await services.workflowRuns.get(run.runId);
+    const states = new Map(settled?.steps.map((entry) => [entry.stepId, entry.state]));
+    expect(states.get("attempt")).toBe("failed");
+    expect(states.get("after")).toBe("skipped");
+    expect(settled?.state).toBe("failed");
+    // The provider's own sentence, on the step — the only thing anyone can act on.
+    expect(settled?.steps.find((entry) => entry.stepId === "attempt")?.detail).toBe(refusal);
+});
+
 test("a fan-in step waits for every branch and is handed all of them", async () => {
     const root = tempRoot();
     const services = fakeServices(root);

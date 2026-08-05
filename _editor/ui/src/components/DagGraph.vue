@@ -8,7 +8,7 @@
 import { VueFlow, Handle, Position } from "@vue-flow/core";
 import type { Edge, Node, VueFlowStore } from "@vue-flow/core";
 import "@vue-flow/core/dist/style.css";
-import { computed, nextTick, ref, useId, watch } from "vue";
+import { computed, nextTick, onBeforeUnmount, ref, useId, watch } from "vue";
 import { type DagEdge, type DagNode, layoutDag, layoutSignature } from "./dagLayout.js";
 
 const {
@@ -130,6 +130,15 @@ const PADDING = 0.08;
 const FIT = computed(() => (magnify ? undefined : { padding: PADDING, maxZoom: 1 }));
 
 const flow = ref<VueFlowStore>();
+const root = ref<HTMLElement>();
+
+/* THE READER HAS TAKEN HOLD, and from here the viewport is theirs — nothing below fits over it. `@move-start`
+ * says exactly that and only that: Vue Flow returns before emitting it when the transform came from code (no
+ * `sourceEvent`), so our own fits can never trip it. The same rule ImageView keeps for a hand-zoomed image. */
+let held = false;
+const hold = (): void => {
+    held = true;
+};
 
 // The fit `readableZoom` describes: whichever of the two the graph's size calls for. The estimate mirrors
 // Vue Flow's own arithmetic closely enough to pick a branch — the branch it picks then does the real work.
@@ -156,24 +165,58 @@ const applyFit = (store: VueFlowStore): void => {
 // asking to see everything is asking to trade legibility for it, deliberately and for as long as you look.
 const fitAll = (): void => void flow.value?.fitView({ padding: PADDING });
 
+// The one door back to a fitted picture: everything that can invalidate a fit calls this, and it is the only
+// place the reader's own pan is protected from being fitted over.
+const refit = (): void => {
+    const store = flow.value;
+    if (store === undefined || held) {
+        return;
+    }
+    applyFit(store);
+};
+
 watch(
     () => layoutSignature(nodes as readonly DagNode<never>[], edges, { direction, nodeWidth, nodeHeight }),
     async () => {
+        // A DIFFERENT graph is not the reader's view any more — whatever they had panned to was a place in the
+        // picture this one replaced, so the hold is released with it and the new graph is fitted.
+        held = false;
         await nextTick();
-        const store = flow.value;
-        if (store !== undefined) {
-            applyFit(store);
-        }
+        refit();
     },
 );
 
-// Not `fit-view-on-init`: that runs Vue Flow's own fit with default options, which is the magnifying one
-// whatever this component was asked for. Fitting on ready is the same moment with the caller's answer applied.
+/* Not `fit-view-on-init`: that runs Vue Flow's own fit with default options, which is the magnifying one
+ * whatever this component was asked for. Fitting on ready is the same moment with the caller's answer applied.
+ *
+ * WHY READY IS NOT ENOUGH ON ITS OWN, and this is the defect that left one card's diagram in the corner of its own
+ * frame while the card under it was drawn perfectly: `fitView` reads each node's MEASURED box, and while none
+ * of them has one it does nothing at all — returns false, leaves the viewport at the identity transform, and
+ * is never asked again. Boxes are measured by an observer, so whether they are in by `pane-ready` is a RACE: a
+ * graph mounted with the page usually wins it, one mounted a moment later (a list that arrived from the daemon,
+ * a card a query revealed) usually loses. `nodes-initialized` is Vue Flow saying the boxes are in, which is the
+ * first moment a fit can mean anything. */
 const onReady = async (store: VueFlowStore): Promise<void> => {
     flow.value = store;
     await nextTick();
-    applyFit(store);
+    refit();
 };
+
+/* AND AGAIN WHENEVER THE FRAME CHANGES SIZE, because a fit is a statement about the frame it was measured in.
+ * Open the chat column beside a page of cards, resize the window, or reveal a pane that mounted hidden, and
+ * every picture on it is still transformed for the frame it no longer has — off-centre, or spilling out of its
+ * own box and clipped. Vue Flow observes this same element for its `dimensions` and registers first (a child's
+ * onMounted runs before its parent's), so the store already knows the new size when this runs. */
+let observer: ResizeObserver | undefined;
+onBeforeUnmount(() => observer?.disconnect());
+watch(root, (element) => {
+    observer?.disconnect();
+    if (element === undefined) {
+        return;
+    }
+    observer = new ResizeObserver(() => refit());
+    observer.observe(element);
+});
 
 const toggle = (id: string): void => {
     selectedId.value = selectedId.value === id ? undefined : id;
@@ -181,7 +224,7 @@ const toggle = (id: string): void => {
 </script>
 
 <template>
-    <div class="relative h-full w-full">
+    <div ref="root" class="relative h-full w-full">
         <!-- `elements-selectable` is TRUE even though this component keeps its own selection and wants none of Vue
              Flow's, and that is not a preference — it is what makes the nodes touchable at all. A node wrapper
              takes pointer events only when something could want them (NodeWrapper's `hasPointerEvents`:
@@ -202,6 +245,8 @@ const toggle = (id: string): void => {
             :elements-selectable="true"
             :zoom-on-double-click="false"
             @pane-ready="onReady"
+            @nodes-initialized="refit()"
+            @move-start="hold()"
         >
             <template #node-card="{ data }">
                 <button

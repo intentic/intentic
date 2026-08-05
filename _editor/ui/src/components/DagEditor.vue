@@ -24,7 +24,7 @@
 import { Handle, Panel, Position, VueFlow } from "@vue-flow/core";
 import type { Connection, Edge, Node, VueFlowStore } from "@vue-flow/core";
 import "@vue-flow/core/dist/style.css";
-import { computed, nextTick, ref, useId, watch } from "vue";
+import { computed, nextTick, onBeforeUnmount, ref, useId, watch } from "vue";
 import { type DagEdge, type DagNode, layoutDag, layoutSignature } from "./dagLayout.js";
 import Icon from "./Icon.vue";
 
@@ -124,25 +124,54 @@ const targetPosition = computed(() => (direction === `LR` ? Position.Left : Posi
 // without paying for it in legibility, which is the thing a canvas is for.
 const FIT = { padding: 0.08, maxZoom: 1 } as const;
 
+const flow = ref<VueFlowStore>();
+
+/* THE READER HAS TAKEN HOLD of the viewport — DagGraph's rule, and it matters more on a canvas somebody is
+ * working on: `@move-start` fires only for a real gesture (Vue Flow returns before emitting it when the
+ * transform came from code), and from that moment nothing below fits over where they panned to. */
+let held = false;
+const hold = (): void => {
+    held = true;
+};
+
+const refit = (): void => {
+    if (held) {
+        return;
+    }
+    void flow.value?.fitView(FIT);
+};
+
+let observer: ResizeObserver | undefined;
+onBeforeUnmount(() => observer?.disconnect());
+
 /* Refit whenever a DIFFERENT graph arrives — the same rule and the same reasoning as DagGraph's, keyed on the
  * layout signature rather than the node count so two different graphs of one size cannot be mistaken for each
  * other. It earns its place harder here: the graph changes on every edit, and a canvas that let a new node
- * land outside the viewport would look like the click did nothing. */
-const flow = ref<VueFlowStore>();
+ * land outside the viewport would look like the click did nothing — which is also why an edit RELEASES the
+ * hold: the picture the reader had chosen a place in is not the picture any more. */
 watch(
     () => layoutSignature(nodes as readonly DagNode<never>[], edges, { direction, nodeWidth, nodeHeight }),
     async () => {
+        held = false;
         await nextTick();
-        void flow.value?.fitView(FIT);
+        refit();
     },
 );
 
-// Not `fit-view-on-init`: that runs Vue Flow's own fit with default options, which is exactly the magnifying
-// one. Fitting on ready instead is the same moment with our cap applied.
+/* Not `fit-view-on-init`: that runs Vue Flow's own fit with default options, which is exactly the magnifying
+ * one. Fitting on ready instead is the same moment with our cap applied — and the two hooks beside it are what
+ * make the fit hold: `nodes-initialized`, because `fitView` does NOTHING while no node has been measured yet
+ * (a graph mounted a moment after its page loses that race and is left at 1× in the corner), and the observer,
+ * because the canvas is resized every time the inspector opens beside it. DagGraph carries the long version. */
 const onReady = async (store: VueFlowStore): Promise<void> => {
     flow.value = store;
     await nextTick();
-    void store.fitView(FIT);
+    refit();
+    const element = store.vueFlowRef.value;
+    if (element !== null) {
+        observer = new ResizeObserver(() => refit());
+        observer.observe(element);
+    }
 };
 
 const toggle = (id: string): void => {
@@ -187,6 +216,8 @@ const fit = (): void => void flow.value?.fitView(FIT);
         :zoom-on-double-click="false"
         :connection-radius="30"
         @pane-ready="onReady"
+        @nodes-initialized="refit()"
+        @move-start="hold()"
         @connect="onConnect"
         @edge-click="onEdgeClick($event.edge)"
         @pane-click="onPaneClick"

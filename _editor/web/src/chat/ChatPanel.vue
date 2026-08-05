@@ -48,11 +48,22 @@ const MIN_PANE_PX = 352;
 // The rail beside them (ChatTabs' `w-40` plus its padding) — the part of the window the panes never get.
 const RAIL_PX = 176;
 
-/* WHICH CHATS ARE ON SCREEN. The store holds the pane set; a DOCKED panel shows the focused one alone whatever
- * that set says, because the column is ~22rem and a second pane in it would be two unusable slivers. The set
- * is not cleared by docking — it is this window's layout, so popping back out returns to the split the user
- * left. Mobile is the same rule for the same reason, one form factor further down. */
-const paneIds = computed(() => (poppedOut.value && !mobile.value ? panes.value : [activeId.value]));
+/* WHICH CHATS ARE ON SCREEN. The store holds the pane set, and what a window can DRAW of it is a question about
+ * room: every pane keeps its floor, so a set only stands side by side where the columns fit at that width.
+ *
+ * A DOCKED PANEL SHOWS THE SPLIT TOO, once it is wide enough — which it was not allowed to before, on the
+ * argument that the column is ~22rem and two panes in it would be slivers. True of 22rem and false of the
+ * column a reader has widened, and the rule that follows from the floor is right about both. It is also what a
+ * run needs: two attempts running side by side is the picture, and the alternative was popping a window open
+ * on the reader's behalf. The set is not cleared by docking — it is this window's layout, so popping back out
+ * returns to the split the user left. Mobile shows one, always: there is no width to be had. */
+const dockedRoom = (count: number): number => count * MIN_PANE_PX;
+const paneIds = computed(() => {
+    if (mobile.value) {
+        return [activeId.value];
+    }
+    return poppedOut.value || layout.chatWidth.value >= dockedRoom(panes.value.length) ? panes.value : [activeId.value];
+});
 const split = computed(() => paneIds.value.length > 1);
 // The conversations behind those ids, in column order. The find always hits — setConversations reconciles the
 // pane set with every list it writes — and `active` is the floor that keeps a slip a wrong chat rather than a
@@ -117,27 +128,45 @@ watch([activeId, tabReveal], () => {
     }
 });
 
+/* ROOM FOR THE BAND THAT JUST OPENED. A run's first move is usually two sessions at once, and a panel that
+ * held the width it had would answer that by showing one of them — so the column asks for the width its own
+ * floor says those panes need, exactly as the popped-out window asks itself to widen (`fit`). Clamped by the
+ * layout to a sliver short of the viewport, and left there for the reader to drag back: a width the app chose
+ * is still a width, and the seam is where it is undone. */
+const makeRoomFor = (count: number): void => {
+    if (poppedOut.value || mobile.value || layout.chatWidth.value >= dockedRoom(count)) {
+        return;
+    }
+    layout.setChatWidth(dockedRoom(count));
+};
+
 /* THE PANEL FOLLOWING THE RUN — the whole of `live`, and the only thing on this side that moves by itself.
  *
- * The ledger is polled, so this fires on every poll while a run is on screen and does nothing on almost all of
- * them (runToFollow returns `undefined` for a set already up). The two it acts on are the ones worth having:
- * the first poll after a start, which turns the diagram into the attempts, and the poll after a band settles,
- * which moves the panes to whatever the graph handed the baton to. Between them the reader never presses
- * anything, which is the point — "show me my workflow" was the whole of the instruction.
+ * It acts the instant the run exists: the start writes the run into the ledger cache before this fires, and
+ * every step's conversation is named in that first record — so the sessions of the first band open on the
+ * press, not on a poll. After that the poll is what moves it: when a band settles, the next one takes the
+ * panes. Between them the reader never presses anything, which is the point — "show me my workflow" was the
+ * whole of the instruction.
+ *
+ * IT RUNS DOCKED AS WELL AS POPPED OUT, and on the stored PANE SET rather than on what this window has room
+ * to draw. Gated on the popped-out reading, a run started from a docked panel opened nothing at all — which is
+ * what the automatic pop-out was really for. A run's sessions are sessions: they open as tabs in a narrow
+ * panel and stand side by side in a wide one, exactly as two chats the reader opened by hand do.
  *
  * Guarded on the MODE rather than on the run, because `graph` and `pinned` are exactly the states in which the
  * reader has said where they want to be and this must not overrule them.
  */
 watch(
-    [shownRun, () => chatRun.value?.mode],
+    [trackedRun, () => chatRun.value?.mode],
     () => {
-        const run = shownRun.value;
+        const run = trackedRun.value;
         if (run === undefined || chatRun.value?.mode !== `live`) {
             return;
         }
-        const following = runToFollow(run, paneIds.value);
+        const following = runToFollow(run, panes.value);
         if (following !== undefined) {
             openRunSessions(following);
+            makeRoomFor(following.length);
         }
     },
     { immediate: true },
