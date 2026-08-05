@@ -14,7 +14,7 @@ import { ref } from "vue";
  * slash commands, installed ACP agents) and the label rules every picker reads them through.
  *
  * Module state rather than per-conversation state, because a catalog is a property of the SANDBOX: every tab,
- * the suggested-session dialog and the settings pages show the same models, and a second conversation must not
+ * the suggested-session box and the settings pages show the same models, and a second conversation must not
  * re-fetch them. useChat fills these on the reachable seam (loadProviderModels / loadAcpProviders) and clears
  * them in resetChat; nothing here fetches, so this module stays free of the daemon client — which is what lets a
  * Conversation read it without importing useChat (a cycle).

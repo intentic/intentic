@@ -39,6 +39,7 @@ scaffolds, profiles, …), and the environment-overlay rebuild flow — is docum
 - **vue-query for request/response** (`useQuery`/`useMutation`, keyed + refetchable); streaming (chat tokens, sandbox liveness) stays manual with `ref` + `fetch`/`EventSource`.
 - PrimeVue components + Tailwind 4 utilities + `@intentic/ui` (`Page`, `Card`, `Code`, `InfoHint`, `useTheme`, `useHighlighter`); markdown via `marked` + DOMPurify; code via Shiki (`useHighlighter`).
 - **SSE/ndjson consume pattern** (see `conversation.ts` / `intenticStream.ts`): read the `ReadableStream`, split on `\n\n`, take `data:` lines, `JSON.parse` into the event union, fold into refs.
+- **A running command's output is a terminal, never a box.** `useTerminalPanel().openFocused(session)`; the dialog beside it holds the state and the buttons, and is not modal. The rule, its two look-alike exceptions and the reasoning are in [`composables/terminal/useTerminalPanel.ts`](src/composables/terminal/useTerminalPanel.ts).
 
 ## How to extend
 

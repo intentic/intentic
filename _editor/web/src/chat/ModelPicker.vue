@@ -16,7 +16,7 @@ import ProviderLogo from "./ProviderLogo.vue";
  * model gets the same list. Rows span every provider and are MODELS ONLY: a pick is a (provider, model) pair.
  *
  * IT PICKS, IT DOES NOT APPLY. The selection arrives as two props and leaves as one `pick` event, which is what
- * lets the chat composer bind it to a conversation (ChatModelPicker), the suggested-session dialog bind it to a
+ * lets the chat composer bind it to a conversation (ChatModelPicker), the suggested-session box bind it to a
  * draft that has no tab yet, and an extension bind it to a run it is about to start (api.models.pick). Anything
  * that configures a SESSION rather than choosing a model goes in the `footer` slot — accounts, the harness axis,
  * extended thinking — because none of that means anything to a caller who has no session.

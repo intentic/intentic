@@ -93,7 +93,7 @@ const agentRunOptions = computed<PickerOptions>(() => {
 // until one is named.
 const agentRunModel = computed(() => parsePinned(settings.value?.agentRunModel ?? ``));
 /* `thinking: false` because the setting pins a starting effort, not a turn: extended thinking is a per-turn
- * Claude knob a suggestion dialog still owns, and Conversation.effort re-clamps this pick against whatever it
+ * Claude knob a proposed session still owns, and Conversation.effort re-clamps this pick against whatever it
  * is when a session actually opens.
  *
  * "Default" leads with the empty value, matching the model row above it, and is not decoration: an unpinned

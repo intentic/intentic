@@ -10,7 +10,30 @@ import { disposeAllSessions, type TerminalTabsSource } from "./useTerminal";
  * one call: extensions start sessions and `openFocused` them, the rail's terminal button and Ctrl+` toggle it. The
  * daemon's GET /system/terminals is the single tab list: web-* shells (numbered) beside panel-* dev servers
  * (labeled, started via Start) — every tab ×-closable, untracked sessions dimmed. It is read through
- * terminalsQuery's shared cache entry, so the strip and the rail's badge are literally the same list. */
+ * terminalsQuery's shared cache entry, so the strip and the rail's badge are literally the same list.
+ *
+ * ────────────────────────────────────────────────────────────────────────────────────────────────────────────
+ * WHERE A COMMAND'S OUTPUT GOES — the browser half of the rule terminal/terminal-run.ts states for the daemon
+ * ("every real shell action the daemon executes for a user-triggered flow runs inside a visible tmux session").
+ * Written here because this module is the only way to reach that session, so this is where a surface decides.
+ *
+ *   A LIVE COMMAND'S OUTPUT IS A TERMINAL. `openFocused(session)` and nothing else. Not a <pre>, not a scrolling
+ *   box, not a polled tail. A terminal has colour, interprets the carriage returns a runner uses to rewrite its
+ *   own progress line, scrolls back through the part that went past, and can be typed into; a box has none of
+ *   that and cannot even render the escape codes, so a suite's failure arrives wearing `[39m[22m` litter.
+ *
+ *   A DIALOG TRACKS STATE AND OFFERS ACTIONS. What is being asked, how the run ended, and the buttons — no
+ *   output. Which is also why such a dialog is not modal: a mask would dim and freeze the terminal the user was
+ *   just sent to watch (see the push flow in pages/workspace/ReviewPanel.vue, the worked example).
+ *
+ * TWO THINGS THAT LOOK LIKE THE RULE'S VIOLATION AND ARE NOT — do not "fix" these:
+ *   · A TRANSCRIPT'S RECORD of a tool result (chat/ChatToolCard.vue's command body). That box is what the MODEL
+ *     saw, frozen in the conversation, and it has to stay readable a week later when the tmux session is long
+ *     reaped. It carries a "Watch in terminal" button to the live session, which is the pairing to copy.
+ *   · A SETTLED FAILURE MESSAGE — a command's final words, bounded and actionable (components/VpnCard.vue's
+ *     dial failure, which names the exact certificate digest to pin). That is a notice, and notices are text.
+ * The line between them: is there more of it coming? Then it is a terminal.
+ * ──────────────────────────────────────────────────────────────────────────────────────────────────────────── */
 
 export const globalTerminalSource: TerminalTabsSource = {
     list: listTerminals,

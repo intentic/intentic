@@ -389,7 +389,7 @@ export class Conversation {
 
     /* THE THREE TURN-SETTING WRITES, all shaped the same way: apply to THIS conversation, and remember the pick
      * as the seed for the next new chat. They live here rather than in useChat because a conversation is not
-     * always the active tab — the suggested-session dialog drives a draft that has no tab at all yet, through
+     * always the active tab — the suggested-session box drives a draft that has no tab at all yet, through
      * the same model picker and the same effort segments (SuggestedSessionBox.vue). useChat's identically-named
      * facades are these, bound to the active tab.
      *

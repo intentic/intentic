@@ -12,9 +12,9 @@ import PickerAccounts from "./PickerAccounts.vue";
  * extended-thinking knob, fast speed, and what this runtime cannot do.
  *
  * IT EDITS THE CONVERSATION IT IS GIVEN, not "the active tab". The composer hands it the active one; the
- * suggested-session dialog hands it a DRAFT that has no tab yet (SuggestedSessionBox.vue), so that a session
- * being proposed can be re-pointed at a different model before it is ever started. Binding to the active tab
- * instead would have made the dialog's picker silently edit whatever chat happened to be open behind it.
+ * suggested-session box hands it a DRAFT that has no tab yet (SuggestedSessionBox.vue), so that a session being
+ * proposed can be re-pointed at a different model before it is ever started. Binding to the active tab instead
+ * would have made the proposal's picker silently edit whatever chat happened to be open behind it.
  *
  * The harness (the provider's own / Claude Code) is a separate axis from the model, chosen via the footer chips
  * — codex/grok run the same subscription model ids under either harness. A mid-chat cross-provider pick just

@@ -42,7 +42,7 @@ export const startAgent = (prompt?: string): void => {
 };
 
 // The two steps that turn a conversation the user cannot see into the one they are now looking at. Shared with
-// the suggested-session dialog (sessionSuggestion.ts), which mints and configures its conversation before any
+// the suggested-session box (sessionSuggestion.ts), which mints and configures its conversation before any
 // tab exists for it and so cannot go through `newChat` — but must land in exactly the same place once accepted,
 // or "start a fix agent" and "New agent" would leave the user in two different states.
 export const revealConversation = (conversation: Conversation): void => {

@@ -15,6 +15,11 @@ import { shellQuote } from "@intentic/sandbox-run/quote";
 // tee-captured output, status-file completion, the command's real exit code. Finished windows linger for
 // scrollback until the session's next run prunes them; sessions linger attachable until the boot sweep
 // (managed-processes.ts killStaleManagedSessions) or the user × them.
+//
+// The BROWSER half of the same rule — what a surface may do with the output once it has a session, and the two
+// text surfaces that are exceptions to it — is stated at the seam that opens them:
+// _editor/web/src/composables/terminal/useTerminalPanel.ts. A flow is only half-visible if the daemon runs it
+// here and the client still paints a captured tail into a box.
 
 const execFileAsync = promisify(execFile);
 
