@@ -1,5 +1,6 @@
 import type { PrepushRun } from "@intentic/sandbox-contract";
 import type { Services } from "../composition.js";
+import { prepushFailed } from "../push/notifications.js";
 import { PREPUSH_SESSION } from "../terminal/terminal-session.js";
 
 /* THE PRE-PUSH CHECK — the workspace's own answer to "would this push go red", asked at the push and answered
@@ -12,15 +13,18 @@ import { PREPUSH_SESSION } from "../terminal/terminal-session.js";
  * of me". The push asks that question for free. There is exactly one artifact at the push, the user is standing
  * in front of it, and nothing else is going to change underneath before it leaves the machine.
  *
- * SO NOTHING IS PERSISTED AND NOTHING IS POLLED AT REST. A run exists while it runs, reports to the dialog that
+ * SO NOTHING IS PERSISTED AND NOTHING IS POLLED AT REST. A run exists while it runs, reports to the surface that
  * started it, and is gone with the process. Nothing survives a daemon restart because nothing needs to: the next
  * push asks again, and an answer the user is not waiting on has no reader.
+ *
+ * THE USER IS NOT REQUIRED TO WATCH. They start a push and go and do something else, so a red verdict is pushed
+ * to their devices (settle, below) rather than waiting to be discovered — the one outcome that needs them back.
  *
  * IT RUNS IN A REAL TERMINAL, which is the standing rule for every shell command the daemon runs on a user's
  * click (terminal/terminal-run.ts). The suite is a tmux window in the `job-checks` session, so the output the
  * user watches is a terminal's — colour, carriage returns, a runner's progress rewriting its own line, the wheel
- * scrolling back through it — and the push dialog is left holding only the question. What this module keeps of
- * that output is the TAIL, and for one reader only: the fix the dialog proposes when the suite goes red.
+ * scrolling back through it — and the app is left holding only the question. What this module keeps of that
+ * output is the TAIL, and for one reader only: the fix the app proposes when the suite goes red.
  *
  * WHAT IT RUNS ON. The main working tree, always — that is where the commits about to be pushed live, and it is
  * the tree whose node_modules resolve this monorepo's cross-package imports to the sources that will actually
@@ -53,9 +57,9 @@ export interface PrepushCheck {
     readonly cancel: () => void;
 }
 
-// What this reaches for out of the daemon. Stated rather than taking Services whole, so a test stands up four
+// What this reaches for out of the daemon. Stated rather than taking Services whole, so a test stands up five
 // seams instead of a hundred and thirty.
-export type PrepushDeps = Pick<Services, "logger" | "sandboxSettings" | "workspace" | "terminalRun">;
+export type PrepushDeps = Pick<Services, "logger" | "sandboxSettings" | "workspace" | "terminalRun" | "pushSender">;
 
 /* THE ONE CHECK THIS PROCESS HAS. A module singleton because the routes (the dialog's clicks) and the shutdown
  * hook all have to reach the SAME live run, and there is only one main working tree for them to be about.
@@ -110,6 +114,13 @@ export const createPrepushCheck = (services: PrepushDeps): PrepushCheck => {
                 { command, status: settled.status, exitCode: settled.exitCode, timedOut, durationMs: Date.now() - startedAt },
                 "prepush: check settled",
             );
+            /* A verdict the user is not there to read. The whole point of a check that runs while they get on
+             * with something else is that they do not have to sit over it — so the one outcome that needs them
+             * back has to travel to where they are. `notifyIfAway` decides whether they are actually away; a
+             * pass sends nothing (the push just goes) and a cancel sends nothing (they stopped it themselves). */
+            if (settled.status === "failed" || settled.status === "error") {
+                void services.pushSender.notifyIfAway(prepushFailed(settled));
+            }
             return settled;
         };
         try {

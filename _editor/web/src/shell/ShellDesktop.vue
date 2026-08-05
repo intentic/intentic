@@ -24,6 +24,8 @@ import { presenceOthers } from "../composables/usePresence";
 import { usePanels } from "../composables/extensions/usePanels";
 import { outgoingMark, outgoingSummary } from "../composables/workspace/outgoingWork";
 import { useChanges } from "../composables/workspace/useChanges";
+import { pushBadge } from "../composables/workspace/pushBadge";
+import { usePushFlow } from "../composables/workspace/usePushFlow";
 import { usePorts } from "../composables/sandbox/usePorts";
 import { useSandbox } from "../composables/sandbox/useSandbox";
 import { useVpn } from "../composables/sandbox/useVpn";
@@ -75,6 +77,8 @@ const { sessions: subagents, running: runningSubagents } = useSubagentsQuery(10_
 const { reachable } = useSandbox();
 // Uncommitted workspace changes surface as a count badge on the Workspace rail tile, visible from any area.
 const changes = useChanges();
+// And so does a push the user started and then navigated away from — the run's only presence outside the panel.
+const pushFlow = usePushFlow();
 // "Agents need you" (pending plans/questions, land conflicts, unread finishes) badges the Agents tile.
 const { attention: agentAttention } = useAgents();
 const layout = useLayout();
@@ -119,8 +123,15 @@ const isNavActive = (to: string): boolean => route.path === to || route.path.sta
  * glyph says which KIND of work is waiting, and the tooltip says how much.
  *
  * That the user committed it themselves is no argument for staying silent: on this workspace an AGENT usually
- * did, and the tree it left behind is clean. */
+ * did, and the tree it left behind is clean.
+ *
+ * A PUSH IN FLIGHT COMES FIRST, above both counts: it is happening now, the user started it and then walked
+ * away from the panel that shows it, and from out here this tile is the only thing that knows (pushBadge.ts). */
 const workspaceBadge = computed<ViewBadge | undefined>(() => {
+    const push = pushBadge(pushFlow.stage.value, pushFlow.question.value);
+    if (push !== undefined) {
+        return push;
+    }
     if (changes.count.value > 0) {
         return {
             count: changes.count.value,

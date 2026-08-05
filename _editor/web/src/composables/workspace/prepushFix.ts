@@ -32,9 +32,9 @@ export const fixPrompt = (run: PrepushRun): string => {
 };
 
 /* The one line above the composer: what happened, without the evidence under it repeating itself. It is a
- * PREDICATE — the dialog draws the command itself, in the same monospace it wears while the check is still going,
- * so the sentence reads the same either side of the verdict. (Wrapping the command in backticks here was the
- * markdown of `fixPrompt` leaking into a plain-text line, which rendered them as the literal characters they are.) */
+ * PREDICATE — the command itself is drawn in front of it, in the same monospace it wears while the check is still
+ * going, so the sentence reads the same either side of the verdict. (Wrapping the command in backticks here was
+ * the markdown of `fixPrompt` leaking into a plain-text line, which rendered them as the literal characters.) */
 export const fixSummary = (run: PrepushRun): string => {
     if (run.timedOut === true) {
         return `never finished — it hit its time limit and was killed.`;
@@ -46,4 +46,25 @@ export const fixSummary = (run: PrepushRun): string => {
         return `was stopped before it finished.`;
     }
     return `failed with exit ${run.exitCode ?? `unknown`}.`;
+};
+
+/* The heading over a settled check — three or four words, because it is read at a glance and from across a
+ * view the user may have walked back into. `passed` never appears: that outcome sends the push and says so in
+ * the panel, so every case left here is a reason the user is still being asked something. */
+export const checkOutcome = (run: PrepushRun): string => {
+    if (run.timedOut === true) {
+        return `Checks timed out`;
+    }
+    switch (run.status) {
+        case `error`:
+            return `Checks couldn't run`;
+        case `cancelled`:
+            return `Checks stopped`;
+        case `failed`:
+            return `Checks failed`;
+        default:
+            // `idle` reaches here only when the command was cleared between the click and the request — there is
+            // no check any more, so it says so rather than implying one ran and said nothing.
+            return `Checks didn't run`;
+    }
 };

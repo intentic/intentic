@@ -7,6 +7,7 @@ import { onScreen } from "../composables/onScreen";
 import { reportIdle, reportSessionId, reportView } from "../composables/usePresence";
 import { useSandboxLiveness } from "../composables/sandbox/useSandboxLiveness";
 import PoppablePanels from "./PoppablePanels.vue";
+import PushNotice from "./PushNotice.vue";
 
 /* THE SIGNED-IN SESSION'S LIVE CONNECTION TO ITS SANDBOX, and the panels that connection feeds — mounted by
  * App.vue for as long as an account has a sandbox selected, and therefore ABOVE every route rather than inside
@@ -20,7 +21,8 @@ import PoppablePanels from "./PoppablePanels.vue";
  *
  * Presence rides the same lifetime, as it always has: it is this tab's claim about what its user is looking at,
  * which is as true on /setup as it is in the workspace, and it is only deliverable while the stream it is
- * reported over is open. */
+ * reported over is open. So does the push notice, for the third variation of the same reason: the question it
+ * asks outlives the view that asked for the push. */
 
 const liveness = useSandboxLiveness();
 const route = useRoute();
@@ -56,4 +58,8 @@ onUnmounted(() => liveness.stop());
     <!-- The mobile shell docks neither panel — its chat is the agent route and its terminal a tab of its own —
          so there is nothing out there to own, and nothing that could be popped into a window. -->
     <PoppablePanels v-if="!mobile" />
+    <!-- A push that needs an answer, asked wherever the user has got to. It belongs to the session for the same
+         reason the stream does: the check that raises it takes minutes, the user was told to go and do something
+         else, and every route in the app is somewhere they might reasonably be when it lands. -->
+    <PushNotice />
 </template>

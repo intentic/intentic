@@ -7,7 +7,9 @@ import { badgeClass, badgeText } from "../core-views/viewBadge";
 import { useAgents } from "../composables/agents/useAgents";
 import { useDrafts } from "../composables/extensions/useDrafts";
 import { outgoingMark, outgoingSummary } from "../composables/workspace/outgoingWork";
+import { pushBadge } from "../composables/workspace/pushBadge";
 import { useChanges } from "../composables/workspace/useChanges";
+import { usePushFlow } from "../composables/workspace/usePushFlow";
 import { useSandboxAttention } from "../composables/sandbox/sandboxAttention";
 import { useSandbox } from "../composables/sandbox/useSandbox";
 
@@ -33,6 +35,7 @@ const { reachable } = useSandbox();
 const { owed: draftsOwed } = useDrafts();
 const { attention } = useAgents();
 const changes = useChanges();
+const pushFlow = usePushFlow();
 const { badge: sandboxBadge } = useSandboxAttention();
 
 // Things to act on: the drafts that owe a decision plus uncommitted changes. Once that total is zero but the
@@ -41,6 +44,12 @@ const { badge: sandboxBadge } = useSandboxAttention();
 // waiting. The drafts half is useDrafts' `owed`, the same count the desktop rail's Drafts tile badges: this used
 // to be every draft in the store, so one post ever published left the tab permanently wearing a number.
 const reviewBadge = computed<ViewBadge | undefined>(() => {
+    // A push in flight, or one standing unsent, comes first — it is the thing happening now, and on a phone the
+    // panel that shows it is two taps away (pushBadge.ts).
+    const push = pushBadge(pushFlow.stage.value, pushFlow.question.value);
+    if (push !== undefined) {
+        return push;
+    }
     const count = draftsOwed.value + changes.count.value;
     if (count > 0) {
         return { count, tooltip: `${count} to review` };

@@ -53,6 +53,9 @@ const fakeRunner = (visible: boolean, count: () => void): TerminalRunner =>
 interface Fakes {
     readonly services: Services;
     readonly settings: { current: typeof SETTINGS };
+    // Every away-notification the check sent. A verdict the user is not standing in front of is the whole
+    // reason this subsystem is allowed to interrupt anyone, so which runs send one is worth asserting.
+    readonly notified: () => readonly string[];
     // How many times the command has actually run — the "one suite at a time" assertion counts executions, not
     // results, because refusing a second run is precisely a claim about how often one was started.
     readonly runs: () => number;
@@ -64,15 +67,22 @@ const fakeServices = (over: Partial<typeof SETTINGS> & { visible?: boolean; root
     const { visible = true, root = mkdtempSync(join(tmpdir(), "prepush-")), ...fields } = over;
     const settings = { current: { ...SETTINGS, ...fields } };
     let runs = 0;
+    const notified: string[] = [];
     const services = unstubbed<Services>("services", {
         workspace: unstubbed<Services["workspace"]>("workspace", { root }),
         sandboxSettings: unstubbed<Services["sandboxSettings"]>("sandboxSettings", { get: async () => settings.current }),
         logger: unstubbed<Services["logger"]>("logger", { info: () => {}, warn: () => {}, debug: () => {}, error: () => {} }),
+        pushSender: unstubbed<Services["pushSender"]>("pushSender", {
+            notifyIfAway: async (notification) => {
+                notified.push(notification.title);
+                return { delivered: 1, failed: 0 };
+            },
+        }),
         terminalRun: fakeRunner(visible, () => {
             runs += 1;
         }),
     });
-    return { services, settings, runs: () => runs };
+    return { services, settings, runs: () => runs, notified: () => notified };
 };
 
 /* REAL timers throughout — deliberately, and it is worth saying why rather than leaving the next person to
@@ -174,7 +184,7 @@ test("a check that outruns the timeout is failed and timedOut, never cancelled",
     expect((await check.state()).timedOut).toBe(true);
 }, 20_000);
 
-// A cancel must not read as a failure: nothing was learned about the code, and a "tests failed" dialog over a
+// A cancel must not read as a failure: nothing was learned about the code, and a "tests failed" notice over a
 // run the user stopped themselves would be the check lying about its own evidence.
 test("a cancelled run is cancelled, not failed", async () => {
     const { services } = fakeServices({ prepushCommand: "sleep 30" });
@@ -183,6 +193,41 @@ test("a cancelled run is cancelled, not failed", async () => {
     await vi.waitFor(async () => expect((await check.state()).status).toBe("running"), { timeout: 5_000 });
     check.cancel();
     await vi.waitFor(async () => expect((await check.state()).status).toBe("cancelled"), { timeout: 8_000 });
+}, 20_000);
+
+/* WHO GETS INTERRUPTED. The user is expected to start a push and go and do something else, so a red verdict has
+ * to travel to them; the two outcomes that leave a push standing unsent are the only ones that qualify. A pass
+ * is not news — the push simply goes — and a cancel was their own hand on the button. */
+test("a red verdict notifies devices; a pass and a cancel say nothing", async () => {
+    const red = fakeServices({ prepushCommand: "exit 1" });
+    const redCheck = createPrepushCheck(red.services);
+    await redCheck.run();
+    await vi.waitFor(async () => expect((await redCheck.state()).status).toBe("failed"), { timeout: 5_000 });
+    expect(red.notified()).toEqual(["Checks failed"]);
+
+    const green = fakeServices({ prepushCommand: "exit 0" });
+    const greenCheck = createPrepushCheck(green.services);
+    await greenCheck.run();
+    await vi.waitFor(async () => expect((await greenCheck.state()).status).toBe("passed"), { timeout: 5_000 });
+    expect(green.notified()).toEqual([]);
+
+    const stopped = fakeServices({ prepushCommand: "sleep 30" });
+    const stoppedCheck = createPrepushCheck(stopped.services);
+    await stoppedCheck.run();
+    await vi.waitFor(async () => expect((await stoppedCheck.state()).status).toBe("running"), { timeout: 5_000 });
+    stoppedCheck.cancel();
+    await vi.waitFor(async () => expect((await stoppedCheck.state()).status).toBe("cancelled"), { timeout: 8_000 });
+    expect(stopped.notified()).toEqual([]);
+}, 30_000);
+
+// A suite killed by its own ceiling is the loudest case there is — the push is held on a check that never
+// finished, and the wording has to say that rather than "failed", which would send the user hunting a test.
+test("a timed-out check notifies as a timeout", async () => {
+    const { services, notified } = fakeServices({ prepushCommand: "sleep 30", prepushTimeoutMs: 150 });
+    const check = createPrepushCheck(services);
+    await check.run();
+    await vi.waitFor(async () => expect((await check.state()).status).toBe("failed"), { timeout: 5_000 });
+    expect(notified()).toEqual(["Checks timed out"]);
 }, 20_000);
 
 // A command the shell cannot find is the shell's own 127 — a FAILED run whose output names the problem, which is

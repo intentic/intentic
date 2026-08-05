@@ -1,4 +1,4 @@
-import type { PushNotification } from "@intentic/sandbox-contract";
+import type { PrepushRun, PushNotification } from "@intentic/sandbox-contract";
 
 /* The wording of every notification this daemon sends, in one file. Kept out of the subsystems that TRIGGER
  * them (turn-runs knows a turn settled; the scheduler knows a wake is held) so that neither has to carry copy,
@@ -44,6 +44,24 @@ export const turnAwaiting = (conversationId: string, kind: "plan" | "question" |
     // One tag across all three kinds: while a turn is parked there is exactly one thing to answer, so a
     // permission prompt following a question should REPLACE it rather than queue behind it.
     tag: `awaiting-${conversationId}`,
+    requireInteraction: true,
+});
+
+/* A pre-push check that said no while the user was somewhere else. Sent for a suite that RAN and refused, and
+ * for one that could not run at all — both leave a push the user asked for standing unsent, which is the only
+ * reason to interrupt them. A pass sends nothing (the push simply goes), and neither does a cancel: the hand on
+ * the Stop button was theirs.
+ *
+ * `requireInteraction`, because this IS the blocked case — the push is held waiting on an answer, and a notice
+ * that auto-dismisses is a decision nobody made. The url goes to the workspace, though the app raises the same
+ * question wherever the user lands. */
+export const prepushFailed = (run: PrepushRun): PushNotification => ({
+    title: run.timedOut === true ? "Checks timed out" : run.status === "error" ? "Checks couldn't run" : "Checks failed",
+    body: `${run.command} — your push is waiting on you.`,
+    url: "/workspace",
+    // One tag for the check, of which this daemon has exactly one: a second verdict replaces the first rather
+    // than stacking a notification per push attempt.
+    tag: "prepush",
     requireInteraction: true,
 });
 

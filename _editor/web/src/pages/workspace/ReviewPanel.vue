@@ -3,9 +3,8 @@ import Button from "primevue/button";
 import type { GitChange, GitDiffSide, RepoChanges, RepoPaths } from "@intentic-app/api-contract";
 import { ChangeStatusMark, cmp, DiffStat, useDevice } from "@intentic/ui";
 import Dialog from "primevue/dialog";
-import { computed, onScopeDispose, ref, shallowRef, watch } from "vue";
+import { computed, onScopeDispose, ref, watch } from "vue";
 import ProviderLogo from "../../chat/ProviderLogo.vue";
-import type { Conversation } from "../../composables/chat/conversation";
 import HoverCard from "../../components/HoverCard.vue";
 import { useAgents } from "../../composables/agents/useAgents";
 import { useChat } from "../../composables/chat/useChat";
@@ -20,13 +19,10 @@ import { diffRawUrls } from "../../composables/workspace/diffRaw";
 import { warmDiffs, warmRows, whenIdle } from "../../composables/workspace/diffWarmer";
 import { repoOfPath, turnWrites } from "../../composables/workspace/liveWrites";
 import { ahead, behind, syncable, unpublished } from "../../composables/workspace/outgoingWork";
-import { COMMIT_SCOPE, type SyncTarget, useChanges } from "../../composables/workspace/useChanges";
-import { usePrepush } from "../../composables/workspace/usePrepush";
+import { COMMIT_SCOPE, useChanges } from "../../composables/workspace/useChanges";
+import { usePushFlow } from "../../composables/workspace/usePushFlow";
 import { useRepos } from "../../composables/workspace/useRepos";
-import { composeSession, startSession } from "../../composables/agents/sessionSuggestion";
-import { useSandboxSettings } from "../../composables/sandbox/useSandboxSettings";
-import SuggestedSessionBox from "../../agents/SuggestedSessionBox.vue";
-import { fixPrompt, fixSummary } from "./prepushFix";
+import { useNow } from "../../composables/useNow";
 import type { DiffPayload } from "@intentic/extension-api";
 import { moduleGroups, rowName, type ModuleGroup } from "./changeModules";
 import type { OpenMode } from "./workspaceTabs";
@@ -65,10 +61,11 @@ import { useModules } from "../../composables/workspace/useModules";
  *     of the panel naming neither, so a failed fetch read as a stray sentence with no visible cause. */
 
 const changes = useChanges();
-// The check that runs when a push is about to go out, and the settings that decide whether there is one and
-// what a failure should be handed to.
-const prepush = usePrepush();
-const { settings: sandboxSettings } = useSandboxSettings();
+// The push, from the click to the answer — started here, but owned above this panel so that leaving the view
+// neither loses the run nor the question it may raise (composables/workspace/usePushFlow.ts).
+const pushFlow = usePushFlow();
+// The elapsed readout ticks only while something is actually in flight.
+const now = useNow(() => pushFlow.running.value);
 
 // A repo the daemon could not scan at all (a half-written .git from a canceled upload, a corrupt HEAD) arrives
 // with empty change lists and `error` set to git's own one-line reason. It has nothing to commit or discard, so
@@ -843,146 +840,48 @@ const syncSummary = computed<string>(() => {
     const spread = syncRepos.value.length > 1 ? ` · ${plural(syncRepos.value.length, `repo`)}` : ``;
     return (counts.length > 0 ? counts.join(` `) : `no upstream yet`) + spread;
 });
-/* --- the pre-push check ---------------------------------------------------------------------------------------
- * EVERY push in this panel funnels through `askSync` — the bar's Push/Sync/Publish and both of a repo row's
- * pills — because a second way to reach the same verb is a way around the check. That is also why useChanges
- * does not export a one-repo push: a single door is the only kind that can be guarded.
+/* --- the push -------------------------------------------------------------------------------------------------
+ * EVERY push in this panel funnels through `pushFlow.askSync` — the bar's Push/Sync/Publish and both of a repo
+ * row's pills — because a second way to reach the same verb is a way around the check. That is also why
+ * useChanges does not export a one-repo push: a single door is the only kind that can be guarded.
  *
  * WHY THE PUSH AND NOT THE COMMIT. The commit is the user's own review boundary and stays unchecked; nothing has
  * left the machine yet, and interrupting the act of recording work would be objecting to the wrong thing. The
  * push is the last moment before CI owns the answer, and the first at which what will be pushed is finally
  * settled — so it is the only moment where a check can be both timely and about the right artifact.
  *
- * IT RUNS WHILE THE USER WAITS, and that is the whole reason this replaced a badge. The old landing gate ran on
- * a debounce after every land and published a verdict the panel polled forever, which meant it was answering
- * about a tree that kept moving and needed a fingerprint, a staleness rule and a strip of sidebar to say which.
- * Here the user has just asked for something, the answer is worth the wait, and the wait is the surface.
- *
- * PUSH ANYWAY IS ALWAYS THERE — during the run and after a failure. The user knows things the check does not:
- * that the failure is the one they are pushing a fix for, that the suite is flaky, that they need this on a
- * branch to look at it in CI. A check that BLOCKED the push would get switched off within the week.
- *
- * A pull-only sync passes straight through: nothing leaves the machine, so there is nothing to check. */
-interface PendingSync {
-    // The word the control the user clicked was wearing, so the dialog answers that click instead of renaming it.
-    readonly verb: string;
-    // What is about to leave — "3 commits across 2 repos", "intentic's branch".
-    readonly what: string;
-    readonly targets: readonly SyncTarget[];
-}
-/* shallowRef, and this one is load-bearing rather than a micro-optimisation: the question on screen is IDENTIFIED
- * by this object, and `ref` would deep-wrap it in a reactive proxy — so `pendingSync.value !== pending` was true
- * of the very object that had just been stored, and every settled run was discarded as "the user moved on". A
- * passed check never closed the dialog or pushed, a failed one never proposed its fix, and the box sat there
- * saying "Checks didn't run" over a suite that had just gone green. */
-const pendingSync = shallowRef<PendingSync | undefined>(undefined);
-// The fix session proposed for the failure on screen, composed once when the run settles red so that edits to
-// its text and model survive every re-render of the dialog holding it.
-// shallowRef because a Conversation owns its own refs — see sessionSuggestion.ts.
-const proposedFix = shallowRef<Conversation | undefined>(undefined);
+ * THE PANEL NO LONGER HOLDS THE WAIT. It states it: while the flow runs, the strip below the sync bar says what
+ * stage it is at and offers the two things worth offering mid-run (stop the suite, watch it). The decision a red
+ * verdict needs is raised ABOVE the router (shell/PushNotice.vue), because by then the user is usually somewhere
+ * else — which is the whole permission this design grants them. */
 
-const closePush = (): void => {
-    pendingSync.value = undefined;
-    proposedFix.value = undefined;
-    prepush.forget();
-};
-
-const askSync = (verb: string, what: string, targets: readonly SyncTarget[]): void => {
-    if (changes.actionBusy.value) {
-        return;
+// What the strip says while something is in flight, and after. One line, because the panel is ~270px wide and
+// the amount of it that can be spent on a status is one line.
+const stageLine = computed<string | undefined>(() => {
+    const push = pushFlow.pending.value;
+    if (pushFlow.stage.value === `checking`) {
+        return `Checking · ${formatElapsed(pushFlow.since.value, now.value)}`;
     }
-    const command = sandboxSettings.value?.prepushCommand ?? ``;
-    if (command === `` || !targets.some((target) => target.push)) {
-        void changes.syncAll(targets);
-        return;
+    if (pushFlow.stage.value === `pushing`) {
+        return `${push?.verb ?? `Push`}ing · ${formatElapsed(pushFlow.since.value, now.value)}`;
     }
-    const pending: PendingSync = { verb, what, targets };
-    pendingSync.value = pending;
-    proposedFix.value = undefined;
-    void prepush.start().then((settled) => {
-        // The user resolved this dialog while the suite ran — pushed anyway, cancelled, or started another sync.
-        // Whatever it decided about, it is not the question on screen any more.
-        if (pendingSync.value !== pending) {
-            return;
-        }
-        if (settled.status === `passed`) {
-            closePush();
-            void changes.syncAll(targets);
-            return;
-        }
-        // `error` gets no fix proposal: the command could not run, so nothing is known to be wrong with the code
-        // and an agent sent after it would hunt a bug that isn't there. Same for a cancel — the user stopped it.
-        if (settled.status === `failed`) {
-            proposedFix.value = composeSession({
-                prompt: fixPrompt(settled),
-                model: sandboxSettings.value?.agentRunModel,
-                effort: sandboxSettings.value?.agentRunEffort,
-                // Isolated, like any other fleet agent: the work under test is committed on a branch, so the fix
-                // belongs in a worktree of its own and arrives as a diff to review rather than as edits landing
-                // underneath the push the user is still deciding about.
-                isolated: true,
-            });
-        }
-    });
-};
+    const sent = pushFlow.pushed.value;
+    return sent === undefined ? undefined : `Pushed ${sent.what}`;
+});
 
-// Push anyway. The run keeps going on the daemon if it has not settled — killing it here would be deciding, on
-// the user's behalf, that an answer they chose not to wait for is an answer nobody wants.
-const confirmSync = (): void => {
-    const target = pendingSync.value;
-    closePush();
-    if (target !== undefined) {
-        void changes.syncAll(target.targets);
-    }
-};
-
-// Hand the failure to an agent. The push does NOT go: the point of accepting the fix is that this tree is not
-// the one to push, and the agent's diff comes back for review like any other.
-const startFix = (): void => {
-    const fix = proposedFix.value;
-    closePush();
-    if (fix !== undefined) {
-        startSession(fix);
-    }
-};
-
-// Stop the suite and keep the dialog: cancelling the checks is not cancelling the push, and the run settles as
-// `cancelled` so the dialog's own wording comes from the same place every other outcome's does.
-const cancelChecks = (): void => void prepush.cancel();
-
-// What follows the command in the dialog's one line of prose — the only part of it the run's state changes, so
-// the line reads as one sentence changing tense rather than as two messages sharing a slot.
-const checkSentence = computed((): string =>
-    prepush.running.value
-        ? `is running over your workspace before ${pendingSync.value?.what ?? `this push`} goes out.`
-        : fixSummary(prepush.run.value),
-);
-
-// The dialog's header once the run has settled. `passed` never appears here — that path closes the dialog and
-// pushes — so every case left is a reason the user is still being asked something.
-const checkOutcome = computed((): string => {
-    const run = prepush.run.value;
-    if (run.timedOut === true) {
-        return `Checks timed out`;
-    }
-    switch (run.status) {
-        case `error`:
-            return `Checks couldn't run`;
-        case `cancelled`:
-            return `Checks stopped`;
-        case `failed`:
-            return `Checks failed`;
-        default:
-            // `idle` reaches here only when the command was cleared between the click and the request — there is
-            // no check any more, so the dialog says so rather than implying one ran and said nothing.
-            return `Checks didn't run`;
-    }
+// The command, and how long this suite usually takes — the two facts that turn "it is running" into "I can go
+// and do something else". They ride the tooltip rather than the line: in this width the elapsed clock is what
+// has to be legible at a glance, and these are read once.
+const stageHint = computed<string>(() => {
+    const typical = pushFlow.typicalMs.value;
+    const usually = typical === undefined ? `` : ` · usually about ${formatElapsed(0, typical)}`;
+    return pushFlow.stage.value === `checking` ? `${pushFlow.command.value}${usually}` : `Sending your commits to their upstreams`;
 });
 
 // One click, every repo that has remote work — git can't span remotes, so the composable fans it out into one
 // real sync per repo (pull what's behind, then push/publish what's ahead), each failure landing on its own row.
 const doSync = (): void =>
-    askSync(
+    pushFlow.askSync(
         syncMeta.value?.label ?? `Sync`,
         `${aheadTotal.value > 0 ? plural(aheadTotal.value, `commit`) : `this branch`}${syncRepos.value.length > 1 ? ` across ${plural(syncRepos.value.length, `repo`)}` : ``}`,
         syncRepos.value.map((repo) => ({ repo: repo.repo, pull: behind(repo) > 0, push: ahead(repo) > 0 || unpublished(repo) })),
@@ -990,7 +889,7 @@ const doSync = (): void =>
 
 // A row's own pill: this repo, outgoing only. Publish and ↑N differ in wording, not in what they send.
 const askPushRepo = (repo: RepoChanges): void =>
-    askSync(
+    pushFlow.askSync(
         unpublished(repo) ? `Publish` : `Push`,
         unpublished(repo) ? `${repo.repo}'s branch` : `${plural(ahead(repo), `commit`)} in ${repo.repo}`,
         [{ repo: repo.repo, pull: false, push: true }],
@@ -1203,12 +1102,52 @@ const WARNING = `flex items-start gap-1.5 rounded-md border border-warning/40 bg
             <Button
                 size="small"
                 class="shrink-0 gap-0 whitespace-nowrap px-2 py-1 text-2xs"
-                :disabled="changes.actionBusy.value"
+                :disabled="changes.actionBusy.value || pushFlow.running.value"
                 @click="doSync"
                 v-tooltip.right="syncMeta!.hint"
             >
                 <Icon :name="syncMeta!.icon" class="mr-1 text-2xs" />{{ syncMeta!.label }}
             </Button>
+        </div>
+
+        <!-- THE RUN, IN PLACE — what replaced the dialog that used to own the wait.
+             It is a STRIP OF ITS OWN rather than a state of the bar above, because the bar above is the primary
+             slot and the commit box takes it back the moment there is anything to commit: a status that lived
+             there would vanish the first time the user did what this whole design invites them to do, which is
+             carry on working while the suite runs. It says the stage and the clock, and offers only what is
+             worth offering mid-run — stop the suite, go and watch it. No verdict, because a verdict that needs
+             answering is raised above the router where the user can be found (shell/PushNotice.vue), and no
+             output, because the output is the terminal's (composables/terminal/useTerminalPanel.ts). -->
+        <div v-if="stageLine !== undefined" class="flex shrink-0 items-center gap-1.5 border-b border-line px-2 py-1.5" v-tooltip.right="stageHint">
+            <Icon
+                :name="pushFlow.running.value ? `spinner` : `check-circle`"
+                :spin="pushFlow.running.value"
+                class="shrink-0 text-2xs"
+                :class="pushFlow.running.value ? `text-link` : `text-success`"
+            />
+            <span class="min-w-0 flex-1 truncate whitespace-nowrap text-2xs text-muted">{{ stageLine }}</span>
+            <!-- Drawn only where there IS a terminal: a sandbox without the tmux wrapper ran the suite in an
+                 invisible shell, and a button that opens an empty panel is worse than none. -->
+            <button
+                v-if="pushFlow.running.value && pushFlow.terminal.value !== undefined"
+                type="button"
+                class="shrink-0 rounded p-0.5 text-muted transition-colors hover:text-content"
+                @click="pushFlow.showTerminal"
+                v-tooltip.top="'Watch it run'"
+                aria-label="Watch the checks run"
+            >
+                <Icon name="terminal" class="text-2xs" />
+            </button>
+            <!-- Stopping the suite is not cancelling the push: the run settles as stopped and the push is still
+                 waiting on an answer, which is then asked for in the notice like any other red outcome. -->
+            <button
+                v-if="pushFlow.stage.value === `checking`"
+                type="button"
+                class="shrink-0 rounded px-1 py-0.5 text-2xs text-muted transition-colors hover:text-content"
+                @click="pushFlow.stopChecks"
+            >
+                Stop
+            </button>
         </div>
 
         <!-- WHOSE WORK IS IN MY TREE — one line, only when an agent actually landed something. Each entry is a
@@ -1330,7 +1269,7 @@ const WARNING = `flex items-start gap-1.5 rounded-md border border-warning/40 bg
                         v-if="unpublished(group)"
                         type="button"
                         class="inline-flex h-5 shrink-0 items-center whitespace-nowrap rounded border border-line px-1.5 text-2xs text-muted transition-colors hover:bg-overlay hover:text-content disabled:opacity-40"
-                        :disabled="changes.actionBusy.value"
+                        :disabled="changes.actionBusy.value || pushFlow.running.value"
                         @click="askPushRepo(group)"
                         v-tooltip.top="'Push and start tracking this branch on the remote'"
                     >
@@ -1340,7 +1279,7 @@ const WARNING = `flex items-start gap-1.5 rounded-md border border-warning/40 bg
                         v-else-if="ahead(group) > 0"
                         type="button"
                         :class="SYNC_PILL"
-                        :disabled="changes.actionBusy.value"
+                        :disabled="changes.actionBusy.value || pushFlow.running.value"
                         @click="askPushRepo(group)"
                         v-tooltip.top="pushHint(group)"
                         :aria-label="`Push ${group.repo}`"
@@ -1649,72 +1588,6 @@ const WARNING = `flex items-start gap-1.5 rounded-md border border-warning/40 bg
                     :disabled="changes.actionBusy.value"
                     @click="confirmDiscard"
                 />
-            </template>
-        </Dialog>
-
-        <!-- The pre-push check, as ONE dialog across the whole wait: the same box that says "running" says
-             "failed" and then holds the fix that answers it, so the user never loses the thread between asking
-             to push and deciding what to do about the answer.
-
-             IT HOLDS THE QUESTION, NOT THE OUTPUT. The suite runs in a real terminal (usePrepush) and the panel
-             opens on it, so this stays small: what is being asked, what the answer was, and the buttons. It is
-             therefore NOT modal and sits at the top — a mask would dim and freeze the very terminal the user was
-             sent to watch, and a centred box would cover it.
-
-             Push anyway is present in every state, including mid-run, and never asks a second time — the user
-             knows things the check does not. Cancel means "stop the suite", not "abandon the push": the dialog
-             stays, now saying it was stopped, because the decision it was raised for is still open. -->
-        <Dialog
-            :visible="pendingSync !== undefined"
-            :modal="false"
-            :draggable="false"
-            position="top"
-            :style="{ width: proposedFix ? '38rem' : '30rem' }"
-            :header="prepush.running.value ? `Checking before ${pendingSync?.verb.toLowerCase() ?? 'push'}…` : checkOutcome"
-            @update:visible="closePush"
-        >
-            <!-- The command leads the line in the same monospace either side of the verdict, so what changes when
-                 the run settles is the tense and nothing else. -->
-            <template v-if="pendingSync">
-                <p class="break-words text-xs text-muted">
-                    <span class="font-mono text-content">{{ prepush.run.value.command || sandboxSettings?.prepushCommand }}</span>
-                    {{ checkSentence }}
-                </p>
-
-                <p v-if="prepush.error.value" :class="cmp.alertDanger('mt-2 break-words text-xs')">{{ prepush.error.value }}</p>
-
-                <!-- The proposal. Composed from the failure and the settings, and editable to the last character
-                     before it costs anything (agents/sessionSuggestion.ts). -->
-                <template v-if="proposedFix">
-                    <p class="mb-1.5 mt-3 text-2xs font-medium uppercase tracking-wide text-subtle">Fix it with an agent</p>
-                    <SuggestedSessionBox :conversation="proposedFix" action="Start agent" @start="startFix" />
-                </template>
-            </template>
-            <template #footer>
-                <!-- The way back to the output, for a user who closed the panel or moved to another tab. Drawn
-                     only where there IS a terminal: a sandbox without the tmux wrapper ran the suite in an
-                     invisible shell (usePrepush), and a button that opens an empty panel is worse than none. -->
-                <button
-                    v-if="prepush.terminal.value !== undefined"
-                    type="button"
-                    class="mr-auto flex items-center gap-1.5 rounded px-3 py-1 text-xs text-muted hover:text-content"
-                    @click="prepush.showTerminal"
-                >
-                    <Icon name="desktop" class="text-2xs" />
-                    Show terminal
-                </button>
-                <button
-                    v-if="prepush.running.value"
-                    type="button"
-                    class="rounded px-3 py-1 text-xs text-muted hover:text-content"
-                    @click="cancelChecks"
-                >
-                    Stop checks
-                </button>
-                <button v-else type="button" class="rounded px-3 py-1 text-xs text-muted hover:text-content" @click="closePush">Cancel</button>
-                <Button size="small" severity="warn" class="px-3 py-1" :disabled="changes.actionBusy.value" @click="confirmSync">
-                    {{ pendingSync?.verb ?? "Push" }} anyway
-                </Button>
             </template>
         </Dialog>
 
