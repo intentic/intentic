@@ -844,7 +844,12 @@ interface PendingSync {
     readonly what: string;
     readonly targets: readonly SyncTarget[];
 }
-const pendingSync = ref<PendingSync | undefined>(undefined);
+/* shallowRef, and this one is load-bearing rather than a micro-optimisation: the question on screen is IDENTIFIED
+ * by this object, and `ref` would deep-wrap it in a reactive proxy — so `pendingSync.value !== pending` was true
+ * of the very object that had just been stored, and every settled run was discarded as "the user moved on". A
+ * passed check never closed the dialog or pushed, a failed one never proposed its fix, and the box sat there
+ * saying "Checks didn't run" over a suite that had just gone green. */
+const pendingSync = shallowRef<PendingSync | undefined>(undefined);
 // The fix session proposed for the failure on screen, composed once when the run settles red so that edits to
 // its text and model survive every re-render of the dialog holding it.
 // shallowRef because a Conversation owns its own refs — see sessionSuggestion.ts.
@@ -918,6 +923,14 @@ const startFix = (): void => {
 // Stop the suite and keep the dialog: cancelling the checks is not cancelling the push, and the run settles as
 // `cancelled` so the dialog's own wording comes from the same place every other outcome's does.
 const cancelChecks = (): void => void prepush.cancel();
+
+// What follows the command in the dialog's one line of prose — the only part of it the run's state changes, so
+// the line reads as one sentence changing tense rather than as two messages sharing a slot.
+const checkSentence = computed((): string =>
+    prepush.running.value
+        ? `is running over your workspace before ${pendingSync.value?.what ?? `this push`} goes out.`
+        : fixSummary(prepush.run.value),
+);
 
 // The dialog's header once the run has settled. `passed` never appears here — that path closes the dialog and
 // pushes — so every case left is a reason the user is still being asked something.
@@ -1617,37 +1630,30 @@ const WARNING = `flex items-start gap-1.5 rounded-md border border-warning/40 bg
              "failed" and then holds the fix that answers it, so the user never loses the thread between asking
              to push and deciding what to do about the answer.
 
+             IT HOLDS THE QUESTION, NOT THE OUTPUT. The suite runs in a real terminal (usePrepush) and the panel
+             opens on it, so this stays small: what is being asked, what the answer was, and the buttons. It is
+             therefore NOT modal and sits at the top — a mask would dim and freeze the very terminal the user was
+             sent to watch, and a centred box would cover it.
+
              Push anyway is present in every state, including mid-run, and never asks a second time — the user
              knows things the check does not. Cancel means "stop the suite", not "abandon the push": the dialog
              stays, now saying it was stopped, because the decision it was raised for is still open. -->
         <Dialog
             :visible="pendingSync !== undefined"
-            :modal="true"
+            :modal="false"
             :draggable="false"
-            :dismissable-mask="true"
+            position="top"
             :style="{ width: proposedFix ? '38rem' : '30rem' }"
             :header="prepush.running.value ? `Checking before ${pendingSync?.verb.toLowerCase() ?? 'push'}…` : checkOutcome"
             @update:visible="closePush"
         >
+            <!-- The command leads the line in the same monospace either side of the verdict, so what changes when
+                 the run settles is the tense and nothing else. -->
             <template v-if="pendingSync">
-                <p v-if="prepush.running.value" class="break-words text-xs text-muted">
+                <p class="break-words text-xs text-muted">
                     <span class="font-mono text-content">{{ prepush.run.value.command || sandboxSettings?.prepushCommand }}</span>
-                    is running over your workspace before {{ pendingSync.what }} goes out.
+                    {{ checkSentence }}
                 </p>
-                <p v-else class="break-words text-xs text-muted">{{ fixSummary(prepush.run.value) }}</p>
-
-                <!-- The output, live. `flex-col-reverse` pins the view to the TAIL as it grows, which is where a
-                     runner puts the line you are waiting for; a top-anchored box would show a build's banner for
-                     two minutes and the failure never. -->
-                <div
-                    v-if="prepush.run.value.output"
-                    class="scrollbar-thin mt-2 flex max-h-56 flex-col-reverse overflow-auto rounded-md border border-line bg-overlay px-2.5 py-2"
-                >
-                    <pre class="whitespace-pre-wrap break-words font-mono text-2xs leading-relaxed text-muted">{{ prepush.run.value.output }}</pre>
-                </div>
-                <div v-else-if="prepush.running.value" class="mt-2 flex items-center gap-2 text-2xs text-subtle">
-                    <Icon name="spinner" spin /> waiting for output…
-                </div>
 
                 <p v-if="prepush.error.value" :class="cmp.alertDanger('mt-2 break-words text-xs')">{{ prepush.error.value }}</p>
 
@@ -1659,6 +1665,18 @@ const WARNING = `flex items-start gap-1.5 rounded-md border border-warning/40 bg
                 </template>
             </template>
             <template #footer>
+                <!-- The way back to the output, for a user who closed the panel or moved to another tab. Drawn
+                     only where there IS a terminal: a sandbox without the tmux wrapper ran the suite in an
+                     invisible shell (usePrepush), and a button that opens an empty panel is worse than none. -->
+                <button
+                    v-if="prepush.terminal.value !== undefined"
+                    type="button"
+                    class="mr-auto flex items-center gap-1.5 rounded px-3 py-1 text-xs text-muted hover:text-content"
+                    @click="prepush.showTerminal"
+                >
+                    <Icon name="desktop" class="text-2xs" />
+                    Show terminal
+                </button>
                 <button
                     v-if="prepush.running.value"
                     type="button"

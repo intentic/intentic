@@ -18,6 +18,10 @@ export const capabilityJobSession = (id: string): string => `${JOB_SESSION_PREFI
 // The infra Check flow's session: `intentic deploy resolve` and `intentic deploy plan` run here as windows.
 export const INFRA_CHECK_SESSION = `${JOB_SESSION_PREFIX}infra-check`;
 
+// The pre-push check's session — named for the word the push dialog uses ("Checks failed", "Stop checks"), so
+// the tab the user is sent to and the dialog that sent them there say the same thing.
+export const PREPUSH_SESSION = `${JOB_SESSION_PREFIX}checks`;
+
 const SESSION_NAME = /^[A-Za-z0-9_][A-Za-z0-9_-]*$/;
 
 export const isValidSessionName = (name: string): boolean => SESSION_NAME.test(name);

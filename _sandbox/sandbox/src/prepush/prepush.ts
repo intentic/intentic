@@ -1,6 +1,6 @@
-import { spawn } from "node:child_process";
 import type { PrepushRun } from "@intentic/sandbox-contract";
 import type { Services } from "../composition.js";
+import { PREPUSH_SESSION } from "../terminal/terminal-session.js";
 
 /* THE PRE-PUSH CHECK — the workspace's own answer to "would this push go red", asked at the push and answered
  * while the user waits for it.
@@ -16,31 +16,21 @@ import type { Services } from "../composition.js";
  * started it, and is gone with the process. Nothing survives a daemon restart because nothing needs to: the next
  * push asks again, and an answer the user is not waiting on has no reader.
  *
+ * IT RUNS IN A REAL TERMINAL, which is the standing rule for every shell command the daemon runs on a user's
+ * click (terminal/terminal-run.ts). The suite is a tmux window in the `job-checks` session, so the output the
+ * user watches is a terminal's — colour, carriage returns, a runner's progress rewriting its own line, the wheel
+ * scrolling back through it — and the push dialog is left holding only the question. What this module keeps of
+ * that output is the TAIL, and for one reader only: the fix the dialog proposes when the suite goes red.
+ *
  * WHAT IT RUNS ON. The main working tree, always — that is where the commits about to be pushed live, and it is
  * the tree whose node_modules resolve this monorepo's cross-package imports to the sources that will actually
  * ship (agents/worktrees.ts explains why an isolated worktree cannot answer this).
  */
 
-// The output kept from one run, tail-first. Enough to see the actual failure, bounded so the fix turn seeded
-// from it stays about fixing rather than scrolling. The TAIL, because a suite's verdict and its failure summary
-// are at the end — a head-capped buffer of a chatty build is all progress bars.
+// How much of the output is kept for the fix turn seeded from a red run. Enough to see the actual failure,
+// bounded so the prompt stays about fixing rather than scrolling — the whole run is in the pane (and its log)
+// for anyone who wants it. The TAIL, because a suite's verdict and its failure summary are at the end.
 const PREPUSH_OUTPUT_BYTES = 24_000;
-
-// SIGTERM first so a test runner can tear down its own children; SIGKILL for one that ignores it. The same
-// escalation (and the same grace) as intentic/intentic-runner.ts.
-const KILL_GRACE_MS = 5_000;
-
-/* WHY THE GRACEFUL SIGNAL GOES OUT TWICE, which is not belt-and-braces but the only thing that makes the first
- * step graceful at all. A stop usually lands while the tree is still being BUILT: at the instant one arrives,
- * `sh -c "<command>"` has typically not forked the command yet — measured here at 97 times in 100 — so the
- * signal reaches the shell alone, and a child forked as its parent was already dying does not inherit the
- * signal that killed it. The command then survives, holding the stdout it inherited open, and `close` does not
- * fire until the SIGKILL runs the grace out. So the run's own cancellation reached a real test runner only as
- * SIGKILL, five seconds late and with no chance to tear down its children — and the cancel that a user clicks
- * the moment a check starts is precisely the one that lands in that window.
- *
- * One repeat, sent once the tree is certainly there, closes it. */
-const TERM_AGAIN_MS = 250;
 
 const IDLE: PrepushRun = { status: "idle", command: "", output: "" };
 
@@ -50,144 +40,106 @@ export interface PrepushCheck {
      *
      * IT RESOLVES WHEN THE RUN IS VISIBLE TO `state`, not when the suite finishes. The route awaits it for
      * exactly that reason: the caller polls `state` the moment the POST returns, and a `run` that resolved
-     * before the child existed handed that first poll an `idle` the dialog reads as "already settled" — a push
-     * dialog that closed itself on a check it never waited for. The suite itself still outlives the request. */
+     * before the command was under way handed that first poll an `idle` the dialog reads as "already settled" —
+     * a push dialog that closed itself on a check it never waited for. The suite itself still outlives the
+     * request. */
     readonly run: () => Promise<void>;
-    // The run as it stands, with the live output tail while it is going. What the push dialog polls.
+    // The run as it stands. What the push dialog polls: it needs the terminal's name while the check is going,
+    // and the verdict when it settles.
     readonly state: () => Promise<PrepushRun>;
+    // Stop the suite: the dialog's Stop checks, and the daemon's own shutdown — a dying daemon must not leave a
+    // suite burning CPU with nothing left to report to. One verb for both, because the kill is the same one and
+    // the verdict it writes has no reader once the process is going down.
     readonly cancel: () => void;
-    // Daemon shutdown: kill a live child, so a dying daemon doesn't leave a suite running.
-    readonly stop: () => void;
 }
 
-// A tail-capped accumulator: append forever, keep the last `cap` bytes. The slice is O(cap) per chunk, which at
-// 24 KB against a suite's output rate is nothing, and it keeps the buffer from tracking a build's whole log.
-const tailBuffer = (cap: number): { readonly append: (chunk: string) => void; readonly read: () => string } => {
-    let held = "";
-    return {
-        append: (chunk) => {
-            held = (held + chunk).slice(-cap);
-        },
-        read: () => held,
-    };
-};
-
-/* Signal a check's whole process TREE, via the group `detached` gave it (see `execute`). A pid that has already
- * gone takes ESRCH, which is the normal race between the watchdog firing and the suite finishing on its own —
- * there is nothing to report and nothing to do. `undefined` pid means the spawn itself failed; the `error`
- * listener has that covered. */
-const killGroup = (pid: number | undefined, signal: NodeJS.Signals): void => {
-    if (pid === undefined) {
-        return;
-    }
-    try {
-        process.kill(-pid, signal);
-    } catch {
-        // Already gone.
-    }
-};
-
-/* Stop a check's whole tree: graceful now, graceful again once the tree is certainly built (TERM_AGAIN_MS),
- * final once the grace is out. Every timer is unref'd — stopping a check must never be the thing that keeps a
- * daemon alive — and a signal to a group that has already gone is the ESRCH `killGroup` exists to ignore. */
-const stopGroup = (pid: number | undefined): void => {
-    killGroup(pid, "SIGTERM");
-    setTimeout(() => killGroup(pid, "SIGTERM"), TERM_AGAIN_MS).unref();
-    setTimeout(() => killGroup(pid, "SIGKILL"), KILL_GRACE_MS).unref();
-};
-
-// What this reaches for out of the daemon: sandboxSettings. Stated rather than taking Services whole,
-// so a test stands up three seams instead of a hundred and thirty.
-export type PrepushDeps = Pick<Services, "logger" | "sandboxSettings" | "workspace">;
+// What this reaches for out of the daemon. Stated rather than taking Services whole, so a test stands up four
+// seams instead of a hundred and thirty.
+export type PrepushDeps = Pick<Services, "logger" | "sandboxSettings" | "workspace" | "terminalRun">;
 
 /* THE ONE CHECK THIS PROCESS HAS. A module singleton because the routes (the dialog's clicks) and the shutdown
- * hook all have to reach the SAME live child, and there is only one main working tree for them to be about.
+ * hook all have to reach the SAME live run, and there is only one main working tree for them to be about.
  * Tests build their own with createPrepushCheck instead, which is why that stays exported. */
 let instance: PrepushCheck | undefined;
 export const prepushCheck = (services: PrepushDeps): PrepushCheck => (instance ??= createPrepushCheck(services));
 
 export const createPrepushCheck = (services: PrepushDeps): PrepushCheck => {
-    const { logger, workspace } = services;
+    const { logger, terminalRun, workspace } = services;
     let current: PrepushRun = IDLE;
-    // The live run: its child (for cancel/kill), its buffer (a running state reads output from here), and the
-    // promise every concurrent caller joins instead of starting a second suite.
-    let child: ReturnType<typeof spawn> | undefined;
-    let liveOutput: (() => string) | undefined;
+    // The promise every concurrent caller joins instead of starting a second suite.
     let running: Promise<PrepushRun> | undefined;
-    // True from the moment `run` is entered until the child exists — the window `running` cannot cover, because
-    // reading the settings is an await (see `run`).
+    // True from the moment `run` is entered until the command is under way — the window `running` cannot cover,
+    // because reading the settings is an await (see `run`).
     let starting = false;
-    // Set by `cancel` and cleared by the next `run`, so a cancelled run reports as cancelled rather than as the
-    // failure its own SIGTERM produced. A flag rather than a handle: cancel stays ignorant of which run it stops.
+    /* How a run is stopped: aborting SIGTERMs the wrapper, whose trap kills the tmux window (terminal-run.ts).
+     * The two flags say WHY it stopped, because the abort itself cannot — a cancel and a timeout produce the
+     * same rejection and mean opposite things to the user. Both are reset by the next `run`. */
+    let controller: AbortController | undefined;
     let cancelled = false;
+    let timedOut = false;
 
     const execute = async (command: string, timeoutMs: number): Promise<PrepushRun> => {
         const startedAt = Date.now();
-        const buffer = tailBuffer(PREPUSH_OUTPUT_BYTES);
-        /* `detached` MAKES THE CHILD A PROCESS-GROUP LEADER, and the whole timeout guarantee rests on it.
-         *
-         * `sh -c "<command>"` forks for anything it cannot exec directly, and a real check command is a process
-         * TREE: pnpm spawns turbo, turbo spawns vitest, vitest spawns a worker per core. Signalling the pid
-         * kills only `sh` — every descendant survives, holding the inherited stdout/stderr open, so `close` does
-         * not fire until the suite finishes on its own. Measured: killing the pid of `sh -c "sleep 30"` at 150ms
-         * still took the full 30s to close. That is the timeout silently not working, on exactly the runaway
-         * suite it exists for.
-         *
-         * With a group of its own, one `process.kill(-pid)` reaches the entire tree. */
-        const spawned = spawn("sh", ["-c", command], { cwd: workspace.root, env: process.env, detached: true });
-        child = spawned;
-        liveOutput = buffer.read;
-        // Never spawned at all — no `sh`, an unreadable cwd, a fork failure. `error`, not `failed`: nothing was
-        // learned about the code, so nobody should be sent to fix it. The child still emits `close` after this,
-        // which is where the result is written; this only records WHY.
-        let spawnError: string | undefined;
-        spawned.on("error", (error: Error) => {
-            spawnError = error.message;
-        });
-        /* EVERY LISTENER IS ATTACHED BEFORE THE NEXT AWAIT, and that ordering is load-bearing rather than
-         * stylistic. `exit 1` from a typo'd command finishes in microseconds, and an EventEmitter does not
-         * replay: a `close` listener attached on the far side of an await never fires at all, and the check sits
-         * on `running` for the life of the daemon — with the push dialog spinning over it. */
-        for (const stream of [spawned.stdout, spawned.stderr]) {
-            stream.setEncoding("utf8");
-            stream.on("data", (chunk: string) => buffer.append(chunk));
-        }
-        const closed = new Promise<[number | null, NodeJS.Signals | null]>((resolve) =>
-            spawned.on("close", (exit, killedBy) => resolve([exit, killedBy])),
-        );
-        let timedOut = false;
-        // Counted from the spawn — a ceiling measured from anywhere else is not the ceiling the setting promises.
+        const abort = new AbortController();
+        controller = abort;
+        // Counted from the start of the command — a ceiling measured from anywhere else is not the ceiling the
+        // setting promises. Unref'd: a check's watchdog must never be the thing keeping a daemon alive.
         const watchdog = setTimeout(() => {
             timedOut = true;
-            logger.warn({ command, pid: spawned.pid, timeoutMs }, "prepush: check timed out — killing");
-            stopGroup(spawned.pid);
+            logger.warn({ command, timeoutMs }, "prepush: check timed out — killing");
+            abort.abort();
         }, timeoutMs);
         watchdog.unref();
-        logger.info({ command, pid: spawned.pid }, "prepush: check started");
-        current = { status: "running", command, startedAt, output: "" };
-        const [code, signal] = await closed;
-        clearTimeout(watchdog);
-        child = undefined;
-        liveOutput = undefined;
-        const output = buffer.read();
-        // A run that died on a signal nobody asked for (the OOM killer, a crashed runner) is a failure of the
-        // check, not a pass — its exit code is null, so this cannot be folded into `code !== 0`.
-        const passed = code === 0 && !timedOut && signal === null;
-        // A cancel that the watchdog caused is a TIMEOUT, not a cancellation — the user asked for neither, and
-        // reporting it as cancelled would hide the one outcome this check most needs to be loud about.
-        const status: PrepushRun["status"] = spawnError !== undefined ? "error" : cancelled && !timedOut ? "cancelled" : passed ? "passed" : "failed";
-        const settled: PrepushRun = {
-            status,
-            command,
-            startedAt,
-            finishedAt: Date.now(),
-            ...(code !== null ? { exitCode: code } : {}),
-            ...(timedOut ? { timedOut: true } : {}),
-            output: spawnError !== undefined ? `${command}: ${spawnError}` : output,
+        // The terminal only exists where the image's tmux wrapper does; without it the runner degrades to an
+        // invisible shell, and a session name nothing can attach to would send the browser after a tab that is
+        // never going to be listed.
+        const session = terminalRun.visible ? PREPUSH_SESSION : undefined;
+        logger.info({ command, session }, "prepush: check started");
+        current = { status: "running", command, startedAt, output: "", ...(session !== undefined ? { session } : {}) };
+        const settle = (fields: Omit<PrepushRun, "command" | "startedAt" | "finishedAt" | "session">): PrepushRun => {
+            const settled: PrepushRun = {
+                ...fields,
+                command,
+                startedAt,
+                finishedAt: Date.now(),
+                ...(session !== undefined ? { session } : {}),
+                output: fields.output.slice(-PREPUSH_OUTPUT_BYTES),
+            };
+            current = settled;
+            logger.info(
+                { command, status: settled.status, exitCode: settled.exitCode, timedOut, durationMs: Date.now() - startedAt },
+                "prepush: check settled",
+            );
+            return settled;
         };
-        current = settled;
-        logger.info({ command, status, exitCode: code, timedOut, durationMs: Date.now() - startedAt }, "prepush: check settled");
-        return settled;
+        try {
+            // `window` names the tmux window rather than the command, so a session holding several runs reads as
+            // a list of checks. The runner's own timeout is left alone — this module's watchdog owns the ceiling,
+            // because it is the only one that can tell the dialog which of the two kills happened.
+            const { code, output } = await terminalRun.tryRun(PREPUSH_SESSION, command, {
+                cwd: workspace.root,
+                window: "checks",
+                signal: abort.signal,
+            });
+            clearTimeout(watchdog);
+            return settle({ status: code === 0 ? "passed" : "failed", exitCode: code, output });
+        } catch (cause) {
+            clearTimeout(watchdog);
+            /* Not our abort ⇒ the command never ran at all: no shell, an unreadable cwd, a missing wrapper.
+             * `error`, not `failed` — nothing was learned about the code, so nobody should be sent to fix it. */
+            if (!abort.signal.aborted) {
+                return settle({ status: "error", output: `${command}: ${cause instanceof Error ? cause.message : String(cause)}` });
+            }
+            // A kill the watchdog caused is a TIMEOUT, not a cancellation — the user asked for neither, and
+            // reporting it as cancelled would hide the one outcome this check most needs to be loud about. The
+            // output stays with the pane: what the wrapper had buffered when it was signalled is not a verdict.
+            if (timedOut) {
+                return settle({ status: "failed", timedOut: true, output: "" });
+            }
+            return settle({ status: cancelled ? "cancelled" : "error", output: "" });
+        } finally {
+            controller = undefined;
+        }
     };
 
     return {
@@ -208,8 +160,9 @@ export const createPrepushCheck = (services: PrepushDeps): PrepushCheck => {
                     return;
                 }
                 cancelled = false;
-                // NOT awaited: `execute` runs synchronously as far as the spawn — which is where it publishes the
-                // `running` state this function's caller is about to poll for — and only then awaits the suite.
+                timedOut = false;
+                // NOT awaited: `execute` runs synchronously as far as publishing the `running` state this
+                // function's caller is about to poll for, and only then awaits the suite.
                 running = execute(prepushCommand, prepushTimeoutMs).finally(() => {
                     running = undefined;
                 });
@@ -225,18 +178,11 @@ export const createPrepushCheck = (services: PrepushDeps): PrepushCheck => {
             if (prepushCommand === "") {
                 return IDLE;
             }
-            if (current.status === "running" && liveOutput !== undefined) {
-                return { ...current, output: liveOutput() };
-            }
             return current;
         },
         cancel: () => {
             cancelled = true;
-            stopGroup(child?.pid);
-        },
-        stop: () => {
-            // No grace on shutdown: the daemon is going, and there is nothing left to report a result to.
-            killGroup(child?.pid, "SIGKILL");
+            controller?.abort();
         },
     };
 };

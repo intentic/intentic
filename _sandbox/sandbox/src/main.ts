@@ -670,9 +670,9 @@ const main = async (): Promise<void> => {
         clearInterval(logsSweep);
         clearInterval(sessionSweep);
         scheduler.stop();
-        // A pre-push check is a child process on the main tree — a daemon that exits without killing it leaves
-        // a suite burning CPU with nothing left to report the result to.
-        prepushCheck(services).stop();
+        // A pre-push check is a suite running on the main tree — a daemon that exits without killing it leaves
+        // it burning CPU with nothing left to report the result to.
+        prepushCheck(services).cancel();
         workloadPriority.stop();
         services.ciHooks.stop();
         ciPoller.stop();

@@ -3768,7 +3768,7 @@ export type DeploySeenResponse = z.infer<typeof DeploySeenResponseSchema>;
 /* Where a run is.
  *
  *   idle      — nothing has run in this daemon's life, or the last run was cleared.
- *   running   — the check is live. `output` grows as it streams.
+ *   running   — the check is live. Its output is the terminal's (`session`), not this object's.
  *   passed    — exited 0. The push goes.
  *   failed    — exited non-zero, or was killed by prepushTimeoutMs (`timedOut`). The state a fix answers.
  *   error     — the check could not run at all: the command was not spawnable. NOT a fix-able failure, because
@@ -3788,8 +3788,16 @@ export const PrepushRunSchema = z.object({
     finishedAt: z.number().optional(),
     exitCode: z.number().optional(),
     timedOut: z.boolean().optional(),
-    // The check's own output, tail-capped (PREPUSH_OUTPUT_BYTES). The TAIL, not the head: a suite's verdict and
-    // its failure summary are at the end, and a head-capped buffer of a chatty build is all progress lines.
+    /* The tmux session the suite runs in, for the browser to open the terminals panel on — the check is a
+     * visible terminal like every other shell command the daemon runs on a click (terminal/terminal-run.ts), so
+     * WATCHING it is not this object's job and never was. Absent where the sandbox has no tmux wrapper (local
+     * dev): the runner falls back to an invisible shell, and a name nothing can attach to would send the browser
+     * after a tab that is never going to be listed. */
+    session: z.string().optional(),
+    /* What the fix proposal quotes, and its only reader — tail-capped (PREPUSH_OUTPUT_BYTES) so a prompt seeded
+     * from a red run stays about fixing rather than scrolling. The TAIL, not the head: a suite's verdict and its
+     * failure summary are at the end. Empty while the run is going, and for a run that was killed: the pane (and
+     * its log) is where the whole of it lives. */
     output: z.string(),
 });
 export type PrepushRun = z.infer<typeof PrepushRunSchema>;
