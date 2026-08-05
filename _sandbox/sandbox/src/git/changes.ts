@@ -418,42 +418,54 @@ const worktreeSide = async (abs: string): Promise<DiffSide> => {
     return content.includes("\0") ? { binary: true } : { text: content };
 };
 
-// Either side being binary or truncated makes the whole diff so — there is no half-renderable diff.
-const bothSides = (before: DiffSide, after: DiffSide): FileDiff => ({
-    ...(before.text !== undefined ? { before: before.text } : {}),
-    ...(after.text !== undefined ? { after: after.text } : {}),
-    ...(before.binary === true || after.binary === true ? { binary: true } : {}),
-    ...(before.truncated === true || after.truncated === true ? { truncated: true } : {}),
-});
+/* Either side being binary or truncated makes the whole diff so — there is no half-renderable diff.
+ *
+ * The two sides are read CONCURRENTLY, and taking promises rather than values is what holds that: written as
+ * `bothSides(await left, await right)` JavaScript evaluates the arguments in order, so every file diff in the
+ * product read its before side to completion before it started on its after side. Nothing needs that order —
+ * the sides are independent — and a git read costs the daemon a whole event-loop turn each, so the serial
+ * spelling doubled the wait on exactly the surface a user is sitting in front of waiting for it.
+ *
+ * Inside a side the size check still gates the content read (blobSide), which is a real dependency: `-s` is
+ * what stops a 16 MB blob being read into memory to be discarded. */
+const bothSides = async (beforeSide: Promise<DiffSide>, afterSide: Promise<DiffSide>): Promise<FileDiff> => {
+    const [before, after] = await Promise.all([beforeSide, afterSide]);
+    return {
+        ...(before.text !== undefined ? { before: before.text } : {}),
+        ...(after.text !== undefined ? { after: after.text } : {}),
+        ...(before.binary === true || after.binary === true ? { binary: true } : {}),
+        ...(before.truncated === true || after.truncated === true ? { truncated: true } : {}),
+    };
+};
 
 // The `ref` blob (a conversation's base sha for the agents review) vs the working tree — the cumulative diff,
 // which is the only one a worktree the user never checks out can offer.
-export const workingFileDiff = async (dir: string, path: string, ref: string, git: GitRunner = defaultGit): Promise<FileDiff> =>
-    bothSides(await blobSide(dir, `${ref}:${path}`, git), await worktreeSide(join(dir, path)));
+export const workingFileDiff = (dir: string, path: string, ref: string, git: GitRunner = defaultGit): Promise<FileDiff> =>
+    bothSides(blobSide(dir, `${ref}:${path}`, git), worktreeSide(join(dir, path)));
 
 // Two blobs, no disk — workingFileDiff's counterpart for an ARCHIVED agent, whose checkout is gone and whose
 // after-side therefore lives on the agent/<id> branch. Same pairing as changesBetweenRefs, so a row and the
 // diff it opens always describe the same comparison.
-export const refFileDiff = async (dir: string, path: string, base: string, tip: string, git: GitRunner = defaultGit): Promise<FileDiff> =>
-    bothSides(await blobSide(dir, `${base}:${path}`, git), await blobSide(dir, `${tip}:${path}`, git));
+export const refFileDiff = (dir: string, path: string, base: string, tip: string, git: GitRunner = defaultGit): Promise<FileDiff> =>
+    bothSides(blobSide(dir, `${base}:${path}`, git), blobSide(dir, `${tip}:${path}`, git));
 
 // Index vs HEAD — exactly the diff a Staged row is listed under, and exactly what a bare `git commit` would
 // record. NOT HEAD↔worktree: for a partially staged file those are different diffs, which is the whole reason
 // the panel lists the two sides separately.
-export const stagedFileDiff = async (dir: string, path: string, git: GitRunner = defaultGit): Promise<FileDiff> =>
-    bothSides(await blobSide(dir, `HEAD:${path}`, git), await blobSide(dir, `:0:${path}`, git));
+export const stagedFileDiff = (dir: string, path: string, git: GitRunner = defaultGit): Promise<FileDiff> =>
+    bothSides(blobSide(dir, `HEAD:${path}`, git), blobSide(dir, `:0:${path}`, git));
 
 // Worktree vs index — the diff an unstaged row is listed under. An untracked file has no index entry, so it
 // reports no before side and renders as the addition it is.
-export const unstagedFileDiff = async (dir: string, path: string, git: GitRunner = defaultGit): Promise<FileDiff> =>
-    bothSides(await blobSide(dir, `:0:${path}`, git), await worktreeSide(join(dir, path)));
+export const unstagedFileDiff = (dir: string, path: string, git: GitRunner = defaultGit): Promise<FileDiff> =>
+    bothSides(blobSide(dir, `:0:${path}`, git), worktreeSide(join(dir, path)));
 
 // An unmerged path, HEAD vs the worktree — which is to say: what you had, against what the merge left you,
 // conflict markers and all. `:0:` is deliberately NOT used: there is no stage 0 for an unmerged path (the index
 // holds "ours" and "theirs" at stages 2 and 3 instead), so asking for it returns nothing and the row renders a
 // blank diff. HEAD is the honest before side — it is the state resolving the conflict is moving away from.
-export const conflictedFileDiff = async (dir: string, path: string, git: GitRunner = defaultGit): Promise<FileDiff> =>
-    bothSides(await blobSide(dir, `HEAD:${path}`, git), await worktreeSide(join(dir, path)));
+export const conflictedFileDiff = (dir: string, path: string, git: GitRunner = defaultGit): Promise<FileDiff> =>
+    bothSides(blobSide(dir, `HEAD:${path}`, git), worktreeSide(join(dir, path)));
 
 // The commit context-menu actions (VSCode "Git Graph" parity). GitActionResult ok/conflict is the shape the
 // sequence + HEAD-moving ops return; the non-destructive ref ops (branch/tag/checkout/reset) let git's own

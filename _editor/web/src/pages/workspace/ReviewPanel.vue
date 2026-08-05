@@ -3,7 +3,7 @@ import Button from "primevue/button";
 import type { GitChange, GitDiffSide, RepoChanges, RepoPaths } from "@intentic-app/api-contract";
 import { ChangeStatusMark, cmp, DiffStat, useDevice } from "@intentic/ui";
 import Dialog from "primevue/dialog";
-import { computed, ref, shallowRef, watch } from "vue";
+import { computed, onScopeDispose, ref, shallowRef, watch } from "vue";
 import ProviderLogo from "../../chat/ProviderLogo.vue";
 import type { Conversation } from "../../composables/chat/conversation";
 import HoverCard from "../../components/HoverCard.vue";
@@ -17,6 +17,7 @@ import { useCommitDraft } from "../../composables/workspace/useCommitDraft";
 import { ALL_SIDES, originHue, originsOf, summarizeOrigins, YOURS } from "../../composables/workspace/changeOrigins";
 import { formatElapsed, unfinishedMark } from "../../composables/agents/agentStatus";
 import { diffRawUrls } from "../../composables/workspace/diffRaw";
+import { warmDiffs, warmRows, whenIdle } from "../../composables/workspace/diffWarmer";
 import { repoOfPath, turnWrites } from "../../composables/workspace/liveWrites";
 import { ahead, behind, syncable, unpublished } from "../../composables/workspace/outgoingWork";
 import { COMMIT_SCOPE, type SyncTarget, useChanges } from "../../composables/workspace/useChanges";
@@ -79,7 +80,7 @@ const scannable = computed(() => changes.repos.value.filter((repo) => repo.error
 const unscannable = computed(() => changes.repos.value.filter((repo) => repo.error !== undefined));
 // The mode rides along because it is the GESTURE that decides it: a click is a look (a preview tab, replaced by
 // the next file looked at), a double-click asks to keep the tab. See workspaceTabs' OpenMode.
-const emit = defineEmits<{ "open-diff": [payload: DiffPayload, mode: OpenMode] }>();
+const emit = defineEmits<{ "open-diff": [payload: DiffPayload, mode: OpenMode]; "fill-diff": [payload: DiffPayload] }>();
 
 const collapsed = ref<ReadonlySet<string>>(new Set());
 const toggleGroup = (repo: string): void => {
@@ -314,29 +315,54 @@ const viewOf = (repo: string, side: GitDiffSide): SectionView => sectionViews.va
 // The design system's toolbar icon button, plus this panel's own disabled treatment.
 const ICON_BUTTON = cmp.iconButton(`disabled:opacity-40`);
 
-// Opens the diff of the ROW, not of the file: a staged row shows index-vs-HEAD, an unstaged row
-// worktree-vs-index. The side rides the tab key too, so a partially staged file's two diffs open as two tabs
-// instead of one silently replacing the other. A binary row carries its two sides' byte URLs as well — the
-// response flags an image, it cannot contain one, and this row is what knows which diff to fetch it from.
+/* Opens the diff of the ROW, not of the file: a staged row shows index-vs-HEAD, an unstaged row
+ * worktree-vs-index. The side rides the tab key too, so a partially staged file's two diffs open as two tabs
+ * instead of one silently replacing the other. A binary row carries its two sides' byte URLs as well — the
+ * response flags an image, it cannot contain one, and this row is what knows which diff to fetch it from.
+ *
+ * THE TAB OPENS ON THE CLICK, not on the answer. Everything the tab needs to exist is on the row already — the
+ * path, the status letter, the ± counts — and the diff is a daemon round-trip that a busy sandbox can take a
+ * second over. Waiting for it before opening anything spent that second saying nothing, so the click read as
+ * having missed; now the row's own facts are on screen at once and the panes fill under them (`pending`, and
+ * `fill-diff` for the half that arrives late). Warmed rows land in the same tick and never draw a wait at all. */
 const openDiff = (repo: string, side: GitDiffSide, change: GitChange, mode: OpenMode): void => {
-    void changes.fileDiff(repo, change.path, side).then((body) => {
-        emit(
-            `open-diff`,
-            {
-                key: `working:${repo}:${side}`,
-                scope: repo,
-                label: side === `staged` ? `${changeLabel(repo, change)} (staged)` : changeLabel(repo, change),
-                status: change.status,
-                path: change.path,
-                additions: change.additions,
-                deletions: change.deletions,
-                ...body,
-                ...diffRawUrls({ source: `working`, repo, side }, change.path, change.status),
-            },
-            mode,
-        );
-    });
+    const tab = {
+        key: `working:${repo}:${side}`,
+        scope: repo,
+        label: side === `staged` ? `${changeLabel(repo, change)} (staged)` : changeLabel(repo, change),
+        status: change.status,
+        path: change.path,
+        additions: change.additions,
+        deletions: change.deletions,
+        ...diffRawUrls({ source: `working`, repo, side }, change.path, change.status),
+    };
+    emit(`open-diff`, { ...tab, pending: true }, mode);
+    void changes.fileDiff(repo, change.path, side).then((body) => emit(`fill-diff`, { ...tab, ...body }));
 };
+
+/* --- reading ahead --------------------------------------------------------------------------------------------
+ * The list is on screen and the reader is deciding what to open; the walk spends that gap reading their diffs
+ * (diffWarmer.ts holds why, and why it is a trickle). Restarted whenever the list changes — a stage, a commit, an
+ * agent landing more work — and abandoned when this panel goes away, which is the same generation check either
+ * way: the walk cannot be interrupted mid-await, so it asks whether it is still the current one instead.
+ *
+ * Driven from the PANEL rather than from useChanges, because the panel being mounted is what says the user is
+ * reviewing. The badge in the shell reads the same list from every page in the app, and reading ahead for a
+ * review nobody has opened would be daemon work spent on a guess. A re-mount costs nothing: everything already
+ * warmed answers from the cache without a request. */
+let warmGeneration = 0;
+watch(
+    changes.repos,
+    (repos) => {
+        const generation = (warmGeneration += 1);
+        void warmDiffs(warmRows(repos), (row) => changes.fileDiff(row.repo, row.path, row.side), {
+            stopped: () => generation !== warmGeneration,
+            idle: whenIdle,
+        });
+    },
+    { immediate: true },
+);
+onScopeDispose(() => (warmGeneration += 1));
 
 // --- row selection (a list selection, NOT a commit target) -------------------------------------------------
 // Ordinary click/ctrl/shift list selection, exactly as VSCode's SCM list works, and for exactly one purpose:

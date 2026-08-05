@@ -98,31 +98,53 @@ const keepTab = (id: string): void => {
  * file, all of them pinned by a look. So a row click opens in `preview` mode — the previous preview gives up
  * its place to this one — and the deliberate gestures (a double-click, an extension, "open in workspace") ask
  * to `keep`, which also releases the slot when the tab holding it is the one being kept. */
+const diffTab = (payload: DiffPayload): WorkspaceTab => ({
+    kind: `diff`,
+    id: diffTabId(payload.key, payload.scope, payload.path),
+    label: payload.label,
+    status: payload.status,
+    path: payload.path,
+    before: payload.before,
+    after: payload.after,
+    binary: payload.binary,
+    truncated: payload.truncated,
+    beforeRaw: payload.beforeRaw,
+    afterRaw: payload.afterRaw,
+    additions: payload.additions,
+    deletions: payload.deletions,
+    pending: payload.pending,
+});
+
 const openDiff = (payload: DiffPayload, mode: OpenMode): void => {
-    const id = diffTabId(payload.key, payload.scope, payload.path);
-    const tab: WorkspaceTab = {
-        kind: `diff`,
-        id,
-        label: payload.label,
-        status: payload.status,
-        path: payload.path,
-        before: payload.before,
-        after: payload.after,
-        binary: payload.binary,
-        truncated: payload.truncated,
-        beforeRaw: payload.beforeRaw,
-        afterRaw: payload.afterRaw,
-        additions: payload.additions,
-        deletions: payload.deletions,
-    };
+    const tab = diffTab(payload);
     openLine.value = undefined;
     tabs.value = placeTab(tabs.value, tab, mode === `preview` ? previewId.value : null);
-    activeId.value = id;
+    activeId.value = tab.id;
     if (mode === `preview`) {
-        previewId.value = id;
+        previewId.value = tab.id;
         return;
     }
-    keepTab(id);
+    keepTab(tab.id);
+};
+
+/* The second half of a `pending` open: the content arrived, so put it in the tab that is holding its place.
+ *
+ * REFRESHES, NEVER OPENS — that distinction is the whole reason this is a separate verb rather than a second
+ * openDiff. Reading down a change list outruns the network, and a plain re-open of a late answer would take the
+ * preview slot away from whatever the reader has moved on to: click file A, click file B, and A's content lands
+ * to find B in the slot it was going to be placed in. So a tab that has since been closed, replaced or scrolled
+ * out of the strip takes nothing, and the answer is simply dropped — the cache kept it anyway, so going back to
+ * that file paints instantly rather than re-reading.
+ *
+ * It touches neither the active tab nor the preview slot for the same reason: filling a tab is not a gesture the
+ * user made, and stealing the focus back to a file they have already moved on from would be the loudest possible
+ * way to say "your click was slow". */
+const fillDiff = (payload: DiffPayload): void => {
+    const tab = diffTab(payload);
+    const open = tabs.value.findIndex((existing) => existing.id === tab.id);
+    if (open !== -1) {
+        tabs.value = tabs.value.with(open, tab);
+    }
 };
 
 // A plan the chat agent proposed opens as a rendered markdown preview (Claude Code VSCode style). One preview
@@ -249,6 +271,7 @@ export function useWorkspaceTabs() {
         openFile,
         openAtLine,
         openDiff,
+        fillDiff,
         openPlan,
         openDirectory,
         openHealth,

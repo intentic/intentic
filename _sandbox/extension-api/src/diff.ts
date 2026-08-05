@@ -46,4 +46,14 @@ export interface DiffPayload extends DiffRawSides {
     // then renders nothing rather than a zero.
     readonly additions?: number;
     readonly deletions?: number;
+    /* THE CONTENT IS STILL COMING — open the tab now and fill it in when it lands (`workspace.fillDiff`).
+     *
+     * Reading a file the source has to compute or fetch is a wait, and a wait that has nowhere to be drawn gets
+     * drawn on the click instead: the row is clicked, nothing on screen changes, and the reader clicks it again.
+     * Everything the tab needs to exist — its identity, its label, the status letter and the line counts — is
+     * known before the content is, so the tab opens on the click and the panes fill underneath it.
+     *
+     * Absent means the payload IS the content, which is what an extension handing over an already-computed
+     * before/after pair should send. */
+    readonly pending?: boolean;
 }

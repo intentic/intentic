@@ -22,6 +22,18 @@ const IDB_KEY = `intentic-query-cache`;
  * value's SHAPE needs this, not just a change of its fields. */
 const SCHEMA_VERSION = 2;
 
+/* THE SEGMENT A QUERY KEY CARRIES WHEN ITS VALUE MUST STAY IN MEMORY. The mirror is structured-cloned WHOLE, on
+ * the main thread, once per window (see the throttle below) — so its cost is set by everything the app has ever
+ * cached, and a single query measured in megabytes is charged to every write of every other cached thing for the
+ * rest of the session. A file diff is exactly that: two complete file texts, and the Changes review reads one
+ * per changed file ahead of the reader.
+ *
+ * Marking the key rather than listing the queries down in the exclusion is what keeps this honest as more of
+ * them appear — the query that knows it is heavy says so, where it is impossible to forget while writing it.
+ * Such a query still lives in the in-memory cache, which is where the speed comes from; it simply re-reads after
+ * a reload instead of being restored, which costs nothing anybody waits for. */
+export const UNPERSISTED = `unpersisted`;
+
 export const queryClient = new QueryClient();
 
 let uninstall: (() => void) | undefined;
@@ -66,11 +78,13 @@ export const restorePersistedQueries = async (userId: string): Promise<void> => 
         buster: `${userId}:${SCHEMA_VERSION}`,
         // A Monday-morning open after Friday still paints; anything older restores as empty.
         maxAge: 7 * 24 * 60 * 60 * 1000,
-        // sandbox.list carries per-sandbox connect tokens (the tunnel secret) — keep it out of IndexedDB.
-        // Every daemon query (workspace/info/capabilities/… keys) and billing.plan still persist; only the
-        // `sandbox`-prefixed list is excluded. Composed with the default so non-success queries stay out too.
+        // Two exclusions, for opposite reasons: sandbox.list carries per-sandbox connect tokens (the tunnel
+        // secret), and an UNPERSISTED-marked query carries more bytes than the mirror can afford (above).
+        // Every other daemon query (workspace/info/capabilities/… keys) and billing.plan still persist.
+        // Composed with the default so non-success queries stay out too.
         dehydrateOptions: {
-            shouldDehydrateQuery: (query) => query.queryKey[0] !== `sandbox` && defaultShouldDehydrateQuery(query),
+            shouldDehydrateQuery: (query) =>
+                query.queryKey[0] !== `sandbox` && !query.queryKey.includes(UNPERSISTED) && defaultShouldDehydrateQuery(query),
         },
     });
     uninstall = unsubscribe;

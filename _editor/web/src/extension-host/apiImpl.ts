@@ -296,6 +296,8 @@ export const createExtensionApi = (
                 const id = diffTabId(payload.key, payload.scope, payload.path);
                 void router.push({ name: `workspace`, params: { path: [] }, query: { ...router.currentRoute.value.query, diff: id } });
             },
+            // No navigation and no focus change, on either device: filling a tab is not a gesture the user made.
+            fillDiff: (payload) => useWorkspaceTabs().fillDiff(payload),
             // Through guardSandbox and the daemon's own schema, so the manifest grant still applies and the
             // envelope is validated once here instead of in every extension that reads a file.
             file: async (path) => {

@@ -9,7 +9,7 @@ import type {
 } from "@intentic-app/api-contract";
 import { computed, ref, watch } from "vue";
 import { useChat } from "../chat/useChat";
-import { queryClient } from "../queryPersistence";
+import { queryClient, UNPERSISTED } from "../queryPersistence";
 import { sandboxJson } from "../sandbox/sandboxClient";
 import { jsonBody } from "../sandbox/jsonBody";
 import { sandboxKey } from "../sandbox/useSandbox";
@@ -128,11 +128,48 @@ const runBatch = async (tasks: readonly ScopedTask[], settle: () => Promise<unkn
     void settle();
 };
 
-// The diff of the ROW that was clicked, not of the file in general: `staged` is index-vs-HEAD, `unstaged` is
-// worktree-vs-index. A partially staged file has both, and they differ — showing one for the other would be a
-// quiet lie, so the side is required rather than defaulted.
+/* --- one row's diff -------------------------------------------------------------------------------------------
+ * The diff of the ROW that was clicked, not of the file in general: `staged` is index-vs-HEAD, `unstaged` is
+ * worktree-vs-index. A partially staged file has both, and they differ — showing one for the other would be a
+ * quiet lie, so the side is required rather than defaulted.
+ *
+ * FILED UNDER THE CHANGE LIST'S OWN KEY, which is the whole freshness rule in one line: every invalidation that
+ * refreshes the list drops the diffs with it — the panel's own verbs (below), an agent's write or a terminal's,
+ * a ref moving (systemEvents), a turn ending (above) — so a cached diff can never be staler than the row that
+ * opened it. That is why `staleTime` is Infinity rather than a guessed number of seconds: time is not what makes
+ * a diff wrong, a write is, and every write already lands here. During a streaming turn the list deliberately
+ * stops refreshing (systemEvents) and these go stale with it, which is the honest behaviour — the rows and the
+ * diffs they open describe the same moment either way.
+ *
+ * UNPERSISTED because a diff is two whole file texts and the warmer below reads one per changed file: see
+ * queryPersistence for what putting that in the disk mirror costs. `gcTime` is the memory bound that follows —
+ * warmed diffs nobody opened are collected a few minutes after the review moved on.
+ *
+ * Concurrent callers share one request (fetchQuery dedupes an in-flight fetch per key), which is what lets a
+ * click land on a file the warmer is already reading and simply wait for that read instead of racing it. */
+const FILE_DIFF_GC_MS = 5 * 60 * 1000;
+
+const fileDiffKey = (repo: string, path: string, side: GitDiffSide): unknown[] => [
+    ...sandboxKey(`git`, `changes`),
+    UNPERSISTED,
+    `file-diff`,
+    repo,
+    side,
+    path,
+];
+
 const fileDiff = (repo: string, path: string, side: GitDiffSide): Promise<FileDiffResponse> =>
-    sandboxJson<FileDiffResponse>(`/git/${encodeURIComponent(repo)}/file-diff?path=${encodeURIComponent(path)}&side=${side}`);
+    queryClient.fetchQuery({
+        queryKey: fileDiffKey(repo, path, side),
+        queryFn: () => sandboxJson<FileDiffResponse>(`/git/${encodeURIComponent(repo)}/file-diff?path=${encodeURIComponent(path)}&side=${side}`),
+        staleTime: Infinity,
+        gcTime: FILE_DIFF_GC_MS,
+        // No retry, which is what this read has always done (it was a bare fetch) and what the warmer needs it to
+        // keep doing: a daemon hiccup during a read-ahead would otherwise turn one quiet walk into four times the
+        // requests, which is the burst the pacing exists to avoid. A failure leaves nothing cached, so the click
+        // that follows asks again for real.
+        retry: false,
+    });
 
 const invalidateChanges = (): Promise<void> => queryClient.invalidateQueries({ queryKey: sandboxKey(`git`, `changes`) });
 

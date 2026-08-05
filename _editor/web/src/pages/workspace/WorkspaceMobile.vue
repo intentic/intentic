@@ -5,6 +5,7 @@ import Button from "primevue/button";
 import Dialog from "primevue/dialog";
 import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
+import { useLoadingReveal } from "../../composables/loadingReveal";
 import { type SidebarPanel, useLayout } from "../../composables/useLayout";
 import { reportOpenPath } from "../../composables/usePresence";
 import { outgoingMark, outgoingSummary } from "../../composables/workspace/outgoingWork";
@@ -19,6 +20,7 @@ import { useWorkspaceTabs } from "../../composables/workspace/useWorkspaceTabs";
 import { useWorkspaceTree } from "../../composables/workspace/useWorkspaceTree";
 import BinaryDiffView from "./viewers/BinaryDiffView.vue";
 import DiffToolbar from "./viewers/DiffToolbar.vue";
+import DiffSkeleton from "./viewers/DiffSkeleton.vue";
 import DiffView from "./viewers/DiffView.vue";
 import { rendersAsBytes } from "./fileType";
 import type { DiffPayload } from "@intentic/extension-api";
@@ -69,7 +71,7 @@ const {
 const { files: uploadFiles, scanning: uploadScanning, skippedNotice: uploadSkipped, enqueue } = useUploadQueue();
 // The open file lives in the URL path (`/workspace/<path>`), synced to the tabs singleton by useWorkspaceRoute;
 // this component keeps only the mobile-specific query state (`?dir=` browse location, `?diff=` diff view).
-const { tabs, activeId, activeTab, openLine, openFile, openAtLine, openDiff } = useWorkspaceTabs();
+const { tabs, activeId, activeTab, openLine, openFile, openAtLine, openDiff, fillDiff } = useWorkspaceTabs();
 useWorkspaceRoute();
 
 // --- Route-driven navigation -------------------------------------------------------------------
@@ -100,6 +102,13 @@ watch(
         }
     },
     { immediate: true },
+);
+
+// The gap between clicking a changed file and its content arriving — see the desktop workspace for why it is
+// gated rather than drawn at once.
+const diffOutline = useLoadingReveal(
+    computed(() => diffTab.value?.pending === true),
+    computed(() => diffTab.value?.id ?? ``),
 );
 
 // Presence: announce which file this tab has open, like the desktop workspace does.
@@ -285,10 +294,13 @@ const onPick = (event: Event): void => {
             </div>
             <div class="min-h-0 flex-1">
                 <template v-if="diffTab">
+                    <!-- Still being read. Nothing below it can be decided yet — whether the file is binary is part
+                         of the answer — so this branch comes first, and the viewer mounts once, with content. -->
+                    <template v-if="diffTab.pending"><DiffSkeleton v-if="diffOutline" /></template>
                     <!-- No text to diff is not the same as nothing to see: an image renders as its two sides
                          (stacked here — two panes don't fit a phone). -->
                     <BinaryDiffView
-                        v-if="rendersAsBytes(diffTab.path, diffTab.binary)"
+                        v-else-if="rendersAsBytes(diffTab.path, diffTab.binary)"
                         :key="diffTab.id"
                         :path="diffTab.path"
                         :before="diffTab.beforeRaw"
@@ -359,8 +371,8 @@ const onPick = (event: Event): void => {
                 {{ actionError ?? error }}
             </p>
 
-            <ReviewPanel v-if="segment === 'changes'" @open-diff="openDiffNav" />
-            <HistoryPanel v-else-if="segment === 'history'" @open-diff="openDiffNav" />
+            <ReviewPanel v-if="segment === 'changes'" @open-diff="openDiffNav" @fill-diff="fillDiff" />
+            <HistoryPanel v-else-if="segment === 'history'" @open-diff="openDiffNav" @fill-diff="fillDiff" />
 
             <template v-else>
                 <!-- Search: name filters the current directory instantly; content searches the daemon. -->

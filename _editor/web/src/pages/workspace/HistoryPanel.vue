@@ -19,7 +19,7 @@ import type { OpenMode } from "./workspaceTabs";
 const { snapshots, error, isLoading, refetch, diff, fileDiff, restore, busy, actionError } = useHistory();
 // The gesture decides the tab: a click is a look (the strip's preview tab, replaced by the next file looked at),
 // a double-click keeps it. See workspaceTabs' OpenMode.
-const emit = defineEmits<{ "open-diff": [payload: DiffPayload, mode: OpenMode] }>();
+const emit = defineEmits<{ "open-diff": [payload: DiffPayload, mode: OpenMode]; "fill-diff": [payload: DiffPayload] }>();
 
 const selectedId = ref<string | undefined>(undefined);
 const changes = ref<readonly SnapshotChange[]>([]);
@@ -56,28 +56,25 @@ const select = (snapshot: WorkspaceSnapshot): void => {
         .finally(() => (diffLoading.value = false));
 };
 
+// The tab opens on the click and the content fills it when the read lands — see DiffPayload's `pending`. A
+// checkpoint's diff is two blob reads on the daemon like any other, and the wait belongs in the tab it is for.
 const openDiff = (change: SnapshotChange, mode: OpenMode): void => {
     const snapshotId = selectedId.value;
     if (snapshotId === undefined) {
         return;
     }
-    void fileDiff(snapshotId, change.scope, change.path).then((body) => {
-        emit(
-            `open-diff`,
-            {
-                key: snapshotId,
-                scope: change.scope,
-                label: changeLabel(change),
-                status: change.status,
-                path: change.path,
-                ...body,
-                // A checkpoint over an image ships no text either — the bytes come from /diff/raw, against this
-                // same checkpoint so the preview shows what the row is about, not the file's state on disk.
-                ...diffRawUrls({ source: `checkpoint`, snapshot: snapshotId, scope: change.scope }, change.path, change.status),
-            },
-            mode,
-        );
-    });
+    const tab = {
+        key: snapshotId,
+        scope: change.scope,
+        label: changeLabel(change),
+        status: change.status,
+        path: change.path,
+        // A checkpoint over an image ships no text either — the bytes come from /diff/raw, against this
+        // same checkpoint so the preview shows what the row is about, not the file's state on disk.
+        ...diffRawUrls({ source: `checkpoint`, snapshot: snapshotId, scope: change.scope }, change.path, change.status),
+    };
+    emit(`open-diff`, { ...tab, pending: true }, mode);
+    void fileDiff(snapshotId, change.scope, change.path).then((body) => emit(`fill-diff`, { ...tab, ...body }));
 };
 
 const confirmRestore = (id: string): void => {

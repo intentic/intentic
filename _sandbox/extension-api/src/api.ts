@@ -252,6 +252,13 @@ export interface IntenticApi {
          * built. On mobile, where there is no strip, the host navigates to the diff instead.
          */
         openDiff(payload: DiffPayload): void;
+        /* FILL A DIFF OPENED WITH `pending` — the second half of opening a tab before its content exists.
+         *
+         * Refreshes, never opens: a tab the user has since closed or replaced takes nothing, and the content is
+         * simply dropped. That is what makes the pending open safe to use for a slow source — a reader who has
+         * moved on to another file is never yanked back to this one, and never has it appear under them.
+         */
+        fillDiff(payload: DiffPayload): void;
         /* READING AND WRITING WORKSPACE FILES — the daemon's file routes, without the encoding.
          *
          * Extensions keep their durable state in the workspace rather than in settings: an acceptance run's

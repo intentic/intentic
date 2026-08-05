@@ -11,6 +11,7 @@ import { usePanels } from "../../composables/extensions/usePanels";
 import { detectActivations } from "../../core-views/registry";
 import { useEditBuffers } from "../../composables/workspace/useEditBuffers";
 import { useMonaco } from "../../composables/workspace/useMonaco";
+import { useLoadingReveal } from "../../composables/loadingReveal";
 import { type SidebarPanel, useLayout } from "../../composables/useLayout";
 import { reportOpenPath } from "../../composables/usePresence";
 import { outgoingMark, outgoingSummary } from "../../composables/workspace/outgoingWork";
@@ -27,6 +28,7 @@ import { filesToEntries } from "./dropEntries";
 import BinaryDiffView from "./viewers/BinaryDiffView.vue";
 import CodebaseHealth from "./CodebaseHealth.vue";
 import DiffToolbar from "./viewers/DiffToolbar.vue";
+import DiffSkeleton from "./viewers/DiffSkeleton.vue";
 import DiffView from "./viewers/DiffView.vue";
 import DirectoryOperator from "./DirectoryOperator.vue";
 import DirectoryUiHost from "./DirectoryUiHost.vue";
@@ -126,6 +128,7 @@ const {
     openFile,
     openAtLine,
     openDiff,
+    fillDiff,
     openDirectory,
     openHealth,
     openDocument,
@@ -137,6 +140,15 @@ const {
 } = useWorkspaceTabs();
 // Mirror the active file into the URL (`/workspace/<path>`) so a reload / shared link reopens it.
 useWorkspaceRoute();
+
+// The gap between clicking a changed file and its content arriving. The tab, its label and the toolbar's status
+// and ± counts are already on screen by then — this decides only whether the panes below them are worth drawing
+// as an outline, which for a warmed or cached diff (the common case) they are not: it lands in the same tick.
+const diffPending = computed(() => activeTab.value?.kind === `diff` && activeTab.value.pending === true);
+const diffOutline = useLoadingReveal(
+    diffPending,
+    computed(() => activeTab.value?.id ?? ``),
+);
 
 // Repository directories that a directory-surface extension serves (Apps, UI, preview) — selecting one in the
 // tree opens its management surface as a tab. Rail-surface repos (intent/desired-state) are absent by design.
@@ -692,8 +704,8 @@ const endResize = (event: PointerEvent): void => {
                         </button>
                     </template>
                 </div>
-                <ReviewPanel v-if="layout.sidebarPanel.value === 'changes'" @open-diff="openDiff" />
-                <HistoryPanel v-else-if="layout.sidebarPanel.value === 'history'" @open-diff="openDiff" />
+                <ReviewPanel v-if="layout.sidebarPanel.value === 'changes'" @open-diff="openDiff" @fill-diff="fillDiff" />
+                <HistoryPanel v-else-if="layout.sidebarPanel.value === 'history'" @open-diff="openDiff" @fill-diff="fillDiff" />
                 <!-- Search header: input hero on row 1; the files-to-include field under it while a content search
                      is on; scope switch + the filter funnel on the last row. One `filter` ref, three scopes
                      (name = instant client-side tree filter, text/smart = debounced daemon search).
@@ -921,9 +933,13 @@ const endResize = (event: PointerEvent): void => {
                         :deletions="activeTab.deletions"
                     />
                     <div class="min-h-0 flex-1">
+                        <!-- Still being read. Nothing below it can be decided yet — whether the file is binary is
+                             part of the answer — so this branch comes first, and the viewer mounts once, with
+                             content, rather than being remounted when the content replaces the empty panes. -->
+                        <template v-if="activeTab.pending"><DiffSkeleton v-if="diffOutline" /></template>
                         <!-- No text to diff is not the same as nothing to see: an image renders as its two sides. -->
                         <BinaryDiffView
-                            v-if="rendersAsBytes(activeTab.path, activeTab.binary)"
+                            v-else-if="rendersAsBytes(activeTab.path, activeTab.binary)"
                             :key="activeTab.id"
                             :path="activeTab.path"
                             :before="activeTab.beforeRaw"
