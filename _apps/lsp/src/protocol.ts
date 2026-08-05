@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { statSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { Diagnostic } from "./diag.js";
@@ -25,9 +26,23 @@ export interface ShutdownRequest {
 
 export type Request = DiagRequest | PingRequest | ShutdownRequest;
 
-export interface DiagResponse {
-    readonly ok: true;
+// One file the daemon would not vouch for, and why: its project's config chain or type foundations failed to
+// load from where the daemon runs, so any diagnostics would be artifacts of that failure, not facts about code.
+export interface Unavailable {
+    readonly file: string;
+    readonly reason: string;
+}
+
+// What a diag can say, daemon-side and wire-side alike. A file appears in `unavailable` OR contributes to
+// `diagnostics`; a file in neither list was checked and is clean. The caller must be able to tell "checked, and
+// clean" from "could not check" — only the first is a verdict.
+export interface DiagReport {
     readonly diagnostics: readonly Diagnostic[];
+    readonly unavailable: readonly Unavailable[];
+}
+
+export interface DiagResponse extends DiagReport {
+    readonly ok: true;
 }
 
 export interface OkResponse {
@@ -41,7 +56,14 @@ export interface ErrorResponse {
 
 export type Response = DiagResponse | OkResponse | ErrorResponse;
 
-// One daemon per workspace root, so two sandboxes (or a worktree and its parent) never share a program whose
-// tsconfigs disagree. The root is hashed rather than embedded: socket paths are length-capped (~104 bytes on
-// most platforms) and a deep worktree path blows straight through that.
-export const socketPathFor = (root: string): string => join(tmpdir(), `intentic-lsp-${createHash("sha256").update(root).digest("hex").slice(0, 16)}.sock`);
+// One daemon per workspace root AS THIS CALLER SEES IT. The path alone is not an identity: an isolated turn
+// bind-mounts its own tree over the same /work path, so two mount namespaces name two DIFFERENT trees
+// identically, and a daemon keyed on the path answered one caller with the other's files — every diagnostic
+// about the wrong content. dev:ino pins the socket to the directory the caller can actually reach: each view
+// spawns a daemon that shares its view, and two paths to one tree (a symlink) still converge on one daemon.
+// Hashed because socket paths are length-capped (~104 bytes on most platforms) and a deep worktree path blows
+// straight through that.
+export const socketPathFor = (root: string): string => {
+    const stat = statSync(root);
+    return join(tmpdir(), `intentic-lsp-${createHash("sha256").update(`${root}\0${stat.dev}\0${stat.ino}`).digest("hex").slice(0, 16)}.sock`);
+};

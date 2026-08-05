@@ -1,5 +1,6 @@
 import { diagnose, type Diagnostic } from "./diag.js";
-import { createProjectDeps, findTsconfig, openProject, type Project, type ProjectDeps } from "./project.js";
+import { createProjectDeps, findTsconfig, openProject, unusableReason, type Project, type ProjectDeps } from "./project.js";
+import type { DiagReport } from "./protocol.js";
 
 /* The warm side of the language service — the thing a daemon holds open between requests.
  *
@@ -17,10 +18,19 @@ import { createProjectDeps, findTsconfig, openProject, type Project, type Projec
  *   - one marker store, so a reader can ask "what is wrong with this file right now" without paying for a check.
  *
  * `touched` is the only invalidation signal. The caller knows precisely which files changed — the agent's own
- * PostToolUse edit, or a watcher — which beats polling mtimes on a monorepo's worth of roots. */
+ * PostToolUse edit, or a watcher — which beats polling mtimes on a monorepo's worth of roots.
+ *
+ * An answer here is one of exactly three things, and the third is the load-bearing one: diagnostics we vouch
+ * for, "checked, and clean", or a REFUSAL with the reason no answer can be vouched for. A project whose config
+ * chain or type foundations failed to load (project.ts) used to fall back to default options and report Map,
+ * Promise and `node:` imports as broken in healthy code — thousands of confident, specific, wrong errors pushed
+ * at whoever asked. Refusing is the honest answer, and the reason travels with it. */
+
+// What the workspace can say about one file: diagnostics it vouches for, or the reason it cannot vouch for any.
+export type FileReport = { readonly diagnostics: readonly Diagnostic[] } | { readonly unavailable: string };
 
 interface Marker {
-    readonly diagnostics: readonly Diagnostic[];
+    readonly report: FileReport;
     // The workspace generation these were computed in — NOT the file's own version. A file's diagnostics depend
     // on every file it imports, so an edit anywhere can break it without touching it; keying the cache on a
     // workspace-wide counter is what makes cross-file breakage surface. Re-checking is cheap because the program
@@ -52,7 +62,12 @@ export class Workspace {
             return existing;
         }
         const project = openProject(tsconfig, file, this.deps);
-        this.projects.set(key, project);
+        // A config that failed to load is usually an install mid-flight; caching it would pin the refusal for
+        // the daemon's whole residency. Left uncached, the next ask re-parses one tsconfig — cheap, no program
+        // is ever built on it — and sees the heal the moment the install lands.
+        if (project.configError === undefined) {
+            this.projects.set(key, project);
+        }
         return project;
     }
 
@@ -69,39 +84,50 @@ export class Workspace {
         this.generation += 1;
     }
 
-    // Diagnostics for these files, computed now against the warm program. Results are cached by version, so
-    // asking twice without an intervening edit costs nothing.
-    diagnose(files: readonly string[]): Diagnostic[] {
-        const out: Diagnostic[] = [];
+    // Diagnostics for these files, computed now against the warm program, with the files no answer can be
+    // vouched for listed apart. Results are cached by generation, so asking twice without an intervening edit
+    // costs nothing.
+    diagnose(files: readonly string[]): DiagReport {
+        const diagnostics: Diagnostic[] = [];
+        const unavailable: { file: string; reason: string }[] = [];
         for (const file of files) {
             this.open.add(file);
-            const cached = this.fresh(file);
-            if (cached !== undefined) {
-                out.push(...cached);
+            const report = this.fresh(file) ?? this.check(file);
+            if ("unavailable" in report) {
+                unavailable.push({ file, reason: report.unavailable });
                 continue;
             }
-            // A project that cannot be built (an unreadable tsconfig) must not take the daemon down with it —
-            // the file simply has no diagnostics we can vouch for.
-            const diagnostics = this.tryDiagnose(file);
-            this.markers.set(file, { diagnostics, generation: this.generation });
-            out.push(...diagnostics);
+            diagnostics.push(...report.diagnostics);
         }
-        return out;
+        return { diagnostics, unavailable };
     }
 
-    private tryDiagnose(file: string): Diagnostic[] {
+    private check(file: string): FileReport {
+        const report = this.tryDiagnose(file);
+        this.markers.set(file, { report, generation: this.generation });
+        return report;
+    }
+
+    private tryDiagnose(file: string): FileReport {
         try {
-            return diagnose(this.projectFor(file), [file]);
-        } catch {
-            return [];
+            const project = this.projectFor(file);
+            const reason = unusableReason(project);
+            if (reason !== undefined) {
+                return { unavailable: reason };
+            }
+            return { diagnostics: diagnose(project, [file]) };
+        } catch (error) {
+            // A project that cannot be built must not take the daemon down with it — and "could not check" must
+            // not be dressed up as "checked, and clean" either.
+            return { unavailable: error instanceof Error ? error.message : String(error) };
         }
     }
 
     // What we already know about a file, or undefined when nothing current is on hand. This is the read a hook
     // wants: if the debounced recompute has already run, the answer costs a map lookup.
-    fresh(file: string): readonly Diagnostic[] | undefined {
+    fresh(file: string): FileReport | undefined {
         const cached = this.markers.get(file);
-        return cached !== undefined && cached.generation === this.generation ? cached.diagnostics : undefined;
+        return cached !== undefined && cached.generation === this.generation ? cached.report : undefined;
     }
 
     // Bring every open file's markers up to date. The daemon calls this on a debounce after edits land, so the
@@ -109,7 +135,7 @@ export class Workspace {
     refresh(): void {
         for (const file of this.open) {
             if (this.fresh(file) === undefined) {
-                this.markers.set(file, { diagnostics: this.tryDiagnose(file), generation: this.generation });
+                this.check(file);
             }
         }
     }

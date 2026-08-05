@@ -6,8 +6,7 @@ import os from "node:os";
 import { dirname, join, resolve as resolvePath } from "node:path";
 import { setTimeout as sleep } from "node:timers/promises";
 import { fileURLToPath } from "node:url";
-import type { Diagnostic } from "./diag.js";
-import type { Request, Response } from "./protocol.js";
+import type { DiagReport, Request, Response } from "./protocol.js";
 import { socketPathFor } from "./protocol.js";
 
 /* Talking to the resident daemon, starting one if there isn't one.
@@ -28,7 +27,7 @@ const SPAWN_ATTEMPTS = 40;
 
 // The nearest ancestor containing `marker`, or undefined at the filesystem root.
 const findUp = (fromDir: string, marker: string): string | undefined => {
-    for (let dir = resolvePath(fromDir); ; ) {
+    for (let dir = resolvePath(fromDir); ;) {
         if (existsSync(join(dir, marker))) {
             return dir;
         }
@@ -129,10 +128,12 @@ export interface DiagnoseOptions {
     readonly touched?: readonly string[];
 }
 
-// Diagnostics for these files from the resident daemon. Returns undefined — never throws, never an empty array —
-// when there is no answer to be had: no TypeScript project, or no daemon we could reach. The caller must be able
-// to tell "checked, and it is clean" from "not checked", because only the first is worth telling the model.
-export const diagnoseVia = async (cwd: string, options: DiagnoseOptions): Promise<Diagnostic[] | undefined> => {
+// The daemon's report for these files. Returns undefined — never throws — when there is no answer to be had at
+// all: no TypeScript project, or no daemon we could reach. A report distinguishes three states per file, and the
+// caller must keep them apart: diagnostics (a verdict), absence from both lists ("checked, and clean" — also a
+// verdict), and an `unavailable` entry (the daemon itself refusing: it could not load the file's project well
+// enough to vouch for anything, so nothing was checked and nothing should be relayed as if it had been).
+export const diagnoseVia = async (cwd: string, options: DiagnoseOptions): Promise<DiagReport | undefined> => {
     const [first] = options.files;
     if (first === undefined || !hasTsconfig(first)) {
         return undefined;
@@ -142,8 +143,12 @@ export const diagnoseVia = async (cwd: string, options: DiagnoseOptions): Promis
         return undefined;
     }
     try {
-        const response = await ask(socket, { verb: "diag", files: options.files, ...(options.touched !== undefined ? { touched: options.touched } : {}) });
-        return response.ok && "diagnostics" in response ? [...response.diagnostics] : undefined;
+        const response = await ask(socket, {
+            verb: "diag",
+            files: options.files,
+            ...(options.touched !== undefined ? { touched: options.touched } : {}),
+        });
+        return response.ok && "diagnostics" in response ? { diagnostics: response.diagnostics, unavailable: response.unavailable } : undefined;
     } catch {
         return undefined;
     } finally {

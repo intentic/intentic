@@ -711,10 +711,15 @@ them by spawning a process, never by import:
   keeps the markers for edited files current on a debounce, exactly as VS Code's tsserver does for open
   buffers. Both callers — the agent's `lsp diag` and the daemon's post-edit hook
   ([agent-diagnostics.ts](_apps/sandbox/src/agent/agent-diagnostics.ts), which imports
-  `@intentic/lsp/client`) — converge on one socket per repository. It matters because the cold path was
-  ~0.8-1.3s per edit against this monorepo and the warm one is ~40-90ms, which is what makes checking after
-  *every* edit affordable. The daemon is started by the first caller with a tsconfig above its file and exits
-  after 15 min idle, so a workspace with no TypeScript in it never starts one.
+  `@intentic/lsp/client`) — converge on one socket per repository *as each caller sees it* (the socket is
+  keyed on the root's `dev:ino`, so an isolated worktree mounted over the same path gets its own daemon that
+  sees its own tree). It matters because the cold path was ~0.8-1.3s per edit against this monorepo and the
+  warm one is ~40-90ms, which is what makes checking after *every* edit affordable. The daemon is started by
+  the first caller with a tsconfig above its file and exits after 15 min idle, so a workspace with no
+  TypeScript in it never starts one. A project whose tsconfig chain or type foundations cannot be loaded from
+  where the checker runs is answered with an explicit per-file refusal (and `lsp diag` exits 2) instead of the
+  ES5-fallback phantom errors TypeScript would otherwise report on healthy code; the hook relays that as one
+  "diagnostics unavailable" notice per turn rather than injecting errors.
 
 ## Scaling model & limits
 

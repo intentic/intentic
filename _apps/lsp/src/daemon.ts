@@ -95,10 +95,10 @@ export class Daemon {
             return { ok: true };
         }
         this.workspace.touched(request.touched ?? []);
-        const diagnostics = this.workspace.diagnose(request.files);
+        const report = this.workspace.diagnose(request.files);
         // The caller has what it asked for; keep the rest of the open set current for whoever asks next.
         this.scheduleRefresh();
-        return { ok: true, diagnostics };
+        return { ok: true, ...report };
     }
 
     private serve(socket: Socket): void {

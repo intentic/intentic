@@ -87,6 +87,24 @@ test("the second identical question is served from the marker store", async () =
     }
 });
 
+test("a project whose config cannot load refuses over the wire instead of answering", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "lsp-daemon-broken-"));
+    await writeFile(join(dir, "package.json"), JSON.stringify({ type: "module" }));
+    await writeFile(join(dir, "tsconfig.json"), JSON.stringify({ extends: "@nowhere/tsconfig.base.json", include: ["*.ts"] }));
+    const file = join(dir, "healthy.ts");
+    await writeFile(file, "export const seen = new Map<string, number>();\n");
+    const daemon = new Daemon({ root: dir });
+    const path = await daemon.listen();
+    try {
+        const response = await request(path, { verb: "diag", files: [file] });
+        expect(response.ok).toBe(true);
+        expect("diagnostics" in response && response.diagnostics).toEqual([]);
+        expect("unavailable" in response && response.unavailable.map((entry) => entry.file)).toEqual([file]);
+    } finally {
+        await daemon.close();
+    }
+});
+
 test("a malformed line is answered with an error rather than killing the daemon", async () => {
     const dir = await scaffold({ "a.ts": "export const n: number = 1;\n" });
     const daemon = new Daemon({ root: dir });

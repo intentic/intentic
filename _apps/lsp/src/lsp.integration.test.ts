@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { expect, test } from "vitest";
 import { diagnose } from "./diag.js";
-import { findTsconfig, openProject } from "./project.js";
+import { findTsconfig, openProject, unusableReason } from "./project.js";
 import { rename } from "./rename.js";
 
 // A throwaway TS project on disk: a minimal nodenext tsconfig plus the given flat files. Returns the dir so the
@@ -61,4 +61,44 @@ test("diag returns nothing for a clean file", async () => {
     const dir = await scaffold({ "a.ts": "export const n: number = 42;\n" });
     const target = join(dir, "a.ts");
     expect(diagnose(openProject(findTsconfig(target), target), [target])).toEqual([]);
+});
+
+test("a healthy project is usable — the canary the broken week would have tripped on day one", async () => {
+    const dir = await scaffold({ "a.ts": "export const n: number = 42;\n" });
+    const target = join(dir, "a.ts");
+    expect(unusableReason(openProject(findTsconfig(target), target))).toBeUndefined();
+});
+
+test("an unresolvable extends marks the project unusable, with the reason naming the config", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "lsp-broken-"));
+    await writeFile(join(dir, "package.json"), JSON.stringify({ type: "module" }));
+    await writeFile(join(dir, "tsconfig.json"), JSON.stringify({ extends: "@nowhere/tsconfig.base.json", include: ["*.ts"] }));
+    const target = join(dir, "a.ts");
+    await writeFile(target, "export const seen = new Map<string, number>();\n");
+    const reason = unusableReason(openProject(findTsconfig(target), target));
+    expect(reason).toContain("tsconfig.json");
+    expect(reason).toContain("not found");
+});
+
+test("a types entry with no type definitions behind it marks the project unusable", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "lsp-notypes-"));
+    await writeFile(join(dir, "package.json"), JSON.stringify({ type: "module" }));
+    await writeFile(join(dir, "tsconfig.json"), JSON.stringify({ compilerOptions: { types: ["node"], strict: true }, include: ["*.ts"] }));
+    const target = join(dir, "a.ts");
+    await writeFile(target, "export const n = 1;\n");
+    expect(unusableReason(openProject(findTsconfig(target), target))).toContain("node");
+});
+
+// The plain TS service cannot resolve SFC imports — that is vue-tsc's job — so without the shim every .vue
+// import in a healthy file reported TS2307, permanently. Through the shim the import lands as `any`: unchecked
+// here rather than falsely broken, while the file's real diagnostics still surface.
+test("a .vue import resolves through the shim instead of reporting TS2307", async () => {
+    const dir = await scaffold({
+        "App.vue": "<template><div/></template>",
+        "main.ts": "import App from './App.vue';\nexport const app = App;\nexport const bad: number = 'no';\n",
+    });
+    const target = join(dir, "main.ts");
+    const codes = diagnose(openProject(findTsconfig(target), target), [target]).map((d) => d.code);
+    expect(codes).not.toContain(2307);
+    expect(codes).toContain(2322);
 });

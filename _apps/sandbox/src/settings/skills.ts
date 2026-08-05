@@ -28,6 +28,8 @@ The \`lsp\` CLI (on PATH) drives the TypeScript language service. Prefer it over
 \`lsp diag <file...>\`
 - Prints syntactic + semantic diagnostics as \`path:line:col: error TS<code>: message\`; "no diagnostics" means the file type-checks. Faster than a full build for confirming an edit is sound — run it after edits to verify you updated all usages.
 
+Both verbs refuse rather than guess: when a file's tsconfig or type foundations cannot be loaded (say the dependencies are not installed where the checker runs), they print an \`unavailable\` message and exit 2 instead of answering from a half-loaded project. Treat that as "not checked" — use the package's own typecheck or tests — never as a verdict on the code.
+
 Notes: TypeScript/JavaScript only. Pass workspace paths.
 `;
 

@@ -41,11 +41,22 @@ const MAX_CHARS = 4_000;
 
 // Ask the resident service about one file. Undefined means "no answer to be had" — no TypeScript project above
 // the file, or no daemon we could reach — which must stay distinguishable from "checked, and clean".
-export type DiagRunner = (file: string, cwd: string) => Promise<readonly string[] | undefined>;
+// `unavailable` is the daemon itself refusing: it reached the file's project and could not load it well enough
+// to vouch for anything (typically a worktree whose installed tree is mounted in a namespace the daemon cannot
+// see), so it checked nothing rather than answer from a half-loaded program. The refusal reason names daemon-side
+// paths the agent has no window onto, so it is not carried here — the notice below says what is true from here.
+export type DiagAnswer = { readonly kind: "checked"; readonly lines: readonly string[] } | { readonly kind: "unavailable" };
+export type DiagRunner = (file: string, cwd: string) => Promise<DiagAnswer | undefined>;
 
 const runResidentDiag: DiagRunner = async (file, cwd) => {
-    const diagnostics = await diagnoseVia(cwd, { files: [file], touched: [file] });
-    return diagnostics?.map((d) => `${d.file}:${d.line}:${d.column}: ${d.category} TS${d.code}: ${d.message}`);
+    const report = await diagnoseVia(cwd, { files: [file], touched: [file] });
+    if (report === undefined) {
+        return undefined;
+    }
+    if (report.unavailable.length > 0) {
+        return { kind: "unavailable" };
+    }
+    return { kind: "checked", lines: report.diagnostics.map((d) => `${d.file}:${d.line}:${d.column}: ${d.category} TS${d.code}: ${d.message}`) };
 };
 
 // Compress to the error lines the model must act on. Warnings/suggestions are dropped — they'd steer the model
@@ -62,17 +73,20 @@ export type ModulesProbe = (file: string) => Promise<NearbyModules>;
 // is the same fact repeated.
 const NAMED_MISSING = 3;
 
-/* WHAT THIS NOTE MAY AND MAY NOT CLAIM, now that two different states reach it (dependency-drift.ts).
+/* WHAT THIS NOTE MAY AND MAY NOT CLAIM, now that three different states reach it.
  *
- * One is a tree nobody has installed. The other is an install this process cannot SEE — an isolated turn's
- * node_modules is mounted inside the turn's namespace, so the daemon finds an empty directory where the agent
- * finds 34 packages. They are one fact for this hook's purposes (no truthful diagnostics from here) and two
- * completely different facts for the agent, which is why the sentence no longer names a cause or prescribes an
- * install: told "dependencies are not installed" an agent whose own type-check passes either distrusts working
- * tooling or goes looking for an install that would land in an overlay and die with the conversation.
+ * One is a tree nobody has installed (dependency-drift.ts). One is an install this process cannot SEE — an
+ * isolated turn's node_modules is mounted inside the turn's namespace, so the daemon finds an empty directory
+ * where the agent finds 34 packages. And one is the type-checker itself refusing: the project's config chain or
+ * type foundations would not load from where it stands, so it declined to answer at all rather than report the
+ * phantom errors a half-loaded program produces (@intentic/lsp). They are one fact for this hook's purposes —
+ * no truthful diagnostics from here — and completely different facts for the agent, which is why the sentence
+ * names no cause and prescribes no install: told "dependencies are not installed" an agent whose own type-check
+ * passes either distrusts working tooling or goes looking for an install that would land in an overlay and die
+ * with the conversation.
  *
  * So it says only what is known from here, and points at the check that CAN answer — the package's own. */
-const ABSENT_NOTE =
+const UNAVAILABLE_NOTE =
     "Type diagnostics are unavailable for this edit: the type-checker cannot resolve this package's dependencies " +
     "from where it runs, so it would report every import as broken whatever the edit did. That is a limit of this " +
     "check, not a verdict on your tools or on the code — run the package's own type-check, lint or tests when you " +
@@ -107,8 +121,8 @@ export const editDiagnosticsHooks = (
     modules: ModulesProbe = modulesNear,
 ): Partial<Record<HookEvent, HookCallbackMatcher[]>> => {
     // Per PACKAGE, not per turn: a turn that edits two packages has two different answers to give, and one
-    // shared flag would silence whichever it reached second. The absent case keys on "" — there is only ever
-    // one of it worth saying.
+    // shared flag would silence whichever it reached second. The absent and refused cases key on "" — they are
+    // the same fact, and there is only ever one of it worth saying.
     const explained = new Set<string>();
     return {
         PostToolUse: [
@@ -130,7 +144,17 @@ export const editDiagnosticsHooks = (
                                 return {};
                             }
                             explained.add("");
-                            return { hookSpecificOutput: { hookEventName: "PostToolUse", additionalContext: ABSENT_NOTE } };
+                            return { hookSpecificOutput: { hookEventName: "PostToolUse", additionalContext: UNAVAILABLE_NOTE } };
+                        }
+                        const output = await diag(target, cwd);
+                        // The daemon refusing is the same fact as an absent tree — no truthful diagnostics from
+                        // here — and shares its once-per-turn telling, keyed on "".
+                        if (output !== undefined && output.kind === "unavailable") {
+                            if (explained.has("")) {
+                                return {};
+                            }
+                            explained.add("");
+                            return { hookSpecificOutput: { hookEventName: "PostToolUse", additionalContext: UNAVAILABLE_NOTE } };
                         }
                         // Keyed by the names themselves: an install that fixed half the list has changed what
                         // the model needs to know, and should be allowed to say so again.
@@ -139,8 +163,7 @@ export const editDiagnosticsHooks = (
                         if (stale) {
                             explained.add(key);
                         }
-                        const output = await diag(target, cwd);
-                        const errors = output === undefined ? undefined : errorLines(output);
+                        const errors = output === undefined ? undefined : errorLines(output.lines);
                         if (errors === undefined) {
                             // Nothing to report about the edit itself — but a first sighting of a drifted tree
                             // is still worth the one sentence, because the next tool the model reaches for

@@ -6,15 +6,23 @@
       "what": "The package's own notes and gotchas."
     },
     {
+      "path": "_apps/lsp/src/project.ts",
+      "what": "Where a project is opened — and where a half-loaded config is caught and refused."
+    },
+    {
+      "path": "_apps/lsp/src/workspace.ts",
+      "what": "The warm resident service: caching, invalidation, and refusal as a first-class answer."
+    },
+    {
       "path": "_apps/lsp/src/client.ts",
-      "what": "The largest file here — usually where the real work happens."
+      "what": "How callers reach the daemon; node-builtins only, imported by the sandbox."
     }
   ],
   "name": "@intentic/lsp",
-  "oneLiner": "Safe renames and real type errors, from the command line.",
+  "oneLiner": "Safe renames and real type errors, from the command line — or an honest refusal.",
   "provenance": {
-    "generatedAt": 1785535377531,
+    "generatedAt": 1785923982048,
     "model": "claude-opus-4-6",
-    "sourceRev": "de6a43b0c525ffc5e8cfb73c7840379cc5077379"
+    "sourceRev": "a16340e6f8400575716188dd8eabbe66b6273359"
   }
 }

@@ -23,10 +23,14 @@ const fire = async (hooks: ReturnType<typeof editDiagnosticsHooks>, toolInput: u
 const runHook = async (diag: DiagRunner, toolInput: unknown, modules: ModulesProbe = RESOLVABLE) =>
     fire(editDiagnosticsHooks("/work", undefined, diag, modules), toolInput);
 
-const withErrors: DiagRunner = async () => [
+const checked =
+    (...lines: string[]): DiagRunner =>
+    async () => ({ kind: "checked", lines });
+
+const withErrors: DiagRunner = checked(
     "src/app.ts:12:5: error TS2304: Cannot find name 'foo'.",
     "src/app.ts:14:1: warning TS6133: 'bar' is declared but never used.",
-];
+);
 
 test("compile errors ride back as additionalContext; warnings are dropped", async () => {
     const result = await runHook(withErrors, { file_path: "/work/src/app.ts" });
@@ -36,7 +40,7 @@ test("compile errors ride back as additionalContext; warnings are dropped", asyn
 });
 
 test("a clean file adds nothing", async () => {
-    const result = await runHook(async () => [], { file_path: "/work/src/app.ts" });
+    const result = await runHook(checked(), { file_path: "/work/src/app.ts" });
     expect(result).toEqual({});
 });
 
@@ -45,7 +49,7 @@ test("non-TypeScript files are never checked", async () => {
     const result = await runHook(
         async () => {
             ran = true;
-            return [];
+            return { kind: "checked", lines: [] };
         },
         { file_path: "/work/README.md" },
     );
@@ -73,7 +77,7 @@ test("with no resolvable node_modules the type-check never runs", async () => {
     const result = await runHook(
         async () => {
             ran = true;
-            return ["src/app.ts:1:1: error TS2307: Cannot find module 'node:path'."];
+            return { kind: "checked", lines: ["src/app.ts:1:1: error TS2307: Cannot find module 'node:path'."] };
         },
         { file_path: "/work/src/app.ts" },
         MISSING,
@@ -82,6 +86,20 @@ test("with no resolvable node_modules the type-check never runs", async () => {
     expect((syncHookOutput(result).hookSpecificOutput as { additionalContext?: string }).additionalContext).toContain(
         "Type diagnostics are unavailable for this edit",
     );
+});
+
+/* The daemon refusing IS the fix for the worst failure in the logs: a worktree project whose config chain the
+ * daemon cannot load fell back to ES5 defaults and reported Map, Promise and `node:` imports as broken on
+ * every edit — thousands of confident, wrong errors injected into turns. The refusal must surface as the same
+ * once-per-turn unavailability sentence, never as diagnostics. */
+test("a daemon refusal is told once as unavailability, not injected as errors", async () => {
+    const hooks = editDiagnosticsHooks("/work", undefined, async () => ({ kind: "unavailable" }), RESOLVABLE);
+    const first = await fire(hooks, { file_path: "/work/src/a.ts" });
+    expect((syncHookOutput(first).hookSpecificOutput as { additionalContext?: string }).additionalContext).toContain(
+        "Type diagnostics are unavailable for this edit",
+    );
+    const second = await fire(hooks, { file_path: "/work/src/b.ts" });
+    expect(second).toEqual({});
 });
 
 test("the missing-dependency reason is told ONCE per turn, not stapled to every edit", async () => {
@@ -105,7 +123,7 @@ test("a tree missing one package still type-checks, with the cause named alongsi
     const result = await runHook(
         async () => {
             ran = true;
-            return ["src/app.ts:1:1: error TS2307: Cannot find module 'left-pad'."];
+            return { kind: "checked", lines: ["src/app.ts:1:1: error TS2307: Cannot find module 'left-pad'."] };
         },
         { file_path: "/work/src/app.ts" },
         stale("left-pad"),
@@ -119,7 +137,7 @@ test("a tree missing one package still type-checks, with the cause named alongsi
 });
 
 test("a drifted tree is worth saying even when the edit itself type-checks clean — the next test will fail too", async () => {
-    const result = await runHook(async () => [], { file_path: "/work/src/app.ts" }, stale("vue", "zod"));
+    const result = await runHook(checked(), { file_path: "/work/src/app.ts" }, stale("vue", "zod"));
     expect(contextOf(result)).toContain("2 dependencies that are not installed (vue, zod)");
 });
 
