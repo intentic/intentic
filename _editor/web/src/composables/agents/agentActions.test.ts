@@ -9,11 +9,13 @@ const chat = vi.hoisted(() => ({
 }));
 // A registered tab: `isolated: false` keeps the fleet's draft join from carding it (see useAgents.fleet), which
 // is what this suite wants — the roster is empty here, so askAgentToResolve finds no agent to open and goes
-// straight to the part under test.
+// straight to the part under test. `unsent` is read of EVERY tab whatever the latch says, so it is part of
+// looking like a conversation at all rather than part of the draft half.
 const tab = (id: string) => ({
     conversationId: id,
     isolated: { value: false },
     registered: { value: true },
+    unsent: { value: false },
     enqueue: (prompt: string) => chat.enqueued.push(prompt),
 });
 

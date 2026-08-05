@@ -3,6 +3,7 @@ import { computed, ref, shallowRef, watch } from "vue";
 import { awaitingUser, blocked, type ClientAgentStatus, type FleetLane, laneOf, turnInFlight, unregistered } from "./agentStatus";
 import type { Conversation } from "../chat/conversation";
 import { openAgentConversation, useChat } from "../chat/useChat";
+import { onScreen } from "../onScreen";
 import { queryClient } from "../queryPersistence";
 import { sandboxJson } from "../sandbox/sandboxClient";
 import { jsonBody } from "../sandbox/jsonBody";
@@ -361,21 +362,14 @@ const unread = computed(() => fleet.value.filter((agent) => agent.unread).length
 const attention = computed(() => fleet.value.filter((agent) => blocked(agent) || agent.unread).length);
 
 // A turn that finishes while you are WATCHING its conversation is not news — the reply is already on your
-// screen, so the card must not flip to "New" under your cursor (and the rail must not badge it). Gated on the
-// tab being VISIBLE: an agent that finishes while the app sits in a background tab or a locked phone is
-// exactly what the badge exists for, even though its conversation is still technically the active one.
-// (Guarded like the store read it replaced: this module also evaluates in the node test env.)
-const visible = ref(true);
-if (typeof document !== `undefined`) {
-    const syncVisible = (): void => {
-        visible.value = document.visibilityState === `visible`;
-    };
-    syncVisible();
-    document.addEventListener(`visibilitychange`, syncVisible);
-}
+// screen, so the card must not flip to "New" under your cursor (and the rail must not badge it). Gated on a
+// window of the app being ON SCREEN, which is not the same as this tab being visible: the chat may be floating
+// in a pop-out window of its own while the tab it is rendered from sits behind another one (onScreen.ts). An
+// agent that finishes with every one of those windows hidden — a background tab, a locked phone — is exactly
+// what the badge exists for, even though its conversation is still technically the active one.
 watch(
     () => {
-        if (!visible.value) {
+        if (!onScreen.value) {
             return undefined;
         }
         const watched = fleet.value.find((agent) => agent.id === useChat().active.value.conversationId);
@@ -487,8 +481,7 @@ const lanes = computed<Record<FleetLane, FleetAgent[]>>(() => {
      * MORE THAN A WINDOW'S WORTH of such cards exist, at which point they are hiding each other rather than
      * being hidden by unrelated work. */
     grouped.finished.sort(
-        (a, b) =>
-            Number(b.unsent) - Number(a.unsent) || Number(b.status === `ready`) - Number(a.status === `ready`) || b.updatedAt - a.updatedAt,
+        (a, b) => Number(b.unsent) - Number(a.unsent) || Number(b.status === `ready`) - Number(a.status === `ready`) || b.updatedAt - a.updatedAt,
     );
     return grouped;
 });

@@ -3,6 +3,7 @@ import { useDevice } from "@intentic/ui";
 import { onMounted, onUnmounted, watch } from "vue";
 import { useRoute } from "vue-router";
 import { useChat } from "../composables/chat/useChat";
+import { onScreen } from "../composables/onScreen";
 import { reportIdle, reportSessionId, reportView } from "../composables/usePresence";
 import { useSandboxLiveness } from "../composables/sandbox/useSandboxLiveness";
 import PoppablePanels from "./PoppablePanels.vue";
@@ -40,19 +41,15 @@ watch(
     (sessionId) => reportSessionId(sessionId),
     { immediate: true },
 );
-const onVisibility = (): void => reportIdle(document.hidden);
+// Idle is "nobody is looking", asked of every window this tab renders into rather than of the tab itself
+// (composables/onScreen.ts): a user typing in a popped-out chat while the tab sits behind another one was
+// reported away to everyone else, in the window where they were most obviously present.
+watch(onScreen, (looking) => reportIdle(!looking), { immediate: true });
 
 // One long-lived SSE stream to the daemon keeps `reachable` live for the whole session, so a killed sandbox is
 // detected the moment the stream breaks — wherever in the app the user happens to be standing.
-onMounted(() => {
-    liveness.start();
-    document.addEventListener(`visibilitychange`, onVisibility);
-    onVisibility();
-});
-onUnmounted(() => {
-    liveness.stop();
-    document.removeEventListener(`visibilitychange`, onVisibility);
-});
+onMounted(() => liveness.start());
+onUnmounted(() => liveness.stop());
 </script>
 
 <template>

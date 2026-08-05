@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { onScreen } from "./onScreen";
 import { createPopout } from "./usePopout";
 
 /* The reload contract. A page refresh (dev-server HMR, an update, F5) destroys the realm driving a popped-out
@@ -301,8 +302,9 @@ describe(`createPopout`, () => {
     it(`shares what the user points at, not what the document itself is doing`, () => {
         createPopout(`scope-panel`, `Panel`, size);
         const onVisibility = vi.fn();
-        // The shell watches this to know whether the APP is on screen (it pauses polling when it isn't). A
-        // pop-out's own visibility is not that answer, so this one stays on the document that asked.
+        // `visibilitychange` describes the document it was armed on, so a listener asking after THIS window must
+        // not be answered by a pop-out minimizing. Whether the app is on screen anywhere is a separate question,
+        // and onScreen.ts answers it by asking each window for itself — see the test below.
         document.addEventListener(`visibilitychange`, onVisibility);
         const win = fakeWindow(`scope-panel`);
         adopt(`scope-panel`, win);
@@ -311,6 +313,31 @@ describe(`createPopout`, () => {
 
         expect(onVisibility).not.toHaveBeenCalled();
         document.removeEventListener(`visibilitychange`, onVisibility);
+    });
+
+    /* A pop-out window is one of the app's own windows, and the gates that ask "is anyone looking?" — the unread
+     * badge, presence idle — have to count it. Everything out there is drawn by the realm in the app's TAB, so
+     * for as long as they read that tab's visibility, a chat being read on a second screen counted as nobody
+     * looking whenever the tab itself sat behind something. */
+    it(`counts the window a panel floats in as somewhere the app is on screen`, () => {
+        const popout = createPopout(`screen-panel`, `Panel`, size);
+        const win = fakeWindow(`screen-panel`);
+        // jsdom answers `visible` for the page's own document and `prerender` for a detached one, and neither
+        // can be set — so both windows are dressed by hand, the way the browser would report them.
+        Object.defineProperty(win.document, `visibilityState`, { value: `visible`, configurable: true });
+        Object.defineProperty(document, `visibilityState`, { value: `hidden`, configurable: true });
+        document.dispatchEvent(new Event(`visibilitychange`)); // the tab going behind another one
+
+        adopt(`screen-panel`, win);
+
+        expect(onScreen.value).toBe(true);
+
+        popout.dock();
+
+        // Docked, the window shows nothing of the app and stops answering for it — leaving the tab, which is
+        // behind another one.
+        expect(onScreen.value).toBe(false);
+        Reflect.deleteProperty(document, `visibilityState`);
     });
 
     it(`forgets the window on dock, so a later reload stays docked`, () => {
@@ -388,7 +415,9 @@ describe(`createPopout`, () => {
 
         await vi.advanceTimersByTimeAsync(10);
 
-        const clonedStyles = Array.prototype.slice.call(win.document.head.querySelectorAll(`style[data-primevue-style-id="contextmenu-style"]`)) as Element[];
+        const clonedStyles = Array.prototype.slice.call(
+            win.document.head.querySelectorAll(`style[data-primevue-style-id="contextmenu-style"]`),
+        ) as Element[];
         expect(clonedStyles).toHaveLength(1);
         expect(clonedStyles[0]?.textContent).toBe(`.p-contextmenu { background: red; }`);
         expect(clonedStyles[0]?.getAttribute(`data-intentic-clone`)).toBe(``);

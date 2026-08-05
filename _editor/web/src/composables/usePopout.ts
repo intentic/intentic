@@ -1,5 +1,6 @@
 import { computed, type ComputedRef, nextTick, ref, type Ref, shallowRef, type ShallowRef } from "vue";
 import { traceFocus } from "./chat/focusTrace";
+import { unwatchOnScreen, watchOnScreen } from "./onScreen";
 
 /* Pop-out window core, shared by the chat panel and the terminal panel. createPopout builds one independent
  * pop-out store: the panel's DOM is teleported into a REAL browser window (window.open) while the JS stays in
@@ -299,9 +300,12 @@ const stopHeadObserver = (): void => {
 };
 
 // A pop-out document joins the set of documents the app renders into: everything armed so far is armed on it,
-// so an overlay that was ALREADY open when the panel popped out dismisses out there too.
+// so an overlay that was ALREADY open when the panel popped out dismisses out there too — and it starts
+// answering for whether the user has the app on screen (onScreen.ts), since from here on it is one of the
+// windows they can be reading it in.
 const shareListeners = (doc: Document): void => {
     popoutDocuments.add(doc);
+    watchOnScreen(doc);
     startHeadObserver();
     for (const entry of sharedListeners) {
         doc.addEventListener(entry.type, entry.listener, entry.options);
@@ -312,6 +316,7 @@ const shareListeners = (doc: Document): void => {
 // hands back keeps its document, and a page that adopts it next arms its own realm's listeners on it.
 const unshareListeners = (doc: Document): void => {
     popoutDocuments.delete(doc);
+    unwatchOnScreen(doc);
     stopHeadObserver();
     for (const entry of sharedListeners) {
         doc.removeEventListener(entry.type, entry.listener, entry.options);
