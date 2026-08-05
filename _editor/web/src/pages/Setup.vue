@@ -871,9 +871,11 @@ watch(commandReady, (ready) => {
     <div class="scrollbar-thin min-h-dvh w-full overflow-auto bg-canvas text-content">
         <!-- The page widens at xl to make room for a second column — see the aside below the steps. Below that
              it is the single centred column it has always been, and max-w-3xl still governs the steps
-             themselves, so the command never gets narrower than it is today at any width. -->
+             themselves, so the command never gets narrower than it is today at any width. 74rem is that
+             arithmetic: steps (max-w-3xl) + gap + the aside's own width, so widening the aside to fit the
+             cleanup one-liner came out of the page's margins rather than out of the steps. -->
         <div
-            class="animate-fade-in mx-auto flex w-full max-w-3xl flex-col gap-3 px-4 pb-[max(1.5rem,env(safe-area-inset-bottom))] pt-5 md:gap-4 md:px-6 md:py-8 xl:max-w-[70rem]"
+            class="animate-fade-in mx-auto flex w-full max-w-3xl flex-col gap-3 px-4 pb-[max(1.5rem,env(safe-area-inset-bottom))] pt-5 md:gap-4 md:px-6 md:py-8 xl:max-w-[74rem]"
         >
             <!-- Wraps rather than shrinks: the three items share one line at desktop widths, and on a phone the
                  escape hatch takes the first line on its own (`order-first w-full`) so the title keeps the full
@@ -1637,8 +1639,11 @@ watch(commandReady, (ready) => {
                      Present only while step 3 is, because it is that step's material and nothing else's — the
                      attach lane runs no command and has nothing to explain here. `hidden` below xl: the same
                      content is on step 3's (i) hint there, and the hint's trigger is `xl:hidden` in turn, so
-                     exactly one of the two is reachable at any width. -->
-                <aside v-if="created && lane === `provision`" class="hidden xl:sticky xl:top-8 xl:block xl:w-72 xl:shrink-0">
+                     exactly one of the two is reachable at any width.
+                     The width is measured, not picked: 22rem is what the longest cleanup one-liner (the sh
+                     one, 44 mono characters at text-2xs) needs to sit on a single line inside the card's
+                     padding. At 18rem it wrapped into three lines — the undo read as a paragraph. -->
+                <aside v-if="created && lane === `provision`" class="hidden xl:sticky xl:top-8 xl:block xl:w-88 xl:shrink-0">
                     <div class="rounded-2xl border border-line bg-card p-4">
                         <SetupRunDetails :sync-enabled="syncEnabled" :cleanup="cleanupCommand" />
                     </div>

@@ -63,16 +63,17 @@ const { syncEnabled, cleanup } = defineProps<{ syncEnabled: boolean; cleanup: st
              permanently visible on a wide screen instead of one row among eight, and on a narrow one it is a tap
              away in the same panel as the rest of what running this means. -->
         <div class="flex flex-col gap-1 border-t border-line pt-3 text-2xs text-muted">
+            <!-- The copy button rides the label, not the command. Beside the command it took ~25px off the
+                 one line that has to survive intact, and a one-liner that wraps stops looking like a thing you
+                 run — the docked column is sized (Setup.vue's aside) so the command clears its full width. -->
             <span class="flex items-center gap-2">
                 <Icon name="undo" class="shrink-0 text-subtle" />
                 Removes all of it, whenever
+                <CopyButton :text="cleanup" class="-my-1 ml-auto" />
             </span>
             <!-- break-words, not break-all: a phone splits this mid-URL otherwise ("https://intentic.de /
                  v/cleanup"), when breaking at its spaces fits. -->
-            <span class="flex items-start gap-1.5">
-                <code class="min-w-0 break-words text-content">{{ cleanup }}</code>
-                <CopyButton :text="cleanup" />
-            </span>
+            <code class="block break-words text-content">{{ cleanup }}</code>
         </div>
     </div>
 </template>
