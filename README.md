@@ -13,7 +13,7 @@ An autonomous agent still needs a human in the loop. AI has to have its context 
 - **Plan-and-review by default** — agents propose before they act; every change is a diff you land or discard; environment changes need your explicit approval.
 - **Capabilities** — wire an agent into GitHub, databases, Sentry, Stripe, SSH hosts, MCP servers, Claude plugins, and more, a click each. Credentials stay inside the sandbox.
 - **Automations** — wake an agent on a schedule, a webhook, or a live event (a push, an alert, a payment, an email), each run leaving a transcript.
-- **Ownership by construction** — code and credentials never leave your machine; the platform stores only your identity and the sandbox's URL and sits off the command path. What runs on your machine is MIT on [GitHub](https://github.com/intentic/intentic), so you can verify it.
+- **Ownership by construction** — code and credentials never leave your machine; the platform stores your identity, the sandbox's URL and the secrets that pair the two, and sits off the command path. All of intentic — sandbox, CLI, workspace and platform — is MIT on [GitHub](https://github.com/intentic/intentic), so you can verify it.
 - **Your subscriptions, your hardware, a flat fee** — each agent runs on your own Claude, ChatGPT, or SuperGrok plan; intentic never meters your model usage.
 
 ## How it runs

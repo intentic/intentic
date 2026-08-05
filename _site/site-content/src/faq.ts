@@ -65,7 +65,7 @@ export const faqGroups: FaqGroup[] = [
             {
                 id: "which-models",
                 question: "Which AI models does it use?",
-                answer: ["Claude Code (Opus, Sonnet, Haiku), Codex, Grok, Kimi Code or Gemini, picked per conversation. Your provider, your account, your usage."],
+                answer: ["Claude Code (Opus, Sonnet, Haiku), Codex, Grok, Kimi Code or Google, picked per conversation. Your provider, your account, your usage."],
             },
         ],
     },
@@ -127,7 +127,7 @@ export const faqGroups: FaqGroup[] = [
                 id: "can-intentic-read-my-secrets",
                 question: "Can intentic read my secrets?",
                 answer: [
-                    "No. Credentials live inside your sandbox and the platform has no path to them. What it does store is AES-256-GCM encrypted with no decrypt path in the product.",
+                    "No. Your capability credentials live inside your sandbox and the platform never receives them. The connection secrets it does hold — the ones that pair a browser to a sandbox — are encrypted at rest with AES-256-GCM.",
                     "Secret files like .env are denylisted from the file relay, so they never leave the sandbox.",
                 ],
             },
@@ -135,8 +135,8 @@ export const faqGroups: FaqGroup[] = [
                 id: "open-source",
                 question: "Is it open source?",
                 answer: [
-                    "Yes. The sandbox and CLI that run on your machine are MIT on GitHub, so you can read what touches your code before you run it.",
-                    "The hosted platform adds accounts, billing and the connection layer. It stays off the command path.",
+                    "Yes, all of it. intentic is MIT on GitHub — the sandbox, the CLI, the workspace and the hosted platform, developed in one public repo — so you can read every line that touches your code before you run it.",
+                    "The platform adds accounts, billing and the connection layer. It stays off the command path, and now you can check that for yourself rather than take our word for it.",
                 ],
             },
             {

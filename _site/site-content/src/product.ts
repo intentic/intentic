@@ -86,7 +86,7 @@ export const productPages: ProductPage[] = [
         facts: [
             { value: "3 lanes", label: "Attention, Active, Finished. The board sorts itself" },
             { value: "1 branch each", label: "every agent works on its own git worktree" },
-            { value: "5 harnesses", label: "Claude Code, Codex, Grok, Kimi, Gemini" },
+            { value: "5 agents", label: "Claude Code, Codex, Grok, Kimi Code, Google" },
         ],
         blocks: [
             {
@@ -156,7 +156,7 @@ export const productPages: ProductPage[] = [
             },
             {
                 title: "Bring your own model",
-                body: "Claude Code, Codex, Grok, Kimi Code and Gemini, on subscriptions you already pay for. Connect once; the credential stays in the sandbox and every turn runs on your plan.",
+                body: "Claude Code, Codex, Grok and Kimi Code on subscriptions you already pay for, plus Google free on a plain sign-in. Connect once; the credential stays in the sandbox and every turn runs on your plan.",
                 shot: {
                     name: "sandbox-agent",
                     alt: "The sandbox's Agent tab: a provider row of Claude, ChatGPT, Grok, Kimi Code and Google, with a connected Claude Max account and an Add another account row.",
@@ -344,8 +344,8 @@ export const productPages: ProductPage[] = [
             label: "acme-shop · /sandbox",
         },
         facts: [
-            { value: "2 fields", label: "all the platform stores about a sandbox: a name and its URL" },
-            { value: "MIT", label: "the sandbox and CLI that run on your machine are open source" },
+            { value: "No code", label: "the platform never stores your source, your prompts or your credentials" },
+            { value: "MIT", label: "all of intentic is open source, platform included" },
             { value: "No ports", label: "nothing inbound is opened; the tunnel dials out" },
         ],
         blocks: [
@@ -386,7 +386,7 @@ export const productPages: ProductPage[] = [
             },
             {
                 title: "One sandbox, several people",
-                body: "The owner installs the tools; invited teammates share that same sandbox, each over their own private tunnel. Setup stays owner-gated.",
+                body: "The owner installs the tools; invited teammates share that same sandbox, each signed in as themselves. Setup stays owner-gated.",
                 bullets: [
                     "Invite by email; grants are enforced by the daemon, fail-closed.",
                     "Teammates chat, drive and review, and mirror the sandbox's ports.",

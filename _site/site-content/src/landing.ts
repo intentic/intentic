@@ -154,7 +154,7 @@ export const landingContent: LandingContent = {
     loop: {
         eyebrow: "The loop",
         heading: "Run several at once. Land them one at a time.",
-        sub: "The parallel half is safe by construction: one sandbox and one worktree each. The deciding half stays yours. Works with Claude Code, Codex, Grok, Kimi Code and Gemini.",
+        sub: "The parallel half is safe by construction: one sandbox and one worktree each. The deciding half stays yours. Works with Claude Code, Codex, Grok, Kimi Code and Google.",
         beats: [
             {
                 step: "01",
@@ -218,7 +218,7 @@ export const landingContent: LandingContent = {
                 holds: ["Your email address", "Your sandbox's URL"],
                 never: "No code, no keys, and no way to command your agents.",
             },
-            footnote: "Your browser holds the token that drives the sandbox; the platform never does. The sandbox is MIT on GitHub, so you can check.",
+            footnote: "Your browser holds the token that drives the sandbox; the platform never does. All of intentic is MIT on GitHub, platform included, so you can check.",
         },
     },
     economics: {
@@ -230,7 +230,7 @@ export const landingContent: LandingContent = {
             { name: "Codex", detail: "on your ChatGPT plan" },
             { name: "Grok", detail: "on your SuperGrok plan" },
             { name: "Kimi Code", detail: "on your Kimi Membership" },
-            { name: "Gemini", detail: "on your Google account" },
+            { name: "Google", detail: "Gemini, Claude and GPT-OSS, free on a Google sign-in" },
         ],
         points: ["No per-token metering. No markup on your model usage.", "No rented cloud compute. Agents run where you run them.", "Free for one sandbox; Pro unlocks the fleet and sharing."],
     },
@@ -259,7 +259,7 @@ export const landingContent: LandingContent = {
             },
             {
                 name: "Team sharing",
-                body: "Invite teammates into one sandbox, each over their own tunnel.",
+                body: "Invite teammates into one sandbox, each signed in as themselves.",
                 href: productHref("sandbox"),
             },
             {

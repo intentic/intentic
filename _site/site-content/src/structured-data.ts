@@ -188,7 +188,7 @@ export function buildSoftwareAppSchema() {
         url: APP_URL,
         description: ORG_DESCRIPTION,
         applicationCategory: "DeveloperApplication",
-        operatingSystem: "Docker on Linux, macOS, or Windows (WSL2)",
+        operatingSystem: "Docker on Linux, macOS, or Windows",
         offers: {
             "@type": "Offer",
             url: APP_URL,
@@ -203,7 +203,7 @@ export function buildSoftwareAppSchema() {
             "Run a fleet of coding agents in parallel, one isolated git worktree each",
             "One Docker sandbox per agent, on hardware you own",
             "Diff review before anything lands in your working tree",
-            "Bring your own agent: Claude Code, Codex, Grok, Kimi Code, or Gemini",
+            "Bring your own agent: Claude Code, Codex, Grok, Kimi Code, or Google",
             "Environment overlays: the job's dev-tools really installed",
             "Capabilities: repos, databases, and services wired in as credentials the agent operates",
             "Extensions: automations, Discord and Slack, a website Doorbell, memory, pipelines",

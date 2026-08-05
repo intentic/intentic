@@ -76,7 +76,7 @@ export const trustCards: TrustCard[] = [
     },
     {
         title: "Open source first",
-        body: "The sandbox and CLI, the parts that touch your credentials, are MIT on GitHub. No hidden binaries, no telemetry. Read what executes on your hardware before you run it.",
+        body: "All of intentic is MIT on GitHub — the parts that touch your credentials and the platform behind them. No hidden binaries, no telemetry. Read what executes on your hardware before you run it.",
         href: githubUrl,
         linkLabel: "Read the source",
     },

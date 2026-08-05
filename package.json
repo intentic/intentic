@@ -2,7 +2,7 @@
     "name": "@intentic-monorepo/root",
     "version": "0.0.0",
     "private": true,
-    "license": "UNLICENSED",
+    "license": "MIT",
     "repository": {
         "type": "git",
         "url": "git+https://github.com/intentic/intentic.git"

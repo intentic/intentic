@@ -99,7 +99,7 @@ export const termsDoc: LegalDoc = {
         {
             heading: "The service",
             paragraphs: [
-                "The intentic platform provides accounts, billing, and the connection layer between your browser and sandboxes you run on your own infrastructure. The sandbox and CLI software is open source under the MIT license; these terms cover the hosted platform, not your self-hosted components.",
+                "The intentic platform provides accounts, billing, and the connection layer between your browser and sandboxes you run on your own infrastructure. The intentic software is open source under the MIT license in its entirety, the platform included; these terms cover the hosted service we operate, not your self-hosted components.",
             ],
         },
         {
