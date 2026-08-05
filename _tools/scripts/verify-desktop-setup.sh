@@ -92,6 +92,14 @@ fi
 # keeps that image exactly what the deployment e2e needs it to be.
 in_host apk add --no-cache curl >/dev/null 2>&1
 
+# connect.sh pulls $SANDBOX_IMAGE with the host's OWN daemon, which starts credential-less. A user's machine
+# needs none — the shipped image is public — but CI points SANDBOX_E2E_IMAGE at the private ghcr package, so
+# hand the runner's registry login (docker/login-action's config.json) through when one exists.
+if [ -f "$HOME/.docker/config.json" ]; then
+    in_host mkdir -p /root/.docker
+    docker cp "$HOME/.docker/config.json" "$HOST_CONTAINER:/root/.docker/config.json"
+fi
+
 # ── run the setup the app would run ───────────────────────────────────────────────────────────────────────────
 # NOT /tmp: the dind entrypoint mounts a tmpfs over /tmp from INSIDE the container's mount namespace, and the
 # daemon serving `docker cp` writes through the container's rootfs on the host, underneath that mount. The copy
