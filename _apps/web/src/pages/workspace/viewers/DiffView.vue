@@ -79,9 +79,15 @@ onMounted(async () => {
         automaticLayout: true,
         renderSideBySide: split.value,
         minimap: { enabled: true },
+        // Wrap both panes, on the file viewer's terms (CodeView) — a review pane is HALF the width, so a line
+        // that merely fit there now folds instead of hiding its tail behind a horizontal scroll. Monaco passes
+        // this to each side through diffWordWrap, whose default is `inherit`; in unified mode it wraps the one
+        // visible pane and leaves the hidden original alone. Alignment across the panes is Monaco's own.
+        wordWrap: `bounded`,
+        wordWrapColumn: 160,
         // Minimap slider + diff overview ruler cover vertical navigation; the per-pane scrollbars are
-        // redundant next to them. Horizontal stays for long lines. Size 0 too: `hidden` alone still
-        // reserves the 14px strip in the layout.
+        // redundant next to them. Size 0 too: `hidden` alone still reserves the 14px strip in the layout.
+        // Horizontal only ever appears for what wrapping can't fold (a long token).
         scrollbar: { vertical: `hidden`, verticalScrollbarSize: 0 },
         // Collapse runs of unchanged lines to a few lines of context, like the old collapseUnchanged.
         hideUnchangedRegions: { enabled: true, contextLineCount: 3, minimumLineCount: 3, revealLineCount: 20 },
