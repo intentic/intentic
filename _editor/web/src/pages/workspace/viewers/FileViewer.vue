@@ -57,10 +57,16 @@ const emit = defineEmits<{ gone: [path: string] }>();
 const open = ref<OpenFile>({ kind: `empty` });
 const lang = ref<string | undefined>(undefined);
 const text = ref<string | null>(null);
-// Content for the resolved extension viewer, filled per its manifest `fetch`. Nothing here needs revoking: a
-// `blob` viewer owns whatever object URL it makes of the bytes, and a `url` viewer is handed a plain string.
-const fileBlob = ref<Blob | undefined>(undefined);
-const fileSrc = ref<string | undefined>(undefined);
+/* Content for the resolved extension viewer: exactly the ONE prop its manifest's `fetch` named, held in the
+ * shape the fetch produced rather than split into a slot per kind. The split was a trap. It passed the two
+ * kinds a viewer never asked for as `undefined`, and an undefined prop is still a fallthrough ATTR — which Vue
+ * merges OVER the bindings of a viewer whose root is itself a component. That is how `src: undefined` reached
+ * the image viewer's <ImageView> and erased the object URL it had just minted from the bytes: every .png and
+ * .webp opened as an empty transparency checkerboard, with no error anywhere to say why.
+ *
+ * Nothing here needs revoking: a `blob` viewer owns whatever object URL it makes of the bytes, and a `url`
+ * viewer is handed a plain string. */
+const viewerContent = shallowRef<{ text: string } | { blob: Blob } | { src: string } | undefined>(undefined);
 // The extension viewer component itself, lazily imported alongside its content.
 const viewerComponent = shallowRef<Component | undefined>(undefined);
 const loading = ref(false);
@@ -164,8 +170,7 @@ watch(
 
         staleOnDisk.value = false;
         text.value = null;
-        fileBlob.value = undefined;
-        fileSrc.value = undefined;
+        viewerContent.value = undefined;
         viewerComponent.value = undefined;
         firstWindow.value = undefined;
         error.value = null;
@@ -245,11 +250,10 @@ watch(
                 }
                 loading.value = false;
                 viewerComponent.value = component;
+                viewerContent.value = loaded;
                 // `text` doubles as the breadcrumb's Copy-content source, which is the right behaviour for a
                 // viewer whose file IS text (an .svg): copying its markup is what that button should do there.
                 text.value = `text` in loaded ? loaded.text : null;
-                fileBlob.value = `blob` in loaded ? loaded.blob : undefined;
-                fileSrc.value = `src` in loaded ? loaded.src : undefined;
             }, fail);
             return;
         }
@@ -436,17 +440,10 @@ const onEditorSave = (value: string): void =>
                 <!-- Over the editable cap: windowed, read-only, seeded with the window the read above already got. -->
                 <BigTextView v-else-if="open.kind === 'big-text' && firstWindow" :path="path" :first="firstWindow" @download="download" />
                 <!-- Whatever a viewers extension contributed. It gets the path plus exactly one content prop,
-                     decided by its manifest's `fetch`; `download` is the host's, so every viewer's own
-                     can't-render fallback reaches the same authenticated byte fetch the states below use. -->
-                <component
-                    :is="viewerComponent"
-                    v-else-if="viewerComponent"
-                    :path="path"
-                    :text="text ?? undefined"
-                    :blob="fileBlob"
-                    :src="fileSrc"
-                    @download="download"
-                />
+                     decided by its manifest's `fetch` (viewerContent — never the other kinds as `undefined`);
+                     `download` is the host's, so every viewer's own can't-render fallback reaches the same
+                     authenticated byte fetch the states below use. -->
+                <component :is="viewerComponent" v-else-if="viewerComponent" :path="path" v-bind="viewerContent" @download="download" />
                 <FileUnsupported v-else-if="open.kind === 'too-large'" mode="too-large" :size="meta?.size" @download="download" />
                 <FileUnsupported v-else-if="open.kind === 'empty'" mode="empty" />
                 <!-- Everything left: a known binary, and the one shape that should be unreachable — a viewer

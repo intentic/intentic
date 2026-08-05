@@ -30,3 +30,7 @@ in: `text` for the SVG's markup, `blob` for formats that must be parsed whole, `
 - None of these components touches the daemon, and none of them ever sees a credential.
 - Each viewer id must match a manifest declaration — the host refuses a registration the approved manifest never
   named.
+- A viewer gets its ONE declared content prop and nothing spare, and that is load-bearing for any viewer whose
+  root is itself a component (the image viewer is `<ImageView>`): Vue passes a parent's leftover attrs down to
+  such a root and they win over its own bindings, so a stray `src` — even an undefined one — silently replaces
+  the URL the viewer just handed its child.
