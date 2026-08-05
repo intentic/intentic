@@ -1,0 +1,23 @@
+{
+    "compilerOptions": {
+        "types": ["node"],
+        "outDir": "./dist",
+        "rootDir": "./src",
+        "tsBuildInfoFile": "./.cache/tsbuildinfo",
+        "skipLibCheck": true
+    },
+    "include": ["./src/**/*"],
+    "exclude": ["./src/**/*.test.ts", "./src/__fixtures__/**"],
+    "references": [
+        { "path": "../../_deploy/graph" },
+        { "path": "../../_deploy/need-resolver" },
+        { "path": "../../_deploy/state-resolver" },
+        { "path": "../../_deploy/engine" },
+        { "path": "../../_deploy/providers" },
+        { "path": "../../_sandbox/sandbox-contract" },
+        { "path": "../../_sandbox/sandbox-run" },
+        { "path": "../../_sandbox/scaffold" },
+        { "path": "../../_deploy/sdk" }
+    ],
+    "extends": "@intentic/tsconfig/tsconfig.base.json"
+}

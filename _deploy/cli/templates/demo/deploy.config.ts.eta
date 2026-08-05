@@ -1,0 +1,23 @@
+import { env } from "@intentic/graph";
+import { defineIntent } from "@intentic/sdk";
+
+export const intent = defineIntent((i) => {
+    const host = i.have.host("host", {
+        address: "127.0.0.1",
+        user: "root",
+        sshKey: env("HOST_SSH_KEY"),
+        port: <%= it.sshPort %>,
+    });
+
+    const cf = i.have.cloudflare("cf", {
+        apiToken: env("CLOUDFLARE_API_TOKEN"),
+    });
+
+    i.want.app("<%= it.app %>", {
+        on: host,
+        expose: cf,
+        environments: {
+            <%= it.env %>: { domain: "<%= it.domain %>", branch: "main", env: { PORT: "<%= it.appPort %>" } },
+        },
+    });
+});
