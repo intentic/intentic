@@ -104,8 +104,16 @@ const showingGraph = computed(() => showingRunGraph(shownRun.value, chatRun.valu
  * draws) latched to a run the user had long since clicked away from.
  */
 watch([activeId, tabReveal], () => {
-    if (trackedRun.value !== undefined && chatRun.value !== undefined) {
-        chatRun.value = runOnFocus(trackedRun.value, activeId.value, chatRun.value.mode);
+    const held = chatRun.value;
+    if (trackedRun.value === undefined || held === undefined) {
+        return;
+    }
+    const next = runOnFocus(trackedRun.value, activeId.value, held.mode);
+    // Written only when it actually moved. runOnFocus answers with a FRESH object for "you are still inside this
+    // run" just as much as for a real exit, and storing that back re-notified everything reading the run — the
+    // panel's own derivations, the board's ring — on every click into a chat the run already held.
+    if (next?.runId !== held.runId || next.mode !== held.mode) {
+        chatRun.value = next;
     }
 });
 

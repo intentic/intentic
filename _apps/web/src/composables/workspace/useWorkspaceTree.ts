@@ -189,10 +189,14 @@ export function useWorkspaceTree() {
     const root = computed(() => query.data.value?.root ?? ``);
     // How many of the ROOT's own entries the daemon's entry budget cut (0 = the root listing is complete).
     const rootHidden = computed(() => query.data.value?.hidden ?? 0);
+    // The eager walk, cached against the tree alone. Split out because the map below is rebuilt every time a
+    // lazy subtree lands, and re-walking every node the daemon already listed — recursively, allocating as it
+    // goes — to add one directory's children is the bulk of that cost for nothing.
+    const eagerByPath = computed(() => buildMap(tree.value));
     // The path → entry map spans the eager tree AND every lazily-loaded subtree, so the viewer can resolve
     // a lazily-shown file's size/type by path.
     const entriesByPath = computed(() => {
-        const map = buildMap(tree.value);
+        const map = new Map(eagerByPath.value);
         for (const entries of lazyChildren.value.values()) {
             for (const child of entries) {
                 map.set(child.path, child);
@@ -255,13 +259,19 @@ export function useWorkspaceTree() {
         { immediate: true },
     );
 
-    // A lazily-loaded subtree lives outside the tree query, so a tree refresh (a user mutation, or the daemon's
-    // file-watch push) would leave it frozen at whatever it held when it was expanded — a file created inside an
-    // open deep folder would simply never appear. Re-fetch every loaded lazy dir whenever the tree data lands, so
-    // the eager and lazy halves of the explorer are always the same age. In-flight paths are skipped, and this
-    // never re-enters: /workspace/children doesn't touch the tree query.
+    /* A lazily-loaded subtree lives outside the tree query, so a tree refresh (a user mutation, or the daemon's
+     * file-watch push) would leave it frozen at whatever it held when it was expanded — a file created inside an
+     * open deep folder would simply never appear. Re-fetch every loaded lazy dir whenever the tree data CHANGES,
+     * so the eager and lazy halves of the explorer are always the same age. In-flight paths are skipped, and this
+     * never re-enters: /workspace/children doesn't touch the tree query.
+     *
+     * Keyed on the data, not on `dataUpdatedAt`: that timestamp moves on every successful fetch, answered or
+     * unchanged, so the two-minute backstop poll alone fired one request per expanded lazy directory — plus a
+     * rebuilt path map and a repaint per answer — for a tree nothing had touched. vue-query's structural sharing
+     * holds the reference steady across a refetch that changed nothing, which makes the identity the question
+     * this actually wants to ask. */
     watch(
-        () => query.dataUpdatedAt.value,
+        query.data,
         () => {
             // Iterating the live keys is safe: fetchChildren only writes this map after its first await.
             for (const path of lazyChildren.value.keys()) {

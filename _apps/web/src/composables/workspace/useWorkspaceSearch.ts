@@ -1,7 +1,7 @@
 import type { WorkspaceSearchMode, WorkspaceSearchResult } from "@intentic-app/api-contract";
 import { keepPreviousData, useInfiniteQuery } from "@tanstack/vue-query";
 import type { Ref } from "vue";
-import { computed, ref, watch } from "vue";
+import { computed, onScopeDispose, ref, watch } from "vue";
 import { sandboxJson } from "../sandbox/sandboxClient";
 import { useSearchOptions } from "./useSearchOptions";
 import { sandboxKey, useSandbox } from "../sandbox/useSandbox";
@@ -46,6 +46,10 @@ export function useWorkspaceSearch(filter: Ref<string>, scope: Ref<SearchScope>,
                 settled.value = value.trim();
             }, debounceMs);
         });
+        // The pending timer dies with the surface — closing the panel mid-type would otherwise let it land, write
+        // `settled`, and start a search for a field nobody is looking at any more (useAgentFilter's own note).
+        // Registered per field, so the include box is covered by the same rule as the query box.
+        onScopeDispose(() => clearTimeout(timer));
         return settled;
     };
     const debounced = debounce(filter);

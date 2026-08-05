@@ -341,21 +341,49 @@ watch(
  * writes the registry entry optimistically before it posts — this watch sees the new name on the tick the
  * user typed it, not a round trip later.
  *
- * The source is a string rather than the roster itself: a deep watch would re-run on every usage frame of
- * every running turn, and titles change a handful of times per conversation. */
-watch(
-    () => registry.value.map((agent) => `${agent.id}=${agent.title ?? ``}`).join(`\u0000`),
-    () => {
-        const { conversations } = useChat();
-        for (const agent of registry.value) {
-            const conversation = conversations.value.find((candidate) => candidate.conversationId === agent.id);
-            // An entry with no title yet (a turn that has not begun) must not blank a tab that named itself.
-            if (agent.title !== undefined && conversation !== undefined && conversation.title.value !== agent.title) {
-                conversation.title.value = agent.title;
-            }
+ * The roster ARRAY is replaced on every frame it pushes — usage counters tick several times a second through a
+ * running turn — so its identity says nothing about whether a title moved, and reconciling on it directly would
+ * walk every open tab several times a second to write nothing. The filter below is what makes that cheap. */
+const appliedTitles = new Map<string, string | undefined>();
+
+/* Did any entry's title move since the last frame? A map lookup per entry and NO allocation in the steady
+ * state, which is the whole point: this replaces a change key built by allocating a string per agent and
+ * joining them on every roster frame, to catch a change that happens a handful of times per conversation.
+ *
+ * A SHRUNKEN roster is the one thing a per-entry sweep cannot see, so it is settled by the count — and the
+ * rebuild that follows runs when an agent actually leaves the fleet, never on the usage frames that are almost
+ * all of this traffic. A reset (the registry emptied) lands here too and leaves the memo correctly empty. */
+const titlesMoved = (entries: readonly AgentSummary[]): boolean => {
+    let moved = false;
+    for (const agent of entries) {
+        if (!appliedTitles.has(agent.id) || appliedTitles.get(agent.id) !== agent.title) {
+            appliedTitles.set(agent.id, agent.title);
+            moved = true;
         }
-    },
-);
+    }
+    if (appliedTitles.size === entries.length) {
+        return moved;
+    }
+    appliedTitles.clear();
+    for (const agent of entries) {
+        appliedTitles.set(agent.id, agent.title);
+    }
+    return true;
+};
+
+watch(registry, (entries) => {
+    if (!titlesMoved(entries)) {
+        return;
+    }
+    const { conversations } = useChat();
+    for (const agent of entries) {
+        const conversation = conversations.value.find((candidate) => candidate.conversationId === agent.id);
+        // An entry with no title yet (a turn that has not begun) must not blank a tab that named itself.
+        if (agent.title !== undefined && conversation !== undefined && conversation.title.value !== agent.title) {
+            conversation.title.value = agent.title;
+        }
+    }
+});
 
 /* May this card be archived from the board? NOT the same question as "is it in the Finished lane", which is
  * what the affordance used to be gated on — and the gate that left an errored agent with no exit at all: its
@@ -448,19 +476,32 @@ export const resetArchive = (): void => {
     archived.value = [];
 };
 
+/* CONCURRENT CALLERS ARE THE NORMAL CASE, so they share one request. The reachable seam asks for this list, and
+ * so does every mounted chat pane's own reachable watch — a three-pane split therefore asked four times in the
+ * same flush, and each answer replaced the array and repainted every reader of it. They all want the same list
+ * at the same instant, which is exactly what one shared promise is.
+ *
+ * Only for the length of the flight: a caller arriving after it settles is asking a new question (the daemon
+ * archives on its own — a boot sweep, a retention pass), and gets its own request. */
+let archiveInFlight: Promise<void> | undefined;
+
 export const loadArchived = async (): Promise<void> => {
-    archiveLoading.value = true;
-    try {
-        const body = await sandboxJson<{ agents: AgentSummary[] }>(`/agents/archived`);
-        // Widened to FleetAgent here rather than at render: an archived agent has no open tab and nothing
-        // unread by construction (it left the board), so the two card fields are constants, not a merge.
-        // Object.assign, not a spread — this array is this call's own freshly-parsed JSON.
-        archived.value = body.agents.map((agent) => Object.assign(agent, { open: false, unread: false }));
-    } catch {
-        // Leave whatever was listed last; the view reports its own emptiness.
-    } finally {
-        archiveLoading.value = false;
-    }
+    archiveInFlight ??= (async () => {
+        archiveLoading.value = true;
+        try {
+            const body = await sandboxJson<{ agents: AgentSummary[] }>(`/agents/archived`);
+            // Widened to FleetAgent here rather than at render: an archived agent has no open tab and nothing
+            // unread by construction (it left the board), so the two card fields are constants, not a merge.
+            // Object.assign, not a spread — this array is this call's own freshly-parsed JSON.
+            archived.value = body.agents.map((agent) => Object.assign(agent, { open: false, unread: false }));
+        } catch {
+            // Leave whatever was listed last; the view reports its own emptiness.
+        } finally {
+            archiveLoading.value = false;
+            archiveInFlight = undefined;
+        }
+    })();
+    await archiveInFlight;
 };
 
 /* --- What an archive says ------------------------------------------------------------------------------------

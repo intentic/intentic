@@ -8,7 +8,22 @@ export function useListNavigation<T>(rows: Ref<readonly T[]>, keyOf: (row: T) =>
     const activeIndex = ref(0);
     const rowEls = new Map<string, HTMLElement>();
 
-    watch(rows, () => (activeIndex.value = 0));
+    /* Reset on WHAT THE ROWS ARE, not on the array holding them. Every caller derives its list — a slice of a
+     * ranked file search, a flatMap over the picker's sections — so each recompute hands over a new array whose
+     * contents are usually identical, and resetting on identity took the highlight back to the top for reasons
+     * the user had nothing to do with: an agent saving a file refreshes the workspace tree, the @mention list is
+     * rebuilt from it, and the row someone was arrowing towards is suddenly row one again.
+     *
+     * The keys ARE the row set here: they are what the caller promises is stable per row (they address the
+     * element registry above), so a list that re-derives to the same keys is the same list to look at.
+     *
+     * NUL-joined, because a key here can be a file path and a path may contain a space: joined on one, two
+     * different row sets ([`a b`, `c`] and [`a`, `b c`]) serialize alike and the reset is missed. Nothing a
+     * path can hold collides with a NUL, which is why the fleet roster's own change key uses it too. */
+    watch(
+        () => rows.value.map(keyOf).join(`\u0000`),
+        () => (activeIndex.value = 0),
+    );
 
     const setRowEl = (key: string, el: unknown): void => {
         if (el) {

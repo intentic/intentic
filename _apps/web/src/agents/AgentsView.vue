@@ -370,12 +370,12 @@ watch([receipt, receiptHovered], () => {
 const PULSE_MS = 1_100;
 const pulsing = ref(false);
 let pulseTimer: ReturnType<typeof setTimeout> | undefined;
+// One archive, one reaction: the pulse the eye catches and the line a screen reader hears are the same event
+// said two ways, so they are said in one place rather than from two watchers over the same source.
 watch(archivedFlash, () => {
     pulsing.value = true;
     clearTimeout(pulseTimer);
     pulseTimer = setTimeout(() => (pulsing.value = false), PULSE_MS);
-});
-watch(archivedFlash, () => {
     announcement.value = `${undoable.value.length} agent${undoable.value.length === 1 ? `` : `s`} archived`;
 });
 /* --- THE CARD A LINK NAMED: /agents?focus=<agent id> -----------------------------------------------------

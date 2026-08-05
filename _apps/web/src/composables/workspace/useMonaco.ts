@@ -118,10 +118,19 @@ const init = async (): Promise<typeof Monaco> => {
     // keeping the editor on the canvas token across light/dark and brand switches (module-lifetime watcher).
     const { scheme, theme } = useTheme();
     watch([scheme, theme], () => applyBridge(monaco, core));
-    // Importing / removing a VSCode theme re-themes the editor's syntax too: load the new theme (if any), then
-    // re-run the bridge so Monaco switches onto it (or falls back to the stock theme when the import is removed).
-    watch(useImportedTheme().active, async () => {
+    /* Importing / removing a VSCode theme re-themes the editor's syntax too: load the new theme (if any), then
+     * re-run the bridge so Monaco switches onto it (or falls back to the stock theme when the import is removed).
+     *
+     * The load is a round trip through a file, so two imports in quick succession — or an import and the removal
+     * that follows it — are two of these in flight at once, and the one that happens to finish LAST is the one
+     * that would paint. Re-reading the active import after the await is what settles it: a call that is no
+     * longer about the current theme has nothing left to say and stands down. */
+    const { active: importedTheme } = useImportedTheme();
+    watch(importedTheme, async (imported) => {
         await ensureImportedTheme(core);
+        if (importedTheme.value !== imported) {
+            return;
+        }
         applyBridge(monaco, core);
     });
     return monaco;
