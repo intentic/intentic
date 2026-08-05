@@ -197,6 +197,26 @@ container:
 Mounting the host socket is what makes a **dind service unnecessary**, along with its TLS certificate dance.
 The runner user must be in the `docker` group.
 
+### The three host jobs, and the ownership hazard they carry
+
+`changes`, `ci-base` and `ci-desktop` are the exceptions — they run on the host as the runner user, because the
+first has to decide whether the images exist and the other two build them. All of these jobs, container and
+host alike, share **one persistent workspace per runner**, so the container jobs' checkout leaves a root-owned
+tree behind and the next host job cannot write `.git`. Checkout dies on `index.lock: Permission denied`, then
+dies again trying to delete a tree it also cannot write.
+
+It does not announce itself. A failed `changes` makes every image and desktop job **skip**, which reads as a
+green pipeline that published nothing — and it is per-workspace and permanent, so it presents as a coin flip
+across the fleet rather than as a break. Four of the six workspaces were in that state at once.
+
+Each host job therefore opens with a `Reclaim the workspace from the container jobs` step that chowns the tree
+back through a throwaway root container (the runner user is in the `docker` group, so this needs no sudo).
+To repair a workspace by hand:
+
+```sh
+docker run --rm --entrypoint chown -v /home/<user>/<work-dir>:/w ghcr.io/intentic/ci-base:latest -R 1000:1000 /w
+```
+
 ### What the runner host needs installed
 
 Only Docker and the runner itself. Everything else — node, pnpm, ripgrep, bun, the docker CLI, the Rust and

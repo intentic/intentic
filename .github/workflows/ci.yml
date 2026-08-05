@@ -74,6 +74,30 @@ jobs:
       images: ${{ steps.filter.outputs.images }}
       platform: ${{ steps.filter.outputs.platform }}
     steps:
+      # THE ONE THING A HOST JOB MUST DO BEFORE IT CHECKS OUT. Every other job on these runners runs in a
+      # container as root, and all of them share ONE persistent workspace per runner — so a container job's
+      # checkout leaves a root-owned tree, and the next job that runs on the host as the runner user cannot
+      # write `.git/index.lock`. Checkout fails, then fails a second time trying to delete the tree it also
+      # cannot write, and the job dies before it can compute a single output. Four of the six workspaces sat in
+      # that state, which made this job a 4-in-6 coin flip — and losing it does not go red downstream, it makes
+      # every image and desktop job SKIP, so a pipeline publishes nothing and still reads as green.
+      #
+      # The runner user is in the docker group, so a throwaway root container hands the tree back without sudo.
+      # ~110k inodes, seconds warm, and this job is off the critical path — preflight runs beside it. This
+      # cannot be a composite action in .github/actions: those are read out of the workspace, which is the very
+      # thing this step exists to make readable.
+      - name: Reclaim the workspace from the container jobs
+        shell: bash
+        run: |
+          set -euo pipefail
+          [ -d "$GITHUB_WORKSPACE" ] || exit 0
+          # Whichever CI image the runner already has, so this needs no registry credential and no third-party
+          # image. Neither one present means no container job ever ran here, so nothing can be root-owned.
+          img=$(docker image ls -q ghcr.io/intentic/ci-base:latest)
+          [ -n "$img" ] || img=$(docker image ls -q ghcr.io/intentic/ci-desktop:latest)
+          [ -n "$img" ] || exit 0
+          docker run --rm --entrypoint chown -v "$GITHUB_WORKSPACE:/w" "$img" -R "$(id -u):$(id -g)" /w
+
       - uses: actions/checkout@v7
         with:
           # Full history: a pull request's base.sha can sit arbitrarily far back and the diff below needs it
@@ -187,6 +211,18 @@ jobs:
     runs-on: [self-hosted, intentic]
     timeout-minutes: 60
     steps:
+      # Runs on the host, so it needs the workspace back from the container jobs before checkout — see the
+      # step of the same name in `changes` for why.
+      - name: Reclaim the workspace from the container jobs
+        shell: bash
+        run: |
+          set -euo pipefail
+          [ -d "$GITHUB_WORKSPACE" ] || exit 0
+          img=$(docker image ls -q ghcr.io/intentic/ci-base:latest)
+          [ -n "$img" ] || img=$(docker image ls -q ghcr.io/intentic/ci-desktop:latest)
+          [ -n "$img" ] || exit 0
+          docker run --rm --entrypoint chown -v "$GITHUB_WORKSPACE:/w" "$img" -R "$(id -u):$(id -g)" /w
+
       - uses: actions/checkout@v7
         with:
           # This job needs no install, but it runs on a workspace other jobs reuse — cleaning it would charge
@@ -233,6 +269,17 @@ jobs:
     runs-on: [self-hosted, intentic]
     timeout-minutes: 90
     steps:
+      # As in ci-base: a host job, so the workspace comes back before checkout.
+      - name: Reclaim the workspace from the container jobs
+        shell: bash
+        run: |
+          set -euo pipefail
+          [ -d "$GITHUB_WORKSPACE" ] || exit 0
+          img=$(docker image ls -q ghcr.io/intentic/ci-base:latest)
+          [ -n "$img" ] || img=$(docker image ls -q ghcr.io/intentic/ci-desktop:latest)
+          [ -n "$img" ] || exit 0
+          docker run --rm --entrypoint chown -v "$GITHUB_WORKSPACE:/w" "$img" -R "$(id -u):$(id -g)" /w
+
       - uses: actions/checkout@v7
         with:
           # As in ci-base: nothing here reads node_modules, but cleaning the workspace costs the next job.
