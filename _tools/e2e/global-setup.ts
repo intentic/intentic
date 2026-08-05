@@ -99,7 +99,7 @@ export default async (): Promise<void> => {
 
     // The API (bun, https via the committed cert — the exact dev shape, so the session cookie is __Secure-).
     if (!(await up(`${API_URL}/api/auth/ok`))) {
-        state.apiPid = spawnServer(`api`, `bun`, [`./src/main.ts`], join(repoRoot, `_apps/api`), {
+        state.apiPid = spawnServer(`api`, `bun`, [`./src/main.ts`], join(repoRoot, `_platform/api`), {
             DATABASE_URL,
             BETTER_AUTH_SECRET,
             API_URL,

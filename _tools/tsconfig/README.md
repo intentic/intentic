@@ -4,7 +4,7 @@ Shared **TypeScript base configurations** for the monorepo. Every workspace pack
 
 ## Responsibilities
 
-- Provide the base `tsconfig`(s) that `_libs/*` and `_apps/*` extend via `"extends": "@intentic/tsconfig/..."`.
+- Provide the base `tsconfig`(s) that every workspace package extends via `"extends": "@intentic/tsconfig/..."`.
 - Centralize strictness, module/target, and the `@intentic/src` export-condition setup that lets workspace imports resolve to source.
 
 ## How it fits

@@ -4,10 +4,10 @@ A private box per project. Your code lives in it, AI agents work in it, and you 
 
 ```stats
 { "items": [
-    {"label": "Packages", "value": "54"},
-    {"label": "Lines of code", "value": "235.3k"},
-    {"label": "Parts", "value": "7", "note": "groups below"},
-    {"label": "With tests", "value": "32 of 54"}
+    {"label": "Packages", "value": "70"},
+    {"label": "Lines of code", "value": "333.0k"},
+    {"label": "Parts", "value": "9", "note": "one directory each"},
+    {"label": "With tests", "value": "47 of 70"}
   ] }
 ```
 
@@ -24,49 +24,63 @@ A private box per project. Your code lives in it, AI agents work in it, and you 
     {"id": "agents", "label": "Agents", "note": "AI doing the work", "accent": "2"},
     {"id": "search", "label": "Code search", "note": "how they find code", "accent": "4"},
     {"id": "deploy", "label": "Deployment engine", "note": "a bundled tool", "accent": "5"},
-    {"id": "account", "label": "Account", "note": "sign-in, billing", "accent": "neutral"}
+    {"id": "computers", "label": "Your computer", "note": "your own machine", "accent": "neutral"},
+    {"id": "account", "label": "Account", "note": "sign-in, billing", "accent": "neutral"},
+    {"id": "site", "label": "The website", "note": "public pages", "accent": "neutral"}
   ],
   "edges": [
     {"from": "you", "to": "editor"},
+    {"from": "you", "to": "site", "dashed": true},
     {"from": "editor", "to": "sandbox"},
     {"from": "editor", "to": "extensions"},
     {"from": "editor", "to": "account", "dashed": true},
     {"from": "extensions", "to": "sandbox"},
     {"from": "sandbox", "to": "agents"},
     {"from": "agents", "to": "search"},
+    {"from": "agents", "to": "computers", "dashed": true},
     {"from": "sandbox", "to": "deploy", "dashed": true}
   ] }
 ```
 
-Notice what is *not* connected: sign-in sits to one side, and the deployment engine hangs off the sandbox as a
-tool it can run. Neither is in the way of you and your code.
+Notice what is *not* connected: sign-in and the website sit to one side, the deployment engine hangs off the
+sandbox as a tool it can run, and your own computer is reached only when you grant it. None of them are in the
+way of you and your code.
+
+Every part below is one top-level directory — the layout *is* this map, so a package's path tells you which
+part it belongs to before you open it.
 
 ## What each part is for
 
-**The editor** — The screen you actually look at — files, chat, terminals. · 3 packages, 85.7k lines
+**The editor** (`_editor/`) — The screen you actually look at — files, chat, terminals. · 4 packages, 105.0k lines
 
-**The sandbox** — One private box per project, where your code and the agents live. · 8 packages, 81.2k lines
+**The sandbox** (`_sandbox/`) — One private box per project, where your code and the agents live. · 11 packages, 116.8k lines
 
-**Extensions** — How features are added without touching the core. · 15 packages, 15.7k lines
+**Extensions** (`_extensions/`) — How features are added without touching the core. · 21 packages, 29.4k lines
 
-**Code search** — How an agent finds the right file instead of reading everything. · 5 packages, 13.5k lines
+**Your computer** (`_computers/`) — How an agent reaches your own machine — with your permission, within your switches. · 4 packages, 4.8k lines
 
-**Deployment engine** — A bundled tool that turns 'what I want' into running servers. Not part of the product. · 8 packages, 27.2k lines
+**Code search** (`_search/`) — How an agent finds the right file instead of reading everything. · 5 packages, 14.5k lines
 
-**Account & website** — Sign-in, billing and the public site. Off to one side of everything else. · 7 packages, 7.5k lines
+**Deployment engine** (`_deploy/`) — A bundled tool that turns 'what I want' into running servers. Not part of the product. · 8 packages, 27.5k lines
 
-**Plumbing** — Shared config and test harnesses. · 6 packages, 3.1k lines
+**Account** (`_platform/`) — Sign-in and billing. Off to one side of everything else. · 4 packages, 22.1k lines
+
+**The website** (`_site/`) — The public site and its playable demo. · 4 packages, 9.8k lines
+
+**Plumbing** (`_tools/`) — Shared config and test harnesses. · 9 packages, 3.0k lines
 
 ```bars
 { "title": "Size of each part",
   "items": [
-    {"label": "The editor", "value": 85686, "display": "85.7k", "accent": "1"},
-    {"label": "The sandbox", "value": 81231, "display": "81.2k", "accent": "2"},
-    {"label": "Extensions", "value": 15686, "display": "15.7k", "accent": "3"},
-    {"label": "Code search", "value": 13545, "display": "13.5k", "accent": "4"},
-    {"label": "Deployment engine", "value": 27167, "display": "27.2k", "accent": "5"},
-    {"label": "Account & website", "value": 7550, "display": "7.5k", "accent": "neutral"},
-    {"label": "Plumbing", "value": 3127, "display": "3.1k", "accent": "neutral"}
+    {"label": "The sandbox", "value": 116806, "display": "116.8k", "accent": "2"},
+    {"label": "The editor", "value": 105045, "display": "105.0k", "accent": "1"},
+    {"label": "Extensions", "value": 29445, "display": "29.4k", "accent": "3"},
+    {"label": "Deployment engine", "value": 27487, "display": "27.5k", "accent": "5"},
+    {"label": "Account", "value": 22127, "display": "22.1k", "accent": "neutral"},
+    {"label": "Code search", "value": 14452, "display": "14.5k", "accent": "4"},
+    {"label": "The website", "value": 9815, "display": "9.8k", "accent": "neutral"},
+    {"label": "Your computer", "value": 4838, "display": "4.8k", "accent": "neutral"},
+    {"label": "Plumbing", "value": 2978, "display": "3.0k", "accent": "neutral"}
   ] }
 ```
 
@@ -75,16 +89,16 @@ tool it can run. Neither is in the way of you and your code.
 ```bars
 { "title": "Lines of code",
   "items": [
-    {"label": "_apps/web", "value": 77708, "display": "77.7k", "accent": "1"},
-    {"label": "_apps/sandbox", "value": 67899, "display": "67.9k", "accent": "2"},
-    {"label": "_libs/providers", "value": 13686, "display": "13.7k", "accent": "5"},
-    {"label": "_libs/ui", "value": 7406, "display": "7.4k", "accent": "1"},
-    {"label": "_libs/sandbox-contract", "value": 7251, "display": "7.3k", "accent": "2"},
-    {"label": "_libs/iq-engine", "value": 6799, "display": "6.8k", "accent": "4"},
-    {"label": "_apps/cli", "value": 6201, "display": "6.2k", "accent": "5"},
-    {"label": "_apps/api", "value": 3611, "display": "3.6k", "accent": "neutral"},
-    {"label": "_extensions/acceptance", "value": 3287, "display": "3.3k", "accent": "3"},
-    {"label": "_libs/state-resolver", "value": 3033, "display": "3.0k", "accent": "5"}
+    {"label": "_editor/web", "value": 95392, "display": "95.4k", "accent": "1"},
+    {"label": "_sandbox/sandbox", "value": 92307, "display": "92.3k", "accent": "2"},
+    {"label": "_platform/prisma", "value": 16274, "display": "16.3k", "accent": "neutral"},
+    {"label": "_sandbox/sandbox-contract", "value": 13891, "display": "13.9k", "accent": "2"},
+    {"label": "_deploy/providers", "value": 13778, "display": "13.8k", "accent": "5"},
+    {"label": "_editor/ui", "value": 8758, "display": "8.8k", "accent": "1"},
+    {"label": "_search/iq-engine", "value": 7223, "display": "7.2k", "accent": "4"},
+    {"label": "_deploy/cli", "value": 6421, "display": "6.4k", "accent": "5"},
+    {"label": "_site/demo", "value": 5181, "display": "5.2k", "accent": "neutral"},
+    {"label": "_platform/api", "value": 4069, "display": "4.1k", "accent": "neutral"}
   ] }
 ```
 
@@ -95,14 +109,14 @@ Two packages are most of the product. That is expected: one is the screen, one i
 ```bars
 { "title": "Number of packages depending on it",
   "items": [
-    {"label": "_tools/tsconfig", "value": 46, "accent": "neutral"},
-    {"label": "_libs/sandbox-contract", "value": 21, "accent": "2"},
-    {"label": "_libs/extension-api", "value": 14, "accent": "3"},
-    {"label": "_libs/extension-ui", "value": 11, "accent": "3"},
-    {"label": "_libs/graph", "value": 10, "accent": "5"},
+    {"label": "_tools/tsconfig", "value": 60, "accent": "neutral"},
+    {"label": "_sandbox/sandbox-contract", "value": 28, "accent": "2"},
+    {"label": "_sandbox/extension-api", "value": 20, "accent": "2"},
+    {"label": "_editor/extension-ui", "value": 15, "accent": "1"},
+    {"label": "_tools/testing", "value": 12, "accent": "neutral"},
+    {"label": "_deploy/graph", "value": 10, "accent": "5"},
     {"label": "_tools/constants", "value": 7, "accent": "neutral"},
-    {"label": "_libs/sandbox-run", "value": 5, "accent": "2"},
-    {"label": "_libs/sdk", "value": 5, "accent": "5"}
+    {"label": "_deploy/sdk", "value": 5, "accent": "5"}
   ] }
 ```
 
@@ -110,11 +124,11 @@ A shared rulebook and a shared config sit at the bottom of everything. Break eit
 
 ## Where to start reading
 
-1. **_apps/web** — The browser app — the whole editor you see and click.
-2. **_libs/sandbox-contract** — The rulebook both sides of the wire agree on.
-3. **_apps/sandbox** — The daemon — the program running inside your project's box.
-4. **_libs/extension-api** — The contract an extension is written against.
-5. **_apps/iq** — One search command an agent can actually use.
+1. **_editor/web** — The browser app — the whole editor you see and click.
+2. **_sandbox/sandbox-contract** — The rulebook both sides of the wire agree on.
+3. **_sandbox/sandbox** — The daemon — the program running inside your project's box.
+4. **_sandbox/extension-api** — The contract an extension is written against.
+5. **_search/iq** — One search command an agent can actually use.
 
 ## Words used here in a particular way
 

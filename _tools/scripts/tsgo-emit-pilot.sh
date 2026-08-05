@@ -6,12 +6,12 @@
 # compilers over the SAME tsconfig, diffs the emitted dist/, then rebuilds dist/ with tsc so the tree is left
 # exactly as the canonical build produces it (non-destructive).
 #
-#   bash _tools/scripts/tsgo-emit-pilot.sh [package-dir]   # default: _libs/graph (a true leaf — only tslib)
+#   bash _tools/scripts/tsgo-emit-pilot.sh [package-dir]   # default: _deploy/graph (a true leaf — only tslib)
 #
 # Exit 0 = byte-identical emit; exit 1 = differences (printed) or a compiler failure. Full diff: /tmp/tsgo-emit-pilot.diff
 set -euo pipefail
 
-PKG="${1:-_libs/graph}"
+PKG="${1:-_deploy/graph}"
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 cd "$ROOT"
 

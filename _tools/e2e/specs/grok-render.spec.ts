@@ -7,7 +7,7 @@ import { expect, test } from "@playwright/test";
 // agent): we drive the real Vue app + real render pipeline against canned Grok frames that deliberately stress
 // the renderer with mid-table / unclosed-code-fence / mid-list partial states.
 
-// The frames the daemon's Grok adapter emits (see intentic/_apps/sandbox/src/grok/grok-agent.ts), split so each
+// The frames the daemon's Grok adapter emits (see intentic/_sandbox/sandbox/src/grok/grok-agent.ts), split so each
 // accumulated prefix is INVALID/partial markdown at the moment it renders.
 const DELTA_CHUNKS = [
     "Yes — I'm here and wired into chat. Quick status:\n\n| Piece | St", // mid table header

@@ -7,7 +7,7 @@
 # moving `stable` tag, via semantic-release successCmd) — and runnable by hand:
 #   docker login ghcr.io && TAGS=0.1.0 pnpm publish:images
 # TAGS is a space-separated tag list; every listed tag is pushed. On release the moving `stable` tag is pushed
-# onto the new version; _libs/state-resolver/src/lib/images.ts and the connect scripts reference `sandbox:stable`
+# onto the new version; _deploy/state-resolver/src/lib/images.ts and the connect scripts reference `sandbox:stable`
 # (unpinned — always the latest release, no digest to maintain). The GHCR packages must be made public once so
 # tenant hosts can pull them unauthenticated.
 set -euo pipefail
@@ -84,5 +84,5 @@ publish() {
 
 # The sandbox image COPYs its compiled payload from .image-out — prepare-image-trees.sh must have run first.
 [ -d "$root/.image-out/sandbox" ] || { echo "missing $root/.image-out — run _tools/scripts/prepare-image-trees.sh first" >&2; exit 1; }
-publish sandbox "$root/_apps/sandbox/Dockerfile" "$root" --build-context "trees=$root/.image-out"
+publish sandbox "$root/_sandbox/sandbox/Dockerfile" "$root" --build-context "trees=$root/.image-out"
 publish dind-host "$root/_tools/dind-host/Dockerfile" "$root/_tools/dind-host"

@@ -1,12 +1,12 @@
 # promo — the product video, recorded
 
-One unbroken Playwright take of the main journey, driven against the **interactive demo** (`_apps/demo`, the real
+One unbroken Playwright take of the main journey, driven against the **interactive demo** (`_site/demo`, the real
 web app on a fixture): a repository is dragged in, an agent's turn is co-piloted through its plan and its
 question, a finished delta is reviewed and landed, and CI answers for it. Output is a silent 1080p master plus
 the shot list its beats sit on, for voice and music to be cut over.
 
 ```sh
-pnpm -C _apps/demo dev                     # the fixture app on :47146 — must be up first
+pnpm -C _site/demo dev                     # the fixture app on :47146 — must be up first
 cd _tools/e2e && node promo/record.mjs     # ~95s take → /work/.intentic/promo/
 ```
 

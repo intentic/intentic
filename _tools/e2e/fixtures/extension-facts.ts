@@ -6,7 +6,7 @@ import type { CapabilitySummary, PanelSummary } from "@intentic-app/api-contract
  * deploy.config.ts, a connected komodo CLI, a docs/user-stories directory. A real fresh sandbox has an empty
  * workspace and no connected capabilities, so most of the rail does not exist there. "Every view loads" is
  * therefore a property of a SEEDED workspace, and this file is that seed: the smallest set of facts under which
- * every registration in `_extensions/*` and `_apps/web/src/core-views/coreViews.ts` yields at least one
+ * every registration in `_extensions/*` and `_editor/web/src/core-views/coreViews.ts` yields at least one
  * activation.
  *
  * THE REPOS ARE SEPARATE ON PURPOSE. registry.ts drops a `fallback` view's activation for any repo a claiming

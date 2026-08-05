@@ -3,7 +3,7 @@
 # the install one-liners download (sync.sh/sync.ps1 for intentic-sync, computer.sh/computer.ps1 for
 # intentic-host). Runs after `pnpm turbo run build`; expects <package-dir>/dist/cli.js and `bun` on PATH.
 #
-#   bash _tools/scripts/build-agent-binaries.sh _apps/sync intentic-sync linux-x64 linux-arm64 darwin-x64 …
+#   bash _tools/scripts/build-agent-binaries.sh _sandbox/sync intentic-sync linux-x64 linux-arm64 darwin-x64 …
 #
 # Targets are explicit per agent rather than a shared list: shipping a binary for a platform no card can hand a
 # command for implies support that does not exist (intentic-host is Windows + Linux; sync also covers macOS).

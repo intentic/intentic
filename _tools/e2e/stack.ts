@@ -34,7 +34,7 @@ export const DAEMON_IMAGE = process.env[`SANDBOX_E2E_IMAGE`] ?? `ghcr.io/intenti
 export const DAEMON_URL = `http://localhost:18787`;
 export const DAEMON_CONTAINER = `intentic-app-e2e-daemon`;
 
-// The public web client id — must match _apps/web/src/environments/environment.local.ts (it keys the cached
+// The public web client id — must match _editor/web/src/environments/environment.local.ts (it keys the cached
 // Google ID token's localStorage slot). Drift shows up as the sign-in gate in every spec's trace.
 const GOOGLE_CLIENT_ID = `481795963975-cq9msl6higcd91joidrfp8mjlkuq5fk3.apps.googleusercontent.com`;
 

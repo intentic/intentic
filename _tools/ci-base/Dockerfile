@@ -3,13 +3,13 @@
 # images-platform and release jobs EACH repeated at runtime, the ripgrep install the test job repeated, and the
 # `curl https://bun.sh/install | bash` the release job repeated. Baked once here, all of that becomes free.
 #
-# The base is the SAME digest-pinned image the sandbox runtime uses (_apps/sandbox/Dockerfile) — deliberately,
+# The base is the SAME digest-pinned image the sandbox runtime uses (_sandbox/sandbox/Dockerfile) — deliberately,
 # not coincidentally. prepare-image-trees.sh runs `pnpm deploy` in THIS image and the resulting node_modules is
 # COPY'd into THAT one, so sharing a base makes the compiled natives (node-pty, @discordjs/opus) and the
 # manylinux prebuilts (sharp, onnxruntime, ast-grep, davey) glibc-identical by construction. It also rules out
 # the tempting shortcut of a docker-cli-alpine base with node bolted on: under musl, pnpm resolves musl builds
 # of those prebuilts and the glibc sandbox cannot load them.
-# ponytail: bump this digest together with _apps/sandbox/Dockerfile's FROM — they must stay identical.
+# ponytail: bump this digest together with _sandbox/sandbox/Dockerfile's FROM — they must stay identical.
 FROM node:24.18.0-bookworm-slim@sha256:b31e7a42fdf8b8aa5f5ed477c72d694301273f1069c5a2f71d53c6482e99a2fc
 
 # What LINKS the GHCR package to this repository, and the reason is not cosmetic: an unlinked private package
@@ -29,7 +29,7 @@ LABEL org.opencontainers.image.source=https://github.com/intentic/intentic
 #                           whose command exited stays listed as a DEAD pane), so agent-terminals.integration
 #                           runs against a REAL private tmux server — stub it and the test asserts the stub
 #   docker-ce-cli + buildx  the images/release jobs drive the dind service and export a mode=max registry cache
-# The docker apt repo is added the same way _apps/sandbox/Dockerfile adds it; resolved once, here, instead of in
+# The docker apt repo is added the same way _sandbox/sandbox/Dockerfile adds it; resolved once, here, instead of in
 # three jobs at runtime.
 RUN apt-get update \
     && apt-get install -y --no-install-recommends ca-certificates curl git python3 make g++ ripgrep openssh-client tmux \
@@ -53,11 +53,11 @@ RUN apt-get update \
 # matched), and baking one repository's checkout path into a shared CI image is the worse trade.
 RUN git config --system --add safe.directory '*'
 
-# bun — _apps/sync/scripts/build-binaries.sh cross-compiles the release's intentic-sync binaries with
+# bun — _sandbox/sync/scripts/build-binaries.sh cross-compiles the release's intentic-sync binaries with
 # `bun build --compile`. Copied out of the official image instead of piping the install script from bun.sh: the
 # version is digest-pinned and this layer needs no network. -slim is bookworm, so the binary is linked against
 # the same glibc as this image.
-# ponytail: keep in lockstep with the oven/bun tag in _apps/api/Dockerfile.
+# ponytail: keep in lockstep with the oven/bun tag in _platform/api/Dockerfile.
 COPY --from=oven/bun:1.3.14-slim@sha256:d56a2534ffd262e92c12fd3249d3924d296d97086da773f821d7d0477435ea04 /usr/local/bin/bun /usr/local/bin/bun
 
 # pnpm pre-activated at the version package.json pins, so no job pays a corepack fetch on first use. The chmod

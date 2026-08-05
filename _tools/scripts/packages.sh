@@ -6,10 +6,10 @@
 # git; the real version is the git tag that semantic-release stamps onto these transiently, in CI only.
 
 # npm-published packages, topological order (deps first) so a publish never references an unpublished dep.
-PUB=(_tools/constants _apps/sync _libs/graph _libs/resources _libs/engine _libs/need-resolver _libs/providers \
-     _libs/extension-api _libs/registry _libs/sandbox-contract _libs/desktop _libs/browser _apps/host _apps/acp-bridge _libs/scaffold _libs/state-resolver _apps/cli \
-     _libs/workspace-ignore _libs/iq-engine _libs/iq-recall _apps/iq _libs/sdk _tools/registry)
+PUB=(_tools/constants _sandbox/sync _deploy/graph _deploy/resources _deploy/engine _deploy/need-resolver _deploy/providers \
+     _sandbox/extension-api _sandbox/registry _sandbox/sandbox-contract _computers/desktop _computers/browser _computers/host _sandbox/acp-bridge _sandbox/scaffold _deploy/state-resolver _deploy/cli \
+     _sandbox/workspace-ignore _search/iq-engine _search/iq-recall _search/iq _deploy/sdk _tools/registry-scan)
 
 # Every dir that carries the release version = the published set plus the private sandbox image, which is not
 # published to npm but bakes its version into the built image. Stamped before build so artifacts see it.
-VERSIONED=("${PUB[@]}" _apps/sandbox)
+VERSIONED=("${PUB[@]}" _sandbox/sandbox)

@@ -2,17 +2,17 @@
 # Does the setup the desktop app runs actually GO THROUGH, on a clean Docker host, using the exact script bytes
 # the installer ships?
 #
-#   verify-desktop-setup.sh [<dist-bin dir>]      # default: _apps/desktop/dist-bin
+#   verify-desktop-setup.sh [<dist-bin dir>]      # default: _editor/desktop-app/dist-bin
 #
 # The app's whole native capability is spawning `connect.sh` (scripts.rs states why at length). So the setup
 # journey splits in two, and this covers the expensive half:
 #
 #   • WHAT THE APP PASSES — the argv and env assembly, including the sh-positional / ps1-named divergence that
-#     silently misbinds. Unit-tested in _apps/desktop/src-tauri/src/commands.rs; costs milliseconds; both hosts.
+#     silently misbinds. Unit-tested in _editor/desktop-app/src-tauri/src/commands.rs; costs milliseconds; both hosts.
 #   • WHAT THE SCRIPT THEN DOES — pull the image, run the container, wire the network, wait on /health. That is
 #     this file, and it needs a real Docker daemon, so it runs nightly rather than per-MR.
 #
-# The script is EXTRACTED FROM THE BUILT ARTIFACT, not read from _apps/site/public/scripts/. That is the whole
+# The script is EXTRACTED FROM THE BUILT ARTIFACT, not read from _site/site/public/scripts/. That is the whole
 # point: verify-desktop-bundle.sh proves the bundled bytes match the source, and this proves those same bundled
 # bytes bring a sandbox up. Reading the source tree here would test a file no user ever runs.
 #
@@ -34,11 +34,11 @@ HOST_IMAGE="${INTENTIC_HOST_IMAGE:-}"
 HOSTNAME_UNDER_TEST="smoke.e2e.test"
 CONNECT_TOKEN="desktop-setup-smoke-token"
 
-if [ ! -d "${1:-$ROOT/_apps/desktop/dist-bin}" ]; then
-    echo "error: no artifact directory at ${1:-$ROOT/_apps/desktop/dist-bin} — build first (build-desktop.sh)" >&2
+if [ ! -d "${1:-$ROOT/_editor/desktop-app/dist-bin}" ]; then
+    echo "error: no artifact directory at ${1:-$ROOT/_editor/desktop-app/dist-bin} — build first (build-desktop.sh)" >&2
     exit 1
 fi
-DIST="$(cd "${1:-$ROOT/_apps/desktop/dist-bin}" && pwd)"
+DIST="$(cd "${1:-$ROOT/_editor/desktop-app/dist-bin}" && pwd)"
 DEB="$DIST/Intentic.deb"
 if [ ! -f "$DEB" ]; then
     echo "error: $DEB not found — this tier reads the shipped connect.sh out of the installer." >&2

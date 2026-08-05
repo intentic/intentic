@@ -1,11 +1,11 @@
 # The interactive demo
 
-The landing page's hero and tour show hand-captured PNGs (`_apps/site/src/assets/product/`). This document
+The landing page's hero and tour show hand-captured PNGs (`_site/site/src/assets/product/`). This document
 covers what sits behind the *click* on them: the **real app**, running against a fixture instead of a sandbox.
 Every section fills with plausible data, the sessions window opens, a turn streams into the chat, a diff opens.
 Nothing is re-implemented for marketing.
 
-Run it with `pnpm -C _apps/demo dev` (http://localhost:47146/demo/). The app's own dev server is untouched.
+Run it with `pnpm -C _site/demo dev` (http://localhost:47146/demo/). The app's own dev server is untouched.
 
 The finding that shapes everything below: **the app does not need to be decoupled from its logic for this.**
 It needs its two transports pointed somewhere else. Component-level decoupling (props/events instead of
@@ -28,11 +28,11 @@ is that wrapper, and it needs no branch anywhere in the app.
 
 ## The package
 
-`@intentic-dev/demo` (`_apps/demo/`) — its own package, depending on `@intentic-app/web` and importing the app's
-entry through its `./main` export. Its [README](../../_apps/demo/README.md) has the file-by-file layout.
+`@intentic-dev/demo` (`_site/demo/`) — its own package, depending on `@intentic-app/web` and importing the app's
+entry through its `./main` export. Its [README](../../_site/demo/README.md) has the file-by-file layout.
 
-It lived inside `_apps/web/src/demo/` first, and that was wrong in three ways that are checkable rather than
-stylistic: a fixture edit matched CI's `_apps/web/**/*` glob and re-released the **product images**, `knip`
+It lived inside `_editor/web/src/demo/` first, and that was wrong in three ways that are checkable rather than
+stylistic: a fixture edit matched CI's `_editor/web/**/*` glob and re-released the **product images**, `knip`
 reported all ten files as unused (web's entry list cannot see a second html), and the package emitted a second
 dist beside the one its Dockerfile assumes. The dependency now runs one way only — the demo knows the app, the
 app knows nothing — which is also what stops app code reaching the fixture by accident.
@@ -110,7 +110,7 @@ That is a fair picture of a busy afternoon and a bad first frame. Someone who ha
 the product apart from the demonstration of it — the rail looks like something they would have to configure,
 and the board looks like a mess they would have to clean up.
 
-So fullness is a control rather than a constant (`_apps/demo/src/mode.ts`), with a bar at the bottom of the
+So fullness is a control rather than a constant (`_site/demo/src/mode.ts`), with a bar at the bottom of the
 recording that switches between three states. It is the demo's only chrome, and it answers the question a
 recording otherwise cannot: *is this what it looks like, or is this what you filled it with?*
 
@@ -162,7 +162,7 @@ was invented for them and none of their code knows the difference. What the demo
 a `POST /agent` whose conversation id carries a run prefix (`xt-`, `dg-`, `mt-`) is a fan-out of isolated agents
 against a checkout that does not exist here, so it comes back as a refusal the extension already renders.
 
-**The scripted turn is the centrepiece.** `AgentEventSchema` (`_libs/sandbox-contract/src/events.ts:186`) is the
+**The scripted turn is the centrepiece.** `AgentEventSchema` (`_sandbox/sandbox-contract/src/events.ts:186`) is the
 whole streaming-turn protocol, and `/agent/attach` yields `{kind:"frame", seq, event}`. A recorded sequence on a
 timer gives, in the real UI with no special-casing: `thinking` folding open, `delta` text typing,
 `tool_call` → `tool_call_update` cards resolving with their line stats derived from the diffs (a Read, a Write, an
@@ -256,17 +256,17 @@ someone presses it this page has loaded no part of the app.
 
 It ships **with the marketing site, at the same origin**, and needs no host of its own:
 
-1. `_apps/demo` builds (`base: /demo/`) into `_apps/site/public/demo/` — gitignored, and Astro copies `public/`
+1. `_site/demo` builds (`base: /demo/`) into `_site/site/public/demo/` — gitignored, and Astro copies `public/`
    into its dist verbatim, so the demo lands in the site's own asset bundle.
 2. The site's Cloudflare worker gains one rule: a navigation under `/demo/` that no asset answers serves
    `/demo/index.html`. That is the SPA fallback its history routes need, and the same rule its dev server runs.
-3. `_apps/site` declares `@intentic-dev/demo` as a devDependency purely for ORDER — turbo's `^build` then builds
+3. `_site/site` declares `@intentic-dev/demo` as a devDependency purely for ORDER — turbo's `^build` then builds
    the demo before Astro reads `public/`. Nothing is imported across that edge, and a site built without the
    demo present is still a valid site: `/demo/` simply isn't there.
 
 Locally none of that applies: `public/demo/` is a build output, and `astro dev` runs no build, so the site's dev
-server **proxies `/demo/` to the demo's own dev server** (`_apps/site/astro.config.mjs`, dev only). Two servers —
-`pnpm -C _apps/site dev` and `pnpm -C _apps/demo dev` — and the overlay shows the live app with HMR, with no build
+server **proxies `/demo/` to the demo's own dev server** (`_site/site/astro.config.mjs`, dev only). Two servers —
+`pnpm -C _site/site dev` and `pnpm -C _site/demo dev` — and the overlay shows the live app with HMR, with no build
 step between a fixture edit and the frame. With the demo's server down the proxy answers a page that says which
 command to run, because a silent 404 in the overlay reads as a broken demo.
 
@@ -282,7 +282,7 @@ from breaking the demo outright. `DEMO_PATH` is a relative `/demo/`, so a previe
 - **Screenshot regeneration** — the payoff phase: drive the demo build under Playwright (`_tools/e2e` already
   drives this app) so `src/assets/product/*.png` stop being hand-captured. This is also the mitigation for the
   drift risk below.
-- **One `pnpm install`** — `_apps/demo` is a new workspace package, so the lockfile has to catch up before its
+- **One `pnpm install`** — `_site/demo` is a new workspace package, so the lockfile has to catch up before its
   `dev`/`build` scripts run anywhere.
 
 ## Risks, honestly
@@ -293,7 +293,7 @@ from breaking the demo outright. `DEMO_PATH` is a relative `/demo/`, so a previe
   from `_extensions/maintenance` under an agent worktree's overlaid `node_modules` (see the workspace README).
   The demo's build is no worse off than the app's, and the dev server is unaffected — but neither the demo's
   production bundle nor the site's `/demo/` has been built in an environment where the app's own build passes.
-- **`optimizeDeps.include` is anchored at the consuming config's root**, so `_apps/demo` declares the five
+- **`optimizeDeps.include` is anchored at the consuming config's root**, so `_site/demo` declares the five
   packages that list names (`shiki`, `@shikijs/langs`, `@shikijs/themes`, `@vue-flow/core`, `@dagrejs/dagre`)
   even though it imports none of them directly — pnpm does not hoist. If that list in `vite.shared.ts` grows,
   the demo's `package.json` has to grow with it or its highlighting silently degrades.

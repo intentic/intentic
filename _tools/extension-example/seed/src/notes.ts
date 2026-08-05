@@ -7,7 +7,7 @@ import { host } from "./host";
  * The daemon's `{ path, content }` body is narrowed by hand below rather than with the wire schema from
  * `@intentic/sandbox-contract`, for one contingent reason: that package's published tarball declares a
  * dependency on `@intentic/registry@0.0.0`, which is not on npm, so `npm i @intentic/sandbox-contract` fails
- * today (fixed by adding _libs/registry to the release set — this comment goes away with the next release).
+ * today (fixed by adding _sandbox/registry to the release set — this comment goes away with the next release).
  * Keeping the example installable from npm alone was worth two lines of type guard. */
 export const NOTES_PATH = `.intentic/example-notes.json`;
 

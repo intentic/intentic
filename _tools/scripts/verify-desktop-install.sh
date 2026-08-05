@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Install the built desktop artifacts on a clean machine and prove they run.
 #
-#   verify-desktop-install.sh [<dist-bin dir>]      # default: _apps/desktop/dist-bin
+#   verify-desktop-install.sh [<dist-bin dir>]      # default: _editor/desktop-app/dist-bin
 #
 # The tier above verify-desktop-bundle.sh: that one reads the archives, this one actually installs them, starts
 # the app on a virtual display and fires a real `intentic://` link at it through xdg-open. See
@@ -16,11 +16,11 @@ ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 CONTEXT="$ROOT/_tools/desktop-smoke"
 IMAGE="${DESKTOP_SMOKE_IMAGE:-intentic-desktop-smoke:local}"
 
-if [ ! -d "${1:-$ROOT/_apps/desktop/dist-bin}" ]; then
-    echo "error: no artifact directory at ${1:-$ROOT/_apps/desktop/dist-bin} — build first (build-desktop.sh or stage-local-downloads.sh)" >&2
+if [ ! -d "${1:-$ROOT/_editor/desktop-app/dist-bin}" ]; then
+    echo "error: no artifact directory at ${1:-$ROOT/_editor/desktop-app/dist-bin} — build first (build-desktop.sh or stage-local-downloads.sh)" >&2
     exit 1
 fi
-DIST="$(cd "${1:-$ROOT/_apps/desktop/dist-bin}" && pwd)"
+DIST="$(cd "${1:-$ROOT/_editor/desktop-app/dist-bin}" && pwd)"
 
 echo "==> building the smoke image"
 docker build -q -t "$IMAGE" "$CONTEXT" >/dev/null

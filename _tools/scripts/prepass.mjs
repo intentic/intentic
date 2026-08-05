@@ -35,7 +35,7 @@
  * before landing and one only CI ever sees.
  *
  * Skipping the prepass is worse than not checking at all. Run against the dist a worktree inherits — built
- * from whatever the main checkout last compiled — `_apps/sandbox` reported 19 errors, of which 16 were stale
+ * from whatever the main checkout last compiled — `_sandbox/sandbox` reported 19 errors, of which 16 were stale
  * declarations and 3 were real. Output like that is what teaches everyone to read a red type check as
  * "baseline failures" and land anyway.
  *
@@ -64,11 +64,14 @@ import { fileURLToPath } from "node:url";
 import { spawnSync } from "node:child_process";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
-const WORKSPACES = ["_apps", "_libs", "_extensions", "_tools"];
+// Discovered, not listed: every `_`-prefixed root directory is a package group (pnpm-workspace.yaml globs the same set).
+const WORKSPACES = readdirSync(root, { withFileTypes: true })
+    .filter((entry) => entry.isDirectory() && entry.name.startsWith("_"))
+    .map((entry) => entry.name);
 const SKIP_DIRS = new Set(["node_modules", "dist", ".cache", ".turbo", "out-tsc", "generated", ".git"]);
 const TEST_FILE = /\.(test|spec)\.[cm]?[jt]sx?$/;
 
-// Every workspace package, as `{ name: "_libs/graph", dir, pkg }` — the one directory walk both checks read.
+// Every workspace package, as `{ name: "_deploy/graph", dir, pkg }` — the one directory walk both checks read.
 const packages = WORKSPACES.flatMap((workspace) =>
     readdirSync(join(root, workspace)).flatMap((name) => {
         const dir = join(root, workspace, name);
@@ -303,7 +306,7 @@ for (const line of readFileSync(join(root, "pnpm-workspace.yaml"), "utf8").split
  * Compared as one set against the union of the importer's blocks rather than block by block, because which
  * block an entry lands in is pnpm's business and not a fact about the manifest: `autoInstallPeers: true` (see
  * the lockfile's own settings) installs peerDependencies and files them under the importer's `dependencies`,
- * which is why `_libs/astro-integrations` records an `astro` its package.json only ever declares as a peer.
+ * which is why `_site/astro-integrations` records an `astro` its package.json only ever declares as a peer.
  * Matching by name keeps every drift this exists to catch — a dependency added, removed, or re-specified
  * without an install — and drops a placement rule that would only ever produce false alarms.
  *
@@ -403,7 +406,7 @@ if (process.argv.includes("--checks-only")) {
 const needsDeclarations = packages.filter(({ pkg }) => /\.\/dist\//.test(JSON.stringify(pkg.exports ?? "")));
 
 /* A package whose sources are themselves GENERATED has nothing for `tsgo -b` to read until its generator has
- * run: `_libs/prisma` is one re-export of `./generated/client.js`, which `prisma generate` writes and git
+ * run: `_platform/prisma` is one re-export of `./generated/client.js`, which `prisma generate` writes and git
  * ignores. turbo used to cover this by way of `^build` (the package's `build` runs the generator first); this
  * prepass replaced `^build`, and on a fresh checkout it therefore reported the generated module as missing —
  * one TS2307 in the prepass, then `@intentic-app/prisma` unresolvable in every dependent, ~20 errors deep in

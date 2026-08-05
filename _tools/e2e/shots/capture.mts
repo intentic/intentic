@@ -8,8 +8,8 @@
  *   node --experimental-strip-types _tools/e2e/shots/capture.mts            # every shot
  *   node --experimental-strip-types _tools/e2e/shots/capture.mts fleet-board sandbox-usage
  *
- * Output: _apps/site/src/assets/product/<name>.png at devicePixelRatio 2 — src/, not public/, because the site
- * build resizes and re-encodes them (`_apps/site/src/lib/shots.ts`). Whole surfaces, not crops — a page
+ * Output: _site/site/src/assets/product/<name>.png at devicePixelRatio 2 — src/, not public/, because the site
+ * build resizes and re-encodes them (`_site/site/src/lib/shots.ts`). Whole surfaces, not crops — a page
  * that wants the Attention lane alone crops in CSS (the landing hero does), so a layout change on the site
  * doesn't mean a re-shoot.
  */
@@ -18,8 +18,8 @@ import { createServer, type Server } from "node:http";
 import { extname, join, normalize, resolve } from "node:path";
 import { chromium, type Browser, type Page } from "@playwright/test";
 
-const DEMO_DIR = resolve(import.meta.dirname, "../../../_apps/site/public/demo");
-const OUT_DIR = resolve(import.meta.dirname, "../../../_apps/site/src/assets/product");
+const DEMO_DIR = resolve(import.meta.dirname, "../../../_site/site/public/demo");
+const OUT_DIR = resolve(import.meta.dirname, "../../../_site/site/src/assets/product");
 const PORT = 47_147;
 const ORIGIN = `http://localhost:${PORT}`;
 /* The demo builds under a base, because it ships inside the site's own deploy rather than on an origin of its
@@ -64,7 +64,7 @@ interface Shot {
 const SHOTS: Shot[] = [
     /* The Doorbell, from the visitor's side — the REAL built widget bundle on a page that is not ours, which is
      * the only honest way to show a surface that by definition lives on someone else's site. The page and the
-     * endpoints behind it are the harness's own (below); the widget is `_libs/webchat-widget/dist/widget.js`
+     * endpoints behind it are the harness's own (below); the widget is `_sandbox/webchat-widget/dist/widget.js`
      * exactly as a customer's browser would load it, so what the shot shows is what it renders. */
     {
         name: "doorbell",
@@ -153,7 +153,7 @@ const TYPES: Record<string, string> = {
  * takes. The endpoints are stubs because the shot's subject is the WIDGET — what it renders, on someone else's
  * page — and a real daemon behind it would change nothing a reader can see. The bundle is not a stub: it is the
  * built artifact, so a regression in the widget's own rendering shows up here as a wrong screenshot. */
-const WIDGET_BUNDLE = resolve(import.meta.dirname, "../../../_libs/webchat-widget/dist/widget.js");
+const WIDGET_BUNDLE = resolve(import.meta.dirname, "../../../_sandbox/webchat-widget/dist/widget.js");
 
 const DOORBELL_CONFIG = {
     automationId: "website-concierge",

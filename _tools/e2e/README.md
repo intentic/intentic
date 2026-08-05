@@ -32,16 +32,16 @@ length): every server above is addressed on `localhost`, and every CI job here d
 suite and could only ever fail it on `P1001` against `localhost:5440`. The tiers CI does run are
 `pnpm e2e` (gated real-infra) and `pnpm e2e:hermetic` (no secrets, every MR).
 
-Those tiers each declare the credentials they need with `e2eTier` (`_libs/testing/src/e2e.ts`) and stand down
+Those tiers each declare the credentials they need with `e2eTier` (`_tools/testing/src/e2e.ts`) and stand down
 naming what was missing, which is what lets CI ask for all of them at once. This suite declares nothing —
 its requirement is a whole local stack, which no environment variable can announce.
 
 ## Not covered here (by design)
 
 Real Google OAuth, Stripe billing and invites — platform unit tests cover their logic. Everything that needs
-real infrastructure or real Discord lives in the gated tiers beside this one: `_apps/cli/src/cli.e2e.test.ts`
-(Cloudflare), `_apps/sandbox/src/discord.e2e.test.ts` (Discord + Whisper), and
-`_apps/cli/src/hermetic.e2e.test.ts` (the secret-free control-plane run). `ARCHITECTURE.md` → *What each tier
+real infrastructure or real Discord lives in the gated tiers beside this one: `_deploy/cli/src/cli.e2e.test.ts`
+(Cloudflare), `_sandbox/sandbox/src/discord.e2e.test.ts` (Discord + Whisper), and
+`_deploy/cli/src/hermetic.e2e.test.ts` (the secret-free control-plane run). `ARCHITECTURE.md` → *What each tier
 needs* is the table.
 
 ## Key files

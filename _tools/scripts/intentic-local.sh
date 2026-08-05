@@ -22,7 +22,7 @@
 #   INTENTIC_DIR     workspace dir for the intent/ + desired-state/ repos (default: ./intentic-local)
 #   INTENTIC_CMD     how to invoke the CLI (default: "npx --yes @intentic/cli@latest").
 #                    Maintainers testing from this repo: INTENTIC_CMD="pnpm intentic" INTENTIC_LINK=1
-#   INTENTIC_LINK    set to 1 to `init --link` against this monorepo's local _libs (dev only)
+#   INTENTIC_LINK    set to 1 to `init --link` against this monorepo's local packages (dev only)
 #   SSH_PORT         host SSH port published to localhost (default: 2222)
 #   FORGEJO_PORT     Forgejo port published to localhost for instant local browsing (default: 3000)
 #   KOMODO_PORT      Komodo port published to localhost for instant local browsing (default: 9120)

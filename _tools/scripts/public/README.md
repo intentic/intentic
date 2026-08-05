@@ -25,13 +25,13 @@ Or take the desktop app from [Releases](https://github.com/intentic/intentic/rel
 
 | | |
 | --- | --- |
-| `_apps/sandbox` | the daemon: agents, worktrees, terminals, previews, the workspace API |
-| `_apps/cli` · `_apps/iq` · `_apps/lsp` | the agent-facing tools — deploy engine, code search, language server |
-| `_apps/sync` · `_apps/host` | the cross-compiled machine agents behind the two install commands above |
-| `_apps/desktop` | the Tauri app: installs Docker, starts the sandbox and its tunnel, keeps it updated |
-| `_apps/acp-bridge` | Agent Client Protocol bridge |
+| `_sandbox/sandbox` | the daemon: agents, worktrees, terminals, previews, the workspace API |
+| `_deploy/cli` · `_search/iq` · `_search/lsp` | the agent-facing tools — deploy engine, code search, language server |
+| `_sandbox/sync` · `_computers/host` | the cross-compiled machine agents behind the two install commands above |
+| `_editor/desktop-app` | the Tauri app: installs Docker, starts the sandbox and its tunnel, keeps it updated |
+| `_sandbox/acp-bridge` | Agent Client Protocol bridge |
 | `_extensions/*` | the loadable capabilities — Discord, IMAP, Slack, deployments, pipelines, memory, … |
-| `_libs/*` | the shared engine, contracts, resolvers, and UI kit those build on |
+| the rest, by directory | each top-level `_` directory is a domain — `_sandbox` contracts and workspace machinery, `_deploy` the engine's libraries, `_search` retrieval, `_computers` the machine drivers, `_editor` the UI kit |
 
 Most packages carry their own README with what they are responsible for and where to start reading.
 

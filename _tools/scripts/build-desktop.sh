@@ -13,7 +13,7 @@
 # in tauri.conf.json. Without the variable the installers still build; the .sig files and latest.json are
 # skipped, which means no auto-update for that release.
 #
-# The artifacts land in _apps/desktop/dist-bin/, from where publish-github.sh attaches them to the GitHub
+# The artifacts land in _editor/desktop-app/dist-bin/, from where publish-github.sh attaches them to the GitHub
 # Release — the download surface the site and the updater both point at.
 set -euo pipefail
 
@@ -27,7 +27,7 @@ if [ "${2:-}" = "--linux-only" ]; then
     LINUX_ONLY=1
 fi
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
-APP="$ROOT/_apps/desktop"
+APP="$ROOT/_editor/desktop-app"
 TAURI_DIR="$APP/src-tauri"
 OUT="$APP/dist-bin"
 # Where the updater fetches an installer FROM: the GitHub Release for this exact version, so a manifest always

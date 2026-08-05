@@ -27,7 +27,7 @@ cookie is `SameSite=Lax`, so `app.<zone>` → `api.<zone>` is cross-origin (CORS
    (the sandbox image is public; the platform is not).
 
 2. **A Google OAuth client.** The web SPA's public client id is hardcoded in
-   [environment.deployment.ts](../../../_apps/web/src/environments/environment.deployment.ts). Use that same
+   [environment.deployment.ts](../../../_editor/web/src/environments/environment.deployment.ts). Use that same
    client and, on it, authorize:
    - Authorized JavaScript origin: `https://app.intentic.dev` (your `WEB_ORIGIN`)
    - Authorized redirect URI: `https://api.intentic.dev/api/auth/callback/google` (your `API_URL` + `/api/auth/callback/google`)

@@ -2,7 +2,7 @@
 
 [`seed/`](seed) is what the repository `github.com/intentic/extension-example` was created from. It lives its own
 life over there now — the same arrangement as
-[the registry's seed](../registry/seed), and for the same reason: it belongs to a repo this monorepo does not
+[the registry's seed](../registry-scan/seed), and for the same reason: it belongs to a repo this monorepo does not
 contain, so keeping it here as a synced copy would be two sources of truth for one thing.
 
 It is deliberately NOT a workspace package. `pnpm-workspace.yaml` globs `_tools/*`, so the manifest sits one level
@@ -21,9 +21,9 @@ single-file bundle — the UI ones are compiled into the web bundle instead — 
 Building it surfaced three things that no amount of reading would have:
 
 1. **`@intentic/sandbox-contract` could not be installed from npm.** Its published tarball declares
-   `@intentic/registry@0.0.0`, a version that was never published, because `_libs/registry` was missing from the
+   `@intentic/registry@0.0.0`, a version that was never published, because `_sandbox/registry` was missing from the
    release set in `_tools/scripts/packages.sh`. `npm i @intentic/sandbox-contract` — step one of the published
-   build guide — failed for everyone. Fixed by adding `_libs/registry` (and `_tools/registry`, whose absence left
+   build guide — failed for everyone. Fixed by adding `_sandbox/registry` (and `_tools/registry-scan`, whose absence left
    the registry's own nightly job with no `@intentic/registry-scan` to `npx`) to `PUB`.
 2. **A third-party view cannot use Tailwind utilities.** The app's Tailwind build scans its own sources and the
    first-party extension packages; it cannot scan a bundle it does not build, so a utility class in an installed
@@ -43,13 +43,13 @@ Both repositories now exist, and the discovery path ran end to end for the first
 | The registry | [`intentic/registry`](https://github.com/intentic/registry) |
 | The listing it produced | [`intentic/registry#1`](https://github.com/intentic/registry/pull/1), labelled `listing`, **merged** |
 
-That pull request was not hand-written. `_tools/registry`'s scan ran against the live GitHub API, found the repo by
+That pull request was not hand-written. `_tools/registry-scan`'s scan ran against the live GitHub API, found the repo by
 its `intentic-extension` topic, parsed the manifest, resolved the head sha, and emitted the proposal, title and body
 that were pushed — the same code `npx @intentic/registry-scan` runs inside the workflow, driven by hand here only
 because that package is not on npm yet.
 
 Running it a second time, against a registry that now lists the repo, is what caught the bug fixed in
-`_tools/registry/src/outputs.ts`: with **zero** proposals the scan deleted its output directory and never recreated
+`_tools/registry-scan/src/outputs.ts`: with **zero** proposals the scan deleted its output directory and never recreated
 it, so writing `summary.md` threw `ENOENT` and the workflow's next step — `cat .scan/summary.md` — had nothing to
 read. Every nightly run that found nothing new would have failed, which is the steady state once every tagged repo
 is listed. `outputs.test.ts` covers it.
@@ -57,7 +57,7 @@ is listed. `outputs.test.ts` covers it.
 Re-running it is the CLI plus a checkout, which is also how to debug a scan without waiting for the nightly job:
 
 ```sh
-GITHUB_TOKEN=… REGISTRY_DIR=/path/to/a/registry/checkout node _tools/registry/dist/cli.js
+GITHUB_TOKEN=… REGISTRY_DIR=/path/to/a/registry/checkout node _tools/registry-scan/dist/cli.js
 ```
 
 ## What is proven, and what is not
@@ -77,7 +77,7 @@ Proven against the published repository rather than a fixture:
   from inside the single file, and the badge's scan reads `/workspace/file`, the one route the manifest allows.
 - **`bin/intentic-example add "…"`** writes `.intentic/example-notes.json`, resolving the workspace root by walking
   up from any subdirectory.
-- **The gallery renders it.** With the listing merged and `pnpm -C _apps/site sync:registry` run, `/extensions/`
+- **The gallery renders it.** With the listing merged and `pnpm -C _site/site sync:registry` run, `/extensions/`
   shows the entry under *Listed* with its version, description and pinned sha, in place of "nothing listed yet".
   A deploy is what puts that on the web.
 

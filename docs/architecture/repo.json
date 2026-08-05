@@ -1,172 +1,173 @@
 {
-  "components": [
-    {
-      "accent": "1",
-      "id": "editor",
-      "name": "The editor",
-      "oneLiner": "The screen you actually look at \u2014 files, chat, terminals.",
-      "packages": [
-        "_apps/desktop",
-        "_apps/web",
-        "_libs/ui"
-      ]
+    "components": [
+        {
+            "accent": "1",
+            "id": "editor",
+            "name": "The editor",
+            "oneLiner": "The screen you actually look at \u2014 files, chat, terminals.",
+            "packages": ["_editor/desktop-app", "_editor/extension-ui", "_editor/ui", "_editor/web"]
+        },
+        {
+            "accent": "2",
+            "id": "sandbox",
+            "name": "The sandbox",
+            "oneLiner": "One private box per project, where your code and the agents live.",
+            "packages": [
+                "_sandbox/acp-bridge",
+                "_sandbox/extension-api",
+                "_sandbox/registry",
+                "_sandbox/sandbox",
+                "_sandbox/sandbox-contract",
+                "_sandbox/sandbox-run",
+                "_sandbox/scaffold",
+                "_sandbox/sync",
+                "_sandbox/webchat-widget",
+                "_sandbox/workspace-ignore",
+                "_sandbox/workspace-setup"
+            ]
+        },
+        {
+            "accent": "3",
+            "id": "extensions",
+            "name": "Extensions",
+            "oneLiner": "How features are added without touching the core.",
+            "packages": [
+                "_extensions/acceptance",
+                "_extensions/acp-agents",
+                "_extensions/activity",
+                "_extensions/automations",
+                "_extensions/computers",
+                "_extensions/connectors",
+                "_extensions/deployments",
+                "_extensions/discord",
+                "_extensions/documentation",
+                "_extensions/git-history",
+                "_extensions/imap",
+                "_extensions/logs",
+                "_extensions/maintenance",
+                "_extensions/memory",
+                "_extensions/pipelines",
+                "_extensions/preview",
+                "_extensions/repo-apps",
+                "_extensions/slack",
+                "_extensions/social",
+                "_extensions/viewers",
+                "_extensions/workflows"
+            ]
+        },
+        {
+            "accent": "neutral",
+            "id": "computers",
+            "name": "Your computer",
+            "oneLiner": "How an agent reaches your own machine \u2014 with your permission, within your switches.",
+            "packages": ["_computers/browser", "_computers/desktop", "_computers/host", "_computers/local-agent"]
+        },
+        {
+            "accent": "4",
+            "id": "search",
+            "name": "Code search",
+            "oneLiner": "How an agent finds the right file instead of reading everything.",
+            "packages": ["_search/iq", "_search/iq-bench", "_search/iq-engine", "_search/iq-recall", "_search/lsp"]
+        },
+        {
+            "accent": "5",
+            "id": "deploy",
+            "name": "Deployment engine",
+            "oneLiner": "A bundled tool that turns 'what I want' into running servers. Not part of the product.",
+            "packages": [
+                "_deploy/cli",
+                "_deploy/engine",
+                "_deploy/graph",
+                "_deploy/need-resolver",
+                "_deploy/providers",
+                "_deploy/resources",
+                "_deploy/sdk",
+                "_deploy/state-resolver"
+            ]
+        },
+        {
+            "accent": "neutral",
+            "id": "platform",
+            "name": "Account",
+            "oneLiner": "Sign-in and billing. Off to one side of everything else.",
+            "packages": ["_platform/api", "_platform/api-contract", "_platform/capability-catalog", "_platform/prisma"]
+        },
+        {
+            "accent": "neutral",
+            "id": "site",
+            "name": "The website",
+            "oneLiner": "The public site and its playable demo.",
+            "packages": ["_site/astro-integrations", "_site/demo", "_site/site", "_site/site-content"]
+        },
+        {
+            "accent": "neutral",
+            "id": "tools",
+            "name": "Plumbing",
+            "oneLiner": "Shared config and test harnesses.",
+            "packages": [
+                "_tools/constants",
+                "_tools/desktop-smoke",
+                "_tools/dind-host",
+                "_tools/e2e",
+                "_tools/examples",
+                "_tools/localhost-https",
+                "_tools/registry-scan",
+                "_tools/testing",
+                "_tools/tsconfig"
+            ]
+        }
+    ],
+    "glossary": [
+        {
+            "means": "One private box per project. Your files, your agents, your terminals \u2014 nobody else's.",
+            "term": "sandbox"
+        },
+        {
+            "means": "The program running inside a sandbox that owns the files and answers the editor.",
+            "term": "the daemon"
+        },
+        {
+            "means": "One AI conversation doing one job. Several can run at once, each on its own copy of the code.",
+            "term": "agent"
+        },
+        {
+            "means": "One round of an agent working: you ask, it acts, it reports.",
+            "term": "turn"
+        },
+        {
+            "means": "A private copy of the code an isolated agent works in, so parallel agents cannot collide.",
+            "term": "worktree"
+        },
+        {
+            "means": "The strip of icons down the left of the editor. Space there is scarce and earned.",
+            "term": "the rail"
+        },
+        {
+            "means": "A package that adds screens, commands or agent tools without changing the core app.",
+            "term": "extension"
+        },
+        {
+            "means": "Something you have connected \u2014 a GitHub account, a database, an API key.",
+            "term": "capability"
+        },
+        {
+            "means": "A repo's own dev server, run by the sandbox and shown in a frame.",
+            "term": "panel"
+        },
+        {
+            "means": "A description of what you want to exist. The deployment engine's input, not the product's.",
+            "term": "intent"
+        },
+        {
+            "means": "The product you look at. Separate from the deployment engine, which is a bundled tool.",
+            "term": "the app plane"
+        }
+    ],
+    "provenance": {
+        "generatedAt": 1785535377531,
+        "model": "claude-opus-4-6",
+        "sourceRev": "e95df55b81e45f87716e24b6f004ed94252da79d"
     },
-    {
-      "accent": "2",
-      "id": "sandbox",
-      "name": "The sandbox",
-      "oneLiner": "One private box per project, where your code and the agents live.",
-      "packages": [
-        "_apps/acp-bridge",
-        "_apps/sandbox",
-        "_apps/sync",
-        "_libs/sandbox-contract",
-        "_libs/sandbox-run",
-        "_libs/scaffold",
-        "_libs/webchat-widget",
-        "_libs/workspace-ignore",
-        "_libs/workspace-setup"
-      ]
-    },
-    {
-      "accent": "3",
-      "id": "extensions",
-      "name": "Extensions",
-      "oneLiner": "How features are added without touching the core.",
-      "packages": [
-        "_extensions/acceptance",
-        "_extensions/activity",
-        "_extensions/automations",
-        "_extensions/connectors",
-        "_extensions/discord",
-        "_extensions/documentation",
-        "_extensions/imap",
-        "_extensions/logs",
-        "_extensions/memory",
-        "_extensions/pipelines",
-        "_extensions/preview",
-        "_extensions/repo-apps",
-        "_extensions/viewers",
-        "_libs/extension-api",
-        "_libs/extension-ui"
-      ]
-    },
-    {
-      "accent": "4",
-      "id": "search",
-      "name": "Code search",
-      "oneLiner": "How an agent finds the right file instead of reading everything.",
-      "packages": [
-        "_apps/iq",
-        "_apps/lsp",
-        "_libs/iq-engine",
-        "_libs/iq-recall",
-        "_tools/iq-bench"
-      ]
-    },
-    {
-      "accent": "5",
-      "id": "deploy",
-      "name": "Deployment engine",
-      "oneLiner": "A bundled tool that turns 'what I want' into running servers. Not part of the product.",
-      "packages": [
-        "_apps/cli",
-        "_libs/engine",
-        "_libs/graph",
-        "_libs/need-resolver",
-        "_libs/providers",
-        "_libs/resources",
-        "_libs/sdk",
-        "_libs/state-resolver"
-      ]
-    },
-    {
-      "accent": "neutral",
-      "id": "account",
-      "name": "Account & website",
-      "oneLiner": "Sign-in, billing and the public site. Off to one side of everything else.",
-      "packages": [
-        "_apps/api",
-        "_apps/site",
-        "_libs/api-contract",
-        "_libs/astro-integrations",
-        "_libs/capability-catalog",
-        "_libs/prisma",
-        "_libs/site-content"
-      ]
-    },
-    {
-      "accent": "neutral",
-      "id": "plumbing",
-      "name": "Plumbing",
-      "oneLiner": "Shared config and test harnesses.",
-      "packages": [
-        "_tools/constants",
-        "_tools/dind-host",
-        "_tools/e2e",
-        "_tools/examples",
-        "_tools/localhost-https",
-        "_tools/tsconfig"
-      ]
-    }
-  ],
-  "glossary": [
-    {
-      "means": "One private box per project. Your files, your agents, your terminals \u2014 nobody else's.",
-      "term": "sandbox"
-    },
-    {
-      "means": "The program running inside a sandbox that owns the files and answers the editor.",
-      "term": "the daemon"
-    },
-    {
-      "means": "One AI conversation doing one job. Several can run at once, each on its own copy of the code.",
-      "term": "agent"
-    },
-    {
-      "means": "One round of an agent working: you ask, it acts, it reports.",
-      "term": "turn"
-    },
-    {
-      "means": "A private copy of the code an isolated agent works in, so parallel agents cannot collide.",
-      "term": "worktree"
-    },
-    {
-      "means": "The strip of icons down the left of the editor. Space there is scarce and earned.",
-      "term": "the rail"
-    },
-    {
-      "means": "A package that adds screens, commands or agent tools without changing the core app.",
-      "term": "extension"
-    },
-    {
-      "means": "Something you have connected \u2014 a GitHub account, a database, an API key.",
-      "term": "capability"
-    },
-    {
-      "means": "A repo's own dev server, run by the sandbox and shown in a frame.",
-      "term": "panel"
-    },
-    {
-      "means": "A description of what you want to exist. The deployment engine's input, not the product's.",
-      "term": "intent"
-    },
-    {
-      "means": "The product you look at. Separate from the deployment engine, which is a bundled tool.",
-      "term": "the app plane"
-    }
-  ],
-  "provenance": {
-    "generatedAt": 1785535377531,
-    "model": "claude-opus-4-6",
-    "sourceRev": "e95df55b81e45f87716e24b6f004ed94252da79d"
-  },
-  "reading": [
-    "_apps/web",
-    "_libs/sandbox-contract",
-    "_apps/sandbox",
-    "_libs/extension-api",
-    "_apps/iq"
-  ],
-  "repo": "intentic"
+    "reading": ["_editor/web", "_sandbox/sandbox-contract", "_sandbox/sandbox", "_sandbox/extension-api", "_search/iq"],
+    "repo": "intentic"
 }

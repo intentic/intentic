@@ -44,21 +44,21 @@ this page.
 
 ## Where the page lives
 
-- Copy: `_libs/site-content/src/landing.ts` — a single `LandingContent` object. Change copy there,
+- Copy: `_site/site-content/src/landing.ts` — a single `LandingContent` object. Change copy there,
   not in the `.astro` files. There is **no `SITE_VARIANT`, no `/preview` route, and no a/b/c
   variants** — that system is retired.
-- Structure: `_apps/site/src/components/Landing.astro` renders the `LandingContent`;
-  `_apps/site/src/pages/index.astro` is the single entry.
-- Meta: title/description come from `_libs/site-content/src/page-meta.ts` /
-  `_libs/site-content/src/site.ts` (ORG_DESCRIPTION) — one page, one set of strings.
-- Screenshots: `_apps/site/src/assets/product/`, all written by one harness —
+- Structure: `_site/site/src/components/Landing.astro` renders the `LandingContent`;
+  `_site/site/src/pages/index.astro` is the single entry.
+- Meta: title/description come from `_site/site-content/src/page-meta.ts` /
+  `_site/site-content/src/site.ts` (ORG_DESCRIPTION) — one page, one set of strings.
+- Screenshots: `_site/site/src/assets/product/`, all written by one harness —
   `node --experimental-strip-types _tools/e2e/shots/capture.mts` after
   `pnpm --filter @intentic-dev/demo build`. It drives the DEMO build of the real app (the recorded
   "acme-shop" workspace the live demo runs on), so the site, the demo and the shots tell one story and a
   re-shoot needs no database, API or tunnel. Whole surfaces are captured; a page that wants a detail crops
   in CSS.
-- Product pages: `_libs/site-content/src/product.ts` — a `productPages` array rendered by
-  `_apps/site/src/pages/product/[slug].astro`. Adding a surface there gives it a page, a nav row, a footer
+- Product pages: `_site/site-content/src/product.ts` — a `productPages` array rendered by
+  `_site/site/src/pages/product/[slug].astro`. Adding a surface there gives it a page, a nav row, a footer
   link, page meta and an llms.txt entry.
 
 ## Conversion model
@@ -74,7 +74,7 @@ this page.
     wizard — never as a standalone "install intentic" instruction.
   - Requirements stated honestly wherever setup is shown: a machine with Docker (auto-installed
     with confirmation), Google account, **no Cloudflare account required**.
-  - Free-tier limits come from `_apps/api/src/billing/entitlements.ts` (free: 1 sandbox, no
+  - Free-tier limits come from `_platform/api/src/billing/entitlements.ts` (free: 1 sandbox, no
     sharing; pro: unlimited + sharing). **Never hardcode Stripe prices.**
   - Every screenshot is real product UI. Re-shoot on UI shifts; never mock a screen the app doesn't render.
 
@@ -130,7 +130,7 @@ because `/about/` shares it.
 - **No slot that can render a zero.** An empty social-proof counter costs more trust than it buys —
   `atlas-protocol.com/about/`, which this band's shape is adapted from, demonstrates it at its own foot
   with "0 TOTAL POPULATION · 0 RECENTLY ACTIVE". Do not add a metric that could be zero or one.
-- **The commit numbers are measured, never typed.** `gitStats()` in `_libs/astro-integrations` counts
+- **The commit numbers are measured, never typed.** `gitStats()` in `_site/astro-integrations` counts
   `agent@intentic.dev`-authored commits at build time — the number changes with every land, and it is
   the strongest asset on the site precisely because it is checkable: *the fleet on this page shipped
   the page*. It refuses shallow clones and falls back to the sentence without a figure rather than
@@ -173,13 +173,13 @@ Rules that keep them honest:
   entries). The repo has no benchmark worth quoting yet: the offline cleaner bench measures ~2% over a
   real corpus, and the agent A/B bench costs real tokens to run. When one exists, it gets a page of its
   own rather than a number in a hero.
-- The demo fixture (`_apps/web/src/demo/`) is the world every shot is taken in, so enriching it improves
+- The demo fixture (`_editor/web/src/demo/`) is the world every shot is taken in, so enriching it improves
   the public demo and the marketing shots in the same commit.
 
 ## The comparison shelf (`/compare/*`)
 
-The second content-driven shelf, and it works the same way: `_libs/site-content/src/compare.ts` holds the
-four families plus one `ComparePage` per competitor, and `_apps/site/src/pages/compare/` renders them with
+The second content-driven shelf, and it works the same way: `_site/site-content/src/compare.ts` holds the
+four families plus one `ComparePage` per competitor, and `_site/site/src/pages/compare/` renders them with
 one hub and one template. Positioning and the rules that keep it honest live in
 [positioning.md](positioning.md#competitive-frame); do not re-argue them here.
 
@@ -232,8 +232,8 @@ it is a row in `#extend`.
 - [ ] `#trust` still concedes something, and still shows no number that could be zero.
 - [ ] The `#trust` commit figures came from git, not from a paste — check a real `astro build`, not dev.
 - [ ] Full-page height at 1440 has not crept back over ~10,000 px (it was 16,254; it is 9,592).
-- [ ] Entitlement copy matches `_apps/api/src/billing/entitlements.ts` at build time; no dollar amounts on the page.
-- [ ] Every screenshot is real product UI (`_apps/site/src/assets/product/`); re-shoot on UI shifts.
+- [ ] Entitlement copy matches `_platform/api/src/billing/entitlements.ts` at build time; no dollar amounts on the page.
+- [ ] Every screenshot is real product UI (`_site/site/src/assets/product/`); re-shoot on UI shifts.
 - [ ] `prefers-reduced-motion` respected (`.fade-in` noscript fallback — keep).
 - [ ] Lighthouse ≥ 95 perf/SEO/a11y on `/` (static Astro + inlined CSS baseline — keep).
 - [ ] Follow-up asset (not launch-blocking): 30–60s screen capture — an agent given a job, its plan

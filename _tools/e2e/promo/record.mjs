@@ -1,11 +1,11 @@
 /* THE PROMO RECORDING — one unbroken take of the product's main journey, driven against the interactive demo.
  *
- * What it records is the real `@intentic-app/web` app (`_apps/demo` boots it against a fixture instead of a
+ * What it records is the real `@intentic-app/web` app (`_site/demo` boots it against a fixture instead of a
  * sandbox), so every frame below is the shipping UI reacting to the shipping protocol: the drop really walks a
  * directory and writes it, the streaming turn is `AgentEvent` frames the chat has never seen before, the land is
  * the mutation that moves four surfaces at once. Nothing is mocked up for marketing, and nothing is sped up.
  *
- *   pnpm -C _apps/demo dev          # the fixture app on :47146
+ *   pnpm -C _site/demo dev          # the fixture app on :47146
  *   node promo/record.mjs           # from _tools/e2e — writes the mp4 + its chapter marks
  *
  * Two things the take depends on, both of them load-bearing:
@@ -311,7 +311,7 @@ const encode = ({ videoPath, startedAt }) => {
     const marks = [
         "# intentic promo — shot list",
         "",
-        "Recorded from the interactive demo (`_apps/demo`), which runs the real web app against a fixture.",
+        "Recorded from the interactive demo (`_site/demo`), which runs the real web app against a fixture.",
         "Silent 1080p30 master: `intentic-promo.mp4`. Times are where each beat STARTS.",
         "",
         "| Time | On screen | What it is |",

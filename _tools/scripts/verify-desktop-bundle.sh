@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
 # Verify what a built desktop installer actually CONTAINS, without installing or launching anything.
 #
-#   verify-desktop-bundle.sh [<dist-bin dir>]        # default: _apps/desktop/dist-bin
+#   verify-desktop-bundle.sh [<dist-bin dir>]        # default: _editor/desktop-app/dist-bin
 #
 # Two regression classes, both invisible to `tauri build` (which succeeds happily either way) and both of which
 # reach a user as "the app installed and then could not do the thing":
 #
-#   1. A SCRIPT DID NOT SHIP. tauri.conf.json bundles `_apps/site/public/scripts/*` by GLOB, which is what makes
+#   1. A SCRIPT DID NOT SHIP. tauri.conf.json bundles `_site/site/public/scripts/*` by GLOB, which is what makes
 #      "a script added to the site is bundled by construction" true — and also what makes it silently untrue the
 #      day the glob is narrowed, a build runs against a stale checkout, or a bundler drops a file it cannot
 #      stat. The app spawns these by basename at run time, so a missing one is a launcher button that fails only
@@ -18,7 +18,7 @@
 #      tauri.conf.json's `plugins.deep-link`. Nothing else in the pipeline reads that config, so a bad edit
 #      there produces a perfectly working build whose sign-in never returns. The MIME entry is only half of it:
 #      an Exec line with no `%u` field code is launched with no arguments, so the entry wins the handler lookup
-#      and then drops the link — see _apps/desktop/src-tauri/main.desktop. Both halves are asserted.
+#      and then drops the link — see _editor/desktop-app/src-tauri/main.desktop. Both halves are asserted.
 #
 # This is deliberately the cheap tier: it is pure archive inspection, runs in seconds, needs no display, no
 # Docker and no privileges — and it is the ONLY automated check that reaches inside the Windows NSIS installer,
@@ -26,14 +26,14 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
-SOURCE_SCRIPTS="$ROOT/_apps/site/public/scripts"
+SOURCE_SCRIPTS="$ROOT/_site/site/public/scripts"
 
-if [ ! -d "${1:-$ROOT/_apps/desktop/dist-bin}" ]; then
-    echo "error: no artifact directory at ${1:-$ROOT/_apps/desktop/dist-bin} — build first (build-desktop.sh or stage-local-downloads.sh)" >&2
+if [ ! -d "${1:-$ROOT/_editor/desktop-app/dist-bin}" ]; then
+    echo "error: no artifact directory at ${1:-$ROOT/_editor/desktop-app/dist-bin} — build first (build-desktop.sh or stage-local-downloads.sh)" >&2
     exit 1
 fi
 # Absolute, because the extractors run from inside their own output directory.
-DIST="$(cd "${1:-$ROOT/_apps/desktop/dist-bin}" && pwd)"
+DIST="$(cd "${1:-$ROOT/_editor/desktop-app/dist-bin}" && pwd)"
 
 WORK="$(mktemp -d)"
 trap 'rm -rf "$WORK"' EXIT
@@ -81,7 +81,7 @@ compare_scripts() {
             fail "$label: $name did not ship"
             problems=$((problems + 1))
         elif ! cmp -s "$SOURCE_SCRIPTS/$name" "$dir/$name"; then
-            fail "$label: $name differs from _apps/site/public/scripts/$name"
+            fail "$label: $name differs from _site/site/public/scripts/$name"
             problems=$((problems + 1))
         fi
     done
@@ -99,7 +99,7 @@ compare_scripts() {
 }
 
 # The deep-link scheme, as the installed desktop entry declares it. Absent ⇒ the OS routes `intentic://` nowhere
-# and every link in the table in _apps/desktop/README.md is dead.
+# and every link in the table in _editor/desktop-app/README.md is dead.
 compare_desktop_entry() {
     local label="$1" root="$2" entry
     entry="$(find "$root" -type f -name '*.desktop' -print -quit)"

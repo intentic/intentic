@@ -6,7 +6,7 @@
 #
 # There is ONE repository. An earlier arrangement exported a public subset to a separate mirror repo, and when
 # development moved onto that same repo the export published straight over main — the v1.0.0 snapshot took
-# .github/workflows and _apps/api with it. The tag names the commit CI already checked out, so there is no
+# .github/workflows and _platform/api with it. The tag names the commit CI already checked out, so there is no
 # second tree to keep in step and nothing to force-push.
 #
 # CI setup: GITHUB_TOKEN, a masked CI variable holding a fine-grained PAT with Contents: read+write. Locally,
@@ -97,7 +97,7 @@ upload_one() {
 }
 
 pids=()
-for f in _apps/sync/dist-bin/* _apps/host/dist-bin/* _apps/desktop/dist-bin/*; do
+for f in _sandbox/sync/dist-bin/* _computers/host/dist-bin/* _editor/desktop-app/dist-bin/*; do
   upload_one "$f" &
   pids+=("$!")
 done

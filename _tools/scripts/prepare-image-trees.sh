@@ -49,7 +49,7 @@ node -p "require('./$out/sandbox/node_modules/playwright/package.json').version"
 # COPY'd into the image stays exactly the layout fetch-model.mjs validated.
 if [ ! -f "$out/.iq-models-complete" ]; then
     rm -rf "$out/iq-models"
-    node _libs/iq-engine/scripts/fetch-model.mjs "$out/iq-models"
+    node _search/iq-engine/scripts/fetch-model.mjs "$out/iq-models"
     touch "$out/.iq-models-complete"
 fi
 echo "image trees ready in $out/"

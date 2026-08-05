@@ -4,7 +4,7 @@
     // The sandbox image's privacy hardening, re-declared so it survives into task processes. Turbo 2's default
     // envMode is `strict`: a task does NOT inherit the ambient environment, it gets a rebuilt one holding only
     // Turbo's system defaults plus what `globalEnv`/`globalPassThroughEnv`/`env`/`passThroughEnv` name. So the
-    // two ENV blocks in _apps/sandbox/Dockerfile — correct, and live in every sandbox shell — were being
+    // two ENV blocks in _sandbox/sandbox/Dockerfile — correct, and live in every sandbox shell — were being
     // deleted before any task started: measured 30 of these 32 stripped, everything except NEXT_ and TURBO_
     // (Turbo ships those two itself). `astro dev` therefore ran with telemetry ON and persisted
     // `enabled: true` plus a tracking id into ~/.config/astro/config.json, which is how this was found.

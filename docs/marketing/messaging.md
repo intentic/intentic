@@ -50,7 +50,7 @@ command path, code and keys never leave your machine). **Automations** make agen
 **Pro** runs a whole team of them; the **economics** are BYO subscription + your own hardware + a
 flat fee — never a meter on model usage.
 
-Landing copy lives in code: `_libs/site-content/src/landing.ts` is a single `LandingContent` object
+Landing copy lives in code: `_site/site-content/src/landing.ts` is a single `LandingContent` object
 — **one page, no variants** (there is no `SITE_VARIANT`, no `/preview` route, no a/b/c doors).
 Change copy there, not in the `.astro` files.
 
@@ -65,7 +65,7 @@ early, and filed us with prompt-builders instead of Cursor/Codespaces/Devin, and
 share with your agents."** / "A shared IDE for you and your agents" as the tagline. "specialized
 agent" survives as *mechanism* vocabulary (see the glossary); it is no longer the headline claim.
 The brand tagline is now "An IDE for your agents. A window for you." (org metadata,
-`_libs/site-content/src/site.ts`), rendered as the hero `An IDE for your agents. / A window for you.`
+`_site/site-content/src/site.ts`), rendered as the hero `An IDE for your agents. / A window for you.`
 
 ## Section order
 
@@ -172,8 +172,8 @@ team sharing). Do not reintroduce a pricing section.
 ## SEO strings
 
 - The landing is a single page — its title/description are **not** per-variant. Fallback
-  (`_libs/site-content/src/page-meta.ts`): `intentic — Specialized agents that own their workspace`.
-- Org description (`_libs/site-content/src/site.ts`, JSON-LD) — the canonical product sentence; keep
+  (`_site/site-content/src/page-meta.ts`): `intentic — Specialized agents that own their workspace`.
+- Org description (`_site/site-content/src/site.ts`, JSON-LD) — the canonical product sentence; keep
   the site and these docs in sync with it verbatim: `An IDE for your agents. A window for you. intentic
   gives each coding agent — Claude Code, Codex, or Grok — its own sandbox on hardware you own: the
   dev-tools its job needs really installed, wired to your systems, its context curated for one job —

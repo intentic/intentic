@@ -1,21 +1,21 @@
 {
     "files": [],
     "references": [
-        { "path": "_libs/graph" },
-        { "path": "_libs/resources" },
-        { "path": "_libs/need-resolver" },
-        { "path": "_libs/state-resolver" },
-        { "path": "_libs/sdk" },
-        { "path": "_libs/engine" },
-        { "path": "_libs/providers" },
-        { "path": "_libs/sandbox-contract" },
-        { "path": "_libs/desktop" },
-        { "path": "_libs/local-agent" },
-        { "path": "_libs/browser" },
-        { "path": "_libs/workspace-ignore" },
-        { "path": "_libs/workspace-setup" },
-        { "path": "_libs/iq-engine" },
-        { "path": "_apps/iq" },
-        { "path": "_apps/cli" }
+        { "path": "_deploy/graph" },
+        { "path": "_deploy/resources" },
+        { "path": "_deploy/need-resolver" },
+        { "path": "_deploy/state-resolver" },
+        { "path": "_deploy/sdk" },
+        { "path": "_deploy/engine" },
+        { "path": "_deploy/providers" },
+        { "path": "_sandbox/sandbox-contract" },
+        { "path": "_computers/desktop" },
+        { "path": "_computers/local-agent" },
+        { "path": "_computers/browser" },
+        { "path": "_sandbox/workspace-ignore" },
+        { "path": "_sandbox/workspace-setup" },
+        { "path": "_search/iq-engine" },
+        { "path": "_search/iq" },
+        { "path": "_deploy/cli" }
     ]
 }

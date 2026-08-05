@@ -9,7 +9,7 @@
             "entry": ["_tools/scripts/*.sh", "test/**/*.ts"],
             "ignore": ["desired-state/**", "intent/**"]
         },
-        "_apps/web": {
+        "_editor/web": {
             "entry": [
                 "src/main.ts",
                 "index.html",
@@ -22,31 +22,31 @@
             ],
             "ignore": ["public/**"]
         },
-        "_apps/demo": {
+        "_site/demo": {
             "entry": ["src/main.ts", "index.html", "popout.html", "vite.config.ts"]
         },
-        "_apps/desktop": {
+        "_editor/desktop-app": {
             "entry": ["src/main.ts", "index.html", "vite.config.ts", "scripts/*.sh"]
         },
-        "_apps/api": {
+        "_platform/api": {
             "entry": ["src/main.ts", "src/**/*.test.ts"]
         },
-        "_apps/sandbox": {
+        "_sandbox/sandbox": {
             "entry": ["src/main.ts", "src/**/*.test.ts", "bin/*.mjs", "bin/*.test.mjs", "scripts/*.{sh,mjs}"]
         },
-        "_apps/iq": {
+        "_search/iq": {
             "entry": ["src/cli.ts", "plugin/**", "src/**/*.test.ts"]
         },
-        "_apps/cli": {
+        "_deploy/cli": {
             "entry": ["src/cli.ts", "src/demo.ts", "src/**/*.test.ts", "doh-lookup.mjs"]
         },
-        "_apps/sync": {
+        "_sandbox/sync": {
             "entry": ["src/cli.ts", "src/**/*.test.ts", "scripts/*.sh"]
         },
-        "_apps/lsp": {
+        "_search/lsp": {
             "entry": ["src/cli.ts", "src/**/*.test.ts"]
         },
-        "_apps/site": {
+        "_site/site": {
             "entry": ["astro.config.mjs", "src/pages/**/*.{astro,ts}", "worker.ts"],
             "ignore": ["public/**"]
         },
@@ -59,16 +59,37 @@
         "_extensions/*": {
             "entry": ["src/index.ts", "src/**/*.test.ts"]
         },
-        "_libs/iq-engine": {
+        "_search/iq-engine": {
             "entry": ["src/index.ts", "scripts/*.mjs", "src/**/*.test.ts"]
         },
-        "_libs/*": {
+        "_computers/*": {
+            "entry": ["src/index.ts", "src/**/*.test.ts"]
+        },
+        "_deploy/*": {
+            "entry": ["src/index.ts", "src/**/*.test.ts"]
+        },
+        "_editor/*": {
+            "entry": ["src/index.ts", "src/**/*.test.ts"]
+        },
+        "_platform/*": {
+            "entry": ["src/index.ts", "src/**/*.test.ts"]
+        },
+        "_sandbox/*": {
+            "entry": ["src/index.ts", "src/**/*.test.ts"]
+        },
+        "_search/*": {
+            "entry": ["src/index.ts", "src/**/*.test.ts"]
+        },
+        "_site/*": {
+            "entry": ["src/index.ts", "src/**/*.test.ts"]
+        },
+        "_tools/testing": {
             "entry": ["src/index.ts", "src/**/*.test.ts"]
         },
         "_tools/examples": {
             "entry": ["*.config.ts"]
         },
-        "_tools/iq-bench": {
+        "_search/iq-bench": {
             "entry": ["src/**/*.ts"]
         },
         "_tools/e2e": {

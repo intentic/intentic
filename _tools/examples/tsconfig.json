@@ -5,6 +5,6 @@
         "tsBuildInfoFile": "./.cache/tsbuildinfo"
     },
     "include": ["./*.config.ts"],
-    "references": [{ "path": "../../_libs/graph" }, { "path": "../../_libs/sdk" }],
+    "references": [{ "path": "../../_deploy/graph" }, { "path": "../../_deploy/sdk" }],
     "extends": "@intentic/tsconfig/tsconfig.base.json"
 }

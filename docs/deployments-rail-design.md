@@ -155,7 +155,7 @@ It is meaningfully smaller than the CI backend, though, because Komodo hands us 
 - **no vendor abstraction** — one API, not GitHub *and* GitLab
 - **no runs cache** — Komodo is the cache
 
-Leaving roughly: an api-key-authenticated client (the existing `_libs/providers/src/komodo/komodo-api.ts` is
+Leaving roughly: an api-key-authenticated client (the existing `_deploy/providers/src/komodo/komodo-api.ts` is
 JWT-and-engine-shaped, so this is a sibling, not a reuse), one `GET /komodo/overview` fanning
 `ListDeployments` + `ListStacks` + `ListServers` + `ListAlerts`, an actions route, a logs route, and a fix
 route. Call it one focused daemon module plus the extension.

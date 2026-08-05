@@ -35,7 +35,7 @@ installed for that tier — never in the image, which has to stay bare for the d
 | registration | `xdg-mime query default x-scheme-handler/intentic` resolves — the AppImage's is checked *after* launch, since it has no installer and registers itself at runtime |
 | launch | the process survives startup and maps its workspace window |
 | deep link, app running | a real `xdg-open intentic://setup?code=…` reaches the instance that was already running and puts its setup screen up |
-| one window | …**in the workspace's place**, not beside it: exactly one mapped window before the link and after it. The app has two screens and one frame (`_apps/desktop/src-tauri/src/windows.rs`), and a setup that opened as a second window would satisfy every other row here |
+| one window | …**in the workspace's place**, not beside it: exactly one mapped window before the link and after it. The app has two screens and one frame (`_editor/desktop-app/src-tauri/src/windows.rs`), and a setup that opened as a second window would satisfy every other row here |
 | deep link, app not running | the same link **starts** the app straight onto that screen — fired at the deb *before its first launch*, so the package's own entry is the handler, and at the AppImage *after it has been run and quit*, since nothing installs an AppImage's entry and it registers itself at runtime |
 
 The two deep-link rows share the link and nothing else. A running app is reached by starting a second copy whose
@@ -65,7 +65,7 @@ The Windows NSIS installer — running it needs Windows. Its *contents* are chec
 
 The hosted SPA does not load here either: `INTENTIC_APP_URL` points at a stub baked into the image, which keeps
 this tier hermetic. Whether the real app renders in WebKitGTK is the nightly tier's job
-(`_apps/desktop/src/../../..` → `nightly.yml`'s `e2e`).
+(`_editor/desktop-app/src/../../..` → `nightly.yml`'s `e2e`).
 
 ## Key files
 

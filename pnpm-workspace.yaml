@@ -1,8 +1,13 @@
 packages:
-  - "_apps/*"
-  - "_libs/*"
-  - "_tools/*"
+  - "_computers/*"
+  - "_deploy/*"
+  - "_editor/*"
   - "_extensions/*"
+  - "_platform/*"
+  - "_sandbox/*"
+  - "_search/*"
+  - "_site/*"
+  - "_tools/*"
 
 injectWorkspacePackages: true
 
