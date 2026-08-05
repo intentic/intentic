@@ -96,15 +96,17 @@ const UNAVAILABLE_NOTE =
  * absent case. A tree missing one package still type-checks everything else correctly, so suppressing the whole
  * report would throw away real errors the edit introduced; what the model needs is the one sentence that stops
  * it misreading the errors about THOSE names. It is also told not to install, because in an isolated turn the
- * install would land in an overlay that dies with the conversation (agents/isolation.ts) — the daemon
- * reconciles the real tree once the workspace is idle. */
+ * install would land in an overlay that dies with the conversation (agents/isolation.ts) — the daemon reconciles
+ * the real tree instead, and it does so once this turn ENDS. Stated that way for the reason workspace-setup.ts
+ * sets out at length: the reconciler defers while a turn is live, so an agent promised relief "once the
+ * workspace is idle" is promised something its own working prevents, with no signal for when it arrives. */
 const staleNote = (missing: readonly string[]): string =>
     `Note: this package declares ${missing.length} ${missing.length === 1 ? "dependency" : "dependencies"} that ` +
     `${missing.length === 1 ? "is" : "are"} not installed (${missing.slice(0, NAMED_MISSING).join(", ")}${
         missing.length > NAMED_MISSING ? `, and ${missing.length - NAMED_MISSING} more` : ""
     }). Unresolved-import errors naming ${missing.length === 1 ? "it" : "those"} are the install being behind, not ` +
-    "a mistake in this code — do not edit working source to satisfy one, and do not run an install; the workspace " +
-    "reconciles itself once it is idle.";
+    "a mistake in this code — do not edit working source to satisfy one, and do not run an install; the daemon " +
+    "installs them once this turn ends, so this package's own checks are available next turn, not this one.";
 
 // PostToolUse on the native Edit/Write: type-check the touched file and feed compile errors back. Silent on
 // clean files, non-TS files, and any failure — feedback must never break or stall an edit. Created once

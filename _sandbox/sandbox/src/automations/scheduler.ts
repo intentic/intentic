@@ -1,10 +1,11 @@
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { Cron } from "croner";
-import type { AgentEvent, AgentOrigin, AgentTurn } from "@intentic/sandbox-contract";
+import type { AgentEvent, AgentOrigin, AgentTurn, AutomationApproval } from "@intentic/sandbox-contract";
 import { openTurnTranscript, recordTurnTranscript } from "../sessions/turn-transcript.js";
 import type { Services } from "../composition.js";
 import { automationPending } from "../push/notifications.js";
+import { threadKey } from "../sessions/thread-sessions.js";
 import { type AutomationRecord, consecutiveFailures } from "./automations-store.js";
 
 const execFileAsync = promisify(execFile);
@@ -204,10 +205,15 @@ export const fireAutomation = async (
                 }
             }
             // Approval gate: hold the wake (payload snapshotted) instead of running. inFlight releases in the
-            // finally, so the lock is NOT held while it waits for the owner — the approve route runs it later.
-            if (automation.requireApproval === true && cleared === undefined) {
+            // finally, so the lock is NOT held while it waits for the owner — the approve route runs it later,
+            // or (a `holdForSeconds` hold) the scheduler's own tick does once the countdown passes unanswered.
+            if ((automation.requireApproval === true || automation.holdForSeconds !== undefined) && cleared === undefined) {
                 await services.approvals.add({
                     automationId: automation.id,
+                    // requireApproval wins over the countdown: "ask me" must never become "unless I'm slow".
+                    ...(automation.requireApproval !== true && automation.holdForSeconds !== undefined
+                        ? { autoRunAt: Date.now() + automation.holdForSeconds * 1_000 }
+                        : {}),
                     ...(capped !== undefined ? { payload: capped } : {}),
                     // Snapshotted with the payload so the approved run opens the same conversation this fire
                     // would have — an approved Discord mention lands on the board as a Discord agent, not as
@@ -368,6 +374,27 @@ export interface AutomationsScheduler {
     readonly tick: (now?: number) => Promise<void>;
 }
 
+/* Run a wake the approvals queue was holding, with everything the hold snapshotted: `cleared: "both"` (its
+ * guard ran when it was held, and whoever calls this holds the release — the owner's click or a countdown
+ * that ran out), and the thread it belonged to settled afterwards so the next message resumes the same
+ * conversation. One function because there are now two releases — the approve route and the scheduler's
+ * countdown scan — and the thread-settling half is exactly the part a second copy would forget. */
+export const runHeldWake = async (services: Services, automation: AutomationRecord, held: AutomationApproval, wake: WakeFn): Promise<void> => {
+    const settled = await fireAutomation(services, automation, wake, {
+        cleared: "both",
+        ...(held.payload !== undefined ? { payload: held.payload } : {}),
+        ...(held.origin !== undefined ? { origin: held.origin } : {}),
+        ...(held.title !== undefined ? { title: held.title } : {}),
+        ...(held.conversationId !== undefined ? { conversationId: held.conversationId } : {}),
+        ...(held.sessionId !== undefined ? { sessionId: held.sessionId } : {}),
+    });
+    const origin = held.origin;
+    if (origin?.channelId === undefined || settled.sessionId === undefined) {
+        return;
+    }
+    await services.threadSessions.settle(threadKey(origin.provider, origin.automationId, origin.channelId), settled.sessionId, Date.now());
+};
+
 // Polls the automations manifest and fires whatever came due since the last pass — so edits are picked up with
 // no resync bookkeeping. Fires run detached from the tick (an agent turn can outlast many polls). Event-kind
 // automations don't tick; they fire from the /automations/{id}/fire route.
@@ -394,6 +421,24 @@ export const createAutomationsScheduler = (services: Services, wake: WakeFn, int
             }
             void fireAutomation(services, automation, wake).catch((error: unknown) =>
                 services.logger.error({ err: error, automation: automation.id }, "automation run failed"),
+            );
+        }
+        /* Countdown holds whose deadline passed unanswered — silence is consent (holdForSeconds), but only
+         * while no turn is live: the wake edits the tree, and the countdown's whole point is not starting
+         * work under someone. A busy fleet just leaves the hold for a later tick; the row keeps showing it.
+         * The entry is removed BEFORE the run so a wake that fails cannot re-fire on every tick, and an
+         * automation deleted or disabled while its countdown ran is read as the cancel it is. */
+        for (const held of await services.approvals.list()) {
+            if (held.autoRunAt === undefined || held.autoRunAt > now || services.agents.liveSessionIds().length > 0) {
+                continue;
+            }
+            const automation = await services.automations.get(held.automationId);
+            await services.approvals.remove(held.id);
+            if (automation === undefined || !automation.enabled) {
+                continue;
+            }
+            void runHeldWake(services, automation, held, wake).catch((error: unknown) =>
+                services.logger.error({ err: error, automation: automation.id }, "countdown-released automation run failed"),
             );
         }
     };

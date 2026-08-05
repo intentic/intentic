@@ -108,6 +108,8 @@ const ANTI_BOT_OPTIONS = [
 const WORKSPACE_EVENTS = [
     { value: `turn.settled`, label: `A turn settles`, hint: `After every isolated agent turn — including the ones that errored or conflicted.` },
     { value: `agent.landed`, label: `Work lands`, hint: `Only when an agent's work actually reaches your workspace.` },
+    { value: `deps.broken`, label: `Checks break`, hint: `A landed change drifted the dependencies, and the reinstalled tree failed its own checks.` },
+    { value: `deps.fixed`, label: `Checks recover`, hint: `A later land turned those failing checks green again.` },
 ] as const;
 
 // Guard/agent/approval fold away by default — revealed on demand or when a recipe prefilled a guard.
@@ -680,6 +682,26 @@ const setProvider = (provider: keyof typeof LISTENER_SOURCES): void => {
                 </label>
                 <p v-if="form.requireApproval" class="-mt-1 text-2xs text-subtle">
                     Each time this fires, the agent waits — you approve or reject it under "Pending approvals" before it acts.
+                </p>
+                <label class="flex items-center gap-2 text-sm text-content">
+                    Hold each run for
+                    <input
+                        v-model.number="form.holdForSeconds"
+                        type="number"
+                        min="0"
+                        step="10"
+                        class="w-20 font-mono"
+                        :class="cmp.input()"
+                        aria-label="Seconds to hold each run before it starts"
+                    />
+                    seconds before it starts
+                </label>
+                <p v-if="form.holdForSeconds > 0 && !form.requireApproval" class="-mt-1 text-2xs text-subtle">
+                    Each fire waits that long under "Waiting for you", with a countdown — cancel it, start it early, or let it run. It also
+                    never starts while another agent is mid-turn.
+                </p>
+                <p v-if="form.holdForSeconds > 0 && form.requireApproval" class="-mt-1 text-2xs text-warning">
+                    "Require my approval" wins: the hold never runs by itself while that is on — only your click starts it.
                 </p>
                 <!-- The one place this caveat lands where it changes a decision. It is in the Doorbell docs, but
                      nobody reads those while flipping a toggle, and a support chat that can never answer is not

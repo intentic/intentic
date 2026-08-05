@@ -106,6 +106,12 @@ const STATE_FILES = [
         why: "Declared by the intentic.automations extension's contributes.files — `automation-approvals` is its query key, not core's.",
         portability: "carry",
     },
+    {
+        path: ".intentic/automations.seeded.json",
+        invalidates: [],
+        why: "Which default automations this workspace has been offered (default-automations.ts); nothing renders it — it exists so deleting a seeded automation is final.",
+        portability: "carry",
+    },
     /* The workflow designs and their run ledger became CORE keys the day runs got cards on the fleet board and
      * a mode of the chat panel (web's useWorkflowRuns): those surfaces exist whether or not the workflows
      * extension is enabled, so their freshness cannot ride an extension's contributes.files — an owner turning
@@ -195,6 +201,18 @@ const STATE_FILES = [
         invalidates: [],
         why: "Same store as the entry above; split from it for portability, not for invalidation.",
         portability: "carry",
+    },
+    {
+        path: ".intentic/verify.json",
+        invalidates: [],
+        why: "The dependency verifier's verdict memory; nothing renders it directly — outcomes reach the owner as activity entries and workspace events.",
+        portability: "carry",
+    },
+    {
+        path: ".intentic/verify/",
+        invalidates: [],
+        why: "A running check's wrapper artifacts (log + exit status), read once by the daemon when the panel finishes.",
+        portability: "derived",
     },
     {
         path: ".intentic/ci.json",

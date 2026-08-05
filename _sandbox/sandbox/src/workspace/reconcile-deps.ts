@@ -39,6 +39,12 @@ export interface ReconcileDeps {
     // number here anybody would want to move — the daemon takes the default, and a case that needs to watch the
     // retry actually happen does not have to wait half a minute to see it.
     readonly retryMs?: number;
+    /* The dirs whose installs this reconcile just started — the dependency verifier's cue (verify-deps.ts).
+     * A callback rather than a return-value read at the call site because of the DEFERRED path: the installs
+     * a busy workspace puts off start from the retry timer, minutes after the land's own frame settled, and
+     * only this module knows that moment. Carried in `pending` like everything else here, so the latest
+     * caller's verifier — with the latest land as its cause — is the one told. */
+    readonly onInstalled?: (dirs: string[]) => void;
 }
 
 // What one reconcile decided, for the surface that reports it. `deferred` and an empty `started` is the busy
@@ -111,5 +117,8 @@ export const reconcileDependencies = async (deps: ReconcileDeps): Promise<Reconc
         }
     }
     deps.logger.info({ projects: started, missing }, "dependency reconcile started");
+    if (started.length > 0) {
+        deps.onInstalled?.(started);
+    }
     return { missing, started, deferred: false };
 };

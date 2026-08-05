@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import type { AutomationSummary } from "@intentic/sandbox-contract";
 import { Button, cmp, ConfirmDialog, Icon, InfoHint, Page, PageAction, PageHeader, RowGroup, Segmented } from "@intentic/extension-ui";
-import { computed, reactive, ref } from "vue";
+import { computed, onUnmounted, reactive, ref } from "vue";
 import AutomationComposer from "./AutomationComposer.vue";
 import AutomationRow from "./AutomationRow.vue";
 import DoorbellInstallDialog from "./DoorbellInstallDialog.vue";
@@ -59,6 +59,20 @@ const search = ref(``);
 const view = ref<View>(`all`);
 
 const topError = computed(() => actionError.value ?? listError.value);
+
+/* The countdown holds' clock. One ticking ref for the whole section rather than a timer per row — it exists
+ * only while a hold with a deadline is on screen, and a second's granularity is the reading a person does.
+ * The daemon releases on its own coarser tick, so "starting…" (past-due, fleet busy or scan pending) is a
+ * real state and gets said rather than showing a negative number. */
+const now = ref(Date.now());
+const countdownTimer = setInterval(() => {
+    now.value = Date.now();
+}, 1_000);
+onUnmounted(() => clearInterval(countdownTimer));
+const startsIn = (autoRunAt: number): string => {
+    const seconds = Math.ceil((autoRunAt - now.value) / 1_000);
+    return seconds <= 0 ? `starting…` : `starts in ${seconds}s unless you cancel`;
+};
 
 const failing = (automation: AutomationSummary): boolean => automation.enabled && automation.runs[0]?.outcome === `error`;
 const matchesSearch = (automation: AutomationSummary): boolean => {
@@ -268,16 +282,24 @@ const toggleDetail = (id: string): void => {
                 <div class="divide-y divide-line overflow-hidden rounded-lg border border-warning/40 bg-card">
                     <div v-for="item in pending" :key="item.id" class="flex items-center gap-2 px-2.5 py-1.5">
                         <span class="shrink-0 truncate text-xs font-medium text-content">{{ item.automationId }}</span>
-                        <span class="shrink-0 text-2xs text-subtle">fired {{ since(item.createdAt) }}</span>
+                        <!-- A countdown hold runs ITSELF when the timer passes — the row's job is to say so
+                             and keep the cancel in reach. An approval hold waits for the reader, as ever. -->
+                        <span v-if="item.autoRunAt !== undefined" class="shrink-0 text-2xs font-medium text-warning">{{ startsIn(item.autoRunAt) }}</span>
+                        <span v-else class="shrink-0 text-2xs text-subtle">fired {{ since(item.createdAt) }}</span>
                         <code v-if="item.payload" class="min-w-0 flex-1 truncate font-mono text-2xs text-subtle" v-tooltip.top="item.payload">
                             {{ item.payload }}
                         </code>
                         <span v-else class="flex-1"></span>
-                        <Button label="Approve" size="small" :disabled="approve.isPending.value" @click="approvePending(item.id)">
+                        <Button
+                            :label="item.autoRunAt !== undefined ? `Start now` : `Approve`"
+                            size="small"
+                            :disabled="approve.isPending.value"
+                            @click="approvePending(item.id)"
+                        >
                             <template #icon><Icon name="check" /></template>
                         </Button>
                         <Button
-                            label="Reject"
+                            :label="item.autoRunAt !== undefined ? `Cancel` : `Reject`"
                             size="small"
                             severity="secondary"
                             :text="true"

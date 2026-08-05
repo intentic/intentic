@@ -60,6 +60,8 @@ export function useAutomationForm() {
         harness: `native` as AgentHarness,
         model: ``,
         requireApproval: false,
+        // 0 = fire instantly; positive = each fire is held, visibly and cancellably, for this many seconds.
+        holdForSeconds: 0,
         provider: `discord` as keyof typeof LISTENER_SOURCES,
         channelId: ``,
         eventType: undefined as ListenerEventType | undefined,
@@ -238,6 +240,7 @@ export function useAutomationForm() {
             harness: `native`,
             model: ``,
             requireApproval: false,
+            holdForSeconds: 0,
             provider: `discord`,
             channelId: ``,
             eventType: undefined,
@@ -266,6 +269,7 @@ export function useAutomationForm() {
         form.kind = recipe.trigger.kind;
         form.id = recipe.id;
         form.guard = recipe.guard ?? ``;
+        form.holdForSeconds = recipe.holdForSeconds ?? 0;
         form.prompt = recipe.prompt;
         form.chore = recipe.chore === true;
         if (recipe.trigger.kind === `schedule`) {
@@ -296,6 +300,7 @@ export function useAutomationForm() {
         form.harness = automation.harness ?? `native`;
         form.model = automation.model ?? ``;
         form.requireApproval = automation.requireApproval === true;
+        form.holdForSeconds = automation.holdForSeconds ?? 0;
         form.chore = automation.chore === true;
         if (trigger.kind === `schedule`) {
             Object.assign(schedule, parseCron(trigger.cron));
@@ -363,6 +368,7 @@ export function useAutomationForm() {
         ...(form.agent !== `claude` && form.harness !== `native` ? { harness: form.harness } : {}),
         ...(form.model !== `` ? { model: form.model } : {}),
         ...(form.requireApproval ? { requireApproval: true } : {}),
+        ...(form.holdForSeconds > 0 ? { holdForSeconds: form.holdForSeconds } : {}),
         // A workspace trigger is a chore by definition (nothing but this codebase can fire it); anything else
         // carries the flag it was created with.
         ...(form.kind === `workspace` || form.chore ? { chore: true } : {}),

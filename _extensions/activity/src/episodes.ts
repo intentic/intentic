@@ -111,6 +111,15 @@ const TYPE_LABELS: Readonly<Record<string, string>> = {
     "voice.session_ended": `Voice session ended`,
     "automation.run": `Automation run`,
     "automation.pending": `Automation held for approval`,
+    // The dependency verifier's chain (workspace/verify-deps.ts): every step after a land drifts the tree
+    // leaves one of these, which is what makes the install→checks→fix chain auditable after the fact.
+    "deps.install_failed": `Dependency install failed`,
+    "deps.install_lost": `Dependency install unwatched`,
+    "deps.verify_green": `Checks green`,
+    "deps.verify_red": `Checks failed`,
+    "deps.verify_skipped": `No checks to run`,
+    "deps.verify_lost": `Checks unwatched`,
+    "deps.fix_unarmed": `Fix available, nothing armed`,
     "turn.started": `Turn started`,
     "turn.plan": `Plan proposed`,
     "turn.error": `Turn error`,

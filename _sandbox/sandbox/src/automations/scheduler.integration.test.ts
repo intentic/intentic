@@ -10,11 +10,13 @@ import { fileApprovalsStore } from "./approvals-store.js";
 import { type AutomationRecord, fileAutomationsStore } from "./automations-store.js";
 import { createAutomationsScheduler, fireAutomation, type WakeFn } from "./scheduler.js";
 
-// The scheduler only touches automations/approvals/activity/turnJournal/workspace/logger/sandboxSettings;
-// `unstubbed` keeps the fake that small. The journal is a real one on a temp dir — the in-flight entry is what
-// several tests assert on.
-const fakeServices = (root: string, settings: Partial<SandboxSettings> = {}): Services =>
+// The scheduler only touches automations/approvals/activity/turnJournal/workspace/logger/sandboxSettings —
+// plus, for the countdown scan, the registry's liveSessionIds (`live` mutates in place, as a test's fleet
+// does); `unstubbed` keeps the fake that small. The journal is a real one on a temp dir — the in-flight entry
+// is what several tests assert on.
+const fakeServices = (root: string, settings: Partial<SandboxSettings> = {}, live: string[] = []): Services =>
     unstubbed<Services>("services", {
+        agents: unstubbed<Services["agents"]>("agents", { liveSessionIds: () => live }),
         automations: fileAutomationsStore(join(root, "automations.json")),
         // Read by the spin-loop guard after a failed run. Defaults parse from `{}`, so the guard is OFF unless a
         // test asks for it — which is also the production default.
@@ -177,6 +179,64 @@ test(`a requireApproval automation holds the wake instead of running it; cleared
     await fireAutomation(services, record, fakeWake(prompts), { cleared: "both" });
     expect(prompts).toEqual(["wake:gated"]);
     expect((await services.automations.get("gated"))?.runs[0]?.outcome).toBe("completed");
+});
+
+test("a holdForSeconds fire is held with a deadline, and the tick releases it once the countdown passes on a quiet fleet", async () => {
+    const live: string[] = ["turn-1"];
+    const services = fakeServices(mkdtempSync(join(tmpdir(), "sched-")), {}, live);
+    await services.automations.upsert(automation("fixer", { trigger: { kind: "event", token: "t" }, holdForSeconds: 1 }));
+    const prompts: string[] = [];
+    const record = (await services.automations.get("fixer")) as AutomationRecord;
+    await fireAutomation(services, record, fakeWake(prompts), { payload: "checks broke" });
+    // Held, visibly, with the deadline the row's countdown renders — and no wake yet.
+    const held = (await services.approvals.list())[0];
+    expect(held?.automationId).toBe("fixer");
+    expect(held?.payload).toBe("checks broke");
+    expect(held?.autoRunAt).toBeGreaterThan(Date.now());
+    expect(prompts).toEqual([]);
+
+    const scheduler = createAutomationsScheduler(services, fakeWake(prompts));
+    // Before the deadline: still the owner's window, whatever the fleet is doing.
+    await scheduler.tick(Date.now());
+    expect(await services.approvals.list()).toHaveLength(1);
+    // Past the deadline but the fleet is busy: the hold stays — a countdown never starts work under someone.
+    await scheduler.tick(Date.now() + 2_000);
+    expect(await services.approvals.list()).toHaveLength(1);
+    expect(prompts).toEqual([]);
+    // Past the deadline and quiet: silence was consent — the wake runs with the held payload, once.
+    live.length = 0;
+    await scheduler.tick(Date.now() + 2_000);
+    await vi.waitFor(async () => expect((await services.automations.get("fixer"))?.runs).toHaveLength(1));
+    expect(await services.approvals.list()).toEqual([]);
+    expect(prompts).toEqual(["wake:fixer\n\n--- Event payload ---\nchecks broke"]);
+});
+
+test("cancelling is just removing the hold — and disabling the automation mid-countdown counts as the cancel", async () => {
+    const services = fakeServices(mkdtempSync(join(tmpdir(), "sched-")));
+    await services.automations.upsert(automation("fixer", { trigger: { kind: "event", token: "t" }, holdForSeconds: 1 }));
+    const prompts: string[] = [];
+    const record = (await services.automations.get("fixer")) as AutomationRecord;
+    await fireAutomation(services, record, fakeWake(prompts), { payload: "checks broke" });
+    await services.automations.upsert({ ...automation("fixer", { trigger: { kind: "event", token: "t" }, holdForSeconds: 1 }), enabled: false });
+    const scheduler = createAutomationsScheduler(services, fakeWake(prompts));
+    await scheduler.tick(Date.now() + 2_000);
+    // The stale hold is dropped rather than left to fire the day the automation is re-enabled.
+    await vi.waitFor(async () => expect(await services.approvals.list()).toEqual([]));
+    expect(prompts).toEqual([]);
+});
+
+test(`requireApproval wins over holdForSeconds: "ask me" never becomes "unless I'm slow"`, async () => {
+    const services = fakeServices(mkdtempSync(join(tmpdir(), "sched-")));
+    await services.automations.upsert(automation("gated-fixer", { trigger: { kind: "event", token: "t" }, requireApproval: true, holdForSeconds: 1 }));
+    const prompts: string[] = [];
+    const record = (await services.automations.get("gated-fixer")) as AutomationRecord;
+    await fireAutomation(services, record, fakeWake(prompts));
+    expect((await services.approvals.list())[0]?.autoRunAt).toBeUndefined();
+    // No deadline, so the scan never touches it — only the owner's click can run it.
+    const scheduler = createAutomationsScheduler(services, fakeWake(prompts));
+    await scheduler.tick(Date.now() + 60_000);
+    expect(await services.approvals.list()).toHaveLength(1);
+    expect(prompts).toEqual([]);
 });
 
 test("a streamed wake pipes text deltas to the sink, ends it, and tells the agent not to self-send", async () => {

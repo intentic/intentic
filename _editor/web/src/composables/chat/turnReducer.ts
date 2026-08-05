@@ -129,8 +129,8 @@ const dependencyLine = (deps: { missing: number; started: string[]; deferred: bo
     }
     const what = `${deps.missing} new ${deps.missing === 1 ? `dependency` : `dependencies`}`;
     return deps.deferred
-        ? ` ${what} still need installing — that runs as soon as your other agents finish.`
-        : ` Installing ${what} it added.`;
+        ? ` ${what} still need installing — that runs as soon as your other agents finish, then the project's checks run; the outcome lands in Activity.`
+        : ` Installing ${what} it added; the project's checks run when that finishes, and the outcome lands in Activity.`;
 };
 
 /** A notice that belongs to the turn's OPENING rather than its running commentary — placed directly ABOVE the

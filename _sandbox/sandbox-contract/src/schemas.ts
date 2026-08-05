@@ -2883,7 +2883,13 @@ export type ExtensionProcessStatus = z.infer<typeof ExtensionProcessStatusSchema
 // conflicted turns most worth a second pair of eyes, and it fires while the user is still looking at the diff —
 // before they decide to land. `agent.landed` fires only when work actually reached the main tree, including an
 // explicit Land from the review panel long after the turn ended.
-export const WorkspaceEventKindSchema = z.enum(["turn.settled", "agent.landed"]);
+//
+// The `deps.*` pair fires from the dependency verifier (workspace/verify-deps.ts) rather than a turn: after a
+// land drifts dependencies, the daemon installs them and runs the tree's own checks, and these are that chain's
+// EDGES — `deps.broken` when the checks go red after a landed change, `deps.fixed` when a later land turns them
+// green again. Edges, not states, on the ci-events precedent (pipeline_broken): a tree that is red and stays
+// red emits nothing, so a fix chore is woken by the breakage, never by the standing colour.
+export const WorkspaceEventKindSchema = z.enum(["turn.settled", "agent.landed", "deps.broken", "deps.fixed"]);
 export type WorkspaceEventKind = z.infer<typeof WorkspaceEventKindSchema>;
 
 // The payload a workspace-triggered wake carries: one JSON object, in $AUTOMATION_PAYLOAD for the guard and
@@ -2907,6 +2913,20 @@ export const WorkspaceEventSchema = z.object({
     // before the user's deliberate Land, which is exactly when a pre-land review wants to run.
     outcome: z.enum(["landed", "conflict", "ready", "idle", "error"]),
     repos: z.array(z.object({ repo: z.string(), from: z.string(), dir: z.string() })),
+    /* The `deps.*` events' own facts, absent on every turn-borne event. What a fix chore needs to start
+     * without rediscovering it: which project broke, the exact command that judged it, how it exited, and the
+     * tail of its output — bounded, because the payload rides a prompt and a guard's environment, and the full
+     * log is one attach away in the project's `--verify` terminal panel. `attempt` counts consecutive red
+     * verifies since the last green, so a guard can cap retries in one visible line of shell. */
+    deps: z
+        .object({
+            project: z.string(),
+            command: z.string(),
+            exitCode: z.number(),
+            attempt: z.number(),
+            logTail: z.string(),
+        })
+        .optional(),
 });
 export type WorkspaceEvent = z.infer<typeof WorkspaceEventSchema>;
 
@@ -3078,6 +3098,12 @@ export const AutomationSchema = z.object({
     model: z.string().optional(),
     // When true, a fire doesn't wake the agent — it's held in the approvals queue until the owner approves.
     requireApproval: z.boolean().optional(),
+    /* The middle ground between firing instantly and requiring a click: the fire is held in the same approvals
+     * queue, visibly, and the daemon runs it ITSELF once the hold has elapsed AND no agent turn is live — the
+     * owner's window to cancel or start it early, with silence as consent. What a fix chore wants: time to see
+     * "checks broke, a fix is about to start" without a standing decision to make. `requireApproval` wins when
+     * both are set — an explicit "ask me" must never quietly become "unless I'm slow". */
+    holdForSeconds: z.number().optional(),
     // A code CHORE: maintenance of THIS codebase rather than a reaction to the outside world. Purely a
     // classification — the daemon fires a chore exactly like any other automation — but it cannot be derived
     // from the trigger, which is why it is stored: a nightly `pnpm audit` sweep and a nightly Stripe poll are
@@ -3110,6 +3136,10 @@ export const AutomationApprovalSchema = z.object({
     conversationId: z.string().optional(),
     sessionId: z.string().optional(),
     createdAt: z.number(),
+    /* Epoch ms after which the daemon may run this wake itself (a `holdForSeconds` hold) — the countdown the
+     * row renders, and the deadline the scheduler's tick checks against. Absent on a `requireApproval` hold,
+     * which only the owner may release. */
+    autoRunAt: z.number().optional(),
 });
 export type AutomationApproval = z.infer<typeof AutomationApprovalSchema>;
 export const AutomationApprovalsListSchema = z.object({ approvals: z.array(AutomationApprovalSchema) });

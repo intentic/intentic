@@ -29,3 +29,10 @@ unconditionally and the rail tile is permanent.
 
 - A trigger fires a TURN, not a script. What happens next is the agent's judgement against the prompt, which is
   why an automation stays useful when the thing it reacts to changes shape.
+- Two ways to keep a hand on the wheel, and they compose: `requireApproval` holds every fire for the owner's
+  click, while `holdForSeconds` holds it under a visible countdown and the daemon starts it itself once the
+  timer passes on a quiet fleet — cancel and start-now stay one click away the whole time. When both are set,
+  approval wins.
+- One automation arrives seeded: the dependency fix chore ("Fix what a dependency change broke"), enabled with a
+  60-second hold, defined once in the contract's chore book and offered again as a recipe only after the owner
+  deletes it.

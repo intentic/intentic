@@ -8,6 +8,9 @@ The **per-project AI-agent dev daemon** — a Docker image that runs as the proj
 - Run one Claude Agent turn (`runAgent`) over the workspace, streaming typed `AgentEvent`s as SSE `data:` frames.
 - Run the `intentic` CLI in-workspace and stream its ndjson lines; commit/push the repos.
 - Manage the app dev server and report preview status.
+- Keep the tree true after lands: reinstall drifted dependencies, run the project's own checks, and announce the
+  edges (`deps.broken`/`deps.fixed`) that wake the seeded fix chore — every step in a visible terminal panel and
+  the activity feed (src/workspace/reconcile-deps.ts → verify-deps.ts → src/automations).
 
 ## Key files
 

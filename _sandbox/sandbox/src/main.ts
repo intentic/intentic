@@ -13,7 +13,9 @@ import { streamAgent } from "./agent/agent.routes.js";
 import { createTurnResumeScheduler, resumeInterruptedTurns } from "./agent/turn-resume.js";
 import { resumeLoops } from "./loops/loop-runner.js";
 import { resumeWorkflowRuns } from "./workflows/workflow-runner.js";
+import { seedDefaultAutomations } from "./automations/default-automations.js";
 import { createAutomationsScheduler } from "./automations/scheduler.js";
+import { statePath } from "./workspace/state-paths.js";
 import { capabilityCtx } from "./capabilities/capability.js";
 import { restoreConnectorGitAccess } from "./capabilities/cli/git-access.js";
 import { linkSshHosts } from "./capabilities/ssh-hosts.js";
@@ -560,6 +562,12 @@ const main = async (): Promise<void> => {
         services.terminalRun.running(session) || services.agents.liveSessionIds().some((sessionId) => agentSessionName(sessionId) === session);
     void reapFinishedSessions(stillWorking);
     const sessionSweep = setInterval(() => void reapFinishedSessions(stillWorking), 3_600_000);
+
+    // The stock automations a workspace starts with (currently the dependency fix chore), offered exactly
+    // once — a deleted seed stays deleted. Before the scheduler so the first tick already sees them.
+    await seedDefaultAutomations(services.automations, statePath(services.workspace.root, ".intentic/automations.seeded.json")).catch(
+        (error: unknown) => services.logger.warn({ err: error }, "default automations: seed failed"),
+    );
 
     // Scheduled agent wake-ups: poll the automations manifest and fire whatever comes due.
     const scheduler = createAutomationsScheduler(services, streamAgent);

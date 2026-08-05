@@ -172,12 +172,19 @@ test("a fully-installed workspace adds nothing to the turn", () => {
 
 /* The stale notice asks the turn for nothing. It exists to stop one specific waste — the model reading an
  * unresolved import as a mistake in code that is fine, and editing working source to satisfy it — so it names
- * the cause and explicitly takes the install off the table. */
+ * the cause and explicitly takes the install off the table.
+ *
+ * It must also say WHEN the tree is fixed, and the answer is next turn. "Once it is idle" was true and useless:
+ * the reconciler defers while a turn is live, so the agent reading it is the reason it cannot fire. Told to
+ * wait with no end to the wait, a model stops verifying anything and reports on reasoning alone. */
 test("a stale project tells the turn why an import fails, and asks it to do nothing about it", () => {
     const notice = setupNoticeFor([status({ state: "stale", unresolved: [{ dir: "", names: ["left-pad", "zod"] }] })]);
     expect(notice).toContain("app: 2 declared dependencies are not installed (left-pad, zod)");
     expect(notice).toContain("do not run an install");
-    expect(notice).toContain("reconciles itself once it is idle");
+    expect(notice).toContain("ready on the NEXT turn, not this one");
+    // The wait has to end somewhere the agent can act on. A promise keyed to the workspace going idle is keyed
+    // to the reader stopping, which is the one thing it cannot observe.
+    expect(notice).not.toContain("once it is idle");
     // Never the fresh-import wording: this project HAS been set up, and saying otherwise sends the model looking
     // for a first-run step that already happened.
     expect(notice).not.toContain(SETUP_NOTICE_HEADER);

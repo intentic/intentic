@@ -103,6 +103,20 @@ export const dispatchWorkspaceEvent = async (services: Services, event: Workspac
         matched.push(automation.id);
         enqueue(services, automation.id, event, wake);
     }
+    /* `deps.broken` exists to offer a fix, so a breakage nothing is armed for is said rather than swallowed —
+     * informed, never silently unprotected. Only this event: the turn-borne kinds fire on every turn and are
+     * routinely unclaimed, and an entry per unclaimed one would be the feed teaching the eye to skip it. */
+    if (event.event === "deps.broken" && matched.length === 0) {
+        void services.activity
+            .append({
+                direction: "system",
+                type: "deps.fix_unarmed",
+                content: `Checks broke for ${event.deps?.project === "" ? "the workspace root" : (event.deps?.project ?? "a project")} and no automation is enabled for it — the "Fix what a dependency change broke" chore on the Automations page can handle this for you.`,
+                outcome: "error",
+                conversationId: event.agentId,
+            })
+            .catch((error: unknown) => services.logger.warn({ err: error }, "activity append failed"));
+    }
     return matched;
 };
 

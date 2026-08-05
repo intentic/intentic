@@ -36,12 +36,15 @@ const drifted = async (root: string): Promise<void> => {
     await mkdir(join(root, "app/node_modules"), { recursive: true });
 };
 
-test("a drifted workspace with nothing running installs itself", async () => {
+test("a drifted workspace with nothing running installs itself, and cues the verifier with what it started", async () => {
     const root = await workspace();
     await drifted(root);
     const started: string[] = [];
-    expect(await reconcileDependencies(deps(root, [], started))).toEqual({ missing: 1, started: ["app"], deferred: false });
+    const cued: string[][] = [];
+    const reconcile = { ...deps(root, [], started), onInstalled: (dirs: string[]) => void cued.push(dirs) };
+    expect(await reconcileDependencies(reconcile)).toEqual({ missing: 1, started: ["app"], deferred: false });
     expect(started).toEqual(["app--install"]);
+    expect(cued).toEqual([["app"]]);
 });
 
 test("an already-satisfied workspace decides nothing, and says so by answering undefined", async () => {

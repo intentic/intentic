@@ -200,11 +200,26 @@ export const startInstall = async (root: string, project: WorkspaceProject, proc
  * type-check errors that are all false.
  *
  * A STALE project is told about differently, and the difference is the point. It is not asked to install
- * anything: the daemon reconciles a stale tree by itself once the workspace is idle (agent.routes.ts), and an
- * install inside an isolated turn would write into an overlay that dies with the conversation anyway. What the
- * turn is given is the one fact it cannot deduce and will otherwise be misled by — that an import failing to
- * resolve right now is the install being behind, not the code being wrong. Without it the model reads a wall of
- * true-looking errors and starts editing correct source to satisfy them.
+ * anything: the daemon reconciles a stale tree by itself (agent.routes.ts), and an install inside an isolated
+ * turn would write into an overlay that dies with the conversation anyway. What the turn is given is the one
+ * fact it cannot deduce and will otherwise be misled by — that an import failing to resolve right now is the
+ * install being behind, not the code being wrong. Without it the model reads a wall of true-looking errors and
+ * starts editing correct source to satisfy them.
+ *
+ * WHEN the repair arrives is stated as NEXT TURN, and that precision is the whole of what this paragraph got
+ * wrong for a long time. It used to promise the workspace "reconciles itself once it is idle" — true, and
+ * unactionable from where it is read: the reconciler defers while any turn is live (reconcile-deps.ts), and the
+ * agent reading the sentence IS a live turn. So the relief it promised could not arrive until the reader
+ * stopped, and nothing ever signalled that it had. A model told to wait, given no end to the wait, concludes it
+ * cannot verify anything at all — and then reports work as done on reasoning alone, which is the failure this
+ * notice exists to prevent, arrived at from the other side. Saying "next turn" converts a dead end into a
+ * handoff, and the sentence after it says the part the model otherwise infers wrongly: only THIS project's own
+ * checks are deferred, and the rest of the workspace tests normally.
+ *
+ * The install is also refused with its REASON attached rather than as bare instruction. The reason is not the
+ * agent's own wasted minutes — it is that a turn's install rewrites the dependency tree every other live
+ * conversation has mounted beneath it (agents/isolation.ts). A rule whose cost falls on somebody else has to
+ * say so, or the first model that decides it knows better is right to.
  */
 
 // The notice's fixed opening — what stripTurnPreamble anchors on to recognize an injected note in a stored
@@ -246,8 +261,12 @@ export const setupNoticeFor = (statuses: readonly ProjectSetupStatus[]): string 
             ? []
             : [
                   `${STALE_NOTICE_HEADER}, so an unresolved import there is the install being behind rather than a mistake ` +
-                      "in the code. Do not edit working source to satisfy one, and do not run an install — the workspace " +
-                      "reconciles itself once it is idle. Say so if it blocks the task:",
+                      "in the code. Do not edit working source to satisfy one, and do not run an install — from inside a turn " +
+                      "it writes to a scratch layer that is discarded, and it rewrites the dependency tree other live " +
+                      "conversations are reading. The daemon installs it once the turn ends, so the tree is ready on the NEXT " +
+                      "turn, not this one. Nothing else is blocked: every already-installed project type-checks and tests " +
+                      "normally. If this one's own checks are what the task needs, finish the rest, say the verification is " +
+                      "deferred, and offer to re-run it next turn:",
                   ...staleLines,
               ]),
     ].join("\n");

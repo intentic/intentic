@@ -18,6 +18,7 @@ import { extensionBinDirsOf } from "../extensions/installed-extensions.js";
 import type { Services } from "../composition.js";
 import type { OrpcContext } from "../context.js";
 import { reconcileDependencies } from "../workspace/reconcile-deps.js";
+import { type LandContext, queueVerify, type VerifyDeps } from "../workspace/verify-deps.js";
 import { syncAdvisory, syncWorkspaceRepos } from "../workspace/sync-repos.js";
 import { resolveWithin } from "../workspace/workspace-files.js";
 import { startAnchor, type TurnPlacement } from "../agents/isolation.js";
@@ -349,8 +350,42 @@ async function* runConversationTurn(
                  * is inherited by every conversation after it. Reconciled here rather than left for someone to
                  * notice — this is the moment the tree changed, and the only moment the cause is still obvious.
                  * Awaited because the receipt rides the frame below; the install itself is a detached panel job,
-                 * so what is awaited is the decision, not the minutes. */
-                const deps = landed.landed ? await reconcileDependencies(services) : undefined;
+                 * so what is awaited is the decision, not the minutes.
+                 *
+                 * The verifier is handed along (onInstalled): once the installs this land made necessary have
+                 * run, the tree's own checks run and their edges wake the fix chore — with THIS land as the
+                 * named cause (verify-deps.ts). */
+                const verifyContext: LandContext = {
+                    agentId: conversationId,
+                    ...(finished.title !== undefined ? { title: finished.title } : {}),
+                    branch,
+                    repos: span,
+                };
+                const verifier: VerifyDeps = {
+                    workspace: services.workspace,
+                    processes: services.processes,
+                    agents: services.agents,
+                    logger: services.logger,
+                    verifyStore: services.verifyStore,
+                    activity: services.activity,
+                    emit: (event) => emitWorkspaceEvent(services, event, streamAgent),
+                };
+                const deps = landed.landed
+                    ? await reconcileDependencies({ ...services, onInstalled: (dirs) => queueVerify(verifier, verifyContext, dirs) })
+                    : undefined;
+                /* THE CLOSURE RE-CHECK: while a project's checks are red, any land that touches it re-runs
+                 * them even with no dependency drift — a source-only fix can never turn the light green
+                 * otherwise. Skipped when the reconcile deferred: its retry will run the checks with the
+                 * installs it is still holding, and a check of the tree before them would misreport the
+                 * install's absence as the code's failure. */
+                if (landed.landed && deps?.deferred !== true) {
+                    const red = await services.verifyStore.red().catch(() => [] as string[]);
+                    queueVerify(
+                        verifier,
+                        verifyContext,
+                        red.filter((dir) => dir === "" || span.some(({ repo }) => dir === repo || dir.startsWith(`${repo}/`))),
+                    );
+                }
                 yield {
                     kind: "landed",
                     landed: landed.landed,

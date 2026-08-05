@@ -22,14 +22,18 @@ describe(`code chores come from the book`, () => {
         }
     });
 
-    /* `review-agent-work` is the one hand-written shelf entry, and it is not an oversight: it is a REFLEX, not a
-     * chore. It fires when a turn settles, it has no standing evidence to accumulate, and it would be meaningless
-     * as a row in a panel about what a codebase is owed. The split is the point — the book holds chores that have
-     * a measurement, this file holds triggers. */
-    test(`the only hand-written chore is the one with no standing evidence`, () => {
+    /* Two shelf entries stand apart from the measurement book, and neither is an oversight: they are REFLEXES,
+     * not chores. Each fires on a workspace event, has no standing evidence to accumulate, and would be
+     * meaningless as a row in a panel about what a codebase is owed. The split is the point — the book holds
+     * chores that have a measurement, this file holds triggers. The fix chore's definition still lives in the
+     * book's package (fix-deps.ts) because the daemon SEEDS it and two copies of a prompt drift; this file only
+     * dresses it as a recipe for whoever deleted the seed. */
+    test(`the only hand-written chores are the reflexes, with no standing evidence`, () => {
         const handWritten = shelf.filter((recipe) => !scheduled.some((chore) => chore.id === recipe.id));
-        expect(handWritten.map((recipe) => recipe.id)).toEqual([`review-agent-work`]);
-        expect(handWritten[0]?.trigger.kind).toBe(`workspace`);
+        expect(handWritten.map((recipe) => recipe.id)).toEqual([`fix-dependency-breakage`, `review-agent-work`]);
+        for (const reflex of handWritten) {
+            expect(reflex.trigger.kind).toBe(`workspace`);
+        }
     });
 
     test(`a scheduled chore's prompt tells the woken turn where the guard left its findings`, () => {

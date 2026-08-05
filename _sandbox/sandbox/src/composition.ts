@@ -48,6 +48,7 @@ import { type ChoresStore, fileChoresStore, LEDGER_FILE, PROBES_FILE } from "./c
 import { createProbeRunner, type ProbeRunner } from "./chores/probe-runner.js";
 import { type CapabilitiesStore, fileCapabilitiesStore } from "./capabilities/capabilities-store.js";
 import { type CiStore, fileCiStore } from "./ci/ci-store.js";
+import { fileVerifyStore, type VerifyStore } from "./workspace/verify-store.js";
 import { type CiHookReconciler, createCiHookReconciler } from "./ci/hooks.js";
 import { createRunsCache, type RunsCache } from "./ci/runs-cache.js";
 import { fileKomodoStore, type KomodoStore } from "./komodo/komodo-store.js";
@@ -266,6 +267,9 @@ export interface Services {
     // CI state (.intentic/ci.json): the webhook secret + the per repo+branch conclusion memory that makes a
     // success after a failure read as `pipeline_fixed`.
     readonly ciStore: CiStore;
+    // The dependency verifier's memory (.intentic/verify.json): last check verdict per project + consecutive
+    // red count — what makes `deps.fixed` an edge and lets a fix chore's guard cap its own retries.
+    readonly verifyStore: VerifyStore;
     // The Pipelines view's read model: webhook deliveries freshen it, /ci/runs backfills it when stale.
     readonly ciRuns: RunsCache;
     // Keeps every mapped repo's provider webhook pointing at this sandbox; its warnings ride /ci/runs.
@@ -657,6 +661,7 @@ export const createServices = (config: Config, logger: Logger): Services => {
         logger.warn(`capabilities: skipping unreadable entry "${id}" (${reason}) — the rest of the manifest is unaffected`),
     );
     const ciStore = fileCiStore(statePath(workspace.root, ".intentic/ci.json"));
+    const verifyStore = fileVerifyStore(statePath(workspace.root, ".intentic/verify.json"));
     // Hoisted: the background probe runner writes the same cache the /chores route reads, and a second store
     // instance would answer a poll from a file the runner had already moved past.
     const chores = fileChoresStore(join(workspace.root, PROBES_FILE), join(workspace.root, LEDGER_FILE));
@@ -697,6 +702,7 @@ export const createServices = (config: Config, logger: Logger): Services => {
         tools: internalTools(config.intenticAgentTools),
         capabilities,
         ciStore,
+        verifyStore,
         ciRuns: createRunsCache(),
         ciHooks: createCiHookReconciler({ workspace, capabilities, ciStore, config, logger }),
         komodoStore: fileKomodoStore(statePath(workspace.root, ".intentic/komodo.json")),
