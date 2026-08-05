@@ -1,7 +1,7 @@
 # The install every job opens with.
 #
-# corepack, pnpm and the node-gyp exec-bit fix are all baked into ci-base. The two lines before the install
-# exist only to cover DRIFT: when package.json's packageManager moves ahead of the pnpm pinned in the image,
+# corepack, pnpm and the node-gyp exec-bit fix are all baked into ci-base. The step before the install exists
+# only to cover DRIFT: when package.json's packageManager moves ahead of the pnpm pinned in the image,
 # corepack fetches the new version here, and that freshly-fetched copy needs the same fix — corepack strips the
 # exec bit off its bundled gyp_main.py, and node-pty (no linux prebuild) compiles from source and invokes it
 # directly. When the versions match, both are no-ops.
@@ -14,6 +14,17 @@ runs:
     - name: Cover a corepack drift
       shell: bash
       run: |
+        # Corepack reads a version directory as "installed" and execs the pnpm.mjs inside it without looking
+        # first, so a HALF-WRITTEN cache — the 207 directories extracted, not one of the files — is fatal and
+        # sticky: every job that lands on that runner dies right here, on a MODULE_NOT_FOUND for a path that
+        # exists three levels up, until someone clears it by hand. It cost a runner for 15 minutes. Dropping
+        # the directory costs one fetch, and the line below is the fetch.
+        for dir in "$HOME/.cache/node/corepack/v1/pnpm"/*; do
+          if [ -d "$dir" ] && [ ! -f "$dir/bin/pnpm.mjs" ]; then
+            echo "half-written corepack cache at $dir — dropping it so the fetch below redoes it"
+            rm -rf "$dir"
+          fi
+        done
         pnpm --version
         find "$HOME/.cache/node/corepack" -path '*node-gyp/gyp/gyp_main.py' -exec chmod +x {} + 2>/dev/null || true
 
