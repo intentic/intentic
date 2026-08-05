@@ -142,8 +142,8 @@ mod tests {
      * same commit. */
     #[test]
     fn the_platform_default_is_the_one_the_connect_scripts_pick_for_themselves() {
-        let dir =
-            std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../site/public/scripts");
+        let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../../../_site/site/public/scripts");
         let sh = std::fs::read_to_string(dir.join("connect.sh")).expect("connect.sh is readable");
         let ps1 =
             std::fs::read_to_string(dir.join("connect.ps1")).expect("connect.ps1 is readable");

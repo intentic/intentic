@@ -478,8 +478,8 @@ mod tests {
     /// runner can reach any other way — the Windows installer is cross-built here and these scripts first
     /// execute on a user's machine.
     fn powershell_scripts() -> Vec<(std::path::PathBuf, String)> {
-        let dir =
-            std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../site/public/scripts");
+        let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../../../_site/site/public/scripts");
         let mut scripts: Vec<(std::path::PathBuf, String)> = std::fs::read_dir(&dir)
             .expect("the bundled scripts directory is readable")
             .map(|entry| entry.expect("readable directory entry").path())
