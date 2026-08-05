@@ -1,0 +1,1 @@
+var e=(e,t)=>({method:e,headers:{"content-type":`application/json`},body:JSON.stringify(t)});export{e as t};

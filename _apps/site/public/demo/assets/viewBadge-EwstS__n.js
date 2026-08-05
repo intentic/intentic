@@ -1,0 +1,1 @@
+var e={info:`bg-primary-600/15 text-link`,warning:`bg-warning/15 text-warning`,danger:`bg-danger-fill text-fill-content`},t=t=>e[t.tone??`info`],n=({count:e=0})=>e>99?`99+`:String(e);export{n,t};

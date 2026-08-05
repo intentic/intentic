@@ -1,0 +1,1 @@
+import{hn as e}from"./src-DNJcLpF2.js";var{bindHost:t,host:n}=e(`ext-memory`);export{n,t};

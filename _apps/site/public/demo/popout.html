@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="en" data-mode="dark">
+    <head>
+        <meta charset="utf-8" />
+        <title>intentic — interactive demo</title>
+        <meta name="viewport" content="width=device-width, initial-scale=1" />
+        <meta name="robots" content="noindex" />
+        <!-- The window a popped-out panel floats in, and the demo's second document (see
+             _apps/web/src/composables/usePopout.ts). It renders nothing itself: the panel's DOM is teleported in
+             from the window that opened it, whose realm — the one holding the fixture — keeps driving it. So
+             this page installs no transports and seeds no credentials; there is nothing here to serve.
+
+             It exists as its own file because the pop-out page is addressed by URL, and the app's copy lives at
+             the ORIGIN root while the demo is served under /demo/. Same job, same keeper, one document each. -->
+        <link rel="icon" type="image/png" href="/demo/assets/intentic-logo-sized.png" />
+        <!-- ponytail: approximates the dark canvas token oklch(16% 0.007 65), same as index.html's. -->
+        <meta name="theme-color" content="#141210" />
+        <!-- Anti-flash, index.html's trick for a window with no app in it yet: paint the canvas and set the
+             scheme native scrollbars key off, so the window opens dark (the app's default) instead of white.
+             The opener mirrors the live theme root onto this document the moment it adopts the window, so these
+             rules only ever cover the first frames. -->
+        <style>
+            html {
+                background: #fff;
+                color-scheme: light;
+            }
+
+            html[data-mode="dark"] {
+                background: #141210;
+                color-scheme: dark;
+            }
+
+            body {
+                margin: 0;
+            }
+
+            .holding {
+                position: fixed;
+                inset: 0;
+                display: grid;
+                place-items: center;
+                font: 500 13px/1.6 system-ui, sans-serif;
+                color: #8b8378;
+            }
+        </style>
+        <script>
+            try {
+                if (localStorage.getItem("ui-color-scheme") === "light") document.documentElement.removeAttribute("data-mode");
+            } catch (e) {}
+        </script>
+      <script type="module" crossorigin src="/demo/assets/popout-qiBkAIjM.js"></script>
+      <link rel="modulepreload" crossorigin href="/demo/assets/modulepreload-polyfill-P2Xu9kJm.js">
+    </head>
+    <body>
+        <!-- All this window shows in the frames before the panel lands — and everything it can ever show when
+             the page is opened on its own, since a pop-out is a view of a running app and there is no app on the
+             other end of this one. -->
+        <p class="holding">Pop-out window · <a href="/demo/">open the demo</a></p>
+    </body>
+</html>

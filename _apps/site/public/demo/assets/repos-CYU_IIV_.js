@@ -1,0 +1,1 @@
+import{hn as e}from"./src-DNJcLpF2.js";var{bindHost:t,host:n}=e(`ext-git-history`),r=e=>e===``?`root`:n().workspace.repos().some(t=>t.repo===e)?e:void 0;export{t as n,n as r,r as t};

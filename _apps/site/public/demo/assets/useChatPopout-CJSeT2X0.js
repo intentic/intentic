@@ -1,0 +1,1 @@
+import{t as e}from"./usePopout-BGqGcXZ1.js";import{t}from"./useLayout-DLLzj11i.js";var n=t(),r=e(`chat`,`Intentic · Chat`,()=>({width:Math.max(n.chatWidth.value,720),height:Math.min(window.innerHeight,900)}));function i(){return r}export{i as t};

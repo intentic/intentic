@@ -1,0 +1,1 @@
+import{i as e}from"./sandboxClient-CZ9OyB47.js";var t=4194304,n=(t,n)=>{let r=new URLSearchParams({path:t,limit:String(n?.limit??4194304)});return n?.offset!==void 0&&r.set(`offset`,String(n.offset)),e(`/workspace/file?${r.toString()}`,{signal:n?.signal})};export{n,t};

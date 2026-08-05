@@ -1,0 +1,1 @@
+var e=e=>{let{target:t}=e;return t instanceof Element?t.closest(`.term`)===null?t.closest(`.chat-panel`)===null?`workspace`:`chat`:`terminal`:`workspace`},t=t=>n=>e(n)===t;export{e as n,t};

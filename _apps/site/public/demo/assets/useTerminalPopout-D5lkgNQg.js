@@ -1,0 +1,1 @@
+import{t as e}from"./usePopout-BGqGcXZ1.js";var t=e(`terminal`,`Intentic · Terminal`,()=>({width:Math.min(window.innerWidth,1100),height:Math.min(window.innerHeight,700)}));function n(){return t}export{n as t};

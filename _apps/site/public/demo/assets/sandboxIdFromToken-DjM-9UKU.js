@@ -1,0 +1,1 @@
+import{C as e}from"./sandboxSession-DgvcpUB0.js";var t=async t=>(await e(t)).slice(0,12);export{t};

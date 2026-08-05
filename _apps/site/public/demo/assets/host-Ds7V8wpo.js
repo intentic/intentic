@@ -1,0 +1,1 @@
+import{hn as e}from"./src-DNJcLpF2.js";var{bindHost:t,host:n}=e(`ext-logs`);export{n,t};

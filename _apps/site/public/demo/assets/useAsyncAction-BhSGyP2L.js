@@ -1,0 +1,1 @@
+import{C as e}from"./reactivity.esm-bundler-CApNupZD.js";var t=(e,t)=>typeof e==`object`&&e&&`message`in e&&typeof e.message==`string`&&e.message!==``?e.message:t;function n(){let n=e(!1),r=e(void 0);return{busy:n,error:r,run:async(e,i=`Action failed.`)=>{if(!n.value){r.value=void 0,n.value=!0;try{await e()}catch(e){r.value=t(e,i)}finally{n.value=!1}}}}}export{n,t};

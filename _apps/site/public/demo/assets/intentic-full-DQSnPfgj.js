@@ -1,0 +1,1 @@
+var e=`/demo/assets/intentic-full.png`;export{e as t};
