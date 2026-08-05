@@ -20,11 +20,11 @@
                     "hint": "The agent uses the token with curl against the GitHub API. With Git access on you can git pull/push in the terminal — ssh-form URLs work too (rerouted over HTTPS when native SSH isn't available), so any repo-scoped token works. For native ssh://git we register an SSH key to your account, which needs write:public_key on a classic PAT (or the \"Git SSH keys: write\" permission on a fine-grained token); without it git still works over HTTPS and we show the key to add manually. Workspace repos on GitHub also get a CI webhook (the Pipelines view + instant CI automations), which needs admin:repo_hook on a classic PAT (or \"Webhooks: write\"); without it the Pipelines view shows the hook to add manually.",
                     "guide": {
                         "url": "https://github.com/settings/tokens",
-                        "scopes": "repo (+ write:public_key for native ssh, admin:repo_hook for CI webhooks)",
+                        "scopes": "`repo` (+ `write:public_key` for native ssh, `admin:repo_hook` for CI webhooks)",
                         "steps": [
-                            "Open Settings → Developer settings → Personal access tokens.",
-                            "Classic: generate a token with the repo scope (add write:public_key for native ssh://git, admin:repo_hook for CI webhooks).",
-                            "Fine-grained: grant repo Contents access (add the \"Git SSH keys: write\" account permission for native ssh://git, and \"Webhooks: write\" for CI).",
+                            "Open `Settings` → `Developer settings` → `Personal access tokens`.",
+                            "Classic: generate a token with the `repo` scope (add `write:public_key` for native `ssh://git`, `admin:repo_hook` for CI webhooks).",
+                            "Fine-grained: grant repo `Contents` access (add the `Git SSH keys: write` account permission for native `ssh://git`, and `Webhooks: write` for CI).",
                             "Copy the token and paste it here. Git works over HTTPS regardless; the extra permissions only enable native ssh and automatic CI webhooks."
                         ]
                     }
@@ -69,11 +69,11 @@
                         "urlFromField": "url",
                         "path": "/-/user_settings/personal_access_tokens",
                         "linkLabel": "Create an access token",
-                        "scopes": "api",
+                        "scopes": "`api`",
                         "steps": [
-                            "Self-hosted: set the Instance URL above first.",
-                            "Open User settings → Access tokens.",
-                            "Add a token with the api scope.",
+                            "Self-hosted: set the `Instance URL` above first.",
+                            "Open `User settings` → `Access tokens`.",
+                            "Add a token with the `api` scope.",
                             "Copy the token and paste it here."
                         ]
                     }
@@ -124,10 +124,10 @@
                     "guide": {
                         "urlFromField": "url",
                         "path": "/settings/account/api/auth-tokens/",
-                        "scopes": "project:read event:read org:read",
+                        "scopes": "`project:read` `event:read` `org:read`",
                         "steps": [
-                            "Open Settings → Account → Auth Tokens (or Developer Settings → Internal Integration).",
-                            "Create a token with the project:read, event:read and org:read scopes.",
+                            "Open `Settings` → `Account` → `Auth Tokens` (or `Developer Settings` → `Internal Integration`).",
+                            "Create a token with the `project:read`, `event:read` and `org:read` scopes.",
                             "Copy the token and paste it here."
                         ]
                     }
@@ -172,9 +172,9 @@
                         "linkLabel": "Open your Redmine account",
                         "scopes": "REST API must be enabled by an admin",
                         "steps": [
-                            "Set the Instance URL above first.",
-                            "Open My account (top-right).",
-                            "Under \"API access key\", click Show (an admin enables it in Administration → Settings → API if hidden).",
+                            "Set the `Instance URL` above first.",
+                            "Open `My account` (top-right).",
+                            "Under `API access key`, click `Show` (an admin enables it in `Administration` → `Settings` → `API` if hidden).",
                             "Copy the key and paste it here."
                         ]
                     }
@@ -211,8 +211,8 @@
                         "path": "/settings/tokens",
                         "scopes": "the token inherits your permissions",
                         "steps": [
-                            "Set the Instance URL above first.",
-                            "Open Settings → API Tokens.",
+                            "Set the `Instance URL` above first.",
+                            "Open `Settings` → `API Tokens`.",
                             "Create a token and give it a name.",
                             "Copy the token and paste it here."
                         ]
@@ -248,10 +248,10 @@
                     "guide": {
                         "urlFromField": "url",
                         "path": "/settings/api-keys",
-                        "scopes": "Viewer role is enough",
+                        "scopes": "`Viewer` role is enough",
                         "steps": [
-                            "Set the SigNoz URL above (Cloud or self-hosted).",
-                            "Open Settings → API Keys and create a key (Viewer role).",
+                            "Set the `SigNoz URL` above (Cloud or self-hosted).",
+                            "Open `Settings` → `API Keys` and create a key (`Viewer` role).",
                             "Copy the key and paste it here."
                         ]
                     }
@@ -289,10 +289,10 @@
                         "linkLabel": "Open your Komodo profile",
                         "scopes": "the key inherits the user's permissions",
                         "steps": [
-                            "Set the Komodo URL above first (the address of Komodo Core).",
-                            "Open your profile (top-right) → Api Keys → New Api Key.",
+                            "Set the `Komodo URL` above first (the address of Komodo Core).",
+                            "Open your profile (top-right) → `Api Keys` → `New Api Key`.",
                             "Komodo shows the key and the secret once — copy both and paste them here.",
-                            "To keep the agent read-only, make the key on a user that only has Read permissions."
+                            "To keep the agent read-only, make the key on a user that only has `Read` permissions."
                         ]
                     }
                 },
@@ -331,8 +331,8 @@
                     "guide": {
                         "steps": [
                             "No external token — use an existing DB user, ideally a read-only one.",
-                            "Make sure the database is reachable from the sandbox (host/port open, grants/pg_hba allow it).",
-                            "PostgreSQL uses port 5432.",
+                            "Make sure the database is reachable from the sandbox (host/port open, grants/`pg_hba` allow it).",
+                            "PostgreSQL uses port `5432`.",
                             "Add this card again with a different name to connect another database."
                         ]
                     }
@@ -383,7 +383,7 @@
                         "steps": [
                             "No external token — use an existing DB user, ideally a read-only one.",
                             "Make sure the database is reachable from the sandbox (host/port open, grants allow it).",
-                            "MySQL uses port 3306.",
+                            "MySQL uses port `3306`.",
                             "Add this card again with a different name to connect another database."
                         ]
                     }

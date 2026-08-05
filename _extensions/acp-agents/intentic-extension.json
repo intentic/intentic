@@ -60,8 +60,8 @@
                         "url": "https://agentclientprotocol.com",
                         "linkLabel": "Browse ACP agents",
                         "steps": [
-                            "Pick an agent from the ACP registry (agentclientprotocol.com) and note its run command.",
-                            "If it needs an API key, add it as a KEY=VALUE line in the environment block.",
+                            "Pick an agent from the ACP registry (`agentclientprotocol.com`) and note its run command.",
+                            "If it needs an API key, add it as a `KEY=VALUE` line in the environment block.",
                             "For device-code sign-ins, add the agent's login command and run it in a Terminal after adding.",
                             "The agent then appears as a provider in the chat's model picker."
                         ]

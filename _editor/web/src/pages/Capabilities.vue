@@ -726,417 +726,444 @@ const submitLabel = computed(() =>
     <Page width="wide">
         <div v-if="topError" :class="cmp.alertDanger('mb-4')">{{ topError }}</div>
 
-        <!-- STEP 2: configure + apply the picked capability. Centered so a short form doesn't stretch the page. -->
-        <div v-if="selected" class="mx-auto max-w-xl">
-            <button type="button" class="mb-4 inline-flex items-center gap-1 text-xs text-muted hover:text-content" @click="back">
-                <Icon name="arrow-left" class="text-2xs" /> All capabilities
-            </button>
+        <!-- STEP 2: configure + apply the picked capability. The form keeps its reading width and the card's
+             credential guide docks beside it, /setup-style — see the aside at the foot of this block. A
+             @container rather than a viewport breakpoint: this page shares the shell with the rail and a chat
+             panel the user drags, so how much room there is for a second column is a fact about the page, not
+             about the screen. Below that width the row collapses and the guide moves inline into the form. -->
+        <div v-if="selected" class="@container">
+            <div class="mx-auto flex max-w-xl flex-col @4xl:max-w-none @4xl:flex-row @4xl:items-start @4xl:justify-center @4xl:gap-6">
+                <div class="flex min-w-0 flex-1 flex-col @4xl:max-w-xl">
+                    <button type="button" class="mb-4 inline-flex w-fit items-center gap-1 text-xs text-muted hover:text-content" @click="back">
+                        <Icon name="arrow-left" class="text-2xs" /> All capabilities
+                    </button>
 
-            <div class="mb-4 flex items-center gap-3">
-                <BrandMark :size="32" :name="selected.name" :logo="selected.logo" :icon="entryIcon(selected)" />
-                <div class="min-w-0">
-                    <div class="font-medium text-content">{{ selected.name }}</div>
-                    <div class="text-xs text-muted">{{ selected.description }}</div>
-                </div>
-            </div>
+                    <div class="mb-4 flex items-center gap-3">
+                        <BrandMark :size="32" :name="selected.name" :logo="selected.logo" :icon="entryIcon(selected)" />
+                        <div class="min-w-0">
+                            <div class="font-medium text-content">{{ selected.name }}</div>
+                            <div class="text-xs text-muted">{{ selected.description }}</div>
+                        </div>
+                    </div>
 
-            <!-- Precondition gate: a service/integration needs DevOps first. -->
-            <div v-if="!requiresMet" :class="cmp.alertInfo()">
-                This needs <b>DevOps</b> active first. Go back and activate the DevOps capability, then add this.
-            </div>
+                    <!-- Precondition gate: a service/integration needs DevOps first. -->
+                    <div v-if="!requiresMet" :class="cmp.alertInfo()">
+                        This needs <b>DevOps</b> active first. Go back and activate the DevOps capability, then add this.
+                    </div>
 
-            <form v-else class="flex flex-col gap-3" @submit.prevent="submit">
-                <!-- The connections already added for this card — each instance removable here (the only place a
-                     custom-named instance can be torn down). -->
-                <RowGroup v-if="selectedInstances.length > 0" label="Connected">
-                    <div v-for="instance in selectedInstances" :key="instance.id" class="flex flex-col gap-1 px-4 py-3">
-                        <div class="flex items-center gap-2 text-xs">
-                            <span class="font-medium text-content">{{ instance.id }}</span>
-                            <span class="text-2xs text-muted">{{ instance.status.state }}</span>
-                            <!-- A VPN's live link says more than "active": the address it was assigned and what
-                                 it routes are what tell you whether your internal host is reachable through it. -->
-                            <span v-if="selected.kind === 'vpn' && vpnFacts(instance.id)" class="font-mono text-2xs text-subtle">{{
-                                vpnFacts(instance.id)
-                            }}</span>
-                            <!-- A connected computer's liveness is the fact its row exists to carry: "added" and
-                                 "asleep" and "working" are three different situations for the person reading it. -->
-                            <span
-                                v-if="selected.kind === 'host'"
-                                class="text-2xs"
-                                :class="hostFor(instance.id)?.online ? 'text-success' : 'text-subtle'"
-                            >
-                                {{ hostFor(instance.id)?.online ? "online" : "offline" }}
-                            </span>
-                            <span v-if="selected.kind === 'host' && hostFor(instance.id)?.facts" class="font-mono text-2xs text-subtle">{{
-                                hostFor(instance.id)?.facts?.os
-                            }}</span>
-                            <div class="ml-auto flex items-center gap-1">
-                                <!-- A computer is connected by running a command ON IT — this button hands over that
-                                     command (and is also how a machine is re-connected after being revoked). -->
-                                <Button
-                                    v-if="selected.kind === 'host'"
-                                    :label="hostFor(instance.id) === undefined || !hostFor(instance.id)?.lastSeen ? 'Connect' : 'Reconnect'"
-                                    size="small"
-                                    :text="true"
-                                    @click="openConnect(instance)"
-                                >
-                                    <template #icon><Icon name="desktop" /></template>
-                                </Button>
-                                <!-- Revoke cuts this machine off without removing the capability, so the card keeps
-                                     its name and permissions and Connect re-pairs it. Removing the capability does
-                                     both, which is a different intent. -->
-                                <Button
-                                    v-if="selected.kind === 'host' && hostFor(instance.id)?.lastSeen"
-                                    label="Revoke"
-                                    size="small"
-                                    :text="true"
-                                    severity="warn"
-                                    @click="removeHostAccess(instance.id)"
-                                >
-                                    <template #icon><Icon name="sign-out" /></template>
-                                </Button>
-                                <!-- A browser capability connects via a live login window, not a form — offer it here
-                                         (also the way to re-log-in once a session expires). -->
-                                <Button
-                                    v-if="selected.kind === 'browser'"
-                                    :label="instance.status.state === 'active' ? 'Re-log in' : 'Log in'"
-                                    size="small"
-                                    :text="true"
+                    <form v-else class="flex flex-col gap-3" @submit.prevent="submit">
+                        <!-- The connections already added for this card — each instance removable here (the only place a
+                             custom-named instance can be torn down). -->
+                        <RowGroup v-if="selectedInstances.length > 0" label="Connected">
+                            <div v-for="instance in selectedInstances" :key="instance.id" class="flex flex-col gap-1 px-4 py-3">
+                                <div class="flex items-center gap-2 text-xs">
+                                    <span class="font-medium text-content">{{ instance.id }}</span>
+                                    <span class="text-2xs text-muted">{{ instance.status.state }}</span>
+                                    <!-- A VPN's live link says more than "active": the address it was assigned and what
+                                         it routes are what tell you whether your internal host is reachable through it. -->
+                                    <span v-if="selected.kind === 'vpn' && vpnFacts(instance.id)" class="font-mono text-2xs text-subtle">{{
+                                        vpnFacts(instance.id)
+                                    }}</span>
+                                    <!-- A connected computer's liveness is the fact its row exists to carry: "added" and
+                                         "asleep" and "working" are three different situations for the person reading it. -->
+                                    <span
+                                        v-if="selected.kind === 'host'"
+                                        class="text-2xs"
+                                        :class="hostFor(instance.id)?.online ? 'text-success' : 'text-subtle'"
+                                    >
+                                        {{ hostFor(instance.id)?.online ? "online" : "offline" }}
+                                    </span>
+                                    <span v-if="selected.kind === 'host' && hostFor(instance.id)?.facts" class="font-mono text-2xs text-subtle">{{
+                                        hostFor(instance.id)?.facts?.os
+                                    }}</span>
+                                    <div class="ml-auto flex items-center gap-1">
+                                        <!-- A computer is connected by running a command ON IT — this button hands over that
+                                             command (and is also how a machine is re-connected after being revoked). -->
+                                        <Button
+                                            v-if="selected.kind === 'host'"
+                                            :label="hostFor(instance.id) === undefined || !hostFor(instance.id)?.lastSeen ? 'Connect' : 'Reconnect'"
+                                            size="small"
+                                            :text="true"
+                                            @click="openConnect(instance)"
+                                        >
+                                            <template #icon><Icon name="desktop" /></template>
+                                        </Button>
+                                        <!-- Revoke cuts this machine off without removing the capability, so the card keeps
+                                             its name and permissions and Connect re-pairs it. Removing the capability does
+                                             both, which is a different intent. -->
+                                        <Button
+                                            v-if="selected.kind === 'host' && hostFor(instance.id)?.lastSeen"
+                                            label="Revoke"
+                                            size="small"
+                                            :text="true"
+                                            severity="warn"
+                                            @click="removeHostAccess(instance.id)"
+                                        >
+                                            <template #icon><Icon name="sign-out" /></template>
+                                        </Button>
+                                        <!-- A browser capability connects via a live login window, not a form — offer it here
+                                                 (also the way to re-log-in once a session expires). -->
+                                        <Button
+                                            v-if="selected.kind === 'browser'"
+                                            :label="instance.status.state === 'active' ? 'Re-log in' : 'Log in'"
+                                            size="small"
+                                            :text="true"
+                                            @click="openLogin(String(instance.config[`platform`]), selected.name)"
+                                        >
+                                            <template #icon><Icon name="sign-in" /></template>
+                                        </Button>
+                                        <!-- An ACP agent with a declared loginCommand signs in interactively: the daemon
+                                                 starts it in the capability's job session and the terminal panel opens on it. -->
+                                        <Button
+                                            v-if="selected.kind === 'agent' && instance.config[`loginCommand`] !== undefined"
+                                            label="Sign in"
+                                            size="small"
+                                            :text="true"
+                                            @click="startAgentLogin(instance.id)"
+                                        >
+                                            <template #icon><Icon name="sign-in" /></template>
+                                        </Button>
+                                        <!-- A VPN is dialled from the Status card, which owns the whole flow (progress,
+                                             the gateway's own error text, a one-time code field). Linking there beats a
+                                             second, thinner set of controls that would handle 2FA worse. -->
+                                        <RouterLink
+                                            v-if="selected.kind === 'vpn'"
+                                            to="/sandbox/status"
+                                            class="inline-flex items-center gap-1 px-2 text-2xs text-link hover:underline"
+                                        >
+                                            Connect / disconnect <Icon name="arrow-right" class="text-2xs" />
+                                        </RouterLink>
+                                        <Button
+                                            v-if="selected.kind !== 'devops'"
+                                            size="small"
+                                            severity="danger"
+                                            :text="true"
+                                            :rounded="true"
+                                            aria-label="Remove instance"
+                                            @click="askRemove(instance.id)"
+                                        >
+                                            <template #icon><Icon name="trash" /></template>
+                                        </Button>
+                                    </div>
+                                </div>
+                                <CapabilityEffects :effects="instanceEffects(instance)" :compact="true" />
+                                <!-- A browser capability that's installed but not signed in is pending on the LOGIN, not a
+                                         rebuild — make the hint open the login window (same action as the button above), never
+                                         the /sandbox rebuild hub. Keyed off the daemon's "rebuild" detail (see handlers/browser.ts). -->
+                                <button
+                                    v-if="
+                                        instance.status.state === 'pending' &&
+                                        selected.kind === 'browser' &&
+                                        !String(instance.status.detail ?? '').includes('rebuild')
+                                    "
+                                    type="button"
+                                    class="inline-flex w-fit items-center gap-1 text-2xs text-warning hover:underline"
                                     @click="openLogin(String(instance.config[`platform`]), selected.name)"
                                 >
-                                    <template #icon><Icon name="sign-in" /></template>
-                                </Button>
-                                <!-- An ACP agent with a declared loginCommand signs in interactively: the daemon
-                                         starts it in the capability's job session and the terminal panel opens on it. -->
-                                <Button
-                                    v-if="selected.kind === 'agent' && instance.config[`loginCommand`] !== undefined"
-                                    label="Sign in"
-                                    size="small"
-                                    :text="true"
-                                    @click="startAgentLogin(instance.id)"
-                                >
-                                    <template #icon><Icon name="sign-in" /></template>
-                                </Button>
-                                <!-- A VPN is dialled from the Status card, which owns the whole flow (progress,
-                                     the gateway's own error text, a one-time code field). Linking there beats a
-                                     second, thinner set of controls that would handle 2FA worse. -->
-                                <RouterLink
-                                    v-if="selected.kind === 'vpn'"
-                                    to="/sandbox/status"
-                                    class="inline-flex items-center gap-1 px-2 text-2xs text-link hover:underline"
-                                >
-                                    Connect / disconnect <Icon name="arrow-right" class="text-2xs" />
-                                </RouterLink>
-                                <Button
-                                    v-if="selected.kind !== 'devops'"
-                                    size="small"
-                                    severity="danger"
-                                    :text="true"
-                                    :rounded="true"
-                                    aria-label="Remove instance"
-                                    @click="askRemove(instance.id)"
-                                >
-                                    <template #icon><Icon name="trash" /></template>
-                                </Button>
-                            </div>
-                        </div>
-                        <CapabilityEffects :effects="instanceEffects(instance)" :compact="true" />
-                        <!-- A browser capability that's installed but not signed in is pending on the LOGIN, not a
-                                 rebuild — make the hint open the login window (same action as the button above), never
-                                 the /sandbox rebuild hub. Keyed off the daemon's "rebuild" detail (see handlers/browser.ts). -->
-                        <button
-                            v-if="
-                                instance.status.state === 'pending' &&
-                                selected.kind === 'browser' &&
-                                !String(instance.status.detail ?? '').includes('rebuild')
-                            "
-                            type="button"
-                            class="inline-flex w-fit items-center gap-1 text-2xs text-warning hover:underline"
-                            @click="openLogin(String(instance.config[`platform`]), selected.name)"
-                        >
-                            <Icon name="exclamation-triangle" />
-                            {{ instance.status.detail ?? "Not connected" }} — Log in →
-                        </button>
-                        <!-- A computer that was added but never connected is pending on the ONE-LINER, not on a
-                             rebuild — send the hint to the same dialog as the button rather than to /sandbox. -->
-                        <button
-                            v-else-if="instance.status.state === 'pending' && selected.kind === 'host'"
-                            type="button"
-                            class="inline-flex w-fit items-center gap-1 text-2xs text-warning hover:underline"
-                            @click="openConnect(instance)"
-                        >
-                            <Icon name="exclamation-triangle" />
-                            {{ instance.status.detail ?? "Not connected" }} — Connect →
-                        </button>
-                        <!-- A capability that needs a sandbox rebuild (Discord voice / a DB client / a browser whose
-                                 Chromium isn't installed yet) is otherwise a dead-end "pending" — point at the Sandbox ▸
-                                 Environment tab where the rebuild command lives. -->
-                        <RouterLink
-                            v-else-if="instance.status.state === 'pending'"
-                            to="/sandbox/environment"
-                            class="inline-flex items-center gap-1 text-2xs text-warning hover:underline"
-                        >
-                            <Icon name="exclamation-triangle" />
-                            {{ instance.status.detail ?? "Needs a sandbox rebuild" }} — Finish setup →
-                        </RouterLink>
-                    </div>
-                </RowGroup>
-
-                <!-- The gateway serving those connections. It answers the question the connector page is
-                     actually visited with once something is set up — "is this still working?" — so it lives
-                     here rather than only in the terminal panel's popover. Same rows, same actions. -->
-                <RowGroup
-                    v-if="cardProcesses.length > 0"
-                    label="Background process"
-                    caption="Relays events to your agent — restart it if this connection stops responding."
-                >
-                    <div v-for="row in cardProcesses" :key="row.id" class="flex items-center gap-2 px-4 py-3 text-xs">
-                        <span class="h-1.5 w-1.5 shrink-0 rounded-full" :class="row.running ? 'bg-success' : 'bg-content/25'"></span>
-                        <span class="font-medium text-content">{{ row.name }}</span>
-                        <span class="text-2xs" :class="row.running ? 'text-muted' : 'text-warning'">{{ row.running ? "running" : "stopped" }}</span>
-                        <div class="ml-auto flex items-center gap-1">
-                            <Button v-if="row.session" label="Logs" size="small" :text="true" @click="viewProcessLogs(row)">
-                                <template #icon><Icon name="align-left" /></template>
-                            </Button>
-                            <Button
-                                :label="row.running ? 'Restart' : 'Start'"
-                                size="small"
-                                :text="true"
-                                :disabled="processBusy === row.id"
-                                @click="void startProcess(row)"
-                            >
-                                <template #icon><Icon :name="row.running ? 'refresh' : 'play'" /></template>
-                            </Button>
-                            <Button
-                                v-if="row.running"
-                                label="Stop"
-                                size="small"
-                                severity="danger"
-                                :text="true"
-                                :disabled="processBusy === row.id"
-                                @click="void stopProcess(row)"
-                            >
-                                <template #icon><Icon name="stop" /></template>
-                            </Button>
-                        </div>
-                    </div>
-                </RowGroup>
-
-                <!-- FortiClient import (vpn only): drop an exported config and pick a connection to pre-fill
-                     the form. FortiClient encrypts stored credentials with a machine-bound key, so the secret
-                     is never importable — each connection says which fields are still waiting. -->
-                <RowGroup v-if="selected.kind === 'vpn'" label="Import from FortiClient (optional)">
-                    <div class="flex flex-col gap-2 px-4 py-3">
-                        <p class="text-2xs text-muted">
-                            Drop an exported FortiClient configuration (File ▸ Settings ▸ Backup) here to fill the form from one of its connections.
-                            Passwords in that file are encrypted by FortiClient and can't be read — you'll still type those.
-                        </p>
-                        <!-- The zone IS the button, so the drag and the click share one target and there is no
-                             small "browse" link beside it to aim at. -->
-                        <button
-                            type="button"
-                            :class="
-                                cmp.emptyState(
-                                    `flex cursor-pointer flex-col items-center gap-1 py-6 transition-colors`,
-                                    forticlientDragging ? `border-primary-500 bg-primary-500/5` : `hover:border-line-strong`,
-                                )
-                            "
-                            :disabled="importing"
-                            @click="chooseForticlient?.click()"
-                            @dragenter.prevent="onForticlientDragEnter"
-                            @dragover.prevent
-                            @dragleave="onForticlientDragLeave"
-                            @drop.prevent="onForticlientDrop"
-                        >
-                            <Icon v-if="importing" name="spinner" spin class="text-lg text-info" />
-                            <Icon v-else name="upload" :class="['text-lg', forticlientDragging ? 'text-primary-500' : 'text-muted']" />
-                            <span class="text-xs text-content">
-                                <template v-if="importing">Reading…</template>
-                                <template v-else-if="forticlientDragging">Drop it to read its connections</template>
-                                <template v-else>Drop the configuration file here</template>
-                            </span>
-                            <!-- Hidden, never unmounted: dropping the line would shorten the zone under the
-                                 pointer mid-drag, and a cursor near its bottom edge would then leave and
-                                 re-enter it in a loop. -->
-                            <span :class="['text-2xs text-subtle', importing || forticlientDragging ? 'invisible' : '']">or click to choose one</span>
-                        </button>
-                        <input
-                            ref="chooseForticlient"
-                            type="file"
-                            accept=".conf,.xml,text/xml,application/xml"
-                            class="hidden"
-                            @change="onForticlientPick"
-                        />
-                        <p v-if="forticlientFile !== '' && forticlientConnections.length === 0" class="text-2xs text-warning">
-                            No VPN connections found in {{ forticlientFile }}.
-                        </p>
-                        <template v-if="forticlientConnections.length > 0">
-                            <p class="text-2xs text-subtle">From {{ forticlientFile }} — pick the connection to fill the form with.</p>
-                            <div class="scrollbar-thin flex max-h-48 flex-col gap-0.5 overflow-auto">
-                                <button
-                                    v-for="connection in forticlientConnections"
-                                    :key="`${connection.provider}-${connection.id}`"
-                                    type="button"
-                                    class="flex flex-col gap-0.5 rounded-md bg-canvas px-2.5 py-1.5 text-left text-xs transition-colors hover:bg-overlay"
-                                    @click="pickForticlient(connection)"
-                                >
-                                    <span class="flex items-baseline gap-2">
-                                        <span class="font-medium text-content">{{ connection.label }}</span>
-                                        <span class="text-2xs text-subtle">{{ connection.provider === "fortinet" ? "SSL-VPN" : "IPsec" }}</span>
-                                        <span class="min-w-0 truncate font-mono text-2xs text-muted">
-                                            {{ connection.server }}:{{ connection.port }}
-                                        </span>
-                                    </span>
-                                    <span class="text-2xs text-subtle">You'll need to enter: {{ connection.needs.join(", ") }}</span>
+                                    <Icon name="exclamation-triangle" />
+                                    {{ instance.status.detail ?? "Not connected" }} — Log in →
                                 </button>
-                            </div>
-                        </template>
-                    </div>
-                </RowGroup>
-
-                <!-- Registry browse (plugin + extension): resolve a registry repo and pre-fill the form below. -->
-                <RowGroup v-if="selected.kind === 'plugin' || selected.kind === 'extension'" label="From a registry (optional)">
-                    <div class="flex flex-col gap-2 px-4 py-3">
-                        <div class="flex gap-2">
-                            <input v-model="marketUrl" placeholder="https://github.com/owner/registry" :class="cmp.input('min-w-0 flex-1')" />
-                            <input v-model="marketToken" type="password" autocomplete="off" placeholder="Token" :class="cmp.input('w-28')" />
-                            <Button
-                                label="Browse"
-                                size="small"
-                                :disabled="marketUrl.trim().length === 0 || browsing"
-                                :loading="browsing"
-                                @click="browse"
-                            />
-                        </div>
-                        <div v-if="market" class="scrollbar-thin flex max-h-40 flex-col gap-0.5 overflow-auto">
-                            <button
-                                v-for="entry in marketEntries"
-                                :key="entry.name"
-                                type="button"
-                                class="flex items-center gap-2 rounded-md bg-canvas px-2.5 py-1.5 text-left text-xs transition-colors enabled:hover:bg-overlay disabled:opacity-50"
-                                :disabled="blockedReason(entry) !== undefined"
-                                @click="pickEntry(entry)"
-                            >
-                                <!-- The mark the registry carries, which for most rows is the extension's own
-                                     initials: these are names nobody has seen before, and a column of marks is
-                                     the only thing here that can be scanned without reading. -->
-                                <BrandMark :size="20" :name="entry.name" :logo="entry.logo" :icon="entry.icon" />
-                                <!-- Verified is the only badge: it is the one state a human asserted, and badging
-                                     "listed" too would dress the honest default up as a review. -->
-                                <Icon v-if="entry.trust === 'verified'" name="shield" class="shrink-0 text-success" title="Verified" />
-                                <span class="font-medium text-content">{{ entry.name }}</span>
-                                <span v-if="entry.version" class="text-2xs text-subtle">{{ entry.version }}</span>
-                                <span v-if="entry.stars !== undefined" class="inline-flex shrink-0 items-center gap-0.5 text-2xs text-subtle">
-                                    <Icon name="star" />{{ entry.stars }}
-                                </span>
-                                <span class="min-w-0 truncate text-2xs text-muted">{{ entry.description }}</span>
-                                <span
-                                    v-if="blockedReason(entry)"
-                                    :class="['ml-auto shrink-0 text-2xs', entry.trust === 'blocked' ? 'text-danger' : 'text-subtle']"
+                                <!-- A computer that was added but never connected is pending on the ONE-LINER, not on a
+                                     rebuild — send the hint to the same dialog as the button rather than to /sandbox. -->
+                                <button
+                                    v-else-if="instance.status.state === 'pending' && selected.kind === 'host'"
+                                    type="button"
+                                    class="inline-flex w-fit items-center gap-1 text-2xs text-warning hover:underline"
+                                    @click="openConnect(instance)"
                                 >
-                                    {{ blockedReason(entry) }}
+                                    <Icon name="exclamation-triangle" />
+                                    {{ instance.status.detail ?? "Not connected" }} — Connect →
+                                </button>
+                                <!-- A capability that needs a sandbox rebuild (Discord voice / a DB client / a browser whose
+                                         Chromium isn't installed yet) is otherwise a dead-end "pending" — point at the Sandbox ▸
+                                         Environment tab where the rebuild command lives. -->
+                                <RouterLink
+                                    v-else-if="instance.status.state === 'pending'"
+                                    to="/sandbox/environment"
+                                    class="inline-flex items-center gap-1 text-2xs text-warning hover:underline"
+                                >
+                                    <Icon name="exclamation-triangle" />
+                                    {{ instance.status.detail ?? "Needs a sandbox rebuild" }} — Finish setup →
+                                </RouterLink>
+                            </div>
+                        </RowGroup>
+
+                        <!-- The gateway serving those connections. It answers the question the connector page is
+                             actually visited with once something is set up — "is this still working?" — so it lives
+                             here rather than only in the terminal panel's popover. Same rows, same actions. -->
+                        <RowGroup
+                            v-if="cardProcesses.length > 0"
+                            label="Background process"
+                            caption="Relays events to your agent — restart it if this connection stops responding."
+                        >
+                            <div v-for="row in cardProcesses" :key="row.id" class="flex items-center gap-2 px-4 py-3 text-xs">
+                                <span class="h-1.5 w-1.5 shrink-0 rounded-full" :class="row.running ? 'bg-success' : 'bg-content/25'"></span>
+                                <span class="font-medium text-content">{{ row.name }}</span>
+                                <span class="text-2xs" :class="row.running ? 'text-muted' : 'text-warning'">{{
+                                    row.running ? "running" : "stopped"
+                                }}</span>
+                                <div class="ml-auto flex items-center gap-1">
+                                    <Button v-if="row.session" label="Logs" size="small" :text="true" @click="viewProcessLogs(row)">
+                                        <template #icon><Icon name="align-left" /></template>
+                                    </Button>
+                                    <Button
+                                        :label="row.running ? 'Restart' : 'Start'"
+                                        size="small"
+                                        :text="true"
+                                        :disabled="processBusy === row.id"
+                                        @click="void startProcess(row)"
+                                    >
+                                        <template #icon><Icon :name="row.running ? 'refresh' : 'play'" /></template>
+                                    </Button>
+                                    <Button
+                                        v-if="row.running"
+                                        label="Stop"
+                                        size="small"
+                                        severity="danger"
+                                        :text="true"
+                                        :disabled="processBusy === row.id"
+                                        @click="void stopProcess(row)"
+                                    >
+                                        <template #icon><Icon name="stop" /></template>
+                                    </Button>
+                                </div>
+                            </div>
+                        </RowGroup>
+
+                        <!-- FortiClient import (vpn only): drop an exported config and pick a connection to pre-fill
+                             the form. FortiClient encrypts stored credentials with a machine-bound key, so the secret
+                             is never importable — each connection says which fields are still waiting. -->
+                        <RowGroup v-if="selected.kind === 'vpn'" label="Import from FortiClient (optional)">
+                            <div class="flex flex-col gap-2 px-4 py-3">
+                                <p class="text-2xs text-muted">
+                                    Drop an exported FortiClient configuration (File ▸ Settings ▸ Backup) here to fill the form from one of its
+                                    connections. Passwords in that file are encrypted by FortiClient and can't be read — you'll still type those.
+                                </p>
+                                <!-- The zone IS the button, so the drag and the click share one target and there is no
+                                     small "browse" link beside it to aim at. -->
+                                <button
+                                    type="button"
+                                    :class="
+                                        cmp.emptyState(
+                                            `flex cursor-pointer flex-col items-center gap-1 py-6 transition-colors`,
+                                            forticlientDragging ? `border-primary-500 bg-primary-500/5` : `hover:border-line-strong`,
+                                        )
+                                    "
+                                    :disabled="importing"
+                                    @click="chooseForticlient?.click()"
+                                    @dragenter.prevent="onForticlientDragEnter"
+                                    @dragover.prevent
+                                    @dragleave="onForticlientDragLeave"
+                                    @drop.prevent="onForticlientDrop"
+                                >
+                                    <Icon v-if="importing" name="spinner" spin class="text-lg text-info" />
+                                    <Icon v-else name="upload" :class="['text-lg', forticlientDragging ? 'text-primary-500' : 'text-muted']" />
+                                    <span class="text-xs text-content">
+                                        <template v-if="importing">Reading…</template>
+                                        <template v-else-if="forticlientDragging">Drop it to read its connections</template>
+                                        <template v-else>Drop the configuration file here</template>
+                                    </span>
+                                    <!-- Hidden, never unmounted: dropping the line would shorten the zone under the
+                                         pointer mid-drag, and a cursor near its bottom edge would then leave and
+                                         re-enter it in a loop. -->
+                                    <span :class="['text-2xs text-subtle', importing || forticlientDragging ? 'invisible' : '']"
+                                        >or click to choose one</span
+                                    >
+                                </button>
+                                <input
+                                    ref="chooseForticlient"
+                                    type="file"
+                                    accept=".conf,.xml,text/xml,application/xml"
+                                    class="hidden"
+                                    @change="onForticlientPick"
+                                />
+                                <p v-if="forticlientFile !== '' && forticlientConnections.length === 0" class="text-2xs text-warning">
+                                    No VPN connections found in {{ forticlientFile }}.
+                                </p>
+                                <template v-if="forticlientConnections.length > 0">
+                                    <p class="text-2xs text-subtle">From {{ forticlientFile }} — pick the connection to fill the form with.</p>
+                                    <div class="scrollbar-thin flex max-h-48 flex-col gap-0.5 overflow-auto">
+                                        <button
+                                            v-for="connection in forticlientConnections"
+                                            :key="`${connection.provider}-${connection.id}`"
+                                            type="button"
+                                            class="flex flex-col gap-0.5 rounded-md bg-canvas px-2.5 py-1.5 text-left text-xs transition-colors hover:bg-overlay"
+                                            @click="pickForticlient(connection)"
+                                        >
+                                            <span class="flex items-baseline gap-2">
+                                                <span class="font-medium text-content">{{ connection.label }}</span>
+                                                <span class="text-2xs text-subtle">{{
+                                                    connection.provider === "fortinet" ? "SSL-VPN" : "IPsec"
+                                                }}</span>
+                                                <span class="min-w-0 truncate font-mono text-2xs text-muted">
+                                                    {{ connection.server }}:{{ connection.port }}
+                                                </span>
+                                            </span>
+                                            <span class="text-2xs text-subtle">You'll need to enter: {{ connection.needs.join(", ") }}</span>
+                                        </button>
+                                    </div>
+                                </template>
+                            </div>
+                        </RowGroup>
+
+                        <!-- Registry browse (plugin + extension): resolve a registry repo and pre-fill the form below. -->
+                        <RowGroup v-if="selected.kind === 'plugin' || selected.kind === 'extension'" label="From a registry (optional)">
+                            <div class="flex flex-col gap-2 px-4 py-3">
+                                <div class="flex gap-2">
+                                    <input v-model="marketUrl" placeholder="https://github.com/owner/registry" :class="cmp.input('min-w-0 flex-1')" />
+                                    <input v-model="marketToken" type="password" autocomplete="off" placeholder="Token" :class="cmp.input('w-28')" />
+                                    <Button
+                                        label="Browse"
+                                        size="small"
+                                        :disabled="marketUrl.trim().length === 0 || browsing"
+                                        :loading="browsing"
+                                        @click="browse"
+                                    />
+                                </div>
+                                <div v-if="market" class="scrollbar-thin flex max-h-40 flex-col gap-0.5 overflow-auto">
+                                    <button
+                                        v-for="entry in marketEntries"
+                                        :key="entry.name"
+                                        type="button"
+                                        class="flex items-center gap-2 rounded-md bg-canvas px-2.5 py-1.5 text-left text-xs transition-colors enabled:hover:bg-overlay disabled:opacity-50"
+                                        :disabled="blockedReason(entry) !== undefined"
+                                        @click="pickEntry(entry)"
+                                    >
+                                        <!-- The mark the registry carries, which for most rows is the extension's own
+                                             initials: these are names nobody has seen before, and a column of marks is
+                                             the only thing here that can be scanned without reading. -->
+                                        <BrandMark :size="20" :name="entry.name" :logo="entry.logo" :icon="entry.icon" />
+                                        <!-- Verified is the only badge: it is the one state a human asserted, and badging
+                                             "listed" too would dress the honest default up as a review. -->
+                                        <Icon v-if="entry.trust === 'verified'" name="shield" class="shrink-0 text-success" title="Verified" />
+                                        <span class="font-medium text-content">{{ entry.name }}</span>
+                                        <span v-if="entry.version" class="text-2xs text-subtle">{{ entry.version }}</span>
+                                        <span v-if="entry.stars !== undefined" class="inline-flex shrink-0 items-center gap-0.5 text-2xs text-subtle">
+                                            <Icon name="star" />{{ entry.stars }}
+                                        </span>
+                                        <span class="min-w-0 truncate text-2xs text-muted">{{ entry.description }}</span>
+                                        <span
+                                            v-if="blockedReason(entry)"
+                                            :class="['ml-auto shrink-0 text-2xs', entry.trust === 'blocked' ? 'text-danger' : 'text-subtle']"
+                                        >
+                                            {{ blockedReason(entry) }}
+                                        </span>
+                                    </button>
+                                </div>
+                                <p v-if="market && marketEntries.length === 0" class="text-2xs text-subtle">
+                                    That registry lists no {{ selected.kind === "extension" ? "extensions" : "plugins" }}.
+                                </p>
+                            </div>
+                        </RowGroup>
+
+                        <!-- One per sandbox → nothing to name, and a name box would be the field that invites a second
+                             one. The id stays the card's (suggestName), so the submit updates what's there. -->
+                        <label v-if="!selected.singleton" class="ui-field">
+                            <span class="ui-field-label">Name</span>
+                            <input
+                                v-model="name"
+                                placeholder="my-tool"
+                                :class="[cmp.input(), touched.has('name') && nameError ? 'ui-field-input-error' : '']"
+                                @input="nameEdited = true"
+                                @blur="markTouched('name')"
+                            />
+                            <span v-if="touched.has('name') && nameError" class="ui-field-error">
+                                <Icon name="exclamation-triangle" class="text-2xs" />
+                                {{ nameError }}
+                            </span>
+                            <span v-else-if="nameCollision" class="mt-1 inline-flex items-center gap-1 text-2xs text-warning">
+                                <Icon name="exclamation-triangle" />
+                                A connection named "{{ name.trim() }}" already exists — saving will update it.
+                            </span>
+                            <span v-else-if="selectedInstances.length > 0" class="mt-1 text-2xs text-subtle">
+                                Give this one a new name to add another connection, or reuse a name to update it.
+                            </span>
+                        </label>
+                        <!-- The narrow half of the credential guide, above the fields it explains. From @4xl it
+                             is docked in a column of its own (see the aside below) and this one is hidden. -->
+                        <CredentialGuide v-if="selected.guide" :entry="selected" :values="values" class="@4xl:hidden" />
+                        <template v-for="field in visibleFields(selected)" :key="field.key">
+                            <!-- An opt-in extra: the switch sits BESIDE its label, not under it. Stacked in the column
+                                 of inputs it would read as one more thing to fill in; beside the label it reads as the
+                                 thing it is — already answered, changeable. Its hint carries what the label can't say
+                                 (a host requirement, when the value takes effect), which is exactly the caveat a lone
+                                 switch invites people to skip. -->
+                            <label v-if="field.boolean" class="flex items-start justify-between gap-4">
+                                <span class="min-w-0">
+                                    <span class="ui-field-label">{{ field.label }}</span>
+                                    <StatusBadge v-if="field.rebuild" variant="neutral" size="xs" label="needs rebuild" class="ml-1.5 align-middle" />
+                                    <span v-if="field.hint" class="mt-0.5 block text-2xs text-muted">{{ field.hint }}</span>
                                 </span>
-                            </button>
+                                <ToggleSwitch
+                                    class="ui-switch-sm mt-0.5 shrink-0"
+                                    :model-value="values[field.key] === 'on'"
+                                    :aria-label="field.label"
+                                    @update:model-value="(value: boolean) => (values[field.key] = value ? 'on' : 'off')"
+                                />
+                            </label>
+                            <label v-else class="ui-field">
+                                <span class="ui-field-label">
+                                    {{ field.label }}{{ field.optional ? " (optional)" : "" }}
+                                    <StatusBadge v-if="field.rebuild" variant="neutral" size="xs" label="needs rebuild" class="ml-1.5 align-middle" />
+                                </span>
+                                <Segmented
+                                    v-if="field.options"
+                                    :model-value="values[field.key] ?? ''"
+                                    :options="[...field.options]"
+                                    @update:model-value="values[field.key] = $event"
+                                />
+                                <textarea
+                                    v-else-if="field.multiline"
+                                    v-model="values[field.key]"
+                                    :placeholder="field.placeholder"
+                                    rows="6"
+                                    spellcheck="false"
+                                    :class="[
+                                        cmp.input('font-mono resize-y'),
+                                        touched.has(field.key) && fieldError(field) ? 'ui-field-input-error' : '',
+                                    ]"
+                                    @blur="markTouched(field.key)"
+                                />
+                                <input
+                                    v-else
+                                    v-model="values[field.key]"
+                                    :type="field.secret ? 'password' : 'text'"
+                                    :autocomplete="field.secret ? 'off' : undefined"
+                                    :placeholder="field.placeholder"
+                                    :class="[cmp.input(), touched.has(field.key) && fieldError(field) ? 'ui-field-input-error' : '']"
+                                    @blur="markTouched(field.key)"
+                                />
+                                <span v-if="touched.has(field.key) && fieldError(field)" class="ui-field-error">
+                                    <Icon name="exclamation-triangle" class="text-2xs" />
+                                    {{ fieldError(field) }}
+                                </span>
+                                <span v-else-if="field.hint" class="text-2xs text-muted">{{ field.hint }}</span>
+                            </label>
+                        </template>
+                        <CapabilityEffects :effects="liveEffects" />
+                        <!-- Why the grid badged this one — named here too, so the rebuild the hint asks for has a reason attached. -->
+                        <div v-if="recommendationFor(selected.kind)" :class="cmp.alertInfo()">
+                            Recommended: your workspace has <b>{{ recommendationFor(selected.kind)?.evidence }}</b
+                            >, which needs this capability to run.
                         </div>
-                        <p v-if="market && marketEntries.length === 0" class="text-2xs text-subtle">
-                            That registry lists no {{ selected.kind === "extension" ? "extensions" : "plugins" }}.
-                        </p>
-                    </div>
-                </RowGroup>
+                        <p v-if="selected.hint" class="text-xs text-muted">{{ selected.hint }}</p>
 
-                <!-- One per sandbox → nothing to name, and a name box would be the field that invites a second
-                     one. The id stays the card's (suggestName), so the submit updates what's there. -->
-                <label v-if="!selected.singleton" class="ui-field">
-                    <span class="ui-field-label">Name</span>
-                    <input
-                        v-model="name"
-                        placeholder="my-tool"
-                        :class="[cmp.input(), touched.has('name') && nameError ? 'ui-field-input-error' : '']"
-                        @input="nameEdited = true"
-                        @blur="markTouched('name')"
-                    />
-                    <span v-if="touched.has('name') && nameError" class="ui-field-error">
-                        <Icon name="exclamation-triangle" class="text-2xs" />
-                        {{ nameError }}
-                    </span>
-                    <span v-else-if="nameCollision" class="mt-1 inline-flex items-center gap-1 text-2xs text-warning">
-                        <Icon name="exclamation-triangle" />
-                        A connection named "{{ name.trim() }}" already exists — saving will update it.
-                    </span>
-                    <span v-else-if="selectedInstances.length > 0" class="mt-1 text-2xs text-subtle">
-                        Give this one a new name to add another connection, or reuse a name to update it.
-                    </span>
-                </label>
-                <CredentialGuide :entry="selected" :values="values" />
-                <template v-for="field in visibleFields(selected)" :key="field.key">
-                    <!-- An opt-in extra: the switch sits BESIDE its label, not under it. Stacked in the column
-                         of inputs it would read as one more thing to fill in; beside the label it reads as the
-                         thing it is — already answered, changeable. Its hint carries what the label can't say
-                         (a host requirement, when the value takes effect), which is exactly the caveat a lone
-                         switch invites people to skip. -->
-                    <label v-if="field.boolean" class="flex items-start justify-between gap-4">
-                        <span class="min-w-0">
-                            <span class="ui-field-label">{{ field.label }}</span>
-                            <StatusBadge v-if="field.rebuild" variant="neutral" size="xs" label="needs rebuild" class="ml-1.5 align-middle" />
-                            <span v-if="field.hint" class="mt-0.5 block text-2xs text-muted">{{ field.hint }}</span>
-                        </span>
-                        <ToggleSwitch
-                            class="ui-switch-sm mt-0.5 shrink-0"
-                            :model-value="values[field.key] === 'on'"
-                            :aria-label="field.label"
-                            @update:model-value="(value: boolean) => (values[field.key] = value ? 'on' : 'off')"
-                        />
-                    </label>
-                    <label v-else class="ui-field">
-                        <span class="ui-field-label">
-                            {{ field.label }}{{ field.optional ? " (optional)" : "" }}
-                            <StatusBadge v-if="field.rebuild" variant="neutral" size="xs" label="needs rebuild" class="ml-1.5 align-middle" />
-                        </span>
-                        <Segmented
-                            v-if="field.options"
-                            :model-value="values[field.key] ?? ''"
-                            :options="[...field.options]"
-                            @update:model-value="values[field.key] = $event"
-                        />
-                        <textarea
-                            v-else-if="field.multiline"
-                            v-model="values[field.key]"
-                            :placeholder="field.placeholder"
-                            rows="6"
-                            spellcheck="false"
-                            :class="[cmp.input('font-mono resize-y'), touched.has(field.key) && fieldError(field) ? 'ui-field-input-error' : '']"
-                            @blur="markTouched(field.key)"
-                        />
-                        <input
-                            v-else
-                            v-model="values[field.key]"
-                            :type="field.secret ? 'password' : 'text'"
-                            :autocomplete="field.secret ? 'off' : undefined"
-                            :placeholder="field.placeholder"
-                            :class="[cmp.input(), touched.has(field.key) && fieldError(field) ? 'ui-field-input-error' : '']"
-                            @blur="markTouched(field.key)"
-                        />
-                        <span v-if="touched.has(field.key) && fieldError(field)" class="ui-field-error">
-                            <Icon name="exclamation-triangle" class="text-2xs" />
-                            {{ fieldError(field) }}
-                        </span>
-                        <span v-else-if="field.hint" class="text-2xs text-muted">{{ field.hint }}</span>
-                    </label>
-                </template>
-                <CapabilityEffects :effects="liveEffects" />
-                <!-- Why the grid badged this one — named here too, so the rebuild the hint asks for has a reason attached. -->
-                <div v-if="recommendationFor(selected.kind)" :class="cmp.alertInfo()">
-                    Recommended: your workspace has <b>{{ recommendationFor(selected.kind)?.evidence }}</b
-                    >, which needs this capability to run.
+                        <div :class="['flex justify-end', shaking ? 'ui-shake' : '']" @animationend="shaking = false">
+                            <Button type="submit" :label="submitLabel" :loading="submitting">
+                                <template #icon><Icon name="check" /></template>
+                            </Button>
+                        </div>
+                    </form>
                 </div>
-                <p v-if="selected.hint" class="text-xs text-muted">{{ selected.hint }}</p>
 
-                <div :class="['flex justify-end', shaking ? 'ui-shake' : '']" @animationend="shaking = false">
-                    <Button type="submit" :label="submitLabel" :loading="submitting">
-                        <template #icon><Icon name="check" /></template>
-                    </Button>
-                </div>
-            </form>
+                <!-- The docked half of the card's credential guide. `hidden` below @4xl, where the same
+                     component renders inline inside the form instead — exactly one of the two is ever on
+                     screen. `items-start` on the row is what leaves it room to stick while the form scrolls
+                     past it, and the v-if keeps a card with no guide from reserving an empty column. -->
+                <aside v-if="selected.guide" class="hidden @4xl:sticky @4xl:top-6 @4xl:block @4xl:w-72 @4xl:shrink-0">
+                    <CredentialGuide :entry="selected" :values="values" />
+                </aside>
+            </div>
         </div>
 
         <!-- STEP 1: the catalog, grouped into sections. -->

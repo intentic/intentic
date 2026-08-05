@@ -32,13 +32,13 @@
                     "guide": {
                         "url": "https://api.slack.com/apps",
                         "linkLabel": "Open the Slack app dashboard",
-                        "scopes": "Bot: app_mentions:read, channels:history, channels:read, chat:write, groups:history, groups:read, im:history, im:read, im:write, mpim:history, reactions:read, reactions:write, users:read · App-level: connections:write",
+                        "scopes": "Bot `app_mentions:read`, `channels:history`, `channels:read`, `chat:write`, `groups:history`, `groups:read`, `im:history`, `im:read`, `im:write`, `mpim:history`, `reactions:read`, `reactions:write`, `users:read` · App-level `connections:write`",
                         "steps": [
-                            "Create New App → From an app manifest (ask the agent for the manifest — it fills in the scopes and events below).",
-                            "Basic Information → App-Level Tokens → Generate, scope connections:write. Copy the xapp- token.",
-                            "Socket Mode → toggle Enable Socket Mode on.",
-                            "Install App → Install to Workspace, then copy the xoxb- Bot User OAuth Token.",
-                            "Paste both tokens here, then invite the bot to a channel with /invite @yourbot."
+                            "`Create New App` → `From an app manifest` (ask the agent for the manifest — it fills in the scopes and events below).",
+                            "`Basic Information` → `App-Level Tokens` → `Generate`, scope `connections:write`. Copy the `xapp-` token.",
+                            "`Socket Mode` → toggle `Enable Socket Mode` on.",
+                            "`Install App` → `Install to Workspace`, then copy the `xoxb-` Bot User OAuth Token.",
+                            "Paste both tokens here, then invite the bot to a channel with `/invite @yourbot`."
                         ]
                     }
                 },

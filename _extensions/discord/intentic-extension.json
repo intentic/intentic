@@ -33,11 +33,11 @@
                     "guide": {
                         "url": "https://discord.com/developers/applications",
                         "linkLabel": "Open the Discord developer portal",
-                        "scopes": "Privileged intents: Message Content + Server Members",
+                        "scopes": "privileged intents `Message Content` + `Server Members`",
                         "steps": [
-                            "New Application → Bot.",
-                            "Reset Token, then copy the bot token.",
-                            "Enable the Message Content and Server Members privileged intents.",
+                            "`New Application` → `Bot`.",
+                            "`Reset Token`, then copy the bot token.",
+                            "Enable the `Message Content` and `Server Members` privileged intents.",
                             "Paste the token here, then ask the agent to “invite yourself to my server” — it makes a one-click invite link."
                         ]
                     }

@@ -53,7 +53,8 @@ const clampVertically = (triggerRect: DOMRect) => {
  * does not work: the trigger is a 16px inline icon, so its own right edge is somewhere in the middle of whatever
  * row it sits in, and a card placed there lands on the same content by a different route. Anything that reaches
  * for the container instead has to guess which ancestor is the container. A hint that would cover a form belongs
- * in a disclosure that opens INSIDE the layout (see CredentialGuide) rather than in an overlay placed cleverly. */
+ * IN the layout — a column of its own where there is room for one (SetupRunDetails, CredentialGuide) — rather
+ * than in an overlay placed cleverly. */
 const place = () => {
     const el = trigger.value;
     if (!el) return;

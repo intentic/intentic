@@ -19,7 +19,7 @@
                     "guide": {
                         "steps": [
                             "Add the computer here, then click Connect on its card to get a one-time command.",
-                            "Run that command in PowerShell on the computer you want to connect — it installs a small agent that dials this sandbox.",
+                            "Run that command in `PowerShell` on the computer you want to connect — it installs a small agent that dials this sandbox.",
                             "Nothing is opened on your network: the connection is outbound, so no port forwarding and no VPN.",
                             "You can revoke it any time from this card; `intentic-host uninstall` removes the agent from the machine."
                         ]

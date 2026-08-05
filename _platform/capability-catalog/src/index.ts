@@ -104,10 +104,15 @@ export const CAPABILITY_CATEGORIES: readonly { readonly id: CapabilityCategory; 
     { id: "extend", label: "Extend", hint: "Add any MCP server or Claude Code plugin." },
 ];
 
-// How to obtain the credential a card needs — surfaced in the config form as a deep "Create a token ↗" link, a
-// required-scopes line, and a short step-by-step behind an info disclosure. A hosted provider uses an absolute
-// `url`; a self-hostable one builds the link from a config field's live value (`urlFromField` + `path`), so it
-// points at github.com or the user's own instance, and simply hides until that field holds an http(s) URL.
+// How to obtain the credential a card needs — surfaced beside the config form as a permanently open panel: the
+// required-scopes line, the step-by-step, and a deep "Create a token ↗" link. A hosted provider uses an
+// absolute `url`; a self-hostable one builds the link from a config field's live value (`urlFromField` +
+// `path`), so it points at github.com or the user's own instance, and simply hides until that field holds an
+// http(s) URL.
+//
+// WRAP LITERALS IN `BACKTICKS` in `scopes` and `steps` — a scope name, a menu item, a hostname, a port, a
+// command. They render as chips, which is what lets a reader pick the value out of the sentence instead of
+// parsing it. Nothing else is markup, and unmatched backticks stay as typed.
 export interface CapabilityGuide {
     readonly url?: string | undefined;
     readonly urlFromField?: string | undefined;
@@ -306,9 +311,9 @@ export const CAPABILITY_CATALOG: readonly CapabilityCatalogEntry[] = [
         guide: {
             steps: [
                 "Use a dedicated key or account scoped to what the agent should reach.",
-                "Generate one: ssh-keygen -t ed25519 -f agent_key, then add agent_key.pub to the server's authorized_keys.",
+                "Generate one: `ssh-keygen -t ed25519 -f agent_key`, then add `agent_key.pub` to the server's `authorized_keys`.",
                 "Paste the unencrypted private key here.",
-                "Or switch Authentication to Password and paste the password instead.",
+                "Or switch `Authentication` to `Password` and paste the password instead.",
             ],
         },
     },
@@ -445,12 +450,12 @@ export const CAPABILITY_CATALOG: readonly CapabilityCatalogEntry[] = [
         hint: "Connect and disconnect from Sandbox ▸ Status (the agent can too). Auto-connect re-dials after a sandbox restart.",
         guide: {
             steps: [
-                "WireGuard: paste the full .conf ([Interface] + [Peer]) from your provider or server.",
-                "FortiGate SSL-VPN: use the gateway host and port your FortiClient connection uses (e.g. vpn.example.com:10443 → host + 10443).",
+                "WireGuard: paste the full `.conf` (`[Interface]` + `[Peer]`) from your provider or server.",
+                "FortiGate SSL-VPN: use the gateway host and port your FortiClient connection uses (e.g. `vpn.example.com:10443` → host + `10443`).",
                 "IPsec: the pre-shared key, plus your XAuth username and password if the gateway asks for them.",
-                "IPsec routed networks: keep 0.0.0.0/0 only if the gateway also carries your internet — otherwise list the networks behind it, or the sandbox loses everything the gateway doesn't route.",
-                "Have a FortiClient config file? Use “Import from FortiClient” above to fill this in from it.",
-                "If the gateway asks for a 2FA code, connect from the Status card and enter the code there.",
+                "IPsec routed networks: keep `0.0.0.0/0` only if the gateway also carries your internet — otherwise list the networks behind it, or the sandbox loses everything the gateway doesn't route.",
+                "Have a FortiClient config file? Use `Import from FortiClient` above to fill this in from it.",
+                "If the gateway asks for a 2FA code, connect from the `Status` card and enter the code there.",
             ],
         },
     },
@@ -486,7 +491,7 @@ export const CAPABILITY_CATALOG: readonly CapabilityCatalogEntry[] = [
         ],
         hint: "Loaded by the agent next turn. Re-adding the same name updates it.",
         guide: {
-            scopes: "private repos: read access (e.g. GitHub repo)",
+            scopes: "private repos: read access (e.g. GitHub `repo`)",
             steps: [
                 "Point at a git repo that holds a Claude Code plugin (skills, agents, hooks, MCP).",
                 "Private repo: add a token with read access.",
@@ -510,9 +515,9 @@ export const CAPABILITY_CATALOG: readonly CapabilityCatalogEntry[] = [
             { key: "token", label: "Access token", secret: true, optional: true },
         ],
         guide: {
-            scopes: "private repos: read access (e.g. GitHub repo)",
+            scopes: "private repos: read access (e.g. GitHub `repo`)",
             steps: [
-                "Point at a git repo with an intentic-extension.json at its root (or the subdirectory).",
+                "Point at a git repo with an `intentic-extension.json` at its root (or the subdirectory).",
                 "Pin the exact commit sha you reviewed — branches and tags are not accepted.",
                 "Private repo: add a token with read access.",
                 "Reload the app after installing to load its UI; agent contributions load next turn.",
@@ -548,8 +553,8 @@ export const CAPABILITY_CATALOG: readonly CapabilityCatalogEntry[] = [
         hint: "A server on this machine is reachable at host.docker.internal — the sandbox always resolves it. Models are read from the endpoint itself, so pulling a new one just needs a reload. Most servers are OpenAI-compatible; pick Anthropic only if it serves /v1/messages.",
         guide: {
             steps: [
-                "Start your model server and note the URL its API is on (Ollama: http://localhost:11434/v1).",
-                "Running on THIS machine? Use host.docker.internal in place of localhost — the sandbox is a container.",
+                "Start your model server and note the URL its API is on (Ollama: `http://localhost:11434/v1`).",
+                "Running on THIS machine? Use `host.docker.internal` in place of `localhost` — the sandbox is a container.",
                 "Leave the key empty if the server has no auth; most self-hosted ones don't.",
                 "Its models then appear as their own provider in the chat's model picker.",
             ],
