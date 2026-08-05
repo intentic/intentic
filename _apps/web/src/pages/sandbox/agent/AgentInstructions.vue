@@ -4,11 +4,12 @@ import { cmp, CopyButton, Row, RowGroup, Segmented } from "@intentic/ui";
 import Button from "primevue/button";
 import Dialog from "primevue/dialog";
 import ToggleSwitch from "primevue/toggleswitch";
-import { computed, ref, watch } from "vue";
+import { computed, ref } from "vue";
 import { sandboxJson } from "../../../composables/sandbox/sandboxClient";
 import { useSavings } from "../../../composables/sandbox/useSavings";
 import { useSandboxSettings } from "../../../composables/sandbox/useSandboxSettings";
 import { useAsyncAction } from "../../../composables/useAsyncAction";
+import { useDraft } from "../../../composables/useDraft";
 import { asPercent, commitPercent } from "./numberInputs";
 import InstructionsInfo from "./InstructionsInfo.vue";
 
@@ -40,30 +41,10 @@ const PROMPT_MODES: { label: string; value: SystemPromptMode }[] = [
     { label: `Custom`, value: `custom` },
 ];
 const promptMode = computed<SystemPromptMode>(() => settings.value?.systemPromptMode ?? `intentic`);
-const prompt = ref(``);
-
-/* The draft mirrors a SAVED value, and this remembers WHICH — the fix for a bug that reached the settings page:
- * seeding used to be guarded by "is the draft dirty?", and on first load an empty draft always differs from a
- * saved prompt, so the guard meant to protect an unsaved edit blocked the initial seed instead. The row then
- * showed mode Custom over an empty textarea with a live Save button — one click from silently wiping the
- * prompt. Comparing against the value the draft was seeded FROM tells the two states apart: not-yet-seeded is
- * `undefined`, an untouched draft still equals its seed, and anything else is the user's own typing. */
-let seededFrom: string | undefined;
+// Seeded from the saved prompt, followed across other windows' saves, never over an edit here — see useDraft,
+// whose seeding rule was extracted from the bug this row hit (an empty draft blocking its own initial seed).
+const prompt = useDraft(() => settings.value?.systemPrompt);
 const promptDirty = computed(() => settings.value !== undefined && prompt.value !== settings.value.systemPrompt);
-watch(
-    () => settings.value?.systemPrompt,
-    (saved) => {
-        if (saved === undefined) {
-            return;
-        }
-        // Seed on first load, and follow a change made in ANOTHER window — but never over an edit in this one.
-        if (seededFrom === undefined || prompt.value === seededFrom) {
-            prompt.value = saved;
-        }
-        seededFrom = saved;
-    },
-    { immediate: true },
-);
 
 const savePrompt = (): void => {
     // Normalise BEFORE the dirty check, not inside the payload: saving a trimmed copy of an untrimmed draft

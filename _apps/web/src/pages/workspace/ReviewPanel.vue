@@ -165,11 +165,9 @@ const originMark = (id: string) => unfinishedMark(agentOf(id));
 // `turns` counts COMPLETED turns, so a session that has landed files and is running again is on turn N+1: the
 // "second iteration" this whole affordance exists to name.
 //
-// The elapsed reading is stamped when the card OPENS rather than ticked by an interval: this panel is one of
-// several the sidebar swaps between, and a timer running behind a v-if to animate a string nobody is looking at
-// is a re-render per second for nothing. A card the user holds open for a minute reads a minute stale, which is
-// the correct trade for a line whose point is "this started a while ago".
-const now = ref(0);
+// The elapsed reading is stamped when the card OPENS rather than ticked: HoverCard snapshots its content at
+// show(), so the note is a frozen string either way. A card the user holds open for a minute reads a minute
+// stale, which is the correct trade for a line whose point is "this started a while ago".
 const originNote = (id: string): string | undefined => {
     const mark = originMark(id);
     const agent = agentOf(id);
@@ -178,7 +176,7 @@ const originNote = (id: string): string | undefined => {
     }
     const turn = agent.turns !== undefined && agent.turns > 0 ? `turn ${agent.turns + 1}` : undefined;
     const doing = agent.activity?.tool !== undefined ? [agent.activity.tool, agent.activity.target].filter(Boolean).join(` `) : agent.activity?.todo;
-    const since = agent.startedAt !== undefined ? formatElapsed(agent.startedAt, now.value) : undefined;
+    const since = agent.startedAt !== undefined ? formatElapsed(agent.startedAt, Date.now()) : undefined;
     return [mark.label, turn, doing, since].filter((part) => part !== undefined && part !== ``).join(` · `);
 };
 
@@ -216,7 +214,6 @@ const firstPromptOf = (id: string): string | undefined => {
     return conversation?.messages.value.find((message) => message.role === `user`)?.text;
 };
 const showOrigins = (event: MouseEvent, ids: readonly string[]): void => {
-    now.value = Date.now();
     // Two agents on one file is a real (if rare) case, and it is exactly the case a single title can't state —
     // so the card lists them and the first message stays out of it.
     hoverCard.value?.show(

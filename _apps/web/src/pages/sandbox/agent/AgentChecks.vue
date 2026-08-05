@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { Row, RowGroup } from "@intentic/ui";
 import ToggleSwitch from "primevue/toggleswitch";
-import { ref, watch } from "vue";
+import { useDraft } from "../../../composables/useDraft";
 import { useSandboxSettings } from "../../../composables/sandbox/useSandboxSettings";
 
 /* WHAT PROVES THE WORK. Two checks with nothing in common but that question: one the daemon asks of a turn that
@@ -23,21 +23,7 @@ const { settings, patch } = useSandboxSettings();
  * only the owner knows what verifies their workspace, and a guessed `pnpm test` would read as the check finding
  * a bug on its first run. Committed on change rather than per keystroke — every save is a daemon round-trip,
  * and a half-typed command is a command. */
-const prepushCommandDraft = ref(``);
-let prepushSeededFrom: string | undefined;
-watch(
-    () => settings.value?.prepushCommand,
-    (saved) => {
-        if (saved === undefined) {
-            return;
-        }
-        if (prepushSeededFrom === undefined || prepushCommandDraft.value === prepushSeededFrom) {
-            prepushCommandDraft.value = saved;
-        }
-        prepushSeededFrom = saved;
-    },
-    { immediate: true },
-);
+const prepushCommandDraft = useDraft(() => settings.value?.prepushCommand);
 
 const savePrepushCommand = (): void => {
     const prepushCommand = prepushCommandDraft.value.trim();

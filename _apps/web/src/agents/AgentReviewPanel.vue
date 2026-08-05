@@ -7,6 +7,8 @@ import { useRouter } from "vue-router";
 import { stopAgent } from "../composables/agents/agentActions";
 import { type Blocker, REASON_COPY } from "../composables/agents/conflictResolution";
 import { type AgentReviewFile, useAgentChanges } from "../composables/agents/useAgentChanges";
+import { sandboxKey } from "../composables/sandbox/useSandbox";
+import { useSandboxQuery } from "../composables/sandbox/useSandboxQuery";
 import { useLayout } from "../composables/useLayout";
 import { diffRawUrls } from "../composables/workspace/diffRaw";
 import { useWorkspaceTabs } from "../composables/workspace/useWorkspaceTabs";
@@ -351,47 +353,35 @@ onMounted(() => window.addEventListener(`keydown`, onKey));
 onBeforeUnmount(() => window.removeEventListener(`keydown`, onKey));
 
 // --- the diff ------------------------------------------------------------------------------------------
-const diff = ref<FileDiffResponse | undefined>(undefined);
-const diffError = ref<string | undefined>(undefined);
-const diffLoading = ref(false);
+/* One query per selected row, keyed UNDER the agent's diff so the invalidation that refreshes the file list
+ * (invalidateAgentAction, after a land or discard) drops the per-file diffs with it. The key does what this
+ * block used to hand-roll: arrowing through the list outruns the network, and a key change already means a
+ * slow early file can't land on top of the one now selected; a re-selected file paints from cache and
+ * refreshes behind itself instead of costing a blank pane per revisit. */
+const { query: diffQuery, error: diffError } = useSandboxQuery({
+    queryKey: computed(() => [...sandboxKey(`agents`, agentId, `diff`), `file`, selected.value?.repo, selected.value?.change.path]),
+    queryFn: () => changes.fileDiff(selected.value!.repo, selected.value!.change.path),
+    enabled: computed(() => selected.value !== undefined),
+});
+const diff = computed(() => diffQuery.data.value);
+const diffLoading = diffQuery.isFetching;
 // Identity of what the viewer is showing. Monaco is uncontrolled (it owns its models), so a new file — or the
-// same file re-read after the agent moved it — has to remount the editor rather than re-render it.
-const diffKey = ref(``);
-let fetchSeq = 0;
-
-watch(
-    selected,
-    (file) => {
-        diff.value = undefined;
-        diffError.value = undefined;
-        if (file === undefined) {
-            return;
-        }
-        const token = ++fetchSeq;
-        diffLoading.value = true;
-        // Arrowing through a list outruns the network, so every response is checked against the latest request
-        // before it paints — otherwise a slow early file lands on top of the file you're now looking at.
-        void changes
-            .fileDiff(file.repo, file.change.path)
-            .then((body) => {
-                if (token === fetchSeq) {
-                    diff.value = body;
-                    diffKey.value = `${file.key}:${token}`;
-                }
-            })
-            .catch((error: Error) => {
-                if (token === fetchSeq) {
-                    diffError.value = error.message;
-                }
-            })
-            .finally(() => {
-                if (token === fetchSeq) {
-                    diffLoading.value = false;
-                }
-            });
-    },
-    { immediate: true },
-);
+// same file re-read after the agent moved it — has to remount the editor rather than re-render it. vue-query's
+// structural sharing keeps `diff` the SAME object across a refetch that changed nothing, so the object is the
+// content's identity — numbered here only because :key wants a string.
+const diffIds = new WeakMap<FileDiffResponse, number>();
+let diffSeq = 0;
+const diffKey = computed(() => {
+    const body = diff.value;
+    if (body === undefined) {
+        return ``;
+    }
+    let id = diffIds.get(body);
+    if (id === undefined) {
+        diffIds.set(body, (id = ++diffSeq));
+    }
+    return `${selectedKey.value ?? ``}:${id}`;
+});
 
 // Where the selected file's BYTES live, for the sides the response can only flag as binary. Derived from the
 // row rather than fetched: a binary diff carries no content to infer the sides from, and the status letter

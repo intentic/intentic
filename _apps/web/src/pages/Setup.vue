@@ -14,6 +14,7 @@ import { useAuth } from "../composables/useAuth";
 import { useGoogleIdentity } from "../composables/useGoogleIdentity";
 import CloudflareTokenField from "../components/CloudflareTokenField.vue";
 import { useCloudflareZones } from "../composables/extensions/useCloudflareZones";
+import { sandboxIdFromToken } from "../composables/sandbox/sandboxIdFromToken";
 import { useSandbox } from "../composables/sandbox/useSandbox";
 import { DESKTOP_DOWNLOADS, desktopSetupLink, desktopVersion, openDesktopLink } from "../environments/desktop";
 import { environment } from "../environments/environment";
@@ -827,11 +828,7 @@ watch(
         if (token === undefined) {
             return;
         }
-        const digest = await crypto.subtle.digest(`SHA-256`, new TextEncoder().encode(token));
-        const hex = Array.from(new Uint8Array(digest))
-            .map((b) => b.toString(16).padStart(2, `0`))
-            .join(``);
-        derivedPrefix.value = sandboxSubdomain(hex.slice(0, 12));
+        derivedPrefix.value = sandboxSubdomain(await sandboxIdFromToken(token));
         if (subdomain.value === ``) {
             subdomain.value = derivedPrefix.value;
         }

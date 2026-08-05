@@ -11,6 +11,7 @@ import { useAgents } from "../composables/agents/useAgents";
 import { errandOf } from "../composables/chat/errands";
 import { type ChatMessage, foldsIntoTurn, type PlanRequest } from "../composables/chat/transcript";
 import { useMarkdown } from "../composables/useMarkdown";
+import { useNow } from "../composables/useNow";
 import { openFileRefFromEvent } from "../composables/workspace/openFileRef";
 import { invalidateWorkspace } from "../composables/workspace/useHistory";
 import { usePaneView } from "../composables/chat/useChat";
@@ -170,10 +171,22 @@ const permissionTitle = computed(() => {
 // prompt the agent was already blocked on.
 const showTyping = computed(() => props.streaming && !awaitingDecision.value);
 
+/* THIS NOTICE'S WAIT, WHILE IT IS STILL RUNNING (see ChatMessage.noticeWait). The message says which wait it
+ * describes; the CONVERSATION says whether that wait is still on. Pairing the two is what keeps a replayed
+ * transcript honest: the line stays in the record, and it only spins while there is genuinely something to wait
+ * for. Undefined the rest of the time, which is also what turns the shared clock off again. */
+const pendingWait = computed(() =>
+    props.message.noticeWait === `credentialRenewal` ? conversation.value.failures.credentialRenewal.value : undefined,
+);
+
+// The shared second-ticking clock, armed for every live readout in this view — the turn's elapsed counter, the
+// retry countdown, and a pending notice's wait. Armed whenever any of them is showing, which is why a notice's
+// wait counts too: it outlives the turn it describes, and a frozen "0s" beside a spinner reads as a hang.
+const now = useNow(() => props.streaming || pendingWait.value !== undefined);
+
 // Cycling status-word loader shown while the turn streams. The conversation owns the start instant: send()
 // records it when the command leaves, and a later attach restores the daemon's instant. Deriving from that
 // source means a view mounted halfway through a turn starts halfway through its counter too.
-const now = ref(Date.now());
 const loaderSeconds = computed(() => {
     const startedAt = conversation.value.turnStartedAt.value;
     return startedAt === undefined ? 0 : Math.max(0, Math.floor((now.value - startedAt) / 1000));
@@ -204,30 +217,6 @@ const retryWait = computed(() => {
 // 529 is capacity, everything else in this frame is a fault. Worth distinguishing: "at capacity" tells a user
 // their request was fine and a smaller model would probably go through right now, which is actionable.
 const retryReason = computed(() => (providerRetry.value?.status === 529 ? `at capacity` : `not responding`));
-
-/* THIS NOTICE'S WAIT, WHILE IT IS STILL RUNNING (see ChatMessage.noticeWait). The message says which wait it
- * describes; the CONVERSATION says whether that wait is still on. Pairing the two is what keeps a replayed
- * transcript honest: the line stays in the record, and it only spins while there is genuinely something to wait
- * for. Undefined the rest of the time, which is also what turns the ticker below off again. */
-const pendingWait = computed(() =>
-    props.message.noticeWait === `credentialRenewal` ? conversation.value.failures.credentialRenewal.value : undefined,
-);
-
-// One second-ticking clock for every live readout in this view — the turn's elapsed counter, the retry
-// countdown, and a pending notice's wait. Runs whenever any of them is showing, which is why a notice's wait
-// counts too: it outlives the turn it describes, and a frozen "0s" beside a spinner reads as a hang.
-watch(
-    () => props.streaming || pendingWait.value !== undefined,
-    (ticking, _prev, onCleanup) => {
-        if (!ticking) {
-            return;
-        }
-        now.value = Date.now(); // a turn starting after mount must not read a `now` left over from setup
-        const timer = setInterval(() => (now.value = Date.now()), 1000);
-        onCleanup(() => clearInterval(timer));
-    },
-    { immediate: true },
-);
 
 // --- Interactive question card ---------------------------------------------------------------
 // Selection state for a pending question card, keyed by question index. Held here because it is UI state of

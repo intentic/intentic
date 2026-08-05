@@ -1,9 +1,9 @@
 <script setup lang="ts">
 import { cmp } from "@intentic/ui";
-import type { Pricing } from "@intentic-app/api-contract";
+import { useQuery } from "@tanstack/vue-query";
 import Button from "primevue/button";
 import Dialog from "primevue/dialog";
-import { computed, ref, watch } from "vue";
+import { computed, ref } from "vue";
 import { apiClient } from "../composables/useApi";
 import { errorMessage } from "../composables/useAsyncAction";
 import { useAuth } from "../composables/useAuth";
@@ -27,9 +27,16 @@ const { upgradeToPro } = useAuth();
 const submitting = ref(false);
 const error = ref<string | null>(null);
 
-// The live "pro" price, read from Stripe when the dialog first opens. Best-effort: on failure the hero simply
-// omits the price line — the CTA still works and Stripe Checkout shows the real figure anyway.
-const pricing = ref<Pricing | null>(null);
+// The live "pro" price, fetched lazily — only when the user actually opens the dialog (no Stripe call for
+// those who never do) and kept for the session (staleTime: a price change mid-session is not worth a refetch;
+// Stripe Checkout shows the real figure anyway). Best-effort: on failure the hero simply omits the price line —
+// the CTA still works.
+const { data: pricing } = useQuery({
+    queryKey: [`billing`, `pricing`],
+    queryFn: () => apiClient.billing.pricing(),
+    enabled: visible,
+    staleTime: Infinity,
+});
 
 // Keep in step with the API's PLAN_ENTITLEMENTS (entitlements.ts) — this list is its marketing copy.
 const benefits: readonly Benefit[] = [
@@ -48,18 +55,6 @@ const priceLabel = computed(() =>
           }).format(pricing.value.amount / 100)
         : ``,
 );
-
-// Fetch once, lazily — only when the user actually opens the dialog (no Stripe call for those who never do).
-watch(visible, async (open) => {
-    if (!open || pricing.value) {
-        return;
-    }
-    try {
-        pricing.value = await apiClient.billing.pricing();
-    } catch {
-        pricing.value = null;
-    }
-});
 
 const upgrade = async (): Promise<void> => {
     if (submitting.value) {

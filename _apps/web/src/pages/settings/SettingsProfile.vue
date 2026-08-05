@@ -1,10 +1,11 @@
 <script setup lang="ts">
 import { Avatar, Card, cmp } from "@intentic/ui";
 import Button from "primevue/button";
-import { computed, ref, watch } from "vue";
+import { computed, ref } from "vue";
 import { fileToSquareDataUrl } from "../../composables/imageDataUrl";
 import { errorMessage } from "../../composables/useAsyncAction";
 import { useAuth } from "../../composables/useAuth";
+import { useDraft } from "../../composables/useDraft";
 
 /* Profile: display name + avatar, saved via Better Auth's update-user (useAuth.updateProfile). The picked file
  * becomes a small square data URL in the browser — no upload. Re-seeded from the shared user ref, so a save
@@ -12,10 +13,10 @@ import { useAuth } from "../../composables/useAuth";
 
 const { user, updateProfile } = useAuth();
 
-const profileName = ref(user.value?.name ?? ``);
-watch(user, (value) => {
-    profileName.value = value?.name ?? ``;
-});
+// Seeded from the session's name and following a rename made elsewhere — but never over an edit in this form:
+// refresh() rebuilds `user` as a fresh object on every call, so an unconditional re-seed here was one new
+// refresh() caller away from wiping a half-typed name (see useDraft).
+const profileName = useDraft(() => user.value?.name);
 // A freshly picked avatar, previewed until Save sends it. Undefined = keep the current one.
 const stagedAvatar = ref<string | undefined>(undefined);
 const avatarInput = ref<HTMLInputElement | null>(null);

@@ -116,24 +116,12 @@ export function useAgentChanges(agentId: Ref<string>) {
     const codeStat = computed(() => statOf(files.value.filter((file) => !isTestPath(file.change.path))));
     const testStat = computed(() => statOf(files.value.filter((file) => isTestPath(file.change.path))));
 
-    // Per-file diffs, cached for the length of one review pass: arrowing up and down the list re-selects files
-    // constantly, and each miss is a daemon round-trip. vue-query's structural sharing keeps `repos` identical
-    // across a refetch that changed nothing, so this only clears when the agent's output actually moved.
-    const diffCache = new Map<string, FileDiffResponse>();
-    watch(repos, () => diffCache.clear());
-
-    const fileDiff = async (repo: string, path: string): Promise<FileDiffResponse> => {
-        const key = reviewFileKey(repo, path);
-        const cached = diffCache.get(key);
-        if (cached !== undefined) {
-            return cached;
-        }
-        const body = await sandboxJson<FileDiffResponse>(
+    // One file's diff, uncached: the review panel reads this through its own vue-query (keyed per row, under
+    // the agent's diff key), which owns the arrow-through caching this used to duplicate with a local Map.
+    const fileDiff = (repo: string, path: string): Promise<FileDiffResponse> =>
+        sandboxJson<FileDiffResponse>(
             `/agents/${encodeURIComponent(agentId.value)}/${encodeURIComponent(repo)}/file-diff?path=${encodeURIComponent(path)}`,
         );
-        diffCache.set(key, body);
-        return body;
-    };
 
     const viewed = computed<ReadonlySet<string>>(() => viewedByAgent.value[agentId.value] ?? NONE);
     // Counted over the CURRENT rows, so a file the agent has since reverted stops inflating the progress.

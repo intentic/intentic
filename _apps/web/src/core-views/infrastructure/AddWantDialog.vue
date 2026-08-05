@@ -1,14 +1,12 @@
 <script setup lang="ts">
 import { BrandMark, cmp, Picker, type PickerOption } from "@intentic/ui";
 import { INVENTORY_SERVICES, type InventoryServiceDescriptor } from "@intentic-app/capability-catalog";
-import { AppsListSchema } from "@intentic-app/api-contract";
 import Button from "primevue/button";
 import Dialog from "primevue/dialog";
 import { computed, ref, watch } from "vue";
-import { sandboxJson } from "../../composables/sandbox/sandboxClient";
 import { errorMessage } from "../../composables/useAsyncAction";
 import { useInventory } from "../../composables/extensions/useInventory";
-import { usePanels } from "../../composables/extensions/usePanels";
+import { useWorkspaceApps } from "../../composables/extensions/useWorkspaceApps";
 import CloudflareConnect from "./CloudflareConnect.vue";
 import ConnectHost from "./ConnectHost.vue";
 
@@ -26,7 +24,6 @@ const visible = defineModel<boolean>(`visible`, { default: false });
 const emit = defineEmits<{ added: [] }>();
 
 const { entries, add, refetch } = useInventory();
-const { panels } = usePanels();
 
 // A pick is either a catalog service or a workspace monorepo app.
 type Picked = { kind: `service`; service: InventoryServiceDescriptor } | { kind: `app`; repo: string; app: string };
@@ -41,28 +38,8 @@ const on = ref(``);
 const subdomain = ref(``);
 const subdomainValid = computed(() => SUBDOMAIN_RE.test(subdomain.value.trim()));
 
-// The apps living in workspace monorepos, fetched when the dialog opens (one round-trip per monorepo).
-const workspaceApps = ref<{ repo: string; app: string }[]>([]);
-const appsError = ref<string | null>(null);
-watch(visible, async (open) => {
-    if (!open) {
-        return;
-    }
-    appsError.value = null;
-    try {
-        const lists = await Promise.all(
-            panels.value
-                .filter((panel) => panel.monorepo)
-                .map(async ({ repo }) => {
-                    const { apps } = AppsListSchema.parse(await sandboxJson(`/workspace/repos/${encodeURIComponent(repo)}/apps`));
-                    return apps.map(({ app }) => ({ repo, app }));
-                }),
-        );
-        workspaceApps.value = lists.flat();
-    } catch (err) {
-        appsError.value = errorMessage(err, `Could not list your apps.`);
-    }
-});
+// The apps living in workspace monorepos — fetched only while the dialog is open, live against the repo list.
+const { apps: workspaceApps, error: appsError } = useWorkspaceApps(visible);
 
 // Apps already declared in intent (by entry name) — shown as added instead of addable.
 const declaredApps = computed(() => new Set(entries.value.filter((entry) => entry.kind === `app`).map((entry) => entry.name)));

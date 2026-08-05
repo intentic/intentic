@@ -1,8 +1,9 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref } from "vue";
+import { computed } from "vue";
 import GateCard from "./GateCard.vue";
 import { formatElapsed } from "../composables/agents/agentStatus";
 import { bootSteps, bootStartedAt } from "../composables/sandbox/useDaemonBoot";
+import { useNow } from "../composables/useNow";
 import { useSandbox } from "../composables/sandbox/useSandbox";
 
 /* Shown while the active daemon is REACHED but not yet READY — the window the sandbox spends listening on
@@ -24,13 +25,9 @@ const title = computed(() => `Starting "${active.value?.name ?? `your sandbox`}"
 const done = computed(() => bootSteps.value.filter((step) => step.state === `done` || step.state === `failed`).length);
 const running = computed(() => bootSteps.value.find((step) => step.state === `running`));
 
-// One ticker for the total, so a boot that takes minutes visibly keeps moving even between step transitions.
-const now = ref(Date.now());
-let ticker: ReturnType<typeof setInterval> | undefined;
-onMounted(() => {
-    ticker = setInterval(() => (now.value = Date.now()), 1000);
-});
-onBeforeUnmount(() => clearInterval(ticker));
+// The shared clock keeps the total moving, so a boot that takes minutes visibly ticks even between step
+// transitions.
+const now = useNow();
 </script>
 
 <template>

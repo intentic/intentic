@@ -10,6 +10,7 @@ import { useRoute, useRouter } from "vue-router";
 import { commandShortcut, registerCommand } from "../composables/commands/useCommands";
 import { badgeClass, badgeText } from "../core-views/viewBadge";
 import { type SandboxAttentionItem, useSandboxAttention } from "../composables/sandbox/sandboxAttention";
+import { sandboxIdFromToken } from "../composables/sandbox/sandboxIdFromToken";
 import { useSandbox } from "../composables/sandbox/useSandbox";
 import { useAuth } from "../composables/useAuth";
 import { bashCommand, psCommand } from "../environments/scriptCommand";
@@ -142,11 +143,7 @@ watch(pending, async (target) => {
         cleanupSlug.value = new URL(target.daemonUrl).hostname.split(`.`)[0] ?? ``;
         return;
     }
-    const digest = await crypto.subtle.digest(`SHA-256`, new TextEncoder().encode(target.token));
-    const hex = Array.from(new Uint8Array(digest))
-        .map((b) => b.toString(16).padStart(2, `0`))
-        .join(``);
-    cleanupSlug.value = sandboxSubdomain(hex.slice(0, 12));
+    cleanupSlug.value = sandboxSubdomain(await sandboxIdFromToken(target.token));
 });
 
 // The host may be a Windows PC (the /setup command has a PowerShell lane, so it can be), where the POSIX

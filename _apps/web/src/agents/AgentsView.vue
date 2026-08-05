@@ -19,6 +19,7 @@ import { openRunInChat } from "../composables/chat/openRun";
 import { traceFocus } from "../composables/chat/focusTrace";
 import { useChat } from "../composables/chat/useChat";
 import { useChatPopout } from "../composables/chat/useChatPopout";
+import { useNow } from "../composables/useNow";
 import { commandShortcut, registerCommand } from "../composables/commands/useCommands";
 import FilterField from "../components/FilterField.vue";
 import AgentCard from "./AgentCard.vue";
@@ -512,9 +513,8 @@ const boardEl = ref<HTMLElement | undefined>(undefined);
 // is never seen, and defaulting the other way would flash three columns on a phone.
 const boardWidth = ref(Number.POSITIVE_INFINITY);
 const narrow = computed(() => boardWidth.value < NARROW_BOARD_PX);
-// One shared ticker for every card's elapsed/time-ago readout.
-const now = ref(Date.now());
-let ticker: ReturnType<typeof setInterval> | undefined;
+// The shared clock, for every card's elapsed/time-ago readout.
+const now = useNow();
 let boardObserver: ResizeObserver | undefined;
 onMounted(() => {
     void refresh();
@@ -526,7 +526,6 @@ onMounted(() => {
     // without a count the Finished header can only offer an archive the user has no reason to believe holds
     // anything, and an empty board would hide every agent they ever ran behind an unlabelled button.
     void loadArchived();
-    ticker = setInterval(() => (now.value = Date.now()), 1000);
     boardCommands = [
         registerCommand({
             owner: `builtin`,
@@ -553,7 +552,6 @@ onMounted(() => {
     ];
 });
 onUnmounted(() => {
-    clearInterval(ticker);
     clearTimeout(receiptTimer);
     clearTimeout(pulseTimer);
     clearTimeout(flashTimer);

@@ -166,18 +166,16 @@ const modelHint = computed(() =>
 // nothing. Either way the segments hide.
 const efforts = computed(() => (capabilities.value.effort ? effortsFor(provider.value, model.value, thinking.value) : []));
 
-// The mobile pickers: pill taps open bottom sheets instead of anchored panels.
-const modelSheetOpen = ref(false);
-const modeSheetOpen = ref(false);
-const workflowSheetOpen = ref(false);
-
 const scroller = ref<HTMLElement>();
 const content = ref<HTMLElement>();
 const input = ref<HTMLTextAreaElement>();
-// The desktop pickers: open state plus the pill each one hangs off. The PILL is what says which window the
-// panel opens in — it is the anchor, and AnchoredOverlay derives the document, the viewport it measures against
-// and the dismissal listeners from it. That is the whole reason this panel can be popped out into a real
-// window and still have overlays that land in the right place and close when clicked away from.
+// The pickers: ONE open flag per menu, whichever surface renders it — an anchored panel on desktop, a bottom
+// sheet on mobile (the v-if="mobile" split where they mount). One flag, not one per surface: the pair drifted
+// apart once already, with the close-on-disconnect watch below reaching only the desktop half. The PILL is what
+// says which window a desktop panel opens in — it is the anchor, and AnchoredOverlay derives the document, the
+// viewport it measures against and the dismissal listeners from it. That is the whole reason this panel can be
+// popped out into a real window and still have overlays that land in the right place and close when clicked
+// away from.
 const modelOpen = ref(false);
 const modeOpen = ref(false);
 const workflowOpen = ref(false);
@@ -720,7 +718,6 @@ watch([connected, pickedWorkflow], ([isConnected, workflow]) => {
 
 const pickWorkflow = (workflow: Workflow | undefined): void => {
     workflowOpen.value = false;
-    workflowSheetOpen.value = false;
     workflowFailure.value = undefined;
     props.conversation.workflowId.value = workflow?.id;
 };
@@ -1417,7 +1414,7 @@ watch(
                                         class="composer-ghost h-8 min-w-0 gap-1.5 px-2.5 text-2xs font-medium max-md:h-11"
                                         :class="{ 'composer-steered': pickedWorkflow !== undefined }"
                                         :disabled="pickedWorkflow !== undefined"
-                                        @click="mobile ? (modelSheetOpen = true) : (modelOpen = !modelOpen)"
+                                        @click="modelOpen = !modelOpen"
                                         v-tooltip.top="modelHint"
                                         :aria-expanded="modelOpen"
                                         :aria-label="`Provider and model: ${providerName} · ${modelLabelText}`"
@@ -1456,7 +1453,7 @@ watch(
                                         class="composer-ghost ml-auto h-8 shrink-0 gap-1.5 px-2.5 text-2xs font-medium max-md:h-11"
                                         :class="{ 'composer-steered': pickedWorkflow !== undefined }"
                                         :disabled="pickedWorkflow !== undefined"
-                                        @click="mobile ? (modeSheetOpen = true) : (modeOpen = !modeOpen)"
+                                        @click="modeOpen = !modeOpen"
                                         v-tooltip.top="modeDescription"
                                         :aria-expanded="modeOpen"
                                         aria-label="Agent mode"
@@ -1506,7 +1503,7 @@ watch(
                                         type="button"
                                         class="composer-ghost h-8 shrink-0 gap-1.5 px-2.5 text-2xs font-medium max-md:h-11"
                                         :class="{ 'composer-active': pickedWorkflow !== undefined }"
-                                        @click="mobile ? (workflowSheetOpen = true) : (workflowOpen = !workflowOpen)"
+                                        @click="workflowOpen = !workflowOpen"
                                         v-tooltip.top="
                                             pickedWorkflow !== undefined
                                                 ? `Send runs “${pickedWorkflow.name}” with this message as its request`
@@ -1634,13 +1631,13 @@ watch(
 
         <!-- The pickers: anchored popovers on desktop, bottom sheets on mobile — same menu bodies. -->
         <template v-if="mobile">
-            <BottomSheet v-model="modelSheetOpen" header="Model">
-                <ChatModelPicker :conversation="conversation" @selected="modelSheetOpen = false" />
+            <BottomSheet v-model="modelOpen" header="Model">
+                <ChatModelPicker :conversation="conversation" @selected="modelOpen = false" />
             </BottomSheet>
-            <BottomSheet v-model="modeSheetOpen" header="Agent mode">
-                <ChatModeMenu @selected="modeSheetOpen = false" />
+            <BottomSheet v-model="modeOpen" header="Agent mode">
+                <ChatModeMenu @selected="modeOpen = false" />
             </BottomSheet>
-            <BottomSheet v-model="workflowSheetOpen" header="Run through a workflow">
+            <BottomSheet v-model="workflowOpen" header="Run through a workflow">
                 <ChatWorkflowMenu :picked="conversation.workflowId.value" @picked="pickWorkflow($event)" />
             </BottomSheet>
             <!-- Mounted here rather than app-wide: a loop belongs to the conversation whose composer opened it,

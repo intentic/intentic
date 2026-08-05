@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ContextMenu, type IconName } from "@intentic/ui";
 import type { MenuItem } from "primevue/menuitem";
-import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
+import { computed, nextTick, ref, watch } from "vue";
 import { createTitleEdit } from "../composables/agents/titleEdit";
 import {
     activityIcon,
@@ -14,6 +14,7 @@ import {
     unreadBadge,
 } from "../composables/agents/agentStatus";
 import { sessionCategory } from "../composables/sessionCategory";
+import { useNow } from "../composables/useNow";
 import { useAgentFilter } from "../composables/agents/useAgentFilter";
 import { FINISHED_WINDOW, type FleetAgent, useAgents, windowFinished } from "../composables/agents/useAgents";
 import FilterField from "../components/FilterField.vue";
@@ -429,16 +430,9 @@ watch(filtering, (on) => {
     }
 });
 
-// One second ticks every running card's elapsed readout together (the board's `now` pattern) — armed while
-// this list is on screen, which for the docked sheet means only while it is open.
-const now = ref(Date.now());
-let ticker: ReturnType<typeof setInterval> | undefined;
-onMounted(() => {
-    ticker = setInterval(() => {
-        now.value = Date.now();
-    }, 1000);
-});
-onBeforeUnmount(() => clearInterval(ticker));
+// The shared clock ticks every running card's elapsed readout together — armed while this list is on screen,
+// which for the docked sheet means only while it is open.
+const now = useNow();
 
 /* --- Keeping the active card in view ------------------------------------------------------------
  * The list scrolls, and the chat it is pointing at is almost always selected from somewhere else — a card on
