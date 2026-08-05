@@ -1,11 +1,18 @@
-import type { CapabilityFacts, Disposable, ExtensionContext, IntenticApi, ProcessStatus, RepoFacts } from "@intentic/extension-api";
+import type { CapabilityFacts, Disposable, ExtensionContext, IntenticApi, PickedModel, ProcessStatus, RepoFacts } from "@intentic/extension-api";
 import { extensionApiVersion, extensionIdOf, flattenQuery, mergeQuery, sandboxRouteAllowed } from "@intentic/extension-api";
 import { useDevice, useTheme } from "@intentic/ui";
-import { type AgentProvider, type ExtensionSummary, parsePinned, WorkspaceFileSchema } from "@intentic/sandbox-contract";
+import {
+    type AgentHarness,
+    type AgentProvider,
+    type ExtensionSummary,
+    parsePinned,
+    providerLabel,
+    WorkspaceFileSchema,
+} from "@intentic/sandbox-contract";
 import { watch } from "vue";
 import { requestModelPick } from "../composables/chat/hostModelPicker";
 import { modelLabelFor } from "../composables/chat/modelPicker";
-import { useChat } from "../composables/chat/useChat";
+import { accountsOf, useChat } from "../composables/chat/useChat";
 import { useAgents } from "../composables/agents/useAgents";
 import { startAgent } from "../composables/agents/agentActions";
 import { registerCommand, executeCommand } from "../composables/commands/useCommands";
@@ -36,6 +43,29 @@ export interface HostBindings {
     // `api.models.agentRun()` answers from.
     readonly agentRunModel: () => string;
 }
+
+/* WHAT TO CALL A SELECTION — the one place a (provider, model, account) triple is turned into words for an
+ * extension, so `pick` and `describe` can never name the same pin two different ways.
+ *
+ * The account's name is its SIGN-IN IDENTITY where the provider reported one, because that is what the owner
+ * recognises: three connections all labelled "Claude" say nothing, and the label is theirs to rename anyway. A
+ * pinned id that matches no connected account is left unnamed rather than echoed back — a pin whose credential
+ * has been disconnected is exactly what a caller needs to be able to notice. */
+const named = (provider: AgentProvider, model: string, account?: string, harness?: AgentHarness): PickedModel => {
+    const connected = account === undefined ? undefined : accountsOf(provider).find((entry) => entry.id === account);
+    // An UNPINNED model has no catalog row to name it, and an empty chip is the one thing a chip must never be.
+    // The provider is what will resolve one at run time, so the provider is what it says. Read from the catalog
+    // first all the same: an installed ACP agent IS a row with an empty model id, and that row has a name.
+    const label = modelLabelFor(provider, model);
+    return {
+        provider,
+        model,
+        label: label === `` ? providerLabel(provider) : label,
+        ...(account !== undefined ? { account } : {}),
+        ...(connected !== undefined ? { accountLabel: connected.email ?? connected.label } : {}),
+        ...(harness !== undefined ? { harness } : {}),
+    };
+};
 
 // The live activation of each extension id. An extension is activated ONCE per app load; a second
 // createExtensionApi for the same id therefore means the previous activation is being superseded (the dev
@@ -336,9 +366,11 @@ export const createExtensionApi = (
                 useChat().active.value.workflowId.value = workflowId;
             },
         },
-        /* The shell's own model picker and the default it opens on. Nothing here is gated on a manifest
-         * permission: the extension never learns a credential, never reaches a provider route, and cannot
-         * observe a catalog it wasn't shown — all it gets back is the pair the user pointed at. */
+        /* The shell's own model picker, the default it opens on, and what to call a pin already saved. Nothing
+         * here is gated on a manifest permission: the extension never learns a credential, never reaches a
+         * provider route, and cannot observe a catalog it wasn't shown — all it gets back is the selection the
+         * user pointed at, plus the words for it. An account arrives as its opaque daemon id for the same reason,
+         * which is also all the daemon needs to run on it. */
         models: {
             agentRun: () => {
                 // The pin carries the provider with the model, because a model id means nothing without the
@@ -348,9 +380,19 @@ export const createExtensionApi = (
                 const chat = useChat();
                 const provider = pinned?.provider ?? chat.provider.value;
                 const model = pinned?.model ?? chat.model.value;
-                return { provider, model, label: modelLabelFor(provider, model) };
+                return named(provider, model);
             },
-            pick: (options) => requestModelPick({ anchor: options.anchor, provider: options.provider as AgentProvider, model: options.model }),
+            describe: (selection) => named(selection.provider as AgentProvider, selection.model, selection.account, selection.harness as AgentHarness),
+            pick: async (options) => {
+                const choice = await requestModelPick({
+                    anchor: options.anchor,
+                    provider: options.provider as AgentProvider,
+                    model: options.model,
+                    ...(options.account !== undefined ? { account: options.account } : {}),
+                    ...(options.harness !== undefined ? { harness: options.harness as AgentHarness } : {}),
+                });
+                return choice === undefined ? undefined : named(choice.provider, choice.model, choice.account, choice.harness);
+            },
         },
         navigate: (path) => {
             void router.push(path);

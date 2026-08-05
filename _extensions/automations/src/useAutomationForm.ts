@@ -139,10 +139,6 @@ export function useAutomationForm() {
         }
     });
 
-    // Only codex/grok have both a native runtime and a routed one to switch between. Claude IS the Claude Code
-    // loop, and kimi/gemini only ever run on it — so none of the three has a harness to choose.
-    const harnessChoosable = computed(() => form.agent === `codex` || form.agent === `grok`);
-
     /* ---- the prompt follows the trigger ---- */
 
     // The starting point for whatever is picked right now. Only a live source has one: every other trigger's
@@ -399,7 +395,6 @@ export function useAutomationForm() {
         originList,
         effectiveCron,
         cronPreview,
-        harnessChoosable,
         dailyMessageMaxDefault: WEBCHAT_DAILY_MAX_DEFAULT,
         // the prompt's relationship to the trigger
         triggerKey: computed(() => triggerKey(form)),

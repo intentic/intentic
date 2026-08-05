@@ -132,15 +132,36 @@ export interface DocumentProviderRegistration {
     readonly view: () => Promise<Component>;
 }
 
-// A provider + model pair, and what the shell calls it. The label is here because a view that shows a chosen
-// model without showing the list would otherwise have to keep a catalog of its own — which is exactly the
-// duplication `api.models` exists to end.
+/* EVERYTHING THAT DECIDES WHO SERVES A TURN, as one value. The label is here because a view that shows a chosen
+ * model without showing the list would otherwise have to keep a catalog of its own — which is exactly the
+ * duplication `api.models` exists to end.
+ *
+ * The last two are optional because they are pins, and the unpinned state is the one most callers want: absent
+ * means "whatever the daemon resolves", which is what keeps a saved choice working after an account is
+ * disconnected or a harness gains a provider. A caller that only cares which model runs can ignore both and
+ * lose nothing. */
 export interface PickedModel {
     // An `AgentProvider` — `claude`, `codex`, a configured model endpoint's id, an installed ACP agent's id.
     // Open on purpose: the set grows with what the sandbox has connected, and an extension only carries it.
     readonly provider: string;
     readonly model: string;
     readonly label: string;
+    /* WHICH CONNECTED ACCOUNT of that provider runs the turn, by its daemon-minted id — absent ⇒ whichever comes
+     * first. It is on the pick rather than left to the daemon because the surfaces that start UNATTENDED runs are
+     * the ones that need it: nobody is watching at 6am, so a first account that has run out of headroom (or whose
+     * organization switched the plan off) is a run that errors every time until someone reads the row. */
+    readonly account?: string | undefined;
+    /* What the shell calls that account — the sign-in identity, which is the only part of it the owner
+     * recognises ("Claude" is what three unrenamed accounts are all called).
+     *
+     * Absent means the shell cannot name it, which covers BOTH a pin whose credential has been disconnected and
+     * an account list this sandbox has not been read for yet. Do not render the first from the second: they are
+     * the same absence, and a view that reads it as "this automation is broken" says so about every row while the
+     * daemon is merely still starting. Show the name when there is one, and nothing when there isn't. */
+    readonly accountLabel?: string | undefined;
+    // `native` or `claude-code` — the agentic loop, an axis of its own since codex/grok run the same subscription
+    // model ids under either. Absent ⇒ native, which for every other provider is the only answer there is.
+    readonly harness?: string | undefined;
 }
 
 export type SettingValue = string | number | boolean;
@@ -301,15 +322,48 @@ export interface IntenticApi {
      * connected provider's catalog, which credentials the sandbox actually holds, and what each model can do.
      * An extension that rendered its own control could only ever offer a worse list: the acceptance view's did,
      * fetching one provider's models behind a second dropdown for the provider itself, and so it happily
-     * offered models the sandbox had no credential for — a run that fails on a credential error minutes later. */
+     * offered models the sandbox had no credential for — a run that fails on a credential error minutes later.
+     *
+     * IT COVERS THE WHOLE CHOICE — provider, account, harness, model — because covering three quarters of it is
+     * what produced the copy this API exists to prevent. The automations form asked all four questions, found an
+     * API that answered three, and hand-rolled ROWS OF CHIPS for every one of them to keep its own fields
+     * consistent with each other: a static provider list that offered providers the sandbox had no credential for
+     * and could not offer a model endpoint or an ACP agent at all, and a model row eleven chips wide that grew
+     * with every release. Partial coverage does not buy partial reuse; it buys none. */
     readonly models: {
         // What a run opens on when nobody has chosen: the sandbox's Agent-runs model (Sandbox ▸ Agent ▸ Models),
         // falling back to whatever the owner's own chat is set to. Reactive when read inside a computed.
         agentRun(): PickedModel;
-        // Open the picker over `anchor` — a popover on desktop, a sheet on mobile — starting on the pair the
-        // caller is holding. Resolves with the pick, or undefined if it was dismissed. A second call supersedes
-        // the first, resolving it as a dismissal.
-        pick(options: { readonly anchor: HTMLElement; readonly provider: string; readonly model: string }): Promise<PickedModel | undefined>;
+        /* NAME A SELECTION THE EXTENSION ALREADY HOLDS — a pin read back from disk, which arrives as bare ids and
+         * has to be rendered before anyone opens the picker. This is what keeps `label` honest for the surfaces
+         * that SAVE a choice rather than spend it immediately: without it every one of them would keep a catalog
+         * to pretty-print its own stored ids, which is the duplication this API exists to end, and it would go
+         * stale the day a provider renames a model or the owner disconnects an account.
+         *
+         * Reactive when read inside a computed — a model that lands in the catalog, or an account that stops being
+         * connected, changes what a stored pin should say about itself. */
+        describe(selection: {
+            readonly provider: string;
+            readonly model: string;
+            readonly account?: string | undefined;
+            readonly harness?: string | undefined;
+        }): PickedModel;
+        /* Open the picker over `anchor` — a popover on desktop, a sheet on mobile — starting on the selection the
+         * caller is holding. Resolves with the pick, or undefined if it was dismissed. A second call supersedes
+         * the first, resolving it as a dismissal.
+         *
+         * EVERY ROW SETTLES IT, including an account and a harness row: each click is one complete answer, so a
+         * caller never has to reconcile a half-changed selection, and the picker never has to hold state that
+         * disagrees with what the caller is showing. Picking a model under a DIFFERENT provider clears the
+         * account with it — an account id is one provider's store key, so carrying it across would pin the run to
+         * an account that provider does not have. */
+        pick(options: {
+            readonly anchor: HTMLElement;
+            readonly provider: string;
+            readonly model: string;
+            readonly account?: string | undefined;
+            readonly harness?: string | undefined;
+        }): Promise<PickedModel | undefined>;
     };
     // Navigate the shell to an app path (e.g. "/capabilities", "/ext/<view>/<key>").
     readonly navigate: (path: string) => void;

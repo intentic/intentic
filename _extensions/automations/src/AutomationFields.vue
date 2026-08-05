@@ -1,15 +1,6 @@
 <script setup lang="ts">
-import {
-    type CatalogOption,
-    HARNESSES,
-    ModelsSchema,
-    modelsFor,
-    OauthAccountListSchema,
-    PROVIDERS,
-    WEBCHAT_DAILY_MAX_DEFAULT,
-} from "@intentic/sandbox-contract";
+import { WEBCHAT_DAILY_MAX_DEFAULT } from "@intentic/sandbox-contract";
 import { cmp, formatDateTime, Icon, ToggleSwitch } from "@intentic/extension-ui";
-import { useQuery } from "@tanstack/vue-query";
 import { computed, ref } from "vue";
 import { host } from "./host";
 import { LISTENER_SOURCES } from "./listenerSources";
@@ -45,7 +36,6 @@ const {
     branchField,
     liveSources,
     cronPreview,
-    harnessChoosable,
     starterPrompt,
     staleStarter,
     applyStarter,
@@ -79,7 +69,7 @@ const nameInput = ref<HTMLInputElement>();
 const promptInput = ref<HTMLTextAreaElement>();
 defineExpose({ nameInput, promptInput });
 
-// Small selectable pills (Repeats, Days, Model, Events, Source) — borderless; selection = a muted brand tint with readable brand text.
+// Small selectable pills (Repeats, Days, Events, Source, Access) — borderless; selection = a muted brand tint with readable brand text.
 const CHIP_BASE = `rounded-md px-3 py-1.5 text-xs font-medium transition-colors`;
 const CHIP_SELECTED = `bg-primary-600/15 text-link`;
 const CHIP_IDLE = `text-muted hover:bg-overlay hover:text-content`;
@@ -123,54 +113,59 @@ const WORKSPACE_EVENTS = [
 // Guard/agent/approval fold away by default — revealed on demand or when a recipe prefilled a guard.
 const advancedOpen = ref(form.guard !== ``);
 
-// The picked provider's live model list — fetched lazily per provider, only while the form reads it. The
-// catalog is the same under either harness (codex/grok run the same subscription ids via the translator), so
-// it's keyed by provider alone.
-const liveModels = useQuery({
-    queryKey: computed(() => host().sandbox.key(`agent-models`, form.agent)),
-    queryFn: async (): Promise<CatalogOption[]> =>
-        ModelsSchema.parse(await host().sandbox.json(`/${form.agent}/models`)).models.map((model) => ({ value: model.id, label: model.label })),
-    enabled: computed(() => host().sandbox.reachable()),
-});
-
-// The wake's model chips: "Default" (empty — the daemon resolves the provider's own default) plus the pinnable
-// ids for the picked provider (with the static floor before the live load).
-const modelOptions = computed<CatalogOption[]>(() => {
-    const catalog = liveModels.data.value ?? modelsFor(form.agent);
-    return [{ value: ``, label: `Default` }, ...catalog.filter((option) => option.value !== ``)];
-});
-
-/* The picked provider's connected ACCOUNTS, read the same way and on the same seam as its models.
+/* WHAT THE WAKE RUNS ON — provider, account, harness and model, as one chip opening the app's own picker.
  *
- * A sandbox holds several side by side, and an automation is the surface that most needs to say which one:
- * nobody is watching when it fires, so a first account that is out of headroom — or whose organization has
- * turned the plan off — is an automation that errors every time until someone reads the row. A provider whose
- * turns authenticate through the bundled translator has no accounts to choose between and the picker stays
- * hidden for it, which is also what an unreachable daemon looks like. */
-const liveAccounts = useQuery({
-    queryKey: computed(() => host().sandbox.key(`agent-accounts`, form.agent)),
-    queryFn: async (): Promise<CatalogOption[]> =>
-        OauthAccountListSchema.parse(await host().sandbox.json(`/${form.agent}/accounts`)).accounts.map((account) => ({
-            value: account.id,
-            // The sign-in identity is what the owner recognises — the label is "Claude" on an account nobody
-            // renamed, which says nothing when three of them are listed together.
-            label: account.email ?? account.label,
-        })),
-    enabled: computed(() => host().sandbox.reachable()),
-});
+ * IT WAS FOUR ROWS OF CHIPS, one per axis, and every one of them was worse than the list the shell already
+ * holds. The provider row was the five built-ins hardcoded, so a sandbox with a model endpoint or an installed
+ * ACP agent could not point an automation at either, and a provider with no credential connected looked exactly
+ * like one that had — on the surface where nobody is watching when it fails. The model row was this extension's
+ * own fetch of `/{provider}/models`, eleven chips wrapping onto two lines and one longer with every release. The
+ * account row was a second fetch, naming accounts with no idea how much headroom any of them had left, which is
+ * the entire question being asked. What replaced all four is `api.models`: searchable across every provider at
+ * once, connected first, locked ones marked with what they would cost, each account's plan drawn as a ring and
+ * a broken credential marked as broken.
+ *
+ * A BLANK IS A DEFAULT, not a gap: no model means the provider resolves its own at wake time (which is what
+ * keeps a year-old automation running after a model is retired), and no account means whichever comes first.
+ * The picker has no rows for those — every row in it is a live, concrete thing — so "back to defaults" is the
+ * button beside the chip rather than an entry inside it. */
+const runsOn = computed(() =>
+    host().models.describe({
+        provider: form.agent,
+        model: form.model,
+        ...(form.account !== `` ? { account: form.account } : {}),
+        harness: form.harness,
+    }),
+);
+const pinned = computed(() => form.model !== `` || form.account !== ``);
 
-const accountOptions = computed<CatalogOption[]>(() => [{ value: ``, label: `Default` }, ...(liveAccounts.data.value ?? [])]);
+// The element the shell hangs its picker off — a popover on desktop, a sheet on mobile; the host decides.
+const chip = ref<HTMLElement>();
+const choose = async (): Promise<void> => {
+    if (chip.value === undefined) {
+        return;
+    }
+    const next = await host().models.pick({
+        anchor: chip.value,
+        provider: form.agent,
+        model: form.model,
+        ...(form.account !== `` ? { account: form.account } : {}),
+        harness: form.harness,
+    });
+    if (next === undefined) {
+        return;
+    }
+    form.agent = next.provider as typeof form.agent;
+    form.model = next.model;
+    form.account = next.account ?? ``;
+    form.harness = (next.harness as typeof form.harness) ?? `native`;
+};
 
-// A provider switch invalidates a pinned model AND a pinned account — an account id is one provider's store
-// key, so carrying it across would pin the wake to an account that provider does not have. A harness switch
-// keeps both (the catalog and the credential store are harness-independent).
-const setAgent = (agent: typeof form.agent): void => {
-    form.agent = agent;
+// Back to what the daemon would have picked anyway. The provider stays: it has no "default" state to return to
+// (an automation saved without one MEANS claude), so clearing it would be a silent switch rather than a reset.
+const useDefaults = (): void => {
     form.model = ``;
     form.account = ``;
-};
-const setHarness = (harness: typeof form.harness): void => {
-    form.harness = harness;
 };
 
 const toggleDay = (day: number): void => {
@@ -605,9 +600,8 @@ const setProvider = (provider: keyof typeof LISTENER_SOURCES): void => {
              unbalance the layout by being used: opening it grew that column by 400px and left the trigger
              column beside it ending in a void — the exact defect the two panes were rebuilt to remove, only
              mirrored. It is also simply the wrong half. A guard decides whether a wake happens at all, and the
-             provider, harness and model are what the wake RUNS ON; neither is "what it wakes with", and neither
-             changes when the trigger does. Full width also fits them properly: four rows of chips that wrapped
-             two-per-line in half a panel now sit one row each.
+             model chip is what the wake RUNS ON; neither is "what it wakes with", and neither changes when the
+             trigger does.
              `mt-2` and no rule: at the container's own gap the collapsed line sat 18px under "Next runs" and
              read as the last field of the trigger column. A border would separate it, but the footer above the
              buttons already draws one, and two rules forty pixels apart is a louder answer than the question. -->
@@ -620,7 +614,7 @@ const setProvider = (provider: keyof typeof LISTENER_SOURCES): void => {
             >
                 <Icon class="text-2xs" :name="advancedOpen ? 'chevron-down' : 'chevron-right'" />
                 <span>Advanced</span>
-                <span v-if="!advancedOpen" class="font-normal normal-case tracking-normal">· guard, provider, account, model, approval</span>
+                <span v-if="!advancedOpen" class="font-normal normal-case tracking-normal">· guard, model, approval</span>
             </button>
             <template v-if="advancedOpen">
                 <label class="ui-field">
@@ -638,77 +632,47 @@ const setProvider = (provider: keyof typeof LISTENER_SOURCES): void => {
                         <template v-else>Runs in your workspace before each wake: exit 0 wakes the agent, anything else skips that run.</template>
                     </p>
                 </label>
+                <!-- WHAT IT RUNS ON — one chip over the app's own picker, where four rows of chips used to be.
+                     The chip states the model, and beside it the account, because those are the two facts that
+                     decide whether a 6am wake gets an answer; the harness and the provider are inside the pick
+                     rather than beside it, since choosing "Claude Opus 5" has already answered both. -->
                 <div class="ui-field">
-                    <span class="ui-field-label">Provider</span>
-                    <div class="flex flex-wrap gap-1.5">
+                    <span class="ui-field-label">Runs on</span>
+                    <div class="flex flex-wrap items-center gap-2">
                         <button
-                            v-for="option in PROVIDERS"
-                            :key="option.value"
+                            ref="chip"
                             type="button"
-                            :class="[CHIP_BASE, form.agent === option.value ? CHIP_SELECTED : CHIP_IDLE]"
-                            :aria-pressed="form.agent === option.value"
-                            @click="setAgent(option.value)"
+                            class="flex min-w-0 cursor-pointer items-center gap-1.5 rounded-md border border-line px-2.5 py-1.5 text-xs text-content transition-colors hover:border-line-strong"
+                            :aria-label="`Provider, account and model for this automation: ${runsOn.label}`"
+                            @click="choose"
                         >
-                            {{ option.label }}
+                            <Icon name="sparkles" class="shrink-0 text-subtle" />
+                            <span class="max-w-[16rem] truncate">{{ runsOn.label }}</span>
+                            <Icon name="chevron-down" class="shrink-0 text-2xs text-subtle" />
+                        </button>
+                        <!-- The pinned account, named by the shell (its sign-in identity — the label is "Claude"
+                             on an account nobody renamed, which says nothing when three are connected).
+                             UNNAMED IS SILENT, not a warning: a pin the shell cannot name is either a credential
+                             disconnected since, or an account list that has not been read yet, and those are the
+                             same absence. Guessing the first is how a sandbox that is merely still starting up
+                             tells you every automation is broken — a claim the UI then has to take back. -->
+                        <span v-if="runsOn.accountLabel" class="min-w-0 truncate text-xs text-muted">on {{ runsOn.accountLabel }}</span>
+                        <button
+                            v-if="pinned"
+                            type="button"
+                            :class="cmp.linkButton(`ml-auto text-2xs text-muted hover:text-content`)"
+                            @click="useDefaults"
+                        >
+                            Use defaults
                         </button>
                     </div>
-                </div>
-                <!-- Harness (the agentic loop), orthogonal to the provider — only codex/grok can switch;
-                     claude/kimi/gemini always run the Claude Code loop. Same semantics as chat's picker. -->
-                <div v-if="harnessChoosable" class="ui-field">
-                    <span class="ui-field-label">Harness</span>
-                    <div class="flex flex-wrap gap-1.5">
-                        <button
-                            v-for="option in HARNESSES"
-                            :key="option.value"
-                            type="button"
-                            :class="[CHIP_BASE, form.harness === option.value ? CHIP_SELECTED : CHIP_IDLE]"
-                            :aria-pressed="form.harness === option.value"
-                            @click="setHarness(option.value)"
-                        >
-                            {{ option.label }}
-                        </button>
-                    </div>
-                    <p v-if="form.harness === 'claude-code'" class="text-xs text-muted">
-                        Runs this model through the Claude Code harness on your
-                        {{ form.agent === "codex" ? "ChatGPT" : "SuperGrok" }} subscription (connect it in Sandbox ▸ Agent).
+                    <p v-if="form.account === ``" class="text-xs text-muted">
+                        On the default account this runs on whichever comes first — so it starts failing when that one runs out of headroom
+                        or its plan is switched off. Pin one to keep this automation on an account you know can answer.
                     </p>
-                </div>
-                <!-- Which connected account pays for — and runs — the wake. Hidden when the provider has none to
-                     choose between (a translator-routed subscription, or a daemon we haven't reached yet). -->
-                <div v-if="accountOptions.length > 1" class="ui-field">
-                    <span class="ui-field-label">Account</span>
-                    <div class="flex flex-wrap gap-1.5">
-                        <button
-                            v-for="option in accountOptions"
-                            :key="option.value"
-                            type="button"
-                            :class="[CHIP_BASE, form.account === option.value ? CHIP_SELECTED : CHIP_IDLE]"
-                            :aria-pressed="form.account === option.value"
-                            @click="form.account = option.value"
-                        >
-                            {{ option.label }}
-                        </button>
-                    </div>
-                    <p class="text-xs text-muted">
-                        Left on Default, this runs on whichever account comes first — so it starts failing when that one runs out of
-                        headroom or its plan is switched off. Pin one to keep this automation on an account you know can answer.
+                    <p v-if="form.model === ``" class="text-xs text-muted">
+                        On the default model the provider picks one at each wake, which is what keeps this working after a model is retired.
                     </p>
-                </div>
-                <div class="ui-field">
-                    <span class="ui-field-label">Model</span>
-                    <div class="flex flex-wrap gap-1.5">
-                        <button
-                            v-for="option in modelOptions"
-                            :key="option.value"
-                            type="button"
-                            :class="[CHIP_BASE, form.model === option.value ? CHIP_SELECTED : CHIP_IDLE]"
-                            :aria-pressed="form.model === option.value"
-                            @click="form.model = option.value"
-                        >
-                            {{ option.label }}
-                        </button>
-                    </div>
                 </div>
                 <label class="flex items-center gap-2 text-sm text-content">
                     <ToggleSwitch v-model="form.requireApproval" aria-label="Require my approval before running" />

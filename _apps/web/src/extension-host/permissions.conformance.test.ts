@@ -1,4 +1,4 @@
-import { readdirSync, readFileSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { ExtensionManifestSchema, sandboxRouteAllowed } from "@intentic/extension-api";
@@ -78,6 +78,46 @@ const scanCalls = (text: string, helpers: Map<string, string>): Call[] => {
     }
     return calls;
 };
+
+/* THE CATALOG BELONGS TO THE SHELL, and this is the check that keeps it there.
+ *
+ * `api.models` exists because a model list is not a list — it is a live read of every connected provider, which
+ * credentials the sandbox actually holds, how much of each account's plan is left and which of them last refused
+ * a turn. An extension CAN fetch `/{provider}/models` and `/{provider}/accounts` itself, and two of them did:
+ * what they could build from the raw routes was a row of chips that offered providers with no credential, could
+ * not offer a model endpoint or an ACP agent at all, and named accounts without being able to say which one had
+ * headroom left. Both are back on `api.models` now, and nothing but this test stops the third.
+ *
+ * It fails on the DECLARATION as well as the call, because the permission is what makes the call reachable — a
+ * manifest granted the route "just in case" is the next copy already half-written. If an extension ever has a
+ * reason to read these routes raw, this list is where the reason gets written down. */
+const CATALOG_ROUTE = /^\/[^/]+\/(models|accounts)$/;
+const everyExtension = readdirSync(extensionsRoot, { withFileTypes: true })
+    .filter((entry) => entry.isDirectory() && existsSync(join(extensionsRoot, entry.name, "intentic-extension.json")))
+    .map((entry) => entry.name);
+
+describe.each(everyExtension)("%s reads models and accounts through api.models, not the daemon", (name) => {
+    const root = join(extensionsRoot, name);
+    const manifest = ExtensionManifestSchema.parse(JSON.parse(readFileSync(join(root, "intentic-extension.json"), "utf8")));
+
+    test("declares no model or account catalog route", () => {
+        const declared = (manifest.permissions?.sandbox ?? []).filter((route) => CATALOG_ROUTE.test(route.replace(/^[A-Z]+\s+/, "")));
+        expect(declared).toEqual([]);
+    });
+
+    test("calls no model or account catalog route", () => {
+        const dir = join(root, "src");
+        const called = !existsSync(dir)
+            ? []
+            : sourceFiles(dir)
+                  .flatMap((file) => {
+                      const text = readFileSync(file, "utf8");
+                      return scanCalls(text, scanMethodHelpers(text));
+                  })
+                  .filter((call) => CATALOG_ROUTE.test(call.path));
+        expect(called).toEqual([]);
+    });
+});
 
 describe.each(BUILTINS)("%s declares every sandbox route it calls", (name) => {
     const manifest = ExtensionManifestSchema.parse(JSON.parse(readFileSync(join(extensionsRoot, name, "intentic-extension.json"), "utf8")));

@@ -1,4 +1,4 @@
-import type { AgentProvider } from "@intentic/sandbox-contract";
+import type { AgentHarness, AgentProvider } from "@intentic/sandbox-contract";
 import { shallowRef } from "vue";
 
 /* THE SHELL'S MODEL PICKER, OPENED BY SOMETHING THAT IS NOT THE COMPOSER — an extension calling
@@ -19,6 +19,10 @@ export interface ModelChoice {
     // What the app calls this pair (modelLabelFor) — so a caller's own trigger can name the choice without
     // holding a catalog of its own.
     readonly label: string;
+    // The two pins the footer adds to the list's own answer, absent unless the caller is holding one. See
+    // PickedModel (extension-api) for why an unattended run is the surface that needs them.
+    readonly account?: string;
+    readonly harness?: AgentHarness;
 }
 
 interface ModelRequest {
@@ -26,6 +30,8 @@ interface ModelRequest {
     readonly anchor: HTMLElement;
     readonly provider: AgentProvider;
     readonly model: string;
+    readonly account?: string;
+    readonly harness?: AgentHarness;
     readonly settle: (choice: ModelChoice | undefined) => void;
 }
 

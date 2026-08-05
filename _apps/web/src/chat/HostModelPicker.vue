@@ -2,15 +2,16 @@
 import { AnchoredOverlay, BottomSheet, useDevice } from "@intentic/ui";
 import { computed } from "vue";
 import { modelRequest, settleModelPick } from "../composables/chat/hostModelPicker";
-import type { PickerEntry } from "../composables/chat/modelPicker";
-import ModelPicker from "./ModelPicker.vue";
+import HostPickerBody from "./HostPickerBody.vue";
 
 /* The app-global mount for the shell's own model picker when something outside the chat asks for one
  * (hostModelPicker.ts — today, an extension calling `api.models.pick()`). Mounted in App.vue rather than in a
  * shell, because the two shells would otherwise each need their own copy and neither is the natural owner: the
  * picker belongs to nothing on screen, it belongs to whoever asked.
  *
- * Same body as the composer's, in the same two hosts: an anchored popover on desktop, a sheet on mobile.
+ * Same body as the composer's (HostPickerBody), in the same two hosts: an anchored popover on desktop, a sheet
+ * on mobile. The body is a component rather than markup repeated under each host — it carries a footer now, and
+ * two copies of it are two places for the two surfaces to drift apart.
  *
  * THE HOSTS STAY MOUNTED and `open` drives them — the arrangement ChatPanel already uses, and not an incidental
  * one. AnchoredOverlay measures and places its box in a watcher on `open` that is deliberately NOT immediate
@@ -32,22 +33,15 @@ const open = computed<boolean>({
     },
 });
 
-const choose = (entry: PickerEntry): void => settleModelPick({ provider: entry.provider, model: entry.value, label: entry.label });
 </script>
 
 <template>
     <BottomSheet v-if="mobile" v-model="open" header="Model">
-        <ModelPicker v-if="modelRequest" :provider="modelRequest.provider" :model="modelRequest.model" @pick="choose" @close="settleModelPick()" />
+        <HostPickerBody />
     </BottomSheet>
     <AnchoredOverlay v-else v-model="open" :anchor="modelRequest?.anchor">
         <div class="flex min-h-0 w-[26rem] flex-col">
-            <ModelPicker
-                v-if="modelRequest"
-                :provider="modelRequest.provider"
-                :model="modelRequest.model"
-                @pick="choose"
-                @close="settleModelPick()"
-            />
+            <HostPickerBody />
         </div>
     </AnchoredOverlay>
 </template>
