@@ -1,0 +1,39 @@
+{
+    "name": "@intentic/lsp",
+    "version": "0.0.0",
+    "description": "lsp — agent-native TypeScript rename + diagnostics CLI over the TS language service",
+    "license": "MIT",
+    "type": "module",
+    "repository": {
+        "type": "git",
+        "url": "git+https://github.com/intentic/intentic.git",
+        "directory": "_search/lsp"
+    },
+    "files": [
+        "dist"
+    ],
+    "bin": {
+        "lsp": "./dist/cli.js"
+    },
+    "exports": {
+        "./client": "./dist/client.js"
+    },
+    "scripts": {
+        "build": "tsgo",
+        "typecheck": "tsgo --noEmit -p tsconfig.test.json",
+        "watch": "tsgo --build --watch",
+        "test": "vitest run",
+        "test:watch": "vitest"
+    },
+    "dependencies": {
+        "tslib": "catalog:",
+        "@typescript/native-preview": "catalog:",
+        "typescript": "catalog:"
+    },
+    "devDependencies": {
+        "@intentic/testing": "workspace:*",
+        "@intentic/tsconfig": "workspace:*",
+        "@types/node": "catalog:",
+        "vitest": "catalog:"
+    }
+}

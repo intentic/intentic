@@ -1,0 +1,37 @@
+{
+    "name": "@intentic/webchat-widget",
+    "version": "0.0.0",
+    "description": "Doorbell — the embeddable chat widget a website loads to talk to a sandbox agent",
+    "license": "MIT",
+    "type": "module",
+    "repository": {
+        "type": "git",
+        "url": "git+https://github.com/intentic/intentic.git",
+        "directory": "_sandbox/webchat-widget"
+    },
+    "files": [
+        "dist"
+    ],
+    "publishConfig": {
+        "access": "public",
+        "registry": "https://registry.npmjs.org/"
+    },
+    "exports": {
+        "./widget.js": "./dist/widget.js"
+    },
+    "scripts": {
+        "build": "vite build",
+        "typecheck": "tsgo --noEmit",
+        "watch": "vite build --watch",
+        "test": "vitest run",
+        "test:watch": "vitest"
+    },
+    "devDependencies": {
+        "@intentic/sandbox-contract": "workspace:*",
+        "@intentic/tsconfig": "workspace:*",
+        "@typescript/native-preview": "catalog:",
+        "jsdom": "catalog:",
+        "vite": "catalog:",
+        "vitest": "catalog:"
+    }
+}

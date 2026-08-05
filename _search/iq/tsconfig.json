@@ -1,0 +1,13 @@
+{
+    "compilerOptions": {
+        "types": ["node"],
+        "outDir": "./dist",
+        "rootDir": "./src",
+        "tsBuildInfoFile": "./.cache/tsbuildinfo",
+        "skipLibCheck": true
+    },
+    "include": ["./src/**/*"],
+    "exclude": ["./src/**/*.test.ts", "./src/__fixtures__/**"],
+    "references": [{ "path": "../../_search/iq-engine" }, { "path": "../../_search/iq-recall" }, { "path": "../../_sandbox/sandbox-contract" }],
+    "extends": "@intentic/tsconfig/tsconfig.base.json"
+}

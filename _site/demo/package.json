@@ -1,0 +1,29 @@
+{
+    "name": "@intentic-dev/demo",
+    "version": "0.0.0",
+    "private": true,
+    "type": "module",
+    "scripts": {
+        "dev": "vite",
+        "build": "vite build",
+        "typecheck": "vue-tsc --noEmit -p tsconfig.json"
+    },
+    "dependencies": {
+        "@intentic-app/api-contract": "workspace:*",
+        "@intentic-app/web": "workspace:*",
+        "@intentic/sandbox-contract": "workspace:*"
+    },
+    "devDependencies": {
+        "@dagrejs/dagre": "catalog:",
+        "@intentic/tsconfig": "workspace:*",
+        "@shikijs/langs": "catalog:",
+        "@shikijs/themes": "catalog:",
+        "@tailwindcss/vite": "catalog:",
+        "@vitejs/plugin-vue": "catalog:",
+        "@vue-flow/core": "catalog:",
+        "shiki": "catalog:",
+        "typescript": "catalog:",
+        "vite": "catalog:",
+        "vue-tsc": "catalog:"
+    }
+}

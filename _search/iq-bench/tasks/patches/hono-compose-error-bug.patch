@@ -1,0 +1,21 @@
+diff --git a/src/compose.ts b/src/compose.ts
+index b1d4508..1ed82e1 100644
+--- a/src/compose.ts
++++ b/src/compose.ts
+@@ -64,7 +64,7 @@ export const compose = <E extends Env = Env>(
+         }
+       }
+ 
+-      if (res && (context.finalized === false || isError)) {
++      if (res && context.finalized === false) {
+         context.res = res
+       }
+       return context
+diff --git a/vitest.bench.config.mts b/vitest.bench.config.mts
+new file mode 100644
+index 0000000..e51a9e8
+--- /dev/null
++++ b/vitest.bench.config.mts
+@@ -0,0 +1,2 @@
++import { defineConfig } from "vitest/config"
++export default defineConfig({ test: { globals: true, environment: "node" } })

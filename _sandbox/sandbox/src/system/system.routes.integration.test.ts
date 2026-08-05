@@ -1,0 +1,404 @@
+import { mkdtempSync } from "node:fs";
+
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+
+import { expect, test, vi } from "vitest";
+
+import { createApp } from "../app.js";
+
+import { createLogger } from "../logger.js";
+
+import { createBootTracker } from "../platform/boot.js";
+import { mintPairing } from "../platform/sync.js";
+
+import { testConfig } from "../testing.js";
+
+import { clientFor, fakeFiles, fakeProcesses, rejectAuth, rejectForbidden, services } from "../route-testing.js";
+
+/* The system routes, driven over the daemon's HTTP surface exactly as the browser drives them.
+ * Split out of app.integration.test.ts, which had grown to 116 tests across every route in the daemon —
+ * one file that two agents working on unrelated features collided in every time. The fakes and the client
+ * are shared (route-testing.ts); what lives here is what these routes do. */
+
+test("system.terminals reports an empty list, not an error, when there is no tmux server to ask", async () => {
+    // Pointed at a socket directory that holds no server: `list-panes` exits non-zero and that is an empty list.
+    // Both vars matter — TMUX_TMPDIR picks the socket, and $TMUX (set whenever the suite itself runs inside tmux)
+    // would otherwise send the query to the REAL server, where this machine's own agent-* sessions live.
+    vi.stubEnv("TMUX_TMPDIR", mkdtempSync(join(tmpdir(), "terminals-empty-")));
+    vi.stubEnv("TMUX", undefined);
+    const client = clientFor(createApp(services()));
+    expect(await client.system.terminals()).toEqual({ sessions: [] });
+});
+
+test("system.usage folds the LEDGER (all-time, never pruned) per provider+account and skips unattributed turns", async () => {
+    const client = clientFor(
+        createApp(
+            services({
+                usage: {
+                    record: async () => {},
+                    // Two days on one account plus an unattributed env-token turn, which belongs to no account.
+                    rollup: async () => [
+                        {
+                            day: "2026-07-20",
+                            provider: "claude",
+                            account: "work",
+                            harness: "native",
+                            turns: 1,
+                            inputTokens: 100,
+                            outputTokens: 50,
+                            cacheReadTokens: 10,
+                            cacheCreationTokens: 5,
+                            costUsd: 0.25,
+                            durationMs: 1_000,
+                        },
+                        {
+                            day: "2026-07-21",
+                            provider: "claude",
+                            account: "work",
+                            harness: "native",
+                            turns: 3,
+                            inputTokens: 300,
+                            outputTokens: 150,
+                            cacheReadTokens: 30,
+                            cacheCreationTokens: 15,
+                            costUsd: 0.75,
+                            durationMs: 3_000,
+                        },
+                        {
+                            day: "2026-07-21",
+                            provider: "claude",
+                            harness: "native",
+                            turns: 9,
+                            inputTokens: 900,
+                            outputTokens: 900,
+                            cacheReadTokens: 0,
+                            cacheCreationTokens: 0,
+                            costUsd: 9,
+                            durationMs: 9_000,
+                        },
+                    ],
+                },
+            }),
+        ),
+    );
+
+    // Both of the account's days summed into one row; the unattributed turn's $9 is excluded, not pooled.
+    expect(await client.system.usage()).toEqual({
+        accounts: [
+            {
+                provider: "claude",
+                account: "work",
+                turns: 4,
+                inputTokens: 400,
+                outputTokens: 200,
+                cacheReadTokens: 40,
+                cacheCreationTokens: 20,
+                costUsd: 1,
+            },
+        ],
+    });
+});
+
+test("system.killTerminal routes a panel-* session through the process manager, so `running` unmaps immediately", async () => {
+    const processes = fakeProcesses();
+    const client = clientFor(createApp(services({ processes: processes })));
+    expect(await client.system.killTerminal({ name: "panel-app" })).toEqual({ ok: true });
+    expect(processes.stopped).toEqual(["app"]);
+});
+
+test("system.session exchanges the verified bearer for a daemon-minted session", async () => {
+    const client = clientFor(
+        createApp(
+            services({
+                auth: {
+                    authorize: async () => ({ email: "o@x.com" }),
+                    authorizeOwner: rejectForbidden,
+                    mintSession: async (identity: { email: string }) => ({ token: `sess-${identity.email}`, expiresAt: 42 }),
+                },
+            }),
+        ),
+    );
+    expect(await client.system.session()).toEqual({ token: "sess-o@x.com", expiresAt: 42, email: "o@x.com" });
+});
+
+test("control-token mint/list/revoke are owner-gated plain routes; mint returns the raw token once", async () => {
+    const minted: { label: string; scope: string }[] = [];
+    const app = createApp(
+        services({
+            auth: { authorize: async () => ({ email: "o@x.com" }), authorizeOwner: async () => {} },
+            controlTokens: {
+                mint: async (label, scope) => {
+                    minted.push({ label, scope });
+                    return { id: "ct-9", token: "ict_raw-once" };
+                },
+                scopeOf: async () => undefined,
+                list: async () => [{ id: "ct-9", label: "zed", scope: "editor", createdAt: 1 }],
+                revoke: async (id) => id === "ct-9",
+            },
+        }),
+    );
+    const mint = await app.request("/system/control/tokens", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ label: "zed", scope: "editor" }),
+    });
+    expect(mint.status).toBe(200);
+    expect(await mint.json()).toEqual({ id: "ct-9", token: "ict_raw-once" });
+    expect(minted).toEqual([{ label: "zed", scope: "editor" }]);
+    expect(await (await app.request("/system/control/tokens")).json()).toEqual({
+        tokens: [{ id: "ct-9", label: "zed", scope: "editor", createdAt: 1 }],
+    });
+    expect((await app.request("/system/control/tokens/ct-9", { method: "DELETE" })).status).toBe(200);
+    expect((await app.request("/system/control/tokens/nope", { method: "DELETE" })).status).toBe(404);
+    // Not the owner → the gate closes the whole surface.
+    const denied = createApp(services({ auth: { authorize: rejectAuth, authorizeOwner: rejectAuth } }));
+    expect((await denied.request("/system/control/tokens", { method: "POST" })).status).toBe(401);
+});
+
+test("minting without a usable scope is refused rather than defaulted", async () => {
+    const app = createApp(services({ auth: { authorize: async () => ({ email: "o@x.com" }), authorizeOwner: async () => {} } }));
+    const mintWith = (body: unknown) =>
+        app.request("/system/control/tokens", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
+    // Absent, misspelled, and not-a-string all land the same way: a 400 naming the scopes that exist. No
+    // default, because every default here is wrong for somebody (see the route).
+    expect((await mintWith({ label: "zed" })).status).toBe(400);
+    expect((await mintWith({ label: "zed", scope: "editorr" })).status).toBe(400);
+    expect((await mintWith({ label: "zed", scope: 7 })).status).toBe(400);
+    expect((await mintWith({ scope: "drive" })).status).toBe(200);
+});
+
+test("system.info reports the sandbox image tag and exact bundled version", async () => {
+    const client = clientFor(
+        createApp(services({ info: { name: "intentic-sandbox", image: "ghcr.io/intentic/sandbox:stable", version: "1.52.0" } })),
+    );
+    expect(await client.system.info()).toEqual({
+        name: "intentic-sandbox",
+        image: "ghcr.io/intentic/sandbox:stable",
+        version: "1.52.0",
+    });
+});
+
+test("presence: an /events connection joins the roster and a /system/presence report fans back out", async () => {
+    // Fake auth resolving a full identity — exercises the whole seam: middleware → context → handler →
+    // registry → stream.
+    const app = createApp(
+        services({
+            auth: { authorize: async () => ({ email: "a@x.com", name: "Ada", picture: "https://p/a.png" }), authorizeOwner: rejectForbidden },
+        }),
+    );
+    const client = clientFor(app);
+    const controller = new AbortController();
+    const stream = await client.system.events({ clientId: "seam-1" }, { signal: controller.signal });
+    // Manual iterator: a for-await break would close the stream between the two phases.
+    const iterator = stream[Symbol.asyncIterator]();
+    const nextPresence = async () => {
+        for (;;) {
+            const { value, done } = await iterator.next();
+            if (done === true) {
+                throw new Error("stream ended before a presence frame");
+            }
+            if (value.kind === "presence") {
+                return value.users;
+            }
+        }
+    };
+    // The subscribe-time snapshot: this connection's own entry, identity from the verified token.
+    expect(await nextPresence()).toEqual([{ clientId: "seam-1", email: "a@x.com", name: "Ada", picture: "https://p/a.png", idle: false }]);
+    await client.system.presence({ clientId: "seam-1", idle: true, view: "workspace", path: "src/app.ts" });
+    expect(await nextPresence()).toEqual([
+        { clientId: "seam-1", email: "a@x.com", name: "Ada", picture: "https://p/a.png", idle: true, view: "workspace", path: "src/app.ts" },
+    ]);
+    controller.abort();
+});
+
+test("events: the first frame is the workspace-identity hello, stable across connections", async () => {
+    // An in-memory files seam so the id minted by the first connection persists to the second (the default
+    // fake forgets writes) — the browser relies on this stability to tell a surviving workspace from a wiped one.
+    const disk = new Map<string, string>();
+    const app = createApp(
+        services({
+            files: fakeFiles({
+                read: async (path) => disk.get(path),
+                write: async (path, content) => {
+                    disk.set(path, typeof content === "string" ? content : new TextDecoder().decode(content));
+                },
+            }),
+        }),
+    );
+    const client = clientFor(app);
+    const firstFrame = async () => {
+        const controller = new AbortController();
+        const stream = await client.system.events({}, { signal: controller.signal });
+        const { value, done } = await stream[Symbol.asyncIterator]().next();
+        controller.abort();
+        if (done === true || value.kind !== "hello") {
+            throw new Error(`expected a hello frame first, got ${done === true ? "stream end" : value.kind}`);
+        }
+        return value.workspaceId;
+    };
+    const minted = await firstFrame();
+    expect(minted).not.toBe("");
+    expect(await firstFrame()).toBe(minted);
+});
+
+test("events: the hello names the daemon's build and where its boot is, then streams every step", async () => {
+    const boot = createBootTracker(createLogger(testConfig));
+    boot.declare([{ key: "registry", label: "Loading conversations" }]);
+    const client = clientFor(createApp(services({ boot })));
+    const controller = new AbortController();
+    const frames = (await client.system.events({}, { signal: controller.signal }))[Symbol.asyncIterator]();
+
+    // /events answers BEFORE the gate on purpose: this frame is the only thing telling a browser that a daemon
+    // it can reach is not a daemon it can read yet.
+    const hello = (await frames.next()).value;
+    expect(hello).toMatchObject({
+        kind: "hello",
+        // A build identity the browser compares against what it last cached from this sandbox.
+        build: expect.stringContaining(":"),
+        boot: { ready: false, steps: [{ key: "registry", state: "pending" }] },
+    });
+
+    // …and each transition re-frames it, so a browser connected mid-boot follows along rather than guessing.
+    // The presence + fleet subscriptions push their own immediate snapshots onto this stream, so pull past
+    // whatever the connect produced rather than assuming an order the contract never promised.
+    const nextBoot = async () => {
+        for (;;) {
+            const { value, done } = await frames.next();
+            if (done === true) {
+                throw new Error("the stream ended before a boot frame arrived");
+            }
+            if (value.kind === "boot") {
+                return value;
+            }
+        }
+    };
+    const step = boot.step("registry", async () => undefined);
+    expect(await nextBoot()).toMatchObject({ ready: false, steps: [{ key: "registry", state: "running" }] });
+    await step;
+    expect(await nextBoot()).toMatchObject({ ready: false, steps: [{ key: "registry", state: "done" }] });
+    boot.finish();
+    expect(await nextBoot()).toMatchObject({ ready: true });
+    controller.abort();
+});
+
+test("POST /system/authorized-key authorizes via the pairing token alone (no bearer)", async () => {
+    const app = createApp(services({ auth: { authorize: rejectAuth, authorizeOwner: rejectAuth } }));
+    // Empty body: a valid pairing must get past auth and fail on key validation (400), never on auth (401) —
+    // the regression was the global bearer middleware 401ing before the route's own pairing check ran.
+    const post = (headers: Record<string, string> = {}) =>
+        app.request("/system/authorized-key", {
+            method: "POST",
+            headers: { "content-type": "application/json", ...headers },
+            body: JSON.stringify({}),
+        });
+    expect((await post({ "x-intentic-pair": mintPairing("sync").token })).status).toBe(400);
+    expect((await post()).status).toBe(401);
+    expect((await post({ "x-intentic-pair": "bogus" })).status).toBe(401);
+});
+
+test("POST /system/authorized-key is single-holder: a rival machine needs takeover (423), which replaces the key", async () => {
+    // Enrollment writes the store under historyRoot and derives ~/.ssh/authorized_keys from it — point both at
+    // temp dirs so neither lands on the real /history nor in the real home.
+    process.env["HOME"] = mkdtempSync(join(tmpdir(), "sync-enroll-home-"));
+    // connectToken + publicUrl make syncSshHostname resolve, so enrollment gets past the tunnel-configured check.
+    const app = createApp(
+        services({
+            config: {
+                ...testConfig,
+                connectToken: "token",
+                historyRoot: mkdtempSync(join(tmpdir(), "sync-history-")),
+                sandbox: { ...testConfig.sandbox, publicUrl: "https://sandbox-abc.example.com" },
+            },
+        }),
+    );
+    // A fresh single-use SYNC pairing per call (the owner's file-sync path); the key's comment is the machine label.
+    const enroll = (key: string, extra: Record<string, string> = {}) =>
+        app.request("/system/authorized-key", {
+            method: "POST",
+            headers: { "content-type": "application/json", "x-intentic-pair": mintPairing("sync").token, ...extra },
+            body: JSON.stringify({ key }),
+        });
+    const KEY_A = "ssh-ed25519 AAAAA machine-a";
+    const KEY_B = "ssh-ed25519 BBBBB machine-b";
+
+    expect((await enroll(KEY_A)).status).toBe(200);
+    // The same machine re-enrolling (its cached key) is idempotent — no takeover needed.
+    expect((await enroll(KEY_A)).status).toBe(200);
+    // A different machine is refused and told who currently holds sync.
+    const blocked = await enroll(KEY_B);
+    expect(blocked.status).toBe(423);
+    expect(await blocked.json()).toEqual({ error: "sync already active", machine: "machine-a" });
+    // An explicit takeover replaces the key; the status route now reports the new holder.
+    expect((await enroll(KEY_B, { "x-intentic-sync-takeover": "1" })).status).toBe(200);
+    expect(await (await app.request("/system/sync")).json()).toMatchObject({ enrolled: true, syncingFrom: "machine-b" });
+});
+
+test("POST /system/authorized-key: a MIRROR pairing lets many machines enroll — no single-holder lock", async () => {
+    process.env["HOME"] = mkdtempSync(join(tmpdir(), "sync-mirror-multi-"));
+    const app = createApp(
+        services({
+            config: {
+                ...testConfig,
+                connectToken: "token",
+                historyRoot: mkdtempSync(join(tmpdir(), "sync-history-")),
+                sandbox: { ...testConfig.sandbox, publicUrl: "https://sandbox-abc.example.com" },
+            },
+        }),
+    );
+    const enrollMirror = (key: string) =>
+        app.request("/system/authorized-key", {
+            method: "POST",
+            headers: { "content-type": "application/json", "x-intentic-pair": mintPairing("mirror").token },
+            body: JSON.stringify({ key }),
+        });
+    // Three collaborators mirror the same sandbox concurrently — every enroll succeeds, none locks.
+    expect((await enrollMirror("ssh-ed25519 AAA laptop-a")).status).toBe(200);
+    expect((await enrollMirror("ssh-ed25519 BBB laptop-b")).status).toBe(200);
+    const c = await enrollMirror("ssh-ed25519 CCC laptop-c");
+    expect(c.status).toBe(200);
+    expect(await c.json()).toMatchObject({ ok: true, mode: "mirror" });
+    // /system/sync shows all three mirroring and no file-sync holder.
+    const sync = await (await app.request("/system/sync")).json();
+    expect(sync).toMatchObject({ enrolled: true, mirroredBy: ["laptop-a", "laptop-b", "laptop-c"] });
+    expect(sync).not.toHaveProperty("syncingFrom");
+});
+
+test("POST /system/sync/pair: the owner may mint a sync pairing, a member is capped to mirror", async () => {
+    // Owner (loopback = owner): default sync, or mirror on request.
+    const owner = createApp(services());
+    expect(await (await owner.request("/system/sync/pair", { method: "POST" })).json()).toMatchObject({ mode: "sync" });
+    expect(await (await owner.request("/system/sync/pair?mode=mirror", { method: "POST" })).json()).toMatchObject({ mode: "mirror" });
+    // Member (authorized but not owner): forced to mirror even when asking for sync.
+    const member = createApp(services({ auth: { authorize: async () => ({ email: "m@x.com" }), authorizeOwner: rejectForbidden } }));
+    const asMember = (query = "") => member.request(`/system/sync/pair${query}`, { method: "POST", headers: { authorization: "Bearer m" } });
+    expect(await (await asMember()).json()).toMatchObject({ mode: "mirror" });
+    expect(await (await asMember("?mode=sync")).json()).toMatchObject({ mode: "mirror" });
+});
+
+test("DELETE /system/authorized-key: a sync token self-revokes just its own enrollment", async () => {
+    process.env["HOME"] = mkdtempSync(join(tmpdir(), "sync-revoke-"));
+    const app = createApp(
+        services({
+            config: {
+                ...testConfig,
+                connectToken: "token",
+                historyRoot: mkdtempSync(join(tmpdir(), "sync-history-")),
+                sandbox: { ...testConfig.sandbox, publicUrl: "https://sandbox-abc.example.com" },
+            },
+        }),
+    );
+    const enroll = (key: string) =>
+        app.request("/system/authorized-key", {
+            method: "POST",
+            headers: { "content-type": "application/json", "x-intentic-pair": mintPairing("mirror").token },
+            body: JSON.stringify({ key }),
+        });
+    const tokenA = ((await (await enroll("ssh-ed25519 AAA laptop-a")).json()) as { syncToken: string }).syncToken;
+    await enroll("ssh-ed25519 BBB laptop-b");
+    // Self-revoke with A's token removes only A; B keeps mirroring.
+    expect((await app.request("/system/authorized-key", { method: "DELETE", headers: { "x-intentic-sync": tokenA } })).status).toBe(200);
+    expect(await (await app.request("/system/sync")).json()).toMatchObject({ mirroredBy: ["laptop-b"] });
+    // A stale token that matches nothing is a 404.
+    expect((await app.request("/system/authorized-key", { method: "DELETE", headers: { "x-intentic-sync": tokenA } })).status).toBe(404);
+});

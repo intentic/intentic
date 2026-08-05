@@ -1,0 +1,16 @@
+[
+    {
+        "id": "hono",
+        "url": "https://github.com/honojs/hono",
+        "sha": "cda1af200256fa9a014bbcc2fdf79db201a627b6",
+        "lang": "ts",
+        "note": "picked 2026-07-10: HEAD of main — mid-size TS web framework, active post-cutoff churn, offline vitest suite"
+    },
+    {
+        "id": "click",
+        "url": "https://github.com/pallets/click",
+        "sha": "b67832c2167e5b0ff6764a8c04a0a9087e697b5a",
+        "lang": "python",
+        "note": "picked 2026-07-10: HEAD of main — small Python CLI framework, fast offline pytest suite"
+    }
+]

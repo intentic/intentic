@@ -1,0 +1,13 @@
+{
+    "compilerOptions": {
+        "types": ["node"],
+        "outDir": "./dist",
+        "rootDir": "./src",
+        "tsBuildInfoFile": "./.cache/tsbuildinfo",
+        "skipLibCheck": true
+    },
+    "include": ["./src/**/*"],
+    "exclude": ["./src/**/*.test.ts"],
+    "references": [{ "path": "../../_deploy/graph" }, { "path": "../sandbox-contract" }],
+    "extends": "@intentic/tsconfig/tsconfig.base.json"
+}

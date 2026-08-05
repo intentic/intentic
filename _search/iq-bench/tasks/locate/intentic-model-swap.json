@@ -1,0 +1,12 @@
+{
+    "id": "intentic-model-swap",
+    "repo": "intentic",
+    "type": "locate",
+    "prompt": "In this repository, when the embedding model is swapped for a different one, previously stored embedding vectors must be invalidated without rebuilding the chunk index. Where does that invalidation happen? Answer with the exact file path and line number.",
+    "grader": {
+        "kind": "anchors",
+        "anchors": [{ "file": "_search/iq-engine/src/index.ts", "line": 88, "tolerance": 15 }],
+        "requireAll": false
+    },
+    "caps": { "maxTurns": 12 }
+}

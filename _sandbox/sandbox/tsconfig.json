@@ -1,0 +1,24 @@
+{
+    "compilerOptions": {
+        "types": ["node"],
+        "outDir": "./dist",
+        "rootDir": "./src",
+        "tsBuildInfoFile": "./.cache/tsbuildinfo",
+        "skipLibCheck": true
+    },
+    "include": ["./src/**/*"],
+    "exclude": ["./src/**/*.test.ts", "./src/e2e-harness.ts", "./src/testing.ts", "./src/route-testing.ts"],
+    "references": [
+        { "path": "../../_sandbox/sandbox-contract" },
+        { "path": "../../_sandbox/workspace-ignore" },
+        { "path": "../../_sandbox/workspace-setup" },
+        { "path": "../../_sandbox/extension-api" },
+        { "path": "../../_deploy/graph" },
+        { "path": "../../_search/iq-engine" },
+        { "path": "../../_sandbox/registry" },
+        { "path": "../../_sandbox/scaffold" },
+        { "path": "../../_deploy/sdk" },
+        { "path": "../../_tools/constants" }
+    ],
+    "extends": "@intentic/tsconfig/tsconfig.base.json"
+}
