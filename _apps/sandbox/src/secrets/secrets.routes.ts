@@ -34,7 +34,9 @@ const providerAccountEntry = (provider: string, providerName: string, id: string
  * that feeds the deploy engine and is pushed to CI below. The value on this route is typed into the browser by
  * whoever holds a session, which is the whole distance from "unlikely input" to "input". */
 export const upsertEnv = (content: string, key: string, value: string): string => {
-    const entries = { ...parseEnv(content), [key]: value };
+    // parseEnv answers a Dict — `undefined` per key so a MISSING key reads as undefined; every key it does
+    // enumerate has a string value, which is what these round-trips iterate.
+    const entries = { ...(parseEnv(content) as Record<string, string>), [key]: value };
     return Object.entries(entries)
         .map(([entryKey, entryValue]) => envLine(entryKey, entryValue))
         .join("");
@@ -42,7 +44,7 @@ export const upsertEnv = (content: string, key: string, value: string): string =
 
 // Drop KEY from a .env's text (same parse/re-serialize round-trip as upsertEnv).
 export const removeEnv = (content: string, key: string): string => {
-    const entries: Record<string, string | undefined> = { ...parseEnv(content) };
+    const entries = parseEnv(content) as Record<string, string>;
     delete entries[key];
     return Object.entries(entries)
         .map(([entryKey, entryValue]) => envLine(entryKey, entryValue))
