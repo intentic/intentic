@@ -283,7 +283,13 @@ const HELD_TASK_TYPES: ReadonlySet<string> = new Set(["subagent", "workflow", "l
 // comes from the SDK's own level signal (background_tasks_changed, replace semantics — a missed edge cannot
 // wedge a stale hold), and once the last child settles, either a wake turn announces itself within the grace
 // window or none is coming and closing the input drains the stream as above.
-async function* sdkTurns(stream: AsyncIterable<SDKMessage>, steering: SteeringQueue | undefined): AsyncGenerator<SDKMessage> {
+async function* sdkTurns(
+    stream: AsyncIterable<SDKMessage>,
+    steering: SteeringQueue | undefined,
+    // Push the turn's prompt back through the streaming input, once — see the swallowed-prompt branch below.
+    // Reports whether it did, so a stream that already redelivered ends at its result like any other.
+    redeliver: (() => boolean) | undefined,
+): AsyncGenerator<SDKMessage> {
     const iterator = stream[Symbol.asyncIterator]();
     let awaitingNextTurn = false;
     // Live in-process background work, off the latest level signal. Counts only what the boundary waits for.
@@ -294,6 +300,10 @@ async function* sdkTurns(stream: AsyncIterable<SDKMessage>, steering: SteeringQu
     // only the idle gaps BETWEEN turns are raced against the grace window while held. Children's own frames
     // (parented) keep arriving throughout the hold and must not read as a turn underway.
     let midTurn = false;
+    // Whether the CLI produced ANYTHING since the last result — model output, a child's, or a local slash
+    // command's. What separates a turn that legitimately never called the model from one that swallowed its
+    // prompt (below).
+    let sawWork = false;
     // A pending next() that lost the grace race is re-awaited on the following pass, never abandoned.
     let pending: Promise<IteratorResult<SDKMessage, void>> | undefined;
     try {
@@ -333,22 +343,50 @@ async function* sdkTurns(stream: AsyncIterable<SDKMessage>, steering: SteeringQu
             } else if ((message.type === "assistant" || message.type === "stream_event" || message.type === "user") && message.parent_tool_use_id === null) {
                 midTurn = true;
             }
-            yield message;
-            if (message.type === "result") {
-                midTurn = false;
-                if (heldTasks > 0) {
-                    held = true;
-                    continue;
-                }
-                held = false;
-                if (steering === undefined || steering.delivered === 0) {
-                    // Close before returning (not just in runAgent's finally) so a steer racing this result
-                    // reports undelivered instead of landing in a queue nothing will ever consume.
-                    steering?.close();
-                    return;
-                }
-                awaitingNextTurn = true;
+            if (message.type === "assistant" || message.type === "stream_event" || (message.type === "system" && message.subtype === "local_command_output")) {
+                sawWork = true;
             }
+            if (message.type !== "result") {
+                yield message;
+                continue;
+            }
+            midTurn = false;
+            /* A SWALLOWED PROMPT: an instant "success" with num_turns 0 and not one frame of work behind it,
+             * before anything was even delivered. The CLI does this when a resume wakes up to its own stale
+             * background-task notifications (a previous turn's subagents killed at its end): it classifies the
+             * whole run as a notification wake needing no response and results in milliseconds — while the
+             * prompt it was just sent is dequeued into the dying run, stamped "No response requested." at the
+             * next resume, and never answered. To the user that is a sent message producing nothing at all: no
+             * reply, no error, no stopped state.
+             *
+             * The subprocess is still alive waiting on the streaming input, so the recovery is the one the user
+             * performs by hand — say it again: the prompt goes back through the steering queue and runs as a
+             * follow-up turn in the same process, whose notification debt the dead run just paid. The empty
+             * result is not yielded — nothing settled, and its zero-usage frame would end the client's turn.
+             * `sawWork` keeps a local slash command (the one legitimate num_turns-0 success) out of this branch,
+             * and redeliver() is once per turn: a second empty answer is a different problem, and looping the
+             * same prompt at it is noise, not recovery. `!held` keeps it off a stream held open for a wake turn:
+             * children can settle without one frame of forwarded work, and an empty wake there is the hold
+             * ending, not the prompt vanishing. */
+            const idle = !sawWork;
+            sawWork = false;
+            if (!held && idle && message.subtype === "success" && message.num_turns === 0 && steering?.delivered === 0 && redeliver?.() === true) {
+                awaitingNextTurn = true;
+                continue;
+            }
+            yield message;
+            if (heldTasks > 0) {
+                held = true;
+                continue;
+            }
+            held = false;
+            if (steering === undefined || steering.delivered === 0) {
+                // Close before returning (not just in runAgent's finally) so a steer racing this result
+                // reports undelivered instead of landing in a queue nothing will ever consume.
+                steering?.close();
+                return;
+            }
+            awaitingNextTurn = true;
         }
     } finally {
         await iterator.return?.();
@@ -496,6 +534,9 @@ async function* streamSdk(
     // chat can show. Absent on a turn with no browser tools at all.
     browserOutputDir: string | undefined,
     steering: SteeringQueue | undefined,
+    // The swallowed-prompt recovery sdkTurns fires — see its result branch. Absent on an unsteerable turn,
+    // which has no road back into the streaming input.
+    redeliver: (() => boolean) | undefined,
     // Reads the credential's plan-limit pools at turn settle; absent when the turn ran on a credential with no
     // pools to read (an API endpoint, the container env) — no read, no frame.
     readUsage: (() => Promise<UsageWindow[]>) | undefined,
@@ -578,7 +619,7 @@ async function* streamSdk(
     // Bound rather than inlined into sdkTurns: the turn also reads the session's slash-command list off this
     // handle at `init` (see below), which the bare AsyncIterable it is consumed as does not expose.
     const session = queryFn({ prompt, options });
-    for await (const message of sdkTurns(session, steering)) {
+    for await (const message of sdkTurns(session, steering, redeliver)) {
         const sessionId = (message as { session_id?: string }).session_id;
         if (!sessionSent && typeof sessionId === "string" && sessionId !== "") {
             sessionSent = true;
@@ -1516,6 +1557,22 @@ export async function* runAgent(
     const readUsage =
         oauthToken === undefined ? undefined : (): Promise<UsageWindow[]> => readClaudeUsage(oauthToken, usageFetch).then((reading) => reading.windows);
 
+    // The swallowed-prompt recovery (sdkTurns): the turn's own prompt, pushed back through the steering queue,
+    // once. Built here because this is where both halves live — the prompt text and the queue the streaming
+    // input reads. An unsteerable turn has no road back, so the empty result then ends the turn as before.
+    const steering = request.steering;
+    let redelivered = false;
+    const redeliver =
+        steering === undefined
+            ? undefined
+            : (): boolean => {
+                  if (redelivered) {
+                      return false;
+                  }
+                  redelivered = true;
+                  return steering.push(request.prompt);
+              };
+
     const pump = (async () => {
         try {
             for await (const event of streamSdk(
@@ -1526,6 +1583,7 @@ export async function* runAgent(
                 tmuxEnabled,
                 request.browserOutputDir,
                 request.steering,
+                redeliver,
                 readUsage,
                 request.allowance,
                 subagents,

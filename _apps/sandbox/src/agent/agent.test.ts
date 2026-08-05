@@ -1236,6 +1236,85 @@ test("a backgrounded shell does not hold the turn open", async () => {
     ]);
 });
 
+/* THE SWALLOWED PROMPT. A resume that wakes to its own stale background-task notifications classifies the
+ * whole run as a notification wake: the prompt is dequeued into the dying run, never answered, and the run
+ * results instantly — subtype success, num_turns 0, not one frame of work. To the user that is a sent message
+ * producing nothing at all. The recovery is the one they perform by hand — say it again — done here through
+ * the steering queue, whose follow-up turn runs in the same process. */
+test("an instant empty result redelivers the prompt instead of ending the turn on nothing", async () => {
+    const drained: string[] = [];
+    const swallowing: QueryFn = async function* (args) {
+        const input = (args.prompt as AsyncIterable<SDKUserMessage>)[Symbol.asyncIterator]();
+        // The prompt is dequeued into the dying run and never answered...
+        drained.push(String((await input.next()).value?.message.content));
+        yield { type: "result", subtype: "success", num_turns: 0, usage: { input_tokens: 0, output_tokens: 0 } } as SDKMessage;
+        // ...and its redelivered copy runs as a follow-up turn in the same process.
+        drained.push(String((await input.next()).value?.message.content));
+        yield {
+            type: "stream_event",
+            session_id: "s",
+            event: { type: "content_block_delta", delta: { type: "text_delta", text: "Pong." } },
+        } as SDKMessage;
+        yield { type: "result", subtype: "success", num_turns: 1, total_cost_usd: 0.1 } as SDKMessage;
+        for (let step = await input.next(); step.done !== true; step = await input.next()) {
+            drained.push(String(step.value.message.content));
+        }
+    };
+    const steering = new SteeringQueue();
+    const events = await collect({ ...request, steering }, swallowing);
+    // The same words, delivered twice — and the empty result never reached the client: no zero-usage frame,
+    // only the follow-up turn that actually answered.
+    expect(drained).toEqual(["add a /ping route", "add a /ping route"]);
+    expect(events).toEqual([
+        { kind: "session", sessionId: "s" },
+        { kind: "delta", text: "Pong." },
+        { kind: "usage", costUsd: 0.1, numTurns: 1 },
+        { kind: "done" },
+    ]);
+});
+
+test("redelivery is once per turn: a second empty answer surfaces instead of looping the prompt at it", async () => {
+    const drained: string[] = [];
+    const swallowingTwice: QueryFn = async function* (args) {
+        const input = (args.prompt as AsyncIterable<SDKUserMessage>)[Symbol.asyncIterator]();
+        drained.push(String((await input.next()).value?.message.content));
+        yield { type: "result", subtype: "success", num_turns: 0, usage: { input_tokens: 0, output_tokens: 0 } } as SDKMessage;
+        drained.push(String((await input.next()).value?.message.content));
+        yield { type: "result", subtype: "success", num_turns: 0, usage: { input_tokens: 0, output_tokens: 0 } } as SDKMessage;
+        for (let step = await input.next(); step.done !== true; step = await input.next()) {
+            drained.push(String(step.value.message.content));
+        }
+    };
+    const steering = new SteeringQueue();
+    const events = await collect({ ...request, steering }, swallowingTwice);
+    // One redelivery, not a loop — and the second empty answer is a different problem, so it is surfaced.
+    expect(drained).toEqual(["add a /ping route", "add a /ping route"]);
+    expect(events).toEqual([{ kind: "usage", inputTokens: 0, outputTokens: 0, numTurns: 0 }, { kind: "done" }]);
+});
+
+test("a local command's own num_turns-0 success is a real answer, not a swallowed prompt", async () => {
+    const drained: string[] = [];
+    const localCommand: QueryFn = async function* (args) {
+        const input = (args.prompt as AsyncIterable<SDKUserMessage>)[Symbol.asyncIterator]();
+        drained.push(String((await input.next()).value?.message.content));
+        // The CLI answered the command itself: no model request ran, so the result legitimately counts no turns.
+        yield {
+            type: "system",
+            subtype: "local_command_output",
+            session_id: "s",
+            content: "<local-command-stdout>Session: 12k tokens</local-command-stdout>",
+        } as SDKMessage;
+        yield { type: "result", subtype: "success", num_turns: 0 } as SDKMessage;
+        for (let step = await input.next(); step.done !== true; step = await input.next()) {
+            drained.push(String(step.value.message.content));
+        }
+    };
+    const steering = new SteeringQueue();
+    const events = await collect({ ...request, steering }, localCommand);
+    expect(drained).toEqual(["add a /ping route"]);
+    expect(events).toEqual([{ kind: "session", sessionId: "s" }, { kind: "delta", text: "Session: 12k tokens" }, { kind: "text_end" }, { kind: "done" }]);
+});
+
 const throwing: QueryFn = async function* () {
     yield { type: "system", session_id: "s" } as SDKMessage;
     throw new Error("stream blew up");
