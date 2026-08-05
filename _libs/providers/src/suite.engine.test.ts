@@ -31,6 +31,15 @@ const serviceImages = (yaml: string): Record<string, string> => {
 
 const ok = (stdout = "", code = 0): SshResult => ({ stdout, stderr: "", code });
 
+/* Read a `--label intentic.<key>=<value>` back out of an emitted docker command the way the host's shell hands
+ * it to docker, rather than by matching one quoting style. The provider shell-quotes its arguments, so a value
+ * with a space arrives single-quoted and a plain one arrives bare — a fake that only understood `"…"` reported
+ * an empty schedule, and the diff then wanted to recreate a container that was already correct. */
+const labelValue = (command: string, key: string): string | undefined => {
+    const quoted = new RegExp(`--label '(?:intentic\\.${key}=)([^']*)'`).exec(command);
+    return quoted?.[1] ?? new RegExp(`--label (?:intentic\\.${key}=)(\\S*)`).exec(command)?.[1];
+};
+
 // A stateful host shared by host/forgejo/forgejo-runner/komodo/tunnel/signoz: Docker-ready, default route ->
 // 10.0.0.5, and it remembers which containers have been started (and on which image) so a second apply reads
 // them as running on the desired pin — exercising the image-drift diff's idempotency.
@@ -101,10 +110,10 @@ const fakeSsh = (): SshExecutor => {
                     const image = /(\S+@sha256:[0-9a-f]+)/.exec(command);
                     if (image?.[1] !== undefined) containerImages.set(run[1], image[1]);
                     // The backup container carries its schedule/repo as create-time labels (what its observe reads back).
-                    const schedule = /--label "intentic\.schedule=([^"]*)"/.exec(command);
-                    const repo = /--label "intentic\.repo=([^"]*)"/.exec(command);
-                    if (schedule?.[1] !== undefined && repo?.[1] !== undefined) {
-                        containerLabels.set(run[1], { schedule: schedule[1], repo: repo[1] });
+                    const schedule = labelValue(command, "schedule");
+                    const repo = labelValue(command, "repo");
+                    if (schedule !== undefined && repo !== undefined) {
+                        containerLabels.set(run[1], { schedule, repo });
                     }
                     return ok("cid");
                 }

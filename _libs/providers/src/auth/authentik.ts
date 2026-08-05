@@ -1,5 +1,6 @@
 import type { Provider, ResolvedInputs } from "@intentic/engine";
 import { HASH_KEY } from "@intentic/graph";
+import { envLine, shellQuote } from "@intentic/sandbox-run/quote";
 import { z } from "zod";
 import { composeDown, composeUp, containerImage, containerLabel, stateDir, waitReady } from "../core/backing-ssh.js";
 import { hasPendingRef, parseInputs, sshSchema, sshTarget } from "../core/inputs.js";
@@ -82,20 +83,23 @@ const ensureFiles = async (session: SshSession, id: string, hash: string, parsed
     const dir = stateDir(KIND, id);
     await session.exec(`mkdir -p ${dir}`);
     await session.exec(`cat > ${dir}/compose.yaml <<'COMPOSE_EOF'\n${composeYaml(id, hash, parsed)}COMPOSE_EOF`);
-    const envLines = [
-        "AUTHENTIK_POSTGRESQL__HOST=postgresql",
-        "AUTHENTIK_POSTGRESQL__USER=authentik",
-        "AUTHENTIK_POSTGRESQL__NAME=authentik",
-        "AUTHENTIK_REDIS__HOST=redis",
-        `AUTHENTIK_BOOTSTRAP_EMAIL=akadmin@${parsed.domain}`,
-        `AUTHENTIK_SECRET_KEY=${parsed.secretKey}`,
-        `AUTHENTIK_POSTGRESQL__PASSWORD=${parsed.dbPassword}`,
-        `AUTHENTIK_BOOTSTRAP_PASSWORD=${parsed.bootstrapPassword}`,
-        `AUTHENTIK_BOOTSTRAP_TOKEN=${parsed.bootstrapToken}`,
-    ]
-        .map((line) => `'${line}'`)
-        .join(" ");
-    await session.exec(`test -f ${dir}/.env || { printf '%s\\n' ${envLines} > ${dir}/.env && chmod 600 ${dir}/.env; }`);
+    // Pairs, not pre-joined `KEY=value` text, because the two layers escape different things and each needs the
+    // value on its own: envLine renders the .env line compose reads back, shellQuote carries it through the
+    // host shell as one printf argument. Four of these are secrets, and the old bare `'${line}'` gave any of
+    // them an apostrophe's worth of shell on this host.
+    const envPairs: [string, string][] = [
+        ["AUTHENTIK_POSTGRESQL__HOST", "postgresql"],
+        ["AUTHENTIK_POSTGRESQL__USER", "authentik"],
+        ["AUTHENTIK_POSTGRESQL__NAME", "authentik"],
+        ["AUTHENTIK_REDIS__HOST", "redis"],
+        ["AUTHENTIK_BOOTSTRAP_EMAIL", `akadmin@${parsed.domain}`],
+        ["AUTHENTIK_SECRET_KEY", parsed.secretKey],
+        ["AUTHENTIK_POSTGRESQL__PASSWORD", parsed.dbPassword],
+        ["AUTHENTIK_BOOTSTRAP_PASSWORD", parsed.bootstrapPassword],
+        ["AUTHENTIK_BOOTSTRAP_TOKEN", parsed.bootstrapToken],
+    ];
+    const envLines = envPairs.map(([key, value]) => shellQuote(envLine(key, value))).join(" ");
+    await session.exec(`test -f ${dir}/.env || { printf '%s' ${envLines} > ${dir}/.env && chmod 600 ${dir}/.env; }`);
 };
 
 // Probe the server's health endpoint FROM THE HOST over SSH (it publishes 9000 on the host); it answers 2xx

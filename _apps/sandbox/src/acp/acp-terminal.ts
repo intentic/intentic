@@ -1,5 +1,6 @@
 import type { CreateTerminalRequest, TerminalExitStatus, TerminalOutputResponse } from "@agentclientprotocol/sdk";
-import { shellQuote, type TerminalRunner } from "../terminal/terminal-run.js";
+import type { TerminalRunner } from "../terminal/terminal-run.js";
+import { shellQuote } from "@intentic/sandbox-run/quote";
 
 /* ACP terminal/* over the tmux substrate: `create` starts the command in a visible window of the ACP
  * conversation's `agent-<id>` session (the exact panel UX Claude's Bash gets) and returns a handle

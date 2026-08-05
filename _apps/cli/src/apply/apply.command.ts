@@ -284,6 +284,9 @@ export const apply = buildCommand<ApplyFlags>({
             process.removeListener("SIGINT", onSignal);
             process.removeListener("SIGTERM", onSignal);
             process.removeListener("SIGHUP", onSignal);
+            // Write back whatever the redactor is still holding as a possible secret prefix, or the
+            // command's last line goes missing. Runs on the error path too — a throw must not eat output.
+            redactor.flush();
             await lock.release();
             // Tear down any cloudflared SSH forwarders this run started (no-op for direct-only applies).
             await ssh.dispose?.();

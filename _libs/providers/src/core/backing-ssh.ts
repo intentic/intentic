@@ -1,17 +1,29 @@
 import { setTimeout as sleep } from "node:timers/promises";
 import type { SshSession } from "./ssh.js";
+import { shellQuote } from "@intentic/sandbox-run/quote";
 
 // Shared host-side helpers for the backing providers (postgres/valkey instances + their binding nodes). Each
 // backing instance is a single container, deployed as a per-instance compose project so multiple instances
 // (and multiple backing kinds) co-exist on one host without colliding. The container is stamped with its
 // node id as the intentic.id label, so its binding nodes can find it by id with `docker exec`.
 
-// A docker-compose-safe project / path fragment derived from a node id (lowercase, non-alnum -> "-").
-const slug = (id: string): string =>
-    id
+/* A docker-compose-safe project / path fragment derived from a node id (lowercase, non-alnum -> "-").
+ *
+ * Refuses to return "" instead of letting the caller build a path one level too high. An id of nothing but
+ * punctuation — `"---"`, `"__"` — used to slug to the empty string, and every use below is a path or project
+ * built by CONCATENATION: stateDir became `/opt/intentic/postgres/` rather than a directory inside it, so the
+ * `rm -rf ${dir}` on delete took every postgres instance on the host with it. An id that cannot name one
+ * instance must not silently name all of them. */
+const slug = (id: string): string => {
+    const slugged = id
         .toLowerCase()
         .replace(/[^a-z0-9]+/g, "-")
         .replace(/^-+|-+$/g, "");
+    if (slugged === "") {
+        throw new Error(`cannot derive a host directory from node id "${id}": it has no letters or digits`);
+    }
+    return slugged;
+};
 
 // The per-instance host directory holding its compose.yaml + .env, and the compose project name.
 export const stateDir = (kind: string, id: string): string => `/opt/intentic/${kind}/${slug(id)}`;
@@ -42,7 +54,7 @@ export const containerLabel = async (session: SshSession, stamp: string, key: st
     if (id === "") {
         return "";
     }
-    const result = await session.exec(`docker inspect --format '{{index .Config.Labels "${key}"}}' ${id}`);
+    const result = await session.exec(`docker inspect --format ${shellQuote(`{{index .Config.Labels "${key}"}}`)} ${id}`);
     return result.stdout.trim();
 };
 

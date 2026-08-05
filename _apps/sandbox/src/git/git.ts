@@ -1,5 +1,6 @@
 import { GIT_GLOBAL_ARGS, type GitRunner } from "@intentic/scaffold";
-import { shellQuote, type TerminalRunner } from "../terminal/terminal-run.js";
+import type { TerminalRunner } from "../terminal/terminal-run.js";
+import { shellQuote } from "@intentic/sandbox-run/quote";
 
 // A GitRunner that executes visibly through a terminal session (capability flows — the user watches the actual
 // git commands). Output is the pane's combined stream (stderr merged); the parsed cases (status --porcelain,

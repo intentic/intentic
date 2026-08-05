@@ -1,4 +1,5 @@
 import { DAEMON_PORT, LOCAL_PORT } from "@intentic/constants";
+import { shellQuote } from "./quote.js";
 
 /* THE SANDBOX CONTAINER'S RUN CONTRACT — every way a sandbox starts, composed from one definition.
  *
@@ -336,14 +337,6 @@ export const sandboxRunArgv = (run: SandboxRun): string[] => {
         run.image,
     ];
 };
-
-// Every character that never needs quoting in a POSIX shell word — flags, names, image tags, and NAME=value
-// pairs of plain values all match, so the emitted command stays byte-identical to what the scripts always
-// wrote and reads at a glance. Anything else (spaces, quotes, $, newlines — a multi-line HOST_SSH_KEY) is
-// single-quote escaped, which is precisely the safety the hand-rolled `-e VAR=$value` splices never had.
-const PLAIN_WORD = /^[\w@%+=:,./-]+$/;
-
-export const shellQuote = (word: string): string => (PLAIN_WORD.test(word) ? word : `'${word.replaceAll("'", `'\\''`)}'`);
 
 // The complete `docker run …` line for sh consumers — the text the CLI verb prints and a host shell executes,
 // and the text the hosted provider splices into its SSH exec.

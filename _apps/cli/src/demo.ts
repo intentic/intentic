@@ -10,6 +10,7 @@ import { deploymentId, deploymentPort } from "@intentic/state-resolver";
 import { loadConfig } from "./env.config.js";
 import { renderTemplate } from "./lib/templates.js";
 import { readGeneratedSecrets } from "./secrets/generated-secrets.js";
+import { shellQuote } from "@intentic/sandbox-run/quote";
 
 // ssh2 is CommonJS; under raw Node ESM `import { utils }` can't be resolved as a named export, so load it
 // through createRequire (the keygen is the only piece we need).
@@ -168,7 +169,7 @@ const up = async (): Promise<void> => {
         CONTAINER,
         "sh",
         "-c",
-        `mkdir -p /root/.ssh && chmod 700 /root/.ssh && printf '%s\\n' '${keys.public}' > /root/.ssh/authorized_keys && chmod 600 /root/.ssh/authorized_keys`,
+        `mkdir -p /root/.ssh && chmod 700 /root/.ssh && printf '%s\\n' ${shellQuote(keys.public)} > /root/.ssh/authorized_keys && chmod 600 /root/.ssh/authorized_keys`,
     ]);
 
     log(`▶ waiting for SSH on 127.0.0.1:${sshPort} …`);

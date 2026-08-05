@@ -5,7 +5,8 @@ import type { HookCallbackMatcher, HookEvent } from "@anthropic-ai/claude-agent-
 import { nsenterPrefix, type TurnPlacement } from "../agents/isolation.js";
 import { redirectCommand } from "../agents/worktree-redirect.js";
 import { agentSessionName } from "@intentic/sandbox-contract/session-names";
-import { shellQuote, TMUX_RUN_BIN } from "../terminal/terminal-run.js";
+import { TMUX_RUN_BIN } from "../terminal/terminal-run.js";
+import { shellQuote } from "@intentic/sandbox-run/quote";
 
 // Rewrites every Bash tool command through bin/tmux-run (baked into the image), so the agent's shell
 // commands run live-visible in `agent-<sdk session>` tmux sessions the terminal panel can attach to — the

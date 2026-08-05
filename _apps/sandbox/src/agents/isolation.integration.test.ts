@@ -1,6 +1,7 @@
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { shellQuote } from "@intentic/sandbox-run/quote";
 import { afterEach, expect, test } from "vitest";
 import { ANCHOR_READY, inWorktree, type IsolationPlan, isolationScript, MAIN_MOUNT, mirroredDirs, nsenterArgv, nsenterPrefix } from "./isolation.js";
 
@@ -33,8 +34,8 @@ test("the namespace is made private before anything is mounted", () => {
 
 test("the main root is bound aside before the worktree shadows it", () => {
     const script = isolationScript(plan);
-    const aside = script.indexOf(`mount --bind '/work' '${MAIN_MOUNT}'`);
-    const shadow = script.indexOf(`mount --bind '/history/worktrees/abc' '/work'`);
+    const aside = script.indexOf(`mount --bind ${shellQuote("/work")} ${shellQuote(MAIN_MOUNT)}`);
+    const shadow = script.indexOf(`mount --bind ${shellQuote("/history/worktrees/abc")} ${shellQuote("/work")}`);
     expect(aside).toBeGreaterThan(-1);
     expect(shadow).toBeGreaterThan(aside);
 });
@@ -44,19 +45,19 @@ test("shared state is re-bound from the aside mount, not from the shadowed path"
     // Sourcing this from /work would name the worktree's own (empty) copy — the mount would succeed and the
     // agent would silently lose the transcript store. A BIND, not an overlay: a transcript written here has
     // to reach the daemon.
-    expect(script).toContain(`mount --bind '${MAIN_MOUNT}/.intentic' '/work/.intentic'`);
+    expect(script).toContain(`mount --bind ${shellQuote(`${MAIN_MOUNT}/.intentic`)} ${shellQuote("/work/.intentic")}`);
     // A fresh checkout has no mount point for an untracked dir.
-    expect(script).toContain(`mkdir -p '/work/.intentic'`);
+    expect(script).toContain(`mkdir -p ${shellQuote("/work/.intentic")}`);
 });
 
 test("the reference shelf comes back into the worktree, read-only, and only when the workspace has one", () => {
     const script = isolationScript(plan);
     // Without this a turn asked to "compare against refs/nimbalyst" finds no /work/refs at all and spends a
     // call rediscovering that the shelf only exists at MAIN_MOUNT.
-    expect(script).toContain(`if [ -d '${MAIN_MOUNT}/refs' ]; then`);
-    expect(script).toContain(`mount --bind '${MAIN_MOUNT}/refs' '/work/refs'`);
+    expect(script).toContain(`if [ -d ${shellQuote(`${MAIN_MOUNT}/refs`)} ]; then`);
+    expect(script).toContain(`mount --bind ${shellQuote(`${MAIN_MOUNT}/refs`)} ${shellQuote("/work/refs")}`);
     // `ro` is ignored on the bind itself — it takes only on the remount, and the shelf is read-only by contract.
-    expect(script).toContain(`mount -o remount,bind,ro '/work/refs'`);
+    expect(script).toContain(`mount -o remount,bind,ro ${shellQuote("/work/refs")}`);
     // Guarded, because most workspaces have no shelf and `set -e` would kill the namespace over its absence.
     expect(script).toContain(`fi`);
 });
@@ -67,21 +68,23 @@ test("a mirrored tree is an overlay over the main checkout, never a writable bin
     // write through the node_modules name rewrite the main checkout's tracked file. Reads still come from
     // the main tree (lowerdir); writes land in this turn's own upper layer.
     expect(script).toContain(
-        `mount -t overlay intentic-modules -o 'lowerdir=${MAIN_MOUNT}/node_modules,upperdir=/history/overlays/abc/node_modules/upper,workdir=/history/overlays/abc/node_modules/work' '/work/node_modules'`,
+        `mount -t overlay intentic-modules -o ${shellQuote(`lowerdir=${MAIN_MOUNT}/node_modules,upperdir=/history/overlays/abc/node_modules/upper,workdir=/history/overlays/abc/node_modules/work`)} ${shellQuote("/work/node_modules")}`,
     );
     // One layer per mount, keyed by the package path — a nested tree must not share (or nest inside) the
     // root's layer, and upper/work must be siblings.
     expect(script).toContain(
-        `mount -t overlay intentic-modules -o 'lowerdir=${MAIN_MOUNT}/_apps/web/node_modules,upperdir=/history/overlays/abc/_apps%2Fweb%2Fnode_modules/upper,workdir=/history/overlays/abc/_apps%2Fweb%2Fnode_modules/work' '/work/_apps/web/node_modules'`,
+        `mount -t overlay intentic-modules -o ${shellQuote(`lowerdir=${MAIN_MOUNT}/_apps/web/node_modules,upperdir=/history/overlays/abc/_apps%2Fweb%2Fnode_modules/upper,workdir=/history/overlays/abc/_apps%2Fweb%2Fnode_modules/work`)} ${shellQuote("/work/_apps/web/node_modules")}`,
     );
     // Both layer dirs have to exist before the mount that names them.
-    expect(script).toContain(`mkdir -p '/work/node_modules' '/history/overlays/abc/node_modules/upper' '/history/overlays/abc/node_modules/work'`);
+    expect(script).toContain(
+        `mkdir -p ${shellQuote("/work/node_modules")} ${shellQuote("/history/overlays/abc/node_modules/upper")} ${shellQuote("/history/overlays/abc/node_modules/work")}`,
+    );
     // Nothing binds a dependency tree any more — a single leftover bind is the whole hole reopened.
-    expect(script).not.toContain(`mount --bind '${MAIN_MOUNT}/node_modules'`);
+    expect(script).not.toContain(`mount --bind ${shellQuote(`${MAIN_MOUNT}/node_modules`)}`);
     // Build output rides the same mechanism: without it a worktree resolves third-party imports but not its
     // own siblings', and every suite that crosses a package boundary dies at collection.
     expect(script).toContain(
-        `mount -t overlay intentic-modules -o 'lowerdir=${MAIN_MOUNT}/_apps/web/dist,upperdir=/history/overlays/abc/_apps%2Fweb%2Fdist/upper,workdir=/history/overlays/abc/_apps%2Fweb%2Fdist/work' '/work/_apps/web/dist'`,
+        `mount -t overlay intentic-modules -o ${shellQuote(`lowerdir=${MAIN_MOUNT}/_apps/web/dist,upperdir=/history/overlays/abc/_apps%2Fweb%2Fdist/upper,workdir=/history/overlays/abc/_apps%2Fweb%2Fdist/work`)} ${shellQuote("/work/_apps/web/dist")}`,
     );
 });
 

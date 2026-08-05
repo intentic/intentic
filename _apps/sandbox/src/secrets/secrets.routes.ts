@@ -2,6 +2,7 @@ import { existsSync } from "node:fs";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { parseEnv } from "node:util";
+import { envLine } from "@intentic/sandbox-run/quote";
 import { collectSecretInventory, ENV_FILE, SECRETS_FILE } from "@intentic/scaffold";
 import { secretField } from "../capabilities/summary.js";
 import { contributionRegistry } from "../capabilities/contributions.js";
@@ -23,14 +24,19 @@ const providerAccountEntry = (provider: string, providerName: string, id: string
     revealable: false,
 });
 
-// Upsert KEY=value into a .env's text. Parsed and re-serialized with Node's own env parser (the same one the
-// CLI loads the file with), every value double-quoted — so multi-line secrets (SSH private keys) survive the
-// round-trip. The file is machine-managed (only the daemon writes it), so re-serializing is lossless.
-// ponytail: values are tokens/PEM keys — no embedded double quotes; add escaping if a secret kind ever carries them.
+/* Upsert KEY=value into a .env's text. Parsed and re-serialized with Node's own env parser (the same one the
+ * CLI loads the file with), so multi-line secrets (SSH private keys) survive the round-trip. The file is
+ * machine-managed (only the daemon writes it), so re-serializing is lossless.
+ *
+ * Serialization is envLine's, not this file's. Hardcoding `KEY="${value}"` here made the VALUE able to end its
+ * own line: parseEnv has no escape inside a quoted value, so a secret containing a double quote was stored
+ * truncated at it — and one containing `"` followed by a newline and `OTHER=…` added a second key to a file
+ * that feeds the deploy engine and is pushed to CI below. The value on this route is typed into the browser by
+ * whoever holds a session, which is the whole distance from "unlikely input" to "input". */
 export const upsertEnv = (content: string, key: string, value: string): string => {
     const entries = { ...parseEnv(content), [key]: value };
     return Object.entries(entries)
-        .map(([entryKey, entryValue]) => `${entryKey}="${entryValue}"\n`)
+        .map(([entryKey, entryValue]) => envLine(entryKey, entryValue))
         .join("");
 };
 
@@ -39,7 +45,7 @@ export const removeEnv = (content: string, key: string): string => {
     const entries: Record<string, string | undefined> = { ...parseEnv(content) };
     delete entries[key];
     return Object.entries(entries)
-        .map(([entryKey, entryValue]) => `${entryKey}="${entryValue}"\n`)
+        .map(([entryKey, entryValue]) => envLine(entryKey, entryValue))
         .join("");
 };
 

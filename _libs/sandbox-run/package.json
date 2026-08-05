@@ -27,6 +27,17 @@
                 "@intentic/src": "./src/index.ts",
                 "default": "./dist/index.js"
             }
+        },
+        "./quote": {
+            "types": "./dist/quote.d.ts",
+            "import": {
+                "@intentic/src": "./src/quote.ts",
+                "default": "./dist/quote.js"
+            },
+            "require": {
+                "@intentic/src": "./src/quote.ts",
+                "default": "./dist/quote.js"
+            }
         }
     },
     "scripts": {

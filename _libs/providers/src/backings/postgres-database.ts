@@ -1,4 +1,5 @@
 import type { Provider, ResolvedInputs } from "@intentic/engine";
+import { shellQuote, sqlIdentifier, sqlLiteral } from "@intentic/sandbox-run/quote";
 import { z } from "zod";
 import { containerId } from "../core/backing-ssh.js";
 import { hasPendingRef, parseInputs, sshSchema, sshTarget } from "../core/inputs.js";
@@ -25,7 +26,10 @@ const url = (parsed: DatabaseInputs): string =>
 // Run psql in the instance container as the superuser over the local socket (trust auth), returning trimmed
 // stdout. Throws on a non-zero exit so a real psql/connection error propagates rather than reads as "absent".
 const psql = async (session: SshSession, cid: string, sql: string): Promise<string> => {
-    const result = await session.exec(`docker exec ${cid} psql -U postgres -tAc "${sql}"`);
+    // The statement rides as ONE argv word. It used to be spliced into a shell double-quoted string, which is
+    // why every caller below had to spell its identifiers `\\"name\\"` — interleaving the shell's escaping with
+    // SQL's by hand, in a template, at each site. shellQuote owns the outer layer now; callers write SQL.
+    const result = await session.exec(`docker exec ${cid} psql -U postgres -tAc ${shellQuote(sql)}`);
     if (result.code !== 0) {
         throw new Error(`psql failed (${result.code}): ${result.stderr.trim()}`);
     }
@@ -56,7 +60,7 @@ export const createPostgresDatabaseProvider = (executor: SshExecutor = sshExecut
             if (cid === "") {
                 return undefined;
             }
-            const exists = await psql(session, cid, `SELECT 1 FROM pg_database WHERE datname='${parsed.database}'`);
+            const exists = await psql(session, cid, `SELECT 1 FROM pg_database WHERE datname=${sqlLiteral(parsed.database)}`);
             return exists === "1" ? { outputs: { url: url(parsed) } } : undefined;
         } finally {
             await session.dispose();
@@ -72,15 +76,15 @@ export const createPostgresDatabaseProvider = (executor: SshExecutor = sshExecut
             if (cid === "") {
                 throw new Error(`postgres-database "${ctx.id}": instance "${parsed.instance}" is not running`);
             }
-            const roleExists = await psql(session, cid, `SELECT 1 FROM pg_roles WHERE rolname='${parsed.role}'`);
+            const roleExists = await psql(session, cid, `SELECT 1 FROM pg_roles WHERE rolname=${sqlLiteral(parsed.role)}`);
             if (roleExists !== "1") {
-                await psql(session, cid, `CREATE ROLE \\"${parsed.role}\\" LOGIN PASSWORD '${parsed.password}'`);
+                await psql(session, cid, `CREATE ROLE ${sqlIdentifier(parsed.role)} LOGIN PASSWORD ${sqlLiteral(parsed.password)}`);
             } else {
-                await psql(session, cid, `ALTER ROLE \\"${parsed.role}\\" LOGIN PASSWORD '${parsed.password}'`);
+                await psql(session, cid, `ALTER ROLE ${sqlIdentifier(parsed.role)} LOGIN PASSWORD ${sqlLiteral(parsed.password)}`);
             }
-            const dbExists = await psql(session, cid, `SELECT 1 FROM pg_database WHERE datname='${parsed.database}'`);
+            const dbExists = await psql(session, cid, `SELECT 1 FROM pg_database WHERE datname=${sqlLiteral(parsed.database)}`);
             if (dbExists !== "1") {
-                await psql(session, cid, `CREATE DATABASE \\"${parsed.database}\\" OWNER \\"${parsed.role}\\"`);
+                await psql(session, cid, `CREATE DATABASE ${sqlIdentifier(parsed.database)} OWNER ${sqlIdentifier(parsed.role)}`);
             }
             return { url: url(parsed) };
         } finally {
@@ -96,8 +100,8 @@ export const createPostgresDatabaseProvider = (executor: SshExecutor = sshExecut
                 ctx.log(`postgres-database "${ctx.id}": instance "${parsed.instance}" already gone; nothing to drop`);
                 return;
             }
-            await psql(session, cid, `DROP DATABASE IF EXISTS \\"${parsed.database}\\"`);
-            await psql(session, cid, `DROP ROLE IF EXISTS \\"${parsed.role}\\"`);
+            await psql(session, cid, `DROP DATABASE IF EXISTS ${sqlIdentifier(parsed.database)}`);
+            await psql(session, cid, `DROP ROLE IF EXISTS ${sqlIdentifier(parsed.role)}`);
         } finally {
             await session.dispose();
         }

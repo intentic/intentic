@@ -158,9 +158,10 @@ export const createWorkspaceProvider = (executor: SshExecutor = sshExecutor): Pr
              * and the extra is not. Nothing optional asked ⇒ no round-trip. */
             const unsupported: string[] = [];
             for (const directive of OPTIONAL_DIRECTIVES.filter((entry) => runtime.includes(entry.token))) {
+                const runtimes = directive.probe.kind === "runtime" ? (await session.exec(`docker info --format '{{json .Runtimes}}'`)).stdout : "";
                 const probe =
                     directive.probe.kind === "runtime"
-                        ? (await session.exec(`docker info --format '{{json .Runtimes}}'`)).stdout.includes(`"${directive.probe.name}"`)
+                        ? runtimes.includes(`"${directive.probe.name}"`)
                         : (await session.exec(`test -e ${directive.probe.path}`)).code === 0;
                 if (!probe) {
                     unsupported.push(directive.token);

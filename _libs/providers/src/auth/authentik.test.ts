@@ -1,3 +1,5 @@
+import { execFileSync } from "node:child_process";
+import { parseEnv } from "node:util";
 import { expect, test } from "vitest";
 import type { SshExecutor, SshResult, SshSession } from "../core/ssh.js";
 import { createAuthentikProvider } from "./authentik.js";
@@ -84,14 +86,13 @@ test("instance apply writes a 4-service compose (server/worker/pinned pg+redis) 
         ),
     ).toBe(true);
     // Secret key + bootstrap token go into the write-once .env (test -f guard), not the rewritable compose.
-    expect(
-        ssh.commands.some(
-            (c) =>
-                c.includes("test -f /opt/intentic/authentik/auth/.env") &&
-                c.includes("AUTHENTIK_SECRET_KEY=sk") &&
-                c.includes("AUTHENTIK_BOOTSTRAP_TOKEN=btok"),
-        ),
-    ).toBe(true);
+    // Asserted by running the emitted printf through a real shell and parsing the result, because the value
+    // crosses two parsers on its way to the file and a transcription of either escape would pass for the
+    // other's bug. What matters is what compose reads back.
+    const envWrite = ssh.commands.find((c) => c.includes("test -f /opt/intentic/authentik/auth/.env")) ?? "";
+    const written = parseEnv(execFileSync("sh", ["-c", envWrite.slice(envWrite.indexOf("printf"), envWrite.indexOf(" > "))], { encoding: "utf8" }));
+    expect(written["AUTHENTIK_SECRET_KEY"]).toBe("sk");
+    expect(written["AUTHENTIK_BOOTSTRAP_TOKEN"]).toBe("btok");
     expect(ssh.commands.some((c) => c.includes("docker compose") && c.includes("up -d"))).toBe(true);
 });
 

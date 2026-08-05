@@ -5,6 +5,7 @@ import { hasPendingRef, parseInputs, sshSchema, sshTarget } from "../core/inputs
 import { listStampedContainers } from "../core/list-stamped.js";
 import type { SshExecutor, SshSession } from "../core/ssh.js";
 import { sshExecutor } from "../core/ssh.js";
+import { shellQuote } from "@intentic/sandbox-run/quote";
 
 // image: the pinned act_runner image; jobImage: the pinned image act_runner runs each `runs-on: docker` job
 // in (carries node for the JS actions; the docker CLI + buildx are bind-mounted from the host below). Both
@@ -84,7 +85,9 @@ export const createForgejoRunnerProvider = (executor: SshExecutor = sshExecutor)
             if (!(await running(session)) || !(await registeredTo(session, parsed.instanceUrl))) {
                 return undefined;
             }
-            const stampHash = (await session.exec(`docker inspect --format '{{index .Config.Labels "${HASH_KEY}"}}' ${CONTAINER}`)).stdout.trim();
+            const stampHash = (
+                await session.exec(`docker inspect --format ${shellQuote(`{{index .Config.Labels "${HASH_KEY}"}}`)} ${CONTAINER}`)
+            ).stdout.trim();
             return {
                 outputs: {},
                 detail: { image: await runningImage(session), jobImage: await configuredJobImage(session) },

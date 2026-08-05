@@ -1,3 +1,5 @@
+import { execFileSync } from "node:child_process";
+import { parseEnv } from "node:util";
 import { expect, test } from "vitest";
 import type { SshExecutor, SshResult, SshSession } from "../core/ssh.js";
 import { createKomodoProvider } from "./komodo.js";
@@ -133,7 +135,12 @@ test("apply writes compose + a once-guarded env, brings the stack up, waits for 
         ),
     ).toBe(true);
     // The resource poll interval is baked into the once-guarded .env so auto_update can roll out new images.
-    expect(ssh.commands.some((c) => c.includes("test -f /opt/intentic/komodo/.env") && c.includes("KOMODO_RESOURCE_POLL_INTERVAL=1-min"))).toBe(true);
+    // Run the emitted printf through a real shell and parse what lands, rather than transcribing the escaping:
+    // the value passes the host shell and then compose's .env parser, and only the end of that chain matters.
+    const envWrite = ssh.commands.find((c) => c.includes("test -f /opt/intentic/komodo/.env")) ?? "";
+    const written = parseEnv(execFileSync("sh", ["-c", envWrite.slice(envWrite.indexOf("printf"), envWrite.indexOf(" > "))], { encoding: "utf8" }));
+    expect(written["KOMODO_RESOURCE_POLL_INTERVAL"]).toBe("1-min");
+    expect(written["KOMODO_INIT_ADMIN_PASSWORD"]).toBe("pw");
     expect(ssh.commands.some((c) => c.includes("docker compose -p komodo") && c.includes("up -d"))).toBe(true);
 });
 
