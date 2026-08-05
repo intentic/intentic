@@ -319,7 +319,7 @@ test("github allJobs resolves needs from the run's own workflow file, pinned to 
 test("github allJobs still returns the jobs when the workflow file cannot be read", async () => {
     // A token without `contents`, a deleted workflow, a run owned by another repo's reusable workflow. The
     // graph is an enrichment; losing it must not cost the caller the job list.
-    for (const options of [{ workflow: undefined }, { workflow: undefined, runOk: false }]) {
+    for (const options of [{}, { runOk: false }]) {
         const jobs = await ciClientFor("github", githubJobsFetch(options).fetchFn).allJobs(githubProject, 7);
         expect(jobs).toHaveLength(3);
         expect(jobs.every((job) => job.needs === undefined)).toBe(true);
