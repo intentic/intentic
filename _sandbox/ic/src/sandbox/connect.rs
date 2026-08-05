@@ -415,18 +415,26 @@ pub fn run(args: Args) -> Result<()> {
     Ok(())
 }
 
+/// Does this reference carry an explicit registry host? The part before the first `/` counts as one when it
+/// looks like a hostname — it contains a `.` or a `:port`, or it is `localhost`. A bare name like
+/// `intentic-sandbox:dev` has none (its `:` is the TAG separator, not a port), so docker would resolve it
+/// against Docker Hub — which is why such a reference is never pulled: that pull can only ever fail, and its
+/// "denied" output is pure noise on top of a dev image that is sitting right there locally.
+fn is_registryless(image: &str) -> bool {
+    match image.split('/').next() {
+        Some(first) if image.contains('/') => {
+            !(first.contains('.') || first.contains(':') || first == "localhost")
+        }
+        _ => true,
+    }
+}
+
 /// Make the image runnable. A registry-less reference (a dev tag like intentic-sandbox:dev) can only resolve
 /// to Docker Hub, so it is never pulled — it runs the local build (the dev wrapper is what rebuilds it from a
 /// checkout; this binary ships without one). Registry images are pulled even when cached so the moving
 /// `stable` tag always runs the newest release.
 fn ensure_image(image: &str, log: &Log) -> Result<()> {
-    let registryless = match image.split('/').next() {
-        Some(first) if image.contains('/') => {
-            !(first.contains('.') || first.contains(':') || first == "localhost")
-        }
-        _ => true,
-    };
-    if registryless {
+    if is_registryless(image) {
         if docker::image_exists(image) {
             println!("intentic: using the existing local sandbox image {image}.");
             return Ok(());
@@ -576,4 +584,35 @@ fn start_dind_target(slug: &str, network: &str, log: &Log) -> Result<(String, St
         })?;
     println!("intentic: deploy target '{dind_container}' is ready (the sandbox reaches it over SSH on the shared network).");
     Ok((key, "root".to_string(), dind_container))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_dev_tag_is_registryless_and_a_published_image_is_not() {
+        // Published references: pulled, so the moving `stable` tag always runs the newest release.
+        assert!(!is_registryless("ghcr.io/intentic/sandbox:stable"));
+        assert!(!is_registryless("docker.io/library/alpine:3"));
+        // Dev tags: never pulled. Docker would resolve these against Docker Hub, where the pull can only
+        // fail — and its "denied" output reads as a real problem on top of a working local image.
+        assert!(is_registryless("intentic-sandbox:dev"));
+        assert!(is_registryless("intentic-sandbox-env-abc:0123456789ab"));
+        assert!(is_registryless("alpine"));
+        // A bare namespaced name is still Docker Hub's — `library/alpine` has no registry host.
+        assert!(is_registryless("library/alpine:3"));
+    }
+
+    #[test]
+    fn a_registry_host_is_recognised_by_a_dot_a_port_or_localhost() {
+        // The three shapes docker itself treats as a registry host.
+        assert!(!is_registryless("registry.example.com/team/img:1"));
+        assert!(!is_registryless("localhost/img:dev"));
+        assert!(!is_registryless("localhost:5000/img:dev"));
+        assert!(!is_registryless("127.0.0.1:5000/img"));
+        // The trap this function exists for: a TAG colon is not a port. `intentic-sandbox:dev` has a colon
+        // but no slash, so reading "contains a colon" alone would call it a registry and try to pull it.
+        assert!(is_registryless("intentic-sandbox:dev"));
+    }
 }

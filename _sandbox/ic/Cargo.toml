@@ -9,7 +9,7 @@ clap = { version = "4", features = ["derive", "env"] }
 ureq = { version = "3", features = ["json"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
-sha2 = "0.10"
+sha2 = "0.11"
 tempfile = "3"
 
 # The bootstrap shims download this binary on EVERY run, so size is user-visible; thin LTO + strip for the

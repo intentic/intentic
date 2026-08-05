@@ -27,16 +27,16 @@ pub struct RunRequest<'a> {
     pub dns: Option<&'a str>,
 }
 
-/// Ask `image` for its own run command and return the argv to execute. `env_nul` rides stdin NUL-framed.
-/// `--format json` rather than the sh line: this caller spawns the argv directly, so nothing here has to
-/// re-implement (or trust its own reading of) shell quoting.
-pub fn run_command(
+/// The `docker run … sandbox run-command …` argv that ASKS the image for its run command. Split from the
+/// call below so it can be asserted without a docker daemon: this is the highest-risk, least-observable
+/// logic in the binary — every flag here decides something about the container that is then invisible
+/// (a dropped `--environment-hash` produces a sandbox that boots, serves, and reports its overlay as not
+/// applied; a dropped `--dns` silently strips a restricted network's resolvers).
+fn run_command_argv(
     request: &RunRequest,
-    env_nul: &[u8],
     no_local_publish: bool,
     unsupported: &[String],
-    log: &Log,
-) -> Result<Vec<String>> {
+) -> Vec<String> {
     let mut args: Vec<String> = [
         "run",
         "-i",
@@ -85,6 +85,20 @@ pub fn run_command(
     if !unsupported.is_empty() {
         args.push(format!("--unsupported={}", unsupported.join(" ")));
     }
+    args
+}
+
+/// Ask `image` for its own run command and return the argv to execute. `env_nul` rides stdin NUL-framed.
+/// `--format json` rather than the sh line: this caller spawns the argv directly, so nothing here has to
+/// re-implement (or trust its own reading of) shell quoting.
+pub fn run_command(
+    request: &RunRequest,
+    env_nul: &[u8],
+    no_local_publish: bool,
+    unsupported: &[String],
+    log: &Log,
+) -> Result<Vec<String>> {
+    let args = run_command_argv(request, no_local_publish, unsupported);
     let arg_refs: Vec<&str> = args.iter().map(String::as_str).collect();
     let output = docker::capture_with_stdin(&arg_refs, env_nul, log).map_err(|_| {
         crate::util::Fail(format!(
@@ -135,6 +149,13 @@ pub fn host_probes(image: &str, runtime_lines: &str, log: &Log) -> Vec<Probe> {
     let Ok(output) = docker::capture_with_stdin(&args, &[], log) else {
         return Vec::new();
     };
+    parse_probes(&output)
+}
+
+/// TSV → probes. Split out so the tolerance is assertable: a malformed line is DROPPED rather than
+/// failing the flow, because the alternative is that one unreadable line costs the user their whole
+/// recreate over an optional extra the sandbox works fine without.
+fn parse_probes(output: &str) -> Vec<Probe> {
     output
         .lines()
         .filter_map(|line| {
@@ -177,4 +198,167 @@ pub fn unsupported_on_this_host(probes: &[Probe]) -> Vec<String> {
         }
     }
     unsupported
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn request<'a>(image: &'a str, slug: &'a str) -> RunRequest<'a> {
+        RunRequest {
+            image,
+            slug,
+            base_image: image,
+            channel: None,
+            previous_image: None,
+            environment_hash: None,
+            runtime: None,
+            mounts: None,
+            dns: None,
+        }
+    }
+
+    /// The value that follows `flag` in an argv, so assertions read as pairs rather than indices.
+    fn value_of<'a>(argv: &'a [String], flag: &str) -> Option<&'a str> {
+        argv.iter()
+            .position(|arg| arg == flag)
+            .and_then(|i| argv.get(i + 1))
+            .map(String::as_str)
+    }
+
+    #[test]
+    fn the_ask_runs_the_image_and_names_the_verb() {
+        let argv = run_command_argv(
+            &request("ghcr.io/intentic/sandbox:stable", "abc123"),
+            false,
+            &[],
+        );
+        // -i, because the env pairs ride stdin; --rm, because this container only prints and exits;
+        // --entrypoint intentic, because the image's default entrypoint is the daemon.
+        assert_eq!(
+            argv[..8],
+            [
+                "run",
+                "-i",
+                "--rm",
+                "--entrypoint",
+                "intentic",
+                "ghcr.io/intentic/sandbox:stable",
+                "sandbox",
+                "run-command"
+            ]
+        );
+        // json, never the shell line: this caller spawns the argv directly and must not re-implement quoting.
+        assert_eq!(value_of(&argv, "--format"), Some("json"));
+    }
+
+    #[test]
+    fn optional_flags_ride_only_when_they_carry_something() {
+        // The bare shape: nothing optional invented, and no empty-valued flags (an empty `--channel` would
+        // pin the sandbox to a channel named "" on the next update).
+        let bare = run_command_argv(&request("img", "abc"), false, &[]);
+        for absent in [
+            "--channel",
+            "--previous-image",
+            "--environment-hash",
+            "--runtime",
+            "--mounts",
+            "--dns",
+            "--no-local-publish",
+        ] {
+            assert!(
+                !bare.contains(&absent.to_string()),
+                "{absent} must not appear when unset"
+            );
+        }
+
+        let mut full = request("img", "abc");
+        full.channel = Some("beta");
+        full.previous_image = Some("img:1");
+        full.environment_hash = Some("deadbeef");
+        full.runtime = Some("# intentic:runtime --gpus=all");
+        full.mounts = Some("vol:/agent-auth");
+        full.dns = Some("1.1.1.1 1.0.0.1");
+        let argv = run_command_argv(&full, false, &[]);
+        assert_eq!(value_of(&argv, "--slug"), Some("abc"));
+        assert_eq!(value_of(&argv, "--base-image"), Some("img"));
+        assert_eq!(value_of(&argv, "--channel"), Some("beta"));
+        assert_eq!(value_of(&argv, "--previous-image"), Some("img:1"));
+        assert_eq!(value_of(&argv, "--environment-hash"), Some("deadbeef"));
+        assert_eq!(
+            value_of(&argv, "--runtime"),
+            Some("# intentic:runtime --gpus=all")
+        );
+        assert_eq!(value_of(&argv, "--mounts"), Some("vol:/agent-auth"));
+        // Space-separated resolvers stay ONE argv element — the run contract splits them, not the shell.
+        assert_eq!(value_of(&argv, "--dns"), Some("1.1.1.1 1.0.0.1"));
+    }
+
+    #[test]
+    fn unsupported_uses_the_attached_form_and_is_omitted_when_empty() {
+        assert!(!run_command_argv(&request("img", "a"), false, &[])
+            .iter()
+            .any(|arg| arg.starts_with("--unsupported")));
+        // ATTACHED, not separated: the values ARE docker flags, and a CLI reading `--unsupported --gpus=all`
+        // sees a flag it has never heard of rather than a value, and refuses the whole verb.
+        let argv = run_command_argv(&request("img", "a"), false, &["--gpus=all".into()]);
+        assert!(argv.contains(&"--unsupported=--gpus=all".to_string()));
+        assert!(!argv.contains(&"--unsupported".to_string()));
+        // Several tokens stay in one attached element, space-joined.
+        let many = run_command_argv(
+            &request("img", "a"),
+            true,
+            &["--gpus=all".into(), "--device=/dev/net/tun".into()],
+        );
+        assert!(many.contains(&"--unsupported=--gpus=all --device=/dev/net/tun".to_string()));
+        // The retry's shape: the loopback shortcut dropped, everything else identical.
+        assert!(many.contains(&"--no-local-publish".to_string()));
+    }
+
+    #[test]
+    fn probe_lines_parse_and_a_malformed_one_is_dropped_not_fatal() {
+        let probes = parse_probes(
+            "--gpus=all\truntime\tnvidia\n--device=/dev/net/tun\tdevice\t/dev/net/tun\n",
+        );
+        assert_eq!(probes.len(), 2);
+        assert_eq!(probes[0].token, "--gpus=all");
+        assert_eq!(probes[0].kind, "runtime");
+        assert_eq!(probes[0].target, "nvidia");
+        assert_eq!(probes[1].kind, "device");
+
+        // A short line, a blank line, and an image that answered nothing at all: none is fatal, because an
+        // optional extra must never cost the user the recreate.
+        assert_eq!(parse_probes("--gpus=all\truntime\n\n").len(), 0);
+        assert_eq!(parse_probes("").len(), 0);
+        // A target containing a tab cannot happen (the vocabulary has none), but splitn(3) keeps any
+        // remainder ON the target rather than silently truncating it.
+        assert_eq!(parse_probes("t\tk\ta\tb")[0].target, "a\tb");
+    }
+
+    #[test]
+    fn an_unknown_probe_kind_reads_as_unavailable_rather_than_as_satisfied() {
+        // An image newer than this binary may know a probe kind this loop does not. Guessing "yes" would
+        // put a flag on the docker run that the host cannot honour and fail the whole launch.
+        let probes = parse_probes("--gpus=all\tsome-future-kind\twhatever");
+        assert_eq!(
+            unsupported_on_this_host(&probes),
+            vec!["--gpus=all".to_string()]
+        );
+    }
+
+    #[test]
+    fn a_device_probe_answers_from_the_filesystem() {
+        // Satisfied: /dev/null exists on every host this runs on.
+        assert!(
+            unsupported_on_this_host(&parse_probes("--device=/dev/null\tdevice\t/dev/null"))
+                .is_empty()
+        );
+        // Unsatisfied: a path that cannot exist reports the token as unavailable.
+        assert_eq!(
+            unsupported_on_this_host(&parse_probes(
+                "--device=/dev/nope\tdevice\t/dev/intentic-no-such-node"
+            )),
+            vec!["--device=/dev/nope".to_string()]
+        );
+    }
 }

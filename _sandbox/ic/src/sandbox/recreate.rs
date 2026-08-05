@@ -161,25 +161,11 @@ pub fn run(mode: Mode, slug: Option<String>) -> Result<()> {
     let current_base = container_env(&container, "SANDBOX_BASE_IMAGE");
     let mut base_image = String::new();
     if !overlay.is_empty() {
-        base_image = overlay
-            .lines()
-            .map(str::trim)
-            .filter(|line| !line.is_empty() && !line.starts_with('#'))
-            .find_map(|line| {
-                line.strip_prefix("FROM ")
-                    .map(|rest| rest.split_whitespace().next().unwrap_or("").to_string())
-            })
-            .unwrap_or_default();
+        base_image = overlay_base(&overlay).unwrap_or_default();
         if base_image.is_empty() {
             bail!("the approved overlay has no FROM instruction.");
         }
-        let official = base_image
-            .strip_prefix(&format!("{DEFAULT_REGISTRY}:"))
-            .is_some_and(|tag| !tag.is_empty());
-        if !official
-            && base_image != DEV_TAG
-            && current_base.as_deref() != Some(base_image.as_str())
-        {
+        if !base_is_allowed(&base_image, current_base.as_deref()) {
             bail!(
                 "the approved overlay must start with FROM {DEFAULT_REGISTRY}:<tag>\n       (or FROM this sandbox's own base, {}); found {base_image}.",
                 current_base.as_deref().unwrap_or("<none>")
@@ -410,6 +396,31 @@ fn rewrite_from(overlay: &str, base: &str) -> String {
     joined
 }
 
+/// The image an overlay's FIRST `FROM` names — comments and blank lines skipped, so a Dockerfile that opens
+/// with a comment block still reads correctly. None when there is no FROM at all.
+fn overlay_base(overlay: &str) -> Option<String> {
+    overlay
+        .lines()
+        .map(str::trim)
+        .filter(|line| !line.is_empty() && !line.starts_with('#'))
+        .find_map(|line| {
+            line.strip_prefix("FROM ")
+                .map(|rest| rest.split_whitespace().next().unwrap_or("").to_string())
+        })
+}
+
+/// May an overlay extend this base? Belt-and-braces — the daemon already enforced it at approval — but this
+/// is the last check before a build, and the overlay lives on a volume the AGENT can write. Allowed: any
+/// OFFICIAL sandbox image, the local dev tag, or the exact base this container was created from
+/// (SANDBOX_BASE_IMAGE, stamped at `docker run` by whichever runner made it — not a value the agent can
+/// reach). Anything else would let an approved-looking overlay swap the base for an image of its choosing.
+fn base_is_allowed(base_image: &str, current_base: Option<&str>) -> bool {
+    let official = base_image
+        .strip_prefix(&format!("{DEFAULT_REGISTRY}:"))
+        .is_some_and(|tag| !tag.is_empty());
+    official || base_image == DEV_TAG || current_base == Some(base_image)
+}
+
 /// What the record's `previous` becomes on this swap. `previous` is what a rollback returns to, and the
 /// property that matters is that a rollback SWAPS rather than appends: one button with no "how far back"
 /// control has to be its own undo, or pressing it twice walks backwards through history with no way
@@ -498,6 +509,63 @@ mod tests {
             next_previous(&update, &saved(None, None), None, "img:1"),
             None
         );
+    }
+
+    #[test]
+    fn the_overlay_base_is_the_first_from_past_any_comments() {
+        assert_eq!(
+            overlay_base(
+                "# a note\n\nFROM ghcr.io/intentic/sandbox:stable\nRUN apt-get install -y jq\n"
+            )
+            .as_deref(),
+            Some("ghcr.io/intentic/sandbox:stable")
+        );
+        // `FROM x AS builder` names x, not the stage alias.
+        assert_eq!(
+            overlay_base("FROM ghcr.io/intentic/sandbox:1.2.3 AS base\n").as_deref(),
+            Some("ghcr.io/intentic/sandbox:1.2.3")
+        );
+        // A commented-out FROM is not a FROM.
+        assert_eq!(overlay_base("# FROM evil:latest\nRUN true\n"), None);
+        assert_eq!(overlay_base(""), None);
+    }
+
+    #[test]
+    fn an_overlay_may_only_extend_an_official_base_the_dev_tag_or_its_own() {
+        // Official releases, any tag.
+        assert!(base_is_allowed("ghcr.io/intentic/sandbox:stable", None));
+        assert!(base_is_allowed("ghcr.io/intentic/sandbox:1.2.3", None));
+        // The dogfood tag, so the dev loop and the rebuild loop are not mutually exclusive.
+        assert!(base_is_allowed(DEV_TAG, None));
+        // This container's own stamped base — the case that lets an already-extended sandbox rebuild.
+        assert!(base_is_allowed(
+            "intentic-sandbox-env-abc:0123456789ab",
+            Some("intentic-sandbox-env-abc:0123456789ab")
+        ));
+    }
+
+    #[test]
+    fn an_overlay_may_not_swap_the_base_for_an_image_of_its_choosing() {
+        // The whole point of the check: the overlay lives on a volume the AGENT can write.
+        assert!(!base_is_allowed("alpine:latest", None));
+        assert!(!base_is_allowed(
+            "evil.example.com/backdoor:latest",
+            Some("ghcr.io/intentic/sandbox:stable")
+        ));
+        // A tagless official reference is refused rather than resolving to :latest.
+        assert!(!base_is_allowed("ghcr.io/intentic/sandbox", None));
+        assert!(!base_is_allowed("ghcr.io/intentic/sandbox:", None));
+        // Near-misses on the registry path must not pass as official.
+        assert!(!base_is_allowed(
+            "ghcr.io/intentic/sandbox-evil:stable",
+            None
+        ));
+        assert!(!base_is_allowed("ghcr.io/notintentic/sandbox:stable", None));
+        // A different sandbox's env image is not this one's base.
+        assert!(!base_is_allowed(
+            "intentic-sandbox-env-other:abc",
+            Some("intentic-sandbox-env-mine:abc")
+        ));
     }
 
     #[test]

@@ -173,3 +173,161 @@ fn run_machine(_command: MachineCommand) -> util::Result<()> {
         "machine enrolment connects Linux servers. On Windows, deploy locally instead: re-run the sandbox setup with $env:SELF_HOST='1', which stands up a Docker-in-Docker deploy target beside the sandbox.".to_string(),
     ))
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use clap::CommandFactory;
+
+    /* THE ARGUMENT SURFACE, asserted — the shims and the platform's cards build command lines against it.
+     *
+     * This is the same class of risk the desktop crate's commands.rs states: an argument that regresses to a
+     * different position or arity binds to the WRONG parameter, silently, and the failure surfaces much
+     * later as something else entirely. Here a `rebuild` whose hash became optional would accept a bare
+     * `ic sandbox rebuild <slug>` and rebuild against no trust anchor at all. */
+
+    #[test]
+    fn the_command_tree_is_internally_consistent() {
+        // clap's own audit: duplicate flags, conflicting shorts, bad arg definitions. It panics on a defect
+        // that would otherwise only appear when a user typed the offending combination.
+        Cli::command().debug_assert();
+    }
+
+    fn parse(args: &[&str]) -> Result<Cli, clap::Error> {
+        Cli::try_parse_from(std::iter::once("ic").chain(args.iter().copied()))
+    }
+
+    #[test]
+    fn rebuild_requires_both_the_slug_and_the_hash() {
+        // The hash is the TRUST ANCHOR: the overlay lives on a volume the agent can write, so only content
+        // that still hashes to what the owner reviewed may be built. Optional would defeat the whole check.
+        let Ok(Cli {
+            command: Command::Sandbox(SandboxCommand::Rebuild { slug, hash }),
+        }) = parse(&["sandbox", "rebuild", "abc123", "deadbeef"])
+        else {
+            panic!("rebuild did not parse")
+        };
+        assert_eq!((slug.as_str(), hash.as_str()), ("abc123", "deadbeef"));
+        assert!(
+            parse(&["sandbox", "rebuild", "abc123"]).is_err(),
+            "a hashless rebuild must be refused"
+        );
+        assert!(parse(&["sandbox", "rebuild"]).is_err());
+    }
+
+    #[test]
+    fn the_slug_is_optional_exactly_where_one_sandbox_can_be_inferred() {
+        // update/rollback/dev fall back to detecting the single sandbox; rebuild never does (it is always
+        // handed a specific slug by the Environment card).
+        for verb in ["update", "rollback", "dev"] {
+            assert!(
+                parse(&["sandbox", verb]).is_ok(),
+                "{verb} must accept a bare invocation"
+            );
+            assert!(
+                parse(&["sandbox", verb, "abc123"]).is_ok(),
+                "{verb} must accept a slug"
+            );
+        }
+    }
+
+    #[test]
+    fn update_takes_a_channel_by_name_and_refuses_a_bare_one() {
+        let Ok(Cli {
+            command: Command::Sandbox(SandboxCommand::Update { slug, channel }),
+        }) = parse(&["sandbox", "update", "abc123", "--channel", "beta"])
+        else {
+            panic!("update --channel did not parse")
+        };
+        assert_eq!(slug.as_deref(), Some("abc123"));
+        assert_eq!(channel.as_deref(), Some("beta"));
+        // A valueless --channel must not swallow the next thing or default to something.
+        assert!(parse(&["sandbox", "update", "abc123", "--channel"]).is_err());
+    }
+
+    #[test]
+    fn connect_binds_the_setup_code_positionally_and_yes_is_a_flag() {
+        let Ok(Cli {
+            command: Command::Sandbox(SandboxCommand::Connect { setup_code, yes }),
+        }) = parse(&["sandbox", "connect", "abc123", "-y"])
+        else {
+            panic!("connect did not parse")
+        };
+        assert_eq!(setup_code.as_deref(), Some("abc123"));
+        assert!(yes);
+        // The desktop app and the shims both pass -y; --force is the historical alias the scripts accepted.
+        let Ok(Cli {
+            command: Command::Sandbox(SandboxCommand::Connect { yes, .. }),
+        }) = parse(&["sandbox", "connect", "abc", "--force"])
+        else {
+            panic!("--force alias did not parse")
+        };
+        assert!(yes);
+        // A codeless connect is legal: the headless path carries CONNECT_TOKEN in the env instead.
+        assert!(parse(&["sandbox", "connect"]).is_ok());
+    }
+
+    #[test]
+    fn remove_takes_many_slugs_and_its_destructive_flags_are_explicit() {
+        let Ok(Cli {
+            command:
+                Command::Sandbox(SandboxCommand::Remove {
+                    slugs,
+                    all,
+                    yes,
+                    agent_auth,
+                }),
+        }) = parse(&["sandbox", "remove", "a", "b", "--agent-auth", "-y"])
+        else {
+            panic!("remove did not parse")
+        };
+        assert_eq!(slugs, vec!["a", "b"]);
+        assert!(yes && agent_auth);
+        // Naming slugs must never widen into --all: that is the difference between removing two sandboxes
+        // and removing every sandbox on the machine.
+        assert!(!all);
+        // -a is --all, and neither is implied by anything: every one of these deletes data.
+        let Ok(Cli {
+            command:
+                Command::Sandbox(SandboxCommand::Remove {
+                    all,
+                    agent_auth,
+                    yes,
+                    ..
+                }),
+        }) = parse(&["sandbox", "remove", "-a"])
+        else {
+            panic!("remove -a did not parse")
+        };
+        assert!(all);
+        assert!(!agent_auth, "--agent-auth must never be implied by --all");
+        assert!(!yes, "-y must never be implied");
+        // A bare `remove` is the interactive picker, not an error.
+        assert!(parse(&["sandbox", "remove"]).is_ok());
+    }
+
+    #[test]
+    fn machine_verbs_parse_and_removal_never_implies_consent() {
+        assert!(parse(&["machine", "enroll"]).is_ok());
+        let Ok(Cli {
+            command: Command::Machine(MachineCommand::Remove { yes, keep_user }),
+        }) = parse(&["machine", "remove"])
+        else {
+            panic!("machine remove did not parse")
+        };
+        assert!(
+            !yes,
+            "machine remove tears down a whole host — consent is never a default"
+        );
+        assert!(!keep_user);
+        assert!(parse(&["machine", "remove", "-y", "--keep-user"]).is_ok());
+    }
+
+    #[test]
+    fn a_verb_typo_is_refused_rather_than_guessed() {
+        // The shims build these command lines; a silently-accepted near-miss would run the wrong flow.
+        assert!(parse(&["sandbox", "updat", "abc"]).is_err());
+        assert!(parse(&["sandbox"]).is_err());
+        assert!(parse(&[]).is_err());
+    }
+}

@@ -49,3 +49,10 @@ a stale ic still runs a new image correctly.
   Docker-in-Docker target with a netns-shared cloudflared), not a dialect of the Linux one.
 - Interactive questions read from the controlling terminal, never stdin — the shims pipe this binary's flows
   from `curl … | sh`, where stdin is the script. A failed read is a refusal, never a default.
+- **Decisions are split from the IO that acts on them**, and that split is what the tests hook into: the argv
+  that asks the image for its run command, the overlay's base check, the rollback record's arithmetic, the
+  image-reference classification. Each is a pure function beside the function that calls docker, so the
+  logic most likely to be wrong — and least likely to be noticed when it is — is asserted without a daemon.
+  Put new decisions on that side of the line too.
+- `cargo test` needs nothing installed. Nothing here mutates process env (`set_var` is global and the test
+  threads are parallel), so tests that need paths take a tempdir instead of repointing `INTENTIC_HOME`.
