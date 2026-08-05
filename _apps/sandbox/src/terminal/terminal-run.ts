@@ -56,6 +56,15 @@ export interface TerminalRunner {
     readonly running: (session: string) => boolean;
 }
 
+// What the PANE shows before the command runs — the line itself, the way a terminal echoes what you typed.
+// Without it a flow of quiet commands (`git config`, a credential write) leaves a blank pane, and the terminal
+// the app just opened for the user reads as "nothing happened here" even though the install ran in it.
+// Written to the pane's own tty rather than to stdout, so it stays out of the captured output the caller gets
+// back (an error message's tail, an ACP agent's tool result) — and the whole line is swallowed where there is
+// no tty, which is the no-tmux fallback. Safe to print by the runner's standing invariant: secrets ride `env`,
+// never the command string.
+const paneEcho = (command: string): string => `{ printf '\\033[1m$ %s\\033[0m\\n' ${shellQuote(command)} > /dev/tty; } 2>/dev/null; `;
+
 // execFile-shaped adapter over a session runner, for call sites written against `exec(file, args)` that branch
 // on the exit code (git config --unset's expected 5): non-zero throws with `code` set, argv words are quoted
 // into one visible command line.
@@ -97,7 +106,12 @@ export const createTerminalRunner = (): TerminalRunner => {
             const { stdout } = visible
                 ? await execFileAsync(
                       TMUX_RUN_BIN,
-                      [...Object.keys(options.env ?? {}).flatMap((key) => ["-e", key]), session, command, options.window ?? "run"],
+                      [
+                          ...Object.keys(options.env ?? {}).flatMap((key) => ["-e", key]),
+                          session,
+                          `${paneEcho(command)}${command}`,
+                          options.window ?? "run",
+                      ],
                       {
                           ...execOptions,
                           env: {

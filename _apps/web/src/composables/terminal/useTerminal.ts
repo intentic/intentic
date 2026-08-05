@@ -1,6 +1,6 @@
 import { ref, type Ref, watch } from "vue";
 import { showWorkTerminals } from "./useWorkTerminals";
-import { addPendingTerminal, dropPendingTerminal } from "./terminalsQuery";
+import { addPendingTerminal, dropPendingTerminal, refreshTerminals } from "./terminalsQuery";
 import { pruneTerminalMeta } from "./terminalMeta";
 import {
     createTerminalSession,
@@ -427,6 +427,29 @@ export const createTerminalTabs = (source: TerminalTabsSource, storageKey: strin
         mount(name);
     };
 
+    // Relist until `name` is listed. A flow ANNOUNCES its session before that session exists: the daemon names
+    // the terminal it is about to work in as its stream's first frame, and the tmux session itself is born with
+    // the flow's first command a moment later. One relist therefore asks too early — and the surface that asked
+    // was left showing whatever it had (an empty panel, or a stray shell), with the tab arriving only on the
+    // panel's ten-second poll, by which time a short install had been over for nine of them. Bounded, so a name
+    // that never materializes stops asking; the poll remains the backstop.
+    const relistUntilListed = async (name: string): Promise<void> => {
+        for (let attempt = 0; attempt < 8; attempt++) {
+            if (attempt > 0) {
+                await new Promise((resolve) => setTimeout(resolve, 250));
+                // The shared list answers from a one-second freshness window (terminalsQuery), so retries
+                // spaced tighter than that would re-read the very answer they are retrying — "no such session",
+                // four times, without asking the daemon once. Retrying IS the statement that the cached list is
+                // out of date, so give it up before asking again.
+                await refreshTerminals();
+            }
+            await refresh();
+            if (order.value.some((tab) => tab.name === name)) {
+                return;
+            }
+        }
+    };
+
     const focus = async (name: string): Promise<void> => {
         if (!order.value.some((tab) => tab.name === name)) {
             // Focusing IS the explicit open that reveals a hidden work terminal (the chat's Bash card, the
@@ -434,7 +457,7 @@ export const createTerminalTabs = (source: TerminalTabsSource, storageKey: strin
             // which is what decides whether it tabs. Unconditional: the set is only ever consulted for agent/job
             // sessions, so a shell or panel name landing in it changes nothing.
             revealed.add(name);
-            await refresh();
+            await relistUntilListed(name);
         }
         // A background-process session never tabs directly — route it through its read-only log view
         // (`panel-docker`, an extension's gateway).
@@ -446,9 +469,8 @@ export const createTerminalTabs = (source: TerminalTabsSource, storageKey: strin
     };
 
     // Make a session that just appeared (the agent's `agent-<id>` the moment it runs Bash) show up as a tab
-    // WITHOUT mounting it — refresh() keeps the current active tab, so focus isn't stolen. Relist a few times to
-    // cover tmux-run's session-create lag; a session that never materializes just stops after ~1s. The
-    // common case (already listed) exits on the first check.
+    // WITHOUT mounting it — refresh() keeps the current active tab, so focus isn't stolen. The relist covers
+    // tmux-run's session-create lag; the common case (already listed) exits on its first check.
     const surface = async (name: string): Promise<void> => {
         // Only the agent channel surfaces, and by default its shells don't tab (useWorkTerminals) — so the
         // retry loop has nothing to wait for. One relist still earns its keep: it writes the shared session
@@ -458,13 +480,7 @@ export const createTerminalTabs = (source: TerminalTabsSource, storageKey: strin
             await refresh();
             return;
         }
-        for (let attempt = 0; attempt < 5 && !order.value.some((tab) => tab.name === name); attempt++) {
-            await refresh();
-            if (order.value.some((tab) => tab.name === name)) {
-                return;
-            }
-            await new Promise((resolve) => setTimeout(resolve, 200));
-        }
+        await relistUntilListed(name);
     };
 
     // Switching away is the "looking up" that ends a finished work terminal's stay: its reveal was held only

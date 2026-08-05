@@ -162,6 +162,15 @@ const realDeps: GitAccessDeps = { uploadKey: uploadKeyReal, deleteKey: deleteKey
 // `https://<host>/owner/repo`, which the ~/.git-credentials line then authenticates.
 const rewriteKey = (host: GitHost): string => `url.https://${host.host}/.insteadOf`;
 
+// Whether the rewrite is in place, asked of git itself rather than read out of ~/.gitconfig — the value can
+// arrive through an include, and this is the same resolution the remote will get. An absent key exits 1, which
+// execFile rejects on, so "no rewrite" arrives as a rejection rather than as empty output.
+const httpsRewriteEnabled = async (host: GitHost): Promise<boolean> =>
+    directExec("git", ["config", "--global", "--get-all", rewriteKey(host)]).then(
+        ({ stdout }) => stdout.trim() !== "",
+        () => false,
+    );
+
 // Route ssh-form remotes over https — the fallback when a native ssh key can't be registered. Two url forms need
 // covering; --replace-all seeds a single value (creating the key if absent), --add appends the second, so a
 // re-apply stays at exactly two entries (idempotent).
@@ -170,16 +179,15 @@ const enableHttpsRewrite = async (host: GitHost, exec: ExecInTerminal): Promise<
     await exec("git", ["config", "--global", "--add", rewriteKey(host), `ssh://git@${host.host}/`]);
 };
 
-// Drop the rewrite (native ssh got registered, or teardown). `git config --unset-all` exits 5 when the option
-// doesn't exist — nothing to remove, so that lone code is expected; any other failure propagates.
+// Drop the rewrite (native ssh got registered, or teardown). Asked first, because `git config --unset-all`
+// exits 5 when the option isn't there — and this is the LAST thing a successful add runs, so swallowing that
+// code still left the user's terminal ending on a red "✗ exit 5" epitaph for an install that worked. The probe
+// is a read (directExec, invisible); only a removal that has something to remove shows up as a command.
 const disableHttpsRewrite = async (host: GitHost, exec: ExecInTerminal): Promise<void> => {
-    try {
-        await exec("git", ["config", "--global", "--unset-all", rewriteKey(host)]);
-    } catch (err) {
-        if ((err as { code?: number }).code !== 5) {
-            throw err;
-        }
+    if (!(await httpsRewriteEnabled(host))) {
+        return;
     }
+    await exec("git", ["config", "--global", "--unset-all", rewriteKey(host)]);
 };
 
 // Returns undefined when native ssh is wired (key registered), or a warning when registration was refused and
@@ -227,15 +235,6 @@ export const restoreGitAccess = async (host: GitHost, exec: ExecInTerminal, deps
     await enableHttpsRewrite(host, exec);
     return undefined;
 };
-
-// Whether the rewrite is in place, asked of git itself rather than read out of ~/.gitconfig — the value can
-// arrive through an include, and this is the same resolution the remote will get. An absent key exits 1, which
-// execFile rejects on, so "no rewrite" arrives as a rejection rather than as empty output.
-const httpsRewriteEnabled = async (host: GitHost): Promise<boolean> =>
-    directExec("git", ["config", "--global", "--get-all", rewriteKey(host)]).then(
-        ({ stdout }) => stdout.trim() !== "",
-        () => false,
-    );
 
 // Whether this connection's container-local git access is actually in place — BOTH halves of it. The https
 // credential line alone is not working git access: the remotes in this workspace are ssh-form

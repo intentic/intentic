@@ -116,6 +116,23 @@ test("the panel opens onto a live tab, never onto the dead pane it was last left
     expect(tabs.activeName.value).toBe(`web-1`);
 });
 
+// THE reported bug behind the retry: a flow NAMES its terminal before that terminal exists — the daemon's first
+// frame says "I will work in job-capability-github", and tmux creates that session with the install's first
+// command a beat later. Asking once meant the answer was always "no such session", so the user sat in front of
+// an empty panel (or the shell they had open) while the install ran to completion somewhere they couldn't see.
+test("a job the daemon has only just announced still tabs and focuses once it exists", async () => {
+    const { tabs, daemonLists, attach, names } = panel([]);
+    await attach(`job-capability-github`);
+    expect(names()).toEqual([]);
+
+    const focusing = tabs.focus(`job-capability-github`);
+    daemonLists([job(`capability-github`, true)]);
+    await focusing;
+
+    expect(names()).toEqual([`job-capability-github`]);
+    expect(tabs.activeName.value).toBe(`job-capability-github`);
+});
+
 // Start opens the panel for a dev-server session the daemon hasn't created yet. The empty-panel shell exists so
 // nobody stares at a blank pane, but here it would flash a stray `web-*` "1" beside the tab that was asked for.
 test("a panel opened FOR a session that doesn't exist yet waits for it instead of spawning a shell", async () => {

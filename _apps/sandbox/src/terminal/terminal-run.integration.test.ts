@@ -17,6 +17,15 @@ test("tryRun returns output + the real exit code; run throws on non-zero with th
     await expect(runner.run("job-test", "printf boom; exit 2", { cwd })).rejects.toThrow(/exited 2:\nboom/);
 });
 
+// The pane echoes the command line it is about to run, so a flow of quiet commands still looks like a terminal.
+// That echo goes to the pane's tty, never to stdout — the caller's captured output is the command's alone, and
+// an error tail (or an ACP agent's tool result) must not grow a copy of its own command line. Only bites where
+// the tmux wrapper is baked in (the sandbox image); the fallback never writes the line at all.
+test("the pane's echo of the command line stays out of the captured output", async () => {
+    const runner = createTerminalRunner();
+    expect(await runner.tryRun("job-echo", "printf ran", { cwd: tmpdir() })).toEqual({ code: 0, output: "ran" });
+});
+
 test("env pairs reach the command (the fallback's channel; the tmux path also rides them as -e flags)", async () => {
     const runner = createTerminalRunner();
     const { code, output } = await runner.tryRun("job-env", 'printf "%s" "$FOO"', { cwd: tmpdir(), env: { FOO: "bar" } });

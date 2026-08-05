@@ -162,7 +162,6 @@ watch(capabilities, () => {
 const values = reactive<Record<string, string>>({});
 const submitting = ref(false);
 const error = ref<string | null>(null);
-const log = ref<string[]>([]);
 // undefined = the confirm dialog is closed; a string = the capability id awaiting a confirmed removal.
 const confirmRemoveId = ref<string>();
 // --- inline validation (touched-on-blur) ---
@@ -559,7 +558,6 @@ const clearForm = (): void => {
         delete values[key];
     }
     error.value = null;
-    log.value = [];
     marketUrl.value = ``;
     marketToken.value = ``;
     market.value = null;
@@ -673,19 +671,14 @@ const submit = async (): Promise<void> => {
     }
     submitting.value = true;
     error.value = null;
-    log.value = [];
     try {
         await add(buildInput(entry), (line) => {
-            // The handler's shell runs in a real tmux session — open its terminal tab so the user watches the
-            // actual commands (user-clicked action → openFocused, the apply/vitest/add-apps precedent). The
-            // inline log below stays as the structured summary.
+            // The install runs in a real tmux session — open ITS terminal tab, so what the user watches is the
+            // commands themselves (user-clicked action → openFocused, the apply/vitest/add-apps precedent).
+            // That IS the progress surface: a summary box beside it could only ever be a worse retelling of
+            // the pane, and it went away with the flow anyway the moment this form navigated back.
             if (line[`kind`] === `terminal` && typeof line[`session`] === `string`) {
                 useTerminalPanel().openFocused(line[`session`]);
-                return;
-            }
-            const message = line[`message`];
-            if (typeof message === `string`) {
-                log.value = [...log.value, message];
             }
         });
         // Dev autofill persist (inert in prod): remember the secret fields that just worked, per card.
@@ -1137,12 +1130,6 @@ const submitLabel = computed(() =>
                     >, which needs this capability to run.
                 </div>
                 <p v-if="selected.hint" class="text-xs text-muted">{{ selected.hint }}</p>
-
-                <!-- Streamed apply progress (devops scaffolding, service provisioning). -->
-                <pre
-                    v-if="log.length > 0"
-                    class="scrollbar-thin max-h-40 overflow-auto whitespace-pre-wrap rounded-md border border-line bg-canvas px-3 py-2 font-mono text-2xs text-subtle"
-                    >{{ log.slice(-12).join("\n") }}</pre>
 
                 <div :class="['flex justify-end', shaking ? 'ui-shake' : '']" @animationend="shaking = false">
                     <Button type="submit" :label="submitLabel" :loading="submitting">
