@@ -10,6 +10,7 @@ import { computed, ref, watch } from "vue";
 import { acknowledgeStaged } from "./attention.js";
 import DocsNav from "./DocsNav.vue";
 import DocPage from "./DocPage.vue";
+import { packageFigures } from "./figures.js";
 import GenerateDialog from "./GenerateDialog.vue";
 import { host } from "./host.js";
 import { useDocs, type DocSource } from "./useDocs.js";
@@ -223,9 +224,9 @@ const openAgent = (id: string): void => api.navigate(`/agents/${id}`);
             <DocPage
                 v-else
                 :key="page"
-                :prose="packageQuery.data.value?.prose"
-                :anchors="packageQuery.data.value?.doc?.keyFiles ?? []"
-                :provenance="packageQuery.data.value?.doc?.provenance"
+                :prose="packageQuery.data.value"
+                :figures="packageFigures(page, index, set?.repoDoc)"
+                :anchors="entries.find((entry) => entry.dir === page)?.anchors ?? []"
                 :repo="repo"
                 :staleness="entries.find((entry) => entry.dir === page)"
             />
@@ -245,9 +246,12 @@ const openAgent = (id: string): void => api.navigate(`/agents/${id}`);
             <div class="flex w-full max-w-md flex-col gap-3 rounded-xl border border-line bg-overlay p-4">
                 <h2 class="text-sm font-semibold">Publish to {{ label }}</h2>
                 <p class="text-xs text-muted">
-                    {{ publishState.tails.length }} file{{ publishState.tails.length === 1 ? `` : `s` }} will be written under
-                    <span class="font-mono">docs/architecture/</span> and committed<span v-if="publishState.branch !== ``">
-                        on {{ publishState.branch }}</span
+                    <!-- Not "under docs/architecture/" any more: a package page is written onto the package as its
+                         README, and only the map lands in the docs directory. Naming one destination for both
+                         would understate what a publish touches. -->
+                    {{ publishState.tails.length }} file{{ publishState.tails.length === 1 ? `` : `s` }} will be written — each package's
+                    <span class="font-mono">README.md</span> and the map under <span class="font-mono">docs/architecture/</span> — and
+                    committed<span v-if="publishState.branch !== ``"> on {{ publishState.branch }}</span
                     >.
                 </p>
                 <p v-if="publishState.foreign.length > 0" class="flex items-start gap-2 rounded-lg bg-warning/10 px-2.5 py-2 text-2xs">

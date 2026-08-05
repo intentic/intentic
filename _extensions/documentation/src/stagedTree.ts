@@ -1,9 +1,9 @@
 import type { IntenticApi } from "@intentic/extension-api";
 import { WorkspaceChildrenSchema } from "@intentic/sandbox-contract";
-import { stagingDir } from "./paths.js";
+import { README_TAIL, stagingDir } from "./paths.js";
 
 /* What a repo's STAGED document set actually contains, as tails relative to the set's root (`repo.json`,
- * `_libs/graph/doc.md`, …).
+ * `_libs/graph/README.md`, …).
  *
  * Two callers need exactly this, which is why it is one function rather than two walks: PUBLISH copies every tail
  * into the repo, and a generation run's ADVANCE step asks "which packages already have a document?" to decide
@@ -50,6 +50,7 @@ export const listStagedTails = async (api: IntenticApi, repo: string): Promise<r
     return tails.toSorted();
 };
 
-// Which package dirs the staged set holds a document for — a `doc.json` tail's directory part.
+// Which package dirs the staged set holds a page for — a `README.md` tail's directory part. The map's own tails
+// sit at the root of the set and have no directory part, so they cannot be mistaken for a package.
 export const documentedDirs = (tails: readonly string[]): readonly string[] =>
-    tails.filter((tail) => tail.endsWith(`/doc.json`)).map((tail) => tail.slice(0, -`/doc.json`.length));
+    tails.filter((tail) => tail.endsWith(`/${README_TAIL}`)).map((tail) => tail.slice(0, -`/${README_TAIL}`.length));

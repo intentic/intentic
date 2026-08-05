@@ -51,3 +51,11 @@ node dist/cli.js agents --task hono-etag-match --vendor claude --model claude-ha
 ## Cost levers
 
 In order of power: drop `fix` tasks (2–3× a locate run each) → reduce task count → lower `maxTurns` → `--model claude-haiku-4-5` for iteration → `--max-spend` as the hard backstop.
+
+## Key files
+
+- [src/retrieval.ts](src/retrieval.ts) — tier 1: does a query surface the right file.
+- [src/agents](src/agents) — tier 2: whole agent runs against real repos.
+- [src/score.ts](src/score.ts) — how a run becomes a number.
+- [src/anchors.ts](src/anchors.ts) — the ground truth each query is graded against.
+- [src/report.ts](src/report.ts) — the output a change is judged on.

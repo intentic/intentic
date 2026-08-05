@@ -1,9 +1,9 @@
 import { useQuery, useQueryClient } from "@tanstack/vue-query";
 import { WorkspaceChildrenSchema } from "@intentic/sandbox-contract";
 import { computed, type Ref } from "vue";
-import { type DocIndex, type PackageDoc, type RepoDoc, parseDocIndex, parsePackageDoc, parseRepoDoc } from "./docModel.js";
+import { type DocIndex, type RepoDoc, parseDocIndex, parseRepoDoc } from "./docModel.js";
 import { host } from "./host.js";
-import { INDEX_TAIL, packageDocTail, packageProseTail, publishedPath, REPO_DOC_TAIL, REPO_PROSE_TAIL, stagingDir, stagingPath } from "./paths.js";
+import { INDEX_TAIL, packagePageTail, publishedPath, REPO_DOC_TAIL, REPO_PROSE_TAIL, stagingDir, stagingPath } from "./paths.js";
 
 /* Reading a document set. Both trees — published (in the repo) and staged (a draft awaiting the owner) — share
  * their tails, so ONE reader serves both and the view only chooses a source. That is the payoff of making
@@ -61,21 +61,22 @@ export function useDocs(repo: Ref<string>, source: Ref<DocSource>) {
     });
 
     /* One package's page, fetched when it is opened rather than with the set: a 50-package monorepo would
-     * otherwise cost 100 reads to render a list nobody has clicked yet. */
+     * otherwise cost a read per package to render a list nobody has clicked yet.
+     *
+     * ONE read, not two. The page IS the README; everything the app needs about the package that is not prose —
+     * its one-liner, its anchors, its measures, whether it is stale — is already in the index this composable
+     * loaded with the set. That is what deleting the per-package sidecar bought, and it is why nothing here
+     * parses. */
     const usePackage = (dir: Ref<string | undefined>) =>
         useQuery({
             queryKey: computed(() => api.sandbox.key(`documentation`, `page`, source.value, repo.value, dir.value ?? ``)),
             enabled: computed(() => api.sandbox.reachable() && dir.value !== undefined),
-            queryFn: async (): Promise<{ doc: PackageDoc | undefined; prose: string | undefined }> => {
+            queryFn: async (): Promise<string | undefined> => {
                 const at = dir.value;
                 if (at === undefined) {
-                    return { doc: undefined, prose: undefined };
+                    return undefined;
                 }
-                const [docText, prose] = await Promise.all([
-                    api.workspace.file(pathFor(source.value, repo.value, packageDocTail(at))),
-                    api.workspace.file(pathFor(source.value, repo.value, packageProseTail(at))),
-                ]);
-                return { doc: docText === undefined ? undefined : parsePackageDoc(docText), prose };
+                return await api.workspace.file(pathFor(source.value, repo.value, packagePageTail(at)));
             },
         });
 

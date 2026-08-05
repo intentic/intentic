@@ -66,3 +66,11 @@ every five seconds on an idle machine.
 It knows nothing about sandboxes, tunnels, enrollment or MCP. It takes a name, a launcher and a spec, and makes a
 CLI survive a reboot with its credentials readable only by its owner. *What* the agent then does is the agent's
 business — which is why host's scopes and sync's Mutagen sessions are nowhere near here.
+
+## Key files
+
+- [src/index.ts](src/index.ts) — the public surface.
+- [src/home.ts](src/home.ts) — the `~/.intentic/<agent>` directory and its 0600 floor.
+- [src/autostart.ts](src/autostart.ts) — login autostart, per platform.
+- [src/detached.ts](src/detached.ts) — the background loop, and surviving a closed terminal.
+- [src/launcher.ts](src/launcher.ts) — `cliLauncher()`, including the compiled-binary argv case.

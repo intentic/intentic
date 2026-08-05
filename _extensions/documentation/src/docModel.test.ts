@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { componentOfPackage, parseDocIndex, parsePackageDoc, parseRepoDoc, type RepoDoc } from "./docModel.js";
+import { componentOfPackage, parseDocIndex, parseRepoDoc, type RepoDoc } from "./docModel.js";
 
 /* A document set is written by a model into a repository the owner then reads, so every parser here is total: a
  * field that arrives malformed must cost that field, never the page. The exception — and the only one — is
@@ -66,59 +66,60 @@ describe(`parseRepoDoc`, () => {
     });
 });
 
-describe(`parsePackageDoc`, () => {
-    it(`reads a package document with its anchors`, () => {
-        const doc = parsePackageDoc(
-            withProvenance({
-                dir: `_libs/graph`,
-                name: `@intentic/graph`,
-                oneLiner: `The desired-state IR.`,
-                keyFiles: [{ path: `_libs/graph/src/compile.ts`, line: 42, what: `RawNode map → graph.` }],
-            }),
-        );
-        expect(doc?.oneLiner).toBe(`The desired-state IR.`);
-        expect(doc?.keyFiles[0]).toEqual({ path: `_libs/graph/src/compile.ts`, line: 42, what: `RawNode map → graph.` });
-    });
-
-    it(`requires dir, oneLiner and provenance`, () => {
-        expect(parsePackageDoc(withProvenance({ oneLiner: `x` }))).toBeUndefined();
-        expect(parsePackageDoc(withProvenance({ dir: `d` }))).toBeUndefined();
-        expect(parsePackageDoc(JSON.stringify({ dir: `d`, oneLiner: `x` }))).toBeUndefined();
-    });
-
-    it(`drops an anchor with no reason, because the reason is the point of an anchor`, () => {
-        const doc = parsePackageDoc(
-            withProvenance({ dir: `d`, oneLiner: `x`, keyFiles: [{ path: `a.ts`, what: `Kept.` }, { path: `b.ts` }] }),
-        );
-        expect(doc?.keyFiles).toEqual([{ path: `a.ts`, what: `Kept.`, line: undefined }]);
-    });
-
-    it(`rejects a line number of zero rather than rendering a link to line 0`, () => {
-        // Anchors are 1-indexed like every other path:line in this workspace.
-        const doc = parsePackageDoc(withProvenance({ dir: `d`, oneLiner: `x`, keyFiles: [{ path: `a.ts`, what: `w`, line: 0 }] }));
-        expect(doc?.keyFiles[0]?.line).toBeUndefined();
-    });
-});
-
+/* There is no `parsePackageDoc`: a package has no JSON document. Everything the app knows about one that is not
+ * its README's prose arrives in the generated index, which is what these cover. */
 describe(`parseDocIndex`, () => {
-    it(`reads the generated index, including the two rots a revision comparison cannot see`, () => {
+    it(`reads the generated index, including a package's derived anchors and measures`, () => {
         const index = parseDocIndex(
             JSON.stringify({
                 repo: `r`,
                 generatedAt: 5,
-                entries: [{ dir: `a`, oneLiner: `A.`, sourceRev: `abc`, stale: true, reason: `it points at a file that is gone`, behind: 0 }],
+                entries: [
+                    {
+                        dir: `_libs/graph`,
+                        name: `@intentic/graph`,
+                        oneLiner: `The desired-state IR.`,
+                        anchors: [{ path: `_libs/graph/src/compile.ts`, line: 42, what: `RawNode map → graph.` }],
+                        files: 11,
+                        loc: 563,
+                        hasTests: true,
+                        readmeRev: `abc`,
+                        updatedAt: 7,
+                        stale: true,
+                        reason: `it points at a file that is gone`,
+                        behind: 0,
+                    },
+                ],
+                edges: [{ from: `_apps/cli`, to: `_libs/graph`, dev: false }],
                 orphans: [`gone`],
                 undocumented: [`b`],
             }),
         );
-        expect(index?.entries[0]).toMatchObject({ dir: `a`, stale: true, behind: 0 });
+        expect(index?.entries[0]).toMatchObject({ dir: `_libs/graph`, name: `@intentic/graph`, loc: 563, hasTests: true, stale: true });
+        expect(index?.entries[0]?.anchors[0]).toEqual({ path: `_libs/graph/src/compile.ts`, line: 42, what: `RawNode map → graph.` });
+        expect(index?.edges).toEqual([{ from: `_apps/cli`, to: `_libs/graph`, dev: false }]);
         expect(index?.orphans).toEqual([`gone`]);
         expect(index?.undocumented).toEqual([`b`]);
     });
 
+    it(`drops an anchor with no reason, because the reason is the point of an anchor`, () => {
+        const index = parseDocIndex(JSON.stringify({ repo: `r`, entries: [{ dir: `d`, anchors: [{ path: `a.ts`, what: `Kept.` }, { path: `b.ts` }] }] }));
+        expect(index?.entries[0]?.anchors).toEqual([{ path: `a.ts`, what: `Kept.`, line: undefined }]);
+    });
+
+    it(`rejects a line number of zero rather than rendering a link to line 0`, () => {
+        // Anchors are 1-indexed like every other path:line in this workspace.
+        const index = parseDocIndex(JSON.stringify({ repo: `r`, entries: [{ dir: `d`, anchors: [{ path: `a.ts`, what: `w`, line: 0 }] }] }));
+        expect(index?.entries[0]?.anchors[0]?.line).toBeUndefined();
+    });
+
     it(`treats a missing stale flag as not stale rather than as unknown`, () => {
         const index = parseDocIndex(JSON.stringify({ repo: `r`, entries: [{ dir: `a` }] }));
-        expect(index?.entries[0]).toMatchObject({ dir: `a`, stale: false, behind: 0, oneLiner: `` });
+        expect(index?.entries[0]).toMatchObject({ dir: `a`, stale: false, behind: 0, oneLiner: ``, loc: 0, files: 0, hasTests: false });
+    });
+
+    it(`answers an empty edge list rather than undefined, so a figure can always iterate it`, () => {
+        expect(parseDocIndex(JSON.stringify({ repo: `r` }))?.edges).toEqual([]);
     });
 });
 

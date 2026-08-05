@@ -1,7 +1,9 @@
 # @intentic/desktop-app
 
-The Windows/Linux desktop app — the no-terminal way to run an intentic sandbox on your own computer, and the
-thing that updates it afterwards. Install it, sign in, click **Run on this computer**.
+The no-terminal way to run an intentic sandbox on your own computer.
+
+A Windows and Linux desktop app that installs the sandbox, and the thing that updates it afterwards. Install it,
+sign in, click **Run on this computer**.
 
 ```
         ONE WINDOW, TWO SCREENS — whichever is up takes the other's frame

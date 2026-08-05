@@ -1,6 +1,8 @@
 # @intentic/cli
 
-The `intentic` CLI (`bin: intentic`) — a toolbox of three command groups: **`tunnel`** (the sandbox's own
+The `intentic` command — tunnels, deployment and scaffolding, in one toolbox.
+
+Three command groups: **`tunnel`** (the sandbox's own
 Cloudflare tunnels, used by connect.sh), **`deploy`** (the bundled deployment engine — turn a local intent
 file into a desired-state artifact and reconcile it, no remote control plane required), and **`scaffold`**
 (seed app repos). The `deploy` group depends on `@intentic/engine`, `@intentic/providers`,
@@ -65,12 +67,11 @@ cd .. && intentic deploy apply                                  # generates the 
 ## Key files
 
 - [src/cli.ts](src/cli.ts) / [src/app.ts](src/app.ts) — the stricli app and command wiring.
-- [src/init.ts](src/init.ts) / [src/resolve.ts](src/resolve.ts) / [src/apply.ts](src/apply.ts) — the `init`/`resolve`/`apply` commands (plan lives alongside resolve/apply).
-- [src/artifact.ts](src/artifact.ts) — `readArtifact`/`writeArtifact`/`writeStatus` (the desired-state files).
-- [src/secrets.ts](src/secrets.ts) / [src/generated-secrets.ts](src/generated-secrets.ts) — the user-supplied vs intentic-generated secret split.
-- [src/output.ts](src/output.ts) — honors `INTENTIC_OUTPUT` (`text`/`json`/`ndjson`); maps `EngineEvent`s to the chosen format.
-- [src/adopt.ts](src/adopt.ts) / [src/adopt-pipelines.ts](src/adopt-pipelines.ts) — push the intent/desired-state repos into Forgejo + wire Actions.
-- [src/access.ts](src/access.ts) — the post-apply Access summary + `access.md`; [src/known-hosts.ts](src/known-hosts.ts) — TOFU host-key pinning.
+- [src/init/init.ts](src/init/init.ts) / [src/resolve/resolve.ts](src/resolve/resolve.ts) / [src/apply/apply.command.ts](src/apply/apply.command.ts) — the `init`/`resolve`/`apply` commands (plan lives alongside resolve/apply).
+- [src/lib/artifact.ts](src/lib/artifact.ts) — `readArtifact`/`writeArtifact`/`writeStatus` (the desired-state files).
+- [src/lib/output.ts](src/lib/output.ts) — honors `INTENTIC_OUTPUT` (`text`/`json`/`ndjson`); maps `EngineEvent`s to the chosen format.
+- [src/adopt/adopt.ts](src/adopt/adopt.ts) — push the intent/desired-state repos into Forgejo + wire Actions.
+- [src/apply/access.ts](src/apply/access.ts) — the post-apply Access summary + `access.md`; [src/lib/known-hosts.ts](src/lib/known-hosts.ts) — TOFU host-key pinning.
 
 ## Conventions
 

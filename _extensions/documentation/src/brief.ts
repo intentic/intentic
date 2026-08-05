@@ -1,5 +1,5 @@
 import type { DocComponent, DocTerm } from "./docModel.js";
-import { INDEX_TAIL, REPO_DOC_TAIL, REPO_PROSE_TAIL, packageDocTail, packageProseTail, stagingDir, stagingPath } from "./paths.js";
+import { INDEX_TAIL, REPO_DOC_TAIL, REPO_PROSE_TAIL, packagePageTail, stagingDir, stagingPath } from "./paths.js";
 
 /* THE BRIEFS — what makes a documentation session produce orientation rather than a restated API.
  *
@@ -26,12 +26,15 @@ import { INDEX_TAIL, REPO_DOC_TAIL, REPO_PROSE_TAIL, packageDocTail, packagePros
  *    sizes and the revisions. An agent left to state those from reading writes numbers that are plausible and
  *    wrong, and a document whose numbers are wrong is worse than no document.
  *
- * 3. FIGURES ARE FENCES, NOT PROSE ABOUT FIGURES. The vocabulary is inlined verbatim below, because a model
- *    told "you may include diagrams" invents a format and gets a code block.
+ * 3. FIGURES ARE FENCES, NOT PROSE ABOUT FIGURES — and a PACKAGE agent draws almost none of them. The vocabulary
+ *    is inlined verbatim below, because a model told "you may include diagrams" invents a format and gets a code
+ *    block. But the measurable figures are computed and drawn by the app now, so the package brief's job is
+ *    mostly to say "do not write those", which is why it carries its own shorter figure block.
  *
  * 4. IT WRITES TO STAGING, NEVER INTO THE REPO. Published documents are committed by the owner's Publish action
- *    after they have read them. An agent that writes straight into `docs/architecture/` has published without
- *    review, which is the one outcome the two-tree design exists to prevent.
+ *    after they have read them. An agent that writes a package's README straight into the package has published
+ *    without review, which is the one outcome the two-tree design exists to prevent — and the temptation is
+ *    sharper now that the destination is an ordinary file beside the code rather than a documentation directory.
  *
  * 5. IT VALIDATES ITS OWN OUTPUT. `intentic-docs validate` is on its PATH; the brief requires a clean run before
  *    it finishes. Schema conformance and dead anchors are the agent's loop, not the reader's surprise. */
@@ -89,6 +92,33 @@ const FIGURES = [
         `cannot: what to notice in it.`,
 ].join(`\n`);
 
+/* What a PACKAGE agent may draw — which is much less than the map may, and deliberately so. Sizes, file counts
+ * and neighbour lists are computed by `intentic-docs check` and drawn by the app above the prose, so a page that
+ * writes them by hand is duplicating a fact it will not be around to update. That duplication was 62% of the
+ * bytes in the layout this replaced, and the largest single source of rot in it. */
+const PACKAGE_FIGURES = [
+    `## Figures`,
+    ``,
+    `**Do not draw the facts.** This package's size, its file count, whether it has tests and which packages it ` +
+        `depends on are computed and drawn above your prose automatically. Writing them into the page yourself ` +
+        `duplicates a number that goes stale the next time anyone commits.`,
+    ``,
+    `Draw a figure only for something the dependency graph cannot say — a request's path, a state machine, an ` +
+        `ordering. Then put it INLINE, at the sentence it illustrates, as a fence whose body is JSON. A fence that ` +
+        `does not parse renders as a plain code block, so keep it valid.`,
+    ``,
+    `\`\`\`dag`,
+    `{ "title": "How a turn reaches the model", "direction": "LR",`,
+    `  "nodes": [{ "id": "web", "label": "Browser app", "note": "Vue", "accent": "1" },`,
+    `            { "id": "daemon", "label": "Sandbox daemon", "note": "one per box", "accent": "2" }],`,
+    `  "edges": [{ "from": "web", "to": "daemon" }] }`,
+    `\`\`\``,
+    ``,
+    `\`direction\` is "LR" (default) or "TB". \`accent\` is "1".."5" or "neutral" and belongs to a COMPONENT — reuse ` +
+        `your component's slot. Edges carry no labels; use \`"dashed": true\` for a weaker or dev-only relationship. ` +
+        `Do not describe a figure in prose as well as drawing it.`,
+].join(`\n`);
+
 /* Provenance takes its revision from the FACTS OUTPUT, not from the browser that started the run. The tool already
  * computes both — `head` for the repository, a per-package `sourceRev` — and it computes them inside the worktree
  * the agent is actually reading. A revision injected from the browser would be one more thing that can be subtly
@@ -117,10 +147,10 @@ const validateRule = (repoFlag: string): string =>
         ``,
         `    intentic-docs validate${repoFlag} --from staging`,
         ``,
-        `It checks that every document parses, that provenance is present, that each \`doc.json\` has a \`doc.md\` ` +
-            `beside it, and that every \`keyFiles\` path still exists. Fix what it reports and run it again until it ` +
-            `passes. A \`keyFiles\` entry pointing at a file that is not there is the clearest possible signal that a ` +
-            `document is wrong, so it is worth getting right rather than working around.`,
+        `It checks that the map parses, that every package has a README, that each one opens with a lead sentence, ` +
+            `and that every \`## Key files\` link still resolves. Fix what it reports and run it again until it ` +
+            `passes. A key-files link pointing at a file that is not there is the clearest possible signal that a ` +
+            `page is wrong, so it is worth getting right rather than working around.`,
     ].join(`\n`);
 
 export interface MapBriefInput {
@@ -249,39 +279,43 @@ export const packageBrief = (input: PackageBriefInput): string => {
             `packages it depends on and which depend on it. Those edges are what tells you whether this is a leaf ` +
             `everything uses or an entry point that uses everything. Do not restate numbers from reading; take them ` +
             `from here.`,
-        `Then read enough to know what it is FOR. \`iq outline ${dir}\` and the package's own README (if it has one) ` +
-            `are worth more per token than opening files. Long comments at the top of a file are usually the author ` +
-            `explaining the design — read those before the code under them.`,
-        `## Write exactly two files`,
+        `Then read enough to know what it is FOR. \`iq outline ${dir}\` is worth more per token than opening files. ` +
+            `Long comments at the top of a file are usually the author explaining the design — read those before the ` +
+            `code under them. If the package already has a README, you are REVISING it, not replacing it: keep what ` +
+            `is still true and fix what is not.`,
+        `## Write exactly one file`,
         [
-            `**${stagingPath(repo, packageDocTail(dir))}**`,
+            `**${stagingPath(repo, packagePageTail(dir))}** — the package's README, which IS its documentation page.`,
+            `There is no JSON sidecar: everything the app needs that is not prose gets read back out of this file.`,
             ``,
-            `    {`,
-            `      "dir": ${JSON.stringify(dir)},`,
-            `      "name": "<the package's own name, if it has one>",`,
-            `      "oneLiner": "One sentence a stranger could repeat back.",`,
-            `      "keyFiles": [{ "path": "${dir}/src/index.ts", "line": 42, "what": "Why this file is worth opening." }],`,
-            `      "provenance": { … }`,
-            `    }`,
+            `Two things are required, because a tool parses them:`,
+            ``,
+            `    # <the package's name, or its directory if it has none>`,
+            ``,
+            `    One sentence a stranger could repeat back. This becomes the package's one-liner everywhere it is`,
+            `    named without being opened, so write a sentence, not a paragraph.`,
+            ``,
+            `    ## Key files`,
+            ``,
+            `    - [src/index.ts](src/index.ts) — why this file is worth opening.`,
+            ``,
+            `\`## Key files\` is three to six entries. Link targets are relative to the PACKAGE directory (so the ` +
+                `links work on GitHub and in the file tree) and must exist. Append \`#L42\` to a target for a line number.`,
         ].join(`\n`),
-        `\`keyFiles\` is three to six entries: where a reader should actually start, with a reason each. Paths are ` +
-            `relative to the repository root and must exist. \`line\` is optional and 1-indexed.`,
-        `**${stagingPath(repo, packageProseTail(dir))}** — the page itself. Roughly: what this is and why it exists; ` +
-            `how it fits the components around it (a \`dag\` of this package and its immediate neighbours earns its ` +
-            `space here); the two or three things you would have to explain to a new maintainer; what is surprising. ` +
+        `Everything else is yours to shape. \`## Responsibilities\`, \`## How it fits\` and \`## Conventions & gotchas\` ` +
+            `are the usual spine and a good default: what this is and why it exists; how it fits the components ` +
+            `around it; the two or three things you would have to explain to a new maintainer; what is surprising. ` +
             `No heading called "API". No list of exports.`,
-        FIGURES,
-        provenanceRule(
-            `this package's own \`sourceRev\` from the \`intentic-docs facts\` output — the entry whose \`dir\` is \`${dir}\`, not the repository's \`head\`.`,
-        ),
+        PACKAGE_FIGURES,
         [
             `## Rules`,
             ``,
-            `- Write ONLY these two files, under \`${stagingDir(repo)}\`. Another agent is documenting each other ` +
+            `- Write ONLY this one file, under \`${stagingDir(repo)}\`. Another agent is documenting each other ` +
                 `package right now, and \`${REPO_DOC_TAIL}\` belongs to the map — editing either is how a run corrupts ` +
                 `itself.`,
             `- Do not modify the code you are documenting. Finding a defect is worth writing down; fixing it is ` + `someone else's turn.`,
-            `- JSON with keys in a stable order and two-space indent.`,
+            `- There is no provenance to write. The page's date is the commit that lands it, and how far the code ` +
+                `has run ahead of it is a commit count — both computed, neither authored.`,
         ].join(`\n`),
         validateRule(repoFlag),
     ];

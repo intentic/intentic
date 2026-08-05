@@ -88,3 +88,12 @@ and opens the listing pull request for you. That is the whole submission process
 and the listing is a pointer to this repo at a sha, not a copy of it.
 
 MIT.
+
+## Key files
+
+- [src/extension.ts](src/extension.ts) — activation, and one registration of every kind.
+- [src/host.ts](src/host.ts) — the host handle, bound once.
+- [src/ExampleView.vue](src/ExampleView.vue) — a view, rendered with the extension UI kit.
+- [src/useNotes.ts](src/useNotes.ts) — reading and writing through the public API.
+- [src/badge.ts](src/badge.ts) — the attention badge pattern, at its smallest.
+- [plugin/skills/example-notes/SKILL.md](plugin/skills/example-notes/SKILL.md) — the agent-facing half of an extension.

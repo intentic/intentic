@@ -74,3 +74,9 @@ listing instead of shadowing it.
 because extension code runs trusted in the owner's browser and a branch name is a promise the upstream can
 break with a force-push. A registry entry without one still lists and still reads; it just can't be installed
 in a click.
+
+## Key files
+
+- [src/registry.ts](src/registry.ts) — the file format: what a registry repo contains.
+- [src/source.ts](src/source.ts) — how a sha-pinned pointer names an extension.
+- [src/index.ts](src/index.ts) — the public surface.

@@ -4,12 +4,13 @@ import type { FigureAccent } from "@intentic/extension-ui";
  *
  * Three layers produce a document set, and keeping them apart is the entire design:
  *
- *   FACTS      — the package graph, sizes, revisions, which dirs exist. Computed by `intentic-docs` (the bin
- *                tool this extension puts on the agent's PATH). Never authored, because a script gets them right
- *                for free and a model gets them plausibly wrong.
+ *   FACTS      — the package graph, sizes, revisions, which dirs exist, and now also every package's one-liner
+ *                and anchors (read out of its README). Computed by `intentic-docs` (the bin tool this extension
+ *                puts on the agent's PATH). Never authored, because a script gets them right for free and a
+ *                model gets them plausibly wrong.
  *   JUDGEMENT  — what a component is FOR, which packages form one, what to read first, what is surprising.
- *                Authored, in `doc.md`/`repo.md` prose and the few fields below. This is the only part that
- *                needs a model, and the only part worth reviewing.
+ *                Authored, as prose: a package's own `README.md`, and `repo.md` for the map. This is the only
+ *                part that needs a model, and the only part worth reviewing.
  *   PRESENTATION — theme, layout, dark mode, dagre, responsive, a11y. Owned by the app. Nothing here carries a
  *                colour, a coordinate or a size.
  *
@@ -71,54 +72,66 @@ export interface RepoDoc {
     readonly provenance: DocProvenance;
 }
 
-// ---- doc.json: one package -----------------------------------------------------------------------------------
+// ---- a package's page: its README, read as data ----------------------------------------------------------------
 
-/* A file worth opening, and why. Anchors are the cheapest lie-detector in the system: `intentic-docs validate`
- * checks that every one still exists, and an anchor pointing at a deleted file is an unarguable "this document
- * is out of date" that no revision comparison can give you (a doc can be stale in rev and still true, or current
- * in rev and describe a file that moved). They are also what the reader clicks. */
+/* A file worth opening, and why — parsed by `intentic-docs` out of the README's `## Key files` section, never
+ * authored as JSON. Anchors are the cheapest lie-detector in the system: `intentic-docs validate` checks that
+ * every one still exists, and an anchor pointing at a deleted file is an unarguable "this page is out of date"
+ * that no commit count can give you (a page can be behind and still true, or current and describe a file that
+ * moved). They are also what the reader clicks. */
 export interface DocAnchor {
     readonly path: string;
     readonly line?: number;
     readonly what: string;
 }
 
-export interface PackageDoc {
-    // Repo-relative package dir — the identity, and the path the document set mirrors.
+// ---- index.json: derived, never authored ---------------------------------------------------------------------
+
+/* One package's row in the generated index — and, since there is no per-package sidecar, everything the app
+ * knows about a package that is not its prose. All of it is computed: the one-liner is the README's lead
+ * sentence, the anchors are its key-files links, the measures come off the filesystem, and staleness is a git
+ * comparison. Nothing here can be forgotten, because nothing here is written by hand.
+ *
+ * `stale` is the tool's verdict, with `reason` saying which check produced it — a reader who is told a page is
+ * stale immediately asks why, and "commits landed since" and "it points at a file that is gone" call for
+ * different actions. */
+export interface DocIndexEntry {
     readonly dir: string;
     // The package's own name (npm, cargo, …) when it has one; a dir with no manifest has only its path.
     readonly name?: string;
-    /* ONE sentence, plain language. Owned here and nowhere else: the browser gets every package's one-liner from
-     * the derived index.json, so this stays the single authored home and cannot drift from a copy. */
-    readonly oneLiner: string;
-    readonly keyFiles: readonly DocAnchor[];
-    readonly provenance: DocProvenance;
-}
-
-// ---- index.json: derived, never authored ---------------------------------------------------------------------
-
-/* One package's row in the generated index. `stale` is the tool's verdict, with `reason` saying which check
- * produced it — a reader who is told a document is stale immediately asks why, and "commits landed since" and
- * "it points at a file that is gone" call for different actions. */
-export interface DocIndexEntry {
-    readonly dir: string;
     readonly oneLiner: string;
     readonly component?: string;
-    readonly sourceRev: string;
+    readonly anchors: readonly DocAnchor[];
+    // What the app draws its figures from, so no page has to hand-write a number that goes stale.
+    readonly files: number;
+    readonly loc: number;
+    readonly hasTests: boolean;
+    // The last commit that touched the README, and when it landed — the page's date, without a field to bump.
+    readonly readmeRev: string;
+    readonly updatedAt: number;
     readonly stale: boolean;
     readonly reason?: string;
-    // Commits touching this dir since `sourceRev`. Zero and not stale is the healthy state.
+    // Commits touching this dir since the README was last written. Zero and not stale is the healthy state.
     readonly behind: number;
 }
 
-/* The whole set's derived state. `orphans` are document directories whose package is GONE — the rot a revision
- * comparison structurally cannot see, because there is no source dir left to have a revision. */
+// One intra-repo dependency, for the neighbour figure. `dev` is a build/test-only edge, drawn weaker.
+export interface DocEdge {
+    readonly from: string;
+    readonly to: string;
+    readonly dev: boolean;
+}
+
+/* The whole set's derived state. `orphans` are staged pages whose package is GONE; a PUBLISHED page cannot be
+ * orphaned, because it lives inside the directory whose disappearance would orphan it — one whole class of rot
+ * that the layout deletes rather than detects. */
 export interface DocIndex {
     readonly repo: string;
     readonly generatedAt: number;
     readonly entries: readonly DocIndexEntry[];
+    readonly edges: readonly DocEdge[];
     readonly orphans: readonly string[];
-    // Package dirs with no document at all. Coverage belongs in the view as a number, never on the rail as a
+    // Package dirs with no README at all. Coverage belongs in the view as a number, never on the rail as a
     // badge — an undocumented count is lit every day, and a permanently lit badge teaches the eye to skip it.
     readonly undocumented: readonly string[];
 }
@@ -225,30 +238,6 @@ export const parseRepoDoc = (text: string): RepoDoc | undefined => {
     };
 };
 
-export const parsePackageDoc = (text: string): PackageDoc | undefined => {
-    const body = parsed(text);
-    if (!isRecord(body)) {
-        return undefined;
-    }
-    const dir = str(body[`dir`]);
-    const oneLiner = str(body[`oneLiner`]);
-    const provenance = provenanceOf(body[`provenance`]);
-    if (dir === undefined || oneLiner === undefined || provenance === undefined) {
-        return undefined;
-    }
-    const rawKeyFiles = body[`keyFiles`];
-    return {
-        dir,
-        name: str(body[`name`]),
-        oneLiner,
-        keyFiles: (Array.isArray(rawKeyFiles) ? rawKeyFiles : []).flatMap((item) => {
-            const anchor = anchorOf(item);
-            return anchor === undefined ? [] : [anchor];
-        }),
-        provenance,
-    };
-};
-
 export const parseDocIndex = (text: string): DocIndex | undefined => {
     const body = parsed(text);
     if (!isRecord(body)) {
@@ -259,6 +248,7 @@ export const parseDocIndex = (text: string): DocIndex | undefined => {
         return undefined;
     }
     const rawEntries = body[`entries`];
+    const rawEdges = body[`edges`];
     return {
         repo,
         generatedAt: num(body[`generatedAt`]) ?? 0,
@@ -270,17 +260,35 @@ export const parseDocIndex = (text: string): DocIndex | undefined => {
             if (dir === undefined) {
                 return [];
             }
+            const rawAnchors = item[`anchors`];
             return [
                 {
                     dir,
+                    name: str(item[`name`]),
                     oneLiner: str(item[`oneLiner`]) ?? ``,
                     component: str(item[`component`]),
-                    sourceRev: str(item[`sourceRev`]) ?? ``,
+                    anchors: (Array.isArray(rawAnchors) ? rawAnchors : []).flatMap((entry) => {
+                        const anchor = anchorOf(entry);
+                        return anchor === undefined ? [] : [anchor];
+                    }),
+                    files: num(item[`files`]) ?? 0,
+                    loc: num(item[`loc`]) ?? 0,
+                    hasTests: item[`hasTests`] === true,
+                    readmeRev: str(item[`readmeRev`]) ?? ``,
+                    updatedAt: num(item[`updatedAt`]) ?? 0,
                     stale: item[`stale`] === true,
                     reason: str(item[`reason`]),
                     behind: num(item[`behind`]) ?? 0,
                 },
             ];
+        }),
+        edges: (Array.isArray(rawEdges) ? rawEdges : []).flatMap((item): DocEdge[] => {
+            if (!isRecord(item)) {
+                return [];
+            }
+            const from = str(item[`from`]);
+            const to = str(item[`to`]);
+            return from === undefined || to === undefined ? [] : [{ from, to, dev: item[`dev`] === true }];
         }),
         orphans: strings(body[`orphans`]),
         undocumented: strings(body[`undocumented`]),

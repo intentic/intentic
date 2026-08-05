@@ -54,3 +54,10 @@ the subset that driving a page actually uses. Nothing in it can fail to load on 
 
 `snapshot.ts`'s renderer and ref parsing, and the per-platform browser search — all pure. The CDP calls end in a
 real Chrome painting a real page; those need a machine, not a test.
+
+## Key files
+
+- [src/index.ts](src/index.ts) — the public surface.
+- [src/cdp.ts](src/cdp.ts) — the hand-rolled Chrome DevTools Protocol client.
+- [src/snapshot.ts](src/snapshot.ts) — a page as structured text with stable element references.
+- [src/launch.ts](src/launch.ts) — finding and starting a browser.

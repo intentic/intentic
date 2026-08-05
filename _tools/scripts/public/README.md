@@ -75,3 +75,8 @@ problems, report them privately instead: [SECURITY.md](SECURITY.md).
 ## License
 
 MIT © Artur Kurowski — see [LICENSE](LICENSE).
+
+## Key files
+
+- [README.md](README.md) — the file itself; this package exists to publish it.
+- [package.json](package.json) — what makes the directory a package.

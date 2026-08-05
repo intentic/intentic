@@ -28,7 +28,9 @@ the browser workspace), see **Develop locally** in the [README](README.md).
   a 60s budget instead of the 5s hang detector), and gated `*.e2e.test.ts` (real infra, opt-in).
 - **Tests are type-checked too**, by `pnpm typecheck` rather than by `pnpm build`. A package that emits to
   `dist` excludes `*.test.ts` from its build config and re-includes it in `tsconfig.test.json`.
-- Every package has its own README with what it is responsible for and where to start reading.
+- Every package is documented by its own README — what it is responsible for and where to start reading. It is
+  the package's documentation page, not a note beside one, so it is updated in the same commit as the change
+  that dates it. [AGENTS.md](AGENTS.md#documentation) has the two parts of it a tool reads.
 
 ## House rules
 
@@ -42,8 +44,9 @@ it, and `semantic-release` derives the version and the release notes from it, so
 what ships.
 
 [ARCHITECTURE.md](ARCHITECTURE.md) covers the platform / sandbox / workspace split, the ownership and trust
-model, the extension system, and the agent-facing tooling. For the shorter, picture-led version — one page per
-package — read [docs/architecture/repo.md](docs/architecture/repo.md).
+model, the extension system, and the agent-facing tooling. For the shorter, picture-led version — the components,
+the vocabulary and what to read first — read [docs/architecture/repo.md](docs/architecture/repo.md); each
+package's own page is its README.
 
 ## Extensions
 

@@ -6,13 +6,20 @@
      this page is styled by the document: it authored meaning, the app draws it. -->
 <script setup lang="ts">
 import { cmp, Icon, Markdown, Panel, StatusBadge, timeAgo } from "@intentic/extension-ui";
+import { computed } from "vue";
 import type { DocAnchor, DocIndexEntry, DocProvenance } from "./docModel.js";
 import { host } from "./host.js";
 
-const { prose, anchors, provenance, repo, staleness } = defineProps<{
+const { prose, figures, anchors, provenance, repo, staleness } = defineProps<{
     prose: string | undefined;
+    /* The computed figures, as markdown, drawn ABOVE the prose. Its own <Markdown> rather than a string spliced
+     * onto the front of the page: a generated fence and an authored one then fail independently, and nothing has
+     * to guess where a README's own first paragraph ends. */
+    figures?: string;
     anchors: readonly DocAnchor[];
-    provenance: DocProvenance | undefined;
+    // The repository overview's provenance. A PACKAGE page has none — it is a README, and its date is the commit
+    // that last touched it, which the index carries.
+    provenance?: DocProvenance;
     // Which repository the anchors are relative to — a document's paths are repo-relative (that is what
     // `intentic-docs validate` resolves them against), and the workspace route is root-relative.
     repo: string;
@@ -27,6 +34,11 @@ const { prose, anchors, provenance, repo, staleness } = defineProps<{
 const open = (anchor: DocAnchor): void => {
     host().navigate(`/workspace/${repo === `` ? `` : `${repo}/`}${anchor.path}`);
 };
+
+// The two footer facts, from whichever side has them. A repo overview carries its own provenance; a package's
+// date and revision are the index's record of the commit that last touched its README.
+const writtenAt = computed((): number => provenance?.generatedAt ?? staleness?.updatedAt ?? 0);
+const rev = computed((): string => provenance?.sourceRev ?? staleness?.readmeRev ?? ``);
 </script>
 
 <template>
@@ -49,6 +61,11 @@ const open = (anchor: DocAnchor): void => {
                 <span class="size-1.5 shrink-0 rounded-full bg-warning/70" aria-hidden="true"></span>
                 May be out of date — {{ staleness.reason }}.
             </p>
+
+            <!-- Measured facts first: how big this is, what it sits between, how it compares. Nobody writes
+             these — `intentic-docs check` computes them into the index and this draws them, so a page cannot
+             carry a line count that stopped being true. -->
+            <Markdown v-if="figures !== undefined && figures !== ``" :source="figures" style="--prose-measure: 76ch" />
 
             <Markdown v-if="prose !== undefined" :source="prose" style="--prose-measure: 76ch" />
             <p v-else class="text-sm text-muted">This page has no prose yet.</p>
@@ -74,19 +91,16 @@ const open = (anchor: DocAnchor): void => {
                 </button>
             </section>
 
-            <!-- Provenance is shown, not hidden in the JSON: "who wrote this, against what, when" is the first thing
-             anyone asks of a generated document, and a page that cannot answer it does not deserve to be trusted. -->
-            <footer v-if="provenance !== undefined" class="flex flex-wrap items-center gap-x-3 gap-y-1 pt-1 text-2xs text-subtle">
-                <StatusBadge
-                    :variant="staleness?.stale === true ? `warning` : `neutral`"
-                    size="xs"
-                    dot
-                    :label="`written ${timeAgo(provenance.generatedAt)}`"
-                />
-                <span
-                    >against <span class="font-mono">{{ provenance.sourceRev.slice(0, 8) }}</span></span
+            <!-- "When was this written, and what has happened since" is the first thing anyone asks of a page they
+             are about to trust, and a page that cannot answer it does not deserve to be. The repository overview
+             answers from its authored provenance; a package answers from git, because its page is a README and the
+             commit that last touched it is a better date than any field an author has to remember to bump. -->
+            <footer v-if="writtenAt > 0" class="flex flex-wrap items-center gap-x-3 gap-y-1 pt-1 text-2xs text-subtle">
+                <StatusBadge :variant="staleness?.stale === true ? `warning` : `neutral`" size="xs" dot :label="`written ${timeAgo(writtenAt)}`" />
+                <span v-if="rev !== ``"
+                    >{{ provenance === undefined ? `in` : `against` }} <span class="font-mono">{{ rev.slice(0, 8) }}</span></span
                 >
-                <span v-if="provenance.model !== undefined">by {{ provenance.model }}</span>
+                <span v-if="provenance?.model !== undefined">by {{ provenance.model }}</span>
                 <span v-if="staleness !== undefined && staleness.behind > 0"
                     >· {{ staleness.behind }} commit{{ staleness.behind === 1 ? `` : `s` }} since</span
                 >

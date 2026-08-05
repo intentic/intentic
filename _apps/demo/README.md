@@ -1,7 +1,8 @@
 # @intentic-dev/demo
 
-The interactive demo behind the landing page's hero: **the real `@intentic-app/web` app**, running against a
-recorded fixture instead of a sandbox. Its entry installs a fake platform and a fake daemon on the two globals
+The landing page's playable demo — the real editor, running on a recording instead of a sandbox.
+
+It is **the actual `@intentic-app/web` app**, not a mock-up. Its entry installs a fake platform and a fake daemon on the two globals
 the app reaches the outside world through, seeds the credentials the router gates look for, and then imports the
 app's own `main.ts`. Nothing in the app is aware of it.
 
@@ -89,3 +90,11 @@ lands on the fleet board rather than on an empty workspace.
 
 Design notes, the route/event coverage table and what is deliberately absent:
 [`docs/marketing/interactive-demo.md`](../../docs/marketing/interactive-demo.md).
+
+## Key files
+
+- [src/main.ts](src/main.ts) — the entry: install the fakes, seed credentials, then import the app's own `main.ts`.
+- [src/platform.ts](src/platform.ts) / [src/daemon.ts](src/daemon.ts) — the two globals the app reaches the outside world through.
+- [src/fixture](src/fixture) — the recording: every surface's contents, as data.
+- [src/turn.ts](src/turn.ts) — replaying an agent turn convincingly, including its timing.
+- [src/mode.ts](src/mode.ts) — what the demo allows and what it quietly declines.

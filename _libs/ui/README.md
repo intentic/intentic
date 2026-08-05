@@ -13,7 +13,7 @@ Shared **Vue UI primitives + theme** for the platform web app. A small, reusable
 
 - [src/index.ts](src/index.ts) — public surface: `Card`, `Page`, `Code`, `InfoHint`, `installUi`, `vTw`, `useTheme`/`ColorScheme`, `useHighlighter`, `Theme`.
 - [src/components/](src/components) — `Card.vue`, `Page.vue`, `Code.vue`, `InfoHint.vue`.
-- [src/vue/](src/vue) — `plugin.ts` (`installUi`), `useTheme.ts` (theme ref + persistence), `tw.ts` (`vTw`), `useHighlighter.ts` (lazy Shiki core).
+- [src/plugin.ts](src/plugin.ts) (`installUi`) and [src/composables](src/composables) — `useTheme` (theme ref + persistence), `vTw`, `useHighlighter` (lazy Shiki core).
 - [src/styles/](src/styles) — design tokens + `theme.ts` (the `Theme` preset that bridges Tailwind vars ↔ PrimeVue `--p-*`), PrimeVue overrides (`@layer primeng`), semantic colors.
 
 ## How it fits

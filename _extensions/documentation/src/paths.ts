@@ -1,10 +1,15 @@
 /* WHERE THE DOCUMENTS LIVE — two trees, and the reason there are two.
  *
- * PUBLISHED: `<repo>/docs/architecture/`. In the repo, in git, landed and reviewed like code, and present for
- * anyone who clones it. Documentation is an asset ABOUT the code, so it has to travel with the code and be
- * reviewable in the same diff as the change that invalidated it. That is the whole reason it does not live in
- * `.intentic/` the way an acceptance run's reports do: a run is point-in-time evidence, a document is a
- * maintained artifact.
+ * PUBLISHED: a package's page is its own `README.md`, beside its code; only the repo-level map lives apart, at
+ * `<repo>/docs/architecture/`. In the repo, in git, landed and reviewed like code, and present for anyone who
+ * clones it. Documentation is an asset ABOUT the code, so it has to travel with the code and be reviewable in
+ * the same diff as the change that invalidated it. That is the whole reason it does not live in `.intentic/` the
+ * way an acceptance run's reports do: a run is point-in-time evidence, a document is a maintained artifact.
+ *
+ * Putting the package page IN the package is the strongest form of the same argument. A parallel tree is a
+ * second place to remember, and the one nobody has open while editing — the layout it replaced reached 61 stale
+ * pages out of 69, one of them 203 commits behind. A README cannot be forgotten in the same way: it is in the
+ * diff already.
  *
  * STAGING: `.intentic/docs/<repo>/`, mirroring the published tail exactly. Generation writes here first, for
  * three reasons that all matter:
@@ -16,7 +21,7 @@
  *   3. The owner reads it before it touches the repo. "Agent proposes, owner approves, it publishes" is already
  *      this workspace's shape for agent output (`.intentic/drafts/`), not a new idea.
  *
- * The two trees share their TAIL (`repo.json`, `<pkg>/doc.md`, …) so publishing is a copy per tail and never a
+ * The two trees share their TAIL (`repo.json`, `<pkg>/README.md`, …) so publishing is a copy per tail and never a
  * translation — and so a reviewer reading either tree is reading the same layout. */
 
 // Repo-relative. Sits beside `docs/user-stories` (what the product promises) as its structural sibling: what
@@ -27,18 +32,30 @@ export const DOCS_DIR = "docs/architecture";
 // `contributes.files` entry able to cover it.
 export const STAGING_ROOT = ".intentic/docs";
 
-/* The tails a document set is made of. The repo-level three are written once per repo; `doc.json`/`doc.md` are
- * written once per package, under the package's own dir.
+/* The tails a document set is made of. The repo-level three are written once per repo; a package page is written
+ * once per package, under the package's own dir.
  *
- * `index.json` is DERIVED — `intentic-docs check` regenerates it from the authored files, and nothing authors it
- * by hand. It exists so the browser can render the package list, its one-liners and its staleness in ONE fetch
- * instead of one per package; putting those one-liners in repo.json instead would duplicate a fact that doc.json
- * already owns and let the two drift. A generated file cannot drift from its own inputs. */
+ * There is NO per-package JSON sidecar. Everything one would have carried is derived by `intentic-docs` from the
+ * README and from git: the one-liner is its lead sentence, the anchors are its `## Key files` links, and how far
+ * the code has run ahead of it is a commit count. A field an author must remember to update is a field that goes
+ * wrong; a field computed from what they did update cannot.
+ *
+ * `index.json` is DERIVED — `intentic-docs check` regenerates it, and nothing authors it by hand. It exists so
+ * the browser can render the package list, its one-liners, its anchors and its staleness in ONE fetch instead of
+ * one per package. A generated file cannot drift from its own inputs. */
 export const REPO_DOC_TAIL = "repo.json";
 export const REPO_PROSE_TAIL = "repo.md";
 export const INDEX_TAIL = "index.json";
-export const packageDocTail = (dir: string): string => `${dir}/doc.json`;
-export const packageProseTail = (dir: string): string => `${dir}/doc.md`;
+export const README_TAIL = "README.md";
+export const packagePageTail = (dir: string): string => `${dir}/${README_TAIL}`;
+
+// The three the map is made of. Everything else in a set is a package page, and that is the whole distinction
+// publishing needs: a map tail lands under `docs/architecture/`, a page tail lands on the package itself.
+const MAP_TAILS: ReadonlySet<string> = new Set([REPO_DOC_TAIL, REPO_PROSE_TAIL, INDEX_TAIL]);
+
+/* A tail → where it lives inside the repository. This is the ONE place the two-destination layout is expressed;
+ * publishing is still a copy per tail, it just has two possible parents instead of one. */
+export const publishedTail = (tail: string): string => (MAP_TAILS.has(tail) ? `${DOCS_DIR}/${tail}` : tail);
 
 // A repo-relative path → workspace-root-relative. The workspace's own root repo is the empty string (the daemon
 // calls it "root" in git routes), and joining "" would produce a leading slash.
@@ -61,8 +78,10 @@ export const splitRepo = (path: string, repos: readonly string[]): { repo: strin
     return { repo: owner, dir: owner === `` ? path : path.slice(owner.length + 1) };
 };
 
+// Where a repo's MAP lives. Not where its package pages live — those are on the packages, which is what
+// `publishedTail` decides and why nothing composes this with a package tail.
 export const publishedDir = (repo: string): string => underRepo(repo, DOCS_DIR);
-export const publishedPath = (repo: string, tail: string): string => `${publishedDir(repo)}/${tail}`;
+export const publishedPath = (repo: string, tail: string): string => underRepo(repo, publishedTail(tail));
 
 // The staging key for a repo. The root repo needs a NAME here — it is a directory under STAGING_ROOT, and an
 // empty segment would collapse the path onto the root itself.

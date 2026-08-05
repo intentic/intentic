@@ -1,7 +1,8 @@
 # @intentic/desktop
 
-Drive a desktop from Node: capture the screen, move the pointer, click, type, press chords, scroll and drag —
-on Windows and Linux, with **no native modules**.
+Drive a desktop from Node, on Windows and Linux, with **no native modules**.
+
+Capture the screen, move the pointer, click, type, press chords, scroll and drag.
 
 ```ts
 import { desktop } from "@intentic/desktop";
@@ -61,3 +62,11 @@ silent misclicks.
 `BackSpace`, `Page_Up`, plus `ctrl`/`alt`/`shift`/`super` and the aliases people actually type — `enter`, `esc`,
 `win`, `cmd`) and each backend translates. Without it every caller would be platform-aware, which is the exact
 coupling this package exists to remove.
+
+## Key files
+
+- [src/index.ts](src/index.ts) — the public surface.
+- [src/input-linux.ts](src/input-linux.ts) / [src/input-windows.ts](src/input-windows.ts) — the two platform backends.
+- [src/screen.ts](src/screen.ts) — capturing the screen.
+- [src/keys.ts](src/keys.ts) — chord and key-name parsing, shared by both platforms.
+- [src/run.ts](src/run.ts) — how commands are invoked without a native module.

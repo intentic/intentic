@@ -14,3 +14,9 @@ A leaf dev dependency of every package — no runtime code. Change compiler-wide
 ## Conventions & gotchas
 
 - Editing a base config affects the whole repo — verify a full `pnpm build` after changes.
+
+## Key files
+
+- [tsconfig.base.json](tsconfig.base.json) — the settings every package inherits.
+- [tsconfig.vue.json](tsconfig.vue.json) — the Vue/`vue-tsc` variant.
+- [tsconfig.astro.json](tsconfig.astro.json) — the Astro variant, for the site.

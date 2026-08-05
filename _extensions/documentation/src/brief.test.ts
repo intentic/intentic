@@ -66,9 +66,16 @@ describe(`packageBrief`, () => {
         components: [component],
     });
 
-    it(`names the two files it may write and where they go`, () => {
-        expect(brief).toContain(`.intentic/docs/intentic/_libs/contract/doc.json`);
-        expect(brief).toContain(`.intentic/docs/intentic/_libs/contract/doc.md`);
+    it(`names the one file it may write, staged under the package's own path`, () => {
+        // The page IS the package's README. It still STAGES, though — publishing is what puts it in the package.
+        expect(brief).toContain(`.intentic/docs/intentic/_libs/contract/README.md`);
+        expect(brief).toContain(`## Write exactly one file`);
+    });
+
+    it(`spells out the two things the tool parses back out of the page`, () => {
+        // A page missing either is a package with no one-liner and no anchors anywhere in the app.
+        expect(brief).toContain(`## Key files`);
+        expect(brief).toContain(`becomes the package's one-liner`);
     });
 
     it(`inlines the component and its accent, so figures across the set agree`, () => {
@@ -86,9 +93,16 @@ describe(`packageBrief`, () => {
         expect(brief).toContain(`repo.json\` belongs to the map`);
     });
 
-    it(`takes provenance from this package's own revision, not the repository head`, () => {
-        expect(brief).toContain(`this package's own \`sourceRev\``);
-        expect(brief).toContain(`not the repository's \`head\``);
+    /* A package page has NO provenance to write — its date is the commit that lands it and its staleness is a
+     * commit count, both computed. Asking an agent for a field it cannot get right is how the previous layout
+     * ended up with 61 stale pages out of 69. */
+    it(`asks for no provenance, and says why there is none to give`, () => {
+        expect(brief).not.toContain(`"sourceRev"`);
+        expect(brief).toContain(`There is no provenance to write`);
+    });
+
+    it(`tells the package agent not to hand-write the facts the app computes`, () => {
+        expect(brief).toContain(`**Do not draw the facts.**`);
     });
 
     it(`rules out the API reference a coding model defaults to`, () => {
@@ -108,7 +122,7 @@ describe(`packageBrief`, () => {
         const bare = packageBrief({ repo: `r`, label: `r`, dir: `p`, glossary: [], components: [] });
         expect(bare).not.toContain(`This repository's vocabulary`);
         expect(bare).toContain(`\n\n## Where this package sits`);
-        expect(bare).toContain(`\n\n## Write exactly two files`);
+        expect(bare).toContain(`\n\n## Write exactly one file`);
         // No heading is ever glued to the line above it.
         expect(/[^\n]\n## /.test(bare)).toBe(false);
     });

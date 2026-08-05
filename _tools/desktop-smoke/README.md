@@ -1,7 +1,9 @@
 # @intentic/desktop-smoke
 
-The image that meets a desktop installer the way a user's machine does: a bare Debian with a virtual display
-and **no GUI libraries pre-installed**. Driven by `_tools/scripts/verify-desktop-install.sh`.
+The image that meets a desktop installer the way a user's machine does.
+
+A bare Debian with a virtual display and **no GUI libraries pre-installed**, driven by
+`_tools/scripts/verify-desktop-install.sh`.
 
 ```sh
 pnpm --filter @intentic/desktop-app stage:downloads          # build the artifacts
@@ -64,3 +66,8 @@ The Windows NSIS installer — running it needs Windows. Its *contents* are chec
 The hosted SPA does not load here either: `INTENTIC_APP_URL` points at a stub baked into the image, which keeps
 this tier hermetic. Whether the real app renders in WebKitGTK is the nightly tier's job
 (`_apps/desktop/src/../../..` → `nightly.yml`'s `e2e`).
+
+## Key files
+
+- [Dockerfile](Dockerfile) — the bare Debian image, deliberately missing the GUI libraries.
+- [smoke.sh](smoke.sh) — what the installer is put through once the image is up.

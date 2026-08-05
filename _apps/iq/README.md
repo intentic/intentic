@@ -135,3 +135,10 @@ The plugin's skill lives at [`plugin/skills/iq/SKILL.md`](plugin/skills/iq/SKILL
 ## License
 
 MIT
+
+## Key files
+
+- [src/commands](src/commands) — one file per verb; the CLI surface an agent actually types.
+- [src/app.ts](src/app.ts) — verb dispatch and intent detection for a bare query.
+- [src/lib](src/lib) — rendering results inside a token budget.
+- [src/cli.ts](src/cli.ts) — the entry point.

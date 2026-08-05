@@ -1,7 +1,8 @@
 # @intentic/extension-api
 
-The **extension-author contract** for the intentic app — the one SDK an extension programs against, and the
-only package (with `@intentic/extension-ui`) an extension is allowed to depend on besides
+The one SDK an extension programs against — the extension-author contract for the intentic app.
+
+With `@intentic/extension-ui`, one of only two packages an extension may depend on besides
 `@intentic/sandbox-contract`. Published to npm; it must stay free of app internals and must **not** pull in
 `@intentic/sandbox-contract` (that would invert the boundary). See the extension system in
 [ARCHITECTURE.md](../../ARCHITECTURE.md) for how the host loads and gates extensions.
@@ -42,3 +43,11 @@ separate "stable data API" to promote. `facts.ts` stays the stable surface only 
 `activate(api, context)` registers contributions and returns; `deactivate` is optional. A UI extension also
 ships a prebuilt single-file ESM `entry` bundle (built with `vue` and `@intentic/extension-api` external).
 The five UI extensions under [`_extensions/`](../../_extensions) are the working templates; start from one.
+
+## Key files
+
+- [src/api.ts](src/api.ts) — the handle an extension is given; the centre of this package.
+- [src/manifest.ts](src/manifest.ts) — every contribution point, and what declaring one means.
+- [src/permissions.ts](src/permissions.ts) — what an extension may reach, and the gate that enforces it.
+- [src/facts.ts](src/facts.ts) — the public facts a view's `detect()` answers from.
+- [src/route.ts](src/route.ts) — the query rules a view with internal navigation uses.

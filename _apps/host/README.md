@@ -1,7 +1,8 @@
 # @intentic/host
 
-The agent that runs on a **user's own computer** so their sandbox can work there — the machine half of the
-`host` capability (the sandbox half is `_apps/sandbox/src/hosts/`).
+The small program on your own computer that lets your sandbox work there.
+
+It is the machine half of the `host` capability; the sandbox half is `_apps/sandbox/src/hosts/`.
 
 ```
 your laptop                                    your sandbox
@@ -76,3 +77,12 @@ scopes), `audit.jsonl` (every call, kept even across an uninstall — it is the 
   [`@intentic/local-agent`](../../_libs/local-agent), shared with `@intentic/sync` and `@intentic/acp-bridge`.
   `src/autostart.ts` here is only this agent's spec — and it declares no macOS `launchAgent`, because the
   connection loop has never been run on a Mac. Opting in is three lines once someone has.
+
+## Key files
+
+- [src/app.ts](src/app.ts) — the machine agent's own server and its lifecycle.
+- [src/policy.ts](src/policy.ts) — what the sandbox is permitted to do on this machine; the security surface.
+- [src/tools](src/tools) — the capabilities exposed: commands, files, screen.
+- [src/connection.ts](src/connection.ts) — staying attached to the sandbox.
+- [src/audit.ts](src/audit.ts) — what was done on this machine, recorded.
+- [src/autostart.ts](src/autostart.ts) — installing as a background agent, per platform.

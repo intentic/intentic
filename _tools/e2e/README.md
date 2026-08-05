@@ -1,8 +1,10 @@
 # @intentic-app/e2e
 
-The browser smoke tier: Playwright drives the real Vue SPA + https API + Postgres + the **published sandbox
-daemon** (`ghcr.io/intentic/sandbox:stable`) running in loopback (no-auth) mode — the same
-image a user's browser meets, so a hand-mirrored `api-contract` schema that drifts from the daemon fails here.
+The browser smoke tier — Playwright against the whole stack, including the published daemon image.
+
+It drives the real Vue SPA, the https API, Postgres, and the **published sandbox daemon**
+(`ghcr.io/intentic/sandbox:stable`) in loopback (no-auth) mode — the same image a user's browser meets, so a
+hand-mirrored `api-contract` schema that drifts from the daemon fails here.
 
 ## What it proves
 
@@ -41,3 +43,11 @@ real infrastructure or real Discord lives in the gated tiers beside this one: `_
 (Cloudflare), `_apps/sandbox/src/discord.e2e.test.ts` (Discord + Whisper), and
 `_apps/cli/src/hermetic.e2e.test.ts` (the secret-free control-plane run). `ARCHITECTURE.md` → *What each tier
 needs* is the table.
+
+## Key files
+
+- [specs](specs) — the browser journeys themselves.
+- [stack.ts](stack.ts) — bringing the whole stack up, including the published daemon image.
+- [playwright.config.ts](playwright.config.ts) — projects, retries, and what runs where.
+- [global-setup.ts](global-setup.ts) — what must exist before any spec runs.
+- [fixtures](fixtures) — the data the journeys rest on.

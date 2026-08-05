@@ -10,6 +10,7 @@
 import { Button, cmp, Icon, Segmented } from "@intentic/extension-ui";
 import { computed, ref, watch } from "vue";
 import DocPage from "./DocPage.vue";
+import { packageFigures } from "./figures.js";
 import { host } from "./host.js";
 import { splitRepo } from "./paths.js";
 import { useDocs, type DocSource } from "./useDocs.js";
@@ -44,7 +45,7 @@ const packageQuery = usePackage(dir);
 // A page that exists only as a draft has to show the draft, or the tab renders empty for the one document that is
 // actually there. Published stays the default everywhere else — it is what the repository says.
 watch([hasStaged, set, packageQuery.data], ([staged, repoSet, page]) => {
-    const published = dir.value === undefined ? repoSet?.prose !== undefined : page?.prose !== undefined;
+    const published = dir.value === undefined ? repoSet?.prose !== undefined : page !== undefined;
     if (staged && !published && source.value === `published`) {
         source.value = `staged`;
     }
@@ -80,7 +81,7 @@ const openArea = (): void =>
              and the invitation goes where generation actually lives, because a run needs a scope and choosing one
              is a decision this tab has no business taking. -->
         <div
-            v-else-if="dir === undefined ? set?.prose === undefined : packageQuery.data.value?.prose === undefined"
+            v-else-if="dir === undefined ? set?.prose === undefined : packageQuery.data.value === undefined"
             class="min-h-0 flex-1 overflow-y-auto p-6 scrollbar-thin"
         >
             <div :class="cmp.emptyState()">
@@ -103,9 +104,9 @@ const openArea = (): void =>
             <DocPage
                 v-else
                 :key="dir"
-                :prose="packageQuery.data.value?.prose"
-                :anchors="packageQuery.data.value?.doc?.keyFiles ?? []"
-                :provenance="packageQuery.data.value?.doc?.provenance"
+                :prose="packageQuery.data.value"
+                :figures="packageFigures(dir, set?.index, set?.repoDoc)"
+                :anchors="staleness?.anchors ?? []"
                 :repo="repo"
                 :staleness="staleness"
             />

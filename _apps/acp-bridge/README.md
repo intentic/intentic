@@ -1,7 +1,8 @@
 # @intentic/acp-bridge
 
-Drive the agents in your [intentic](https://intentic.dev) sandbox — Claude, Codex, Grok, or any installed
-ACP agent — from Zed, JetBrains, or any editor speaking the
+Drive the agents in your [intentic](https://intentic.dev) sandbox from your own editor.
+
+Claude, Codex, Grok or any installed ACP agent, reached from Zed, JetBrains, or anything else speaking the
 [Agent Client Protocol](https://agentclientprotocol.com). The bridge is a thin stdio adapter the editor
 spawns locally; the agent itself runs remotely in your sandbox, and your
 [synced folder](https://intentic.dev/docs/desktop-sync) mirrors its edits back so diffs and jump-to-file
@@ -45,3 +46,11 @@ Alternatively run `npx @intentic/acp-bridge login` once — credentials persist 
   terminal capabilities (your synced folder is the local mirror).
 - Cancel stops the stream (soft — the sandbox turn may finish server-side). Revoking the token in the app
   cuts the bridge off immediately.
+
+## Key files
+
+- [src/bridge.ts](src/bridge.ts) — the adapter itself: editor on stdio, sandbox over the wire.
+- [src/translate.ts](src/translate.ts) — ACP messages to and from the daemon's own shapes.
+- [src/daemon-client.ts](src/daemon-client.ts) — the remote half of the connection.
+- [src/login.ts](src/login.ts) / [src/config.ts](src/config.ts) — pairing an editor with a sandbox, and remembering it.
+- [src/cli.ts](src/cli.ts) — what the editor actually spawns.

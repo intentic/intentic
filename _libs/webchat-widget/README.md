@@ -37,3 +37,10 @@ overrides it for a site that fronts the sandbox behind its own proxy.
 The daemon takes this package as a **prod dependency** and resolves `dist/widget.js` through its export, so
 `pnpm --filter @intentic/sandbox deploy --prod` carries the built bundle into the image with no Dockerfile
 change. The other half of the wire is `_apps/sandbox/src/webchat/`.
+
+## Key files
+
+- [src/element.ts](src/element.ts) — the custom element a site embeds.
+- [src/transport.ts](src/transport.ts) — the connection back to the sandbox.
+- [src/identity.ts](src/identity.ts) / [src/challenge.ts](src/challenge.ts) — who a visitor is, and the abuse gate.
+- [src/main.ts](src/main.ts) — the entry the script tag loads.

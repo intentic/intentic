@@ -18,6 +18,14 @@
 const ARCHITECTURE = `docs/architecture`;
 const STAGING = `.intentic/docs`;
 
+/* What a page carries before it becomes a README. Authored here only so the fixture can compose the page and the
+ * index from ONE source; neither shape exists on disk in a real repository. */
+interface PageDoc {
+    readonly dir: string;
+    readonly oneLiner: string;
+    readonly keyFiles: readonly { readonly path: string; readonly line?: number; readonly what: string }[];
+}
+
 const WEB_REV = `4f1c8ab2d9e6f0713c5a8b47d1e2f9c0a6b3d84e`;
 const API_REV = `9b2d10e4c7a1f3b85d6e0c29a4f7b1d3e8c05a26`;
 
@@ -133,7 +141,7 @@ test that clicks a plan has to wait for that fetch, and the two flaky tests this
 same race written twice.
 `;
 
-const WEB_PAGES: readonly { readonly dir: string; readonly doc: object; readonly prose: string }[] = [
+const WEB_PAGES: readonly { readonly dir: string; readonly doc: PageDoc; readonly prose: string }[] = [
     {
         dir: `src/pricing`,
         doc: {
@@ -222,6 +230,9 @@ for exactly this and is the reason the fixture waits on a rendered price rather 
     },
 ];
 
+/* The index is GENERATED in a real repository — `intentic-docs check` reads each README and the package graph and
+ * writes this. The recording has no tool run, so it is authored here, but every field is one the tool would have
+ * computed: the one-liners come from the pages above, and the measures are what the app draws its figures from. */
 const WEB_INDEX = (generatedAt: number): string =>
     `${JSON.stringify(
         {
@@ -230,31 +241,50 @@ const WEB_INDEX = (generatedAt: number): string =>
             entries: [
                 {
                     dir: `src/pricing`,
-                    oneLiner: `The three plans, and the button that starts a subscription.`,
+                    oneLiner: WEB_PAGES[0]?.doc.oneLiner,
                     component: `storefront`,
-                    sourceRev: WEB_REV,
+                    anchors: WEB_PAGES[0]?.doc.keyFiles,
+                    files: 5,
+                    loc: 1120,
+                    hasTests: false,
+                    readmeRev: WEB_REV,
+                    updatedAt: generatedAt,
                     // The one page the recording marks stale, because the fleet board next door is editing exactly
                     // this directory — which is what staleness looks like when it is honest rather than decorative.
                     stale: true,
-                    reason: `3 commits have touched this package since it was documented`,
+                    reason: `3 commits have touched this package since its README was written`,
                     behind: 3,
                 },
                 {
                     dir: `src/lib`,
-                    oneLiner: `The thin client between the pages and our own API.`,
+                    oneLiner: WEB_PAGES[1]?.doc.oneLiner,
                     component: `checkout`,
-                    sourceRev: WEB_REV,
+                    anchors: WEB_PAGES[1]?.doc.keyFiles,
+                    files: 3,
+                    loc: 640,
+                    hasTests: false,
+                    readmeRev: WEB_REV,
+                    updatedAt: generatedAt,
                     stale: false,
                     behind: 0,
                 },
                 {
                     dir: `tests`,
-                    oneLiner: `The end-to-end checks that guard the path to a sale.`,
+                    oneLiner: WEB_PAGES[2]?.doc.oneLiner,
                     component: `suite`,
-                    sourceRev: WEB_REV,
+                    anchors: WEB_PAGES[2]?.doc.keyFiles,
+                    files: 3,
+                    loc: 660,
+                    hasTests: true,
+                    readmeRev: WEB_REV,
+                    updatedAt: generatedAt,
                     stale: false,
                     behind: 0,
                 },
+            ],
+            edges: [
+                { from: `src/pricing`, to: `src/lib`, dev: false },
+                { from: `tests`, to: `src/pricing`, dev: true },
             ],
             orphans: [],
             undocumented: [],
@@ -325,7 +355,7 @@ query written without that filter quietly returns people who asked to be forgott
 it is the single most important thing to know before writing a query here.
 `;
 
-const API_PAGES: readonly { readonly dir: string; readonly doc: object; readonly prose: string }[] = [
+const API_PAGES: readonly { readonly dir: string; readonly doc: PageDoc; readonly prose: string }[] = [
     {
         dir: `src/routes`,
         doc: {
@@ -387,9 +417,34 @@ const API_INDEX = (generatedAt: number): string =>
             repo: `api`,
             generatedAt,
             entries: [
-                { dir: `src/routes`, oneLiner: `Every route the storefront and Stripe can call.`, component: `http`, sourceRev: API_REV, stale: false, behind: 0 },
-                { dir: `src/db`, oneLiner: `Where orders, users and subscriptions are kept.`, component: `data`, sourceRev: API_REV, stale: false, behind: 0 },
+                {
+                    dir: `src/routes`,
+                    oneLiner: API_PAGES[0]?.doc.oneLiner,
+                    component: `http`,
+                    anchors: API_PAGES[0]?.doc.keyFiles,
+                    files: 6,
+                    loc: 890,
+                    hasTests: true,
+                    readmeRev: API_REV,
+                    updatedAt: generatedAt,
+                    stale: false,
+                    behind: 0,
+                },
+                {
+                    dir: `src/db`,
+                    oneLiner: API_PAGES[1]?.doc.oneLiner,
+                    component: `data`,
+                    anchors: API_PAGES[1]?.doc.keyFiles,
+                    files: 4,
+                    loc: 520,
+                    hasTests: false,
+                    readmeRev: API_REV,
+                    updatedAt: generatedAt,
+                    stale: false,
+                    behind: 0,
+                },
             ],
+            edges: [{ from: `src/routes`, to: `src/db`, dev: false }],
             orphans: [],
             undocumented: [],
         },
@@ -397,11 +452,23 @@ const API_INDEX = (generatedAt: number): string =>
         2,
     )}\n`;
 
-const pageFiles = (base: string, pages: readonly { readonly dir: string; readonly doc: object; readonly prose: string }[], generatedAt: number, rev: string) =>
-    pages.flatMap((page): [string, string][] => [
-        [`${base}/${page.dir}/doc.json`, `${JSON.stringify({ ...page.doc, provenance: { generatedAt, sourceRev: rev, model: `claude-opus-5` } }, undefined, 2)}\n`],
-        [`${base}/${page.dir}/doc.md`, page.prose],
-    ]);
+/* One page → one file, because a package's document IS its README. The authored `doc` is not written anywhere:
+ * in a real repository the tool READS the one-liner and the anchors back out of the README, so the fixture
+ * composes them INTO the page rather than shipping them beside it. That keeps the recording honest about where
+ * this data comes from, and it means the fixture's index cannot disagree with its pages.
+ *
+ * The one-liner goes directly under the heading, which is the position the parser takes it from, and the anchors
+ * become a `## Key files` section with package-relative links — the same links that have to work on GitHub. */
+const pageFiles = (base: string, pages: readonly { readonly dir: string; readonly doc: PageDoc; readonly prose: string }[]) =>
+    pages.map((page): [string, string] => {
+        const [heading, ...rest] = page.prose.split(`\n\n`);
+        const keyFiles = page.doc.keyFiles.map((anchor) => {
+            const relative = anchor.path.startsWith(`${page.dir}/`) ? anchor.path.slice(page.dir.length + 1) : anchor.path;
+            const target = anchor.line === undefined ? relative : `${relative}#L${anchor.line}`;
+            return `- [${relative}](${target}) — ${anchor.what}`;
+        });
+        return [`${base}/${page.dir}/README.md`, [heading, page.doc.oneLiner, ...rest, `## Key files`, `${keyFiles.join(`\n`)}\n`].join(`\n\n`)];
+    });
 
 export const documentationFiles = (now: number): [string, string][] => {
     // Published two days ago; the draft came out of a run twenty minutes before the visitor arrived, which is why
@@ -412,11 +479,13 @@ export const documentationFiles = (now: number): [string, string][] => {
         [`web/${ARCHITECTURE}/repo.json`, WEB_REPO_DOC(published)],
         [`web/${ARCHITECTURE}/repo.md`, WEB_REPO_PROSE],
         [`web/${ARCHITECTURE}/index.json`, WEB_INDEX(published)],
-        ...pageFiles(`web/${ARCHITECTURE}`, WEB_PAGES, published, WEB_REV),
+        // A PUBLISHED package page sits on the package, not under the docs directory — that is the layout.
+        ...pageFiles(`web`, WEB_PAGES),
 
         [`${STAGING}/api/repo.json`, API_REPO_DOC(drafted)],
         [`${STAGING}/api/repo.md`, API_REPO_PROSE],
         [`${STAGING}/api/index.json`, API_INDEX(drafted)],
-        ...pageFiles(`${STAGING}/api`, API_PAGES, drafted, API_REV),
+        // A STAGED one still mirrors under the staging root, which is what makes publishing a copy per tail.
+        ...pageFiles(`${STAGING}/api`, API_PAGES),
     ];
 };

@@ -12,10 +12,10 @@ The **state resolver**: turns an `IntentSet` into the desired state — a `Desir
 ## Key files
 
 - [src/state.ts](src/state.ts) — `resolveState`: intent → `DesiredStateGraph`.
-- [src/catalog.ts](src/catalog.ts) — `defaultCatalog`, `Catalog`/`Option` (what satisfies each capability).
-- [src/emit.ts](src/emit.ts) — `emit` + `Assignment` (build the nodes for one assignment); `emit-github.ts` for the GitHub stack.
-- [src/platform.ts](src/platform.ts) / [src/app.ts](src/app.ts) / [src/route.ts](src/route.ts) / [src/workspace.ts](src/workspace.ts) — per-area node derivation (control plane, app plane, DNS routes, dev workspace sandbox).
-- [src/ids.ts](src/ids.ts) / [src/identity.ts](src/identity.ts) — id helpers, `adminUsername`.
+- [src/lib/catalog.ts](src/lib/catalog.ts) — `defaultCatalog`, `Catalog`/`Option` (what satisfies each capability).
+- [src/emit/emit.ts](src/emit/emit.ts) — `emit` + `Assignment` (build the nodes for one assignment).
+- [src/resolvers](src/resolvers) — per-area node derivation: `platform.ts`, `app.ts`, `route.ts`, `workspace.ts` (control plane, app plane, DNS routes, dev workspace sandbox).
+- [src/lib/ids.ts](src/lib/ids.ts) / [src/resolvers/identity.ts](src/resolvers/identity.ts) — id helpers, `adminUsername`.
 
 ## How it fits
 

@@ -54,3 +54,10 @@ GITHUB_TOKEN=… REGISTRY_DIR=/path/to/registry-checkout node dist/cli.js
 
 `SCANNED_AT` overrides the timestamp so a re-run against a fixed input produces a fixed output. A token is
 required — the search and contents endpoints are rate-limited to approximately nothing without one.
+
+## Key files
+
+- [src/scan.ts](src/scan.ts) — finding extensions and resolving each to a sha.
+- [src/github.ts](src/github.ts) — the API half.
+- [src/outputs.ts](src/outputs.ts) — what the job writes.
+- [src/cli.ts](src/cli.ts) — the entry point the nightly job runs.

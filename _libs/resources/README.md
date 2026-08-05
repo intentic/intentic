@@ -1,6 +1,8 @@
 # @intentic/resources
 
-The closed **resource vocabulary** shared by the state resolver (which emits these kinds), the engine (which reconciles them), and the providers (which implement them). The graph IR treats a node's `type` as an opaque string; this package is the single authority on which kinds exist and what each produces. Depends only on [`@intentic/graph`](../graph).
+The closed list of things that can be deployed — the resource vocabulary, and the single authority on it.
+
+Shared by the state resolver (which emits these kinds), the engine (which reconciles them), and the providers (which implement them). The graph IR treats a node's `type` as an opaque string; this package says which kinds exist and what each produces. Depends only on [`@intentic/graph`](../graph).
 
 ## Responsibilities
 

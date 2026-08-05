@@ -12,11 +12,11 @@ The stateless **reconcile engine**. It walks a `DesiredStateGraph` in dependency
 
 ## Key files
 
-- [src/apply.ts](src/apply.ts) / [src/plan.ts](src/plan.ts) / [src/reconcile-loop.ts](src/reconcile-loop.ts) — the converge/dry-run/loop logic.
+- [src/reconcile/apply.ts](src/reconcile/apply.ts) / [src/reconcile/plan.ts](src/reconcile/plan.ts) / [src/reconcile/reconcile-loop.ts](src/reconcile/reconcile-loop.ts) — the converge/dry-run/loop logic.
 - [src/provider.ts](src/provider.ts) / [src/types.ts](src/types.ts) — the SPI and engine types (`Provider`, `DiffResult`, `EngineConfig`, `Step`, `Orphan`).
 - [src/readiness.ts](src/readiness.ts) — `httpProbe` / `waitReady` (readiness gates).
 - [src/resolve-inputs.ts](src/resolve-inputs.ts) — resolve refs/secrets into concrete provider inputs.
-- [src/orphans.ts](src/orphans.ts) / [src/prune.ts](src/prune.ts) — drift cleanup; [src/providers/](src/providers) — `createFakeProviders` (in-memory SPI for tests).
+- [src/reconcile/orphans.ts](src/reconcile/orphans.ts) / [src/reconcile/prune.ts](src/reconcile/prune.ts) — drift cleanup; [src/providers](src/providers) — `createFakeProviders` (in-memory SPI for tests).
 
 ## How it fits
 

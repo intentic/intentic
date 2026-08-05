@@ -1,8 +1,9 @@
 # @intentic/lsp
 
-An **agent-native TypeScript CLI** over the TS language service — `lsp rename <file> <symbol> <newName>`
-(project-wide rename) and `lsp diag <file...>` (syntactic + semantic diagnostics). Despite the name it is
-**not** a language-server host: nothing connects to it over LSP. TypeScript/JavaScript only.
+An agent-native CLI over the TypeScript language service: project-wide rename, and diagnostics.
+
+`lsp rename <file> <symbol> <newName>` and `lsp diag <file...>`. Despite the name it is **not** a language-server
+host — nothing connects to it over LSP. TypeScript and JavaScript only.
 
 **It refuses rather than guesses.** A tsconfig whose `extends` chain cannot be resolved, or a program whose
 type foundations (`@types`, global types) did not load, makes TypeScript fall back to decade-old defaults and
@@ -23,3 +24,11 @@ falsely reported as missing modules.
 file ([settings/skills](../sandbox/src/settings)). The one library surface is `@intentic/lsp/client`
 (node-builtins only, no compiler in the importer's heap), which the sandbox daemon uses for post-edit
 diagnostics feedback.
+
+## Key files
+
+- [src/rename.ts](src/rename.ts) — project-wide rename, and what it refuses to do.
+- [src/diag.ts](src/diag.ts) — syntactic and semantic diagnostics.
+- [src/project.ts](src/project.ts) — resolving a tsconfig into a program; where "refuse rather than guess" lives.
+- [src/daemon.ts](src/daemon.ts) — the warm process that makes a second call fast.
+- [src/cli.ts](src/cli.ts) — the entry point.

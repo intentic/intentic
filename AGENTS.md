@@ -11,6 +11,26 @@
 - Guard invariants by discovery, not enumeration – a test that recognizes violations by their SHAPE anywhere
   in the repo; a hardcoded file list repeats the miss it exists to prevent.
 
+## Documentation
+
+**A package is documented by its own `README.md`, and that README is updated in the same commit as the change
+that invalidated it.** There is no second place to remember: the repository-level map lives in
+`docs/architecture/` (`repo.json`, `repo.md`, and a generated `index.json`), and nothing else does.
+
+- The `# H1` and the **one sentence** under it are parsed — that sentence becomes the package's one-liner
+  wherever it is named without being opened. `## Key files` is parsed too: three to six package-relative links,
+  each with a reason, each of which must resolve. Everything else on the page is free-form.
+- **Do not hand-write facts.** Line counts, file counts, test presence and dependency edges are computed by
+  `intentic-docs` and drawn by the app above your prose. A figure fence in a README is for something the
+  dependency graph cannot say — a request's path, a state machine, an ordering.
+- Nothing carries provenance. How far the code has run ahead of its page is the number of commits that touched
+  the package since its README last changed, so updating them together is what keeps it at zero.
+- `intentic-docs validate` and `intentic-docs check --write` are on your PATH; the shipped `documenting` skill
+  has the house style.
+
+What does *not* need a documentation edit: renaming a local, adding a test, fixing a bug the page never
+described, changing an implementation detail it deliberately does not mention.
+
 ## Before you finish a turn
 
 Run **`pnpm verify`** — `pnpm typecheck` and then every package's suite. Both halves run inside an agent

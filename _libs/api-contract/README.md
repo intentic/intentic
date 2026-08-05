@@ -1,6 +1,8 @@
 # @intentic-app/api-contract
 
-The **shared oRPC contract + Zod schemas** — the single source of truth for the API surface, consumed by both the backend ([`@intentic-app/api`](../../_apps/api), which `implement`s it) and the web client ([`@intentic-app/web`](../../_apps/web), which calls it). No codegen: the TypeScript source *is* the contract, so request/response types stay in lockstep across the wire.
+The single source of truth for the platform's API surface — the oRPC contract and its Zod schemas.
+
+Consumed by both the backend ([`@intentic-app/api`](../../_apps/api), which `implement`s it) and the web client ([`@intentic-app/web`](../../_apps/web), which calls it). No codegen: the TypeScript source *is* the contract, so request/response types stay in lockstep across the wire.
 
 ## Responsibilities
 

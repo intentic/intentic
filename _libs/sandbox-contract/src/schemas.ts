@@ -4964,7 +4964,8 @@ export type ProbeResult = z.infer<typeof ProbeResultSchema>;
 
 // One workspace package as its manifest declares it — what the daemon already reads to build the dependency
 // graph, carried through so chores can reason about the repo's own shape without a probe. `documented` is the
-// one derived field: whether docs/architecture/<dir>/doc.md exists, a stat per package.
+// one derived field: whether <dir>/README.md exists, a stat per package. A package's architecture document IS
+// its README in this workspace, which is what makes that a stat on the package itself rather than a lookup.
 export const ChorePackageSchema = z.object({
     dir: z.string(),
     name: z.string(),
@@ -4993,8 +4994,10 @@ export type ChorePackage = z.infer<typeof ChorePackageSchema>;
  * boolean where the paths themselves are worth showing — a chore that says "not applicable: no Dockerfile" is
  * useful, and one that says "3 Dockerfiles: ./Dockerfile, _apps/web/Dockerfile, …" is more so. */
 export const ChoreShapeSchema = z.object({
-    // Architecture documents that actually exist (docs/architecture/**/doc.md), capped — the count is what
-    // matters, and the drift survey needs to know there is something to re-read.
+    // The repository MAP, when one exists (docs/architecture/*.md), capped — the count is what matters, and the
+    // drift survey needs to know there is something to re-read. Package pages are READMEs and are counted per
+    // package by `ChorePackage.documented`; a repo with a map has been through the documentation flow at all,
+    // which is the question this gate actually asks.
     docs: z.array(z.string()),
     dockerfiles: z.array(z.string()),
     // CI pipeline definitions: .github/workflows/*.yml, .gitlab-ci.yml, and the other single-file conventions.

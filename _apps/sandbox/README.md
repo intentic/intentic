@@ -11,12 +11,11 @@ The **per-project AI-agent dev daemon** — a Docker image that runs as the proj
 
 ## Key files
 
-- [src/daemon.ts](src/daemon.ts) — the Hono HTTP API + request schemas.
-- [src/agent.ts](src/agent.ts) — `runAgent` + the `AgentEvent` union (`session`/`delta`/`tool`/`error`/`done`); wraps the Claude Agent SDK.
-- [src/dev-server.ts](src/dev-server.ts) — spawns/watches the app dev server; `/preview` status.
-- [src/intentic-runner.ts](src/intentic-runner.ts) — runs the `intentic` CLI and parses its ndjson.
-- [src/git.ts](src/git.ts) — status/commit/push; [src/workspace.ts](src/workspace.ts) — the three-repo layout (intent / desired-state / monorepo).
-- [src/main.ts](src/main.ts) — entrypoint: builds the workspace + dev server and serves the daemon.
+- [src/app.ts](src/app.ts) — the Hono HTTP API: every route the browser and the CLI reach the daemon through.
+- [src/agent](src/agent) — **singular**: one conversation. The turn loop, its tools, steering, terminals and diagnostics.
+- [src/agents](src/agents) — **plural**: the fleet. The registry, `worktrees.ts`, `isolation.ts`, `land.ts`, `origins.ts`.
+- [src/git/git.routes.ts](src/git/git.routes.ts) — status/commit/push over the wire; [src/workspace](src/workspace) — the repo layout the daemon serves.
+- [src/composition.ts](src/composition.ts) — what is wired to what; [src/main.ts](src/main.ts) — the entrypoint that builds it and serves.
 
 ## How it fits
 

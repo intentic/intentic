@@ -171,7 +171,8 @@ describe(`package signals`, () => {
             "pnpm-workspace.yaml": `packages:\n  - "_libs/*"\n`,
             "_libs/one/package.json": JSON.stringify({ name: `@x/one`, engines: { node: `>=22` }, dependencies: { zod: `^4` }, devDependencies: { vitest: `^2` } }),
             "_libs/two/package.json": JSON.stringify({ name: `@x/two` }),
-            "docs/architecture/_libs/one/doc.md": `# one`,
+            // A package's architecture document is its own README, so `documented` is a stat on the package dir.
+            "_libs/one/README.md": `# one`,
         });
         expect(packageSignals(dir)).toEqual([
             { dir: `_libs/one`, name: `@x/one`, engines: { node: `>=22` }, dependencies: [`zod`], devDependencies: [`vitest`], documented: true },
@@ -201,15 +202,15 @@ describe(`repo shape`, () => {
             "_apps/web/web.Dockerfile": `FROM nginx`,
             ".github/workflows/ci.yml": `on: push`,
             ".github/workflows/release.yaml": `on: tag`,
+            // The MAP is what `docs` counts. Package pages are READMEs, counted per package by `packageSignals`.
             "docs/architecture/repo.md": `# repo`,
-            "docs/architecture/_libs/one/doc.md": `# one`,
         });
         const found = choreShape(dir);
         expect(found.lockfile).toBe(true);
         expect(found.packageManifest).toBe(true);
         expect(found.dockerfiles.toSorted()).toEqual([`Dockerfile`, `_apps/web/web.Dockerfile`]);
         expect(found.ci.toSorted()).toEqual([`.github/workflows/ci.yml`, `.github/workflows/release.yaml`]);
-        expect(found.docs).toHaveLength(2);
+        expect(found.docs).toEqual([`repo.md`]);
     });
 
     test(`an empty repository rules everything out rather than guessing`, async () => {

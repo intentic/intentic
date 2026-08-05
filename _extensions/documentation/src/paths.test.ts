@@ -6,9 +6,11 @@ import {
     DOCS_DIR,
     INDEX_TAIL,
     mapConversationId,
-    packageDocTail,
+    packagePageTail,
     publishedPath,
+    README_TAIL,
     REPO_DOC_TAIL,
+    REPO_PROSE_TAIL,
     runIdAt,
     runPrefix,
     slugOf,
@@ -44,11 +46,24 @@ describe(`splitRepo`, () => {
 });
 
 describe(`the two document trees`, () => {
-    it(`mirrors published and staged tails so publishing is a copy, never a translation`, () => {
-        const tail = packageDocTail(`_libs/graph`);
-        expect(publishedPath(`intentic`, tail)).toBe(`intentic/docs/architecture/_libs/graph/doc.json`);
-        expect(stagingPath(`intentic`, tail)).toBe(`.intentic/docs/intentic/_libs/graph/doc.json`);
-        // The tail — the part publish carries across — is identical on both sides.
+    /* A package's page is its own README, in the package — while the MAP still lives under `docs/architecture/`.
+     * That split is the whole layout, and it is expressed once, here, so publishing stays a copy per tail. */
+    it(`publishes a package page onto the package, not into the docs directory`, () => {
+        const tail = packagePageTail(`_libs/graph`);
+        expect(publishedPath(`intentic`, tail)).toBe(`intentic/_libs/graph/README.md`);
+        expect(publishedPath(``, tail)).toBe(`_libs/graph/README.md`);
+    });
+
+    it(`publishes the map's own tails under the docs directory`, () => {
+        expect(publishedPath(`intentic`, REPO_DOC_TAIL)).toBe(`intentic/docs/architecture/repo.json`);
+        expect(publishedPath(`intentic`, REPO_PROSE_TAIL)).toBe(`intentic/docs/architecture/repo.md`);
+        expect(publishedPath(`intentic`, INDEX_TAIL)).toBe(`intentic/docs/architecture/index.json`);
+    });
+
+    it(`mirrors staged tails so publishing is a copy, never a translation`, () => {
+        const tail = packagePageTail(`_libs/graph`);
+        expect(stagingPath(`intentic`, tail)).toBe(`.intentic/docs/intentic/_libs/graph/README.md`);
+        // The tail — the part publish carries across — is the end of the path on both sides.
         expect(publishedPath(`intentic`, tail).endsWith(tail)).toBe(true);
         expect(stagingPath(`intentic`, tail).endsWith(tail)).toBe(true);
     });
@@ -63,8 +78,8 @@ describe(`the two document trees`, () => {
 
     it(`keeps every staged path under one prefix, which is what makes the file-change push declarable`, () => {
         // contributes.files declares `.intentic/docs/` and matching is by prefix; a staged path escaping it would
-        // simply never invalidate the view.
-        for (const path of [stagingPath(`a/b`, INDEX_TAIL), stagingPath(``, REPO_DOC_TAIL), stagingPath(`x`, packageDocTail(`p/q`))]) {
+        // simply never invalidate the view. A package page stages here too — only PUBLISHING sends it elsewhere.
+        for (const path of [stagingPath(`a/b`, INDEX_TAIL), stagingPath(``, REPO_DOC_TAIL), stagingPath(`x`, packagePageTail(`p/q`))]) {
             expect(path.startsWith(`${STAGING_ROOT}/`)).toBe(true);
         }
     });
@@ -124,5 +139,11 @@ describe(`bin/intentic-docs constants`, () => {
 
     it(`declares the same staging root as paths.ts`, () => {
         expect(declared(`STAGING_ROOT`)).toBe(STAGING_ROOT);
+    });
+
+    // The tool decides which directories are documented by looking for this filename, and the browser reads the
+    // page back from it. They disagreeing would show up as "no documentation yet" on a package that has one.
+    it(`declares the same page filename as paths.ts`, () => {
+        expect(declared(`README_TAIL`)).toBe(README_TAIL);
     });
 });

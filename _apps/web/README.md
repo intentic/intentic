@@ -64,3 +64,12 @@ the whole point of the lean-core split — see the extension system in [ARCHITEC
 [src/core-views/coreViews.ts](src/core-views/coreViews.ts) (`infrastructure`, `live-status`, `directory-ui`)
 that are coupled to platform/onboarding internals a clean extension must not reach. New client state for a
 core surface: a composable exposing a module-level `ref`.
+
+## Key files
+
+- [src/pages](src/pages) — one file per route; the map of the whole app.
+- [src/composables](src/composables) — where the state actually lives: `chat/`, `agents/`, `terminal/`, `workspace/`, `sandbox/`.
+- [src/chat](src/chat) — the conversation panel, its tabs and tool cards.
+- [src/agents](src/agents) — the fleet board: cards, detail, review.
+- [src/extension-host](src/extension-host) — how an extension's views reach the app.
+- [src/router/index.ts](src/router/index.ts) — the full route table.

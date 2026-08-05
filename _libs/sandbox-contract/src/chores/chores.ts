@@ -427,7 +427,9 @@ const duplication: Chore = {
     done: `Done when every clone in the report has either a named extraction or a one-line reason it should stay.`,
 };
 
-/* DOCUMENTATION. The evidence is a package with no architecture document, which sounds like a coverage statistic
+/* DOCUMENTATION. The evidence is a package with no README — which IS its architecture document in this
+ * workspace, so this is a stat on the package directory rather than a lookup in a parallel tree. It sounds like
+ * a coverage statistic
  * and would be one if the rail read it directly. It does not: the digest is the SET of undocumented package
  * directories, so a long-standing backlog goes quiet after it is seen once, and a package appearing that nothing
  * explains is an event that speaks. That is the whole difference between this being useful and being a nag. */
@@ -435,9 +437,9 @@ const documentation: Chore = {
     id: `documentation-refresh`,
     title: `Document what nothing explains`,
     icon: `file-edit`,
-    description: `Packages in this repository with no architecture document — new ones first.`,
+    description: `Packages in this repository with no README — new ones first.`,
     kind: `drifting`,
-    criterion: `A workspace package has no docs/architecture document.`,
+    criterion: `A workspace package has no README.`,
     applies: (signals) => (signals.packages.length > 0 ? undefined : `not a workspace`),
     stance: `act`,
     needs: [],
@@ -454,7 +456,7 @@ const documentation: Chore = {
             severity: `info`,
             why:
                 `${plural(undocumented.length, `package`)} of ${context.signals.packages.length} in ${repoLabel(context.repo)} have no ` +
-                `docs/architecture document: ${undocumented.map((entry) => entry.dir).join(`, `)}.`,
+                `README: ${undocumented.map((entry) => entry.dir).join(`, `)}.`,
         };
     },
     diagnosis: `A package nobody can read the shape of gets worked in by guesswork, and the guesses accumulate.`,
@@ -1073,8 +1075,10 @@ const deprecated = survey({
  * re-read, and the first thing an owner of a fresh workspace sees is an offer to re-read documentation they have
  * never written. That is not a chore being wrong about a threshold — it is the surface admitting it never looked.
  *
- * Note which fact it gates on: the DOCUMENTS, not the directory. An empty `docs/architecture/` is a directory
- * somebody made and never filled, and a gate on the directory would put the chore back exactly where it started. */
+ * Note which fact it gates on: the MAP, not the directory. An empty `docs/architecture/` is a directory somebody
+ * made and never filled, and a gate on the directory would put the chore back exactly where it started. The
+ * survey then reads the package READMEs too — they are the package pages — but a repo with no map has not been
+ * documented at all, and that is the case worth staying quiet for. */
 const documentationDrift = survey({
     id: `documentation-drift`,
     title: `Re-read the documentation against the code`,

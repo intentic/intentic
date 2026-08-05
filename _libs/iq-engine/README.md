@@ -1,8 +1,9 @@
 # @intentic/iq-engine
 
-The search engine behind the [`iq`](../../_apps/iq) CLI: a disk index (`node:sqlite`) fused across
-**lexical** (ripgrep), **structural** (ast-grep), **semantic** (local embed + rerank), and **git** engines,
-with rank fusion and a token-budget renderer. This is the heavy lib of the iq cluster.
+The search engine behind the [`iq`](../../_apps/iq) CLI, and the heavy lib of the iq cluster.
+
+A disk index (`node:sqlite`) fused across **lexical** (ripgrep), **structural** (ast-grep), **semantic** (local
+embed + rerank) and **git** engines, with rank fusion and a token-budget renderer.
 
 Two engines answer "orient me" rather than "find X", and read the index rather than searching it:
 [engines/map.ts](src/engines/map.ts) PageRanks files over the import graph — specifiers captured by
@@ -18,3 +19,12 @@ codebase-health panel from it. One ranking, two presentations — the verbs keep
 `composition.ts`) and calls `run` / `health` in-process for `/workspace/search` and `/workspace/health`, which
 is the only reason app code imports this package at all. Nothing else should: every other path to these
 results is the `sandbox-contract` wire shape (`WorkspaceSearch*`, `WorkspaceHealth*`), never an import.
+
+## Key files
+
+- [src/verbs](src/verbs) — one file per search verb; the surface `iq` dispatches into.
+- [src/engines](src/engines) — the four searches: lexical, structural, semantic, git.
+- [src/plan](src/plan) — intent detection and rank fusion; how four answers become one.
+- [src/indexer](src/indexer) — building and updating the disk index.
+- [src/render](src/render) — fitting results into a token budget.
+- [src/store](src/store) — the `node:sqlite` index itself.

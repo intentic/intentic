@@ -19,10 +19,15 @@ import type { Services } from "../composition.js";
 // carried per repo on a route the rail badge polls.
 const RANKING_LIMIT = 12;
 
-// The architecture document a package is expected to have. Named here rather than imported from the documentation
-// extension: that extension owns generating and publishing them, this only asks whether one EXISTS, and a daemon
-// route reaching into a browser extension's module for a path constant would be the wrong direction entirely.
-const docPath = (repoDir: string, packageDir: string): string => join(repoDir, "docs", "architecture", packageDir, "doc.md");
+/* The architecture document a package is expected to have — its own README. Named here rather than imported from
+ * the documentation extension: that extension owns generating and publishing them, this only asks whether one
+ * EXISTS, and a daemon route reaching into a browser extension's module for a path constant would be the wrong
+ * direction entirely.
+ *
+ * It used to be `docs/architecture/<dir>/doc.md`, a page in a tree mirroring the repo. That layout rotted — the
+ * page was never open when the code it described changed — so a package's document is now the README beside its
+ * code, and this is a stat on the package directory itself. */
+const docPath = (repoDir: string, packageDir: string): string => join(repoDir, packageDir, "README.md");
 
 const dependencyNames = (manifest: Record<string, unknown>, block: string): string[] => {
     const deps = manifest[block];
@@ -151,9 +156,10 @@ const declaredDeps = (repoDir: string): string[] => {
 /* What this repository is MADE OF, for the applicability gates. Every check here is a stat or a shallow readdir,
  * which is what lets it sit on a route the rail badge polls — anything that needed a subprocess would be a probe.
  *
- * `docs` looks for the architecture documents themselves rather than for the directory: an empty
- * `docs/architecture/` is a directory somebody made and never filled, and gating the drift survey on it would put
- * the chore back exactly where a repo with nothing to re-read cannot use it. */
+ * `docs` looks for the repository MAP rather than for the directory: an empty `docs/architecture/` is a directory
+ * somebody made and never filled, and gating the drift survey on it would put the chore back exactly where a repo
+ * with nothing to re-read cannot use it. Package pages are READMEs and are counted per package by
+ * `packageSignals`; a repo with a map is a repo that has been documented at all, which is what this gate asks. */
 export const choreShape = (repoDir: string): ChoreShape => ({
     docs: findFiles(join(repoDir, "docs", "architecture"), (name) => name.endsWith(".md")),
     dockerfiles: findFiles(repoDir, isDockerfile),

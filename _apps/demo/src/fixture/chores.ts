@@ -176,7 +176,8 @@ const webRepo = (now: number) => ({
         // document and library chores read "not applicable" rather than inventing one pseudo-package.
         packages: [],
         shape: {
-            docs: [`docs/architecture/repo.md`, `docs/architecture/src/pricing/doc.md`, `docs/architecture/src/lib/doc.md`, `docs/architecture/tests/doc.md`],
+            // The MAP is what `docs` carries; package pages are READMEs, counted per package by `packages`.
+            docs: [`docs/architecture/repo.md`],
             dockerfiles: [],
             ci: [`.github/workflows/ci.yml`],
             lockfile: true,

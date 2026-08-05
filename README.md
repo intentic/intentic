@@ -46,7 +46,7 @@ Dev serves over HTTPS via the committed `@intentic-app/localhost-https` cert (Go
 - **Tests are co-located:** `*.test.ts` (unit), `*.integration.test.ts` (temp trees, subprocesses, real git — a 60s budget instead of the 5s hang detector), and gated `*.e2e.test.ts` (real infra, opt-in). Run `pnpm test` (Turbo) or per-package `vitest`.
 - **`pnpm verify` is the gate — run it before you finish, including from an agent worktree.** It is `pnpm typecheck` and then `pnpm test` — under a minute for all 45 packages, from a cold cache. Both emit every dependency's dist with `tsgo -b` first (`_tools/scripts/prepass.mjs`), so neither needs `pnpm build`, which cannot run under worktree isolation. It is also what CI decides main's health on, so a green run here is a green run there.
 - **Tests are type-checked too, by `pnpm typecheck`, not by `pnpm build`.** A package that emits to `dist` excludes `*.test.ts` from its build config and re-includes it in `tsconfig.test.json`; a package that only type-checks uses one config for both. Adding a package with tests and no `typecheck` script fails the same script's coverage guard. The testing conventions this protects are in [AGENTS.md](AGENTS.md).
-- Each package has its own README with its responsibilities, key files, and gotchas — start there when working inside one.
+- **Each package is documented by its own README** — responsibilities, key files, gotchas. Start there when working inside one, and update it in the same commit as a change that dates it. That rule is the whole of how these stay true; [AGENTS.md](AGENTS.md#documentation) has the details, including the two parts of the page a tool parses.
 
 ## Bundled deployment engine (a tool, not the product)
 
@@ -74,9 +74,10 @@ mirror, its manifest and its guard are gone; there is no second tree to keep in 
 
 [ARCHITECTURE.md](ARCHITECTURE.md) covers the platform / sandbox / workspace split, the ownership and trust model, the extension system, the agent-facing tooling (iq/lsp), and the bundled deployment engine.
 
-For the shorter, picture-led version — one page per package, mostly diagrams and charts — read
-**[docs/architecture/repo.md](docs/architecture/repo.md)**, or open the **Documentation** tile in the app, which
-renders the same files and flags any page whose code has moved on since it was written.
+For the shorter, picture-led version — the components, the vocabulary, and what to read first — read
+**[docs/architecture/repo.md](docs/architecture/repo.md)**, or open the **Documentation** tile in the app. It
+renders that map and every package's README as one browsable set, draws each package's size and neighbours from
+the live package graph, and flags any page whose code has moved on since it was written.
 
 ## License
 

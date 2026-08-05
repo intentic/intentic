@@ -4,24 +4,28 @@
  * they ride the sha-pinned checkout).
  *
  * The split this tool exists to enforce: a model authors judgement, a script computes facts. Which packages
- * exist, what depends on what, how big each one is, which revision a document was written against, whether an
+ * exist, what depends on what, how big each one is, whether a page has been kept up with its code, whether an
  * anchor still resolves — all of that is cheap and exact from the filesystem and git, and all of it is something
  * a model will otherwise produce plausibly and wrongly. So the agent runs `facts` before it writes a word, and
  * `validate` after, and the only thing left for it to get wrong is the part that needs a mind.
  *
+ * A PACKAGE'S DOCUMENT IS ITS OWN README. There is no per-package JSON sidecar: the one-liner is the README's
+ * lead sentence, the anchors are its `## Key files` links, and staleness is a git comparison. Everything an
+ * author could forget to update has been replaced by something derived from what they did update.
+ *
  * THREE VERBS
  *   facts     enumerate packages, their dependency edges, sizes and revisions          → JSON on stdout
- *   validate  every document parses, every anchor resolves                             → exit 1 + reasons
- *   check     recompute the derived index (staleness, orphans, coverage)                → writes index.json
+ *   validate  every package has a README, it has a lead sentence, anchors resolve      → exit 1 + reasons
+ *   check     recompute the derived index (staleness, orphans, coverage, facts)        → writes index.json
  *
  * `check` is where rot becomes visible. Staleness is computed HERE and written to a file rather than derived in
  * the browser, because `GET /git/{repo}/log` takes no path filter — the browser would need one commit-diff
  * request per commit to learn what touched a package. One `git rev-list --count` answers it exactly.
  *
  * WHY THIS FILE IS PLAIN ESM AND NOT TYPESCRIPT. It is executed directly by the agent's shell, so it must run
- * with no build step and no loader. That costs a small, deliberate duplication: the two path constants below
- * also live in src/paths.ts. paths.test.ts imports both and asserts they are equal, so the duplication cannot
- * drift silently — it fails a test the moment it does. */
+ * with no build step and no loader. That costs a small, deliberate duplication: the constants below also live in
+ * src/paths.ts. paths.test.ts imports both and asserts they are equal, so the duplication cannot drift silently
+ * — it fails a test the moment it does. */
 
 import { execFileSync } from "node:child_process";
 import { existsSync, mkdirSync, readdirSync, readFileSync, realpathSync, statSync, writeFileSync } from "node:fs";
@@ -31,6 +35,7 @@ import { fileURLToPath } from "node:url";
 // Mirrored from src/paths.ts — see the header, and paths.test.ts which pins them together.
 export const DOCS_DIR = "docs/architecture";
 export const STAGING_ROOT = ".intentic/docs";
+export const README_TAIL = "README.md";
 
 const MANIFESTS = ["package.json", "Cargo.toml", "pyproject.toml", "go.mod"];
 const SKIP_DIRS = new Set(["node_modules", ".git", "dist", "build", "target", ".cache", ".next", "coverage", "vendor", "__pycache__"]);
@@ -43,6 +48,8 @@ const SOURCE_EXTENSIONS = new Set(["ts", "tsx", "js", "jsx", "mjs", "cjs", "vue"
 const MAX_MEASURED_BYTES = 512 * 1024;
 // Deep enough for `_apps/web/src/...`-shaped monorepos, shallow enough that a stray checkout cannot walk forever.
 const MAX_DEPTH = 5;
+// A one-liner is a tooltip and a list row. Past this it is a paragraph that has been let loose.
+const ONE_LINER_MAX = 200;
 
 // ---- shell ---------------------------------------------------------------------------------------------------
 
@@ -65,6 +72,14 @@ const readJson = (path) => {
     }
 };
 
+const readText = (path) => {
+    try {
+        return readFileSync(path, `utf8`);
+    } catch {
+        return undefined;
+    }
+};
+
 /* Canonical JSON: sorted keys, two-space indent, trailing newline. The whole reviewability argument for a data
  * document model rests on this — unstable key order turns every regeneration into an unreadable diff, which is
  * exactly the objection that ruled out generated HTML in the first place. */
@@ -82,6 +97,107 @@ const sortKeys = (value) => {
             .sort()
             .map((key) => [key, sortKeys(value[key])]),
     );
+};
+
+// ---- reading a README ------------------------------------------------------------------------------------------
+
+/* Markdown reduced to the words in it. A one-liner lands in a tooltip and a list row, where `**bold**` and a link
+ * target are noise — so emphasis, code ticks and link syntax collapse to their text and nothing else changes. */
+const plain = (text) =>
+    text
+        .replace(/!\[[^\]]*\]\([^)]*\)/g, ``)
+        .replace(/\[([^\]]*)\]\([^)]*\)/g, `$1`)
+        .replace(/[*_`]+/g, ``)
+        .replace(/\s+/g, ` `)
+        .trim();
+
+/* THE LEAD SENTENCE — a package's one-liner, and the reason a README needs no `oneLiner` field to forget.
+ *
+ * The first paragraph after the `# H1`, cut at its first sentence. Authors are told to write one sentence there,
+ * so for a page written to the convention this is the whole paragraph; cutting is what keeps a page that opened
+ * with three sentences from putting all three in a tooltip. Badge lines and block quotes are skipped because
+ * they are chrome, and a fence before the prose is a quickstart rather than a description. */
+const leadSentence = (markdown) => {
+    const lines = markdown.split(/\r?\n/);
+    const start = lines.findIndex((line) => /^#\s+\S/.test(line));
+    const paragraph = [];
+    let fenced = false;
+    for (const line of lines.slice(start + 1)) {
+        if (/^```/.test(line)) {
+            fenced = !fenced;
+            continue;
+        }
+        if (fenced) {
+            continue;
+        }
+        const trimmed = line.trim();
+        if (trimmed === ``) {
+            if (paragraph.length > 0) {
+                break;
+            }
+            continue;
+        }
+        // A heading before any prose means the page never described itself; stop rather than quote a section title.
+        if (/^#{1,6}\s/.test(trimmed) || /^>/.test(trimmed) || /^[-*+]\s/.test(trimmed) || /^\|/.test(trimmed)) {
+            if (paragraph.length > 0) {
+                break;
+            }
+            if (/^#{1,6}\s/.test(trimmed)) {
+                return undefined;
+            }
+            continue;
+        }
+        paragraph.push(trimmed);
+    }
+    const prose = plain(paragraph.join(` `));
+    if (prose === ``) {
+        return undefined;
+    }
+    /* First sentence: a `.`, `!` or `?` followed by a space and a capital, or the end of the paragraph. The
+     * lookahead for a capital is what stops `e.g.` and `@intentic/graph v1.2` from cutting the sentence in half. */
+    const match = /^(.+?[.!?])\s+[A-Z(]/.exec(prose);
+    const sentence = match === null ? prose : match[1];
+    return sentence.length <= ONE_LINER_MAX ? sentence : `${sentence.slice(0, ONE_LINER_MAX - 1).replace(/\s+\S*$/, ``)}…`;
+};
+
+/* THE ANCHORS — `## Key files`, read as data.
+ *
+ * `- [src/compile.ts](src/compile.ts) — RawNode map → validated graph.` Link targets are PACKAGE-relative, so the
+ * same link works on GitHub, in the file tree and in the documentation view; this returns them repo-relative,
+ * which is what every reader of the index wants and what `validate` resolves against.
+ *
+ * External links and anchors-into-prose are skipped rather than reported: a `## Key files` list is allowed to
+ * mention a URL, and only a local path can be checked for existence. */
+const keyFilesOf = (markdown, dir) => {
+    const lines = markdown.split(/\r?\n/);
+    const at = lines.findIndex((line) => /^##\s+key files/i.test(line.trim()));
+    if (at === -1) {
+        return [];
+    }
+    const anchors = [];
+    for (const line of lines.slice(at + 1)) {
+        if (/^#{1,6}\s/.test(line.trim())) {
+            break;
+        }
+        const match = /^\s*[-*+]\s+\[([^\]]*)\]\(([^)\s]+)\)\s*(.*)$/.exec(line);
+        if (match === null) {
+            continue;
+        }
+        const [, label, target, rest] = match;
+        if (/^[a-z][a-z0-9+.-]*:/i.test(target) || target.startsWith(`#`)) {
+            continue;
+        }
+        // `#L42` is GitHub's spelling of a line number, and the only one a markdown link can carry.
+        const hash = /#L(\d+)$/.exec(target);
+        const path = target.replace(/#.*$/, ``);
+        const what = plain(rest.replace(/^\s*[—–-]\s*/, ``));
+        anchors.push({
+            path: join(dir, path).split(`\\`).join(`/`),
+            what: what === `` ? plain(label) : what,
+            ...(hash === null ? {} : { line: Number.parseInt(hash[1], 10) }),
+        });
+    }
+    return anchors;
 };
 
 // ---- discovery -----------------------------------------------------------------------------------------------
@@ -205,22 +321,54 @@ const dependencyEdges = (repoRoot, packages) => {
     return edges.sort((left, right) => `${left.from}->${left.to}`.localeCompare(`${right.from}->${right.to}`));
 };
 
-// The last commit that touched a directory. A real commit rather than a tree hash, so a reader can look it up —
-// and `rev-list --count` against it answers "how far behind" exactly.
-const revOf = (repoRoot, dir) => git(repoRoot, [`log`, `-1`, `--format=%H`, `--`, dir === `` ? `.` : dir]);
-const commitsSince = (repoRoot, dir, rev) => {
-    const count = git(repoRoot, [`rev-list`, `--count`, `${rev}..HEAD`, `--`, dir === `` ? `.` : dir]);
+// The last commit that touched a path. A real commit rather than a tree hash, so a reader can look it up — and
+// `rev-list --count` against it answers "how far behind" exactly.
+const revOf = (repoRoot, path) => git(repoRoot, [`log`, `-1`, `--format=%H`, `--`, path === `` ? `.` : path]);
+const committedAt = (repoRoot, rev) => {
+    const seconds = git(repoRoot, [`log`, `-1`, `--format=%ct`, rev]);
+    return seconds === undefined ? undefined : (Number.parseInt(seconds, 10) || 0) * 1000;
+};
+
+/* HOW FAR THE CODE HAS RUN AHEAD OF ITS PAGE — the whole staleness signal, in one git call and no authored field.
+ *
+ * Commits touching the package since the last commit that touched its README. Because that rev is the README's
+ * OWN most recent commit, every commit in the range is by construction one that changed the package without
+ * changing its page — which is exactly the thing worth counting, and exactly what the same-commit rule asks an
+ * author to keep at zero. Updating the README in the same commit as the code moves the rev forward with it, so
+ * there is nothing to bump and nothing to forget. */
+const behindOf = (repoRoot, dir, readmeRev) => {
+    if (readmeRev === undefined) {
+        return 0;
+    }
+    const count = git(repoRoot, [`rev-list`, `--count`, `${readmeRev}..HEAD`, `--`, dir === `` ? `.` : dir]);
     return count === undefined ? 0 : Number.parseInt(count, 10) || 0;
 };
 
 // ---- the document tree ---------------------------------------------------------------------------------------
 
-const docsBase = (root, repo, from) =>
+/* Where the repo-level map lives for the tree being read. The PACKAGE pages are not in here — a published one is
+ * `<repo>/<dir>/README.md`, beside its code, which is the entire point of the layout. */
+const mapBase = (root, repo, from) =>
     from === `staging` ? join(root, STAGING_ROOT, repo === `` ? `root` : repo) : join(root, repo === `` ? `` : repo, DOCS_DIR);
 
-// Which package dirs the document tree holds a doc.json for. Read off the filesystem rather than from repo.json,
-// so a document that exists is counted whether or not the map remembered to mention it.
-const documentedDirs = (base) => {
+// Where one package's page lives. Staging mirrors the package dir under the repo's staging root, so publishing is
+// a copy per tail and never a translation.
+const pagePath = (root, repo, dir, from) =>
+    from === `staging`
+        ? join(root, STAGING_ROOT, repo === `` ? `root` : repo, dir, README_TAIL)
+        : join(root, repo === `` ? `` : repo, dir, README_TAIL);
+
+/* Which package dirs have a page. Read off the filesystem rather than from repo.json, so a page that exists is
+ * counted whether or not the map remembered to mention it.
+ *
+ * Published: the packages that exist and have a README. A published page CANNOT outlive its directory — it is in
+ * it — so the orphan case is structurally impossible on this side, which is one whole class of rot the layout
+ * deletes rather than detects. Staging: whatever the draft holds, which may well name a package that is gone. */
+const documentedDirs = (root, repo, from, packages) => {
+    if (from !== `staging`) {
+        return packages.filter((dir) => dir !== `` && existsSync(pagePath(root, repo, dir, from)));
+    }
+    const base = mapBase(root, repo, from);
     const found = [];
     const walk = (dir, depth) => {
         if (depth > MAX_DEPTH + 1) {
@@ -232,7 +380,7 @@ const documentedDirs = (base) => {
         } catch {
             return;
         }
-        if (entries.some((entry) => entry.isFile() && entry.name === `doc.json`)) {
+        if (entries.some((entry) => entry.isFile() && entry.name === README_TAIL)) {
             found.push(relative(base, dir).split(`\\`).join(`/`));
         }
         for (const entry of entries) {
@@ -257,87 +405,100 @@ const factsOf = (root, repo) => {
             const manifest = readJson(join(dir === `` ? repoRoot : join(repoRoot, dir), `package.json`));
             const nested = packages.filter((other) => other !== dir && other.startsWith(dir === `` ? `` : `${dir}/`));
             const { files, loc, hasTests } = measure(repoRoot, dir, nested);
-            return { dir, name: manifest?.name, description: manifest?.description, files, loc, hasTests, sourceRev: revOf(repoRoot, dir) };
+            return {
+                dir,
+                name: manifest?.name,
+                description: manifest?.description,
+                files,
+                loc,
+                hasTests,
+                hasReadme: existsSync(join(repoRoot, dir, README_TAIL)),
+                sourceRev: revOf(repoRoot, dir),
+            };
         }),
         edges: dependencyEdges(repoRoot, packages),
     };
 };
 
-/* Every document parses and every anchor resolves. Anchors are checked against the WORKING TREE the agent is in,
- * which is the point: an anchor that no longer resolves is the one staleness signal that needs no git history and
- * cannot be argued with. */
+/* Every package has a page, every page describes itself, and every anchor resolves. Anchors are checked against
+ * the WORKING TREE the agent is in, which is the point: an anchor that no longer resolves is the one staleness
+ * signal that needs no git history and cannot be argued with. */
 const validateDocs = (root, repo, from) => {
-    const base = docsBase(root, repo, from);
     const repoRoot = repo === `` ? root : join(root, repo);
+    const base = mapBase(root, repo, from);
+    const packages = discoverPackages(repoRoot);
+    const documented = documentedDirs(root, repo, from, packages);
     const problems = [];
-    if (!existsSync(base)) {
-        return [`no documents at ${relative(root, base)} — nothing to validate`];
-    }
+
     const repoDoc = readJson(join(base, `repo.json`));
     if (repoDoc === undefined) {
-        problems.push(`repo.json is missing or is not valid JSON`);
-    } else if (repoDoc.provenance?.sourceRev === undefined) {
-        problems.push(`repo.json has no provenance.sourceRev — a document that cannot be dated cannot be trusted`);
+        problems.push(`${relative(root, join(base, `repo.json`))} is missing or is not valid JSON`);
     }
-    for (const dir of documentedDirs(base)) {
-        const doc = readJson(join(base, dir, `doc.json`));
-        if (doc === undefined) {
-            problems.push(`${dir}/doc.json is not valid JSON`);
+    if (!existsSync(join(base, `repo.md`))) {
+        problems.push(`${relative(root, join(base, `repo.md`))} is missing — the repository's own page`);
+    }
+
+    for (const dir of documented) {
+        const markdown = readText(pagePath(root, repo, dir, from));
+        if (markdown === undefined) {
+            problems.push(`${dir}/README.md cannot be read`);
             continue;
         }
-        if (typeof doc.oneLiner !== `string` || doc.oneLiner.trim() === ``) {
-            problems.push(`${dir}/doc.json has no oneLiner`);
+        if (leadSentence(markdown) === undefined) {
+            problems.push(`${dir}/README.md has no lead sentence under its heading — that sentence IS the package's one-liner`);
         }
-        if (doc.provenance?.sourceRev === undefined) {
-            problems.push(`${dir}/doc.json has no provenance.sourceRev`);
-        }
-        if (!existsSync(join(base, dir, `doc.md`))) {
-            problems.push(`${dir} has a doc.json but no doc.md — the prose IS the document`);
-        }
-        for (const anchor of Array.isArray(doc.keyFiles) ? doc.keyFiles : []) {
-            if (typeof anchor?.path !== `string`) {
-                problems.push(`${dir}/doc.json has a keyFiles entry with no path`);
-                continue;
-            }
+        for (const anchor of keyFilesOf(markdown, dir)) {
             if (!existsSync(join(repoRoot, anchor.path))) {
-                problems.push(`${dir}/doc.json points at ${anchor.path}, which does not exist`);
+                problems.push(`${dir}/README.md points at ${anchor.path}, which does not exist`);
             }
         }
+    }
+
+    for (const dir of packages.filter((candidate) => candidate !== `` && !documented.includes(candidate))) {
+        problems.push(`${dir} has no README.md — every package is documented by its own`);
     }
     return problems;
 };
 
 const checkDocs = (root, repo, from, write) => {
-    const base = docsBase(root, repo, from);
     const repoRoot = repo === `` ? root : join(root, repo);
+    const base = mapBase(root, repo, from);
     const packages = discoverPackages(repoRoot);
-    const documented = documentedDirs(base);
+    const documented = documentedDirs(root, repo, from, packages);
     const repoDoc = readJson(join(base, `repo.json`));
     const componentOf = (dir) =>
         (Array.isArray(repoDoc?.components) ? repoDoc.components : []).find((component) => (component.packages ?? []).includes(dir))?.id;
 
     const entries = documented.map((dir) => {
-        const doc = readJson(join(base, dir, `doc.json`)) ?? {};
-        const sourceRev = doc.provenance?.sourceRev;
+        const markdown = readText(pagePath(root, repo, dir, from)) ?? ``;
+        const manifest = readJson(join(repoRoot, dir, `package.json`));
+        const nested = packages.filter((other) => other !== dir && other.startsWith(`${dir}/`));
         const gone = !existsSync(join(repoRoot, dir));
-        const deadAnchor = (Array.isArray(doc.keyFiles) ? doc.keyFiles : []).find(
-            (anchor) => typeof anchor?.path === `string` && !existsSync(join(repoRoot, anchor.path)),
-        );
-        const behind = sourceRev === undefined || gone ? 0 : commitsSince(repoRoot, dir, sourceRev);
+        const { files, loc, hasTests } = gone ? { files: 0, loc: 0, hasTests: false } : measure(repoRoot, dir, nested);
+        const anchors = keyFilesOf(markdown, dir);
+        const deadAnchor = anchors.find((anchor) => !existsSync(join(repoRoot, anchor.path)));
+        const readmeRev = gone ? undefined : revOf(repoRoot, `${dir}/${README_TAIL}`);
+        const behind = gone ? 0 : behindOf(repoRoot, dir, readmeRev);
         /* Reasons are ordered by how much they tell the reader, not by how easy they are to compute. A dead
-         * anchor is a document that is already wrong; being commits behind only means it MIGHT be. */
+         * anchor is a page that is already wrong; being commits behind only means it MIGHT be. */
         const reason = gone
             ? `the package no longer exists`
             : deadAnchor !== undefined
               ? `it points at ${deadAnchor.path}, which no longer exists`
               : behind > 0
-                ? `${behind} commit${behind === 1 ? `` : `s`} have touched this package since it was documented`
+                ? `${behind} commit${behind === 1 ? ` has` : `s have`} touched this package since its README was written`
                 : undefined;
         return {
             dir,
-            oneLiner: typeof doc.oneLiner === `string` ? doc.oneLiner : ``,
+            name: manifest?.name,
+            oneLiner: leadSentence(markdown) ?? ``,
             component: componentOf(dir),
-            sourceRev: sourceRev ?? ``,
+            anchors,
+            files,
+            loc,
+            hasTests,
+            readmeRev: readmeRev ?? ``,
+            updatedAt: readmeRev === undefined ? 0 : (committedAt(repoRoot, readmeRev) ?? 0),
             stale: reason !== undefined,
             reason,
             behind,
@@ -348,6 +509,7 @@ const checkDocs = (root, repo, from, write) => {
         repo,
         generatedAt: Date.now(),
         entries,
+        edges: dependencyEdges(repoRoot, packages),
         orphans: documented.filter((dir) => !existsSync(join(repoRoot, dir))),
         undocumented: packages.filter((dir) => dir !== `` && !documented.includes(dir)),
     };
@@ -360,7 +522,7 @@ const checkDocs = (root, repo, from, write) => {
 
 // ---- cli -----------------------------------------------------------------------------------------------------
 
-const USAGE = `intentic-docs — facts, validation and staleness for generated documentation
+const USAGE = `intentic-docs — facts, validation and staleness for architecture documentation
 
   intentic-docs facts     [--root DIR] [--repo DIR]
   intentic-docs validate  [--root DIR] [--repo DIR] [--from staging|published]
@@ -368,8 +530,11 @@ const USAGE = `intentic-docs — facts, validation and staleness for generated d
 
   --root  workspace root (default /work)
   --repo  repository directory relative to the root; omit for the root repo itself
-  --from  which document tree to read: the staged one you are writing, or the published one (default staging)
+  --from  which tree to read: the staged draft you are writing, or the published one (default staging)
   --write check only: rewrite index.json in place. Without it, the index goes to stdout.
+
+A package's page is its own README.md. Only the map (repo.json, repo.md) and the generated index.json live under
+${DOCS_DIR}/.
 `;
 
 const main = (argv) => {
