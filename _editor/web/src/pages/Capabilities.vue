@@ -799,8 +799,9 @@ const submit = async (): Promise<void> => {
     }
     submitting.value = true;
     error.value = null;
+    const input = buildInput(entry);
     try {
-        await add(buildInput(entry), (line) => {
+        await add(input, (line) => {
             // The install runs in a real tmux session — open ITS terminal tab, so what the user watches is the
             // commands themselves (user-clicked action → openFocused, the apply/vitest/add-apps precedent).
             // That IS the progress surface: a summary box beside it could only ever be a worse retelling of
@@ -814,6 +815,16 @@ const submit = async (): Promise<void> => {
             if (field.secret === true && field.value === undefined) {
                 devFillSet(`capability.${entry.id}.${field.key}`, (values[field.key] ?? ``).trim());
             }
+        }
+        // ADDING A COMPUTER IS HALF THE STEP. The other half runs on the machine itself, and this card is the
+        // only place its one-time command exists — so the add hands straight over to that command instead of
+        // returning to the catalog, where the reader is left in front of a grid with a capability that has
+        // quietly gone `pending` and nothing saying what to do about it. Every other kind is finished when the
+        // apply is, and goes back as before.
+        const added = capabilities.value.find((capability) => capability.id === input.id);
+        if (entry.kind === `host` && added !== undefined) {
+            openConnect(added);
+            return;
         }
         back();
     } catch (err) {

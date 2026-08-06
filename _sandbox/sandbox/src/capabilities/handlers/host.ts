@@ -44,7 +44,7 @@ export const hostHandler: CapabilityHandler = {
         if (!(await ctx.hosts.enrolled(id))) {
             yield {
                 kind: "log",
-                message: `Added "${id}". Open its card and click Connect, then run the one-liner on that computer — the agent can work on it from the next turn.`,
+                message: `Added "${id}". Run the one-time command its card is offering on that computer — the agent can work on it from the next turn.`,
             };
             return;
         }
