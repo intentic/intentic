@@ -1,9 +1,10 @@
 import { access, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { defaultGit, gitInit, type GitRunner } from "@intentic/scaffold";
+import { defaultGit, gitCommitAll, gitInit, type GitRunner } from "@intentic/scaffold";
 import { repoGitDir, syncRootExcludes } from "../history/history.js";
 import { discoverRepos } from "../workspace/repo-discovery.js";
 import type { WorkspacePaths } from "../workspace/workspace.js";
+import { commitIndex } from "./changes.js";
 import { AGENT_GIT_AUTHOR } from "./git.js";
 
 // The /work workspace repo ("root"): the ENTIRE workspace is under version control, not just the nested
@@ -100,6 +101,42 @@ const untrackNestedRepos = async (root: string, gitDir: string, git: GitRunner):
         await rm(index, { force: true });
     }
     await git(root, drop);
+};
+
+/* THE SAME INVARIANT, IN A CONVERSATION'S OWN CHECKOUT — the last place it can still be broken.
+ *
+ * The turn-start sync, the land and the retire each preserve whatever an agent's worktree still holds as a
+ * provenance commit on its branch (`add -A`, agents/sync.ts, land.ts, worktrees.ts). Root's exclude list is
+ * derived from the repos discovered in the MAIN checkout, so it describes a conversation's tree only
+ * approximately — a repo the agent cloned itself, one that appeared while the derived list was between syncs —
+ * and `add -A` stages whatever the rules missed as a gitlink. The commit puts it on the branch, and from that
+ * moment the path is TRACKED in this worktree's own index, where no later exclude rule reaches it again.
+ *
+ * What the user sees for that is every repo of the workspace listed as a one-line `+1` add in the agent's
+ * review, back again after every land: untrackNestedRepos converges the main checkout at boot, but a
+ * conversation's worktree has its own index and its own branch, and nothing converged those.
+ *
+ * So the enforcement runs between the staging and the commit, costing one `ls-files` on a worktree that is
+ * clean. Dropping an entry that a previous turn already committed is a REMOVAL the commit then records, which
+ * is what retires the phantom for good: added and removed inside the same branch, the review's anchor→tip
+ * reading of it is no rows at all.
+ *
+ * A NESTED repo of the composition commits through plain gitCommitAll — a gitlink there is a submodule of the
+ * USER's repo, and dropping it would land a deletion nobody asked for.
+ */
+export const commitWorktreeRemainder = async (repo: string, dir: string, message: string, git: GitRunner = defaultGit): Promise<boolean> => {
+    if (repo !== "root") {
+        return gitCommitAll(dir, message, AGENT_GIT_AUTHOR, git);
+    }
+    await git(dir, ["add", "-A"]);
+    const gitlinks = await trackedGitlinks(dir, git);
+    if (gitlinks.length > 0) {
+        await git(dir, ["update-index", "--force-remove", "--", ...gitlinks]);
+    }
+    // commitIndex rather than gitCommitAll's own tail: the index is already exactly what should go in, and it
+    // is the only one of the two that can commit a removal the staging did not produce. Nothing to --no-verify
+    // around — root's git dir is the daemon's, on /history, where the agent cannot install a hook.
+    return commitIndex(dir, message, AGENT_GIT_AUTHOR, git);
 };
 
 // Returns true only when this boot freshly `gitInit`ed the repo — the caller then takes the baseline commit

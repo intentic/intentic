@@ -1,8 +1,8 @@
 import { access, lstat, mkdir, readdir, rm, rmdir, symlink } from "node:fs/promises";
 import { dirname, join } from "node:path";
-import { defaultGit, gitCommitAll, type GitRunner } from "@intentic/scaffold";
+import { defaultGit, type GitRunner } from "@intentic/scaffold";
 import type { Logger } from "pino";
-import { AGENT_GIT_AUTHOR } from "../git/git.js";
+import { commitWorktreeRemainder } from "../git/root-repo.js";
 import type { PerfTracker } from "../platform/perf.js";
 import { discoverRepos } from "../workspace/repo-discovery.js";
 import type { WorkspacePaths } from "../workspace/workspace.js";
@@ -405,12 +405,12 @@ export const createAgentWorktrees = (
                     // per repo, per agent — the single biggest chunk of an archive's wall clock.) Porcelain
                     // covers staged, unstaged AND untracked, which is exactly what `add -A` below would sweep.
                     // It also OVER-reports — dirty content inside a nested repo stages as nothing — which is
-                    // why the commit itself is gitCommitAll's call, on the index, and not this probe's.
+                    // why the commit itself is commitWorktreeRemainder's call, on the index, and not this probe's.
                     const { stdout } = await git(worktree, ["status", "--porcelain", "-z"]);
                     if (stdout === "") {
                         return;
                     }
-                    await gitCommitAll(worktree, `Agent: ${title ?? id}`, AGENT_GIT_AUTHOR, git);
+                    await commitWorktreeRemainder(repo, worktree, `Agent: ${title ?? id}`, git);
                 }),
             );
             // PASS 2 does need the lock (worktree admin area), but only per repo — so the nested repos run

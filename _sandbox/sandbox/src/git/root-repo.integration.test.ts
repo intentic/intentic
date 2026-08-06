@@ -1,13 +1,13 @@
 import { execFile } from "node:child_process";
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { promisify } from "node:util";
 import { afterEach, expect, test } from "vitest";
 import { rootExcludes } from "../history/history.js";
 import { workspacePaths } from "../workspace/workspace.js";
 import { changedFiles } from "./changes.js";
-import { commitRootBaseline, ensureRootRepo } from "./root-repo.js";
+import { commitRootBaseline, commitWorktreeRemainder, ensureRootRepo } from "./root-repo.js";
 
 const exec = promisify(execFile);
 const sh = async (cwd: string, ...args: string[]): Promise<string> => (await exec("git", ["-C", cwd, ...args])).stdout.trim();
@@ -125,6 +125,62 @@ test("untracking a nested repo leaves the user's own staged work staged, and out
     // Still staged, and the housekeeping commit recorded only the removal.
     expect(await sh(work, "diff", "--cached", "--name-only")).toBe("notes.md");
     expect(await sh(work, "show", "--format=", "--name-status", "HEAD")).toBe("D\tintent");
+});
+
+// A conversation's own checkout of root, the shape agents/worktrees.ts creates it in.
+const agentWorktree = async (work: string, branch: string): Promise<string> => {
+    const dir = join(dirname(work), branch);
+    await sh(work, "worktree", "add", "-q", "-b", branch, dir);
+    return dir;
+};
+
+test("a conversation's root worktree stages a nested repo but never commits one", async () => {
+    const { work, historyRoot } = await tempBase();
+    await ensureRootRepo(workspacePaths(work), historyRoot);
+    await commitRootBaseline(workspacePaths(work));
+    const worktree = await agentWorktree(work, "agent-one");
+    // A repo the derived exclude list cannot name: the agent cloned it into its own tree, so the main checkout
+    // discovery reads has never seen it.
+    await nestedRepo(worktree, "intent");
+    await writeFile(join(worktree, "notes.md"), "agent work\n");
+
+    expect(await commitWorktreeRemainder("root", worktree, "Agent: one")).toBe(true);
+
+    expect(await sh(worktree, "show", "--format=", "--name-status", "HEAD")).toBe("A\tnotes.md");
+    expect(await sh(worktree, "ls-files")).toBe("notes.md");
+    // The checkout is untouched — the repo is still there, still its own.
+    expect(await readFile(join(worktree, "intent", "app.ts"), "utf8")).toBe("v1\n");
+});
+
+test("a nested repo a past turn committed is dropped, and the review's span comes back clean", async () => {
+    const { work, historyRoot } = await tempBase();
+    await ensureRootRepo(workspacePaths(work), historyRoot);
+    await commitRootBaseline(workspacePaths(work));
+    const worktree = await agentWorktree(work, "agent-one");
+    const nested = await nestedRepo(worktree, "intent");
+    // The bug as the branch already carries it: a one-line `+1` add for the repo, back on every land as the
+    // repo's own HEAD moves.
+    await trackNestedRepo(worktree, "intent");
+    await commitInNested(nested);
+    expect(await sh(worktree, "diff", "--name-only", "main")).toBe("intent");
+
+    await writeFile(join(worktree, "notes.md"), "agent work\n");
+    expect(await commitWorktreeRemainder("root", worktree, "Agent: one")).toBe(true);
+
+    // Added and removed inside this branch, so anchor→tip — what the agent's review reads — has no row for it.
+    expect(await sh(worktree, "diff", "--name-only", "main")).toBe("notes.md");
+    expect(await sh(worktree, "show", "--format=", "--name-status", "HEAD")).toBe("D\tintent\nA\tnotes.md");
+});
+
+test("a NESTED repo of the composition keeps a gitlink of its own — that one is the user's submodule", async () => {
+    const { work, historyRoot } = await tempBase();
+    await ensureRootRepo(workspacePaths(work), historyRoot);
+    const app = await nestedRepo(work, "app");
+    await nestedRepo(app, "vendor");
+
+    expect(await commitWorktreeRemainder("app", app, "Agent: one")).toBe(true);
+
+    expect(await sh(app, "ls-files")).toBe("app.ts\nvendor");
 });
 
 test("re-ensure is idempotent and heals a deleted .git pointer without a new baseline", async () => {

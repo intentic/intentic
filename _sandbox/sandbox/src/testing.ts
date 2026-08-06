@@ -1,4 +1,5 @@
-import { basename } from "node:path";
+import { tmpdir } from "node:os";
+import { basename, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { HookJSONOutput, SyncHookJSONOutput } from "@anthropic-ai/claude-agent-sdk";
 import type { IsolatedAgent, PersistedAgent } from "./agents/agents-store.js";
@@ -27,10 +28,19 @@ export const EXTENSIONS_DIR = fileURLToPath(new URL("../../../_extensions", impo
  * rather than stood in for: `unstubbed` answers an unread key with a throwing FUNCTION, which a `if
  * (config.publicUrl)` branch would read as set. One copy for the package — a suite that cares about a field
  * spreads this and overrides it, and a suite that doesn't gets the same inert defaults every other one sees.
+ *
+ * `historyRoot` is the ONE field held away from its schema default (/history), because that default names a
+ * live volume of the machine running the suite — and this daemon is dogfooded, so that machine is a real
+ * sandbox with real agents on it. A route test only has to reach a handler that WRITES under the history root
+ * to write the running workspace's own state: the git routes' scan converges root's exclude list there
+ * (syncRootExcludes) from whatever repos the test's temp workspace holds, which left the live root repo
+ * excluding "intent" and "shop" and, until the daemon's next scan re-derived it, staging every real repo of
+ * the workspace into root's index as a gitlink. Under a path that does not exist, every such write is the
+ * no-op the test always meant it to be.
  */
 export const testConfig: Config = {
     workspaceRoot: "/work",
-    historyRoot: "/history",
+    historyRoot: join(tmpdir(), "intentic-test-history"),
     extensionsDir: EXTENSIONS_DIR,
     agentAuthDir: "",
     logLevel: "silent",

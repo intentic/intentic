@@ -2,9 +2,9 @@ import { access, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { AgentSpan, GitChange, LandConflict, LandConflictReason, LandMode, LandResult } from "@intentic/sandbox-contract";
-import { defaultGit, gitCommitAll, type GitRunner } from "@intentic/scaffold";
+import { defaultGit, type GitRunner } from "@intentic/scaffold";
 import { changedFiles, headSha, parseNameStatusZ } from "../git/changes.js";
-import { AGENT_GIT_AUTHOR } from "../git/git.js";
+import { commitWorktreeRemainder } from "../git/root-repo.js";
 import { agentRepoChanges, anchorOf } from "./agent-changes.js";
 import { branchSha, mainBranchOf } from "./agent-refs.js";
 import type { IsolatedAgent, PersistedAgent } from "./agents-store.js";
@@ -326,7 +326,7 @@ export const landAgent = async (
                 // does. The nested repo lands its own work below; root's gitlink follows whenever someone
                 // commits there. (A retired checkout has nothing uncommitted to preserve — its retire did this.)
                 if (attached) {
-                    await gitCommitAll(worktree, `Agent: ${entry.title ?? entry.id}`, AGENT_GIT_AUTHOR, git);
+                    await commitWorktreeRemainder(repo, worktree, `Agent: ${entry.title ?? entry.id}`, git);
                 }
                 const tip = attached ? (await git(worktree, ["rev-parse", "HEAD"])).stdout.trim() : await branchSha(main, entry.branch, git);
                 if (tip === undefined) {

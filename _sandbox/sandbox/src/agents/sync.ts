@@ -1,8 +1,9 @@
 import { access } from "node:fs/promises";
 import { join } from "node:path";
-import { defaultGit, gitCommitAll, type GitRunner } from "@intentic/scaffold";
+import { defaultGit, type GitRunner } from "@intentic/scaffold";
 import { headSha, rebaseOnto } from "../git/changes.js";
 import { AGENT_GIT_AUTHOR } from "../git/git.js";
+import { commitWorktreeRemainder } from "../git/root-repo.js";
 import type { AgentWorktrees } from "./worktrees.js";
 
 /* BRING A CONVERSATION'S BRANCH ONTO THE CURRENT MAIN LINE, before its next turn reads a line of it.
@@ -126,7 +127,7 @@ const syncOne = async (
     // The dirty remainder becomes a commit before anything moves — `git rebase` refuses to start otherwise, and
     // this is the commit land would have taken anyway. Only on the path that is about to rebase, so an ordinary
     // turn on an up-to-date branch never grows a commit it did not ask for.
-    await gitCommitAll(worktree, `Agent: ${title ?? id}`, AGENT_GIT_AUTHOR, git);
+    await commitWorktreeRemainder(repo, worktree, `Agent: ${title ?? id}`, git);
     const rebased = await rebaseOnto(worktree, head, AGENT_GIT_AUTHOR, git);
     return rebased.ok ? behind : { ...behind, blocked: true };
 };

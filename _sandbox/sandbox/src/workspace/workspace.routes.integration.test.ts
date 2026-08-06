@@ -23,6 +23,7 @@ import { workspacePaths } from "./workspace.js";
 import { MAX_RAW_BYTES, sha256Text, statWorkspaceFileSize, UploadTooLargeError } from "./workspace-files.js";
 
 import { clientFor, errorCode, fakeFiles, fakeHistory, services, tempWorkspace } from "../route-testing.js";
+import { testConfig } from "../testing.js";
 
 /* The workspace routes, driven over the daemon's HTTP surface exactly as the browser drives them.
  * Split out of app.integration.test.ts, which had grown to 116 tests across every route in the daemon —
@@ -583,7 +584,14 @@ test("workspace.addRepo clones a repo with a protected git dir, rejects reserved
         ),
     );
     expect(await client.workspace.addRepo({ name: "extra", cloneUrl: "https://example.com/extra.git" })).toEqual({ name: "extra", path: "extra" });
-    expect(clones).toEqual([{ parentDir: "/work", name: "extra", cloneUrl: "https://example.com/extra.git", separateGitDir: "/history/gits/extra" }]);
+    expect(clones).toEqual([
+        {
+            parentDir: "/work",
+            name: "extra",
+            cloneUrl: "https://example.com/extra.git",
+            separateGitDir: join(testConfig.historyRoot, "gits", "extra"),
+        },
+    ]);
     // The preview route is minted at clone time, not first panel start (DNS negative-caching).
     expect(ensured).toEqual(["preview-extra"]);
     // A reserved role (one of the three fixed repos) cannot be clobbered, and a path-escape name is rejected.
