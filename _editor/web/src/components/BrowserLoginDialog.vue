@@ -122,6 +122,7 @@ const onWheel = (event: WheelEvent): void => {
 };
 const onKeyDown = (event: KeyboardEvent): void => {
     // Let real shortcuts (copy/paste/devtools) through; we only forward plain typing + a few control keys.
+    // Paste is the reason that matters here — see onPaste.
     if (event.ctrlKey || event.metaKey || event.altKey) {
         return;
     }
@@ -132,6 +133,19 @@ const onKeyDown = (event: KeyboardEvent): void => {
         sendMsg({ type: "key", key: event.key });
         event.preventDefault();
     }
+};
+
+// A PASSWORD IS PASTED, NOT TYPED, which makes this the one input a sign-in cannot do without. The Chromium
+// being screencast has its own clipboard inside the sandbox and nothing on the user's machine can write to it,
+// so the chord is left to the host browser (onKeyDown above) and the text it hands us rides the same
+// insertText path as a keystroke. Same rule in useBrowserView for the agent's browser.
+const onPaste = (event: ClipboardEvent): void => {
+    const text = event.clipboardData?.getData("text/plain");
+    if (text === undefined || text === "") {
+        return;
+    }
+    event.preventDefault();
+    sendMsg({ type: "text", text });
 };
 
 const finish = (): void => {
@@ -171,6 +185,7 @@ const cancel = (): void => {
             @mouseup="onMouseUp"
             @wheel.prevent="onWheel"
             @keydown="onKeyDown"
+            @paste="onPaste"
             @contextmenu.prevent
         >
             <img v-if="frame" ref="imgEl" :src="frame" alt="" draggable="false" class="h-full w-full object-contain" />

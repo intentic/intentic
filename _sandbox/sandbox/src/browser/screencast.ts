@@ -20,6 +20,13 @@ const STILL_DELAY_MS = 400;
 const STILL_QUALITY = 85;
 // Twice the layout viewport. Past that the wire cost stops buying anything a 1280-CSS-px page can show.
 const STILL_SCALE = 2;
+/* HOW LONG A CAPTURE KEEPS DISTURBING THE PICTURE IT TOOK. Photographing the page at STILL_SCALE makes Chromium
+ * re-raster it, and the screencast dutifully encodes that wobble as motion frames arriving ~20ms behind the
+ * still. Left alone they replace the sharp picture with a blurry one AND re-arm the debounce that took it, so a
+ * page where nothing whatsoever is happening pulsed sharp-blurry-sharp twice a second forever — flickering, and
+ * paying for an encode and a tunnel round trip each time. Frames inside this window belong to our own camera.
+ * Generous against a loaded machine and still well under STILL_DELAY_MS, so a real change never waits on it. */
+const CAPTURE_ECHO_MS = 250;
 
 const SCREENCAST_OPTIONS = { format: "jpeg", quality: MOTION_QUALITY, maxWidth: VIEW_WIDTH, maxHeight: VIEW_HEIGHT, everyNthFrame: 1 } as const;
 
@@ -146,6 +153,9 @@ export const startScreencast = async (context: BrowserContext, onFrame: (frame: 
     // The page `attached` is streaming — only needed to tell whether a closing page is the pinned one.
     let boundTo: Page | undefined;
     let stillTimer: NodeJS.Timeout | undefined;
+    // Whether a frame arriving now is the page moving or our own still capture shaking it — see CAPTURE_ECHO_MS.
+    let capturing = false;
+    let echoUntil = 0;
 
     /* THE PICTURE ANYONE ACTUALLY READS IS A STILL ONE. Watching an agent browse is mostly watching a page that
      * is not moving — so the motion stream is tuned for smoothness (1x, quality 70, enough to follow a scroll)
@@ -161,14 +171,25 @@ export const startScreencast = async (context: BrowserContext, onFrame: (frame: 
         if (stopped || paused || session !== attached) {
             return;
         }
+        /* A CLIP IS IN DOCUMENT COORDINATES, NOT VIEWPORT ONES, so the still has to ask the page where it is
+         * before it can photograph it. A fixed {0,0} names the top of the DOCUMENT — right only while nothing
+         * has scrolled, and Chromium answers a clip that isn't on the composited surface with a BLANK image
+         * rather than an error. So every settle after a scroll wiped the picture white and the next motion
+         * frame brought it back: the view flickered exactly when someone was reading it. */
+        capturing = true;
         const shot = await session
-            .send("Page.captureScreenshot", {
-                format: "webp",
-                quality: STILL_QUALITY,
-                clip: { x: 0, y: 0, width: VIEW_WIDTH, height: VIEW_HEIGHT, scale: STILL_SCALE },
-            })
+            .send("Page.getLayoutMetrics")
+            .then(({ visualViewport }) =>
+                session.send("Page.captureScreenshot", {
+                    format: "webp",
+                    quality: STILL_QUALITY,
+                    clip: { x: visualViewport.pageX, y: visualViewport.pageY, width: VIEW_WIDTH, height: VIEW_HEIGHT, scale: STILL_SCALE },
+                }),
+            )
             // Navigated, closed, or blocked on a dialog mid-capture — the next motion frame schedules another.
             .catch(() => undefined);
+        capturing = false;
+        echoUntil = Date.now() + CAPTURE_ECHO_MS;
         if (shot === undefined || stopped || paused || session !== attached) {
             return;
         }
@@ -182,6 +203,8 @@ export const startScreencast = async (context: BrowserContext, onFrame: (frame: 
         pinned ||= pin;
         boundTo = target;
         clearTimeout(stillTimer);
+        // A different page's first frames are nobody's echo, however recently we photographed the last one.
+        echoUntil = 0;
         try {
             await attached?.detach();
         } catch {
@@ -190,8 +213,15 @@ export const startScreencast = async (context: BrowserContext, onFrame: (frame: 
         const session = await context.newCDPSession(target);
         attached = session;
         session.on("Page.screencastFrame", (frame) => {
-            onFrame({ data: frame.data, format: "jpeg" });
+            // Acked whatever happens to it: an unacked frame stops the stream, including the ones below that
+            // are dropped precisely because nothing has changed.
             session.send("Page.screencastFrameAck", { sessionId: frame.sessionId }).catch(() => {});
+            if (capturing || Date.now() < echoUntil) {
+                // Our own still shaking the page it photographed. Forwarding it would undo the sharp frame we
+                // just sent, and re-arming the debounce would take another — which is the loop, not the page.
+                return;
+            }
+            onFrame({ data: frame.data, format: "jpeg" });
             clearTimeout(stillTimer);
             stillTimer = setTimeout(() => void still(session), STILL_DELAY_MS);
         });
@@ -242,6 +272,8 @@ export const startScreencast = async (context: BrowserContext, onFrame: (frame: 
             }
             paused = next;
             clearTimeout(stillTimer);
+            // Coming back is a fresh stream, and its first frame is the surface as it stands — not an echo.
+            echoUntil = 0;
             const session = attached;
             if (session === undefined) {
                 return;

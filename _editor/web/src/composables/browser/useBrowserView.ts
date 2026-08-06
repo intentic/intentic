@@ -51,6 +51,12 @@ export interface BrowserView {
     readonly onMouseUp: (event: MouseEvent, frame: HTMLElement) => void;
     readonly onWheel: (event: WheelEvent, frame: HTMLElement) => void;
     readonly onKeyDown: (event: KeyboardEvent) => void;
+    // THE ONE THING TYPING CANNOT DO. The remote Chromium has a clipboard of its own, inside the sandbox, that
+    // nothing on the user's machine can write to — so Ctrl/Cmd+V arriving at the page would paste whatever that
+    // browser last copied, not what the user meant. onKeyDown deliberately lets the chord through to the host
+    // browser instead, which turns it into a `paste` event carrying the real clipboard, and the text travels
+    // down the same insertText path a keystroke does.
+    readonly onPaste: (event: ClipboardEvent) => void;
 }
 
 // Build the authenticated wss URL, or undefined if the sandbox isn't reachable / not signed in. Reads the base
@@ -257,6 +263,14 @@ export const useBrowserView = (name: Ref<string | undefined>): BrowserView => {
                 send({ type: `key`, key: event.key });
                 event.preventDefault();
             }
+        },
+        onPaste: (event) => {
+            const text = event.clipboardData?.getData(`text/plain`);
+            if (!driving.value || text === undefined || text === ``) {
+                return;
+            }
+            event.preventDefault();
+            send({ type: `text`, text });
         },
     };
 };

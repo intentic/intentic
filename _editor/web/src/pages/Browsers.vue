@@ -176,6 +176,7 @@ const close = (name: string): void => void closeBrowser(name);
                 @mouseup="frameEl && view.onMouseUp($event, frameEl)"
                 @wheel="frameEl && view.onWheel($event, frameEl)"
                 @keydown="view.onKeyDown"
+                @paste="view.onPaste"
                 @contextmenu.prevent
             >
                 <img v-show="view.frame.value" ref="frameEl" :src="view.frame.value" alt="" draggable="false" class="h-full w-full object-contain" />
