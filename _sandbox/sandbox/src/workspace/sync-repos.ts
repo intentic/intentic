@@ -49,6 +49,15 @@ export const syncWorkspaceRepos = async (services: Services, throttleMs: number)
 
 const commits = (n: number): string => `${n} ${n === 1 ? "commit" : "commits"}`;
 
+/* The note's fixed opening — what turn-preamble.ts recognizes it by, in the list that decides both what the
+ * chat discloses and what a restore strips back out of the stored message.
+ *
+ * It used to have neither. The advisory was pasted onto the front of the prompt by hand, which put it outside
+ * every mechanism built for exactly this kind of text: the chat never mentioned it, and — because the stripper
+ * only ever cuts an opening it knows — a reopened tab redrew the whole thing as a paragraph the user had
+ * supposedly typed above their own words. */
+export const REPO_SYNC_NOTE_HEADER = "## Repos synced with their remotes";
+
 // A note prepended to the turn's prompt so the agent knows what moved and — critically — which repos it could
 // NOT advance (its context there may be stale). Clean/current/no-remote/skipped repos add nothing.
 export const syncAdvisory = (results: readonly RepoSync[]): string | undefined => {
@@ -68,5 +77,5 @@ export const syncAdvisory = (results: readonly RepoSync[]): string | undefined =
                 return [];
         }
     });
-    return notes.length > 0 ? `[repo sync]\n${notes.join("\n")}` : undefined;
+    return notes.length > 0 ? `${REPO_SYNC_NOTE_HEADER}\n\n${notes.join("\n")}` : undefined;
 };

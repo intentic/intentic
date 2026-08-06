@@ -1,4 +1,6 @@
+import type { TurnNote } from "@intentic/sandbox-contract";
 import type { RepoSync } from "../agents/sync.js";
+import { REPO_SYNC_NOTE_HEADER } from "../workspace/sync-repos.js";
 import { SETUP_NOTICE_HEADER, STALE_NOTICE_HEADER } from "../workspace/workspace-setup.js";
 import { DELEGATION_NOTE_HEADER } from "./delegation.js";
 import { TURN_CONTEXT_NOTE_HEADER } from "./turn-context.js";
@@ -12,6 +14,12 @@ import { TURN_CONTEXT_NOTE_HEADER } from "./turn-context.js";
 // as the user's own words: the "Dependencies are NOT installed" text stapled onto their message after every
 // refresh or sandbox rebuild. Builder and stripper live together so restore recognizes exactly what a turn
 // injected — including in transcripts written before this module existed, which used the same shape.
+//
+// The third reader is the CHAT, and it is the one this module was missing for most of its life. Stripping a
+// note out of the user's words is only half the job: the other half is showing it somewhere, because a note
+// that changes what the agent does and appears nowhere is an instruction the user is watching be followed
+// without being allowed to read it. preambleNotes below is that half — the same anchored split the stripper
+// makes, kept instead of discarded — and INJECTED carries a title per note so the chat has a row to draw.
 
 const SEPARATOR = "\n\n---\n\n";
 
@@ -120,20 +128,26 @@ export const syncNote = (repos: readonly RepoSync[], when: "start" | "parked"): 
     return lines.join("\n");
 };
 
-// Every note this module knows how to put in front of a user message — the builder's flatten check and the
-// stripper's anchor read the same list, which is what keeps the two from drifting.
-const INJECTED = [
-    DELEGATION_NOTE_HEADER,
-    SETUP_NOTICE_HEADER,
+/* Every note this module knows how to put in front of a user message — the builder's flatten check, the
+ * stripper's anchor and the chat's disclosure all read this one list, which is what keeps the three from
+ * drifting. A note missing from it is invisible three ways at once: it flattens wrong, it survives restore as
+ * the user's own words, and the chat never mentions it.
+ *
+ * The TITLE is the row the reader clicks. It says what the note is about in their terms, not the daemon's — the
+ * text behind it is addressed to a model and reads like it. */
+const INJECTED: readonly { readonly header: string; readonly title: string }[] = [
+    { header: DELEGATION_NOTE_HEADER, title: "Delegating to other coding agents" },
+    { header: SETUP_NOTICE_HEADER, title: "Dependencies aren't installed yet" },
     // The dependency notice has TWO openings, and only one of them was ever listed here. A workspace whose
     // projects are installed-but-behind emits the stale half alone, which begins with neither the header above
     // nor anything else this list knew — so the anchor never matched, nothing was stripped, and the notice came
     // back out of every restore as the user's own words. It is the shape this repo's own sandbox produces.
-    STALE_NOTICE_HEADER,
-    TURN_CONTEXT_NOTE_HEADER,
-    LITERAL_SLASH_NOTE_HEADER,
-    WORKTREE_NOTE_HEADER,
-    SYNC_NOTE_HEADER,
+    { header: STALE_NOTICE_HEADER, title: "Dependencies are behind" },
+    { header: TURN_CONTEXT_NOTE_HEADER, title: "Workspace context found for this message" },
+    { header: LITERAL_SLASH_NOTE_HEADER, title: "How to read this message" },
+    { header: WORKTREE_NOTE_HEADER, title: "Where this turn's files live" },
+    { header: SYNC_NOTE_HEADER, title: "Your workspace moved on underneath this agent" },
+    { header: REPO_SYNC_NOTE_HEADER, title: "Repos synced with their remotes" },
 ];
 
 /* Notes in front of the user's message, separated from it exactly ONCE however many passes add to them.
@@ -148,15 +162,52 @@ export const withTurnPreamble = (notes: readonly string[], prompt: string): stri
         return prompt;
     }
     const joined = notes.join("\n\n");
-    return INJECTED.some((header) => prompt.startsWith(header)) ? `${joined}\n\n${prompt}` : `${joined}${SEPARATOR}${prompt}`;
+    return INJECTED.some(({ header }) => prompt.startsWith(header)) ? `${joined}\n\n${prompt}` : `${joined}${SEPARATOR}${prompt}`;
 };
 
-// The restore-side inverse. Anchored, not fuzzy: only a message that STARTS with a known injected note is
-// touched, and only up to the FIRST separator — a user who typed `---` themselves keeps their text intact.
-export const stripTurnPreamble = (text: string): string => {
-    if (!INJECTED.some((header) => text.startsWith(header))) {
-        return text;
+/* WHERE THE NOTES END AND THE USER'S WORDS BEGIN — one answer, read by the two functions below.
+ *
+ * Anchored, not fuzzy: only a message that STARTS with a known injected note has a preamble at all, and it runs
+ * only up to the FIRST separator, so a user who typed `---` themselves keeps their text intact. A message with a
+ * known opening and no separator is the one case where the boundary cannot be located — it is left whole rather
+ * than cut at a guess, which means the strip is a no-op and the chat discloses nothing rather than something
+ * wrong. */
+const preambleEnd = (text: string): number | undefined => {
+    if (!INJECTED.some(({ header }) => text.startsWith(header))) {
+        return undefined;
     }
     const separator = text.indexOf(SEPARATOR);
-    return separator === -1 ? text : text.slice(separator + SEPARATOR.length);
+    return separator === -1 ? undefined : separator;
+};
+
+// The restore-side inverse of the builder: the user's own words, with the daemon's notes taken back off.
+export const stripTurnPreamble = (text: string): string => {
+    const end = preambleEnd(text);
+    return end === undefined ? text : text.slice(end + SEPARATOR.length);
+};
+
+/* ONE BLOCK OF NOTES, TITLED — the rows the chat draws for text the daemon wrote and the user did not.
+ *
+ * Split on the note openings themselves, which is the only marker there is: the builder joins notes with a blank
+ * line and nothing else, so a note is the run of text from its own header to the next one. Positions are found
+ * rather than assumed, because the assembly order is the caller's (turn-plan.ts layers two passes of it) and a
+ * list in a fixed order would mis-title every note the day someone reorders them.
+ *
+ * A header only counts where it OPENS A LINE. Two of these notes are prose rather than `##` headings, and a
+ * model-facing paragraph is free to mention "some dependencies declared under /work are not installed" mid
+ * sentence — matching that would cut a note in half and title the remainder as a note of its own. */
+export const splitTurnNotes = (preamble: string): TurnNote[] => {
+    const marks = INJECTED.flatMap(({ header, title }) => {
+        const at = preamble.indexOf(header);
+        return at === -1 || (at > 0 && preamble[at - 1] !== "\n") ? [] : [{ at, title }];
+    }).toSorted((left, right) => left.at - right.at);
+    return marks.map(({ at, title }, index) => ({ title, text: preamble.slice(at, marks[index + 1]?.at).trim() }));
+};
+
+// The same cut stripTurnPreamble makes, KEPT: what a built prompt put in front of the user's words, for the
+// chat to disclose. The pair is the whole point — one side takes the notes out of the message, the other side
+// shows them, and neither can quietly become the only one that runs.
+export const preambleNotes = (text: string): TurnNote[] => {
+    const end = preambleEnd(text);
+    return end === undefined ? [] : splitTurnNotes(text.slice(0, end));
 };

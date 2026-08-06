@@ -2,7 +2,15 @@ import { expect, test } from "vitest";
 import type { RepoSync } from "../agents/sync.js";
 import { setupNoticeFor, SETUP_NOTICE_HEADER } from "../workspace/workspace-setup.js";
 import { DELEGATION_NOTE_HEADER } from "./delegation.js";
-import { LITERAL_SLASH_NOTE, stripTurnPreamble, SYNC_NOTE_HEADER, syncNote, withTurnPreamble } from "./turn-preamble.js";
+import {
+    LITERAL_SLASH_NOTE,
+    preambleNotes,
+    splitTurnNotes,
+    stripTurnPreamble,
+    SYNC_NOTE_HEADER,
+    syncNote,
+    withTurnPreamble,
+} from "./turn-preamble.js";
 
 const notice = `${SETUP_NOTICE_HEADER}\n(a dropped project arrives without them on purpose):\n- intentic: run \`pnpm install\` there first.`;
 const note = `${DELEGATION_NOTE_HEADER}\n\nThe user's connected agent accounts are runnable from your shell.`;
@@ -73,6 +81,61 @@ test("a second pass of notes merges into the first rather than nesting a separat
     expect(outer.startsWith(SETUP_NOTICE_HEADER)).toBe(true);
     expect(outer).toContain(DELEGATION_NOTE_HEADER);
     expect(stripTurnPreamble(outer)).toBe("fix the bug");
+});
+
+/* WHAT THE CHAT GETS TO SHOW — the other half of the strip, and the half that did not exist. Every assertion
+ * below is really the same one: whatever came off the user's words is still reachable, whole, and labelled.
+ *
+ * These pair with the strip tests above deliberately. The two functions read one list and must answer about the
+ * same span of text — a note the stripper cuts but the splitter cannot name is a note the user watches an agent
+ * act on with no way to read it, which is the failure this whole mechanism exists to prevent. */
+test("what strip removes, the split hands back — titled, whole, and in the order it was sent", () => {
+    const sent = withTurnPreamble([note, notice], "fix the bug");
+
+    expect(preambleNotes(sent)).toEqual([
+        { title: "Delegating to other coding agents", text: note },
+        { title: "Dependencies aren't installed yet", text: notice },
+    ]);
+    // …and the user's words are untouched by the disclosure, exactly as before it existed.
+    expect(stripTurnPreamble(sent)).toBe("fix the bug");
+});
+
+// The two halves of the dependency notice are one string built by one function, and they say different things
+// to different audiences — so they are two rows, not one, and the split has to find the second's opening.
+test("the dependency notice's two halves come back as two rows", () => {
+    const both =
+        setupNoticeFor([
+            {
+                dir: "",
+                recipe: { ecosystem: "node", manager: "pnpm", command: "pnpm install", evidence: "pnpm-lock.yaml", marker: "node_modules" },
+                state: "needs-setup",
+            },
+            {
+                dir: "intentic",
+                recipe: { ecosystem: "node", manager: "pnpm", command: "pnpm install", evidence: "pnpm-lock.yaml", marker: "node_modules" },
+                state: "stale",
+                unresolved: [{ dir: "", names: ["vue"] }],
+            },
+        ]) ?? "";
+
+    expect(preambleNotes(withTurnPreamble([both], "go"))).toMatchObject([
+        { title: "Dependencies aren't installed yet" },
+        { title: "Dependencies are behind" },
+    ]);
+});
+
+// The mid-turn rebase is handed the note directly rather than a built prompt — there is no user message for it
+// to sit in front of — so the splitter has to title a bare note on its own.
+test("a bare note titles itself, which is what the mid-turn rebase discloses", () => {
+    expect(splitTurnNotes(syncNote([behind()], "parked") ?? "")).toMatchObject([{ title: "Your workspace moved on underneath this agent" }]);
+});
+
+// The disclosure obeys the same anchor the strip does. A user who quoted the notice themselves is not owed a
+// row claiming the daemon sent it, and a header with no separator behind it is a boundary nobody can locate.
+test("the split stays silent exactly where the strip declines to cut", () => {
+    expect(preambleNotes("fix the bug")).toEqual([]);
+    expect(preambleNotes(`My sessions get appended:\n\n${notice}\n\n---\n\nDespite dependencies being installed!`)).toEqual([]);
+    expect(preambleNotes(notice)).toEqual([]);
 });
 
 const behind = (overrides: Partial<RepoSync> = {}): RepoSync => ({

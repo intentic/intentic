@@ -448,9 +448,16 @@ test("an approved plan executes with permissions bypassed, whatever the turn pla
  * a tree it planned from. The route owns the git; these cases own WHEN it is asked for, which is the part that
  * can quietly go wrong: fire on a rejection and the daemon rewrites a branch whose turn the user just stopped;
  * fire under a running command and the ground moves beneath a build nobody is watching. */
+const parkedSyncFrame = { kind: "worktree" as const, branch: "agent/c1", base: "abc1234", sync: { commits: 2, blocked: [] } };
+const parkedSyncNote = "## Your branch moved onto newer main\n\nmoved under you";
+// Both frames the route hands back: the summary line the reader gets, and the note itself so the words the
+// model is about to act on are reachable rather than merely paraphrased.
 const parkedSync = {
-    frame: { kind: "worktree" as const, branch: "agent/c1", base: "abc1234", sync: { commits: 2, blocked: [] } },
-    note: "## Your branch moved onto newer main\n\nmoved under you",
+    frames: [
+        parkedSyncFrame,
+        { kind: "preamble" as const, notes: [{ title: "Your workspace moved on underneath this agent", text: parkedSyncNote }], duringTurn: true },
+    ],
+    note: parkedSyncNote,
 };
 
 test("an approved plan rebases the branch, announces it, and hands the agent the note", async () => {
@@ -472,8 +479,13 @@ test("an approved plan rebases the branch, announces it, and hands the agent the
 
     expect(calls).toBe(1);
     // The transcript hears it where it happened — after the card it settles, not at the top of the turn.
-    expect(frames.filter((frame) => frame.kind === "worktree")).toEqual([parkedSync.frame]);
+    expect(frames.filter((frame) => frame.kind === "worktree")).toEqual([parkedSyncFrame]);
     expect(frames.findIndex((frame) => frame.kind === "worktree")).toBeGreaterThan(frames.findIndex((frame) => frame.kind === "resolved"));
+    // And the reader gets the same words the model does: what the branch was told, verbatim, marked as
+    // mid-turn so it reads under the card rather than being back-dated onto the prompt.
+    expect(frames.filter((frame) => frame.kind === "preamble")).toEqual([
+        { kind: "preamble", notes: [{ title: "Your workspace moved on underneath this agent", text: parkedSyncNote }], duringTurn: true },
+    ]);
     // `allow` carries a decision and no sentence, so the model hears it as an injected message — wrapped as a
     // preamble over an empty prompt, which is what makes a restored transcript drop it instead of redrawing it
     // as the user's own words.

@@ -448,7 +448,10 @@ test("agent.run streams the agent events, fenced by a user snapshot before and a
             }),
         ),
     );
-    expect(await runAgentTurn(client, { prompt: "do it" })).toEqual(events);
+    // Preamble frames dropped: an unstubbed git.sync makes every turn in this suite carry a repo-sync note, which
+    // is a real injection being really disclosed (agent.routes.ts) and not part of what the adapter streamed.
+    const frames = await runAgentTurn(client, { prompt: "do it" });
+    expect(frames.filter((frame) => frame.kind !== "preamble")).toEqual(events);
     // Attribution: pending user changes are captured BEFORE the agent runs, so the turn snapshot is agent-only.
     expect(triggers).toEqual(["user", "turn"]);
 });

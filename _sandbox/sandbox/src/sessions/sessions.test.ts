@@ -180,8 +180,9 @@ test("a successful edit keeps its call-time diff instead of the result snippet",
 
 // The daemon prepends readiness/delegation notes to the prompt it files (agent.routes.ts); a redrawn tab must
 // show what the user typed, not the protocol around it — the original complaint was the "Dependencies are NOT
-// installed" note stapled onto old messages after every refresh.
-test("restore strips an injected turn preamble from the user's bubble", async () => {
+// installed" note stapled onto old messages after every refresh. Out of their WORDS, not out of the transcript:
+// the note is what the agent was told, so it comes back on the message as a row the reader can open.
+test("restore takes an injected turn preamble off the user's words and keeps it on the message", async () => {
     const notice = [
         "Dependencies are NOT installed for the following projects, so their type-checks, linters and tests cannot work yet",
         "(a dropped project arrives without them on purpose):",
@@ -189,7 +190,7 @@ test("restore strips an injected turn preamble from the user's bubble", async ()
     ].join("\n");
     getSessionMessages.mockResolvedValue([{ type: "user", message: { content: `${notice}\n\n---\n\nfix the config` } }]);
     const messages = await readWorkspaceSession("/work", "s0");
-    expect(messages).toEqual([{ role: "user", text: "fix the config" }]);
+    expect(messages).toEqual([{ role: "user", text: "fix the config", notes: [{ title: "Dependencies aren't installed yet", text: notice }] }]);
 });
 
 test("a history-list title falling back to firstPrompt names the chat, not the injected notice", async () => {

@@ -160,6 +160,12 @@ export interface RestoredToolCall {
     thinking?: string | undefined;
 }
 
+/* ONE NOTE THE DAEMON PUT IN FRONT OF A USER'S MESSAGE, as both audiences see it: the model reads `text`, and
+ * the chat draws `title` on a collapsed row that opens to that same `text`. Shared by the live frame and the
+ * restored transcript so a note reads identically whether the tab watched it arrive or reopened an hour later. */
+export const TurnNoteSchema = z.object({ title: z.string(), text: z.string() });
+export type TurnNote = z.infer<typeof TurnNoteSchema>;
+
 // One restored bubble. Each stored assistant message becomes its own, which is what reproduces the live
 // interleaving — prose, the tool cards that prose introduced, then the next block of prose — rather than
 // collapsing a turn's whole narration into a single bubble with its tools hanging off the end.
@@ -180,6 +186,14 @@ export const RestoredMessageSchema = z.object({
     checkpointId: z.string().optional(),
     thinking: z.string().optional(),
     tools: z.array(RestoredToolCallSchema).optional(),
+    /* What the daemon added to this turn's message (user rows only) — the same notes the live `preamble` frame
+     * carries, recovered from the stored prompt when the transcript is read back. The reader that strips them out
+     * of the user's words is the one that hands them over here instead of dropping them on the floor.
+     *
+     * On the message rather than as a row of its own, and that is load-bearing twice: they ARE part of what was
+     * sent, and a record row per turn preamble would break the one-row-per-bubble correspondence a branch counts
+     * with (see the client's recordedRows — notices are drawn locally and never recorded). */
+    notes: z.array(TurnNoteSchema).optional(),
 });
 export type RestoredMessage = z.infer<typeof RestoredMessageSchema>;
 
@@ -241,6 +255,27 @@ export const AgentEventSchema = z.discriminatedUnion("kind", [
         held: z.boolean().optional(),
         deps: z.object({ missing: z.number(), started: z.array(z.string()), deferred: z.boolean() }).optional(),
     }),
+    /* WHAT THE DAEMON ADDED TO THE USER'S MESSAGE before the model read it — the exact words, not a summary of
+     * them.
+     *
+     * A turn's prompt is not only what was typed: the daemon prepends notes the model needs and the user did not
+     * write (agent/turn-preamble.ts owns the list — a rebase that moved the branch, dependencies that are behind,
+     * workspace context retrieved for this very message, where an unenforced runtime's files really live). Those
+     * notes change what the agent does, and for a long time the chat's only trace of any of them was one muted
+     * line paraphrasing the rebase — so a user watching an agent act on instructions they could not see had no
+     * way to find out what those instructions said. This frame is the fix: the note text verbatim, one entry per
+     * note, rendered collapsed so it costs a click rather than a scroll.
+     *
+     * `title` is the note's own opening header, which is what the stripper already anchors on — so the two
+     * cannot drift, and a note nobody thought to title cannot reach the wire unlabelled.
+     *
+     * `duringTurn` separates the two moments a turn is told something, because they belong in different places
+     * on screen. Absent is the ordinary one: the notes went in front of the user's own message before the turn
+     * started, so they hang off that message — and are stored on it, which is how a reopened tab still has them.
+     * Set means the turn was already running when this arrived (the rebase taken while a question or a plan sat
+     * waiting for an answer), so it reads where it happened, under the answer that triggered it, and is drawn by
+     * the client alone like every other mid-turn notice. */
+    z.object({ kind: z.literal("preamble"), notes: z.array(TurnNoteSchema), duringTurn: z.boolean().optional() }),
     // The SDK's init handshake; carries the model it actually resolved for the turn.
     z.object({ kind: z.literal("init"), model: z.string() }),
     // The pre-turn workspace snapshot's id (the attribution-fence "user" capture), emitted once before the

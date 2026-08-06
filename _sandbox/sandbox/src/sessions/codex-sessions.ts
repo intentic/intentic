@@ -3,7 +3,7 @@ import { join } from "node:path";
 import type { RestoredMessage, RestoredToolCall } from "@intentic/sandbox-contract";
 import { stripAttachmentNote } from "../agent/attachment-note.js";
 import { displayNameOf, toolCategoryOf } from "../agent/tool-calls.js";
-import { stripTurnPreamble } from "../agent/turn-preamble.js";
+import { preambleNotes, stripTurnPreamble } from "../agent/turn-preamble.js";
 
 // Codex persists each thread as a rollout under <CODEX_HOME>/sessions/YYYY/MM/DD/rollout-<ISO8601>-<threadId>.jsonl
 // (the id is the `thread.started` thread_id). The @openai/codex-sdk exposes only start/resumeThread — no
@@ -130,8 +130,16 @@ export const readCodexSession = async (home: string, threadId: string, root: str
             // rollout stores the combined text — so the same unwrapping applies (see turn-transcript.ts).
             const stripped = stripAttachmentNote(stripTurnPreamble(payload.message));
             const attachments = stripped.attachments.map((file) => (file.startsWith(`${root}/`) ? file.slice(root.length + 1) : file));
+            // And what was folded in, disclosed rather than merely removed — carried on the message exactly as
+            // the other two readers carry it, because a Codex turn is told the same things a Claude one is.
+            const notes = preambleNotes(payload.message);
             if (stripped.text.length > 0 || attachments.length > 0) {
-                out.push({ role: "user", text: stripped.text, ...(attachments.length > 0 ? { attachments } : {}) });
+                out.push({
+                    role: "user",
+                    text: stripped.text,
+                    ...(attachments.length > 0 ? { attachments } : {}),
+                    ...(notes.length > 0 ? { notes } : {}),
+                });
             }
             bubble = undefined;
             continue;

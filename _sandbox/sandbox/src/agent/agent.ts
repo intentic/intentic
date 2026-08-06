@@ -1057,11 +1057,15 @@ const formatAnswers = (questions: AskQuestion[], reply: Extract<AgentReply, { ki
     return `The user answered:\n${lines.join("\n")}`;
 };
 
-// What a rebase taken under a parked card produces: the frame that re-announces where the turn is standing,
-// and the note that tells the model its reads just went stale. Built by the route, which owns the git — this
-// module only decides when to ask for it and where the two halves go.
+/* What a rebase taken under a parked card produces: the frames that say where the turn is standing and what it
+ * was just told, and the note that tells the model its reads went stale. Built by the route, which owns the git —
+ * this module only decides when to ask for it and where the halves go.
+ *
+ * `frames` rather than one, because the news has two audiences and telling only the model is what this used to
+ * do. The worktree frame gives the reader a summary line; the preamble frame carries the note itself, so the
+ * words the model is acting on are a click away instead of nowhere. */
 export interface ParkedSync {
-    readonly frame: Extract<AgentEvent, { kind: "worktree" }>;
+    readonly frames: readonly AgentEvent[];
     readonly note: string;
 }
 
@@ -1110,7 +1114,9 @@ const syncOnAnswer = async (
     if (synced === undefined) {
         return undefined;
     }
-    push(synced.frame);
+    for (const frame of synced.frames) {
+        push(frame);
+    }
     return synced.note;
 };
 

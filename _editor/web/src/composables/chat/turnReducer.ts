@@ -110,9 +110,10 @@ export const appendMessage = (state: TurnState, message: Omit<ChatMessage, "id">
 });
 
 /** A small muted system line marking a control action (dismissed / kept planning / approved / stopped).
- * `extra` carries the two things a notice line can be more than text: the one-press follow-up some of them offer
- * (ChatMessage.noticeAction) and the unfinished wait some of them describe (ChatMessage.noticeWait). */
-export const appendNotice = (state: TurnState, text: string, extra?: Pick<ChatMessage, "noticeAction" | "noticeWait">): TurnState =>
+ * `extra` carries the three things a notice line can be more than text: the one-press follow-up some of them
+ * offer (ChatMessage.noticeAction), the unfinished wait some of them describe (ChatMessage.noticeWait), and the
+ * exact words behind a line that stands in for something the agent was told (ChatMessage.notes). */
+export const appendNotice = (state: TurnState, text: string, extra?: Pick<ChatMessage, "noticeAction" | "noticeWait" | "notes">): TurnState =>
     appendMessage(state, { role: `notice`, text, ...extra });
 
 /* What a landed delta did to the workspace's dependencies, as a clause the landed notice ends with — or nothing
@@ -486,6 +487,24 @@ export const applyTurnFrame = (state: TurnState, event: AgentEvent, context: Tur
             // nothing holds any more. (The daemon's fleet registry reads the same frame for how long the turn
             // was parked; see agents-registry.ts.)
             return step(resolveCard(state, event));
+        case `preamble`:
+            /* WHAT THE DAEMON PUT IN FRONT OF THE MODEL, as one collapsed row carrying the exact words.
+             *
+             * Two placements, because there are two moments. The ordinary one went in front of the message the
+             * user typed, so it belongs TO that message — hung off the user bubble, where someone re-reading
+             * their own prompt finds it, and where the daemon's record keeps it for a tab that reopens tomorrow.
+             * A mid-turn note (the rebase taken while a card sat parked) was added to no message of theirs, so
+             * it reads where it happened: appended under the answer that triggered it.
+             *
+             * A frame with nothing in it is not a row. The daemon sends only notes it actually injected, but a
+             * turn that injected none must not draw an empty disclosure inviting a click on nothing. */
+            if (event.notes.length === 0) {
+                return step(state);
+            }
+            if (event.duringTurn === true) {
+                return step(appendNotice(state, ``, { notes: event.notes }));
+            }
+            return step(mapMessage(state, context.userMessageId, (message) => ({ ...message, notes: event.notes })));
         case `compact`:
             return step(appendNotice(state, `Context compacted to free up space.`));
         case `landed`:

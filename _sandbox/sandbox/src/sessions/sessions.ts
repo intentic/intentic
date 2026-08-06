@@ -4,7 +4,7 @@ import type { RestoredMessage, RestoredToolCall } from "@intentic/sandbox-contra
 import { stripAttachmentNote } from "../agent/attachment-note.js";
 import { parseRuntimeHistory } from "../agent/runtime-history.js";
 import { displayNameOf, editDiffContent, resultText, toolCategoryOf, toolLocations, toolTarget } from "../agent/tool-calls.js";
-import { stripTurnPreamble } from "../agent/turn-preamble.js";
+import { preambleNotes, stripTurnPreamble } from "../agent/turn-preamble.js";
 import { matchPrompts, readSessionPrompts } from "./prompt-index.js";
 
 // A past conversation in this workspace, for the platform's chat-history list. `title` is the SDK's
@@ -169,14 +169,19 @@ export const restoredSessionMessages = (messages: readonly { readonly type?: str
             if (text.length > 0) {
                 const stripped = stripAttachmentNote(stripTurnPreamble(text));
                 const attachments = stripped.attachments.map((path) => (path.startsWith(`${dir}/`) ? path.slice(dir.length + 1) : path));
+                // …and the preamble that was just stripped, kept on the message it was added to. Removing it from
+                // the user's words is only half of being honest about it; carrying it is the other half, and it
+                // reads the same here as on the daemon's own record.
+                const notes = preambleNotes(text);
+                const added = notes.length > 0 ? { notes } : {};
                 const runtime = parseRuntimeHistory(stripped.text);
                 if (runtime !== undefined) {
                     out.push(...runtime.history);
                     if (runtime.prompt.length > 0 || attachments.length > 0) {
-                        out.push({ role: "user", text: runtime.prompt, ...(attachments.length > 0 ? { attachments } : {}) });
+                        out.push({ role: "user", text: runtime.prompt, ...(attachments.length > 0 ? { attachments } : {}), ...added });
                     }
                 } else if (stripped.text.length > 0 || attachments.length > 0) {
-                    out.push({ role: "user", text: stripped.text, ...(attachments.length > 0 ? { attachments } : {}) });
+                    out.push({ role: "user", text: stripped.text, ...(attachments.length > 0 ? { attachments } : {}), ...added });
                 }
             }
             continue;

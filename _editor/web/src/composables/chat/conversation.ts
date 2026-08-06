@@ -615,6 +615,10 @@ export class Conversation {
                     : {}),
                 ...(message.thinking !== undefined ? { thinking: message.thinking } : {}),
                 ...(message.tools !== undefined ? { tools: message.tools } : {}),
+                // What the daemon added to that turn's message. Kept across a reopen for the same reason it is
+                // shown live: a reader who can see the agent's instructions only while the tab stays open can't
+                // see them at all.
+                ...(message.notes !== undefined ? { notes: message.notes } : {}),
             })),
         );
         this.error.value = null;

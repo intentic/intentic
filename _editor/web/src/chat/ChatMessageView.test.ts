@@ -17,6 +17,17 @@ vi.hoisted(() => {
         removeEventListener: () => {},
         dispatchEvent: () => false,
     })) as unknown as typeof globalThis.matchMedia;
+    /* The prompt bubble watches its own box twice — a ResizeObserver for whether the clamp is doing anything, an
+     * IntersectionObserver for whether it has stuck to the top of the scroller. jsdom has layout for neither.
+     * Stubs that never fire leave both flags at their defaults, which is exactly what the component shows before
+     * its first measurement, so a user bubble renders here as it does on screen the instant it mounts. */
+    const idle = class {
+        observe(): void {}
+        unobserve(): void {}
+        disconnect(): void {}
+    };
+    globalThis.ResizeObserver ??= idle;
+    globalThis.IntersectionObserver ??= idle as unknown as typeof globalThis.IntersectionObserver;
     globalThis.window.env ??= {
         production: false,
         api: { url: `http://localhost` },
@@ -274,5 +285,43 @@ describe(`ChatMessageView errand row`, () => {
         element.querySelector(`button`)?.click();
         await nextTick();
         expect(element.textContent).toContain(`src/auth/session.ts`);
+    });
+});
+
+/* THE NOTES ROW — the same bargain the errand row strikes, for text the daemon put in FRONT of the user's
+ * message rather than instead of it. Collapsed so a turn that was told four things does not bury the answer;
+ * openable because an agent visibly acting on instructions the reader cannot reach is the thing this replaces. */
+describe(`ChatMessageView added-notes row`, () => {
+    const notes = [
+        { title: `Your workspace moved on underneath this agent`, text: `## Your branch moved onto newer main\n\nRe-read src/auth/session.ts.` },
+        { title: `Dependencies are behind`, text: `Some dependencies declared under /work are not installed.` },
+    ];
+
+    it(`names every note and keeps the words the agent got one press away`, async () => {
+        const element = mount({ id: 3, role: `user`, text: `fix the bug`, notes });
+
+        // Titles up front, so the reader knows what the turn was told without opening anything…
+        expect(element.textContent).toContain(`Your workspace moved on underneath this agent`);
+        expect(element.textContent).toContain(`Dependencies are behind`);
+        // …and their words are collapsed, not absent.
+        expect(element.textContent).not.toContain(`Re-read src/auth/session.ts.`);
+
+        element.querySelector(`[aria-expanded]`)?.dispatchEvent(new MouseEvent(`click`, { bubbles: true }));
+        await nextTick();
+        expect(element.textContent).toContain(`Re-read src/auth/session.ts.`);
+        expect(element.textContent).toContain(`Some dependencies declared under /work are not installed.`);
+    });
+
+    // The mid-turn note rides a notice with nothing of its own to say. The empty line must not draw.
+    it(`draws a note-only notice as the row alone, with no empty line above it`, () => {
+        const element = mount({ id: 4, role: `notice`, text: ``, notes: notes.slice(0, 1) });
+
+        expect(element.textContent).toContain(`Sent with your message`);
+        expect(element.querySelectorAll(`[aria-expanded]`)).toHaveLength(1);
+    });
+
+    // A turn nobody added anything to says nothing — no row, no chevron, nothing to click.
+    it(`stays out of the way of an ordinary message`, () => {
+        expect(mount({ id: 5, role: `user`, text: `fix the bug` }).textContent).not.toContain(`Sent with your message`);
     });
 });

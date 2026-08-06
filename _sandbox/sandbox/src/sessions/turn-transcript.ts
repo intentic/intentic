@@ -1,7 +1,7 @@
 import type { AgentEvent, AgentTurn, RestoredMessage, RestoredToolCall } from "@intentic/sandbox-contract";
 import { stripAttachmentNote } from "../agent/attachment-note.js";
 import { parseRuntimeHistory } from "../agent/runtime-history.js";
-import { stripTurnPreamble } from "../agent/turn-preamble.js";
+import { preambleNotes, stripTurnPreamble } from "../agent/turn-preamble.js";
 import type { Services } from "../composition.js";
 import type { TranscriptAgent } from "./agent-transcript.js";
 
@@ -34,13 +34,21 @@ export const restoredTurn = (
     // Claude path's way of carrying it, and the other adapters word it differently.
     const stripped = stripAttachmentNote(stripTurnPreamble(turn.prompt));
     const attachments = (turn.attachments ?? stripped.attachments).map((path) => (path.startsWith(`${root}/`) ? path.slice(root.length + 1) : path));
+    /* Taken OUT of the user's words and kept, rather than taken out and dropped. What a turn was told is part of
+     * what happened to it, so a tab that reopens tomorrow shows the same collapsed row the tab that watched it
+     * stream did — not a message whose agent appears to have acted on nothing.
+     *
+     * Carried ON the user's row, never as a row of its own: the record's positions are what a rewind addresses
+     * and a branch copies a prefix of, so a turn that happened to be told something must not record one row more
+     * than a turn that wasn't. */
+    const notes = preambleNotes(turn.prompt);
     /* A handoff turn's prompt opens with the transcript the daemon folded into it (runtime-history.ts). Unwrap
      * that and keep only what the user actually typed: the rows inside the envelope are this conversation's OWN
      * earlier messages, which this record already holds. Re-emitting them appended a second — and, being
      * budget-capped, truncated — copy of the conversation every time a provider or account was switched. */
     const text = parseRuntimeHistory(stripped.text)?.prompt ?? stripped.text;
     if (text.length > 0 || attachments.length > 0) {
-        out.push({ role: "user", text, ...(attachments.length > 0 ? { attachments } : {}) });
+        out.push({ role: "user", text, ...(attachments.length > 0 ? { attachments } : {}), ...(notes.length > 0 ? { notes } : {}) });
     }
 
     out.push(...foldFrames(events, undefined));

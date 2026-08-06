@@ -8,6 +8,7 @@ import type {
     ToolCallLocation,
     ToolCallStatus,
     ToolKind,
+    TurnNote,
 } from "@intentic/sandbox-contract";
 import { errandOf } from "./errands";
 
@@ -160,6 +161,19 @@ export interface ChatMessage {
      * pairs the kind with the live state that answers it (credentialRenewal), so a transcript replayed an hour
      * later shows the line settled instead of spinning forever over a turn that came back long ago. */
     readonly noticeWait?: "credentialRenewal";
+    /* WHAT THE DAEMON TOLD THIS TURN and the user did not — each note with the title its row is drawn as and the
+     * text that opening it reveals.
+     *
+     * A turn's prompt is not only what was typed: a rebase that moved the branch out from under the agent,
+     * dependencies that are behind, workspace context retrieved for the message, the repos just pulled. The chat
+     * used to show one muted line paraphrasing the rebase and nothing at all for the rest, which put the user in
+     * the position of watching an agent follow instructions they had no way to read. Collapsed, not hidden: one
+     * line until it is opened, and always there to open.
+     *
+     * On the USER bubble for the ordinary case, because that is what the notes were added to and it is how they
+     * survive a reopen (the daemon stores them on that row). On a NOTICE for the mid-turn case — a rebase taken
+     * while a card was parked went in front of no message of theirs, so it reads where it happened. */
+    readonly notes?: readonly TurnNote[];
     // Files the user attached to this turn (user bubbles only), for the chip/thumbnail row.
     readonly attachments?: readonly ChatAttachment[];
     // The workspace checkpoint capturing the state BEFORE this turn ran (user bubbles only, main-tree turns

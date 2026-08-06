@@ -32,7 +32,7 @@ import { handoffHistory, turnStartIndex } from "../sessions/turn-transcript.js";
 import type { AgentRequest, ParkedSync } from "./agent.js";
 import { adapterFor } from "./adapter-registry.js";
 import { withAttachmentNote } from "./attachment-note.js";
-import { syncNote } from "./turn-preamble.js";
+import { preambleNotes, splitTurnNotes, syncNote, withTurnPreamble } from "./turn-preamble.js";
 import { resolveRequest } from "./agent-requests.js";
 import { rewindConversation } from "./rewind.js";
 import { commandsOf } from "./agent-commands.js";
@@ -313,7 +313,13 @@ async function* runConversationTurn(
                 // The note is absent on exactly the repos-empty answer, so it is the whole test: no movement,
                 // no frame and nothing to tell the model.
                 const note = syncNote(moved, "parked");
-                return note === undefined ? undefined : { frame: worktreeFrame(moved), note };
+                // The summary line for the reader, the note itself behind it, and the same note to the model.
+                // Split out because they are read at different depths, not because they are different news.
+                // `duringTurn`: this one was not added to anything the user typed — it arrived mid-answer, and
+                // reads under the card that had been holding the turn open.
+                return note === undefined
+                    ? undefined
+                    : { frames: [worktreeFrame(moved), { kind: "preamble", notes: splitTurnNotes(note), duringTurn: true }], note };
             } catch (error) {
                 services.logger.warn({ err: error, id: conversationId }, "agents: sync on a settled card failed");
                 return undefined;
@@ -663,7 +669,25 @@ async function* runTurn(
     const advisory = syncPromise === undefined ? undefined : syncAdvisory(await syncPromise);
     mark("repoSync");
     if (advisory !== undefined) {
-        request = { ...request, prompt: `${advisory}\n\n${request.prompt}` };
+        // Through withTurnPreamble like every other note, and not by hand: that is what puts it inside the
+        // strip on restore and the disclosure below, both of which key off the openings that function knows.
+        // Pasted on directly, as it was, it reached the model and nothing else — invisible in the chat, and
+        // redrawn as the user's own words by every reopened tab.
+        request = { ...request, prompt: withTurnPreamble([advisory], request.prompt) };
+    }
+    /* WHAT THE USER'S MESSAGE GREW ON THE WAY TO THE MODEL, said out loud.
+     *
+     * Everything above this line may have prepended a note to the prompt: a rebase that moved the branch, a
+     * dependency tree that is behind, workspace context retrieved for this very message, the repos just pulled.
+     * They change what the agent does, and the chat used to show at most a one-line paraphrase of one of them —
+     * so an agent acting on instructions the user could not read looked like an agent acting on its own.
+     *
+     * Emitted from the FINAL prompt rather than from the notes as they were assembled, because that is the
+     * string the model actually receives; anything a later pass adds is in it by construction, and a disclosure
+     * that has to be remembered separately is one someone eventually forgets to update. */
+    const notes = preambleNotes(request.prompt);
+    if (notes.length > 0) {
+        yield { kind: "preamble", notes };
     }
     // Attribution fence: capture anything pending as user-authored (terminal edits, desktop-sync arrivals,
     // unflushed UI writes) BEFORE the agent runs, so the turn-end snapshot below is purely the agent's work.

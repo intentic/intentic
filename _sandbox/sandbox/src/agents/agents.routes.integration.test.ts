@@ -99,10 +99,10 @@ test("a thrown workspace turn settles its surfaced card as an error", async () =
         ),
     );
 
-    expect(await runAgentTurn(client, { prompt: "do it", conversationId: "workspace-error" })).toEqual([
-        { kind: "error", message: "adapter crashed" },
-        { kind: "done" },
-    ]);
+    // Preamble frames dropped: an unstubbed git.sync makes every turn in this suite carry a repo-sync note, which
+    // is a real injection being really disclosed (agent.routes.ts) and nothing to do with the error path here.
+    const frames = await runAgentTurn(client, { prompt: "do it", conversationId: "workspace-error" });
+    expect(frames.filter((frame) => frame.kind !== "preamble")).toEqual([{ kind: "error", message: "adapter crashed" }, { kind: "done" }]);
     // And the roster carries WHY, not just that: the sentence is the whole of what a card, a run row or a
     // notification can say about a turn that produced nothing else, and reaching it through the transcript is
     // the trip this field exists to spare the reader.

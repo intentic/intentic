@@ -475,6 +475,21 @@ const defers = computed(() => foldsIntoTurn(props.message));
 const errand = computed(() => errandOf(props.message));
 const errandOpen = ref(false);
 
+/* THE NOTES THE DAEMON ADDED TO A TURN'S MESSAGE (ChatMessage.notes) — the errand row's reasoning applied to
+ * the other half of the same problem.
+ *
+ * An errand is our prose sent AS the user; these are our prose sent WITH them, prepended to what they typed
+ * before the model reads it: a rebase that moved the branch out from under the agent, dependencies that are
+ * behind, workspace context retrieved for the message. They change what the agent does — and the chat's only
+ * trace of any of them used to be a single muted line paraphrasing the rebase, so an agent visibly acting on
+ * instructions had those instructions nowhere on screen and nowhere to look for them.
+ *
+ * Same answer as the errand, and it must stay the same answer: collapsed to one line, opening to the words
+ * verbatim. Summarising is what caused this; a shorter paraphrase in place of the text would be the same bug
+ * with better wording. */
+const notesOpen = ref(false);
+const noteTitles = computed(() => (props.message.notes ?? []).map((note) => note.title).join(`, `));
+
 /* THE PINNED PROMPT'S TRAILER: things have happened to this turn since it was asked, and the pin must not
  * pretend otherwise. One line, so it names the LAST of them and counts how many said the same thing — in the
  * user's own words for a nudge (the lexicon keeps those short) and by label for an errand. In flow whenever
@@ -813,8 +828,10 @@ const onEditKeydown = (event: KeyboardEvent): void => {
                 </div>
             </div>
         </div>
+        <!-- A mid-turn preamble is a notice with nothing to say on its own line: its whole content is the notes
+             row below, and drawing the empty line too would put a bare info glyph above it. -->
         <div
-            v-else-if="message.role === 'notice'"
+            v-else-if="message.role === 'notice' && message.text !== ''"
             class="flex flex-wrap items-center justify-center gap-x-2 gap-y-0.5 self-center py-0.5 text-2xs text-subtle"
         >
             <!-- A notice whose wait is still running spins instead of showing the info glyph, and says how long
@@ -1139,5 +1156,33 @@ const onEditKeydown = (event: KeyboardEvent): void => {
         <span v-if="trailer" class="text-2xs text-subtle"
             >↳ {{ trailer.label }}<template v-if="trailer.count > 1"> ×{{ trailer.count }}</template></span
         >
+
+        <!-- WHAT THE DAEMON ADDED TO WHAT THE AGENT READ (see `notesOpen`): one line naming each note, opening
+             to exactly the words it was given. Outside the branches above because it hangs off two different
+             kinds of row — the user's own message for the notes prepended to it, and a bare notice for the ones
+             injected mid-turn — and reads the same on both. Full width and left-aligned even under a user
+             bubble: this is machine prose to be read, not something they said.
+             Open, it is capped and scrolls, for the reason .chat-prompt-open caps the bubble's own expansion at
+             45dvh: on a user message this row IS the sticky pinned prompt, so an unbounded panel would take the
+             panel over for as long as the turn runs. -->
+        <template v-if="message.notes?.length">
+            <button
+                type="button"
+                class="flex max-w-full items-center gap-2 self-start rounded-lg bg-overlay px-3 py-1.5 text-2xs"
+                :aria-expanded="notesOpen"
+                @click="notesOpen = !notesOpen"
+            >
+                <Icon name="info-circle" class="shrink-0 text-2xs text-link" />
+                <span class="shrink-0 font-medium text-content">Sent with your message</span>
+                <span class="truncate text-subtle">{{ noteTitles }}</span>
+                <Icon :name="notesOpen ? 'chevron-up' : 'chevron-down'" class="shrink-0 text-2xs text-subtle" />
+            </button>
+            <div v-if="notesOpen" class="scrollbar-thin flex max-h-80 w-full flex-col gap-3 overflow-auto rounded-lg bg-overlay/60 px-3 py-2">
+                <div v-for="note in message.notes" :key="note.title" class="flex flex-col gap-1">
+                    <span class="text-2xs font-medium uppercase tracking-wide text-subtle">{{ note.title }}</span>
+                    <span class="whitespace-pre-wrap text-xs leading-relaxed text-muted">{{ note.text }}</span>
+                </div>
+            </div>
+        </template>
     </div>
 </template>
