@@ -1,6 +1,7 @@
 import type { ProviderRefusal } from "@intentic/sandbox-contract";
 import { expect, test } from "vitest";
 import type { Services } from "../composition.js";
+import type { SeatRefusal } from "../claude/claude-seats.js";
 import { services } from "../route-testing.js";
 import { harnessEnv, resolveHarnessCredentials } from "./harness-credentials.js";
 
@@ -53,7 +54,7 @@ test("a custom endpoint with no resolved model pins nothing rather than an empty
  * organization has switched Claude Code off for is turned away before it spends a token, so its meter stays the
  * best-looking one on file and it wins every pick, forever. This is the layer that knows the turn's provider, so
  * it is the layer that reads the refusal and hands it down. */
-const twoAccounts = (refusal: ProviderRefusal | undefined): Services =>
+const twoAccounts = (refusal: ProviderRefusal | undefined, seats: Record<string, SeatRefusal> = {}): Services =>
     services({
         claudeStore: {
             // No refresh token ⇒ ensureFreshToken answers with what is stored, so this test resolves a
@@ -64,6 +65,7 @@ const twoAccounts = (refusal: ProviderRefusal | undefined): Services =>
                 { id: "working", label: "working", connectedAt: 1 },
             ],
         },
+        claudeSeats: { read: async () => seats, refuse: async () => {}, clear: async () => {} },
         // The refused account looks untouched precisely BECAUSE it is refused — nothing it was handed ever ran.
         accountUsage: {
             read: async () => ({
@@ -76,12 +78,33 @@ const twoAccounts = (refusal: ProviderRefusal | undefined): Services =>
         providerRefusals: { read: async () => (refusal === undefined ? {} : { claude: refusal }), record: async () => {}, clear: async () => {} },
     });
 
-const resolved = async (refusal: ProviderRefusal | undefined, account?: string) =>
-    await resolveHarnessCredentials(twoAccounts(refusal), { agent: "claude", ...(account !== undefined ? { account } : {}) });
+const resolved = async (refusal: ProviderRefusal | undefined, account?: string, seats?: Record<string, SeatRefusal>) =>
+    await resolveHarnessCredentials(twoAccounts(refusal, seats), { agent: "claude", ...(account !== undefined ? { account } : {}) });
 
 test("an unnamed turn skips the account whose organization has refused it", async () => {
     const result = await resolved({ at: Date.now(), kind: "entitlement", message: "organization has disabled Claude Code", account: "refused" });
     expect(result.ok && result.credentials.account).toBe("working");
+});
+
+/* AND KEEPS SKIPPING IT once the refusal store has moved on, which is the case that costs real turns. That store
+ * keeps ONE refusal per provider, so the next spent allowance on any Claude account overwrites the entitlement
+ * one — and the seat is still off. The durable record is what benches the account; the refusal above is only the
+ * hint that ranks it. */
+test("a benched seat stays benched after the provider's last refusal is some other account's", async () => {
+    const seats = { refused: { at: Date.now(), reason: "organization has disabled Claude Code" } };
+    const result = await resolved({ at: Date.now(), kind: "limit", message: "usage limit reached", account: "working" }, undefined, seats);
+    expect(result.ok && result.credentials.account).toBe("working");
+});
+
+// And with nothing left to fall back to, the benched account runs anyway: a turn that fails saying why beats
+// "no Claude account connected", which would be a lie about a sandbox that has one.
+test("a sandbox whose every seat is refused still resolves a credential", async () => {
+    const seats = {
+        refused: { at: Date.now(), reason: "organization has disabled Claude Code" },
+        working: { at: Date.now(), reason: "organization has disabled Claude Code" },
+    };
+    const result = await resolved(undefined, undefined, seats);
+    expect(result.ok && result.credentials.account).toBe("refused");
 });
 
 test("a spent allowance does not bench an account — the meters already describe that", async () => {

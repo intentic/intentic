@@ -176,16 +176,6 @@ const StoredAccountSchema = TokenSetSchema.extend({
     // place. `revokedReason` is the sentence the account list shows the user.
     revokedAt: z.number().optional(),
     revokedReason: z.string().optional(),
-    /* SIGNS IN PERFECTLY AND MAY NOT SERVE CLAUDE CODE — an organization-managed account whose admin has the
-     * feature switched off. Anthropic answers the turn, not the sign-in: the token authenticates, the pools
-     * publish headroom, and the model returns "your organization has disabled Claude subscription access" and
-     * nothing else. So it is invisible to every check that runs BEFORE a turn, which is how it came to be the
-     * account the picker preferred: it is the one with the most headroom precisely because nothing can spend
-     * on it. Every unpinned turn — a workflow's steps, an automation's wake, a chore — landed on it and came
-     * back empty. Recorded from the refusal itself and cleared by the next answered turn on this account
-     * (agent.routes), so an admin turning the seat back on needs no reconnect. */
-    notEntitledAt: z.number().optional(),
-    notEntitledReason: z.string().optional(),
 });
 export type StoredAccount = z.infer<typeof StoredAccountSchema>;
 
@@ -200,18 +190,7 @@ export const toAccount = (stored: StoredAccount): OauthAccount => ({
     ...(stored.organization !== undefined ? { organization: stored.organization } : {}),
     ...(stored.scope !== undefined ? { scope: stored.scope } : {}),
     ...(stored.revokedAt !== undefined ? { needsReauth: true, detail: stored.revokedReason ?? "Signed out — reconnect to keep using it." } : {}),
-    /* Said WITHOUT needsReauth, which is the whole distinction: reconnecting is the fix for a dead credential
-     * and the one thing that cannot help here — this account signs in perfectly and its organization has
-     * switched the feature off. Only an admin clears it, so the row says what happened rather than offering a
-     * button that would spend a sign-in to arrive back here. */
-    ...(stored.revokedAt === undefined && stored.notEntitledAt !== undefined
-        ? { detail: stored.notEntitledReason ?? "This account's organization has Claude Code switched off — an admin has to enable it." }
-        : {}),
 });
-
-// Whether this account may serve a turn at all. Both refusals are permanent until somebody acts, which is what
-// separates them from a spent allowance: the picker skips these outright rather than ranking them last.
-export const accountUsable = (stored: StoredAccount): boolean => stored.revokedAt === undefined && stored.notEntitledAt === undefined;
 
 // Anthropic's token endpoint answers with the identity the grant belongs to beside the tokens themselves.
 // Everything but the access token is optional here because it is the provider's to send — see readIdentity.
@@ -512,33 +491,6 @@ export const replaceRejectedToken = (
     rejected: string,
     refresh: RefreshFn = refreshTokens,
 ): Promise<string | undefined> => rotate(store, id, rejected, refresh);
-
-/* THE SEAT SAID NO — write it down on the account, so the picker stops sending turns to a credential that
- * cannot serve one (see StoredAccountSchema.notEntitledAt for what this condition is and why nothing before
- * the turn can see it). Idempotent: a second refusal on an account already marked rewrites nothing, which
- * keeps the timestamp the first one earned.
- *
- * `answered` is the other half and the reason this is safe to write at all: any turn that produces content on
- * this account clears the mark. An admin who switches the feature back on needs no reconnect and no button —
- * the next pinned turn proves it and the account rejoins the rotation. */
-export const markNotEntitled = async (store: ClaudeStore, id: string, reason: string): Promise<void> => {
-    const current = await store.read(id);
-    if (current === undefined || current.notEntitledAt !== undefined) {
-        return;
-    }
-    await store.write({ ...current, notEntitledAt: Date.now(), notEntitledReason: reason });
-    store.logger.warn({ account: id, reason }, "claude account cannot serve Claude Code — taking it out of the rotation");
-};
-
-export const markEntitled = async (store: ClaudeStore, id: string): Promise<void> => {
-    const current = await store.read(id);
-    if (current === undefined || current.notEntitledAt === undefined) {
-        return;
-    }
-    const { notEntitledAt: _at, notEntitledReason: _reason, ...rest } = current;
-    await store.write(rest);
-    store.logger.info({ account: id }, "claude account answered a turn — back in the rotation");
-};
 
 /* ROTATE THIS ACCOUNT WHILE IT IS FREE TO ROTATE — the whole of the collision-avoidance strategy, in one
  * predicate: nobody is holding the token, and it is inside the last OPPORTUNISTIC_AHEAD_MS of its life. Anything

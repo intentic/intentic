@@ -5,14 +5,11 @@ import { join } from "node:path";
 import { pino } from "pino";
 import { expect, test, vi } from "vitest";
 import {
-    accountUsable,
     buildAuthorizeUrl,
     type ClaudeStore,
     ensureFreshToken,
     holdAccount,
     fileClaudeStore,
-    markEntitled,
-    markNotEntitled,
     newAccount,
     renameAccount,
     startClaudeRefresh,
@@ -92,31 +89,6 @@ test("toAccount surfaces the identity alongside the user's own name", () => {
         email: "a@example.com",
         organization: "Acme",
     });
-});
-
-/* THE ACCOUNT THAT SIGNS IN AND MAY NOT SERVE A TURN. An organization with Claude Code switched off
- * authenticates, publishes headroom, and refuses every turn — so it reads as the FREEST account there is and
- * every unpinned turn was sent to it. Marked from the refusal, it stops being a candidate; the next turn that
- * answers on it puts it back, so an admin re-enabling the seat needs no reconnect. */
-test("an account whose organization refused the turn stops being usable, and an answered turn restores it", async () => {
-    const store = memoryStore(stored({ accessToken: "t" }));
-    const refusal = "Your organization has disabled Claude subscription access for Claude Code";
-    expect(accountUsable(store.current()!)).toBe(true);
-
-    await markNotEntitled(store, "a", refusal);
-    expect(accountUsable(store.current()!)).toBe(false);
-    // Said on the row without offering a reconnect, which is the one thing that cannot help here.
-    expect(toAccount(store.current()!).detail).toBe(refusal);
-    expect(toAccount(store.current()!).needsReauth).toBeUndefined();
-
-    // A second refusal keeps the first one's timestamp rather than rewriting it.
-    const marked = store.current()?.notEntitledAt;
-    await markNotEntitled(store, "a", "something else");
-    expect(store.current()?.notEntitledAt).toBe(marked);
-
-    await markEntitled(store, "a");
-    expect(accountUsable(store.current()!)).toBe(true);
-    expect(toAccount(store.current()!).detail).toBeUndefined();
 });
 
 test("ensureFreshToken returns undefined when the account is not connected", async () => {

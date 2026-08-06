@@ -290,7 +290,12 @@ export const services = (overrides: ServiceOverrides = {}): Services => {
         capabilityDismissals: memoryDismissalsStore(),
         automations: memoryAutomationsStore(),
         // Empty approvals queue: agents.list projects it as `held`, and no suite here holds a wake.
-        approvals: { list: async () => [], get: async () => undefined, add: async (approval) => ({ ...approval, id: "held-1" }), remove: async () => false },
+        approvals: {
+            list: async () => [],
+            get: async () => undefined,
+            add: async (approval) => ({ ...approval, id: "held-1" }),
+            remove: async () => false,
+        },
         // Inert turn journal: every fire path writes an in-flight entry and clears it, and nothing here resumes.
         turnJournal: {
             list: async () => [],
@@ -322,6 +327,9 @@ export const services = (overrides: ServiceOverrides = {}): Services => {
             logger: createLogger(testConfig),
             ...claudeStore,
         }),
+        // Every seat is live. On the turn path for the same reason providerRefusals is: the picker reads it to
+        // skip an account no organization will serve, and an answered turn clears whatever it holds.
+        claudeSeats: { read: async () => ({}), refuse: async () => {}, clear: async () => {} },
         // No usage measured by default — an account that hasn't run a turn since its window reset reports none.
         accountUsage: { read: async () => ({}), record: async () => {}, clear: async () => {} },
         // …and nothing sweeps for one: the reader would need a live OAuth usage endpoint to reach.

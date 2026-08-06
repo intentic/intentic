@@ -3,12 +3,23 @@ import { implement, ORPCError } from "@orpc/server";
 import type { Services } from "../composition.js";
 import type { OrpcContext } from "../context.js";
 import { buildAuthorizeUrl, exchangeCode, newAccount, renameAccount, toAccount } from "./claude-credentials.js";
+import type { SeatRefusal } from "./claude-seats.js";
 
 // An account plus its usage window, when one has been measured. Kept out of the map callback so the account
 // object is never mutated in place — the store hands back a fresh view per call, but it isn't ours to edit.
 const withUsage = (account: OauthAccount, usage: AccountUsage | undefined): OauthAccount => (usage === undefined ? account : { ...account, usage });
 
-export type ClaudeRoutesDeps = Pick<Services, "accountUsage" | "claudeModels" | "claudeStore" | "claudeUsage">;
+/* And the row for an account whose organization has switched Claude Code off: the provider's own sentence, said
+ * WITHOUT needsReauth. That is the whole distinction — reconnecting is the fix for a dead credential and the one
+ * thing that cannot help here, since this account signs in perfectly and publishes headroom the entire time it
+ * refuses every turn. Only an admin clears it, so the row says what happened rather than offering a button that
+ * would spend a sign-in to arrive back where it started.
+ *
+ * A revoked credential outranks it: that one IS reconnectable, and it is the older problem of the two. */
+const withSeat = (account: OauthAccount, seat: SeatRefusal | undefined): OauthAccount =>
+    seat === undefined || account.needsReauth === true ? account : { ...account, detail: seat.reason };
+
+export type ClaudeRoutesDeps = Pick<Services, "accountUsage" | "claudeModels" | "claudeSeats" | "claudeStore" | "claudeUsage">;
 
 /* How long the account list will wait for a fresh plan-limit reading before answering with what is on file.
  *
@@ -52,7 +63,9 @@ export const createClaudeRoutes = (services: ClaudeRoutesDeps) => {
             }
             const renamed = renameAccount(stored, input.label);
             await services.claudeStore.write(renamed);
-            return toAccount(renamed);
+            // The row this replaces on the card carries the seat note, so this one has to as well: a rename is
+            // not the moment to quietly drop the reason an account has been benched.
+            return withSeat(toAccount(renamed), (await services.claudeSeats.read())[input.id]);
         }),
         // Each account carries its plan-limit reading, so the picker can show what's left on each without
         // spending a turn on it — brought up to date first (see USAGE_WAIT_MS), because an account's allowance
@@ -60,14 +73,18 @@ export const createClaudeRoutes = (services: ClaudeRoutesDeps) => {
         // ever been obtained for; the UI reads that as unknown, not as empty.
         accounts: i.accounts.handler(async ({ input }) => {
             await services.claudeUsage.refresh(input.force ? FORCED_USAGE_WAIT_MS : USAGE_WAIT_MS, input.force);
-            const [accounts, usage] = await Promise.all([services.claudeStore.list(), services.accountUsage.read()]);
-            return { accounts: accounts.map((account) => withUsage(account, usage[account.id])) };
+            const [accounts, usage, seats] = await Promise.all([
+                services.claudeStore.list(),
+                services.accountUsage.read(),
+                services.claudeSeats.read(),
+            ]);
+            return { accounts: accounts.map((account) => withUsage(withSeat(account, seats[account.id]), usage[account.id])) };
         }),
         models: i.models.handler(() => services.claudeModels.models()),
-        // Forget the credential AND its usage snapshot: a reconnect mints a fresh account id, so a snapshot left
-        // behind here is orphaned for good.
+        // Forget the credential AND everything filed against it: a reconnect mints a fresh account id, so a
+        // snapshot or a seat refusal left behind here is orphaned for good.
         disconnect: i.disconnect.handler(async ({ input }) => {
-            await Promise.all([services.claudeStore.clear(input.id), services.accountUsage.clear(input.id)]);
+            await Promise.all([services.claudeStore.clear(input.id), services.accountUsage.clear(input.id), services.claudeSeats.clear(input.id)]);
             return { ok: true } as const;
         }),
     };

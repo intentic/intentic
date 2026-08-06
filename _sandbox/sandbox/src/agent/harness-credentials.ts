@@ -6,7 +6,7 @@ import {
     type NativeProvider,
     PROVIDER_VENDOR,
 } from "@intentic/sandbox-contract";
-import { accountUsable, ensureFreshToken, replaceRejectedToken } from "../claude/claude-credentials.js";
+import { ensureFreshToken, replaceRejectedToken } from "../claude/claude-credentials.js";
 import { unversionedBase } from "../endpoints/endpoint-config.js";
 import { endpointModelId } from "../endpoints/endpoint-translator.js";
 import type { Services } from "../composition.js";
@@ -327,14 +327,13 @@ export const resolveHarnessCredentials = async (
      * else is free. An account whose ORGANIZATION has Claude Code switched off is not a moment: it
      * authenticates, publishes full headroom, refuses everything, and is therefore ALWAYS the freest account on
      * the list. Ranking it last is not enough, because "last" is still chosen on a sandbox where the others are
-     * spent — so a marked account (markNotEntitled) comes out of the running entirely until a turn on it
-     * answers. Only if that empties the list does the whole of it stand again: a refusal naming the reason
-     * beats "no Claude account connected", which would be a lie about a sandbox that has three. A NAMED account
-     * is never filtered — the user pointing at one is entitled to its own error. */
+     * spent — so a refused seat (claude-seats.ts) comes out of the running entirely until a turn on it answers.
+     * Only if that empties the list does the whole of it stand again: a refusal naming the reason beats "no
+     * Claude account connected", which would be a lie about a sandbox that has three. A NAMED account is never
+     * filtered — the user pointing at one is entitled to its own error. */
     const refusal = (await services.providerRefusals.read())["claude"];
-    const connected = await services.claudeStore.list();
-    const stored = await Promise.all(connected.map((account) => services.claudeStore.read(account.id)));
-    const usable = stored.flatMap((account) => (account !== undefined && accountUsable(account) ? [account.id] : []));
+    const [connected, seats] = await Promise.all([services.claudeStore.list(), services.claudeSeats.read()]);
+    const usable = connected.flatMap((account) => (account.needsReauth === true || seats[account.id] !== undefined ? [] : [account.id]));
     const candidates = usable.length > 0 ? usable : connected.map((account) => account.id);
     const accountId =
         input.account ?? (await accountWithHeadroom(services.accountUsage, candidates, refusal?.kind === "limit" ? undefined : refusal?.account));

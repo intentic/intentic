@@ -57,6 +57,7 @@ import { createAuthorizer, createGoogleVerifier, fileMembersStore, fileOwnerStor
 import { createSessions, type MintedSession } from "./auth/session.js";
 import { type ClaudeCatalog, createClaudeCatalog } from "./claude/claude-models.js";
 import { type ClaudeStore, fileClaudeStore } from "./claude/claude-credentials.js";
+import { type ClaudeSeatStore, fileClaudeSeatStore } from "./claude/claude-seats.js";
 import { type AccountUsageStore, fileAccountUsageStore } from "./usage/account-usage.js";
 import { type ClaudeUsageRefresher, createClaudeUsageRefresher } from "./usage/claude-usage.js";
 import { fileProviderRefusalStore, type ProviderRefusalStore } from "./usage/provider-refusals.js";
@@ -321,6 +322,10 @@ export interface Services {
     readonly pushSender: PushSender;
     // Claude subscription accounts (one <id>.json per account under .intentic/claude), several per sandbox.
     readonly claudeStore: ClaudeStore;
+    // Which of those accounts an organization has switched Claude Code off for (claude/seats.json, beside them).
+    // Kept apart from the account record because that record is rewritten whole on every token rotation, by every
+    // sandbox sharing the auth dir — see claude-seats.ts. The picker skips a refused seat outright.
+    readonly claudeSeats: ClaudeSeatStore;
     // The latest plan-limit snapshot per account of ANY provider (historyRoot/account-usage.json). streamAgent
     // records what a Claude turn's stream reports and the translator client records what it pulls for the
     // routed subscriptions; /claude/accounts and /translator/accounts each merge it into their own rows, so
@@ -627,6 +632,7 @@ export const createServices = (config: Config, logger: Logger): Services => {
         : undefined;
 
     const claudeStore = fileClaudeStore(join(authRoot, "claude"), logger);
+    const claudeSeats = fileClaudeSeatStore(join(authRoot, "claude", "seats.json"), logger);
     // Reads each Claude account's plan limits into the store above. Hoisted here because two callers share it:
     // /claude/accounts waits on a sweep before answering, and main.ts keeps one running on a timer.
     const claudeUsage = createClaudeUsageRefresher({ store: claudeStore, usage: accountUsage });
@@ -743,6 +749,7 @@ export const createServices = (config: Config, logger: Logger): Services => {
         push: pushStore,
         pushSender: createPushSender(pushStore, logger),
         claudeStore,
+        claudeSeats,
         accountUsage,
         claudeUsage,
         providerRefusals: fileProviderRefusalStore(join(config.historyRoot, "provider-refusals.json")),
