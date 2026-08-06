@@ -1,4 +1,4 @@
-import type { ResidentEngine } from "@intentic/iq-engine";
+import { parseFeatures, type ResidentEngine } from "@intentic/iq-engine";
 import type { IqContextOutcome } from "@intentic/sandbox-contract";
 import type { Logger } from "pino";
 
@@ -31,9 +31,31 @@ const CONTEXT_BUDGET_TOKENS = 1200;
 // every term after the ask dilutes the query it is supposed to sharpen (BM25 and the embedder both average).
 const QUERY_MAX_CHARS = 400;
 
-// A turn must never visibly wait on this. The resident engine serves from a warm index and typically answers in
-// a few hundred ms; past the deadline the turn goes on without the note and the query is abandoned mid-flight.
-const RETRIEVAL_DEADLINE_MS = 2_000;
+/* A turn must never visibly wait on this. The resident engine serves from a warm index and typically answers in
+ * a few hundred ms; past the deadline the turn goes on without the note and the query is abandoned mid-flight.
+ *
+ * A BACKSTOP, NOT A BUDGET, which is the difference between this number and the one it replaced. At two seconds
+ * it was the thing deciding whether the feature ran at all — the ledger recorded it taking 104 of the 133 turns
+ * retrieval was eligible for. The pipeline below is what fixed that; this is only here for the query that goes
+ * genuinely wrong. It can afford the extra second because it does not run alone: the planning round it is
+ * awaited underneath (extensions, browser bring-up, delegation) averages ~1.5s in production, so the wait a
+ * turn actually pays is whatever retrieval takes BEYOND that, and for a p90 near 0.9s that is nothing. */
+const RETRIEVAL_DEADLINE_MS = 3_000;
+
+/* WITHOUT THE CROSS-ENCODER, and the deadline above is the whole reason.
+ *
+ * The reranker is a transformer run in-process, and this query shares its thread with everything else the
+ * daemon is doing — several agent streams, the index worker, the routes. Measured against the real prompts of
+ * one week: on an idle box the full pipeline answers in ~1.2s, comfortably inside the deadline; with the box
+ * saturated it answers in ~2.7s and misses it 71% of the time. That is not a hypothetical — the ledger says
+ * the deadline took 104 of the 133 turns this feature was eligible for, so four notes in five were computed
+ * and thrown away. Without the cross-encoder the same queries answer in ~0.7s saturated and never miss.
+ *
+ * The trade is ordering, not finding: the candidates are the same, and what the reranker buys is which of them
+ * leads. That is worth paying for a search the reader is waiting on, and not worth it here — this note is
+ * explicitly a starting point, its anchors are positions to read, and an answer that arrives second-best beats
+ * the four-fifths that arrived not at all. */
+const CONTEXT_FEATURES = parseFeatures("-rerank");
 
 /* Words that carry no search intent. A prompt made of nothing but these is the user talking TO the agent —
  * "go on", "yes please do that", "thanks, looks good" — and retrieving for it returns whatever the index thinks
@@ -165,6 +187,7 @@ export const retrieveTurnContext = async (deps: TurnContextDeps, prompt: string)
                 scope: {},
                 render: { budget: CONTEXT_BUDGET_TOKENS },
                 options: {},
+                features: CONTEXT_FEATURES,
                 // The CLI form of the same call, which is what seeds the pagination cursor id — and what the
                 // note tells the model was run, so the two never disagree.
                 echo: `"${query}"`,

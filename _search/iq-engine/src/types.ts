@@ -1,4 +1,5 @@
 import type { WorkspaceSearchFreshness, WorkspaceSearchResult, WorkspaceSearchSpan, WorkspaceSearchTag } from "@intentic/sandbox-contract";
+import type { Feature } from "./features.js";
 
 // No separate natural-language verb: a bare `q` whose words are not a symbol, path or regex IS the semantic
 // pipeline, and an exact query that finds nothing escalates into it.
@@ -65,6 +66,14 @@ export interface QueryRequest {
     // The verb + args as the user typed them (minus output flags) — echoed in the truncation footer's
     // continuation command.
     readonly echo: string;
+    /* THIS QUERY'S PIPELINE, when it is not the engine's. A resident engine serves several callers off one
+     * index, and they do not all want the same trade: a human's `iq` call wants the best ranking the box can
+     * produce, while a caller answering under a deadline (the daemon's pre-injected turn context) would rather
+     * drop the cross-encoder than drop the answer. One engine, one index, per-call stages.
+     *
+     * Absent ⇒ the engine's own set, which is every stage unless the host disabled some. The disabled list
+     * travels out in WorkspaceSearchResult.features either way, so a cheaper run says so. */
+    readonly features?: ReadonlySet<Feature>;
 }
 
 export interface QueryOutcome {

@@ -6,6 +6,7 @@ import {
     type IqContextOutcome,
     SandboxSettingsSchema,
     capabilitiesOf,
+    withoutResumeNote,
 } from "@intentic/sandbox-contract";
 import { browserOutputDir } from "../browser/browser-artifacts.js";
 import { browserServersOf } from "../browser/browser-tools.js";
@@ -367,10 +368,16 @@ export const planHarnessTurn = async (
      * iteration, a chore, an acceptance story). Retrieval reads the opening 400 characters as its query, and
      * for those the opening is scaffolding: a loop's iteration heading and its "you are one iteration of a
      * loop" preamble were being searched against the index, and the ranked answer to THAT was pasted on top of
-     * the step's real instructions. Every workflow step opened with a page of it. */
+     * the step's real instructions. Every workflow step opened with a page of it.
+     *
+     * AND NOT FOR THE RESUME SENTENCE, which is the same failure one layer in: a turn re-run after a renewed
+     * credential, a provider outage or a sandbox restart carries the daemon's own explanation of the
+     * interruption in front of the prompt (turn-resume.ts), and 400 characters of that is the whole query. Six
+     * turns in one week searched the index for "the Claude credential ... has been renewed" and pasted the
+     * ranked answer to it over the question the user had actually asked. The words underneath are the ask. */
     const contextNote =
         (contextArm ?? iqContext) && input.unattended !== true
-            ? retrieveTurnContext({ iq: services.iq, logger: services.logger }, input.prompt)
+            ? retrieveTurnContext({ iq: services.iq, logger: services.logger }, withoutResumeNote(input.prompt))
             : undefined;
     /* THE SECOND ROUND, and the last of the planning I/O: an extension scan, the browser bring-up, and the
      * delegation lookup that reaches the translator. Only `delegation` waited on anything above it (it needs

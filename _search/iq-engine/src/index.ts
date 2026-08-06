@@ -168,7 +168,7 @@ export const createEngine = (options: EngineOptions): Engine => {
                         // Unless someone else owns the index: topping up WRITES vectors, so a query that did not
                         // earn the write lock leaves the backlog to the process that did.
                         topUpEmbeddings: indexed,
-                        features: options.features ?? new Set(FEATURES),
+                        features: request.features ?? options.features ?? new Set(FEATURES),
                         ...(options.rgPath !== undefined ? { rgPath: options.rgPath } : {}),
                     },
                     request,
@@ -340,7 +340,10 @@ export const createResidentEngine = (options: ResidentEngineOptions): ResidentEn
                     // top up — and an `ask` that spent its 2s embedding budget on this thread would be the exact
                     // stall the worker exists to prevent.
                     topUpEmbeddings: false,
-                    features: options.features ?? new Set(FEATURES),
+                    // Per-call stages beat the engine's own set: one resident engine serves the CLI, the routes
+                    // and the turn preamble off one index, and only the last of those is answering under a
+                    // deadline it would rather meet than rank perfectly (QueryRequest.features).
+                    features: request.features ?? options.features ?? new Set(FEATURES),
                     ...(options.rgPath !== undefined ? { rgPath: options.rgPath } : {}),
                     ...(signal !== undefined ? { signal } : {}),
                 },

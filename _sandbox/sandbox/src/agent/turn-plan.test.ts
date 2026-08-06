@@ -1,4 +1,4 @@
-import { type AgentTurn, SandboxSettingsSchema } from "@intentic/sandbox-contract";
+import { type AgentTurn, RESUME_NOTES, SandboxSettingsSchema, withResumeNote } from "@intentic/sandbox-contract";
 import { beforeEach, expect, test, vi } from "vitest";
 import type { Services } from "../composition.js";
 import { unstubbed } from "@intentic/testing";
@@ -335,4 +335,34 @@ test("every runtime hears that its branch was rebased; a main-tree turn has no b
 
     const main = await planTurn(codexServices(), turn({ agent: "codex" }), { ...context, syncNote: "should never be sent" });
     expect((main as { request: AgentRequest }).request.prompt).toBe("do the thing");
+});
+
+/* WHAT THE PRE-INJECTION SEARCHES FOR when the turn is a re-run. A turn interrupted by a renewed credential, a
+ * provider outage or a sandbox restart comes back with the daemon's explanation of the interruption in front of
+ * the prompt (turn-resume.ts) — and retrieval reads a prompt's OPENING as its query, so the whole search went
+ * to our own sentence about credentials. Six turns in one week did exactly that, every one of them a miss. */
+test("a resumed turn retrieves for the question, not for the sentence explaining the interruption", async () => {
+    const queries: string[] = [];
+    const services = harnessServices({
+        sandboxSettings: unstubbed<Services["sandboxSettings"]>("sandboxSettings", {
+            get: async () => SandboxSettingsSchema.parse({ iqContext: true }),
+        }),
+        iq: unstubbed<Services["iq"]>("iq", {
+            run: async (request) => {
+                queries.push(request.query ?? "");
+                // No hits: this case is about the query that went out, and an answer would only add a note to
+                // assert around.
+                return {
+                    exitCode: 1,
+                    text: "",
+                    result: { mode: "q", total: 0, files: 0, shown: 0, groups: [], freshness: { state: "fresh" }, truncated: false },
+                };
+            },
+        }),
+        logger: unstubbed<Services["logger"]>("logger", { debug: () => {}, warn: () => {} }),
+    });
+
+    await planTurn(services, turn({ prompt: withResumeNote("why does the scheduler wake a sandbox twice?", RESUME_NOTES.auth) }), context);
+
+    expect(queries).toEqual(["why does the scheduler wake a sandbox twice?"]);
 });

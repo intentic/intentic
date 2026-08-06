@@ -117,6 +117,25 @@ test("the preamble round-trips: what restore gives back is the message alone", a
     expect(stripTurnPreamble(withTurnPreamble([note!], prompt))).toBe(prompt);
 });
 
+/* THE DEADLINE IS THE PIPELINE'S PROBLEM, not just the clock's. The cross-encoder is a transformer sharing the
+ * daemon's thread with every agent stream it is serving: measured on one week of real prompts, the full
+ * pipeline answers in ~1.2s idle and ~2.7s with the box saturated, which is how the deadline came to take four
+ * eligible turns in five. Dropping that one stage answers in ~0.7s saturated, and this note was never the
+ * search whose ordering had to be perfect. */
+test("the pre-injected query runs without the cross-encoder, so a busy box still gets its note", async () => {
+    const seen: Parameters<ResidentEngine["run"]>[0][] = [];
+    const deps = depsOf((request) => {
+        seen.push(request);
+        return Promise.resolve(outcome());
+    });
+    await retrieveTurnContext(deps, "how do we rotate credentials?");
+    expect(seen[0]?.features?.has("rerank")).toBe(false);
+    // Only the reranker. The embedding half is what answers a question whose words the code does not use, which
+    // is the entire reason to retrieve for a prompt instead of grepping it.
+    expect(seen[0]?.features?.has("semantic")).toBe(true);
+    expect(seen[0]?.features?.has("bm25")).toBe(true);
+});
+
 test("an ineligible prompt never reaches the engine", async () => {
     const run = vi.fn();
     expect(await retrieveTurnContext(depsOf(run as unknown as ResidentEngine["run"]), "go for it")).toEqual({ skipped: "ineligible" });
@@ -167,7 +186,7 @@ test("a retrieval that outruns its deadline is abandoned, not waited on", async 
                 }),
         );
         const pending = retrieveTurnContext(deps, "how does the daemon decide which runtime serves a turn?");
-        await vi.advanceTimersByTimeAsync(2_000);
+        await vi.advanceTimersByTimeAsync(3_000);
         expect(await pending).toEqual({ skipped: "deadline" });
         // The abort still goes out — it releases the half of a query that listens for it (the rg child).
         expect(aborted).toBe(true);

@@ -42,6 +42,20 @@ test("bm25 off: a natural-language query has no [bm25] tags and discloses the di
     expect(outcome.text).toContain("features -bm25,-prf");
 });
 
+/* One engine, one index, several callers — and they do not all want the same trade. The daemon's turn preamble
+ * answers under a deadline it would rather meet than rank perfectly, while the CLI call next to it wants every
+ * stage; per-call stages are what lets both share the resident engine instead of standing one up each. */
+test("a request's own feature set overrides the engine's, for that call only", async () => {
+    const engine = engineWith();
+    const cheap = await engine.run({ ...request("q", "how are widgets built for the registry?"), features: parseFeatures("-bm25,-prf") });
+    expect(cheap.result.groups.flatMap((group) => group.hits).every((hit) => hit.tags.every((tag) => tag.kind !== "bm25"))).toBe(true);
+    expect(cheap.result.features).toEqual(expect.arrayContaining(["bm25", "prf"]));
+
+    // The next call through the same engine is back to everything — the override rode the request, not the engine.
+    const full = await engine.run(request("q", "how are widgets built for the registry?"));
+    expect(full.result.features).toBeUndefined();
+});
+
 test("allow-list: only bm25 runs, and only [bm25] tags appear", async () => {
     const outcome = await engineWith("bm25").run(request("q", "how are widgets built for the registry?"));
     const kinds = new Set(outcome.result.groups.flatMap((group) => group.hits).flatMap((hit) => hit.tags.map((tag) => tag.kind)));
