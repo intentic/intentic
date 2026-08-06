@@ -131,16 +131,58 @@ docker run -d --restart unless-stopped --name intentic-sandbox-tunnel-$SLUG \\
         nothing is exposed and nothing is deployed.
     </p>
 
-    <h2>1 · Sign in and let setup mint your code</h2>
+    <h2 id="setup-code">1 · Sign in and get your setup code</h2>
     <p>
         Open <a href={APP_URL}>app.intentic.dev</a> and sign in with Google. A sandbox is created as setup opens — named for you, renameable
         from the same card — so intentic can start preparing a private tunnel for it under its own domain straight away. No Cloudflare
         account required. Prefer your own zone? Paste a Cloudflare token; it's used once to list your zones and is never stored.
     </p>
     <p>
-        Setup then shows a short-lived <strong>setup code</strong>. That code is the only secret in any of the commands below: it is redeemed
-        once, on your machine, for the real connection token — so no long-lived token ever lands in your shell history. The platform stores
-        your identity and your sandbox's URL, nothing else. It never sees your code or your keys.
+        That's the whole of step 1. <strong>You never type the setup code, and there is nothing to generate.</strong> The moment your address
+        is ready, the setup screen's <em>Run it</em> step shows you a finished command with the code already in it, behind a Copy button —
+        one tab per install path, so the line you copy is the one your machine needs:
+    </p>
+    <table>
+        <thead>
+            <tr>
+                <th>On the setup screen</th>
+                <th>What Copy gives you</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr>
+                <td><strong>Linux / macOS</strong></td>
+                <td>The <code>curl … | sh -s -- &lt;your code&gt;</code> line, ready to paste into a terminal</td>
+            </tr>
+            <tr>
+                <td><strong>Windows</strong></td>
+                <td>The PowerShell line, with the code already set as an environment variable</td>
+            </tr>
+            <tr>
+                <td><strong>Docker Compose</strong></td>
+                <td>Your two services, plus the bootstrap whose <code>code=…</code> is your setup code</td>
+            </tr>
+            <tr>
+                <td><strong>Run on this computer</strong></td>
+                <td>Nothing to copy — the button hands the code straight to the installed desktop app</td>
+            </tr>
+        </tbody>
+    </table>
+    <p>
+        So wherever a command below reads <code>&lt;SETUP_CODE&gt;</code>, the real one is already filled in on that screen. If you are
+        building the command yourself — the <a href="#docker-run">docker run</a> path has no tab of its own — the code is simply the trailing
+        argument of the Linux/macOS line, or the <code>code=</code> value in the Compose bootstrap.
+    </p>
+    <p>
+        The code is <strong>short-lived: it expires 30 minutes after the setup screen mints it</strong>. Within that window it is redeemed
+        on your machine for the real connection token, which is why no long-lived secret ever lands in your shell history — and why a
+        re-run of the same command still works. If it expires before you get to a terminal,
+        reopen the sandbox's setup screen and a fresh one is minted; nothing else is lost. Setting up on a different machine from the one
+        you're reading this on? On a phone, setup offers to <strong>email you the link back to this screen</strong> — open it on the target
+        machine and copy the command there.
+    </p>
+    <p>
+        Throughout, the platform stores your identity and your sandbox's URL, nothing else. It never sees your code or your keys.
     </p>
 
     <h2>2 · Pick how you install it</h2>
@@ -228,7 +270,7 @@ docker run -d --restart unless-stopped --name intentic-sandbox-tunnel-$SLUG \\
         digest-pinned connector image already filled in; paste them into your own <code>docker-compose.yml</code>.
     </p>
     <DocsCodeBlock code={composeFile} lang="yaml" title="docker-compose.yml" />
-    <p>Then, once, in the same folder:</p>
+    <p>Then, once, in the same folder — the same tab prints this with your <a href="#setup-code">setup code</a> already in the URL:</p>
     <DocsCodeBlock code={composeBootstrap} lang="bash" title="Bootstrap" />
     <p>
         The first command redeems your setup code into the <code>.env</code> that Compose interpolates
@@ -253,6 +295,11 @@ docker run -d --restart unless-stopped --name intentic-sandbox-tunnel-$SLUG \\
         safe: <strong>ask the image what its run command is instead of writing the flags yourself.</strong> The container's shape (its
         capability posture, volumes, network alias, environment allowlist) ships <em>with</em> the image and changes with it, so a flag list
         copied into your scripts today is a sandbox quietly missing something next release.
+    </p>
+    <p>
+        Setup has no tab for this one, so fill in the three values yourself: your <strong>slug</strong> is the first label of your sandbox's
+        hostname, and your <strong><a href="#setup-code">setup code</a></strong> is the trailing argument of the Linux/macOS command on the
+        setup screen (or the <code>code=</code> value in its Compose bootstrap).
     </p>
     <DocsCodeBlock code={runInline} lang="bash" title="Your machine · bash" />
     <p>
