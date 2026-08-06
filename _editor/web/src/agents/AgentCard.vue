@@ -14,6 +14,7 @@ import {
     contextPct,
     formatCost,
     formatElapsed,
+    landedAway,
     laneOf,
     loopMeta,
     reviewAction,
@@ -67,6 +68,9 @@ const emit = defineEmits<{
     review: [];
     resolve: [];
     land: [];
+    // The way back after landed work was discarded — a separate event from `land`, because it lands a
+    // different span (the whole of the agent's output, not the remainder) and must never be fired by accident.
+    reland: [];
     archive: [];
     restore: [];
     close: [];
@@ -121,12 +125,24 @@ const review = computed(() => (mobile.value ? undefined : reviewAction(props.age
  * button pressed in the archive would quietly put the card back on the board — a side effect nobody browsing a
  * filing cabinet asked for. Restore first; the conflict will still be there. */
 const resolvable = computed(() => props.agent.archivedAt === undefined && dropActionFor(props.agent, `finished`) === `resolve`);
+/* WORK THIS AGENT LANDED THAT IS NO LONGER IN THE TREE — the line, and the offer under it (agentStatus.landedAway).
+ *
+ * Excluded in the archive like every other press on this card, and by the same logic: act on filed-away work
+ * by restoring it first.
+ *
+ * IT TAKES THE READY CARD'S BUTTON RATHER THAN SITTING BESIDE IT, which is why `landable` below yields to it.
+ * Both can be true at once — an agent whose first land was discarded and which has since written more — and
+ * the two presses are NOT interchangeable there: "Land now" carries the outstanding remainder and would put
+ * the newer work in while leaving the discarded half exactly as missing as it was, which is the one outcome
+ * nobody wants and the hardest to notice. "Land again" measures from the branch's base and so covers both, so
+ * where both apply there is only ever one honest button. */
+const away = computed(() => (props.agent.archivedAt === undefined ? landedAway(props.agent) : undefined));
 /* THE READY CARD'S PRESS. `ready` exists because the user turned auto-land off, so the one thing this card is
  * waiting for is the deliberate land — offered where the state is announced, as a real button for the same
  * reasons the conflict card's resolve is one (touch, keyboard, a scanning eye). Same wording and mechanics as
  * the review panel's own button: one vocabulary for one action. Excluded in the archive like `resolvable`,
  * and by the same logic — act on filed-away work by restoring it first. */
-const landable = computed(() => props.agent.archivedAt === undefined && props.agent.status === `ready`);
+const landable = computed(() => props.agent.archivedAt === undefined && props.agent.status === `ready` && away.value === undefined);
 /* THE PRESS WHILE IT IS STILL OUT. A card mid-action dims, which says the board is doing SOMETHING with it —
  * not which something, and that is the half that matters on the two controls the card fires itself: a button
  * holding its resting label through a round trip reads as a press that didn't take, which is what makes people
@@ -134,6 +150,9 @@ const landable = computed(() => props.agent.archivedAt === undefined && props.ag
  * action precisely so archiving a `ready` card doesn't leave its Land button spinning over work nobody asked
  * to land. What ENDS the state is the daemon's next roster frame — for a land, a card with no button left. */
 const landing = computed(() => props.pending === `land`);
+// Its own flag rather than a widened `landing`: the two buttons can never both be on a card (see `away`), but
+// each has to name back the action that was actually pressed, which is the whole reason `pending` carries one.
+const relanding = computed(() => props.pending === `reland`);
 const handingOver = computed(() => props.pending === `resolve`);
 const context = computed(() => contextPct(props.agent.contextTokens, props.agent.contextWindow));
 /* WHETHER THE STAT ROW HAS ANYTHING TO SAY — every chip in it, which is the whole point of naming it here.
@@ -498,6 +517,34 @@ const grab = (event: PointerEvent): void => {
                 <span class="text-2xs leading-snug text-subtle"
                     >It merges in its own worktree — nothing reaches your workspace unless it succeeds.</span
                 >
+            </div>
+
+            <!-- LANDED WORK THAT IS NO LONGER IN THE TREE. The user discarded it in the Changes panel (or took
+                 it back out by hand), and until this line existed the card went on wearing its landed chip over
+                 a workspace that held none of it — the one lie on this board the user could not catch, because
+                 every other reading here is taken between commits and a discard moves no commit.
+                 THE SENTENCE LEADS AND THE BUTTON FOLLOWS, which is the reverse of the two blocks above and the
+                 whole point of the block: those are decisions waiting to be made, this is a FACT the card owes
+                 the reader whether or not they act on it. The offer under it is deliberately quiet — a bordered
+                 text button, not the success-filled primary "Land now" wears — because discarding is very often
+                 a rejection, and a board that answers it with a bright green button is arguing with a decision
+                 the user already made. Never automatic, for the same reason: nothing re-lands this without the
+                 press. The reassurance is not decoration either — "removed from your workspace" reads as work
+                 destroyed unless the card says, in the same breath, that the branch still has all of it. -->
+            <div v-if="away !== undefined" class="flex min-w-0 flex-col gap-0.5">
+                <p class="flex min-w-0 items-start gap-1.5 text-2xs leading-snug text-warning">
+                    <Icon name="undo" class="mt-0.5 shrink-0 text-2xs" /><span class="min-w-0">{{ away.text }}</span>
+                </p>
+                <button
+                    type="button"
+                    class="inline-flex shrink-0 items-center self-start whitespace-nowrap rounded border border-line px-1.5 py-0.5 text-2xs text-muted transition-colors hover:bg-overlay hover:text-content"
+                    @click.stop="emit('reland')"
+                >
+                    <Icon :name="relanding ? 'spinner' : 'undo'" :spin="relanding" class="mr-1 text-2xs" />{{
+                        relanding ? "Landing…" : "Land again"
+                    }}
+                </button>
+                <span class="text-2xs leading-snug text-subtle">{{ away.hint }}</span>
             </div>
 
             <!-- The READY card's press — the deliberate land the user opted into by turning auto-land off (see

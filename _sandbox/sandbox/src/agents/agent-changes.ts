@@ -1,4 +1,4 @@
-import type { GitChange } from "@intentic/sandbox-contract";
+import type { AgentSpan, GitChange } from "@intentic/sandbox-contract";
 import { defaultGit, type GitRunner } from "@intentic/scaffold";
 import { changesAgainstBase, changesBetweenRefs, headSha } from "../git/changes.js";
 import type { IsolatedAgent, PersistedAgent } from "./agents-store.js";
@@ -81,16 +81,6 @@ export const anchorOf = async (
     }
     return merged === "" ? base : merged;
 };
-
-/* Which rung of the agent's history a reading starts at (see anchorOf):
- *
- *   cumulative  — the agent's WHOLE output, landed work included. What the review lists and the card counts:
- *                 a clean turn auto-lands within milliseconds of finishing, so a span that stopped at the
- *                 last land would leave the user reviewing an empty page for work that plainly exists.
- *   outstanding — only what a land would still carry, i.e. from `landedTip`. What the review flags as not
- *                 yet landed, and the span the land itself applies.
- */
-export type AgentSpan = "cumulative" | "outstanding";
 
 /* ONE repo of one agent's composition, in the GitChange shape the Changes panel already renders.
  *

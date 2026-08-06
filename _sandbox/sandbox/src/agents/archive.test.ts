@@ -38,6 +38,7 @@ const card = (overrides: Partial<AgentSummary> = {}): AgentSummary => ({
 
 // The registry stub the archive paths drive: they only ever ask it for the roster and write the markers back.
 const noStandings = { of: () => "idle" as const, refresh: async () => false, forget: () => {} };
+const noPresences = { of: () => undefined, refresh: async () => false, forget: () => {} };
 
 // Only `retire` (archive) and `remove` (purge) are exercised here; the rest of the interface is unreachable
 // from these paths.
@@ -86,7 +87,7 @@ describe("archivable", () => {
 
 describe("archiveAgents", () => {
     it("retires each checkout, then marks the entries", async () => {
-        const agents = createAgentsRegistry(memoryStore(), noStandings);
+        const agents = createAgentsRegistry(memoryStore(), noStandings, noPresences);
         await agents.init();
         await agents.begin(turn(), 1_000);
         await agents.finish("c1", 2_000);
@@ -100,7 +101,7 @@ describe("archiveAgents", () => {
     });
 
     it("archives a workspace conversation without calling worktree teardown", async () => {
-        const agents = createAgentsRegistry(memoryStore(), noStandings);
+        const agents = createAgentsRegistry(memoryStore(), noStandings, noPresences);
         await agents.init();
         await agents.begin(turn({ isolated: false }), 1_000);
         await agents.finish("c1", 2_000);
@@ -112,7 +113,7 @@ describe("archiveAgents", () => {
     });
 
     it("leaves an agent ON the board when its checkout could not be retired", async () => {
-        const agents = createAgentsRegistry(memoryStore(), noStandings);
+        const agents = createAgentsRegistry(memoryStore(), noStandings, noPresences);
         await agents.init();
         await agents.begin(turn(), 1_000);
         await agents.finish("c1", 2_000);
@@ -134,7 +135,7 @@ describe("archiveAgents", () => {
     });
 
     it("ignores ids with no entry", async () => {
-        const agents = createAgentsRegistry(memoryStore(), noStandings);
+        const agents = createAgentsRegistry(memoryStore(), noStandings, noPresences);
         await agents.init();
         const { worktrees, retire } = stubWorktrees();
         expect(await archiveAgents({ agents, agentWorktrees: worktrees, logger }, ["ghost"], 9_000)).toEqual([]);
@@ -144,7 +145,7 @@ describe("archiveAgents", () => {
 
 describe("purgeArchived", () => {
     it("deletes the archive and leaves the board alone", async () => {
-        const agents = createAgentsRegistry(memoryStore(), noStandings);
+        const agents = createAgentsRegistry(memoryStore(), noStandings, noPresences);
         await agents.init();
         await agents.begin(turn({ conversationId: "filed" }), 1_000);
         await agents.finish("filed", 2_000);
@@ -166,7 +167,7 @@ describe("purgeArchived", () => {
     });
 
     it("purges a workspace conversation without attempting branch removal", async () => {
-        const agents = createAgentsRegistry(memoryStore(), noStandings);
+        const agents = createAgentsRegistry(memoryStore(), noStandings, noPresences);
         await agents.init();
         await agents.begin(turn({ isolated: false }), 1_000);
         await agents.finish("c1", 2_000);
@@ -179,7 +180,7 @@ describe("purgeArchived", () => {
     });
 
     it("keeps the agents whose teardown failed, and deletes the rest", async () => {
-        const agents = createAgentsRegistry(memoryStore(), noStandings);
+        const agents = createAgentsRegistry(memoryStore(), noStandings, noPresences);
         await agents.init();
         for (const id of ["a", "b"]) {
             await agents.begin(turn({ conversationId: id }), 1_000);
@@ -201,7 +202,7 @@ describe("purgeArchived", () => {
     });
 
     it("leaves an agent that a new turn took back out of the archive", async () => {
-        const agents = createAgentsRegistry(memoryStore(), noStandings);
+        const agents = createAgentsRegistry(memoryStore(), noStandings, noPresences);
         await agents.init();
         await agents.begin(turn({ conversationId: "filed" }), 1_000);
         await agents.finish("filed", 2_000);
@@ -219,7 +220,7 @@ describe("purgeArchived", () => {
 describe("sweepAgedAgents", () => {
     it("archives only what has aged out, and skips a running turn", async () => {
         const now = 10 * DAY;
-        const agents = createAgentsRegistry(memoryStore(), noStandings);
+        const agents = createAgentsRegistry(memoryStore(), noStandings, noPresences);
         await agents.init();
         // Old and finished — the sweep's target.
         await agents.begin(turn({ conversationId: "old" }), 0);
@@ -243,7 +244,7 @@ describe("sweepAgedAgents", () => {
     });
 
     it("does nothing when retention is off", async () => {
-        const agents = createAgentsRegistry(memoryStore(), noStandings);
+        const agents = createAgentsRegistry(memoryStore(), noStandings, noPresences);
         await agents.init();
         await agents.begin(turn(), 0);
         await agents.finish("c1", 0);

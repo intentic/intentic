@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed } from "vue";
-import { effectiveAutoLand } from "../composables/agents/agentStatus";
+import { effectiveAutoLand, landedAway } from "../composables/agents/agentStatus";
 import type { useAgentChanges } from "../composables/agents/useAgentChanges";
 import { useAgents } from "../composables/agents/useAgents";
 import { useSandboxSettings } from "../composables/sandbox/useSandboxSettings";
@@ -30,6 +30,16 @@ const emit = defineEmits<{ selected: []; discard: [] }>();
 
 const { agentById, restore, busyIds } = useAgents();
 const archived = computed(() => agentById(agentId)?.archivedAt !== undefined);
+/* WORK THIS SESSION LANDED THAT THE WORKSPACE NO LONGER HOLDS — the reason "Land now" above stands down.
+ *
+ * The menu item it replaces was the sharpest form of the problem: with everything recorded as landed, its
+ * caption read "Already in your workspace" over a tree the user had emptied of it, and the item was greyed out
+ * so there was nothing to press either. Read off the roster rather than off the diff, because the diff is the
+ * agent's own branch and the branch is exactly what has NOT changed. */
+const away = computed(() => {
+    const agent = agentById(agentId);
+    return agent === undefined || agent.archivedAt !== undefined ? undefined : landedAway(agent);
+});
 // Both directions claim the same per-id counter in the fleet store, so one flag covers the round trip either way.
 const archiveBusy = computed(() => busyIds.value.includes(agentId));
 
@@ -52,13 +62,17 @@ const run = (action: () => void): void => {
     emit(`selected`);
 };
 
+// The cumulative land — "Land again" (see `away`). Through `run` like every other item, so the menu closes on
+// the press and the panel's own busy/error line owns the round trip.
+const relandNow = (): void => run(() => changes.land(`check`, `cumulative`));
+
 const ITEM = `flex w-full items-start gap-2 rounded-lg px-2.5 py-1.5 text-left transition-colors hover:bg-overlay disabled:opacity-40 disabled:hover:bg-transparent max-md:py-3`;
 </script>
 
 <template>
     <div class="flex flex-col p-1">
         <button
-            v-if="landInMenu"
+            v-if="landInMenu && away === undefined"
             type="button"
             :class="ITEM"
             :disabled="changes.actionBusy.value || streaming || changes.pending.value.length === 0"
@@ -76,6 +90,18 @@ const ITEM = `flex w-full items-start gap-2 rounded-lg px-2.5 py-1.5 text-left t
                               : `Applies ${changes.pending.value.length} change(s) to your workspace`
                     }}
                 </span>
+            </span>
+        </button>
+        <!-- THE WAY BACK, where the session's own decisions live. It replaces "Land now" rather than joining
+             it, because the two are never both the honest offer: with landed work missing from the tree, a
+             plain land carries the remainder and leaves the missing part exactly as missing, which is the one
+             outcome that looks like it worked. Quiet like everything else in this menu — the card is where the
+             fact is announced; this is just the second place the press can be found. -->
+        <button v-if="away !== undefined" type="button" :class="ITEM" :disabled="changes.actionBusy.value || streaming" @click="relandNow">
+            <Icon name="undo" class="mt-0.5 text-xs text-warning" />
+            <span class="flex min-w-0 flex-col">
+                <span class="text-sm text-content md:text-xs">Land again</span>
+                <span class="text-2xs text-subtle">{{ streaming ? `Wait for the agent turn to finish` : away.text }}</span>
             </span>
         </button>
         <button type="button" :class="ITEM" @click="run(() => changes.refresh())">

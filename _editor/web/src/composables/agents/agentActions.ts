@@ -1,5 +1,5 @@
 import type { AgentChangesResponse } from "@intentic-app/api-contract";
-import type { LandMode, LandResult } from "@intentic/sandbox-contract";
+import type { AgentSpan, LandMode, LandResult } from "@intentic/sandbox-contract";
 import { useDevice } from "@intentic/ui";
 import type { Conversation } from "../chat/conversation";
 import { focusComposer, useChat } from "../chat/useChat";
@@ -65,8 +65,14 @@ export const revealConversation = (conversation: Conversation): void => {
 // matters most is the automatic one at turn completion, which runs inside the daemon and never crosses this
 // seam; what broke was the two manual paths (the review panel's Land/Merge, and dropping a card on Finished) —
 // and with them the only way an errored or conflicted agent could ever reach the Finished lane.
-export const landAgent = (id: string, mode: LandMode = `check`): Promise<LandResult> =>
-    sandboxJson<LandResult>(`/agents/${encodeURIComponent(id)}/land`, jsonBody(`POST`, { mode }));
+//
+// `span` picks the rung the patch is measured from, and `cumulative` exists for exactly one case: work this
+// agent landed that the user has since discarded from the workspace. Every sha still says it landed — because
+// it did — so the default `outstanding` span is empty and would carry nothing at all; only a reading from the
+// branch's base can still see what is gone. Paths the tree already holds drop out of it per file, so a
+// cumulative land applies the missing part and re-applies nothing (AgentSpanSchema).
+export const landAgent = (id: string, mode: LandMode = `check`, span: AgentSpan = `outstanding`): Promise<LandResult> =>
+    sandboxJson<LandResult>(`/agents/${encodeURIComponent(id)}/land`, jsonBody(`POST`, { mode, span }));
 
 /* THE MAIN ROAD OUT OF A LAND CONFLICT: hand it back to the agent that wrote the work.
  *

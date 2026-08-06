@@ -20,7 +20,7 @@ export type DropAction = "land" | "resolve" | "stop" | "discard";
  * It is the action and not a boolean because the two actions the card offers as BUTTONS report their own
  * progress in place (AgentCard), and a flag cannot tell them apart from the filing pair — archiving a `ready`
  * card would otherwise leave its Land button spinning on work nobody asked to land. */
-export type PendingAction = DropAction | "archive" | "restore";
+export type PendingAction = DropAction | "archive" | "restore" | "reland";
 
 export const dropActionFor = (agent: FleetAgent, target: DropTarget): DropAction | undefined => {
     // A draft is an open tab that never ran, and a refused one is a tab that TRIED and was turned away: either

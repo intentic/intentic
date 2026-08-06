@@ -431,7 +431,7 @@ test("a discard fired during an in-flight land queues behind the repo lock — l
         return defaultGit(dir, args);
     };
 
-    const landing = landAgent(worktrees, isolatedAgent(conversation.repos), "check", pausingGit);
+    const landing = landAgent(worktrees, isolatedAgent(conversation.repos), "check", "outstanding", pausingGit);
     await pausedAt;
     let removed = false;
     const removing = worktrees.remove("c1", conversation.repos).then(() => {

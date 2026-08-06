@@ -580,6 +580,22 @@ export const AgentSummarySchema = z.object({
     // The agent's cumulative output (base → branch tip across every repo), refreshed on each land —
     // the card's "12 files · +412 −96" readout. Independent of what has landed.
     diff: z.object({ files: z.number(), insertions: z.number(), deletions: z.number() }).optional(),
+    /* HOW MUCH OF WHAT THIS AGENT LANDED IS STILL IN YOUR WORKING TREE — present only when some of it ISN'T.
+     *
+     * A land applies its delta to the main tree as uncommitted changes, so the user can discard it there like
+     * any other change, and every other reading on this card is measured between commits and cannot see that
+     * happen (landed-presence.ts). Left unsaid, the card goes on wearing a landed chip and the session menu
+     * goes on saying "Already in your workspace" over a tree that no longer holds it — and the next land
+     * carries only the NEW delta, dropping turn 2 onto a tree missing turn 1.
+     *
+     * `present` counts the landed paths still there: dirty, or committed into history — a commit is the
+     * strongest form of still-there, which is why this cannot be folded into the Changes panel's own
+     * attribution, where a commit is what ENDS the agent's claim (origins.ts).
+     *
+     * Absent is the steady state and the quiet one: an agent that never landed and an agent whose work is
+     * exactly where it left it both say nothing. Its PRESENCE is the signal, which is what keeps the board
+     * from spending a line per card on the ordinary case. */
+    landedPresence: z.object({ landed: z.number(), present: z.number() }).optional(),
     /* The loop driving this conversation, when one is (or was) — "iteration 3/12, until the suite is green".
      *
      * PROJECTED onto the card rather than fetched beside it, and that is the whole reason a loop needed no
@@ -726,7 +742,21 @@ export type LandResult = z.infer<typeof LandResultSchema>;
  * on the branch for a deliberate Land. */
 export const LandModeSchema = z.enum(["check", "merge", "measure"]);
 export type LandMode = z.infer<typeof LandModeSchema>;
-export const AgentLandSchema = z.object({ id: z.string().min(1), mode: LandModeSchema.optional() });
+/* WHICH RUNG OF AN AGENT'S HISTORY A READING — or a land — STARTS AT.
+ *
+ *   outstanding — only what has not landed yet, measured from the last landed tip. The default, and what a
+ *                 land carries: a second land applies only what the agent has done since the first.
+ *   cumulative  — the agent's WHOLE output, from where its branch left the main line. What the review lists
+ *                 (landed work stays inspectable), and what "Land again" applies.
+ *
+ * A CUMULATIVE LAND IS NOT A DOUBLE APPLICATION. It is the way back when a land's work was discarded from the
+ * workspace: the outstanding span is empty then — every sha says the work landed, because it did — so only a
+ * reading from the base can still see the part that is missing. Paths the tree already holds drop out of it
+ * per file, by the same reverse probe that keeps work which reached main by another road out of a conflict
+ * report (land.ts, classifyDelta), so what actually applies is exactly what is gone. */
+export const AgentSpanSchema = z.enum(["cumulative", "outstanding"]);
+export type AgentSpan = z.infer<typeof AgentSpanSchema>;
+export const AgentLandSchema = z.object({ id: z.string().min(1), mode: LandModeSchema.optional(), span: AgentSpanSchema.optional() });
 
 // ---- routed-provider subscriptions ----
 

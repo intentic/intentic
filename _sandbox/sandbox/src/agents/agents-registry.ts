@@ -6,6 +6,7 @@ import { workflowProjection } from "../workflows/workflow-state.js";
 import { recordConversationPrompt, recordPrompt } from "../sessions/prompt-index.js";
 import { type AgentsStore, type AgentTitleSource, isIsolated, type PersistedAgent } from "./agents-store.js";
 import type { LandOutcome } from "./land.js";
+import type { LandedPresences } from "./landed-presence.js";
 import type { LandStandings } from "./standing.js";
 
 // The runtime half of the fleet registry: holds the authoritative in-memory entry list (loaded once from the
@@ -246,7 +247,7 @@ export interface AgentsRegistry {
     readonly revision: () => number;
 }
 
-export const createAgentsRegistry = (store: AgentsStore, standings: LandStandings): AgentsRegistry => {
+export const createAgentsRegistry = (store: AgentsStore, standings: LandStandings, presences: LandedPresences): AgentsRegistry => {
     let entries: PersistedAgent[] = [];
     const runtime = new Map<string, RuntimeState>();
     /* The other half of the turn mutex — conversations a rewind is currently restoring. Deliberately NOT a flag
@@ -310,6 +311,9 @@ export const createAgentsRegistry = (store: AgentsStore, standings: LandStanding
         const subagents = { running: subagentCountsOf(entry.id).running, total: (entry.subagents ?? 0) + (state?.pendingSubagents ?? 0) };
         const loop = loopProjection.of(entry.id);
         const workflow = workflowProjection.of(entry.id);
+        // Read for branch-backed agents only, for the same reason a standing is: a workspace conversation
+        // reaches the main tree by typing in it, never through a land, so it has no landing to be missing.
+        const landedPresence = entry.branch === undefined ? undefined : presences.of(entry.id);
         return {
             id: entry.id,
             status,
@@ -357,6 +361,10 @@ export const createAgentsRegistry = (store: AgentsStore, standings: LandStanding
             ...(entry.diffFiles !== undefined
                 ? { diff: { files: entry.diffFiles, insertions: entry.diffInsertions ?? 0, deletions: entry.diffDeletions ?? 0 } }
                 : {}),
+            // Present ONLY when some of what this agent landed is no longer in the main tree — the user
+            // discarded it, or took it back out by hand. Its absence is the steady state and says nothing, so
+            // the card spends a line on this exactly when there is something to say (landed-presence.ts).
+            ...(landedPresence !== undefined ? { landedPresence } : {}),
             // The loop driving this conversation, read off the pump's own live state for the same reason the
             // subagent counts are read off theirs — one projection, no second copy to go stale.
             ...(loop !== undefined ? { loop } : {}),
@@ -384,9 +392,19 @@ export const createAgentsRegistry = (store: AgentsStore, standings: LandStanding
     loopProjection.onChange(broadcast);
     workflowProjection.onChange(broadcast);
 
-    // Only the live, branch-backed roster is probed — see LandStandings.refresh on why an archived agent keeps
-    // its last answer, and why a workspace conversation has no standing to probe at all.
-    const reprobe = (): Promise<boolean> => standings.refresh(entries.filter(isIsolated).filter((entry) => entry.archivedAt === undefined));
+    /* Only the live, branch-backed roster is probed — see LandStandings.refresh on why an archived agent keeps
+     * its last answer, and why a workspace conversation has no standing to probe at all.
+     *
+     * Two readings over one roster, because a land has two halves and only one of them is a sha: where the
+     * branch stands against the main line (standing.ts), and whether what already landed is still in the tree
+     * (landed-presence.ts). Both, or the board answers the discard case with a confident stale yes. Run
+     * together rather than chained so neither waits on the other's git, and `moved` is the OR: either half
+     * changing is a card the user is looking at changing. */
+    const reprobe = async (): Promise<boolean> => {
+        const live = entries.filter(isIsolated).filter((entry) => entry.archivedAt === undefined);
+        const [standingMoved, presenceMoved] = await Promise.all([standings.refresh(live), presences.refresh(live)]);
+        return standingMoved || presenceMoved;
+    };
 
     // Chained, not fire-and-forget: `entries` is REPLACED (not mutated) by every write path, so two overlapping
     // persists would each serialize the array they captured — and the one that finishes last would write back a
@@ -911,6 +929,7 @@ export const createAgentsRegistry = (store: AgentsStore, standings: LandStanding
                 runtime.delete(id);
             }
             standings.forget(ids);
+            presences.forget(ids);
             loopProjection.forget(ids);
             workflowProjection.forget(ids);
             await persist();

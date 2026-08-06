@@ -1,5 +1,5 @@
 import type { AgentChange, AgentChangesResponse, AgentRepoChanges, FileDiffResponse } from "@intentic-app/api-contract";
-import { isTestPath, type LandConflictReason, type LandMode, type LandResult } from "@intentic/sandbox-contract";
+import { isTestPath, type AgentSpan, type LandConflictReason, type LandMode, type LandResult } from "@intentic/sandbox-contract";
 import { computed, ref, watch, type Ref } from "vue";
 import { sandboxJson } from "../sandbox/sandboxClient";
 import { sandboxKey } from "../sandbox/useSandbox";
@@ -167,9 +167,12 @@ export function useAgentChanges(agentId: Ref<string>) {
         }
     });
 
-    const land = (mode: LandMode = `check`): Promise<void> =>
+    // `span` is `cumulative` only for "Land again" — the way back after landed work was discarded from the
+    // workspace, where every sha says the work went in and only a reading from the branch's base can still see
+    // that it is gone (AgentSpanSchema).
+    const land = (mode: LandMode = `check`, span: AgentSpan = `outstanding`): Promise<void> =>
         run(async () => {
-            resolving.value = (await landAgent(agentId.value, mode)).resolving;
+            resolving.value = (await landAgent(agentId.value, mode, span)).resolving;
             await invalidateAgentAction(agentId.value);
         }, `Land failed.`);
 

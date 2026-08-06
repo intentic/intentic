@@ -229,6 +229,44 @@ export const laneOf = (agent: AgentStanding): FleetLane => {
     return `finished`;
 };
 
+/* WHAT THE CARD SAYS WHEN LANDED WORK IS NO LONGER IN THE WORKSPACE — the sentence, and the fraction when it
+ * is only part of it.
+ *
+ * A land arrives as uncommitted changes, so the user can discard it in the Changes panel like anything else,
+ * and every other reading on a card is taken between commits and cannot see that happen (landed-presence.ts
+ * on the daemon side). Unsaid, the card goes on wearing `Landed` and the session menu goes on offering a
+ * greyed-out land captioned "Already in your workspace" — over a tree that no longer holds a line of it.
+ *
+ * IT IS A QUALIFIER ON `landed`, NOT A STATUS OF ITS OWN, and that is deliberate on both counts. The lane is
+ * still Finished: the user discarded that work on purpose, and a card that climbed back into a queue demanding
+ * attention would be arguing with a decision they already made. And the fact is orthogonal to the turn
+ * lifecycle — an agent that has since been messaged and is running again can equally have had its earlier
+ * land discarded, and both things are true of it at once.
+ *
+ * The COMMITTED half counts as present, which is why the ordinary flow never sees this line: reviewing an
+ * agent's work and committing it is the happy path, and a card that announced "removed from your workspace"
+ * the moment the user committed would be crying wolf on the one outcome the whole review exists to produce.
+ *
+ * Undefined for every agent with nothing missing, which is nearly all of them — the daemon only sends a
+ * reading when there is something to say (AgentSummarySchema.landedPresence). */
+export const landedAway = (agent: {
+    readonly landedPresence?: { readonly landed: number; readonly present: number };
+}): { text: string; hint: string } | undefined => {
+    const presence = agent.landedPresence;
+    if (presence === undefined) {
+        return undefined;
+    }
+    const hint = `Nothing is lost — this agent's branch still holds all of it, and "Land again" puts back what is missing.`;
+    // The whole of it, which is the common shape: one discard of one agent's work, and no arithmetic to read.
+    if (presence.present === 0) {
+        return { text: `Removed from your workspace`, hint };
+    }
+    // A PART of it — a discarded selection, or a few rows reverted by hand. The fraction rather than the
+    // remainder ("3 files gone") because what the user is deciding is whether enough survived to leave it be,
+    // and that reads off "9 of 12" without them having to do the subtraction.
+    return { text: `${presence.present} of ${presence.landed} files still in your workspace`, hint };
+};
+
 /* ONE BIT — "this session isn't done with your tree yet" — for surfaces that name an agent while showing its
  * OUTPUT rather than the agent itself (the Changes panel's From legend). Those chips spend their glyph on
  * identity, so the full status vocabulary above cannot ride them; and most of it would say nothing there

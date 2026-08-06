@@ -407,11 +407,13 @@ export const services = (overrides: ServiceOverrides = {}): Services => {
         }),
         // A real registry over a memory store (cheap, and /events' roster subscription needs the real seam);
         // worktree git mechanics are stubbed — the worktree suites cover them against real git.
-        // No land standings to derive here: these suites drive the routes, and where a card's work stands is
-        // standing.integration.test.ts's subject. Every agent this harness makes therefore reads at its turn lifecycle.
+        // Neither derived half is computed here: these suites drive the routes, and where a card's work stands
+        // — plus how much of it is still in the tree — belongs to the integration suites that have real git.
+        // Every agent this harness makes therefore reads at its turn lifecycle, with nothing landed missing.
         agents: createAgentsRegistry(
             { load: async () => [], save: async () => {} },
             { of: () => "idle", refresh: async () => false, forget: () => {} },
+            { of: () => undefined, refresh: async () => false, forget: () => {} },
         ),
         agentWorktrees: {
             conversationDir: (id) => `/history/worktrees/${id}`,

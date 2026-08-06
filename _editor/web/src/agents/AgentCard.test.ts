@@ -76,7 +76,7 @@ const delegating = (): FleetAgent => ({
 let app: App | undefined;
 // Icon and v-tooltip are registered app-wide by installUi; stand-ins keep this off the whole UI plugin. Icon
 // prints the glyph it was handed, because WHICH glyph is what says "in flight" on the button.
-const mount = (agent: FleetAgent, pending?: PendingAction, onClose?: () => void): HTMLElement => {
+const mount = (agent: FleetAgent, pending?: PendingAction, handlers: { onClose?: () => void; onReland?: () => void } = {}): HTMLElement => {
     const el = document.createElement(`div`);
     document.body.append(el);
     app = createApp({
@@ -85,7 +85,7 @@ const mount = (agent: FleetAgent, pending?: PendingAction, onClose?: () => void)
                 agent,
                 now: 2,
                 ...(pending !== undefined ? { pending } : {}),
-                ...(onClose !== undefined ? { onClose } : {}),
+                ...handlers,
             }),
     });
     app.component(
@@ -172,7 +172,7 @@ it(`offers a close on a card the daemon has no entry for — the only way it can
 
 it(`asks the board to close it on the press`, () => {
     const closed = vi.fn();
-    buttonLabelled(mount(refused(), undefined, closed), `Close agent`)!.click();
+    buttonLabelled(mount(refused(), undefined, { onClose: closed }), `Close agent`)!.click();
     expect(closed).toHaveBeenCalledTimes(1);
 });
 
@@ -217,4 +217,67 @@ it(`says why a session died, on the card that reports it died`, () => {
 // needs no second check — but a healthy card must not grow an empty red line out of the same markup.
 it(`keeps the line off a card with nothing to explain`, () => {
     expect(mount(ready()).querySelector(`[data-icon="exclamation-circle"]`)).toBeNull();
+});
+
+/* THE DISCARD CASE — landed work the user has since taken back out of the workspace.
+ *
+ * It is the one state on this board the card could not previously report, and the reason is structural: every
+ * other reading here is taken between commits, and discarding uncommitted changes moves no commit. So the card
+ * went on wearing `Landed` over a tree holding none of it. Four properties are pinned: the card SAYS so; it
+ * offers the way back; the offer is not the primary press (a discard is very often a rejection, and a bright
+ * green button would be arguing with it); and where a plain land would also apply, this one replaces it —
+ * "Land now" carries the remainder and would leave the missing half exactly as missing. */
+const discarded = (present: number, landed: number, status: FleetAgent[`status`] = `landed`): FleetAgent => ({
+    ...ready(status),
+    landedPresence: { landed, present },
+});
+
+const relandButton = (el: HTMLElement): HTMLButtonElement | undefined =>
+    [...el.querySelectorAll(`button`)].find((button) => /Land again|Landing/.test(button.textContent ?? ``));
+
+it(`says so when the whole of a land has left the workspace`, () => {
+    expect(mount(discarded(0, 4)).textContent).toContain(`Removed from your workspace`);
+});
+
+// The fraction, not the remainder: what the user is deciding is whether enough survived to leave it be, and
+// "9 of 12" answers that without them doing the subtraction.
+it(`counts what survived when only part of a land was discarded`, () => {
+    expect(mount(discarded(9, 12)).textContent).toContain(`9 of 12 files still in your workspace`);
+});
+
+// The half that stops "removed from your workspace" reading as work destroyed. It is not decoration: the
+// branch genuinely still holds all of it, and that fact is what makes the discard safe to have made.
+it(`says the work is not lost, in the same breath`, () => {
+    expect(mount(discarded(0, 4)).textContent).toContain(`this agent's branch still holds all of it`);
+});
+
+it(`offers the way back, and reports its own press`, () => {
+    expect(relandButton(mount(discarded(0, 4)))?.textContent?.trim()).toBe(`Land again`);
+    const pressed = relandButton(mount(discarded(0, 4), `reland`))!;
+    expect(pressed.textContent?.trim()).toBe(`Landing…`);
+    expect(pressed.querySelector(`[data-icon="spinner"]`)).not.toBeNull();
+});
+
+it(`asks the board to re-land on the press`, () => {
+    const relanded = vi.fn();
+    relandButton(mount(discarded(0, 4), undefined, { onReland: relanded }))!.click();
+    expect(relanded).toHaveBeenCalledTimes(1);
+});
+
+/* THE TWO NEVER SHARE A CARD. An agent whose first land was discarded and which has since written more is
+ * `ready` AND missing work, and the two presses are not interchangeable: "Land now" applies the outstanding
+ * remainder and leaves the discarded half untouched — a land that reports success and fixes nothing, which is
+ * the hardest kind of wrong to notice. "Land again" measures from the branch's base and covers both. */
+it(`replaces the plain land rather than sitting beside it`, () => {
+    const card = mount(discarded(0, 4, `ready`));
+    expect(relandButton(card)?.textContent?.trim()).toBe(`Land again`);
+    expect(landButton(card)).toBeUndefined();
+});
+
+// Nothing missing is the steady state and says NOTHING — a card that announced the ordinary landed agent would
+// be spending a line on nearly every card on the board.
+it(`stays quiet when the landed work is where it was left`, () => {
+    const card = mount(ready(`landed`));
+    expect(relandButton(card)).toBeUndefined();
+    expect(card.textContent).not.toContain(`your workspace`);
 });

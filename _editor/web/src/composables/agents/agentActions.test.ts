@@ -84,16 +84,17 @@ it("sends the land body as JSON, so the daemon parses an object and keeps the ag
     const [request] = sent;
     expect(request?.url).toBe(`https://daemon.test/agents/a1/land`);
     expect(request?.headers.get(`content-type`)).toBe(`application/json`);
-    // The drag-to-Finished drop and the panel's Land button both take the default: check-only, so a refusal
-    // leaves the workspace byte-identical.
-    expect(await request?.json()).toEqual({ mode: `check` });
+    // The drag-to-Finished drop and the panel's Land button both take the defaults: check-only, so a refusal
+    // leaves the workspace byte-identical, and the outstanding span, so a land carries only what has not
+    // landed yet. The cumulative span is asked for by name and by one surface alone ("Land again").
+    expect(await request?.json()).toEqual({ mode: `check`, span: `outstanding` });
 });
 
 it("carries an explicit mode, so the conflict report's Merge is a different request and not the same one twice", async () => {
     stubFetch();
     await landAgent(`a1`, `merge`);
     expect(sent[0]?.headers.get(`content-type`)).toBe(`application/json`);
-    expect(await sent[0]?.json()).toEqual({ mode: `merge` });
+    expect(await sent[0]?.json()).toEqual({ mode: `merge`, span: `outstanding` });
 });
 
 /* WHO THE ASK IS FOR, decided against the report and not against the card. The board arms its "Have the agent
@@ -163,4 +164,14 @@ it("refuses the ask when the agent has no conversation left", async () => {
     expect(await askAgentToResolve(`a1`)).toEqual({ sent: false, why: expect.stringContaining(`no conversation`) });
     // Refused before the report is even read — there is no one to tell.
     expect(sent).toEqual([]);
+});
+
+/* THE WAY BACK AFTER A DISCARD, and it has to be a different request from every other land — otherwise it is
+ * the same one twice and does nothing. Landing is measured from the last landed tip, so once the user discards
+ * a land's work from the workspace the default span is EMPTY: every sha still says the work went in, because
+ * it did. Only a reading from the branch's base can still see that it is gone. */
+it("asks for the cumulative span by name, so a re-land carries work the default span can no longer see", async () => {
+    stubFetch();
+    await landAgent(`a1`, `check`, `cumulative`);
+    expect(await sent[0]?.json()).toEqual({ mode: `check`, span: `cumulative` });
 });

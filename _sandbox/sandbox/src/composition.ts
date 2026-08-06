@@ -73,6 +73,7 @@ import { createAgentsRegistry, type AgentsRegistry } from "./agents/agents-regis
 import { fileAgentsStore } from "./agents/agents-store.js";
 import { createTurnIsolation, type TurnIsolation } from "./agents/isolation.js";
 import { createAgentOrigins, type AgentOrigins } from "./agents/origins.js";
+import { createLandedPresences } from "./agents/landed-presence.js";
 import { createLandStandings } from "./agents/standing.js";
 import { createAgentWorktrees, type AgentWorktrees } from "./agents/worktrees.js";
 import {
@@ -661,7 +662,11 @@ export const createServices = (config: Config, logger: Logger): Services => {
     );
     // Hoisted: the Changes scan's per-file attribution reads the SAME registry the turns write to — a
     // second instance would answer from a stale agents.json.
-    const agents = createAgentsRegistry(fileAgentsStore(join(config.historyRoot, "agents.json")), createLandStandings(agentWorktrees));
+    const agents = createAgentsRegistry(
+        fileAgentsStore(join(config.historyRoot, "agents.json")),
+        createLandStandings(agentWorktrees),
+        createLandedPresences(agentWorktrees, logger),
+    );
     // Hoisted: the CI hook reconciler reads the same manifest the routes edit.
     const capabilities = fileCapabilitiesStore(statePath(workspace.root, ".intentic/capabilities.json"), (id, reason) =>
         logger.warn(`capabilities: skipping unreadable entry "${id}" (${reason}) — the rest of the manifest is unaffected`),

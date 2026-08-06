@@ -1,7 +1,7 @@
 import { access, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { GitChange, LandConflict, LandConflictReason, LandMode, LandResult } from "@intentic/sandbox-contract";
+import type { AgentSpan, GitChange, LandConflict, LandConflictReason, LandMode, LandResult } from "@intentic/sandbox-contract";
 import { defaultGit, gitCommitAll, type GitRunner } from "@intentic/scaffold";
 import { changedFiles, headSha, parseNameStatusZ } from "../git/changes.js";
 import { AGENT_GIT_AUTHOR } from "../git/git.js";
@@ -276,6 +276,15 @@ export const landAgent = async (
     worktrees: AgentWorktrees,
     entry: IsolatedAgent,
     mode: LandMode = "check",
+    /* WHICH RUNG THE PATCH IS MEASURED FROM — `outstanding` for every automatic land, and the only reason the
+     * other exists is that a land's product is UNCOMMITTED. The user can discard it in the Changes panel like
+     * any other change, and when they do, nothing this file records moves: `landedTip` still says the work
+     * went in, so the outstanding span is empty and the one action that could put it back would carry an
+     * empty patch. `cumulative` re-measures from the branch's own base, which is the only rung that can still
+     * see what is gone; classifyDelta's reverse probe drops every path the tree already holds, so what
+     * applies is the missing part and nothing else. Offered on the card as "Land again", never automatically:
+     * the discard was a decision, and a daemon that undid it in the background would make it meaningless. */
+    span: AgentSpan = "outstanding",
     git: GitRunner = defaultGit,
 ): Promise<LandOutcome> => {
     const conflicts: LandConflict[] = [];
@@ -335,7 +344,7 @@ export const landAgent = async (
                     diff.insertions += change.additions ?? 0;
                     diff.deletions += change.deletions ?? 0;
                 }
-                const from = await anchorOf(refDir, main, tip, composed.landedTip, base, git);
+                const from = await anchorOf(refDir, main, tip, span === "cumulative" ? undefined : composed.landedTip, base, git);
                 if (tip === from) {
                     /* Everything already landed for this repo. Usually that is a recorded fact (landedTip is
                      * the tip) and this land is a true no-op — but when ANCESTRY says so, the registry is

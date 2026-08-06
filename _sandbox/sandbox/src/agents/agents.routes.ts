@@ -232,13 +232,15 @@ export const createAgentsRoutes = (services: Services) => {
             const entry = isolatedEntryOf(input.id);
             notRunning(input.id);
             // Snapshotted before the land advances every landedTip — the span a chore diffs from, exactly as
-            // the auto-land path captures it before its own land (see streamIsolatedTurn).
+            // the auto-land path captures it before its own land (see streamIsolatedTurn). A cumulative land
+            // reads from the base for the same reason the land itself does: the rung it is putting back is
+            // the one before anything landed, so a chore told otherwise would diff an empty range.
             const span = entry.repos.map(({ repo, base, landedTip }) => ({
                 repo,
-                from: landedTip ?? base,
+                from: input.span === "cumulative" ? base : (landedTip ?? base),
                 dir: services.agentWorktrees.worktreeDir(entry.id, repo),
             }));
-            const result = await landAgent(services.agentWorktrees, entry, input.mode);
+            const result = await landAgent(services.agentWorktrees, entry, input.mode, input.span);
             // Both halves of what the card will show: recordLanded stores the tips and the conflict report,
             // and re-derives the standing from them. `finish` no longer carries a verdict — it clears how the
             // LAST TURN ended, which a deliberate land is the user moving past (an `error` card they chose to

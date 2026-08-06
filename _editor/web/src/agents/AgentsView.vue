@@ -118,6 +118,7 @@ const {
     cancelResolve,
     resolveNow,
     landNow,
+    relandNow,
 } = useAgentDrag();
 // The card behind the resolve confirmation — looked up live rather than snapshotted with the drop, so a
 // rename or a status change while the dialog is open is reflected in what it is asking about.
@@ -1027,6 +1028,7 @@ const grabCard = (event: PointerEvent, agent: FleetAgent, card: HTMLElement): vo
                             @review="reviewAgent(agent)"
                             @resolve="resolveNow(agent.id)"
                             @land="landNow(agent.id)"
+                            @reland="relandNow(agent.id)"
                             @archive="archive([agent.id])"
                             @restore="restore([agent.id])"
                             @close="closeAgent(agent)"

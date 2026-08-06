@@ -2,7 +2,7 @@ import { computed, ref } from "vue";
 import { errorMessage } from "../useAsyncAction";
 import { askAgentToResolve, discardAgent, invalidateAgentAction, landAgent, stopAgent } from "./agentActions";
 import { unregistered } from "./agentStatus";
-import { dropActionFor, type DropAction, type DropTarget } from "./laneDrop";
+import { dropActionFor, type DropAction, type DropTarget, type PendingAction } from "./laneDrop";
 import { useAgents, type FleetAgent } from "./useAgents";
 
 /* Pointer-driven card drag for the board. Pointer Events rather than HTML5 drag-and-drop: the ghost is a real
@@ -30,7 +30,7 @@ const pointer = ref({ x: 0, y: 0 });
 const over = ref<DropTarget | undefined>(undefined);
 // The one action this board is running, and which card it is running against — the action and not just the id
 // because the card's own buttons report their progress in place (see PendingAction).
-const busy = ref<{ id: string; action: DropAction } | undefined>(undefined);
+const busy = ref<{ id: string; action: PendingAction } | undefined>(undefined);
 const ghostWidth = ref(0);
 
 // Resolved live against the roster rather than snapshotted at grab time: a turn that ends mid-drag must
@@ -82,19 +82,23 @@ const cancel = (): void => {
 
 // The card doesn't move lane here — the roster frame the action provokes does that. Until it arrives the card
 // shows as busy in place, so a slow daemon reads as "working", never as a card teleporting back.
-const perform = async (id: string, chosen: DropAction): Promise<void> => {
+const perform = async (id: string, chosen: PendingAction): Promise<void> => {
     busy.value = { id, action: chosen };
     notice.value = undefined;
     try {
         if (chosen === `stop`) {
             await stopAgent(id);
-        } else if (chosen === `land`) {
-            const result = await landAgent(id);
+        } else if (chosen === `land` || chosen === `reland`) {
+            // One runner for both spans, because a re-land IS a land in every way the board cares about — same
+            // busy flag, same refusal notice, same refresh. What differs is the rung it measures from, and
+            // that is one argument rather than a parallel path free to drift on the other three.
+            const result = await landAgent(id, `check`, chosen === `reland` ? `cumulative` : `outstanding`);
             await invalidateAgentAction(id);
             if (!result.landed) {
                 // Reachable from an ERRORED card's drop or a READY card's button (a conflicted one resolves
                 // instead) — either way a first refusal with a report to read, not the repeat of one the user
-                // has already seen.
+                // has already seen. A re-land reaches it when the user's own tree has moved over the paths it
+                // is putting back, which is the same report and the same read.
                 notice.value = `Landing hit a conflict — open the agent to see what blocked it.`;
             }
         } else if (chosen === `resolve`) {
@@ -164,6 +168,12 @@ const resolveNow = (id: string): Promise<void> => perform(id, `resolve`);
 // notice strip, one refresh). No dialog: landing is reversible in the git sense (the branch keeps everything)
 // and the button states its own mechanics, exactly like the review panel's copy of it.
 const landNow = (id: string): Promise<void> => perform(id, `land`);
+
+// The way back for a card whose landed work was discarded from the workspace — the same runner again, one
+// argument apart (see perform). No dialog, for the reason the two above have none and one of their own: this
+// press UNDOES a destruction rather than causing one, and the only thing it can put in the tree is work the
+// user has already reviewed once.
+const relandNow = (id: string): Promise<void> => perform(id, `reland`);
 
 const onMove = (event: PointerEvent): void => {
     pointer.value = { x: event.clientX, y: event.clientY };
@@ -248,5 +258,6 @@ export function useAgentDrag() {
         cancelResolve,
         resolveNow,
         landNow,
+        relandNow,
     };
 }
