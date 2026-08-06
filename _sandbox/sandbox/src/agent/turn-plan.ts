@@ -354,12 +354,6 @@ export const planHarnessTurn = async (
      * "the steer was off for everyone" is not a control group. */
     const terseEligible = terseOutput && systemPromptMode !== "custom" && terseHoldout > 0;
     const terseArm = terseEligible ? Math.random() >= terseHoldout : undefined;
-    /* PRE-INJECTION'S OWN COIN FLIP, on the same terms — a fraction of otherwise-eligible turns run without the
-     * retrieved context so the two arms are populations of the same command stream. Its eligibility is simpler
-     * than terse's: the note rides the user message, so no system-prompt mode can take it away. Independent of
-     * the terse flip on purpose: two independent flips leave each experiment's other-arm turns evenly spread,
-     * where a shared one would confound them into a single four-cell design nothing here reads. */
-    const contextArm = iqContext && iqContextHoldout > 0 ? Math.random() >= iqContextHoldout : undefined;
     /* Retrieval starts HERE and is awaited at the prompt, so its (deadline-capped) latency runs underneath the
      * gates below — the dependency probe, the delegation lookup, the browser servers — instead of on top of
      * them. `input.prompt` is the user's own words: `context.base.prompt` may already carry a switched
@@ -374,9 +368,32 @@ export const planHarnessTurn = async (
      * credential, a provider outage or a sandbox restart carries the daemon's own explanation of the
      * interruption in front of the prompt (turn-resume.ts), and 400 characters of that is the whole query. Six
      * turns in one week searched the index for "the Claude credential ... has been renewed" and pasted the
-     * ranked answer to it over the question the user had actually asked. The words underneath are the ask. */
+     * ranked answer to it over the question the user had actually asked. The words underneath are the ask.
+     *
+     * AND ONLY ON THE MESSAGE THAT OPENS THE CONVERSATION, which is the gate the other three are special cases
+     * of. A week of real turns, scored on whether the agent then opened a file the note named: 75% on an
+     * opening message against a 27% chance floor, 37% on every later message against 13% — and the later ones
+     * mostly re-name files the conversation was already sitting in. The reason is structural rather than
+     * lexical, which is why no list of stopwords was ever going to fix it: a follow-up means what the turn
+     * before it meant. "Yes, fix it.", "Next iteration.", "Done. Verify if all is good." are questions to the
+     * index only if you cannot see the message above them, and the index cannot. An opening message has nothing
+     * above it, so it is the one place where the words carry the whole ask. */
+    const conversationTurns = input.conversationId === undefined ? 0 : (services.agents.entry(input.conversationId)?.turns ?? 0);
+    const contextEligible = iqContext && input.unattended !== true && conversationTurns === 0;
+    /* PRE-INJECTION'S OWN COIN FLIP, on the same terms as the terse steer's — a fraction of otherwise-eligible
+     * turns run without the retrieved context so the two arms are populations of the same command stream.
+     * Independent of the terse flip on purpose: two independent flips leave each experiment's other-arm turns
+     * evenly spread, where a shared one would confound them into a single four-cell design nothing here reads.
+     *
+     * FLIPPED ONLY WHERE THE MECHANISM APPLIES, which is what makes the arms mean anything. An arm stamped onto
+     * a turn retrieval was never going to run for puts the same dead weight in both populations, and the delta
+     * it dilutes is already small — the experiment carried that flaw while every unattended and follow-up turn
+     * was being stamped, and scoping retrieval to opening messages would have made the diluting majority the
+     * whole ledger. What is left in the two arms now is turns the note could have ridden. */
+    const contextArm = contextEligible && iqContextHoldout > 0 ? Math.random() >= iqContextHoldout : undefined;
+    // Past the gate, the holdout arm is the only thing left that can take the note away.
     const contextNote =
-        (contextArm ?? iqContext) && input.unattended !== true
+        contextEligible && contextArm !== false
             ? retrieveTurnContext({ iq: services.iq, logger: services.logger }, withoutResumeNote(input.prompt))
             : undefined;
     /* THE SECOND ROUND, and the last of the planning I/O: an extension scan, the browser bring-up, and the

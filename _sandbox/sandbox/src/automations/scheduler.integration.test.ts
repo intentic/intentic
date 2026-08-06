@@ -122,6 +122,10 @@ test("an automation's agent/harness/model ride the wake; unset fields leave the 
     expect(inputs[0]).toMatchObject({ prompt: "wake:pinned", agent: "codex", harness: "claude-code", model: "gpt-5-codex" });
     expect(inputs[1]).toMatchObject({ prompt: "wake:plain" });
     expect(inputs.every((turn) => turn.conversationId !== undefined)).toBe(true);
+    /* A WAKE IS UNATTENDED, whatever else rides it — nobody is at a composer for a schedule that fires at 3am.
+     * The tool set, the guard's refusals, the model default and whether the turn is worth retrieving workspace
+     * context for all key off this one flag, and the dispatchers used to leave it unsaid. */
+    expect(inputs.every((turn) => turn.unattended === true)).toBe(true);
 });
 
 test("outside and scheduled fires both open surfaced conversations with placement kept separate", async () => {

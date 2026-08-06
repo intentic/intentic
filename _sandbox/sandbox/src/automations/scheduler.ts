@@ -303,6 +303,18 @@ export const fireAutomation = async (
             // is exactly what an unstreamed wake does.
             prompt: stream !== undefined ? `${STREAM_NOTE}\n\n${body}` : body,
             conversationId,
+            /* NOBODY IS AT A COMPOSER FOR THIS ONE — which is what the flag means (AgentTurn.unattended names a
+             * Maintenance chore among its examples), and every module downstream already assumed it: the
+             * command gate's unattended branch exists so an automation turn gets a refusal instead of a
+             * permission card nobody can answer, and the plan/ask tools are withheld for the same reason. The
+             * dispatchers simply never said it, so a wake fired at 3am could still park itself on a question.
+             *
+             * It also decides what this turn is worth retrieving workspace context for: the pre-turn search is
+             * scoped to the opening message of a conversation a PERSON started (turn-plan.ts), and a schedule
+             * that mints a fresh conversation on every fire looks exactly like one until the flag says
+             * otherwise. Its prompt is the automation's standing brief, whose first 400 characters are a brief
+             * about being a brief. */
+            unattended: true,
             // A continuing thread resumes its provider session, so the agent answers the follow-up rather than
             // meeting the visitor again. Absent on a first turn and on every one-off wake.
             ...(resumedSessionId !== undefined ? { sessionId: resumedSessionId } : {}),

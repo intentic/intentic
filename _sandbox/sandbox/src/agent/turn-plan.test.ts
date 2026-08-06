@@ -337,20 +337,20 @@ test("every runtime hears that its branch was rebased; a main-tree turn has no b
     expect((main as { request: AgentRequest }).request.prompt).toBe("do the thing");
 });
 
-/* WHAT THE PRE-INJECTION SEARCHES FOR when the turn is a re-run. A turn interrupted by a renewed credential, a
- * provider outage or a sandbox restart comes back with the daemon's explanation of the interruption in front of
- * the prompt (turn-resume.ts) — and retrieval reads a prompt's OPENING as its query, so the whole search went
- * to our own sentence about credentials. Six turns in one week did exactly that, every one of them a miss. */
-test("a resumed turn retrieves for the question, not for the sentence explaining the interruption", async () => {
-    const queries: string[] = [];
-    const services = harnessServices({
+/* WHAT THE PRE-INJECTION SEARCHES FOR, and when it searches at all. The queries this records are the whole
+ * assertion surface: the note's content is turn-context.ts's business, but WHICH turns reach the engine — and
+ * with which words — is decided here. */
+// `holdout` is 0 unless a case is about the experiment itself: a live holdout puts a coin flip between the gate
+// and the engine, and a case asserting on the QUERY would then pass or fail with the coin.
+const retrievingServices = (queries: string[], turnsSoFar?: number, holdout = 0): Services =>
+    harnessServices({
         sandboxSettings: unstubbed<Services["sandboxSettings"]>("sandboxSettings", {
-            get: async () => SandboxSettingsSchema.parse({ iqContext: true }),
+            get: async () => SandboxSettingsSchema.parse({ iqContext: true, iqContextHoldout: holdout }),
         }),
         iq: unstubbed<Services["iq"]>("iq", {
             run: async (request) => {
                 queries.push(request.query ?? "");
-                // No hits: this case is about the query that went out, and an answer would only add a note to
+                // No hits: these cases are about the query that went out, and an answer would only add a note to
                 // assert around.
                 return {
                     exitCode: 1,
@@ -359,10 +359,53 @@ test("a resumed turn retrieves for the question, not for the sentence explaining
                 };
             },
         }),
+        agents: unstubbed<Services["agents"]>("agents", {
+            entry: () => (turnsSoFar === undefined ? undefined : ({ turns: turnsSoFar } as ReturnType<Services["agents"]["entry"]>)),
+        }),
         logger: unstubbed<Services["logger"]>("logger", { debug: () => {}, warn: () => {} }),
     });
 
-    await planTurn(services, turn({ prompt: withResumeNote("why does the scheduler wake a sandbox twice?", RESUME_NOTES.auth) }), context);
+/* A turn interrupted by a renewed credential, a provider outage or a sandbox restart comes back with the
+ * daemon's explanation of the interruption in front of the prompt (turn-resume.ts) — and retrieval reads a
+ * prompt's OPENING as its query, so the whole search went to our own sentence about credentials. Six turns in
+ * one week did exactly that, every one of them a miss. */
+test("a resumed turn retrieves for the question, not for the sentence explaining the interruption", async () => {
+    const queries: string[] = [];
+
+    await planTurn(
+        retrievingServices(queries),
+        turn({ prompt: withResumeNote("why does the scheduler wake a sandbox twice?", RESUME_NOTES.auth) }),
+        context,
+    );
 
     expect(queries).toEqual(["why does the scheduler wake a sandbox twice?"]);
+});
+
+/* THE MESSAGE THAT OPENS A CONVERSATION IS THE ONE WORTH SEARCHING FOR, measured over a week of real turns:
+ * 75% of opening-message notes named a file the agent then opened (chance floor 27%), against 37% for every
+ * later message (floor 13%). A follow-up's meaning lives in the turn above it, which the index cannot read. */
+test("retrieval fires on the opening message and on nothing after it", async () => {
+    const question = "how does the scheduler wake a sandbox?";
+
+    const opening: string[] = [];
+    await planTurn(retrievingServices(opening, 0), turn({ prompt: question, conversationId: "c1" }), context);
+    expect(opening).toEqual([question]);
+
+    const later: string[] = [];
+    await planTurn(retrievingServices(later, 1), turn({ prompt: question, conversationId: "c1" }), context);
+    expect(later).toEqual([]);
+});
+
+/* AND THE EXPERIMENT'S ARM GOES WITH THE GATE. A turn the mechanism cannot run on is not a control turn — it is
+ * dead weight in whichever arm the coin handed it, and the delta it dilutes is small enough to disappear under
+ * that. Only a turn the note could have ridden reaches the ledger with an arm on it. */
+test("the holdout flips only for turns retrieval applies to", async () => {
+    const first = await planTurn(retrievingServices([], 0, 0.5), turn({ prompt: "how does a wake pick its model?", conversationId: "c1" }), context);
+    expect(first).toHaveProperty("contextArm");
+
+    const second = await planTurn(retrievingServices([], 1, 0.5), turn({ prompt: "how does a wake pick its model?", conversationId: "c1" }), context);
+    expect(second).not.toHaveProperty("contextArm");
+
+    const wake = await planTurn(retrievingServices([], 0, 0.5), turn({ prompt: "run the nightly sweep", conversationId: "c2", unattended: true }), context);
+    expect(wake).not.toHaveProperty("contextArm");
 });
