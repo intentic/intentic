@@ -38,11 +38,11 @@ export function useWorkflows() {
     };
 
     const save = useMutation({
-        mutationFn: (workflow: Workflow) =>
+        mutationFn: ({ workflow, create }: { workflow: Workflow; create: boolean }) =>
             api.sandbox.json(`/workflows`, {
                 method: `POST`,
                 headers: { "content-type": `application/json` },
-                body: JSON.stringify(workflow),
+                body: JSON.stringify({ workflow, create }),
             }),
         onSuccess: invalidate,
     });

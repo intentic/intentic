@@ -19,6 +19,9 @@ The **per-project AI-agent dev daemon** — a Docker image that runs as the proj
   git, recursive deletes, credential reads, publishes, outbound fetches — park on a permission card before they
   execute. Both in-turn gates are PreToolUse hooks, which is what makes them hold in the autonomous posture
   where the permission cards are never raised at all.
+- Schedule workflow graphs daemon-side. A run snapshots every repository HEAD once, creates every fresh step
+  from those exact commits, holds candidate branches instead of auto-landing them, and resumes workflow-owned
+  loops through one coordinated restart path. At most four workflow graphs execute across a sandbox at once.
 
 ## Key files
 
@@ -28,6 +31,8 @@ The **per-project AI-agent dev daemon** — a Docker image that runs as the proj
 - [src/git/git.routes.ts](src/git/git.routes.ts) — status/commit/push over the wire; [src/workspace](src/workspace) — the repo layout the daemon serves.
 - [src/composition.ts](src/composition.ts) — what is wired to what; [src/main.ts](src/main.ts) — the entrypoint that builds it and serves.
 - [src/guard/guard.ts](src/guard/guard.ts) — the one gate every gated action consults (fail-closed); [src/guard/actions.ts](src/guard/actions.ts) is the catalog of decisions, and [src/guard/command-gate.ts](src/guard/command-gate.ts) is the one that can park a running turn on a card.
+- [src/workflows](src/workflows) — workflow scheduling, immutable run snapshots, restart recovery, run-ledger
+  retention, and complete handoff artifacts; [src/loops](src/loops) drives each individual step.
 
 ## How it fits
 
@@ -39,3 +44,5 @@ The agent half of the dev plane. The browser talks to this daemon **directly** o
 - The daemon authenticates every request itself (the owner's Google ID token, verified via Google's JWKS), since it is reached directly over its public tunnel — it owns its own auth.
 - Built on Hono + the Claude Agent SDK + zod; `runAgent`'s `QueryFn` is injectable so co-located `*.test.ts` run without the SDK or network.
 - A land's product is **uncommitted** — it patches the main working tree and moves no commit. So every reading taken between two shas (`standing.ts`) is blind to the user discarding it afterwards; `landed-presence.ts` is the one that asks the working tree, and it is what keeps a card from claiming work is in a workspace that no longer holds it.
+- Workflow run artifacts are shared state under `.intentic/workflow-runs/`. The JSON ledger retains every active
+  run plus 50 ended runs and removes a run's artifacts when that record is evicted or forgotten.

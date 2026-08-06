@@ -89,7 +89,14 @@ const TYPE_OPTIONS: { label: string; value: OutputField["type"] }[] = [
     { label: `list of text`, value: `string[]` },
 ];
 
-const newField = (): OutputField => ({ name: `result`, type: `string`, description: ``, required: true });
+const newField = (existing: readonly OutputField[] = []): OutputField => {
+    const names = new Set(existing.map((field) => field.name));
+    let suffix = 1;
+    while (names.has(suffix === 1 ? `result` : `result_${suffix}`)) {
+        suffix += 1;
+    }
+    return { name: suffix === 1 ? `result` : `result_${suffix}`, type: `string`, description: ``, required: true };
+};
 
 const outputKind = computed({
     get: () => step.value.output.kind,
@@ -161,11 +168,22 @@ const harnessChoosable = computed(() => step.value.agent === `codex` || step.val
  * A pinned version shows as its raw id, because the label belongs to the catalog and the catalog belongs to the
  * shell: holding one here to pretty-print a stored pin is the duplication `api.models` exists to end, and a
  * cached label is a label that goes stale the day the provider renames a model. */
+const described = computed(() => {
+    if (step.value.agent === undefined) {
+        return host().models.agentRun();
+    }
+    return host().models.describe({
+        provider: step.value.agent,
+        model: step.value.model ?? ``,
+        ...(step.value.account !== undefined ? { account: step.value.account } : {}),
+        ...(step.value.harness !== undefined ? { harness: step.value.harness } : {}),
+    });
+});
 const pinLabel = computed(() => {
     if (step.value.agent === undefined) {
         return `Whatever you normally use`;
     }
-    return step.value.model ?? providerLabel(step.value.agent);
+    return [described.value.label || providerLabel(step.value.agent), described.value.accountLabel].filter((part) => part !== undefined).join(` · `);
 });
 
 // The element the shell hangs its picker off — a popover on desktop, a sheet on mobile; the host decides.
@@ -177,17 +195,27 @@ const choose = async (): Promise<void> => {
     if (chip.value === undefined) {
         return;
     }
-    const from = step.value.agent === undefined ? host().models.agentRun() : { provider: step.value.agent, model: step.value.model ?? `` };
-    const next = await host().models.pick({ anchor: chip.value, provider: from.provider, model: from.model });
+    const from = described.value;
+    const next = await host().models.pick({
+        anchor: chip.value,
+        provider: from.provider,
+        model: from.model,
+        ...(step.value.account !== undefined ? { account: step.value.account } : {}),
+        ...(step.value.harness !== undefined ? { harness: step.value.harness } : {}),
+    });
     if (next === undefined) {
         return;
     }
-    // A provider switch invalidates the harness under it: it only means anything on the two providers that
-    // have two of them, and the one chosen belongs to the provider it was chosen under.
-    patch({ agent: next.provider, model: next.model, ...(next.provider === step.value.agent ? {} : { harness: undefined }) });
+    const harness = HARNESSES.find((entry) => entry.value === next.harness)?.value;
+    patch({ agent: next.provider, model: next.model, account: next.account, harness });
 };
 
-const unpin = (): void => patch({ agent: undefined, model: undefined, harness: undefined });
+const unpin = (): void => patch({ agent: undefined, model: undefined, account: undefined, harness: undefined });
+
+const setMaxSpend = (value: string): void => {
+    const trimmed = value.trim();
+    patch({ maxSpendUsd: trimmed === `` ? undefined : Number(trimmed) });
+};
 
 /* What the folded section is currently hiding, in the fewest words that name it. Empty ⇒ everything inside is
  * still at its default and the fold is costing the reader nothing. This is what makes hiding safe: you can see
@@ -202,6 +230,9 @@ const advancedSummary = computed(() => {
     if (step.value.model !== undefined) {
         parts.push(step.value.model);
     }
+    if (step.value.account !== undefined) {
+        parts.push(described.value.accountLabel ?? `pinned account`);
+    }
     if (step.value.output.kind === `json`) {
         parts.push(`${step.value.output.fields.length} data field${step.value.output.fields.length === 1 ? `` : `s`}`);
     }
@@ -213,6 +244,9 @@ const advancedSummary = computed(() => {
     }
     if (step.value.context === `continue`) {
         parts.push(`keeps its thread`);
+    }
+    if (step.value.maxSpendUsd !== undefined) {
+        parts.push(`up to $${step.value.maxSpendUsd}`);
     }
     return parts.join(` · `);
 });
@@ -313,7 +347,7 @@ const advancedSummary = computed(() => {
                                 <Icon name="trash" />
                             </button>
                         </div>
-                        <Button label="Add field" size="small" severity="secondary" :text="true" @click="setFields([...fields, newField()])">
+                        <Button label="Add field" size="small" severity="secondary" :text="true" @click="setFields([...fields, newField(fields)])">
                             <template #icon><Icon name="plus" /></template>
                         </Button>
                     </div>
@@ -341,6 +375,23 @@ const advancedSummary = computed(() => {
                     <span :class="cmp.sectionLabel()">Memory between rounds</span>
                     <Segmented :model-value="step.context" :options="CONTEXT_OPTIONS" @update:model-value="patch({ context: $event })" />
                 </div>
+
+                <label class="flex flex-col gap-1.5">
+                    <span :class="cmp.sectionLabel()">Spend ceiling</span>
+                    <span class="flex items-center gap-1.5">
+                        <span class="text-xs text-subtle">$</span>
+                        <input
+                            :value="step.maxSpendUsd ?? ``"
+                            type="number"
+                            min="0.01"
+                            step="0.01"
+                            :class="[cmp.input(), `w-28 tabular-nums`]"
+                            placeholder="No ceiling"
+                            @input="setMaxSpend(($event.target as HTMLInputElement).value)"
+                        />
+                    </span>
+                    <span class="text-2xs text-subtle">Across every round of this step. Empty leaves it uncapped.</span>
+                </label>
 
                 <div class="flex flex-col gap-1.5">
                     <span :class="cmp.sectionLabel()">Runs on</span>

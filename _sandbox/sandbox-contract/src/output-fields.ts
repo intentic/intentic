@@ -39,7 +39,31 @@ export type OutputField = z.infer<typeof OutputFieldSchema>;
 // what the prose half of the document is for.
 export const OUTPUT_FIELDS_MAX = 16;
 
-export const OutputFieldsSchema = z.array(OutputFieldSchema).min(1).max(OUTPUT_FIELDS_MAX);
+/* Repeated names make the declaration internally contradictory: object validation can only keep one rule for
+ * a key, while a consumer looking the field up sees whichever copy it happens to ask for first. Reject them at
+ * the declaration boundary, before either interpretation gets a chance to exist. Exported because graph-level
+ * validation uses the same fact to explain the fault in the designer before a save is attempted. */
+export const duplicateOutputFieldNames = (fields: readonly Pick<OutputField, "name">[]): string[] => {
+    const seen = new Set<string>();
+    const repeated = new Set<string>();
+    for (const field of fields) {
+        if (seen.has(field.name)) {
+            repeated.add(field.name);
+        }
+        seen.add(field.name);
+    }
+    return [...repeated];
+};
+
+export const OutputFieldsSchema = z
+    .array(OutputFieldSchema)
+    .min(1)
+    .max(OUTPUT_FIELDS_MAX)
+    .superRefine((fields, context) => {
+        for (const name of duplicateOutputFieldNames(fields)) {
+            context.addIssue({ code: "custom", message: `Output field names must be unique; "${name}" is repeated.` });
+        }
+    });
 
 const validatorFor = (field: OutputField): z.ZodType => {
     if (field.type === "number") {

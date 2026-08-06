@@ -116,7 +116,11 @@ export const createGateRoute =
         if (runFaults.length > 0) {
             return c.json({ error: runFaults.join(" ") }, 400);
         }
-        const run = await services.workflowRuns.start(openRun(workflow, Date.now(), request === "" ? undefined : request));
+        const repos = await services.agentWorktrees.snapshot();
+        if (repos.length === 0) {
+            return c.json({ error: "the workspace has no committed repository snapshot to run from" }, 409);
+        }
+        const run = await services.workflowRuns.start(openRun(workflow, repos, Date.now(), request === "" ? undefined : request));
 
         /* Held, unlike every other run-starting route here — holding it IS the product. A pipeline step's whole
          * job is to block until it knows, and the alternative (ack now, make the caller poll) pushes the wait

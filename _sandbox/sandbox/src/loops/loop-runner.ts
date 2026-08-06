@@ -202,7 +202,10 @@ export const runLoop = async (services: Services, record: LoopRecord, fn: TurnFn
                 ...(sessionId !== undefined ? { sessionId } : {}),
                 ...(record.agent !== undefined ? { agent: record.agent } : {}),
                 ...(record.harness !== undefined ? { harness: record.harness } : {}),
+                ...(record.account !== undefined ? { account: record.account } : {}),
                 ...(record.model !== undefined ? { model: record.model } : {}),
+                ...(record.worktreeBase !== undefined ? { worktreeBase: record.worktreeBase } : {}),
+                ...(record.autoLand !== undefined ? { autoLand: record.autoLand } : {}),
             };
             const outcome = await runIteration(services, record, turn, fn);
             report = outcome.report;
@@ -329,10 +332,10 @@ export const runLoop = async (services: Services, record: LoopRecord, fn: TurnFn
  */
 const RESUME_MAX = 2;
 
-export const resumeLoops = async (services: Services, fn: TurnFn): Promise<string[]> => {
+export const resumeLoops = async (services: Services, fn: TurnFn, ownedByWorkflow: ReadonlySet<string> = new Set()): Promise<string[]> => {
     const resumed: string[] = [];
     for (const record of await services.loops.list()) {
-        if (record.state !== "running" || running.has(record.conversationId)) {
+        if (record.state !== "running" || running.has(record.conversationId) || ownedByWorkflow.has(record.conversationId)) {
             continue;
         }
         const counted = await services.loops.countResume(record.conversationId);

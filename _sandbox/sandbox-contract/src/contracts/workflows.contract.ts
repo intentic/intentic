@@ -6,6 +6,7 @@ import {
     WorkflowRunSchema,
     WorkflowRunsListSchema,
     WorkflowRunStartSchema,
+    WorkflowSaveSchema,
     WorkflowSchema,
     WorkflowsListSchema,
 } from "../schemas.js";
@@ -14,7 +15,7 @@ import {
  *
  * SPLIT LIKE AUTOMATIONS, NOT LIKE LOOPS, and the split says what a workflow is. A loop has no editor because
  * it is started against a conversation and then it is history; a workflow is a DESIGN — a thing the user
- * authors once, keeps, edits, and runs repeatedly — so it gets the manifest treatment: upsert by id, delete,
+ * authors once, keeps, edits, and runs repeatedly — so it gets the manifest treatment: create/update, delete,
  * list. What it does not get is an `enabled` toggle, because nothing fires it on its own: a workflow runs when
  * somebody (or an automation's prompt) says run it.
  *
@@ -26,11 +27,12 @@ export const workflowsContract = {
     // Every saved workflow with its run history, newest run first. One route rather than two because the list
     // page shows both and a workflow with no runs is the interesting case, not an error.
     list: oc.route({ method: "GET", path: "/workflows" }).output(WorkflowsListSchema),
-    /* Create or replace a workflow, by id. Refuses a graph that cannot run — a cycle, a `needs` naming a step
+    /* Create or replace a workflow, with the operation made explicit so an accidental id collision cannot turn
+     * a create into replacement. Refuses a graph that cannot run — a cycle, a `needs` naming a step
      * that is not there, a step with no way to know it is finished — with the same sentences the designer shows
      * while you type (see workflowFaults). Validation lives in the contract precisely so those two can never
      * disagree about what is legal. */
-    save: oc.route({ method: "POST", path: "/workflows" }).input(WorkflowSchema).output(WorkflowSchema),
+    save: oc.route({ method: "POST", path: "/workflows" }).input(WorkflowSaveSchema).output(WorkflowSchema),
     // Deleting a workflow does NOT stop a run of it that is in flight, and does not delete its history: the run
     // snapshotted its definition when it started, so it stays readable and stays stoppable.
     remove: oc.route({ method: "DELETE", path: "/workflows/{id}" }).input(WorkflowIdParamSchema).output(OkSchema),

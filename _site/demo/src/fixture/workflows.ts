@@ -104,6 +104,7 @@ export const demoRuns = (now: number): WorkflowRun[] => [
     {
         runId: `a3f19c22`,
         workflow: demoWorkflow(),
+        repos: [{ repo: `root`, base: `1111111111111111111111111111111111111111` }],
         state: `running`,
         startedAt: now - minutes(21),
         resumed: 0,

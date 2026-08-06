@@ -20,6 +20,7 @@ const run = (runId: string, over: Partial<WorkflowRun> = {}): WorkflowRun =>
     ({
         runId,
         workflow: { id: `wf`, name: `Two models, one task`, steps: [], maxParallel: 2 },
+        repos: [{ repo: `root`, base: `1111111111111111111111111111111111111111` }],
         state: `done`,
         startedAt: 1,
         resumed: 0,

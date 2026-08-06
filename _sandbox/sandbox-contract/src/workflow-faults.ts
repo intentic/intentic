@@ -6,6 +6,7 @@
  * then what is wrong BETWEEN steps.
  */
 
+import { duplicateOutputFieldNames } from "./output-fields.js";
 import type { Workflow, WorkflowStep } from "./schemas.js";
 
 // One id, one node: the scheduler keys needs, runs and the drawn graph by it, so a repeat makes the same node
@@ -39,6 +40,13 @@ const stepFaults = (step: WorkflowStep, ids: ReadonlySet<string>): string[] => {
             step.needs.length === 0
                 ? `"${step.title}" continues a session but starts the run — there is nothing to continue.`
                 : `"${step.title}" continues a session but waits for ${step.needs.length} steps; it can only continue one.`,
+        );
+    }
+    if (step.output.kind === "json") {
+        faults.push(
+            ...duplicateOutputFieldNames(step.output.fields).map(
+                (name) => `"${step.title}" declares the output field "${name}" more than once; field names must be unique.`,
+            ),
         );
     }
     /* A STEP THAT DECLARES NOTHING IS NOT A FAULT — it is the ordinary step, and this used to refuse it.

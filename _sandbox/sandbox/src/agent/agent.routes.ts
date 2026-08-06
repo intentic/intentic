@@ -198,7 +198,7 @@ async function* runConversationTurn(
     try {
         // Lazily create (first turn) or repair the conversation's worktree composition, then announce it.
         const entry = services.agents.entry(conversationId);
-        const worktree = await services.agentWorktrees.ensure(conversationId, entry?.repos ?? []);
+        const worktree = await services.agentWorktrees.ensure(conversationId, entry?.repos ?? [], input.worktreeBase);
         if ((entry?.repos.length ?? 0) === 0) {
             await services.agents.recordWorktree(conversationId, worktree.repos);
         }
@@ -219,6 +219,12 @@ async function* runConversationTurn(
         // own preflight marks start after this, so an unmeasured rebase would read as a turn that was simply
         // slow to begin — the exact attribution failure those marks exist to prevent.
         const syncOnto = async (): Promise<RepoSync[]> => {
+            // Workflow steps deliberately stay on the run's immutable snapshot. Rebasing candidates here would
+            // reintroduce the timing race the snapshot removed: whichever fan-out arm opened last would compare
+            // against a newer workspace, and a resumed iteration could change ground halfway through its step.
+            if (input.worktreeBase !== undefined) {
+                return [];
+            }
             const synced = await services.perf.track("agent.sync", { id: conversationId }, () =>
                 syncConversation(services.agentWorktrees, conversationId, worktree.repos, services.agents.entry(conversationId)?.title),
             );
@@ -342,7 +348,11 @@ async function* runConversationTurn(
         const finished = services.agents.entry(conversationId);
         if (!failed && signal?.aborted !== true && finished !== undefined && isIsolated(finished)) {
             const { autoLand } = await services.sandboxSettings.get();
-            const landed = await landAgent(services.agentWorktrees, finished, (finished.autoLand ?? autoLand) ? "check" : "measure");
+            const landed = await landAgent(
+                services.agentWorktrees,
+                finished,
+                (input.autoLand ?? finished.autoLand ?? autoLand) ? "check" : "measure",
+            );
             if (!landed.changed && landed.diff.files > 0) {
                 // Nothing NEW to land, but the agent's cumulative output exists and is all accounted for in
                 // the main tree — a follow-up turn that only answered a question must not downgrade the card

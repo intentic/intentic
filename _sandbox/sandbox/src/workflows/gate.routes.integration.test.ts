@@ -20,6 +20,7 @@ import { fileWorkflowRunsStore, fileWorkflowsStore } from "./workflows-store.js"
  */
 
 const TOKEN = "gate-token-abc";
+const REPOS = [{ repo: "root", base: "1111111111111111111111111111111111111111" }] as const;
 
 const fakeServices = (root: string): Services =>
     unstubbed<Services>("services", {
@@ -29,7 +30,7 @@ const fakeServices = (root: string): Services =>
         workflowRuns: fileWorkflowRunsStore(join(root, "workflow-runs.json")),
         workspace: unstubbed<Services["workspace"]>("workspace", { root }),
         agents: unstubbed<Services["agents"]>("agents", { sessionIdOf: () => undefined }),
-        agentWorktrees: unstubbed<Services["agentWorktrees"]>("agentWorktrees", { conversationDir: () => root }),
+        agentWorktrees: unstubbed<Services["agentWorktrees"]>("agentWorktrees", { conversationDir: () => root, snapshot: async () => REPOS }),
         transcripts: unstubbed<Services["transcripts"]>("transcripts", { open: async () => {}, append: async () => {} }),
         logger: unstubbed<Services["logger"]>("logger", { error: () => {}, warn: () => {} }),
     });
@@ -81,7 +82,7 @@ const post = async (app: Hono, id: string, query = `token=${TOKEN}`, body = ""):
 test("a passing judgment ships, and the run is the one the gate started", async () => {
     const root = tempRoot();
     const services = fakeServices(root);
-    await services.workflows.upsert(gated("wf-pass"));
+    await services.workflows.save(gated("wf-pass"), true);
     const response = await post(appFor(services, judging(root, "pass")), "wf-pass");
 
     expect(response.status).toBe(200);
@@ -97,7 +98,7 @@ test("a passing judgment ships, and the run is the one the gate started", async 
 test("a failing judgment answers fail over a 200, not an HTTP error", async () => {
     const root = tempRoot();
     const services = fakeServices(root);
-    await services.workflows.upsert(gated("wf-fail"));
+    await services.workflows.save(gated("wf-fail"), true);
     const response = await post(appFor(services, judging(root, "fail")), "wf-fail");
 
     expect(response.status).toBe(200);
@@ -110,7 +111,7 @@ test("the request body reaches the step as the run's request", async () => {
     const root = tempRoot();
     const services = fakeServices(root);
     const prompts: string[] = [];
-    await services.workflows.upsert(gated("wf-body"));
+    await services.workflows.save(gated("wf-body"), true);
     await post(appFor(services, judging(root, "pass", prompts)), "wf-body", `token=${TOKEN}`, "sha=deadbeef url=https://preview.example");
 
     expect(prompts[0]).toContain("https://preview.example");
@@ -120,7 +121,7 @@ test("an unknown id and a workflow with no gate are the same 404", async () => {
     const root = tempRoot();
     const services = fakeServices(root);
     const { gate: _gate, ...ungated } = gated("wf-ungated");
-    await services.workflows.upsert(ungated);
+    await services.workflows.save(ungated, true);
     const app = appFor(services, judging(root, "pass"));
 
     expect((await post(app, "wf-nothing")).status).toBe(404);
@@ -131,7 +132,7 @@ test("a wrong token is refused before anything is spent", async () => {
     const root = tempRoot();
     const services = fakeServices(root);
     const prompts: string[] = [];
-    await services.workflows.upsert(gated("wf-auth"));
+    await services.workflows.save(gated("wf-auth"), true);
     const response = await post(appFor(services, judging(root, "pass", prompts)), "wf-auth", "token=not-the-token");
 
     expect(response.status).toBe(401);
@@ -144,7 +145,10 @@ test("a wrong token is refused before anything is spent", async () => {
 test("a gate past its daily ceiling refuses without starting a run", async () => {
     const root = tempRoot();
     const services = fakeServices(root);
-    await services.workflows.upsert(gated("wf-ceiling", { gate: { step: "judge", field: "release", pass: ["pass"], token: TOKEN, dailyMax: 1 } }));
+    await services.workflows.save(
+        gated("wf-ceiling", { gate: { step: "judge", field: "release", pass: ["pass"], token: TOKEN, dailyMax: 1 } }),
+        true,
+    );
     const app = appFor(services, judging(root, "pass"));
 
     expect((await post(app, "wf-ceiling")).status).toBe(200);
@@ -158,7 +162,7 @@ test("a gate past its daily ceiling refuses without starting a run", async () =>
 test("a gate pointed at a field nobody declares is refused at call time", async () => {
     const root = tempRoot();
     const services = fakeServices(root);
-    await services.workflows.upsert(gated("wf-broken", { gate: { step: "judge", field: "shipit", pass: ["pass"], token: TOKEN } }));
+    await services.workflows.save(gated("wf-broken", { gate: { step: "judge", field: "shipit", pass: ["pass"], token: TOKEN } }), true);
     const response = await post(appFor(services, judging(root, "pass")), "wf-broken");
 
     expect(response.status).toBe(400);
@@ -170,7 +174,7 @@ test("a gate pointed at a field nobody declares is refused at call time", async 
 test("a run that outlasts the deadline is stopped and answers blocked", async () => {
     const root = tempRoot();
     const services = fakeServices(root);
-    await services.workflows.upsert(gated("wf-slow"));
+    await services.workflows.save(gated("wf-slow"), true);
     const slow: TurnFn = async function* () {
         await new Promise((resolve) => setTimeout(resolve, 3_000));
         yield { kind: "done" } as AgentEvent;

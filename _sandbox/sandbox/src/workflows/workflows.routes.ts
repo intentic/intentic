@@ -46,7 +46,7 @@ export const createWorkflowsRoutes = (services: Services) => {
              * privately is a rule the user meets as a failed save with no idea which node is wrong. Refused
              * rather than saved-and-broken because a workflow that cannot run is not a draft, it is a trap: the
              * failure would arrive an hour later, halfway through a run, having already spent money. */
-            const faults = workflowFaults(input);
+            const faults = workflowFaults(input.workflow);
             if (faults.length > 0) {
                 throw new ORPCError("BAD_REQUEST", { message: faults.join(" ") });
             }
@@ -55,10 +55,16 @@ export const createWorkflowsRoutes = (services: Services) => {
              * KEPT, because the designer re-posts the whole workflow on every edit: a gate whose URL changed
              * each time somebody renamed a step would be one every pipeline had to be re-taught. */
             const workflow =
-                input.gate !== undefined && input.gate.token === undefined
-                    ? { ...input, gate: { ...input.gate, token: randomBytes(24).toString("base64url") } }
-                    : input;
-            await services.workflows.upsert(workflow);
+                input.workflow.gate !== undefined && input.workflow.gate.token === undefined
+                    ? { ...input.workflow, gate: { ...input.workflow.gate, token: randomBytes(24).toString("base64url") } }
+                    : input.workflow;
+            const saved = await services.workflows.save(workflow, input.create);
+            if (saved === "conflict") {
+                throw new ORPCError("CONFLICT", { message: "A workflow with that id already exists. Reopen the list and try again." });
+            }
+            if (saved === "missing") {
+                throw new ORPCError("NOT_FOUND", { message: "That workflow no longer exists. Reopen the list before saving." });
+            }
             // Returned rather than echoing the input: the token is minted here, and the designer has no other
             // way to learn the URL it has to hand the pipeline.
             return workflow;
@@ -80,7 +86,11 @@ export const createWorkflowsRoutes = (services: Services) => {
             if (faults.length > 0) {
                 throw new ORPCError("BAD_REQUEST", { message: faults.join(" ") });
             }
-            const run = await services.workflowRuns.start(openRun(workflow, Date.now(), input.request));
+            const repos = await services.agentWorktrees.snapshot();
+            if (repos.length === 0) {
+                throw new ORPCError("PRECONDITION_FAILED", { message: "The workspace has no committed repository snapshot to run from." });
+            }
+            const run = await services.workflowRuns.start(openRun(workflow, repos, Date.now(), input.request));
             // Detached, like every other route that starts a turn: the first step alone can take minutes.
             void runWorkflow(services, run, streamAgent);
             return run;

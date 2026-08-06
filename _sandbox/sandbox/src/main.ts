@@ -11,8 +11,7 @@ import { createApp } from "./app.js";
 import { sweepAgedAgents } from "./agents/archive.js";
 import { streamAgent } from "./agent/agent.routes.js";
 import { createTurnResumeScheduler, resumeInterruptedTurns } from "./agent/turn-resume.js";
-import { resumeLoops } from "./loops/loop-runner.js";
-import { resumeWorkflowRuns } from "./workflows/workflow-runner.js";
+import { resumeWorkflowExecution } from "./workflows/workflow-runner.js";
 import { seedDefaultAutomations } from "./automations/default-automations.js";
 import { createAutomationsScheduler } from "./automations/scheduler.js";
 import { statePath } from "./workspace/state-paths.js";
@@ -604,15 +603,12 @@ const main = async (): Promise<void> => {
         logger.error({ err: error }, "interrupted turns could not be resumed — they stand on the record as interrupted"),
     );
 
-    // The same restart story for LOOPS, and they need it more than any single turn does: a loop is a sequence,
-    // so the death that costs one turn costs every iteration that would have followed it. The loops manifest is
-    // its own journal — a record still marked `running` is one nothing settled — so this needs no second store,
-    // only a read. Detached and bounded by a resume count; see loop-runner.ts.
-    void resumeLoops(services, streamAgent).catch((error: unknown) => logger.error({ err: error }, "loops could not be resumed"));
-
-    // And for WORKFLOW RUNS, which need it most of all: a run is the longest-lived thing in the sandbox, and a
-    // resume replays the steps that already finished off the record rather than paying for them twice.
-    void resumeWorkflowRuns(services, streamAgent).catch((error: unknown) => logger.error({ err: error }, "workflow runs could not be resumed"));
+    // The same restart story for loops and workflow runs, coordinated because every workflow step IS a loop.
+    // Two independent passes can both claim the same persisted loop and race its conversation/worktree; the
+    // coordinator reserves workflow-owned conversations before generic loop recovery sees the remainder.
+    void resumeWorkflowExecution(services, streamAgent).catch((error: unknown) =>
+        logger.error({ err: error }, "loops and workflow runs could not be resumed"),
+    );
 
     // Warm the "latest released sandbox version" cache in the background so /info can offer a non-blocking
     // update without ever fetching on the request path.

@@ -80,6 +80,25 @@ const install = async (repo: string, rule: string): Promise<void> => {
     await deps(repo, "pkg/a");
 };
 
+test("a supplied snapshot creates every repository at the same captured commits after main moves", async () => {
+    const { work, worktrees } = await setup();
+    const snapshot = await worktrees.snapshot();
+
+    await writeFile(join(work, "CLAUDE.md"), "new workspace notes\n");
+    await sh(work, "add", "-A");
+    await sh(work, "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "-m", "root moved");
+    const intent = join(work, "intent");
+    await writeFile(join(intent, "deploy.config.ts"), "v2\n");
+    await sh(intent, "add", "-A");
+    await sh(intent, "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "-m", "intent moved");
+
+    const conversation = await worktrees.ensure("c1", [], snapshot);
+
+    expect(conversation.repos).toEqual(snapshot);
+    expect(await readFile(join(conversation.cwd, "CLAUDE.md"), "utf8")).toBe("workspace notes\n");
+    expect(await readFile(join(conversation.cwd, "intent", "deploy.config.ts"), "utf8")).toBe("v1\n");
+});
+
 // The property isolated turns rest on: a checkout of TRACKED files alone cannot resolve a single import, so
 // nothing type-checks, lints or tests in a worktree unless the installed trees are mirrored into it.
 test("a worktree resolves dependencies through links to the main checkout", async () => {

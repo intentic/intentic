@@ -33,7 +33,7 @@ import { useWorkflows } from "./useWorkflows";
  * line. So the seam is draggable, double-click puts it back, and the width is remembered.
  */
 
-const { initial } = defineProps<{ initial: Workflow }>();
+const { initial, creating } = defineProps<{ initial: Workflow; creating: boolean }>();
 const emit = defineEmits<{ close: []; saved: [id: string] }>();
 
 const { save } = useWorkflows();
@@ -140,7 +140,7 @@ const commit = async (): Promise<void> => {
          * label and not a description of done. It is absent now, and absent has a real meaning: the step is
          * measured against what the run was asked to do. The inspector already stores a cleared box as absent
          * rather than as ``, so there is nothing left to normalize on the way out. */
-        await save.mutateAsync(draft.value);
+        await save.mutateAsync({ workflow: draft.value, create: creating });
         emit(`saved`, draft.value.id);
     } catch (error) {
         failure.value = error instanceof Error ? error.message : `The workflow could not be saved.`;

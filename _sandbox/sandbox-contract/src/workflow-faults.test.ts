@@ -1,5 +1,5 @@
 import { expect, test } from "vitest";
-import type { Workflow, WorkflowStep } from "./schemas.js";
+import { type Workflow, WorkflowSchema, type WorkflowStep } from "./schemas.js";
 import { workflowFaults, workflowRunFaults } from "./workflow-faults.js";
 
 /* The GATE rules. The graph rules beside them are exercised by the scheduler's own integration tests, which
@@ -37,6 +37,25 @@ test("a well-formed gate is no fault at all", () => {
 test("a workflow with no gate is judged on its graph alone", () => {
     const { gate: _gate, ...ungated } = gated();
     expect(workflowFaults(ungated)).toEqual([]);
+});
+
+test("duplicate output field names are one fault at both authoring and schema boundaries", () => {
+    const duplicate = gated({
+        steps: [
+            judge({
+                output: {
+                    kind: "json",
+                    fields: [
+                        { name: "release", type: "string", description: "pass | fail", required: true },
+                        { name: "release", type: "boolean", description: "whether to release", required: true },
+                    ],
+                },
+            }),
+        ],
+    });
+
+    expect(workflowFaults(duplicate)).toContain(`"Judge" declares the output field "release" more than once; field names must be unique.`);
+    expect(WorkflowSchema.safeParse(duplicate).success).toBe(false);
 });
 
 test("a gate naming a step the workflow does not have is refused", () => {

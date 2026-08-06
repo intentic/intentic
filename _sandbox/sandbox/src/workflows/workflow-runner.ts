@@ -1,10 +1,22 @@
 import { randomUUID } from "node:crypto";
-import type { Loop, LoopDocument, Workflow, WorkflowRun, WorkflowRunState, WorkflowStep, WorkflowStepRun } from "@intentic/sandbox-contract";
+import { mkdir, writeFile } from "node:fs/promises";
+import { join } from "node:path";
+import type {
+    Loop,
+    LoopDocument,
+    LoopState,
+    RepoBase,
+    Workflow,
+    WorkflowRun,
+    WorkflowRunState,
+    WorkflowStep,
+    WorkflowStepRun,
+} from "@intentic/sandbox-contract";
 import type { Services } from "../composition.js";
 // The turn registry's own abort — agent-steering is a leaf (a Map of live turns), so this is not the cycle
 // through agent.routes that loop-runner's header warns about.
 import { stopTurn } from "../agent/agent-steering.js";
-import { runLoop, stopLoop, type TurnFn } from "../loops/loop-runner.js";
+import { resumeLoops, runLoop, stopLoop, type TurnFn } from "../loops/loop-runner.js";
 import { briefForStep, type Handover, stepConversations } from "./workflow-brief.js";
 import { workflowProjection } from "./workflow-state.js";
 
@@ -35,9 +47,28 @@ import { workflowProjection } from "./workflow-state.js";
 // enough that two runs of one workflow never collide — a collision here would mean two runs sharing worktrees.
 const runIdOf = (): string => randomUUID().slice(0, 8);
 
-// How much of a step's closing text is kept on the record. Enough to hand forward and to read on the node;
-// the transcript is where the whole thing lives.
+// How much of a step's closing text is kept inline on the record. The complete response is written under
+// shared .intentic state and downstream steps are handed that path, so this is a preview rather than data loss.
 const REPORT_KEPT = 4_000;
+const WORKFLOW_REPORTS_DIR = ".intentic/workflow-runs";
+
+const reportPreview = (report: string): string => {
+    if (report.length <= REPORT_KEPT) {
+        return report;
+    }
+    const half = REPORT_KEPT / 2;
+    return `${report.slice(0, half)}\n\n[… full response saved as a workflow artifact …]\n\n${report.slice(-half)}`;
+};
+
+const persistReport = async (root: string, runId: string, stepId: string, report: string): Promise<string | undefined> => {
+    if (report === "") {
+        return undefined;
+    }
+    const relative = `${WORKFLOW_REPORTS_DIR}/${runId}/${stepId}.md`;
+    await mkdir(join(root, WORKFLOW_REPORTS_DIR, runId), { recursive: true });
+    await writeFile(join(root, relative), report);
+    return relative;
+};
 
 // Runs in flight, keyed by run id. A module singleton for the same reason the loop pump's is: the routes, the
 // boot resume and the tests all have to see the same set.
@@ -90,12 +121,13 @@ export const abandonRun = async (services: Services, run: WorkflowRun, now: numb
  * so the graph is complete from the first frame the UI sees — a node that only appears once it runs makes
  * "waiting" and "not part of this run" the same picture.
  */
-export const openRun = (workflow: Workflow, now: number, request?: string): WorkflowRun => {
+export const openRun = (workflow: Workflow, repos: readonly RepoBase[], now: number, request?: string): WorkflowRun => {
     const runId = runIdOf();
     const conversations = stepConversations(runId, workflow.steps);
     return {
         runId,
         workflow,
+        repos: [...repos],
         ...(request !== undefined && request.trim() !== "" ? { request: request.trim() } : {}),
         state: "running",
         startedAt: now,
@@ -117,14 +149,31 @@ export const openRun = (workflow: Workflow, now: number, request?: string): Work
  */
 const slots = (limit: number) => {
     let free = limit;
-    const waiting: (() => void)[] = [];
+    const waiting: { readonly resolve: (taken: boolean) => void; readonly signal?: AbortSignal; readonly aborted?: () => void }[] = [];
     return {
-        take: async (): Promise<void> => {
+        take: async (signal?: AbortSignal): Promise<boolean> => {
+            if (signal?.aborted === true) {
+                return false;
+            }
             if (free > 0) {
                 free -= 1;
-                return;
+                return true;
             }
-            await new Promise<void>((resolve) => waiting.push(resolve));
+            return await new Promise<boolean>((resolve) => {
+                const entry: { resolve: (taken: boolean) => void; signal?: AbortSignal; aborted?: () => void } = { resolve };
+                if (signal !== undefined) {
+                    entry.signal = signal;
+                    entry.aborted = () => {
+                        const index = waiting.indexOf(entry);
+                        if (index !== -1) {
+                            waiting.splice(index, 1);
+                            resolve(false);
+                        }
+                    };
+                    signal.addEventListener("abort", entry.aborted, { once: true });
+                }
+                waiting.push(entry);
+            });
         },
         give: (): void => {
             const next = waiting.shift();
@@ -132,10 +181,20 @@ const slots = (limit: number) => {
                 free += 1;
                 return;
             }
-            next();
+            if (next.signal !== undefined && next.aborted !== undefined) {
+                next.signal.removeEventListener("abort", next.aborted);
+            }
+            next.resolve(true);
         },
     };
 };
+
+// Four workflow graphs may actively drive steps at once across the whole sandbox. Each graph has its own
+// maxParallel below, so this is the outer bound that prevents several individually-reasonable fan-outs from
+// multiplying into an unbounded provider and worktree storm. Additional admitted runs wait here and remain
+// stoppable while queued.
+export const WORKFLOW_RUNS_MAX = 4;
+const workflowSlots = slots(WORKFLOW_RUNS_MAX);
 
 // How a step turned out, as the steps after it need to read it. `ok` is the only thing the graph branches on;
 // the rest is what gets handed forward.
@@ -143,9 +202,11 @@ interface StepOutcome {
     readonly ok: boolean;
     readonly document: LoopDocument | undefined;
     readonly report: string;
+    readonly reportPath: string | undefined;
+    readonly loopState: LoopState | undefined;
 }
 
-const BLOCKED: StepOutcome = { ok: false, document: undefined, report: "" };
+const BLOCKED: StepOutcome = { ok: false, document: undefined, report: "", reportPath: undefined, loopState: undefined };
 
 /* THE BACKSTOPS, and they are backstops rather than settings — which is why they are constants here instead of
  * three fields on every step. A step runs like any other agent session: until it is done, or until you stop
@@ -172,7 +233,7 @@ const STEP_IDLE_ROUNDS = 3;
  * loops manifest that no step could ever approach: a number describing machinery rather than the job. Nothing
  * the model reads has ever mentioned it (loop-brief), and nothing should.
  */
-const loopForStep = (step: WorkflowStep, conversationId: string, prompt: string, goal: string): Loop => ({
+const loopForStep = (step: WorkflowStep, repos: readonly RepoBase[], conversationId: string, prompt: string, goal: string): Loop => ({
     conversationId,
     goal,
     prompt,
@@ -181,12 +242,18 @@ const loopForStep = (step: WorkflowStep, conversationId: string, prompt: string,
     checks: step.checks,
     maxIterations: step.output.kind === "none" && step.checks.length === 0 ? 1 : STEP_ROUNDS_MAX,
     stallLimit: STEP_IDLE_ROUNDS,
+    ...(step.maxSpendUsd !== undefined ? { maxSpendUsd: step.maxSpendUsd } : {}),
     // Always. A workflow step is an isolated agent session, and there is no longer a way to ask for anything
     // else (see WorkflowSchema).
     isolated: true,
     ...(step.agent !== undefined ? { agent: step.agent } : {}),
     ...(step.harness !== undefined ? { harness: step.harness } : {}),
+    ...(step.account !== undefined ? { account: step.account } : {}),
     ...(step.model !== undefined ? { model: step.model } : {}),
+    worktreeBase: [...repos],
+    // A candidate branch is a workflow input until a person chooses it. Global auto-land is a chat posture and
+    // must never merge an intermediate arm into the workspace before downstream comparison has happened.
+    autoLand: false,
 });
 
 /* Drive one run to completion. Resolves when the run ends, however it ends; it never rejects, for the reason
@@ -202,6 +269,12 @@ export const runWorkflow = async (services: Services, run: WorkflowRun, fn: Turn
     }
     const abort = new AbortController();
     running.set(runId, { abort });
+    const acquired = await workflowSlots.take(abort.signal);
+    if (!acquired) {
+        await abandonRun(services, run, Date.now());
+        running.delete(runId);
+        return;
+    }
 
     const byId = new Map(workflow.steps.map((step) => [step.id, step]));
     const position = new Map(workflow.steps.map((step, index) => [step.id, index + 1]));
@@ -230,7 +303,7 @@ export const runWorkflow = async (services: Services, run: WorkflowRun, fn: Turn
          * manifest is keyed by conversation and holds the LATEST loop on it, so a continued step replaces the
          * row of the step it continued — right for a per-conversation view, and lossless for the user, because
          * the run record below is what carries each step's own history. */
-        const record = await services.loops.start(loopForStep(step, conversationId, prompt, goal), Date.now());
+        const record = await services.loops.start(loopForStep(step, run.repos, conversationId, prompt, goal), Date.now());
         /* Stopping the RUN has to reach a loop that is already turning, and the loop pump's own signal is
          * private to it — `stopLoop` is the door. The listener covers a stop that arrives during the step; the
          * check right after covers one that landed in the instant between the guard above and here, which is
@@ -256,7 +329,8 @@ export const runWorkflow = async (services: Services, run: WorkflowRun, fn: Turn
         }
         const settlement = await settling.finally(() => abort.signal.removeEventListener("abort", relay));
         const ok = settlement.state === "done";
-        const report = settlement.report.slice(-REPORT_KEPT);
+        const reportPath = await persistReport(services.workspace.root, runId, step.id, settlement.report);
+        const report = reportPreview(settlement.report);
         await services.workflowRuns.patchStep(runId, step.id, {
             state: ok ? "done" : settlement.state === "stopped" ? "stopped" : "failed",
             endedAt: Date.now(),
@@ -266,8 +340,9 @@ export const runWorkflow = async (services: Services, run: WorkflowRun, fn: Turn
             ...(settlement.detail !== undefined ? { detail: settlement.detail } : {}),
             ...(settlement.document !== undefined ? { document: settlement.document } : {}),
             ...(report !== "" ? { report } : {}),
+            ...(reportPath !== undefined ? { reportPath } : {}),
         });
-        return { ok, document: settlement.document, report };
+        return { ok, document: settlement.document, report, reportPath, loopState: settlement.state };
     };
 
     const outcomeOf = (step: WorkflowStep): Promise<StepOutcome> => {
@@ -284,7 +359,13 @@ export const runWorkflow = async (services: Services, run: WorkflowRun, fn: Turn
              * tree nobody saw. It starts over. */
             const before = recorded.get(step.id);
             if (before?.state === "done") {
-                return { ok: true, document: before.document, report: before.report ?? "" };
+                return {
+                    ok: true,
+                    document: before.document,
+                    report: before.report ?? "",
+                    reportPath: before.reportPath,
+                    loopState: before.loopState,
+                };
             }
             const upstream = await Promise.all(
                 step.needs
@@ -308,8 +389,8 @@ export const runWorkflow = async (services: Services, run: WorkflowRun, fn: Turn
             }
             const conversationId = before?.conversationId ?? "";
             // The branch is named only when this step CANNOT simply look at the work: every fresh session is
-            // in its own worktree off main, while a step that shares its predecessor's conversation is already
-            // standing in the tree that branch describes.
+            // in its own worktree off the run's pinned snapshot, while a step that shares its predecessor's
+            // conversation is already standing in the tree that branch describes.
             const handoverFrom = (entry: { parent: WorkflowStep; outcome: StepOutcome }): Handover => {
                 const parentConversation = recorded.get(entry.parent.id)?.conversationId;
                 const separate = parentConversation !== undefined && parentConversation !== conversationId;
@@ -317,7 +398,12 @@ export const runWorkflow = async (services: Services, run: WorkflowRun, fn: Turn
                     title: entry.parent.title,
                     document: entry.outcome.document,
                     report: entry.outcome.report,
-                    ...(separate ? { branch: `agent/${parentConversation}` } : {}),
+                    ...(entry.outcome.reportPath !== undefined ? { reportPath: entry.outcome.reportPath } : {}),
+                    ...(separate
+                        ? {
+                              branches: run.repos.map(({ repo, base }) => ({ repo, base, branch: `agent/${parentConversation}` })),
+                          }
+                        : {}),
                 };
             };
             const handovers: Handover[] = upstream.map(handoverFrom);
@@ -354,7 +440,8 @@ export const runWorkflow = async (services: Services, run: WorkflowRun, fn: Turn
     try {
         const settled = await Promise.all(workflow.steps.map((step) => outcomeOf(step)));
         const failed = settled.filter((outcome) => !outcome.ok).length;
-        const state: WorkflowRunState = abort.signal.aborted ? "stopped" : failed === 0 ? "done" : "failed";
+        const overspent = settled.some((outcome) => outcome.loopState === "overspent");
+        const state: WorkflowRunState = abort.signal.aborted ? "stopped" : overspent ? "overspent" : failed === 0 ? "done" : "failed";
         const detail =
             failed === 0
                 ? undefined
@@ -368,6 +455,7 @@ export const runWorkflow = async (services: Services, run: WorkflowRun, fn: Turn
             .settle(runId, "error", Date.now(), error instanceof Error ? error.message : "the run failed")
             .catch(() => undefined);
     } finally {
+        workflowSlots.give();
         running.delete(runId);
     }
 };
@@ -385,9 +473,9 @@ export const runWorkflow = async (services: Services, run: WorkflowRun, fn: Turn
  */
 const RESUME_MAX = 2;
 
-export const resumeWorkflowRuns = async (services: Services, fn: TurnFn): Promise<string[]> => {
+export const resumeWorkflowRuns = async (services: Services, fn: TurnFn, candidates?: readonly WorkflowRun[]): Promise<string[]> => {
     const resumed: string[] = [];
-    for (const run of await services.workflowRuns.list()) {
+    for (const run of candidates ?? (await services.workflowRuns.list())) {
         if (run.state !== "running" || running.has(run.runId)) {
             continue;
         }
@@ -396,6 +484,20 @@ export const resumeWorkflowRuns = async (services: Services, fn: TurnFn): Promis
             continue;
         }
         if (counted.resumed > RESUME_MAX) {
+            const conversations = new Set(counted.steps.map((step) => step.conversationId));
+            await Promise.all(
+                [...conversations].map(async (conversationId) => {
+                    const loop = await services.loops.get(conversationId);
+                    if (loop?.state === "running") {
+                        await services.loops.settle(
+                            conversationId,
+                            "error",
+                            Date.now(),
+                            `Its workflow was abandoned after ${counted.resumed} daemon restarts.`,
+                        );
+                    }
+                }),
+            );
             await services.workflowRuns.settle(
                 run.runId,
                 "error",
@@ -409,4 +511,14 @@ export const resumeWorkflowRuns = async (services: Services, fn: TurnFn): Promis
         void runWorkflow(services, counted, fn);
     }
     return resumed;
+};
+
+/* One boot coordinator for both journals. Workflow steps are loops, so launching the two generic recovery
+ * passes independently gives the same persisted loop two drivers: the workflow scheduler and the loop pump.
+ * Claim every conversation belonging to a running workflow first, then let generic recovery see only the rest.
+ */
+export const resumeWorkflowExecution = async (services: Services, fn: TurnFn): Promise<void> => {
+    const runs = (await services.workflowRuns.list()).filter((run) => run.state === "running");
+    const owned = new Set(runs.flatMap((run) => run.steps.map((step) => step.conversationId)));
+    await Promise.all([resumeWorkflowRuns(services, fn, runs), resumeLoops(services, fn, owned)]);
 };

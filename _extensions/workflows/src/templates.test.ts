@@ -53,25 +53,26 @@ test("the template teaches every shape", () => {
     }
 });
 
-/* WHAT THE TEMPLATE MUST NOT TEACH, which is the assertion that replaced two of the ones above.
- *
- * It used to be required to declare a `json` output and a `command` check, on the reasoning that one gallery
- * card carries the whole teaching load. Both turned out to teach the wrong lesson at the user's expense. A
- * declared output is a COMPLETION GATE — the step fails unless it writes a valid document, so an attempt that
- * built the thing and described it imperfectly takes the rest of the graph down with it — and it drags the
- * whole output contract into a prompt that is meant to be the user's own sentence. A command check in a
- * template is a guess about a stranger's repo: this one ran `pnpm -w test`, which cannot pass anywhere that is
- * not a pnpm monorepo, so the step looped to its ceiling and failed a run that had actually succeeded.
- *
- * Both remain available in the designer for someone who wants them against a tree they know. Neither belongs in
- * the thing a person clicks before they understand what either does.
- */
-test("the shipped template declares no completion scaffolding", () => {
+/* Candidate authors stay unburdened by completion paperwork; the sessions that evaluate and synthesize do not.
+ * Evaluation must be structured so synthesis receives evidence rather than another essay, and synthesis must
+ * have an independent check so a clean turn or an unverified test claim cannot finish the graph by itself. */
+test("the template separates blind evaluation from checked synthesis", () => {
     for (const { workflow } of WORKFLOW_TEMPLATES) {
-        for (const step of workflow.steps) {
-            expect(step.output.kind, `${workflow.id}/${step.id} declares an output, which gates its completion`).toBe(`none`);
-            expect(step.checks, `${workflow.id}/${step.id} declares a check against a tree the template cannot see`).toEqual([]);
-        }
+        const attempts = workflow.steps.filter((step) => step.id.startsWith(`attempt-`));
+        expect(attempts.every((step) => step.output.kind === `none` && step.checks.length === 0)).toBe(true);
+        expect(new Set(attempts.map((step) => step.title))).toEqual(new Set([`Attempt A`, `Attempt B`]));
+
+        const evaluation = workflow.steps.find((step) => step.id === `evaluate`);
+        expect(evaluation?.output.kind).toBe(`json`);
+        expect(evaluation?.agent).toBeDefined();
+        expect(evaluation?.agent).not.toBe(attempts[0]?.agent);
+        expect(evaluation?.agent).not.toBe(attempts[1]?.agent);
+
+        const synthesis = workflow.steps.find((step) => step.id === `synthesise`);
+        expect(synthesis?.agent).toBeDefined();
+        expect(synthesis?.output.kind).not.toBe(`none`);
+        expect(synthesis?.checks.length).toBeGreaterThan(0);
+        expect(synthesis?.needs).toEqual(expect.arrayContaining([`attempt-a`, `attempt-b`, `evaluate`]));
     }
 });
 

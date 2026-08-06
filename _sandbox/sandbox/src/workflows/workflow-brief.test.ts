@@ -116,7 +116,7 @@ test("an inheriting step still receives what the steps before it concluded", () 
 
 /* NOTHING IS SAID ABOUT THE WORKTREE, and this asserts the absence because the sentence was here and was wrong.
  *
- * A step does run isolated, and the step after it does read `git diff main...<branch>` — so telling it to
+ * A step does run isolated, and the step after it can read its pinned-base-to-branch diff — so telling it to
  * commit looked like closing a real hole. It was not one: the daemon commits the worktree onto that branch
  * itself at clean turn completion (agents/land.ts, in both `check` and `measure` modes). The paragraph
  * instructed the model to do something already done for it, and it was the largest single thing standing
@@ -125,7 +125,7 @@ test("an inheriting step still receives what the steps before it concluded", () 
 test("nothing is added about the worktree — the daemon commits the branch itself", () => {
     const design = workflow([step("declared"), step("inheriting", { prompt: undefined, goal: undefined })]);
     for (const one of design.steps) {
-        expect(briefForStep(one, [], "the ask"), one.id).not.toContain("git diff main...");
+        expect(briefForStep(one, [], "the ask").toLowerCase(), one.id).not.toContain("worktree");
     }
 });
 

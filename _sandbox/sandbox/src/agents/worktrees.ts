@@ -38,8 +38,16 @@ export interface AgentWorktrees {
     // marker clear while its checkout stays retired until the next turn's ensure() re-attaches it. Diff,
     // fileDiff and land all branch on this — the checkout when it is there, the branch refs when it is not.
     readonly attached: (id: string, repo: string) => Promise<boolean>;
-    // Create the composition on first use (recorded = []), else repair what the recorded composition names.
-    readonly ensure: (id: string, recorded: readonly { repo: string; base: string }[]) => Promise<ConversationWorktree>;
+    // The current full HEAD of every repository a new conversation would span. A workflow captures this once
+    // and hands it to every candidate, so a fan-out cannot observe several different moving workspaces.
+    readonly snapshot: () => Promise<ConversationWorktree["repos"]>;
+    // Create the composition on first use (recorded = []), optionally at a caller-owned immutable snapshot;
+    // else repair what the recorded composition names.
+    readonly ensure: (
+        id: string,
+        recorded: readonly { repo: string; base: string }[],
+        base?: readonly { repo: string; base: string }[],
+    ) => Promise<ConversationWorktree>;
     // Tear down: worktree remove (before the ref goes — git refuses to delete a checked-out branch), then the dir.
     readonly remove: (id: string, recorded: readonly { repo: string; base: string }[]) => Promise<void>;
     // Retire the CHECKOUT and keep the commits — what archiving an agent costs. Everything the worktree still
@@ -198,9 +206,9 @@ export const createAgentWorktrees = (
     // skipped in createOne — an unborn HEAD has nothing to branch from.
     const liveRepos = async (): Promise<string[]> => ["root", ...(await discoverRepos(workspace.root))];
 
-    const createOne = async (id: string, repo: string): Promise<{ repo: string; base: string } | undefined> => {
+    const createOne = async (id: string, repo: string, pinned?: string): Promise<{ repo: string; base: string } | undefined> => {
         const main = mainDir(repo);
-        const base = await headSha(main);
+        const base = pinned ?? (await headSha(main));
         if (base === undefined) {
             logger.warn({ repo }, "agents: unborn HEAD, repo excluded from worktree composition");
             return undefined;
@@ -211,7 +219,7 @@ export const createAgentWorktrees = (
         if (await branchExists(main, branch)) {
             await git(main, ["worktree", "add", target, branch]);
         } else {
-            await git(main, ["worktree", "add", "-b", branch, target, "HEAD"]);
+            await git(main, ["worktree", "add", "-b", branch, target, base]);
         }
         return { repo, base };
     };
@@ -325,7 +333,14 @@ export const createAgentWorktrees = (
         mainDir,
         exists: (id) => exists(conversationDir(id)),
         attached: (id, repo) => exists(join(worktreeDir(id, repo), ".git")),
-        ensure: async (id, recorded) => {
+        snapshot: async () => {
+            const repos = await liveRepos();
+            const heads = await Promise.all(repos.map(async (repo) => ({ repo, base: await headSha(mainDir(repo)) })));
+            return heads
+                .filter((entry): entry is { repo: string; base: string } => entry.base !== undefined)
+                .map(({ repo, base }) => ({ repo, base }));
+        },
+        ensure: async (id, recorded, base) => {
             const branch = `agent/${id}`;
             if (recorded.length > 0) {
                 await eachRepo(recorded, "root-first", (repo) => withRepoLock(repo, () => repairOne(id, repo)));
@@ -335,22 +350,19 @@ export const createAgentWorktrees = (
             // Root first: its checkout creates the conversation dir the nested worktrees mount into (the root
             // repo excludes every repo dir — syncRootExcludes — so the mounts never collide with its own
             // tracked files).
-            const live = await liveRepos();
+            const live = base === undefined ? (await liveRepos()).map((repo) => ({ repo, base: undefined })) : base;
             const created = new Map<string, { repo: string; base: string }>();
-            await eachRepo(
-                live.map((repo) => ({ repo })),
-                "root-first",
-                async (repo) => {
-                    const made = await withRepoLock(repo, () => createOne(id, repo));
-                    if (made !== undefined) {
-                        created.set(repo, made);
-                    }
-                },
-            );
+            await eachRepo(live, "root-first", async (repo) => {
+                const pinned = live.find((entry) => entry.repo === repo)?.base;
+                const made = await withRepoLock(repo, () => createOne(id, repo, pinned));
+                if (made !== undefined) {
+                    created.set(repo, made);
+                }
+            });
             // Read back in DISCOVERY order rather than in the order the creations happened to finish: root leads
             // a composition (the worktree frame takes its base from that, and the record is written down for
             // every later turn to repair against), and completion order is whatever the disk felt like.
-            const repos = live.map((repo) => created.get(repo)).filter((entry): entry is { repo: string; base: string } => entry !== undefined);
+            const repos = live.map(({ repo }) => created.get(repo)).filter((entry): entry is { repo: string; base: string } => entry !== undefined);
             await linkComposition(id, repos);
             return { cwd: conversationDir(id), branch, repos };
         },

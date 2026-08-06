@@ -39,6 +39,7 @@ const stepRun = (over: Partial<WorkflowStepRun> = {}): WorkflowStepRun => ({
 const runWith = (step: WorkflowStepRun, workflow: Workflow = design): WorkflowRun => ({
     runId: "r1",
     workflow,
+    repos: [{ repo: "root", base: "1111111111111111111111111111111111111111" }],
     state: "done",
     startedAt: 1,
     resumed: 0,

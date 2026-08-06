@@ -1,4 +1,5 @@
 import type { LoopDocument, WorkflowStep } from "@intentic/sandbox-contract";
+import { shellQuote } from "@intentic/sandbox-run/quote";
 
 /* WHAT A STEP IS TOLD, over and above what its loop already tells it.
  *
@@ -58,30 +59,48 @@ export interface Handover {
     readonly title: string;
     readonly document: LoopDocument | undefined;
     readonly report: string;
+    // Complete response artifact. `report` is deliberately only a ledger/UI preview; a downstream session must
+    // be able to consume a long analysis or document without its middle silently disappearing.
+    readonly reportPath?: string;
     /* The branch the upstream step's work is on, for an ISOLATED run where this step is a fresh session.
      *
      * This closes what would otherwise be a silent hole in the whole design. In an isolated run every fresh
-     * step gets its own worktree off main, so a reviewer told "check the implementation" opens a tree that
+     * step gets its own worktree off the run's pinned repository snapshot, so a reviewer told "check the implementation" opens a tree that
      * contains no implementation, finds nothing wrong, and says so — a green review of work it never saw,
      * which is worse than no review. Naming the branch turns that into the thing it should have been all
-     * along: `git diff main...<branch>` is what reviewing a change actually is, and it works precisely BECAUSE
-     * the sessions are separate.
+     * along: `git diff <pinned-base>...<branch>` is what reviewing a change actually is, and it works precisely
+     * BECAUSE the sessions are separate.
      *
      * Absent on a shared-tree run, where the work is simply there, and absent when the step is continuing the
      * same session, where it is already in the worktree the step is standing in.
      */
-    readonly branch?: string;
+    readonly branches?: readonly { readonly repo: string; readonly base: string; readonly branch: string }[];
 }
 
 // One upstream step's output, as the next step reads it. A `json` document leads with its data because that is
 // what the step was promised and what it is expected to act on; the prose follows as context.
-const handoverFrom = ({ title, document, report, branch }: Handover): string => {
+const handoverFrom = ({ title, document, report, reportPath, branches }: Handover): string => {
     const where =
-        branch === undefined ? [] : [``, `Its work is on the branch \`${branch}\` — \`git diff main...${branch}\` is exactly what it changed.`];
+        branches === undefined
+            ? []
+            : [
+                  ``,
+                  `Its work is on the following branches. Each command compares against this run's exact starting commit, not against a branch name that may have moved:`,
+                  ...branches.map(({ repo, base, branch }) =>
+                      repo === "root"
+                          ? `- workspace root: \`git diff ${base}...${branch}\``
+                          : `- \`${repo}\`: \`git -C ${shellQuote(repo)} diff ${base}...${branch}\``,
+                  ),
+              ];
+    const full =
+        reportPath === undefined
+            ? []
+            : [``, `Its complete response is in \`${reportPath}\`. Read that file before acting; the text below is only a preview.`];
     if (document === undefined) {
         // No document: either the step declared `none`, or it ended without writing a valid one. Its closing
-        // words are all there is, and truncating from the END keeps the conclusion rather than the preamble.
-        return [`### From "${title}"`, ``, report.slice(-4_000).trim() || `(this step finished without saying anything)`, ...where].join(`\n`);
+        // words are all there is. The complete artifact prevents long-form work from becoming a 4,000-character
+        // tail; this bounded text keeps the prompt itself readable.
+        return [`### From "${title}"`, ...full, ``, report.trim() || `(this step finished without saying anything)`, ...where].join(`\n`);
     }
     return [
         `### From "${title}"`,
@@ -89,6 +108,7 @@ const handoverFrom = ({ title, document, report, branch }: Handover): string => 
         document.reason,
         ...(document.evidence !== undefined ? [``, `Evidence: ${document.evidence}`] : []),
         ...(document.data !== undefined ? [``, `\`\`\`json`, JSON.stringify(document.data, undefined, 2), `\`\`\``] : []),
+        ...full,
         ...where,
     ].join(`\n`);
 };
@@ -112,10 +132,10 @@ const handoverFrom = ({ title, document, report, branch }: Handover): string => 
  * typed: the request, what is already settled, and this step's own instruction.
  *
  * NOTHING NEEDS TO BE SAID ABOUT THE WORKTREE, which is worth writing down because it is not obvious and it was
- * got wrong here. A step does run isolated, and the step after it does read `git diff main...<branch>` — but
- * the daemon commits the worktree onto that branch itself at clean turn completion (agents/land.ts, in both
- * `check` and `measure` modes). Telling the model to commit was instructing it to do something already done for
- * it, at the cost of the one thing this default exists to protect.
+ * got wrong here. A step does run isolated, and the step after it reads an exact pinned-base-to-branch diff —
+ * but the daemon commits the worktree onto that branch itself at clean turn completion (agents/land.ts, in
+ * both `check` and `measure` modes). Telling the model to commit was instructing it to do something already
+ * done for it, at the cost of the one thing this default exists to protect.
  *
  * A STEP THAT DECLARES A PROMPT IS SAYING IT HAS A JOB OF ITS OWN — review this, merge those — so ITS words go
  * last, where the instruction belongs, with the request and the handovers above them as the context they are

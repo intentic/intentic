@@ -1,15 +1,15 @@
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { mkdir, writeFile } from "node:fs/promises";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { type AgentEvent, type AgentTurn, LOOP_DIR, type Workflow, type WorkflowStep, workflowFaults } from "@intentic/sandbox-contract";
 import { unstubbed } from "@intentic/testing";
-import { expect, test } from "vitest";
+import { expect, test, vi } from "vitest";
 import type { Services } from "../composition.js";
 import { fileLoopsStore } from "../loops/loops-store.js";
 import type { TurnFn } from "../loops/loop-runner.js";
 import { fileWorkflowRunsStore, fileWorkflowsStore } from "./workflows-store.js";
-import { abandonRun, openRun, runWorkflow, stopWorkflowRun, workflowRunning } from "./workflow-runner.js";
+import { abandonRun, openRun, resumeWorkflowExecution, runWorkflow, stopWorkflowRun, workflowRunning } from "./workflow-runner.js";
 
 /* The scheduler's graph behaviour, end to end. Every test here is about the SEAM between steps, because that
  * is the only thing this module owns — a step's own execution is a loop, and loops are tested next door.
@@ -53,6 +53,7 @@ const workflow = (steps: readonly WorkflowStep[], over: Partial<Workflow> = {}):
 });
 
 const tempRoot = (): string => mkdtempSync(join(tmpdir(), "workflows-"));
+const REPOS = [{ repo: "root", base: "1111111111111111111111111111111111111111" }] as const;
 
 /* A turn that writes the verdict its step needs, so the step's loop converges on iteration 1. `claims` decides
  * per step id whether it says done — the lever every failure test below pulls. It reads the step from the
@@ -79,7 +80,7 @@ test("steps run in dependency order and each is handed what the one before it pr
     const services = fakeServices(root);
     const prompts: string[] = [];
     const design = workflow([step("plan"), step("build", { needs: ["plan"] }), step("verify", { needs: ["build"] })]);
-    const run = await services.workflowRuns.start(openRun(design, 1));
+    const run = await services.workflowRuns.start(openRun(design, REPOS, 1));
     await runWorkflow(services, run, claiming(root, prompts));
 
     const settled = await services.workflowRuns.get(run.runId);
@@ -90,8 +91,68 @@ test("steps run in dependency order and each is handed what the one before it pr
     expect(prompts[1]).toContain("plan says true");
     // A `json`-shaped document rides across as JSON, not as a paragraph mentioning it.
     expect(prompts[2]).toContain(`"note": "build"`);
+    expect(prompts[1]).toContain(`git diff ${REPOS[0].base}...agent/`);
     // And the first step, which was handed nothing, is not given an empty handover section.
     expect(prompts[0]).not.toContain("What the steps before you concluded");
+});
+
+test("workflow loops pin the full model choice, shared base, spend ceiling, and held landing posture", async () => {
+    const root = tempRoot();
+    const services = fakeServices(root);
+    let turn: AgentTurn | undefined;
+    const design = workflow([
+        step("only", {
+            output: { kind: "none" },
+            agent: "codex",
+            harness: "claude-code",
+            account: "codex-account-2",
+            model: "gpt-5.6",
+            maxSpendUsd: 3.5,
+        }),
+    ]);
+    const run = await services.workflowRuns.start(openRun(design, REPOS, 1));
+    const capture: TurnFn = async function* (_services, input) {
+        turn = input;
+        yield { kind: "done" } as AgentEvent;
+    };
+
+    await runWorkflow(services, run, capture);
+
+    expect(turn).toMatchObject({
+        agent: "codex",
+        harness: "claude-code",
+        account: "codex-account-2",
+        model: "gpt-5.6",
+        worktreeBase: REPOS,
+        autoLand: false,
+    });
+    expect((await services.loops.get(run.steps[0]!.conversationId))?.maxSpendUsd).toBe(3.5);
+});
+
+test("a long unstructured response is handed on through a complete shared artifact", async () => {
+    const root = tempRoot();
+    const services = fakeServices(root);
+    const design = workflow([step("write", { output: { kind: "none" } }), step("read", { needs: ["write"], output: { kind: "none" } })]);
+    const run = await services.workflowRuns.start(openRun(design, REPOS, 1));
+    const full = `BEGIN\n${"middle\n".repeat(2_000)}END`;
+    let downstream = "";
+    const turns: TurnFn = async function* (_services, input) {
+        if (input.conversationId?.endsWith("-write") === true) {
+            yield { kind: "delta", text: full } as AgentEvent;
+        } else {
+            downstream = input.prompt;
+        }
+        yield { kind: "done" } as AgentEvent;
+    };
+
+    await runWorkflow(services, run, turns);
+
+    const settled = await services.workflowRuns.get(run.runId);
+    const reportPath = settled?.steps[0]?.reportPath;
+    expect(reportPath).toBe(`.intentic/workflow-runs/${run.runId}/write.md`);
+    expect(await readFile(join(root, reportPath ?? ""), "utf8")).toBe(full);
+    expect(downstream).toContain(reportPath);
+    expect(settled?.steps[0]?.report?.length).toBeLessThan(full.length);
 });
 
 /* WHAT THE MODEL ACTUALLY RECEIVES — asserted end to end, through the step brief, the loop brief and the turn,
@@ -112,7 +173,7 @@ test("an ordinary step's turn prompt is the request, byte for byte", async () =>
     const prompts: string[] = [];
     // The ordinary step: no prompt, no goal, nothing to produce and nothing to check.
     const design = workflow([step("only", { prompt: undefined, goal: undefined, output: { kind: "none" }, checks: [] })]);
-    const run = await services.workflowRuns.start(openRun(design, 1, "make the importer handle empty files"));
+    const run = await services.workflowRuns.start(openRun(design, REPOS, 1, "make the importer handle empty files"));
     const capture: TurnFn = async function* turn(_services, input: AgentTurn) {
         prompts.push(input.prompt);
         yield { kind: "done" } as AgentEvent;
@@ -135,7 +196,7 @@ test("a step with a job of its own still gets told what the run is for", async (
     const design = workflow([
         step("review", { prompt: "read the diff and say what is wrong", goal: undefined, output: { kind: "none" }, checks: [] }),
     ]);
-    const run = await services.workflowRuns.start(openRun(design, 1, "make the importer handle empty files"));
+    const run = await services.workflowRuns.start(openRun(design, REPOS, 1, "make the importer handle empty files"));
     const capture: TurnFn = async function* turn(_services, input: AgentTurn) {
         prompts.push(input.prompt);
         yield { kind: "done" } as AgentEvent;
@@ -158,7 +219,7 @@ test("a failed step skips everything downstream of it and leaves the branch besi
         step("after-bad", { needs: ["bad"] }),
         step("sibling", { needs: ["root"] }),
     ]);
-    const run = await services.workflowRuns.start(openRun(design, 1));
+    const run = await services.workflowRuns.start(openRun(design, REPOS, 1));
     await runWorkflow(
         services,
         run,
@@ -185,7 +246,7 @@ test("a step whose model was refused fails the run instead of reporting a done s
     const services = fakeServices(root);
     const refusal = "Your organization has disabled Claude subscription access for Claude Code";
     const design = workflow([step("attempt", { output: { kind: "none" } }), step("after", { needs: ["attempt"], output: { kind: "none" } })]);
-    const run = await services.workflowRuns.start(openRun(design, 1));
+    const run = await services.workflowRuns.start(openRun(design, REPOS, 1));
     // eslint-disable-next-line require-yield
     await runWorkflow(services, run, async function* refused() {
         yield { kind: "error", message: refusal } as AgentEvent;
@@ -206,7 +267,7 @@ test("a fan-in step waits for every branch and is handed all of them", async () 
     const services = fakeServices(root);
     const prompts: string[] = [];
     const design = workflow([step("left"), step("right"), step("merge", { needs: ["left", "right"] })]);
-    const run = await services.workflowRuns.start(openRun(design, 1));
+    const run = await services.workflowRuns.start(openRun(design, REPOS, 1));
     await runWorkflow(services, run, claiming(root, prompts));
 
     const merged = prompts.at(-1) ?? "";
@@ -231,18 +292,52 @@ test("maxParallel bounds how many steps are inside a turn at once", async () => 
         yield { kind: "done" } as AgentEvent;
     };
     const design = workflow([step("a"), step("b"), step("c"), step("d"), step("e")], { maxParallel: 2 });
-    const run = await services.workflowRuns.start(openRun(design, 1));
+    const run = await services.workflowRuns.start(openRun(design, REPOS, 1));
     await runWorkflow(services, run, counting);
 
     expect(peak).toBeLessThanOrEqual(2);
     expect((await services.workflowRuns.get(run.runId))?.state).toBe("done");
 });
 
+test("the sandbox-wide workflow limit bounds several fan-outs together", async () => {
+    const root = tempRoot();
+    const services = fakeServices(root);
+    let active = 0;
+    let peak = 0;
+    let release: () => void = () => {};
+    const held = new Promise<void>((resolve) => {
+        release = resolve;
+    });
+    const blocking: TurnFn = async function* () {
+        active += 1;
+        peak = Math.max(peak, active);
+        await held;
+        active -= 1;
+        yield { kind: "done" } as AgentEvent;
+    };
+    const design = workflow([step("only", { output: { kind: "none" } })], { maxParallel: 8 });
+    const runs = await Promise.all(Array.from({ length: 5 }, () => services.workflowRuns.start(openRun(design, REPOS, Date.now()))));
+    const executions = runs.map((run) => runWorkflow(services, run, blocking));
+
+    for (let attempt = 0; attempt < 100; attempt += 1) {
+        if (peak >= 4) {
+            break;
+        }
+        await new Promise((resolve) => setTimeout(resolve, 1));
+    }
+    expect(peak).toBe(4);
+
+    release();
+    await Promise.all(executions);
+    expect(peak).toBe(4);
+    expect((await services.workflowRuns.list()).every((run) => run.state === "done")).toBe(true);
+});
+
 test("a `continue` step runs on its predecessor's conversation; a `fresh` one gets its own", async () => {
     const root = tempRoot();
     const services = fakeServices(root);
     const design = workflow([step("first"), step("second", { needs: ["first"], handoff: "continue" }), step("third", { needs: ["first"] })]);
-    const run = await services.workflowRuns.start(openRun(design, 1));
+    const run = await services.workflowRuns.start(openRun(design, REPOS, 1));
     const conversations = new Map(run.steps.map((entry) => [entry.stepId, entry.conversationId]));
 
     // The sharing IS the mechanism: same conversation means same fleet card, same worktree, same transcript.
@@ -254,7 +349,7 @@ test("stopping a run stops the loop in flight and starts nothing further", async
     const root = tempRoot();
     const services = fakeServices(root);
     const design = workflow([step("slow"), step("never", { needs: ["slow"] })]);
-    const run = await services.workflowRuns.start(openRun(design, 1));
+    const run = await services.workflowRuns.start(openRun(design, REPOS, 1));
     // Never writes a verdict, so its loop would run to the scheduler's backstop; the stop is what ends it.
     const endless: TurnFn = async function* turn() {
         stopWorkflowRun(run.runId);
@@ -286,7 +381,7 @@ test("a step queued behind maxParallel never opens a loop once the run is stoppe
     // One slot and two independent roots, so `queued` is holding the door while `first` runs — and `first` is
     // what presses Stop.
     const design = workflow([step("first"), step("queued")], { maxParallel: 1 });
-    const run = await services.workflowRuns.start(openRun(design, 1));
+    const run = await services.workflowRuns.start(openRun(design, REPOS, 1));
     const stopper: TurnFn = async function* turn() {
         stopWorkflowRun(run.runId);
         yield { kind: "done" } as AgentEvent;
@@ -311,7 +406,7 @@ test("a resumed run replays the steps that already finished instead of paying fo
     const services = fakeServices(root);
     const prompts: string[] = [];
     const design = workflow([step("done-already"), step("unfinished", { needs: ["done-already"] })]);
-    const run = openRun(design, 1);
+    const run = openRun(design, REPOS, 1);
     // The record as a daemon death would leave it: the first step finished and was written down, the second
     // never started.
     await services.workflowRuns.start({
@@ -328,6 +423,45 @@ test("a resumed run replays the steps that already finished instead of paying fo
     expect(prompts).toHaveLength(1);
     expect(prompts[0]).toContain("settled last time");
     expect((await services.workflowRuns.get(run.runId))?.state).toBe("done");
+});
+
+test("restart recovery gives a workflow-owned loop only to the workflow scheduler", async () => {
+    const root = tempRoot();
+    const services = fakeServices(root);
+    const prompts: string[] = [];
+    const design = workflow([step("interrupted")]);
+    const opened = openRun(design, REPOS, 1);
+    const conversationId = opened.steps[0]!.conversationId;
+
+    // Both journals say the daemon died during this step. The workflow coordinator owns the restart: generic
+    // loop recovery must leave the matching loop alone or two pumps race the same conversation and worktree.
+    await services.workflowRuns.start({
+        ...opened,
+        steps: opened.steps.map((entry) => ({ ...entry, state: "running" as const, startedAt: 1 })),
+    });
+    await services.loops.start(
+        {
+            conversationId,
+            goal: "interrupted is done",
+            prompt: "do interrupted",
+            context: "fresh",
+            output: { kind: "claim" },
+            checks: [],
+            maxIterations: 20,
+            stallLimit: 3,
+            isolated: true,
+            worktreeBase: [...REPOS],
+            autoLand: false,
+        },
+        1,
+    );
+
+    await resumeWorkflowExecution(services, claiming(root, prompts));
+    await vi.waitFor(async () => expect((await services.workflowRuns.get(opened.runId))?.state).toBe("done"));
+
+    expect(prompts).toHaveLength(1);
+    expect((await services.workflowRuns.get(opened.runId))?.resumed).toBe(1);
+    expect((await services.loops.get(conversationId))?.resumed).toBe(0);
 });
 
 test("workflowFaults refuses the graphs the scheduler could not run", () => {
@@ -367,7 +501,7 @@ test("a run nothing is driving can still be stopped, steps and all", async () =>
     const root = tempRoot();
     const services = fakeServices(root);
     const design = workflow([step("cut-off"), step("never-reached", { needs: ["cut-off"] })]);
-    const opened = openRun(design, 1);
+    const opened = openRun(design, REPOS, 1);
     await services.workflowRuns.start({
         ...opened,
         steps: opened.steps.map((entry) => (entry.stepId === "cut-off" ? { ...entry, state: "running" as const, iterations: 1 } : entry)),

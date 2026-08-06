@@ -430,6 +430,7 @@ export const services = (overrides: ServiceOverrides = {}): Services => {
             exists: async () => false,
             // A live checkout, so the routes read the worktree path — the steady state these fakes model.
             attached: async () => true,
+            snapshot: async () => [{ repo: "root", base: "a".repeat(40) }],
             ensure: async (id) => ({ cwd: `/history/worktrees/${id}`, branch: `agent/${id}`, repos: [{ repo: "root", base: "a".repeat(40) }] }),
             remove: async () => {},
             retire: async () => {},

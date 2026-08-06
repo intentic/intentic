@@ -109,17 +109,18 @@ const openDraft = (workflow: Workflow): void => {
     drafted.value = workflow;
     host().route.setQuery({ edit: `new`, run: undefined }, { push: true });
 };
+const mintWorkflowId = (): string => `workflow-${crypto.randomUUID()}`;
 const watchRun = (runId: string): void => host().route.setQuery({ run: runId, edit: undefined }, { push: true });
 const backToList = (): void => host().route.setQuery({ edit: undefined, run: undefined });
 
 // A template opens the designer PREFILLED rather than creating the workflow: a graph that costs money to run
 // is not something to create by accident, and looking at the picture before saving is the whole point.
 // Handed over uncloned — the designer copies whatever it is given, so the module constant is only ever read.
-const fromTemplate = (template: WorkflowTemplate): void => openDraft(template.workflow);
+const fromTemplate = (template: WorkflowTemplate): void => openDraft({ ...template.workflow, id: mintWorkflowId() });
 
 const blank = (): void =>
     openDraft({
-        id: `workflow-${workflows.value.length + 1}`,
+        id: mintWorkflowId(),
         name: `New workflow`,
         // No goal and no prompt: the step does whatever the run is asked to do and is measured against it. A
         // blank workflow is therefore RUNNABLE the moment it is named, which is the point — the author adds
@@ -200,7 +201,14 @@ const RUN_VARIANT: Record<WorkflowRun["state"], StatusVariant> = {
          screen at a different address — and since `editing` is this component's `:key`, the designer was torn
          down and rebuilt in place: a flicker, then the form you were already looking at. Nothing about the
          press was legible as having worked. A save is finishing with the document, so it closes it. -->
-    <WorkflowDesigner v-if="designing" :key="editing" :initial="designing" @close="backToList()" @saved="backToList()" />
+    <WorkflowDesigner
+        v-if="designing"
+        :key="editing"
+        :initial="designing"
+        :creating="editing === `new`"
+        @close="backToList()"
+        @saved="backToList()"
+    />
     <WorkflowRunPage v-else-if="watching" :key="watching.runId" :run="watching" @close="backToList()" />
 
     <Page v-else width="wide">

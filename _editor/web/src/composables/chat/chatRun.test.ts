@@ -39,6 +39,7 @@ const run = (steps: readonly WorkflowStep[], runs: readonly Partial<WorkflowStep
     return {
         runId: `r1`,
         workflow,
+        repos: [{ repo: `root`, base: `1111111111111111111111111111111111111111` }],
         state: `running`,
         startedAt: 0,
         resumed: 0,

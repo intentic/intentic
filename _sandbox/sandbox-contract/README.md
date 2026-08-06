@@ -13,6 +13,8 @@ mismatch is a type error rather than a runtime surprise.
 - Declare the event union the daemon pushes over SSE (`src/events.ts`).
 - Hold the small pieces of logic that BOTH sides must agree on rather than each deciding: the chore book,
   hostname and tunnel-id rules, session naming, terminal protocol, workspace state.
+- Define workflow designs and immutable run snapshots, including full model/account/harness pins, per-step spend
+  ceilings, pinned repository bases, bounded report previews, and complete-report artifact paths.
 
 ## Key files
 
@@ -21,6 +23,8 @@ mismatch is a type error rather than a runtime surprise.
 - [src/events.ts](src/events.ts) — what the daemon pushes, and when.
 - [src/chores](src/chores) — the chore book: definitions, applicability gates and verdicts, shared because the
   daemon computes the signals and the browser renders the judgement.
+- [src/workflow-faults.ts](src/workflow-faults.ts) and [src/output-fields.ts](src/output-fields.ts) — graph and
+  structured-output invariants shared by the designer and daemon, including duplicate field-name rejection.
 - [src/index.ts](src/index.ts) — the public surface.
 
 ## How it fits

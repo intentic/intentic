@@ -37,6 +37,12 @@ export type AgentProvider = z.infer<typeof AgentProviderSchema>;
 export const AgentHarnessSchema = z.enum(["native", "claude-code"]);
 export type AgentHarness = z.infer<typeof AgentHarnessSchema>;
 
+// One repository at one immutable commit. Workflow runs use this both as the checkout instruction for every
+// candidate and as the comparison base written into handoffs, so a multi-repo run has one provenance record
+// rather than a hard-coded branch name that only happens to work in the root repository.
+export const RepoBaseSchema = z.object({ repo: z.string(), base: z.string().min(1) });
+export type RepoBase = z.infer<typeof RepoBaseSchema>;
+
 // What the user is looking at in the editor, attached to a turn only when they explicitly opt in (the
 // composer chip — off by default). The daemon folds it into the prompt as a context note, so deictic
 // prompts ("fix this") resolve without an @-mention. Selection is bounded — it's context, not an upload.
@@ -156,6 +162,15 @@ export const AgentTurnSchema = z
         // When true, the turn runs in the conversation's isolated git worktree (created lazily on first use)
         // instead of the shared /work tree — the parallel-agents mode. Requires conversationId.
         isolated: z.boolean().optional(),
+        /* Pin a NEW isolated conversation's worktree composition to these repository commits. Daemon-owned:
+         * ordinary chats omit it and keep rebasing onto the current workspace; a workflow supplies the one
+         * snapshot all of its candidates must share. Repeated iterations carry it too, which suppresses the
+         * ordinary pre-turn rebase for the lifetime of that workflow step. */
+        worktreeBase: z.array(RepoBaseSchema).min(1).max(50).optional(),
+        // Override landing for this turn only. Workflow steps set false so candidate branches cannot leak into
+        // the workspace before the synthesis step has compared them; ordinary turns inherit agent/workspace
+        // posture exactly as before.
+        autoLand: z.boolean().optional(),
         // Set ONLY by the daemon's own automation dispatchers: this turn opens a conversation on behalf of an
         // outside message rather than a user. Recorded on the registry entry so the fleet can say where the
         // agent came from. Requires conversationId — there is nothing to record it on otherwise.
@@ -213,6 +228,9 @@ export const AgentTurnSchema = z
     })
     .refine((turn) => turn.isolated !== true || turn.conversationId !== undefined, {
         message: "isolated requires conversationId",
+    })
+    .refine((turn) => turn.worktreeBase === undefined || (turn.isolated === true && turn.conversationId !== undefined), {
+        message: "worktreeBase requires an isolated conversationId",
     })
     .refine((turn) => turn.origin === undefined || turn.conversationId !== undefined, {
         message: "origin requires conversationId",
@@ -364,7 +382,12 @@ export const LoopSchema = z.object({
     // driver has no composer to read them from.
     agent: AgentProviderSchema.optional(),
     harness: AgentHarnessSchema.optional(),
+    account: z.string().optional(),
     model: z.string().optional(),
+    // A workflow persists these on its underlying loop so restart recovery cannot silently change the checkout
+    // or let a candidate inherit the sandbox's global auto-land posture on a later iteration.
+    worktreeBase: z.array(RepoBaseSchema).min(1).max(50).optional(),
+    autoLand: z.boolean().optional(),
 });
 export type Loop = z.infer<typeof LoopSchema>;
 
@@ -3451,15 +3474,13 @@ export const WorkflowStepSchema = z.object({
     // How the step's own ITERATIONS meet each other — the Ralph question, one level down from `handoff`. A
     // long-running step wants `fresh` (no context rot); a short refine-this step wants `continue`.
     context: LoopContextSchema,
-    /* NO CEILINGS HERE, and their absence is the design. A step used to declare its own iteration cap, idle-round
-     * cap and dollar cap — three numbers to answer before a workflow would run, on a page that already asks for
-     * a prompt and a goal. Nobody has a considered answer to "how many rounds", and a wrong guess is a step
-     * that gives up mid-job. A step now runs the way any agent session in this product runs: until it is done
-     * or until you stop it. The loop underneath keeps a runaway backstop of its own (WORKFLOW_STEP_ROUNDS in
-     * the scheduler) — a backstop is not a setting, and it is not something a user should have to think about.
-     */
+    /* Iteration/stall limits remain scheduler backstops rather than form questions. Spend is different: it is
+     * the one resource the owner cannot recover after an unattended fan-out, and the underlying loop already
+     * enforces it exactly. Absent remains uncapped for short, person-started work. */
+    maxSpendUsd: z.number().positive().optional(),
     agent: AgentProviderSchema.optional(),
     harness: AgentHarnessSchema.optional(),
+    account: z.string().optional(),
     model: z.string().optional(),
 });
 export type WorkflowStep = z.infer<typeof WorkflowStepSchema>;
@@ -3542,9 +3563,9 @@ export const WorkflowSchema = z.object({
      *
      * It was a per-workflow choice between worktrees and the shared /work tree, and the shared side never
      * earned its place: parallel steps on one tree collide, a `fresh` step there sees a half-finished
-     * predecessor's edits as if they were the workspace, and the branch names that make a fan-in READABLE
-     * (`git diff main...<branch>` — see workflow-brief) only exist on the isolated side. A setting whose other
-     * value is a subtle trap is not a setting, it is a mistake waiting for somebody to make it.
+     * predecessor's edits as if they were the workspace, and the pinned-base-to-branch comparisons that make
+     * a fan-in READABLE (see workflow-brief) only exist on the isolated side. A setting whose other value is a
+     * subtle trap is not a setting, it is a mistake waiting for somebody to make it.
      */
     // How many steps may run at once. Bounded because a fan-out of twelve is twelve provider sessions, twelve
     // worktrees and twelve times the burn rate — and because the machine this runs on is one machine.
@@ -3579,10 +3600,12 @@ export const WorkflowStepRunSchema = z.object({
     // What the step produced. Present once the step has written a valid document, which for a `json` output
     // means it matched the declared fields. This is what the steps downstream are given.
     document: LoopDocumentSchema.optional(),
-    /* The step's closing words, truncated. Two jobs, and it would be stored for either: it is the only output a
-     * `none` step has, and it is what a resumed run hands forward for a step that finished before the daemon
-     * died — without it, resuming would either re-run finished work or feed the next step a blank. */
+    /* A bounded preview of the step's closing words. The complete response lives at `reportPath`, so a long-form
+     * handoff is not silently reduced to its last few thousand characters and the ledger stays bounded. */
     report: z.string().optional(),
+    // Workspace-relative shared-state artifact containing the complete response. Fresh worktrees and a resumed
+    // daemon see the same .intentic mount, so downstream steps can read it without copying it into their prompt.
+    reportPath: z.string().optional(),
 });
 export type WorkflowStepRun = z.infer<typeof WorkflowStepRunSchema>;
 
@@ -3598,6 +3621,10 @@ export const WorkflowRunSchema = z.object({
      * that has been edited twice since), the boot resume needs the step definitions of a workflow that may have
      * been deleted, and a history row for a deleted workflow is otherwise an id and nothing else. */
     workflow: WorkflowSchema,
+    /* The workspace as this run began, one immutable commit per repository. Every fresh step branches from
+     * these exact commits, even if main moves while a wide fan-out is still opening worktrees. Handoffs use the
+     * same bases in their diff commands, so provenance works in nested repositories as well as at root. */
+    repos: z.array(RepoBaseSchema).min(1).max(50),
     /* WHAT THIS RUN WAS ASKED TO DO — the sentence the user typed when they started it, handed to every step
      * on top of its own prompt. Absent for a run started from the workflows page, which has no composer.
      *
@@ -3644,6 +3671,11 @@ export const WorkflowRunIdParamSchema = z.object({ runId: z.string() });
  * starts runs with no composer to read one from — a design whose steps already say what they want is complete
  * on its own, and only a design written as a shape needs today's sentence. */
 export const WorkflowRunStartSchema = WorkflowIdParamSchema.extend({ request: z.string().min(1).max(20_000).optional() });
+
+// Creation and replacement are deliberately distinct. An id collision on create is a conflict; an update of
+// a missing id is not an implicit create. That makes the daemon, rather than a browser naming convention, the
+// authority that prevents one saved design from overwriting another.
+export const WorkflowSaveSchema = z.object({ workflow: WorkflowSchema, create: z.boolean() });
 
 // ---- ci: pipeline runs on the workspace repos' github/gitlab remotes ----
 // The daemon maps each workspace repo to the CI project behind its remote (a connected github/gitlab

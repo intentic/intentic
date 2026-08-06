@@ -7,6 +7,8 @@ import {
     WorkflowSchema,
     type WorkflowRunState,
 } from "@intentic/sandbox-contract";
+import { rm } from "node:fs/promises";
+import { dirname, join } from "node:path";
 import { z } from "zod";
 import { jsonFile } from "../store/json-file.js";
 
@@ -21,16 +23,16 @@ import { jsonFile } from "../store/json-file.js";
  * readable (it snapshotted its definition; see WorkflowRunSchema.workflow).
  */
 
-// How many runs the ledger remembers, newest first. A run is a deliberate act and carries a full workflow
-// snapshot, so these are kilobytes each rather than bytes — generous, but not unbounded.
+// How many ENDED runs the ledger remembers, newest first. Running records are never retention candidates: a
+// scheduler still writing one must not lose its journal because enough newer runs happened to start.
 const RUNS_KEPT = 50;
 
 export interface WorkflowsStore {
     readonly list: () => Promise<Workflow[]>;
     readonly get: (id: string) => Promise<Workflow | undefined>;
-    // Upsert by id. An edit does NOT touch run history — history lives in the run ledger, keyed by run, and a
-    // run that already snapshotted this workflow is unaffected by what the design becomes next.
-    readonly upsert: (workflow: Workflow) => Promise<void>;
+    // Atomic create-or-update with the caller's intent made explicit. This is the collision guard: a create
+    // never overwrites and an update never invents a missing design.
+    readonly save: (workflow: Workflow, create: boolean) => Promise<"saved" | "conflict" | "missing">;
     // True when a workflow of that id existed and was removed.
     readonly remove: (id: string) => Promise<boolean>;
 }
@@ -43,11 +45,21 @@ export const fileWorkflowsStore = (path: string): WorkflowsStore => {
     return {
         list: () => file.read(),
         get: async (id) => (await file.read()).find((workflow) => workflow.id === id),
-        upsert: async (workflow) => {
+        save: async (workflow, create) => {
+            let outcome: "saved" | "conflict" | "missing" = "saved";
             await file.update((workflows) => {
                 const index = workflows.findIndex((entry) => entry.id === workflow.id);
-                return index === -1 ? [...workflows, workflow] : workflows.map((entry, at) => (at === index ? workflow : entry));
+                if (create && index !== -1) {
+                    outcome = "conflict";
+                    return workflows;
+                }
+                if (!create && index === -1) {
+                    outcome = "missing";
+                    return workflows;
+                }
+                return create ? [...workflows, workflow] : workflows.map((entry, at) => (at === index ? workflow : entry));
             });
+            return outcome;
         },
         remove: async (id) => {
             const before = (await file.read()).length;
@@ -110,11 +122,28 @@ export const fileWorkflowRunsStore = (path: string): WorkflowRunsStore => {
     const amendSteps = (runId: string, change: (step: WorkflowStepRun) => WorkflowStepRun): Promise<void> =>
         amend(runId, (run) => ({ ...run, steps: run.steps.map(change) }));
 
+    const artifacts = join(dirname(path), "workflow-runs");
+    const retained = (runs: readonly WorkflowRun[]): { readonly kept: WorkflowRun[]; readonly evicted: WorkflowRun[] } => {
+        const running = runs.filter((run) => run.state === "running");
+        const ended = runs.filter((run) => run.state !== "running").slice(0, RUNS_KEPT);
+        const kept = [...running, ...ended].toSorted((a, b) => b.startedAt - a.startedAt);
+        const ids = new Set(kept.map((run) => run.runId));
+        return { kept, evicted: runs.filter((run) => !ids.has(run.runId)) };
+    };
+    const dropArtifacts = (runs: readonly WorkflowRun[]): Promise<unknown> =>
+        Promise.all(runs.map((run) => rm(join(artifacts, run.runId), { recursive: true, force: true })));
+
     return {
         list: async () => (await file.read()).toSorted((a, b) => b.startedAt - a.startedAt),
         get: async (runId) => (await file.read()).find((run) => run.runId === runId),
         start: async (run) => {
-            await file.update((runs) => [run, ...runs].slice(0, RUNS_KEPT));
+            let evicted: WorkflowRun[] = [];
+            await file.update((runs) => {
+                const next = retained([run, ...runs]);
+                evicted = next.evicted;
+                return next.kept;
+            });
+            await dropArtifacts(evicted);
             return run;
         },
         patchStep: (runId, stepId, patch) => amendSteps(runId, (step) => (step.stepId === stepId ? { ...step, ...patch } : step)),
@@ -122,10 +151,22 @@ export const fileWorkflowRunsStore = (path: string): WorkflowRunsStore => {
             const wanted = new Set(stepIds);
             return amendSteps(runId, (step) => (wanted.has(step.stepId) ? { ...step, state, ...(detail !== undefined ? { detail } : {}) } : step));
         },
-        settle: (runId, state, now, detail) => amend(runId, (run) => ({ ...run, state, endedAt: now, ...(detail !== undefined ? { detail } : {}) })),
+        settle: async (runId, state, now, detail) => {
+            let evicted: WorkflowRun[] = [];
+            await file.update((runs) => {
+                const changed = runs.map((run) =>
+                    run.runId === runId ? { ...run, state, endedAt: now, ...(detail !== undefined ? { detail } : {}) } : run,
+                );
+                const next = retained(changed);
+                evicted = next.evicted;
+                return next.kept;
+            });
+            await dropArtifacts(evicted);
+        },
         setArchived: (runId, at) => amend(runId, ({ archivedAt: _was, ...run }) => (at === undefined ? run : { ...run, archivedAt: at })),
         forget: async (runId) => {
             await file.update((runs) => runs.filter((run) => run.runId !== runId));
+            await rm(join(artifacts, runId), { recursive: true, force: true });
         },
         countResume: async (runId) => {
             await amend(runId, (run) => ({ ...run, resumed: run.resumed + 1 }));
