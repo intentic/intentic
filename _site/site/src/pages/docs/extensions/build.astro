@@ -90,6 +90,12 @@ const ship = `npm run build          # produces dist/extension.js
 git add -f dist/extension.js
 git commit -m "release 1.0.0"
 git push && git rev-parse HEAD   # this sha is what you install`;
+
+const workspace = `.intentic/workspace-extensions/
+└── incidents/
+    ├── intentic-extension.json   # the manifest, at the root of the directory
+    ├── dist/extension.js         # the entry bundle, if it contributes UI
+    └── plugin/skills/...         # anything else the manifest points at`;
 ---
 
 <DocsLayout
@@ -179,11 +185,37 @@ git push && git rev-parse HEAD   # this sha is what you install`;
         turn; an <code>environment</code> fragment applies at the next image rebuild.
     </p>
 
-    <h2>Developing without a rebuild loop</h2>
+    <h2 id="workspace">Skip all of that: write it in the workspace</h2>
     <p>
-        Point the install at a branch head sha, iterate, and re-add at the new sha to pick up changes. The staged-checkout validation makes
-        that cheap and safe. Your extension's settings are stored by <code>publisher.name</code> on the daemon, not in the checkout, so they
-        survive every re-clone.
+        Steps 1 to 6 are the path for an extension other people will install. For one that only has to work in <em>your</em> sandbox, there
+        is a shorter one: put the directory under <code>.intentic/workspace-extensions/</code> and it runs from where it sits. No repo, no
+        commit, no sha, no install dialog.
+    </p>
+    <DocsCodeBlock code={workspace} lang="bash" title="Inside your sandbox" />
+    <p>
+        Everything else is identical, deliberately: the same manifest, the same <code>activate()</code>, the same contribution points, the
+        same row on <strong>Sandbox → Extensions</strong> with the same on/off switch and settings form. A workspace extension is not a
+        lesser kind of extension; it is the same kind that skipped the courier.
+    </p>
+    <p>
+        This is the path to hand your <strong>agent</strong>, and the reason it exists. "Build me a rail view that lists our incidents" is a
+        thing you can now ask for and have five minutes later, because the agent writes files into the workspace and the sandbox picks them
+        up — no publish, no install, and nothing to clone from a machine that doesn't have it yet.
+    </p>
+
+    <h3>The loop</h3>
+    <ul>
+        <li><strong>Edit, then reload.</strong> A workspace extension's identity is its bytes, not a commit, so rebuilding the bundle is the whole update. Press the reload button on the Extensions tab and the new code is running; there is nothing to re-add and no page refresh.</li>
+        <li><strong>Appearing and disappearing are just files.</strong> Creating the directory installs it and deleting the directory removes it. The tab follows the filesystem live.</li>
+        <li><strong>Mistakes are named.</strong> A directory that isn't a valid extension — no manifest, a manifest that doesn't parse, a <code>publisher.name</code> something else already owns — is listed under <em>Not loadable</em> with the reason, rather than silently ignored. Nothing here can shadow a baked or installed extension.</li>
+        <li><strong>The usual timing applies.</strong> Views, viewers, commands, settings and connector cards land at once; <code>agent</code> and <code>bin</code> from the agent's next turn; an <code>environment</code> fragment at the next image rebuild.</li>
+    </ul>
+
+    <h3>Graduating it</h3>
+    <p>
+        When it turns out to be good, move the directory into a repository, commit the built bundle, and install it the sha-pinned way from
+        step 6. Its identity, its switch and its stored settings all key off <code>publisher.name</code> rather than where the code came
+        from, so they survive the move — and every other sandbox can have it too.
     </p>
 
     <h2>Next</h2>

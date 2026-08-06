@@ -37,13 +37,18 @@ const agentPoints = [
 <DocsLayout
     pageId="extensions"
     heading="Extensions"
-    lead="intentic is a lean core plus an extension system. An extension is a git repo with a manifest, and unlike an editor plugin it can extend the agent as well as the UI."
+    lead="intentic is a lean core plus an extension system. An extension is a directory with a manifest — a git repo to share, a folder in your sandbox to just use — and unlike an editor plugin it can extend the agent as well as the UI."
 >
     <h2>What an extension is</h2>
     <p>
-        A git repository with an <code>intentic-extension.json</code> file at its root. That's the whole definition. The manifest names a
-        publisher, a name, and the things the extension contributes; if it contributes UI, the repo also holds a prebuilt bundle exporting an
-        <code>activate()</code> function.
+        A directory with an <code>intentic-extension.json</code> file at its root. That's the whole definition. The manifest names a
+        publisher, a name, and the things the extension contributes; if it contributes UI, the directory also holds a prebuilt bundle
+        exporting an <code>activate()</code> function.
+    </p>
+    <p>
+        Usually that directory is a git repository, because a repository is how an extension travels to somebody else's sandbox. It doesn't
+        have to be: a directory inside your own sandbox is already an extension, which is what makes "ask the agent to build me one" a
+        reasonable sentence.
     </p>
     <DocsCodeBlock code={manifest} lang="json" title="intentic-extension.json" />
     <p>
@@ -89,8 +94,10 @@ const agentPoints = [
     </p>
     <ul>
         <li>
-            <strong>The code is pinned to a commit.</strong> Installing takes a full 40-character commit sha, not a branch. The code you
-            approved is the code that runs, and an update is an explicit, visible act, never something that happens under you.
+            <strong>Code that comes from elsewhere is pinned to a commit.</strong> Installing takes a full 40-character commit sha, not a
+            branch. The code you approved is the code that runs, and an update is an explicit, visible act, never something that happens
+            under you. An extension you wrote in your own sandbox is pinned to nothing, for the same reason your own repositories aren't:
+            there is no upstream that could change it behind your back, only files you can read.
         </li>
         <li>
             <strong>The manifest is the approval surface.</strong> The install dialog shows exactly the declared contributions. Afterwards
@@ -124,9 +131,13 @@ const agentPoints = [
     <ul>
         <li><strong>Baked into the image</strong>: first-party ones are present in every sandbox and can be switched off, not removed.</li>
         <li><strong>Git-installed</strong>: everything else, as a sha-pinned clone into <code>.intentic/extensions/</code>, added from a repo URL or picked from a registry.</li>
+        <li>
+            <strong>Written in the workspace</strong>: a directory under <code>.intentic/workspace-extensions/</code>, run straight from
+            where it sits. No clone, no install step, no publishing — see <a href="/docs/extensions/build/#workspace">Build an extension</a>.
+        </li>
     </ul>
     <p>
-        Both land in one list on <strong>Sandbox → Extensions</strong>, with one on/off switch each. Switching one off unwires it
+        All three land in one list on <strong>Sandbox → Extensions</strong>, with one on/off switch each. Switching one off unwires it
         everywhere: no view, no command, no PATH entry, no connector card, no env var, no background process.
     </p>
 

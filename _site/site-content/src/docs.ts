@@ -81,22 +81,22 @@ export const docsSections: DocsSection[] = [
             {
                 id: "extensions",
                 title: "Extensions",
-                blurb: "A lean core plus a git repo with a manifest",
+                blurb: "A lean core plus a directory with a manifest",
                 meta: {
                     title: "Extensions · intentic docs",
                     description:
-                        "intentic is a lean core plus an extension system. An extension is a git repo with a manifest, and it extends the agent as well as the UI.",
+                        "intentic is a lean core plus an extension system. An extension is a directory with a manifest, and it extends the agent as well as the UI.",
                     datePublished: "2026-07-31",
                 },
             },
             {
                 id: "extensions/build",
                 title: "Build an extension",
-                blurb: "Author one end to end, from manifest to install",
+                blurb: "Author one end to end, in a repo or in your workspace",
                 meta: {
                     title: "Build an extension · intentic docs",
                     description:
-                        "Author an intentic extension end to end: the manifest, activate(), a rail view that reads from the daemon, and a sha-pinned install.",
+                        "Author an intentic extension end to end: manifest, activate(), a rail view — then a sha-pinned install, or run it straight from your workspace.",
                     datePublished: "2026-07-31",
                 },
             },
