@@ -2,6 +2,7 @@ import { eventIterator, oc } from "@orpc/contract";
 import { IntenticLineSchema } from "../events.js";
 import {
     CapabilitiesListSchema,
+    CapabilityCardParamSchema,
     CapabilityIdParamSchema,
     CapabilityLoginSchema,
     CapabilitySchema,
@@ -25,6 +26,9 @@ export const capabilitiesContract = {
     setSecret: oc.route({ method: "POST", path: "/capabilities/{id}/secret" }).input(CapabilitySecretInputSchema).output(OkSchema),
     status: oc.route({ method: "GET", path: "/capabilities/{id}/status" }).input(CapabilityIdParamSchema).output(CapabilityStatusSchema),
     marketplace: oc.route({ method: "POST", path: "/capabilities/marketplace" }).input(MarketplaceRequestSchema).output(MarketplaceSchema),
+    // "Not needed": stop offering this card until the workspace evidence behind it changes. Nothing is torn
+    // down and nothing is remembered about the card itself — only the evidence it was declined against.
+    dismiss: oc.route({ method: "DELETE", path: "/capabilities/recommendations/{card}" }).input(CapabilityCardParamSchema).output(OkSchema),
     // Start an agent-kind capability's interactive login (its declared loginCommand) in a visible terminal
     // session the user types into — device-code sign-in flows. Returns the session the panel attaches to.
     login: oc.route({ method: "POST", path: "/capabilities/{id}/login" }).input(CapabilityIdParamSchema).output(CapabilityLoginSchema),

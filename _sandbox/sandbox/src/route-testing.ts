@@ -25,6 +25,7 @@ import { ForbiddenError } from "./auth/auth.js";
 import type { AppEnv, OrpcContext } from "./context.js";
 import type { AutomationRecord, AutomationsStore } from "./automations/automations-store.js";
 import type { CapabilitiesStore } from "./capabilities/capabilities-store.js";
+import type { DismissalsStore, DismissedRecommendation } from "./capabilities/dismissals-store.js";
 import type { Services } from "./composition.js";
 import { createLogger } from "./logger.js";
 import type { ManagedProcesses } from "./processes/managed-processes.js";
@@ -85,6 +86,17 @@ export const memoryCapabilitiesStore = (initial: Capability[] = []): Capabilitie
             const existed = next.length !== capabilities.length;
             capabilities = next;
             return existed;
+        },
+    };
+};
+
+// An in-memory dismissals store — what the catalog's "not needed" writes to, without the fs.
+export const memoryDismissalsStore = (initial: DismissedRecommendation[] = []): DismissalsStore => {
+    let dismissed = [...initial];
+    return {
+        list: async () => dismissed,
+        dismiss: async (entry) => {
+            dismissed = [...dismissed.filter((existing) => existing.card !== entry.card), entry];
         },
     };
 };
@@ -273,6 +285,9 @@ export const services = (overrides: ServiceOverrides = {}): Services => {
         info: undefined,
         tools: [],
         capabilities: memoryCapabilitiesStore(),
+        // Nothing declined by default: every route suite wants the catalog answering as it does on a sandbox
+        // nobody has said no on yet.
+        capabilityDismissals: memoryDismissalsStore(),
         automations: memoryAutomationsStore(),
         // Empty approvals queue: agents.list projects it as `held`, and no suite here holds a wake.
         approvals: { list: async () => [], get: async () => undefined, add: async (approval) => ({ ...approval, id: "held-1" }), remove: async () => false },

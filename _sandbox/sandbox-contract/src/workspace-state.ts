@@ -66,6 +66,13 @@ const STATE_FILES = [
      * name every capability the target needs re-added before its environment matches again. */
     { path: ".intentic/capabilities.json", invalidates: ["capabilities", "environment", "panels"], portability: "secret" },
 
+    /* Which workspace-derived recommendations the owner has said "not needed" to, and the evidence each was
+     * declined against. It rides the `capabilities` key because the catalog is what changes when one lands, and
+     * it travels because a decision about what this workspace does NOT need is as much the owner's as the
+     * connections themselves — an export that dropped it would greet them on the target with the same
+     * suggestions they had already dismissed. Holds no credential: it is a card name and a file path. */
+    { path: ".intentic/capability-dismissals.json", invalidates: ["capabilities"], portability: "carry" },
+
     /* The overlay Dockerfile, four files that a single `.intentic/environment.` prefix used to cover. They are
      * split here because they answer PORTABILITY differently while answering invalidation identically, and the
      * split is the whole difference between an export that reproduces an environment and one that reproduces a

@@ -56,7 +56,7 @@ import { importForticlient, useVpn } from "../composables/sandbox/useVpn";
 const NAME_RE = /^[a-zA-Z0-9][a-zA-Z0-9_-]*$/;
 const URL_RE = /^https?:\/\/.+/i;
 
-const { hasCapability, recommendationFor, capabilities, error: listError, add, remove, refetch } = useCapabilities();
+const { hasCapability, recommendationFor, capabilities, error: listError, add, remove, refetch, dismissRecommendation } = useCapabilities();
 const { contributionOf, enabled: enabledExtensions, extensions, settled: extensionsSettled } = useExtensions();
 // VPN instances get live link state and connect/disconnect here too — the same daemon routes the Sandbox ▸
 // Status card drives, so a tunnel dialled from either place reads identically in both.
@@ -163,7 +163,7 @@ const nameCollision = computed(() => selectedInstances.value.some((instance) => 
  * grid used to call instancesOf() three times per card while drawing it, which is a scan of every capability in
  * the sandbox per call. */
 const cards = computed(() =>
-    allCards.value.map((entry) => ({ entry, connected: instancesOf(entry).length, recommendation: recommendationFor(entry.kind) })),
+    allCards.value.map((entry) => ({ entry, connected: instancesOf(entry).length, recommendation: recommendationFor(entry.id) })),
 );
 const connectedCards = computed(() => cards.value.filter((card) => card.connected > 0));
 const recommendedCards = computed(() => cards.value.filter((card) => card.recommendation !== undefined));
@@ -732,6 +732,19 @@ watch(
         for (const [key, value] of Object.entries(live?.config ?? {})) {
             values[key] = typeof value === `boolean` ? (value ? `on` : `off`) : String(value);
         }
+        /* WHAT THE WORKSPACE SCAN ALREADY KNOWS, filled in — the self-hosted instance url it read off a remote,
+         * and anything else a card would otherwise ask a user to go and look up. This is where the recommended
+         * flow earns its keep: a wrong instance url is one of the two ways connecting a repository host fails,
+         * and the scan has already answered it correctly.
+         *
+         * NEVER A SECRET, and the guard is deliberate rather than defensive: a credential is the one thing this
+         * flow will not put into a form on the user's behalf, even where one is sitting in a file it has read. */
+        for (const [key, value] of Object.entries(recommendationFor(entry.id)?.prefill ?? {})) {
+            const field = entry.fields.find((candidate) => candidate.key === key);
+            if (field !== undefined && field.secret !== true && field.value === undefined) {
+                values[key] = value;
+            }
+        }
         // Dev autofill (inert in prod): prefill secret fields with the values the last successful add used.
         // A remembered value that the daemon would now reject is skipped — it was saved before the check
         // existed, and silently re-offering it turns a convenience into a confusing 400 on submit.
@@ -771,6 +784,67 @@ const back = (): void => {
     void router.push({ name: `capabilities`, query: route.query });
 };
 
+/* --- THE GUIDED SETUP: the recommended cards, one at a time, in the order the daemon made them ---
+ *
+ * A queue rather than a wizard, and it steps through the ORDINARY cards: they already own the form, the "where
+ * this token is made, with these scopes" guide, and the warning about what applying one costs. A parallel
+ * wizard would be a second copy of all three, and the copy would drift.
+ *
+ * The walk lives in the URL and its contents are DERIVED, never snapshotted: connecting a card or declining it
+ * takes it out of the queue by itself, so there is no cursor to get out of step with what is actually connected,
+ * and a reload lands back where the user was. */
+const SETUP = `recommended`;
+const walking = computed(() => route.query[`setup`] === SETUP);
+const walkQueue = computed<CapabilityCatalogEntry[]>(() => recommendedCards.value.filter((card) => card.connected === 0).map((card) => card.entry));
+
+// The card to land on after this one is dealt with, read BEFORE the change that deals with it — after a connect
+// or a dismissal the current card has left the queue, and re-deriving "next" then would send a user who skipped
+// forward back to the top of the list.
+const nextAfter = (entry: CapabilityCatalogEntry): string | undefined => {
+    const at = walkQueue.value.findIndex((candidate) => candidate.id === entry.id);
+    return (at === -1 ? walkQueue.value[0] : walkQueue.value[at + 1])?.id;
+};
+// Nothing left ⇒ the walk is over, and the catalog it lands back on is the proof of what got connected.
+const goNext = (card: string | undefined): void => {
+    void router.push(
+        card === undefined
+            ? { name: `capabilities`, query: { ...route.query, setup: undefined } }
+            : { name: `capabilities`, params: { card }, query: route.query },
+    );
+};
+const startSetup = (): void => {
+    const first = walkQueue.value[0];
+    if (first !== undefined) {
+        void router.push({ name: `capabilities`, params: { card: first.id }, query: { ...route.query, setup: SETUP } });
+    }
+};
+const skip = (): void => {
+    if (selected.value !== undefined) {
+        goNext(nextAfter(selected.value));
+    }
+};
+
+const selectedRecommendation = computed(() => (selected.value === undefined ? undefined : recommendationFor(selected.value.id)));
+
+// "Not needed" — the suggestion goes quiet until its evidence changes, which is what keeps the Recommended
+// slice from becoming the strip people learn to stop reading. Nothing is torn down; the card stays in the
+// catalog exactly as it was, minus the badge.
+const dismiss = async (entry: CapabilityCatalogEntry): Promise<void> => {
+    const next = walking.value ? nextAfter(entry) : undefined;
+    error.value = null;
+    try {
+        await dismissRecommendation.mutateAsync(entry.id);
+    } catch (err) {
+        error.value = errorMessage(err, `Could not dismiss that suggestion.`);
+        return;
+    }
+    if (walking.value) {
+        goNext(next);
+        return;
+    }
+    back();
+};
+
 const buildInput = (entry: CapabilityCatalogEntry): AddCapabilityInput => {
     const config: Record<string, string> = {};
     for (const field of entry.fields) {
@@ -807,6 +881,9 @@ const submit = async (): Promise<void> => {
     submitting.value = true;
     error.value = null;
     const input = buildInput(entry);
+    // Where the walk goes next, decided against the queue as it stands now — the add below takes this card out
+    // of it, and asking afterwards would answer about a different list.
+    const next = walking.value ? nextAfter(entry) : undefined;
     try {
         await add(input, (line) => {
             // The install runs in a real tmux session — open ITS terminal tab, so what the user watches is the
@@ -844,6 +921,10 @@ const submit = async (): Promise<void> => {
             } else if (entry.kind === `browser` && awaitingLogin(added)) {
                 openLogin(String(added.config[`platform`]), entry.name);
             }
+            return;
+        }
+        if (walking.value) {
+            goNext(next);
             return;
         }
         back();
@@ -909,6 +990,17 @@ const submitLabel = computed(() =>
                         <button type="button" class="mb-4 inline-flex w-fit items-center gap-1 text-xs text-muted hover:text-content" @click="back">
                             <Icon name="arrow-left" class="text-2xs" /> {{ activeScope.label }}
                         </button>
+
+                        <!-- The walk's own strip: where the user is in it, and the way past a card they don't
+                             want to answer right now. A count of what is LEFT rather than "step 2 of 5" — a
+                             connected card leaves the queue, so any fixed position would start lying at the
+                             first success. -->
+                        <div v-if="walking" class="mb-4 flex items-center gap-2 rounded-lg border border-line bg-card px-3 py-2">
+                            <Icon name="sparkles" class="text-info" />
+                            <span class="text-xs text-content">Recommended setup</span>
+                            <span class="text-2xs text-muted">{{ walkQueue.length }} left</span>
+                            <Button class="ml-auto" label="Skip" size="small" severity="secondary" text @click="skip" />
+                        </div>
 
                         <div class="mb-4 flex items-center gap-3">
                             <BrandMark :size="32" :name="selected.name" :logo="selected.logo" :icon="entryIcon(selected)" />
@@ -1336,10 +1428,25 @@ const submitLabel = computed(() =>
                                 </label>
                             </template>
                             <CapabilityEffects :effects="liveEffects" />
-                            <!-- Why the grid badged this one — named here too, so the rebuild the hint asks for has a reason attached. -->
-                            <div v-if="recommendationFor(selected.kind)" :class="cmp.alertInfo()">
-                                Recommended: your workspace has <b>{{ recommendationFor(selected.kind)?.evidence }}</b
-                                >, which needs this capability to run.
+                            <!-- Why the grid badged this one — the claim, then the thing that was read to make
+                                 it, verbatim. The evidence is what makes this checkable instead of magic, and it
+                                 is also what "Not needed" is answering: the suggestion goes quiet for THIS, and
+                                 comes back by itself if the workspace changes under it. -->
+                            <div v-if="selectedRecommendation" :class="cmp.alertInfo()">
+                                <div class="flex items-start gap-3">
+                                    <div class="min-w-0 flex-1">
+                                        <div>Recommended — {{ selectedRecommendation.reason }}.</div>
+                                        <div class="mt-0.5 truncate font-mono text-2xs text-subtle">{{ selectedRecommendation.evidence }}</div>
+                                    </div>
+                                    <Button
+                                        label="Not needed"
+                                        size="small"
+                                        severity="secondary"
+                                        text
+                                        :loading="dismissRecommendation.isPending.value"
+                                        @click="dismiss(selected)"
+                                    />
+                                </div>
                             </div>
                             <p v-if="selected.hint" class="text-xs text-muted">{{ selected.hint }}</p>
 
@@ -1363,6 +1470,26 @@ const submitLabel = computed(() =>
 
             <!-- STEP 1: the catalog. -->
             <div v-else class="flex min-h-0 flex-1 flex-col gap-3">
+                <!-- WHAT THE WORKSPACE ITSELF ASKS FOR, offered as one thing to do rather than as badges to go
+                     and find. It sits above the filter because it is not one: it is the shortest path off this
+                     page for somebody who has just arrived and has no idea which of forty cards apply to them.
+                     Only ever shown when the scan actually found something — an empty version of this would be a
+                     permanent invitation to a walk with nothing in it. -->
+                <div v-if="walkQueue.length > 0" class="flex flex-wrap items-center gap-3 rounded-lg border border-info/30 bg-info/5 px-4 py-3">
+                    <Icon name="sparkles" class="text-info" />
+                    <div class="min-w-0 flex-1">
+                        <div class="text-sm text-content">
+                            {{ walkQueue.length }} {{ walkQueue.length === 1 ? "capability your" : "capabilities your" }} workspace asks for
+                        </div>
+                        <div class="text-xs text-muted">
+                            Each one is something your own code already points at. We fill in what we could read; you add only the credential.
+                        </div>
+                    </div>
+                    <Button label="Set them up" size="small" @click="startSetup">
+                        <template #icon><Icon name="arrow-right" /></template>
+                    </Button>
+                </div>
+
                 <!-- The bar sits on the grid it narrows, spanning it — one left edge and one right edge down the
                      pane. Picking the slice is the rail's own job and is not repeated here. -->
                 <FilterBar v-model="search" placeholder="Filter by name, what it does, kind…" :count="visibleCards.length" />
@@ -1417,9 +1544,11 @@ const submitLabel = computed(() =>
                                     <div v-if="card.entry.requires?.includes('devops') && !hasCapability('devops')" class="mt-1 text-xs text-muted">
                                         Requires DevOps
                                     </div>
-                                    <!-- Derived from what is checked out in /work, so the evidence path is shown rather than asserted. -->
-                                    <div v-if="card.recommendation" class="mt-1 text-xs text-info">
-                                        Your workspace has {{ card.recommendation.evidence }}
+                                    <!-- Derived from what is checked out in the workspace, so the claim comes
+                                         with the thing that was read to make it rather than being asserted. -->
+                                    <div v-if="card.recommendation" class="mt-1 text-xs text-info">{{ card.recommendation.reason }}</div>
+                                    <div v-if="card.recommendation" class="truncate font-mono text-2xs text-subtle">
+                                        {{ card.recommendation.evidence }}
                                     </div>
                                 </div>
                             </button>

@@ -94,19 +94,29 @@ export function useCapabilities() {
         onSuccess: invalidate,
     });
 
+    // "Not needed": stop suggesting this card until the workspace evidence behind it changes. Only the catalog
+    // moves, so only the capability list is refreshed — nothing is installed, removed or recomposed.
+    const dismissRecommendation = useMutation({
+        mutationFn: (card: string) => sandboxJson(`/capabilities/recommendations/${encodeURIComponent(card)}`, { method: `DELETE` }),
+        onSuccess: () => queryClient.invalidateQueries({ queryKey: QUERY_KEY }),
+    });
+
     const capabilities = computed<CapabilitySummary[]>(() => query.data.value?.capabilities ?? []);
     const recommendations = computed<CapabilityRecommendation[]>(() => query.data.value?.recommendations ?? []);
     return {
         capabilities,
         // Presence of a kind = the user activated it (status reports its live health separately).
         hasCapability: (kind: string): boolean => capabilities.value.some((capability) => capability.kind === kind),
-        // What the workspace asks for but isn't activated — the evidence path is rendered, so the card can say why.
-        recommendationFor: (kind: string): CapabilityRecommendation | undefined =>
-            recommendations.value.find((recommendation) => recommendation.kind === kind),
+        // What the workspace asks for but isn't activated, by CATALOG CARD — github, gitlab and every other
+        // connector share the `cli` kind, so a kind would badge all of them at once. The evidence is rendered
+        // verbatim beside the claim, so the card says why rather than asking to be trusted.
+        recommendationFor: (card: string): CapabilityRecommendation | undefined =>
+            recommendations.value.find((recommendation) => recommendation.card === card),
         error,
         isLoading: query.isLoading,
         refetch: query.refetch,
         add,
         remove,
+        dismissRecommendation,
     };
 }

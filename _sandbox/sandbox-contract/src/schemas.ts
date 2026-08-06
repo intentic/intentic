@@ -2775,12 +2775,29 @@ export const CapabilitySummarySchema = z.object({
     status: CapabilityStatusSchema,
     config: z.record(z.string(), z.union([z.string(), z.number(), z.boolean()])),
 });
-// A capability the WORKSPACE asks for but the manifest doesn't carry — derived from what is checked out under
-// /work, not from anything the user configured. It exists because the failure it prevents is illegible: a
-// compose-backed dev database (`pnpm db:up`) dies on a missing /var/run/docker.sock, and nothing on that error
-// points at the one-time privileged rebuild that fixes it. `evidence` is the workspace-relative path that
-// triggered it, rendered verbatim so the claim is checkable rather than magic.
-export const CapabilityRecommendationSchema = z.object({ kind: CapabilityKindSchema, evidence: z.string() });
+/* A capability the WORKSPACE asks for but the manifest doesn't carry — derived from what is checked out under
+ * /work, not from anything the user configured. It exists because the failures it prevents are illegible: a
+ * compose-backed dev database (`pnpm db:up`) dies on a missing /var/run/docker.sock, and nothing on that error
+ * points at the one-time privileged rebuild that fixes it; a workspace full of GitHub repos gets an agent that
+ * cannot read one issue until somebody thinks to go looking for the card.
+ *
+ * KEYED BY CATALOG CARD, NOT BY KIND, because github, gitlab, komodo and every other connector share the single
+ * `cli` kind — a kind cannot say which card to open, and matching on one badged all of them at once.
+ *
+ * WHAT IS STORED IS WHAT WAS SEEN. `evidence` is the artifact itself — a workspace-relative path, a git remote —
+ * rendered verbatim so the claim is checkable rather than believed, and `reason` is the same claim in the user's
+ * words with the evidence NOT repeated into it. A recommendation is re-derived on every read rather than
+ * remembered, so one whose evidence has since moved simply stops being made.
+ *
+ * `prefill` is the non-secret config the scan could read (a self-hosted instance url, a Komodo core) — it fills
+ * the card's form so the user supplies only the credential. Secrets are NEVER in here, even when one is sitting
+ * in a checked-in file: the flow points at such a file as evidence, it does not absorb what is in it. */
+export const CapabilityRecommendationSchema = z.object({
+    card: z.string(),
+    evidence: z.string(),
+    reason: z.string(),
+    prefill: z.record(z.string(), z.string()),
+});
 export type CapabilityRecommendation = z.infer<typeof CapabilityRecommendationSchema>;
 export const CapabilitiesListSchema = z.object({
     capabilities: z.array(CapabilitySummarySchema),
@@ -2790,6 +2807,10 @@ export const CapabilitiesListSchema = z.object({
     recommendations: z.array(CapabilityRecommendationSchema).default([]),
 });
 export const CapabilityIdParamSchema = z.object({ id: z.string() });
+// DELETE /capabilities/recommendations/{card}: the user said this one is not wanted. The EVIDENCE it was
+// declined against is recorded daemon-side rather than sent, so the client cannot dismiss a claim other than the
+// one it was shown — and so the recommendation comes back by itself when the workspace changes under it.
+export const CapabilityCardParamSchema = z.object({ card: z.string() });
 // POST /capabilities/{id}/secret body: replace just the capability's secret field (its key is per-kind, see the
 // sandbox's secretField) and re-run its idempotent apply — the /secrets page's edit path.
 export const CapabilitySecretInputSchema = z.object({ id: z.string(), value: z.string().min(1) });

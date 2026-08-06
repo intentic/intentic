@@ -49,6 +49,7 @@ vi.mock(`../composables/extensions/useCapabilities`, () => ({
         add: vi.fn(),
         remove: { mutateAsync: vi.fn(), isPending: ref(false) },
         refetch: vi.fn(),
+        dismissRecommendation: { mutateAsync: vi.fn(), isPending: ref(false) },
     }),
     browseMarketplace: vi.fn(),
 }));

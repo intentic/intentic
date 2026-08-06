@@ -29,7 +29,11 @@ export const createCapabilitiesRoutes = (services: Services) => {
     const adding = new Set<string>();
     return {
         list: i.list.handler(async () => {
-            const [capabilities, connectors] = await Promise.all([services.capabilities.list(), contributionRegistry(services)]);
+            const [capabilities, connectors, dismissed] = await Promise.all([
+                services.capabilities.list(),
+                contributionRegistry(services),
+                services.capabilityDismissals.list(),
+            ]);
             const [rows, recommendations] = await Promise.all([
                 Promise.all(
                     capabilities.map(async (capability) => ({
@@ -39,7 +43,7 @@ export const createCapabilitiesRoutes = (services: Services) => {
                         config: echoConfig(capability, connectors),
                     })),
                 ),
-                capabilityRecommendations(services.workspace.root, capabilities),
+                capabilityRecommendations(services.workspace.root, capabilities, dismissed),
             ]);
             return { capabilities: rows, recommendations };
         }),
@@ -162,6 +166,22 @@ export const createCapabilitiesRoutes = (services: Services) => {
             return registry[capability.kind].status(ctx, capability.id, capability.config);
         }),
         marketplace: i.marketplace.handler(async ({ input }) => browseMarketplace(ctx, input.url, input.token)),
+        // "Not needed", recorded against the evidence the card is CURRENTLY recommended on — re-derived here
+        // rather than taken from the client, so the dismissal answers the claim that was actually on screen and
+        // lapses by itself when the workspace moves. A card that is no longer recommended has nothing to record.
+        dismiss: i.dismiss.handler(async ({ input }) => {
+            const recommendations = await capabilityRecommendations(
+                services.workspace.root,
+                await services.capabilities.list(),
+                await services.capabilityDismissals.list(),
+            );
+            const recommendation = recommendations.find((candidate) => candidate.card === input.card);
+            if (recommendation === undefined) {
+                throw new ORPCError("NOT_FOUND", { message: "nothing is being recommended for that card" });
+            }
+            await services.capabilityDismissals.dismiss({ card: input.card, evidence: recommendation.evidence });
+            return { ok: true } as const;
+        }),
         // An agent capability's interactive sign-in: run its loginCommand in a live window of the capability's
         // job session, typed via send-keys (the managed-processes pattern) so the USER completes the flow in
         // the attached terminal panel — device codes, browser links, pasted tokens all work. Deliberately not

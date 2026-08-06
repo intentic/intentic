@@ -47,6 +47,7 @@ import { fileWorkflowRunsStore, fileWorkflowsStore, type WorkflowRunsStore, type
 import { type ChoresStore, fileChoresStore, LEDGER_FILE, PROBES_FILE } from "./chores/chores-store.js";
 import { createProbeRunner, type ProbeRunner } from "./chores/probe-runner.js";
 import { type CapabilitiesStore, fileCapabilitiesStore } from "./capabilities/capabilities-store.js";
+import { type DismissalsStore, fileDismissalsStore } from "./capabilities/dismissals-store.js";
 import { type CiStore, fileCiStore } from "./ci/ci-store.js";
 import { fileVerifyStore, type VerifyStore } from "./workspace/verify-store.js";
 import { type CiHookReconciler, createCiHookReconciler } from "./ci/hooks.js";
@@ -245,6 +246,9 @@ export interface Services {
     readonly tools: readonly AgentTool[];
     // The unified capability manifest (.intentic/capabilities.json) — DevOps/mcp/service/integration.
     readonly capabilities: CapabilitiesStore;
+    // Recommendations the owner has declined (.intentic/capability-dismissals.json), so a "no" survives the
+    // page load that would otherwise re-derive the same suggestion straight back onto the catalog.
+    readonly capabilityDismissals: DismissalsStore;
     // Scheduled agent wake-ups (.intentic/automations.json) — the scheduler polls it; /automations edits it.
     readonly automations: AutomationsStore;
     // Ralph loops (.intentic/loops.json): the pump drives them, /loops starts and stops them, and the record is
@@ -701,6 +705,7 @@ export const createServices = (config: Config, logger: Logger): Services => {
         info,
         tools: internalTools(config.intenticAgentTools),
         capabilities,
+        capabilityDismissals: fileDismissalsStore(statePath(workspace.root, ".intentic/capability-dismissals.json")),
         ciStore,
         verifyStore,
         ciRuns: createRunsCache(),

@@ -7,7 +7,16 @@ import { expect, test } from "vitest";
 
 import { createApp } from "../app.js";
 
-import { clientFor, collect, errorCode, fakeFiles, memoryCapabilitiesStore, services, tempWorkspace } from "../route-testing.js";
+import {
+    clientFor,
+    collect,
+    errorCode,
+    fakeFiles,
+    memoryCapabilitiesStore,
+    memoryDismissalsStore,
+    services,
+    tempWorkspace,
+} from "../route-testing.js";
 
 /* The capabilities routes, driven over the daemon's HTTP surface exactly as the browser drives them.
  * Split out of app.integration.test.ts, which had grown to 116 tests across every route in the daemon —
@@ -37,7 +46,24 @@ test("capabilities.list recommends docker when a repo in the workspace carries a
     const workspace = tempWorkspace([{ name: "app" }]);
     writeFileSync(join(workspace.root, "app", "docker-compose.yml"), "");
     const client = clientFor(createApp(services({ workspace, capabilities: memoryCapabilitiesStore([]) })));
-    expect((await client.capabilities.list()).recommendations).toEqual([{ kind: "docker", evidence: "app/docker-compose.yml" }]);
+    expect((await client.capabilities.list()).recommendations).toEqual([
+        { card: "docker", evidence: "app/docker-compose.yml", reason: "your workspace has a compose stack to run", prefill: {} },
+    ]);
+});
+
+// "Not needed" is the other half of making suggestions at all: a surface that re-derives them on every load and
+// cannot be told no becomes the strip people stop reading. The evidence is recorded daemon-side, so the record
+// answers the claim that was on screen rather than whatever the client chose to send.
+test("capabilities.dismiss takes a recommendation off the catalog and records what it was declined against", async () => {
+    const workspace = tempWorkspace([{ name: "app" }]);
+    writeFileSync(join(workspace.root, "app", "docker-compose.yml"), "");
+    const dismissals = memoryDismissalsStore();
+    const client = clientFor(createApp(services({ workspace, capabilities: memoryCapabilitiesStore([]), capabilityDismissals: dismissals })));
+    expect(await client.capabilities.dismiss({ card: "docker" })).toEqual({ ok: true });
+    expect(await dismissals.list()).toEqual([{ card: "docker", evidence: "app/docker-compose.yml" }]);
+    expect((await client.capabilities.list()).recommendations).toEqual([]);
+    // Nothing is being suggested for a card nobody was offered — there is no claim to record a "no" against.
+    expect(await errorCode(client.capabilities.dismiss({ card: "github" }))).toBe("NOT_FOUND");
 });
 
 test("capabilities.add composes the entry's image fragment into the overlay and nags for the rebuild; remove drops it", async () => {
