@@ -117,8 +117,9 @@ because `/about/` shares it.
    Creator-forward: the name, the role, three profile chips, then four cards — *why trust intentic ·
    open source first · it builds itself · honest about its age*. Copy in `about.ts`, shared with
    `/about/` so the two cannot drift. (P1, P4)
-7. **Get connected (`#connect`)** — the speed proof: ① Sign in with Google ② Name your sandbox
-   ③ Paste one command, with the real command block. (P3)
+7. **Get connected (`#connect`)** — the speed proof: ① Sign in with Google ② The sandbox is waiting
+   (made and named for you) ③ Paste one command, with the real command block. Two of the three are things
+   the visitor does not have to do, which is the point the band is making. (P3)
 8. **FAQ (`#faq`)** — see below.
 9. **Final CTA** — restate the claim + `Get started free` · `See the source`. (close)
 

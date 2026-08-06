@@ -285,15 +285,15 @@ export const landingContent: LandingContent = {
     connect: {
         eyebrow: "Get connected",
         heading: "One command, and an agent has a home.",
-        sub: "Sign in, name the sandbox, paste one command on the machine that should host it. The workspace opens the moment it reports in.",
+        sub: "Sign in, then paste one command on the machine that should host it. The workspace opens the moment it reports in.",
         steps: [
             {
                 title: "Sign in with Google",
                 body: "No forms, no card. It stores your identity and the sandbox's URL, nothing else.",
             },
             {
-                title: "Name the sandbox",
-                body: "You get a private tunnel under intentic's own domain. No Cloudflare account needed.",
+                title: "The sandbox is waiting",
+                body: "Made and named for you, with a private tunnel under intentic's own domain. No Cloudflare account needed.",
             },
             {
                 title: "Paste one command",

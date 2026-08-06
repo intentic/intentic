@@ -135,11 +135,3 @@ export const daemonUrlProblem = (raw: string): string | undefined => {
     }
     return normalizeDaemonUrl(trimmed) === undefined ? `That doesn't look like a domain — for example sandbox.example.com.` : undefined;
 };
-
-// A sensible sandbox name derived from its address, so the attach path asks for one paste and nothing else. The
-// leftmost label is what distinguishes sandboxes on a shared zone (sandbox.example.com, dev.example.com); the
-// field stays editable, this is only the default.
-export const nameFromDaemonUrl = (daemonUrl: string): string => {
-    const { hostname } = new URL(daemonUrl);
-    return hostname.split(`.`)[0] ?? hostname;
-};

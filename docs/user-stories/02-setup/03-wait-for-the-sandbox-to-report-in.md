@@ -8,7 +8,7 @@ The wait also says which wait it is, because there are two and they are nothing 
 
 When the wait is not going well, the page says so rather than spinning. A platform it cannot reach is a different problem from a sandbox that has not started, and I need to know which one I have before I go looking at Docker. If nothing has reached us at all after a while, it says the likeliest reason out loud — that the command is still on my clipboard — and offers it to me again. And once I do have a workspace, the way back into it is on this page too — a returning user who wandered here should not be trapped in setup.
 
-Leaving in the middle is normal, and coming back has to be too. If I name a sandbox, mean to paste the command on the other machine later, and close the browser, then the next time I sign in I land back on setup with that sandbox still in hand — not in a workspace shell for a machine that was never started, and not in front of a blank name field that hides the one I already made. A sandbox that has never reported in is not a workspace: it does not open one, and where it appears at all it says so and leads back here.
+Leaving in the middle is normal, and coming back has to be too. If I get as far as the command, mean to paste it on the other machine later, and close the browser, then the next time I sign in I land back on setup with that sandbox still in hand — not in a workspace shell for a machine that was never started, and not in front of a freshly made one that hides the one I already had. A sandbox that has never reported in is not a workspace: it does not open one, and where it appears at all it says so and leads back here.
 
 ## Acceptance criteria
 

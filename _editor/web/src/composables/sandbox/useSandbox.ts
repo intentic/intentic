@@ -138,18 +138,23 @@ const create = async (name: string): Promise<SandboxSummary> => {
     return sandbox;
 };
 
-// Rename the active sandbox and/or set its switcher logo — `image: null` clears it (owner-only; the API
-// enforces). Writing the returned row into the list cache is what repaints the rail chip in the same tick as
-// the hub's own tile. No-op when nothing is active.
-const update = async (input: { name?: string; image?: string | null }): Promise<void> => {
-    if (activeSandboxId.value === undefined) {
-        return;
-    }
-    const updated = await apiClient.sandbox.update({ sandboxId: activeSandboxId.value, ...input });
+// Rename a sandbox and/or set its switcher logo — `image: null` clears it (owner-only; the API enforces).
+// Writing the returned row into the list cache is what repaints the rail chip in the same tick as the hub's
+// own tile.
+//
+// The sandbox is NAMED by the caller rather than taken from the active selection, because the two are not the
+// same sandbox everywhere: /setup renames the row it just created while `reconcileActive` can still be moving
+// the selection off it (a just-created row is briefly absent from a server list read), and renaming whichever
+// sandbox happens to be selected would quietly rename a different one of the user's machines. The updated row
+// is handed back for the same reason — /setup holds its own reference to it, and everything the install command
+// derives from the name (the sync folder) would otherwise go on describing the old one.
+const update = async (sandboxId: string, input: { name?: string; image?: string | null }): Promise<SandboxSummary> => {
+    const updated = await apiClient.sandbox.update({ sandboxId, ...input });
     await queryClient.cancelQueries({ queryKey: SANDBOX_LIST_KEY });
     queryClient.setQueryData<SandboxSummary[]>(SANDBOX_LIST_KEY, (live = []) =>
         live.map((sandbox) => (sandbox.id === updated.id ? updated : sandbox)),
     );
+    return updated;
 };
 
 // Point a sandbox at a URL the owner runs it behind (setup's "I already have one running" path) and make it

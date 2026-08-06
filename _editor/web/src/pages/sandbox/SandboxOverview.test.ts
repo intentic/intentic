@@ -25,7 +25,7 @@ vi.hoisted(() => {
 // card + update prompt below the header are separate surfaces with their own daemon calls — stubbed so this
 // mounts the identity block and nothing else.
 const active = ref<SandboxSummary | undefined>(undefined);
-const update = vi.fn<(input: { name?: string; image?: string | null }) => Promise<void>>().mockResolvedValue(undefined);
+const update = vi.fn<(sandboxId: string, input: { name?: string; image?: string | null }) => Promise<void>>().mockResolvedValue(undefined);
 vi.mock(`../../composables/sandbox/useSandbox`, () => ({
     useSandbox: () => ({ active, update, daemonUrl: ref(undefined), reachable: ref(true) }),
 }));
@@ -137,7 +137,7 @@ it(`saves the picked file on its own, fitted rather than cropped`, async () => {
     const el = mount(sandboxRow());
     await pickFile(el);
     expect(fileToSquareDataUrl).toHaveBeenCalledWith(expect.any(File), `contain`);
-    expect(update).toHaveBeenCalledWith({ image: `data:image/webp;base64,NEW` });
+    expect(update).toHaveBeenCalledWith(`s1`, { image: `data:image/webp;base64,NEW` });
 });
 
 // A rename must not ride along with a logo, and a logo must not ride along with a rename — the two controls are
@@ -146,7 +146,7 @@ it(`sends the logo without the name`, async () => {
     const el = mount(sandboxRow());
     await pickFile(el);
     expect(update).toHaveBeenCalledTimes(1);
-    expect(update.mock.calls[0]?.[0]).not.toHaveProperty(`name`);
+    expect(update.mock.calls[0]?.[1]).not.toHaveProperty(`name`);
 });
 
 // The way back to the monogram. `null` rather than an omitted field is the whole point: an absent `image` means
@@ -165,7 +165,7 @@ it(`takes a logo back off with an explicit null`, async () => {
         return button!;
     });
     remove.click();
-    await vi.waitFor(() => expect(update).toHaveBeenCalledWith({ image: null }));
+    await vi.waitFor(() => expect(update).toHaveBeenCalledWith(`s1`, { image: null }));
 });
 
 // An unreadable file is the FILE's fault, and it has to be reported as that rather than as a failed save — and

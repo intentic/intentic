@@ -5,7 +5,7 @@ import { sandboxSubdomain, syncFolder } from "@intentic/sandbox-contract";
 import { cmp, Code, commandLang, CopyButton, InfoHint, Segmented, StepSection, useDevice, useOsPreference } from "@intentic/ui";
 import Button from "primevue/button";
 import Checkbox from "primevue/checkbox";
-import { computed, onMounted, onUnmounted, ref, watch } from "vue";
+import { computed, nextTick, onMounted, onUnmounted, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { track } from "../composables/analytics";
 import { apiClient } from "../composables/useApi";
@@ -24,9 +24,12 @@ import SetupCompose from "./SetupCompose.vue";
 import SetupHandoff from "./SetupHandoff.vue";
 import SetupRunDetails from "./SetupRunDetails.vue";
 import type { ComposeArgs } from "./setupCompose";
-import { type AttachOutcome, daemonUrlProblem, nameFromDaemonUrl, normalizeDaemonUrl, probeDaemon } from "./setupAttach";
+import { type AttachOutcome, daemonUrlProblem, normalizeDaemonUrl, probeDaemon } from "./setupAttach";
+import { autoSandboxName } from "./setupName";
 
-/* The setup gate's destination (outside the workspace shell). Step 2 offers two ways to make the sandbox reachable:
+/* The setup gate's destination (outside the workspace shell). Step 1 asks for NOTHING: the sandbox is created on
+ * arrival under a name this page picks (autoCreate + setupName.ts), so the step opens already done and carries a
+ * rename rather than a form. Step 2 offers two ways to make the sandbox reachable:
  *   • intentic-provided (default): the platform provisions a Cloudflare tunnel under its OWN zone; the user needs no
  *     Cloudflare of their own. The subdomain is fixed (server-derived from the connection token).
  *   • own Cloudflare: the user pastes their token, picks a zone, and edits the subdomain; the sandbox creates its own
@@ -58,7 +61,8 @@ import { type AttachOutcome, daemonUrlProblem, nameFromDaemonUrl, normalizeDaemo
  * the sandbox itself — its `name` and its `created` row — is one value read by both. That is what makes a lane
  * switch lossless in either direction at any point: a name typed before switching survives, and a row created by
  * an attach whose probe passed but whose attach then failed continues as the provision lane's sandbox instead of
- * being stranded. `targetKey` is gated on the lane for the same reason in reverse — minting is what buys the
+ * being stranded. The attach lane shows that name as a field and the provision lane behind a rename link, but
+ * both edit the same buffer and commit it the same way (saveName). `targetKey` is gated on the lane for the same reason in reverse — minting is what buys the
  * Cloudflare tunnel, and an attached sandbox is reached over the user's own domain, so it must not mint. */
 
 const sandbox = useSandbox();
@@ -72,13 +76,21 @@ const { mobile } = useDevice();
 const { user } = useAuth();
 const { getIdToken, warmIdToken } = useGoogleIdentity();
 
-// The sandbox created in this setup session (holds its connection token). Null until the user names + creates it.
+// The sandbox this page is setting up (holds its connection token). Null only while the auto-create below is in
+// flight, or after it failed.
 const created = ref<SandboxSummary | null>(null);
 // True when we arrived via ?sandbox=<id> and resumed an existing sandbox (vs. created one here now).
 const resuming = ref(false);
+// The name on screen: the created row's, until the user edits it in the rename box (or the attach lane's field).
 const name = ref(``);
 const creating = ref(false);
 const error = ref<string | null>(null);
+
+// The rename box, open only when asked for. The name is a default nobody typed, so changing it has to be one
+// click away — and it must never be a gate: setup runs to completion whether or not this is ever touched.
+const renaming = ref(false);
+const savingName = ref(false);
+const nameInput = ref<HTMLInputElement | null>(null);
 
 // Is there a workspace to go BACK to — some sandbox other than the one being set up here that has actually
 // reported in. Both halves matter: a row this page created moments ago is not somewhere to return to, and
@@ -137,21 +149,22 @@ const attachOutcome = ref<AttachOutcome | undefined>(undefined);
 
 const normalizedDomain = computed(() => normalizeDaemonUrl(domain.value));
 const domainProblem = computed(() => daemonUrlProblem(domain.value));
-// What a bare paste would be named, so the attach lane can ask for the domain and nothing else. It only ever
-// fills the field's PLACEHOLDER — a name the user actually typed (in either lane) always wins.
-const derivedName = computed(() => (normalizedDomain.value === undefined ? `` : nameFromDaemonUrl(normalizedDomain.value)));
-const attachedName = computed(() => (name.value.trim() === `` ? derivedName.value : name.value.trim()));
 
-// Step 1 collapses to a summary once the sandbox exists — its title carries the name — in both lanes: an
-// already-named row is why the attach lane stops asking for a name at all.
+// Step 1 is a summary of a sandbox that already exists — its title carries the name — in both lanes. The title
+// reads the SAVED row rather than the edit buffer, so it changes when a rename is committed instead of jittering
+// under the user's typing.
 // A resumed sandbox that has ACTUALLY run before is being reconnected; one that was named and never started is
 // just being picked back up, and calling that "Reconnect" claims a history it doesn't have.
 const neverStarted = computed(() => created.value !== null && created.value.lastSeenAt === null);
 const step1Title = computed(() => {
-    if (created.value !== null) {
-        return resuming.value && lane.value === `provision` && !neverStarted.value ? `Reconnect "${name.value}"` : `Sandbox: ${name.value}`;
+    const row = created.value;
+    if (row !== null) {
+        return resuming.value && lane.value === `provision` && !neverStarted.value ? `Reconnect "${row.name}"` : `Sandbox: ${row.name}`;
     }
-    return lane.value === `attach` ? `Connect your sandbox` : `Name your sandbox`;
+    if (lane.value === `attach`) {
+        return `Connect your sandbox`;
+    }
+    return creating.value ? `Creating your sandbox…` : `Your sandbox`;
 });
 
 // Step 3 shows one command at a time; the preferred OS is a persisted singleton shared across screens.
@@ -518,21 +531,75 @@ const check = async (): Promise<void> => {
     }
 };
 
-// Create a new sandbox (mints its connection token) and make it active. Entry point of the flow — the mint
-// watcher below takes over the moment `created` holds a sandbox.
-const createSandbox = async (): Promise<void> => {
-    if (name.value.trim() === `` || creating.value) {
+/* Create the sandbox (which mints its connection token) and make it active. Entry point of the flow — the mint
+ * watcher below takes over the moment `created` holds a sandbox — and it runs WITHOUT BEING ASKED FOR, on
+ * arrival, which is the point.
+ *
+ * Step 1 used to be a form: an empty field, and a Create button that stayed dead until a word was typed. That
+ * word buys nothing at this moment — a name only ever tells sandboxes apart in the switcher, and the first one
+ * has nothing to be told apart from — while it costs the two things onboarding can least afford: a decision
+ * before anything has been seen, and the seconds of tunnel provisioning that cannot start until a row exists.
+ * Naming it here starts step 2's mint immediately, so the first screen a new account sees is the command.
+ *
+ * The name is still the user's (setupName.ts picks it, the summary renames it), it is simply no longer a gate.
+ */
+const autoCreate = async (): Promise<void> => {
+    if (creating.value) {
         return;
     }
     creating.value = true;
     error.value = null;
     try {
-        created.value = await sandbox.create(name.value.trim());
+        // A name already in the box wins — the attach lane offers one before any row exists, and this is also
+        // the retry after a failed create, where re-picking the default would throw that typing away.
+        const typed = name.value.trim();
+        const row = await sandbox.create(typed === `` ? autoSandboxName(sandbox.sandboxes.value.map((entry) => entry.name)) : typed);
+        created.value = row;
+        name.value = row.name;
     } catch (err) {
         error.value = errorMessage(err, `Could not create your sandbox.`);
     } finally {
         creating.value = false;
     }
+};
+
+// Open the rename box on the row's own name, selected — the name was chosen for the user, so the likeliest
+// next keystroke is a replacement rather than an edit.
+const startRename = async (): Promise<void> => {
+    name.value = created.value?.name ?? ``;
+    error.value = null;
+    renaming.value = true;
+    await nextTick();
+    nameInput.value?.select();
+};
+
+// Commit the rename box (and the attach lane's Name field, which is the same edit under a different roof).
+// Writing the row back is what keeps everything derived from the name honest — the step title, and the sync
+// folder the install command carries.
+const saveName = async (): Promise<void> => {
+    const row = created.value;
+    const trimmed = name.value.trim();
+    if (row === null || savingName.value || trimmed === `` || trimmed === row.name) {
+        renaming.value = false;
+        return;
+    }
+    savingName.value = true;
+    error.value = null;
+    try {
+        created.value = await sandbox.update(row.id, { name: trimmed });
+        renaming.value = false;
+    } catch (err) {
+        error.value = errorMessage(err, `Could not rename your sandbox.`);
+    } finally {
+        savingName.value = false;
+    }
+};
+
+// Leaving the rename box puts the row's own name back in it, so an abandoned edit doesn't sit there looking saved.
+const cancelRename = (): void => {
+    name.value = created.value?.name ?? ``;
+    renaming.value = false;
+    error.value = null;
 };
 
 // Connect a sandbox that is ALREADY reachable: probe the pasted address from this browser, and only once the
@@ -562,10 +629,19 @@ const connectDomain = async (): Promise<void> => {
             attachOutcome.value = outcome;
             return;
         }
-        // Reuses the row when there already is one — a resumed sandbox, or one a previous attempt created whose
-        // attach then failed — so retrying never leaves a stray sandbox behind.
-        const row = created.value ?? (await sandbox.create(attachedName.value));
-        created.value = row;
+        // There is normally a row already — one is created on arrival — and reusing it is what keeps a retry
+        // after a failed attach from leaving a stray sandbox behind. The create here covers the one case where
+        // there isn't: a lane switch made while the arrival create was failing.
+        if (created.value === null) {
+            await autoCreate();
+        }
+        const row = created.value;
+        if (row === null) {
+            return;
+        }
+        // The Name field is the same edit the summary's rename box makes, so it is committed on the way through
+        // rather than left in a box the user is one line away from navigating out of.
+        await saveName();
         await sandbox.attach(row.id, url);
         // Same milestone as the provision lane's announce — the user has a live sandbox in the workspace, and
         // the workspace has to open on THAT one (see check()).
@@ -724,20 +800,21 @@ const composeArgs = computed<ComposeArgs | undefined>(() => {
     };
 });
 
-/* Which sandbox this page is setting up. Two ways in:
+/* Which sandbox this page is setting up. Three ways in:
  *   • an id in the URL — the gate's "Open setup", the switcher's unfinished row, requireSetup's redirect
  *   • nothing in the URL, and the account has NO working sandbox but does own an unfinished one
+ *   • none of the above — a fresh account, or the switcher's "Add sandbox" — and one is created on the spot
  *
- * The second exists because leaving mid-setup is normal — you name it, mean to paste the command on the other
- * machine, and close the tab. Coming back to a blank "Name your sandbox" is worse than useless there: it hides
+ * The second exists because leaving mid-setup is normal — you get as far as the command, mean to paste it on
+ * the other machine, and close the tab. Coming back to a blank first step is worse than useless there: it hides
  * the sandbox you already made. So an account whose only sandbox is unfinished resumes it wherever it enters from.
  *
  * Gated on there being no connected sandbox anywhere, which is what keeps the switcher's "Add sandbox" honest
  * — that button exists to make a SECOND sandbox, and it is only reachable from a shell that already has a
  * working first one.
  *
- * Owned only — a member can't mint someone else's setup code, so their id falls through to the create form.
- * The check loop acts on the ACTIVE sandbox, so select it to make the URL self-contained. */
+ * Owned only — a member can't mint someone else's setup code, so their id gets them a sandbox of their own
+ * instead. The check loop acts on the ACTIVE sandbox, so select it to make the URL self-contained. */
 onMounted(async () => {
     const loaded = await sandbox.list();
     const requested = route.query[`sandbox`];
@@ -747,6 +824,7 @@ onMounted(async () => {
         : loaded.find((entry) => entry.role === `owner` && entry.lastSeenAt === null);
     const found = named ?? unfinished;
     if (found?.role !== `owner`) {
+        await autoCreate();
         return;
     }
     sandbox.select(found.id);
@@ -755,7 +833,7 @@ onMounted(async () => {
     resuming.value = true;
 });
 
-// Escape hatch from a resumed setup: forget the resumed sandbox and drop to a blank create form. Everything
+// Escape hatch from a resumed setup: forget the resumed sandbox and start a new one in its place. Everything
 // derived from the resumed sandbox resets too — its minted code, hostname, and token-derived subdomain must
 // not leak into the sandbox created next.
 const startFresh = (): void => {
@@ -778,7 +856,10 @@ const startFresh = (): void => {
     domain.value = ``;
     attachToken.value = ``;
     attachOutcome.value = undefined;
+    renaming.value = false;
     void router.replace({ path: `/setup` }); // drop ?sandbox= so a reload doesn't re-resume
+    // There is no blank form to drop to any more: the replacement is created here, exactly as it is on arrival.
+    void autoCreate();
 };
 
 // Watch the registry while we sit on /setup; the moment the daemon reports in, open the workspace.
@@ -902,8 +983,9 @@ watch(commandReady, (ready) => {
                  `items-start` is what lets the panel stick while the steps scroll past it. -->
             <div class="flex flex-col gap-3 md:gap-4 xl:flex-row xl:items-start xl:gap-6">
                 <div class="flex min-w-0 flex-1 flex-col gap-3 md:gap-4 xl:max-w-3xl">
-                    <!-- Step 1: name + create the sandbox (collapses to a summary once created), or — in the attach
-                 lane — the entire setup: one address for a sandbox that is already running and reachable.
+                    <!-- Step 1: the sandbox, created on arrival and summarised here with the rename that is the only
+                 thing left to do about it — or, in the attach lane, the entire setup: one address for a sandbox
+                 that is already running and reachable.
                  The attach lane drops the "1" badge: it is the whole flow, not the first of four. -->
                     <StepSection
                         :step="lane === `provision` ? 1 : undefined"
@@ -953,25 +1035,20 @@ watch(commandReady, (ready) => {
                                 >
                             </label>
 
-                            <!-- The SAME `name` the create form binds, so switching lanes never loses what was typed.
-                         Only a switcher label here, so the domain fills the placeholder rather than blocking the
-                         paste. Hidden once the row exists (resumed, or created by an earlier attempt) — that
-                         sandbox is already named, and the step title says so. -->
-                            <label v-if="created === null" class="ui-field">
+                            <!-- The SAME `name` the rename box binds, so switching lanes never loses what was typed.
+                         It arrives filled in — the row was created on the way in — and Connect commits whatever
+                         is in it, so this lane asks for a domain and nothing else unless the user wants to. -->
+                            <label class="ui-field">
                                 <span class="ui-field-label">Name</span>
                                 <input
                                     v-model="name"
                                     autocomplete="off"
                                     spellcheck="false"
-                                    :placeholder="derivedName === `` ? `e.g. work, staging, my-laptop` : derivedName"
+                                    placeholder="e.g. work, staging, my-laptop"
                                     :class="cmp.input('w-full font-mono text-base md:text-sm')"
                                     @keydown.enter="connectDomain"
                                 />
-                                <span class="text-xs text-muted">
-                                    Just so you can tell it apart in the switcher<template v-if="derivedName !== ``">
-                                        — defaults to <span class="font-mono">{{ derivedName }}</span></template
-                                    >.
-                                </span>
+                                <span class="text-xs text-muted">Just so you can tell it apart in the switcher.</span>
                             </label>
 
                             <!-- Each probe failure names the one thing the user can do about it. -->
@@ -1039,28 +1116,20 @@ watch(commandReady, (ready) => {
                                 {{ created === null ? `← Set one up for me instead` : `← Get a domain from intentic instead` }}
                             </button>
                         </template>
+                        <!-- No row yet, which on this lane means the arrival create is in flight or has failed —
+                             never a form waiting to be filled in. Both states are one line, because neither is
+                             something the user has to do anything about. -->
                         <template v-else-if="created === null">
-                            <p class="text-xs text-muted">Give this sandbox a name so you can tell it apart in the switcher — you can run several.</p>
-                            <div class="flex flex-col gap-2 md:flex-row md:items-center">
-                                <input
-                                    v-model="name"
-                                    autocomplete="off"
-                                    spellcheck="false"
-                                    placeholder="e.g. work, staging, my-laptop"
-                                    :class="cmp.input('w-full font-mono text-base md:text-sm')"
-                                    @keydown.enter="createSandbox"
-                                />
-                                <Button
-                                    label="Create"
-                                    class="w-full justify-center md:w-auto"
-                                    :loading="creating"
-                                    :disabled="name.trim().length === 0"
-                                    @click="createSandbox"
-                                >
-                                    <template #icon><Icon name="plus" /></template>
+                            <p v-if="creating" class="flex items-center gap-2 text-xs text-muted">
+                                <Icon name="spinner" spin class="text-info" />
+                                Setting one up for you — nothing to fill in.
+                            </p>
+                            <template v-else>
+                                <div v-if="error" :class="cmp.alertDanger()">{{ error }}</div>
+                                <Button label="Try again" class="w-full justify-center md:w-auto" @click="autoCreate">
+                                    <template #icon><Icon name="refresh" /></template>
                                 </Button>
-                            </div>
-                            <div v-if="error" :class="cmp.alertDanger()">{{ error }}</div>
+                            </template>
                             <!-- The one-step lane, kept to a single line: it costs the common path nothing and the
                              user who needs it is looking for exactly these words. -->
                             <button type="button" :class="cmp.linkButton()" @click="setLane(`attach`)">
@@ -1070,12 +1139,13 @@ watch(commandReady, (ready) => {
                         <template v-else>
                             <template v-if="resuming">
                                 <!-- Two different histories, and only one of them is a reconnect. A sandbox that
-                                     ran before was torn down locally; one that was named and never started is
+                                     ran before was torn down locally; one that was made here and never started is
                                      simply where the user left off — telling them a container was cleared would
                                      be describing a machine that never existed. -->
                                 <p class="text-xs text-muted">
                                     <template v-if="neverStarted">
-                                        You named this one but never started it — pick up where you left off, or create a new sandbox instead.
+                                        This one was made last time you were here but never started — pick up where you left off, or create a new
+                                        sandbox instead.
                                     </template>
                                     <template v-else>
                                         This sandbox still exists on the platform — the CLI cleanup only cleared its local container. Reconnect it
@@ -1086,6 +1156,45 @@ watch(commandReady, (ready) => {
                                     Not this one? Create a new sandbox instead
                                 </button>
                             </template>
+                            <!-- Nobody typed this name, so the card that reports it is also where it can be changed.
+                                 A footnote to a step that is already done, never a gate in front of the next one:
+                                 the command below is ready whether or not this is ever opened. -->
+                            <div v-if="renaming" class="flex flex-col gap-2 md:flex-row md:items-center">
+                                <input
+                                    ref="nameInput"
+                                    v-model="name"
+                                    autocomplete="off"
+                                    spellcheck="false"
+                                    :class="cmp.input('w-full font-mono text-base md:text-sm')"
+                                    @keydown.enter="saveName"
+                                    @keydown.esc="cancelRename"
+                                />
+                                <Button
+                                    label="Save"
+                                    class="w-full justify-center md:w-auto"
+                                    :loading="savingName"
+                                    :disabled="savingName || name.trim().length === 0"
+                                    @click="saveName"
+                                >
+                                    <template #icon><Icon name="check" /></template>
+                                </Button>
+                                <Button
+                                    label="Cancel"
+                                    severity="secondary"
+                                    :text="true"
+                                    class="w-full justify-center md:w-auto"
+                                    @click="cancelRename"
+                                />
+                            </div>
+                            <template v-else>
+                                <p v-if="!resuming" class="text-xs text-muted">
+                                    We named it for you so nothing stood between you and the next step — it's yours to change.
+                                </p>
+                                <button type="button" :class="cmp.linkButton(`text-muted underline hover:text-content`)" @click="startRename">
+                                    Rename this sandbox
+                                </button>
+                            </template>
+                            <div v-if="error" :class="cmp.alertDanger()">{{ error }}</div>
                             <!-- Offered from EVERY created state, not just a resumed one: the realisation that this
                          sandbox is already running somewhere the platform never heard from (a daemon with no
                          PLATFORM_URL) arrives just as often while staring at step 3's install command. Attaching

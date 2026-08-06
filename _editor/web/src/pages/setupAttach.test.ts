@@ -1,5 +1,5 @@
 import { afterEach, expect, test, vi } from "vitest";
-import { daemonUrlProblem, nameFromDaemonUrl, normalizeDaemonUrl, probeDaemon } from "./setupAttach";
+import { daemonUrlProblem, normalizeDaemonUrl, probeDaemon } from "./setupAttach";
 
 afterEach(() => {
     vi.unstubAllGlobals();
@@ -30,11 +30,6 @@ test("http gets its own explanation instead of a generic invalid-address message
     // Nothing typed yet is not a mistake; a valid one has no problem to report.
     expect(daemonUrlProblem(``)).toBeUndefined();
     expect(daemonUrlProblem(`sandbox.example.com`)).toBeUndefined();
-});
-
-test("the default name is the label that distinguishes sandboxes on a shared zone", () => {
-    expect(nameFromDaemonUrl(`https://staging.example.com`)).toBe(`staging`);
-    expect(nameFromDaemonUrl(`https://example.com`)).toBe(`example`);
 });
 
 const stubFetch = (routes: Record<string, { status: number; body?: unknown }>) => {

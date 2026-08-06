@@ -2,7 +2,7 @@
 import DocsLayout from "../../components/DocsLayout.astro";
 
 const lifecycle = [
-    { title: "Sign in + open Setup", body: "You authenticate with Google and name a sandbox. The platform reserves a private tunnel and hands you a connect one-liner." },
+    { title: "Sign in + open Setup", body: "You authenticate with Google, and the sandbox is created for you. The platform reserves a private tunnel and hands you a connect one-liner." },
     { title: "Connect", body: "You run the one-liner on your machine. It starts the sandbox and a cloudflared sidecar; the daemon announces its URL to the platform on boot." },
     { title: "Bind on first use", body: "Your browser drives the daemon directly with your Google ID token. The daemon verifies it and binds you as owner on the first authenticated request." },
     { title: "Chat + plan", body: "You work over the tunnel: chat, files, editor, terminals. The agent runs in plan mode, proposing changes while you watch and steer." },

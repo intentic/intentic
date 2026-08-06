@@ -105,10 +105,14 @@ const pressLogo = (event: MouseEvent): void => {
 // Write a logo straight through; `null` clears it. sandbox.update's cache write is what makes this tile and the
 // rail chip change together, so there is nothing staged here to preview and nothing to reconcile afterwards.
 const writeLogo = async (image: string | null): Promise<void> => {
+    const id = sandbox.active.value?.id;
+    if (id === undefined) {
+        return;
+    }
     logoBusy.value = true;
     error.value = undefined;
     try {
-        await sandbox.update({ image });
+        await sandbox.update(id, { image });
     } catch (err) {
         error.value = errorMessage(err, `Couldn't save the logo.`);
     } finally {
@@ -149,14 +153,15 @@ const removeLogo = async (): Promise<void> => {
 };
 
 const save = async (): Promise<void> => {
+    const id = sandbox.active.value?.id;
     const trimmed = name.value.trim();
-    if (busy.value || !canSave.value) {
+    if (id === undefined || busy.value || !canSave.value) {
         return;
     }
     busy.value = true;
     error.value = undefined;
     try {
-        await sandbox.update({ name: trimmed });
+        await sandbox.update(id, { name: trimmed });
         editing.value = false;
     } catch (err) {
         error.value = errorMessage(err, `Couldn't save sandbox settings.`);
