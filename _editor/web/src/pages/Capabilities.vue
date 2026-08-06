@@ -870,7 +870,7 @@ const submitLabel = computed(() =>
                  the shell with a chat panel the user drags, so how much room there is for a second column is a
                  fact about the pane, not about the screen. Below that width the row collapses and the guide moves
                  inline into the form. -->
-            <div v-if="selected" class="scrollbar-thin @container min-h-0 flex-1 overflow-y-auto">
+            <div v-if="selected" class="scrollbar-thin scrollbar-stable @container min-h-0 flex-1 overflow-y-auto pr-2">
                 <div class="mx-auto flex max-w-xl flex-col @3xl:max-w-none @3xl:flex-row @3xl:items-start @3xl:justify-center @3xl:gap-6">
                     <div class="flex min-w-0 flex-1 flex-col @3xl:max-w-xl">
                         <!-- Back to the slice the card was picked out of, named — "All capabilities" was a lie the
@@ -1340,7 +1340,9 @@ const submitLabel = computed(() =>
                      pane. Picking the slice is the rail's own job and is not repeated here. -->
                 <FilterBar v-model="search" placeholder="Filter by name, what it does, kind…" :count="visibleCards.length" />
 
-                <div class="scrollbar-thin @container flex min-h-0 flex-1 flex-col gap-6 overflow-y-auto">
+                <!-- The tiles keep their distance from the scrollbar: `pr-2` is the gap, and the reserved gutter is
+                     what stops the whole grid sliding sideways the moment a filter takes the last row away. -->
+                <div class="scrollbar-thin scrollbar-stable @container flex min-h-0 flex-1 flex-col gap-6 overflow-y-auto pr-2">
                     <!-- HEADINGS ONLY WHERE THE GRID SPANS MORE THAN ONE CATEGORY. Under a single category the
                          rail has already said which one and the page's own description carries its sentence, so a
                          heading repeating both above the only group in view is a line of chrome. -->
