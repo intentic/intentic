@@ -118,6 +118,71 @@ test("flush records calls whose results never arrived, without an outcome", () =
     expect(appended[0]?.outcome).toBeUndefined();
 });
 
+// The exact shapes the telegram SKILL teaches. The method rides in the path BEHIND the bot token, which is why
+// these assert on the endpoint as much as on the classification.
+const TG_SEND = `curl -s -X POST -H "Content-Type: application/json" -d '{"chat_id":-100123,"text":"on it"}' "https://api.telegram.org/bot$TELEGRAM_BOT_TOKEN/sendMessage"`;
+const TG_FILE = `curl -s "https://api.telegram.org/bot$TELEGRAM_BOT_TOKEN/getFile?file_id=abc"`;
+const TG_DOWNLOAD = `curl -s -o /work/incoming "https://api.telegram.org/file/bot$TELEGRAM_BOT_TOKEN/voice/file_1.oga"`;
+const TG_UPLOAD = `curl -s -F chat_id=-100123 -F document=@/work/report.pdf "https://api.telegram.org/bot$TELEGRAM_BOT_TOKEN/sendDocument"`;
+
+test("a telegram send records the method as the endpoint, with the chat and text off the JSON body", () => {
+    const { appended, services } = capture();
+    const sniffer = createOutboundSniffer(services, TURN);
+    sniffer.observe(tool(TG_SEND));
+    sniffer.observe(result(`{"ok":true,"result":{"message_id":9}}`));
+    expect(appended).toEqual([
+        {
+            provider: "telegram",
+            direction: "out",
+            type: "message.send",
+            method: "POST",
+            endpoint: "/sendMessage",
+            channelId: "-100123",
+            content: "on it",
+            turnId: TURN,
+            outcome: "ok",
+        },
+    ]);
+});
+
+/* A BOT TOKEN MUST NEVER REACH THE ACTIVITY FEED. Telegram puts it in the URL path, the feed is read by people
+ * and pasted into support threads, and the skills teach `$TELEGRAM_BOT_TOKEN` precisely so it does not expand —
+ * but a hand-typed one has to be dropped on the floor too, which is what recording only the method does. */
+test("a literally-pasted bot token does not survive into the recorded call", () => {
+    const { appended, services } = capture();
+    const sniffer = createOutboundSniffer(services, TURN);
+    const token = "8123456789:AAH-Fake-Token-Value";
+    sniffer.observe(tool(`curl -s -X POST -d '{"chat_id":42,"text":"hi"}' "https://api.telegram.org/bot${token}/sendMessage"`));
+    sniffer.observe(result(`{"ok":true}`));
+    expect(appended[0]).toMatchObject({ provider: "telegram", endpoint: "/sendMessage", channelId: "42" });
+    expect(JSON.stringify(appended)).not.toContain(token);
+});
+
+test("file reads, uploads and downloads each classify without a token in the endpoint", () => {
+    const { appended, services } = capture();
+    const sniffer = createOutboundSniffer(services, TURN);
+    sniffer.observe(tool(TG_FILE, "t1"));
+    sniffer.observe(result(`{"ok":true,"result":{"file_path":"voice/file_1.oga"}}`, "t1"));
+    sniffer.observe(tool(TG_DOWNLOAD, "t2"));
+    sniffer.observe(result("", "t2"));
+    sniffer.observe(tool(TG_UPLOAD, "t3"));
+    sniffer.observe(result(`{"ok":true}`, "t3"));
+    expect(appended.map(({ type, method, endpoint, channelId }) => ({ type, method, endpoint, channelId }))).toEqual([
+        { type: "file.read", method: "GET", endpoint: "/getFile", channelId: undefined },
+        { type: "api.call", method: "GET", endpoint: "/file", channelId: undefined },
+        // A multipart upload carries the chat as a form field rather than in JSON — same fact, different syntax.
+        { type: "message.send", method: "POST", endpoint: "/sendDocument", channelId: "-100123" },
+    ]);
+});
+
+test("telegram reports a refusal in `description` where slack uses `error` — both read as a failed call", () => {
+    const { appended, services } = capture();
+    const sniffer = createOutboundSniffer(services, TURN);
+    sniffer.observe(tool(TG_SEND));
+    sniffer.observe(result(`{"ok":false,"error_code":400,"description":"Bad Request: chat not found"}`));
+    expect(appended.map(({ outcome, error }) => ({ outcome, error }))).toEqual([{ outcome: "error", error: "Bad Request: chat not found" }]);
+});
+
 test("an interim update (live output snapshot, no status) keeps the call pending", () => {
     const { appended, services } = capture();
     const sniffer = createOutboundSniffer(services, TURN);

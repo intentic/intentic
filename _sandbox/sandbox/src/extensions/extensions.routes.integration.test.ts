@@ -71,6 +71,7 @@ test("the extension list carries every first-party extension, compiled-in UI one
         "intentic.repo-apps",
         "intentic.slack",
         "intentic.social",
+        "intentic.telegram",
         "intentic.viewers",
         "intentic.workflows",
     ]);

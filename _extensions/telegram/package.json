@@ -1,0 +1,19 @@
+{
+    "name": "@intentic/ext-telegram",
+    "version": "1.0.0",
+    "description": "Telegram — the connected bot as an agent tool, plus the long-polling gateway as a baked extension process",
+    "license": "MIT",
+    "private": true,
+    "type": "module",
+    "scripts": {
+        "build": "tsgo",
+        "typecheck": "tsgo --noEmit -p tsconfig.test.json",
+        "test": "vitest run"
+    },
+    "devDependencies": {
+        "@intentic/tsconfig": "workspace:*",
+        "@types/node": "catalog:",
+        "@typescript/native-preview": "catalog:",
+        "vitest": "catalog:"
+    }
+}

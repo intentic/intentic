@@ -52,6 +52,7 @@
                 "_extensions/repo-apps",
                 "_extensions/slack",
                 "_extensions/social",
+                "_extensions/telegram",
                 "_extensions/viewers",
                 "_extensions/workflows"
             ]

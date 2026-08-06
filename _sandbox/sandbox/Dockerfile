@@ -1,5 +1,5 @@
 # The per-project AI-agent sandbox image (published as ghcr.io/intentic/sandbox). The
-# monorepo is compiled OUTSIDE Docker: _tools/scripts/prepare-image-trees.sh builds the six baked packages
+# monorepo is compiled OUTSIDE Docker: _tools/scripts/prepare-image-trees.sh builds the seven baked packages
 # (turbo, warm cache) and prunes their production trees + the iq models into .image-out/, which enters this
 # build as the named context `trees`. Every layer here is a pinned tool install (registry-cache-stable) or a
 # cheap tree COPY, so a source change rebuilds in seconds — no pnpm install / turbo run inside a cacheless
@@ -347,8 +347,8 @@ RUN codex_bin="$(find /opt/sandbox/node_modules/.pnpm -maxdepth 6 -path '*@opena
 # Image-baked first-party extensions — one manifest checkout per subdir, enumerated by installedExtensions()
 # via SANDBOX_EXTENSIONS_DIR (the iq-plugin precedent): present in every sandbox, not removable, no capability
 # entry. connectors, social, computers and acp-agents are data-only (manifest + skill packs + client image
-# fragments) so they copy straight from context; discord, imap and slack ship their deployed gateway trees from
-# the trees context (node_modules included).
+# fragments) so they copy straight from context; discord, imap, slack and telegram ship their deployed gateway
+# trees from the trees context (node_modules included).
 #
 # The four data-only packs are what makes the /capabilities grid: every card that is a ROW over a generic core
 # handler (a cli connector, a social platform, an OS pack, an ACP preset) is one of these manifest entries, so
@@ -365,6 +365,8 @@ RUN cd /opt/extensions/discord/node_modules/.pnpm/@discordjs+opus@*/node_modules
 COPY --from=trees extensions/imap /opt/extensions/imap
 # The slack gateway is pure JS (Socket Mode over undici) — no native build step to redo after the COPY.
 COPY --from=trees extensions/slack /opt/extensions/slack
+# The telegram gateway is pure JS AND dependency-free (the Bot API is fetch + JSON), so its tree is its own dist.
+COPY --from=trees extensions/telegram /opt/extensions/telegram
 # documentation is a UI extension with daemon-side contributions, so it sits between the two groups: its views are
 # compiled into the web bundle like the manifest-only ones below, but `contributes.bin` (the intentic-docs CLI the
 # agent runs) and `contributes.agent` (the documenting skill) are read from the image, so those two directories have
@@ -376,7 +378,7 @@ COPY _extensions/documentation/bin /opt/extensions/documentation/bin
 COPY _extensions/documentation/plugin /opt/extensions/documentation/plugin
 # The web-builtin UI extensions bake their MANIFEST ONLY — their code is compiled into the web bundle
 # (extension-host/builtins.ts), so there is nothing daemon-side to ship. The manifest is what makes them exist
-# for the daemon: `GET /extensions` then enumerates all sixteen first-party extensions through one enumerator,
+# for the daemon: `GET /extensions` then enumerates all twenty-two first-party extensions through one enumerator,
 # so the Extensions tab is a complete list with a working on/off switch instead of a view of one load path.
 # The pairing is checked both ways — a manifest here with no compiled-in module shows as "missing" in the tab
 # (image and web bundle built from different commits), and a module with no manifest shows as "unlisted".

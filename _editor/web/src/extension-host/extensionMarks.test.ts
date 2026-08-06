@@ -12,8 +12,8 @@ import { describe, expect, it } from "vitest";
  * not a runtime error either. <BrandMark> falls through to the extension's initials, which looks deliberate and
  * is how the same class of typo already shipped once as a blank rail tile (`book`).
  *
- * Read off DISK rather than off builtins.ts, and that is the point: seven of these extensions contribute no
- * code to this bundle at all (connectors, social, computers, acp-agents, discord, slack, imap), so a test over
+ * Read off DISK rather than off builtins.ts, and that is the point: eight of these extensions contribute no
+ * code to this bundle at all (connectors, social, computers, acp-agents, discord, slack, telegram, imap), so a test over
  * the compiled-in modules would check two thirds of the list and quietly skip the third that has nowhere else
  * to be checked. The vocabulary lives in @intentic/ui, which only the browser depends on, so this is the only
  * package that can ask the question.

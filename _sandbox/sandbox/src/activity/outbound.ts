@@ -98,8 +98,56 @@ const matchSlack = (command: string): OutboundCall | undefined => {
     };
 };
 
+/* Telegram is method-per-path like Slack, but the path also carries the BOT TOKEN — `/bot<token>/sendMessage`.
+ * So the endpoint recorded here is the METHOD ONLY: an activity feed is read by people and shipped in support
+ * threads, and a credential that lands in it is a credential to rotate. The skills teach `$TELEGRAM_BOT_TOKEN`,
+ * which never expands in the command text we see, but a hand-typed token must not leak either. */
+const TELEGRAM_TYPES: Readonly<Record<string, string>> = {
+    sendMessage: "message.send",
+    sendDocument: "message.send",
+    sendPhoto: "message.send",
+    sendVideo: "message.send",
+    sendAudio: "message.send",
+    sendVoice: "message.send",
+    editMessageText: "message.edit",
+    setMessageReaction: "reaction.add",
+    getFile: "file.read",
+};
+
+const matchTelegram = (command: string): OutboundCall | undefined => {
+    const url = /https:\/\/api\.telegram\.org\/(file\/)?bot[^/\s"']*\/([^\s"'\\?]*)/.exec(command);
+    if (url === null) {
+        return undefined;
+    }
+    // The download endpoint (`/file/bot<token>/<path>`) names a file, not a method — its verb is the fetch.
+    const endpoint = url[1] === undefined ? `/${url[2] as string}` : "/file";
+    const method = /-X\s+(GET|POST|PUT|PATCH|DELETE)/.exec(command)?.[1] ?? (/\s-[dF]\s/.test(command) ? "POST" : "GET");
+    const payload = /-d\s+'([^']*)'/.exec(command)?.[1] ?? /-d\s+"((?:[^"\\]|\\.)*)"/.exec(command)?.[1];
+    // A file upload is multipart (`-F chat_id=…`), and a lookup puts the chat in the query — both are the same
+    // fact under different syntax, so all three spellings resolve to one channelId.
+    let channelId = /-F\s+chat_id=([^\s"']+)/.exec(command)?.[1] ?? /[?&]chat_id=([^&\s"']+)/.exec(command)?.[1];
+    let content: string | undefined;
+    if (payload !== undefined) {
+        try {
+            const parsed = JSON.parse(payload) as { text?: unknown; chat_id?: unknown };
+            content = typeof parsed.text === "string" ? parsed.text : payload;
+            channelId = typeof parsed.chat_id === "string" || typeof parsed.chat_id === "number" ? String(parsed.chat_id) : channelId;
+        } catch {
+            content = payload;
+        }
+    }
+    return {
+        provider: "telegram",
+        type: TELEGRAM_TYPES[endpoint.slice(1)] ?? "api.call",
+        method,
+        endpoint,
+        ...(channelId !== undefined ? { channelId } : {}),
+        ...(content !== undefined ? { content } : {}),
+    };
+};
+
 // One matcher per cli provider (the cli/providers.ts key space); the chat providers whose skills teach curl.
-const matchers: readonly ((command: string) => OutboundCall | undefined)[] = [matchDiscord, matchSlack];
+const matchers: readonly ((command: string) => OutboundCall | undefined)[] = [matchDiscord, matchSlack, matchTelegram];
 
 // The classifier, shared with the enforcing PreToolUse gate (guard/outbound-gate.ts) — one parser for audit
 // and enforcement, so the two can never disagree about what a command is.
@@ -114,21 +162,23 @@ export const classifyOutboundCall = (command: string): OutboundCall | undefined 
 };
 
 // curl -s exits 0 on HTTP 4xx, so the response body is the status signal. Discord's error envelope is a JSON
-// object with a numeric `code` and string `message`; Slack always answers 200 and puts the verdict in `ok`,
-// which is why a `"ok": false` body has to be read as a failure here or every refused Slack call would log as
-// a success. ponytail: the envelope sniff IS the HTTP-status heuristic; teach the skill `-w` if it ever
-// misclassifies.
+// object with a numeric `code` and string `message`; Slack and Telegram both answer with an `ok` verdict in the
+// body (Slack always over HTTP 200), which is why a `"ok": false` body has to be read as a failure here or
+// every refused call would log as a success. The two name their reason differently — Slack `error`, Telegram
+// `description` — so both are read. ponytail: the envelope sniff IS the HTTP-status heuristic; teach the skill
+// `-w` if it ever misclassifies.
 const outcomeOf = (output: string, isError: boolean | undefined): { outcome: "ok" | "error"; error?: string } => {
     if (isError === true) {
         return { outcome: "error", error: output.trim().slice(-ERROR_TAIL) };
     }
     try {
-        const parsed = JSON.parse(output) as { code?: unknown; message?: unknown; ok?: unknown; error?: unknown };
+        const parsed = JSON.parse(output) as { code?: unknown; message?: unknown; ok?: unknown; error?: unknown; description?: unknown };
         if (typeof parsed.code === "number" && typeof parsed.message === "string") {
             return { outcome: "error", error: parsed.message };
         }
         if (parsed.ok === false) {
-            return { outcome: "error", error: typeof parsed.error === "string" ? parsed.error : "slack call failed" };
+            const reason = [parsed.error, parsed.description].find((each) => typeof each === "string");
+            return { outcome: "error", error: reason ?? "the call was refused" };
         }
     } catch {
         // Non-JSON output (empty 204 body, piped text) — no error envelope to read.

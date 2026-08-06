@@ -30,7 +30,7 @@ export interface ListenerSource {
     readonly starterPrompt: string;
 }
 
-export const LISTENER_SOURCES: Record<`webchat` | `discord` | `imap` | `ci`, ListenerSource> = {
+export const LISTENER_SOURCES: Record<`webchat` | `discord` | `telegram` | `imap` | `ci`, ListenerSource> = {
     webchat: {
         label: `Doorbell`,
         icon: `globe`,
@@ -54,6 +54,16 @@ export const LISTENER_SOURCES: Record<`webchat` | `discord` | `imap` | `ci`, Lis
         mentionLabel: `Only when the bot is mentioned (@mention or reply)`,
         channel: { label: `Channel ID (optional)`, placeholder: `all channels the bot can read` },
         starterPrompt: `Discord events just arrived — each line of the event payload is one JSON event: type \`message\` (a new message: author, channelId, content; \`mentioned: true\` when the bot was tagged or replied to) or \`voice_transcript\` (a finished voice session — read the transcript at its \`extra.path\`). Handle messages that need attention with your Discord capability; turn transcripts into notes and action items in the workspace.`,
+    },
+    telegram: {
+        label: `Telegram`,
+        logo: `telegram`,
+        events: [{ value: `message`, label: `Messages` }],
+        mentionLabel: `Only when the bot is messaged directly (private chat, @mention or reply)`,
+        // A Telegram chat id is a number, negative for a group and starting -100 for a supergroup — worth
+        // spelling out, because it is the one id here a user cannot read off a right-click menu.
+        channel: { label: `Chat ID (optional)`, placeholder: `every chat the bot is in` },
+        starterPrompt: `A Telegram message just arrived — each line of the event payload is one JSON event of type \`message\`: \`author\` is who wrote it, \`channelId\` is the chat, \`content\` is the text (a \`[voice note]\`-style marker when they sent a file instead, with the file ids in \`extra.attachments\`), and \`mentioned: true\` means it was addressed to the bot. \`history\` holds the recent messages the gateway watched go by — a bot cannot read a chat's past, so that is all the context there is. Reply in plain text: your answer is streamed into the chat for you, and Telegram renders markdown literally, so no asterisks, headings or link syntax.`,
     },
     imap: {
         label: `Email (IMAP)`,
