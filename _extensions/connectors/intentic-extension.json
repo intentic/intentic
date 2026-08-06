@@ -14,7 +14,7 @@
                 "kind": "cli",
                 "catalog": {
                     "name": "GitHub",
-                    "logo": "github/f5f5f5",
+                    "logo": "github",
                     "description": "Issues, PRs and code search as agent tools — plus git clone/pull/push and CI pipelines on your workspace repos.",
                     "category": "code",
                     "hint": "The agent uses the token with curl against the GitHub API. With Git access on you can git pull/push in the terminal — ssh-form URLs work too (rerouted over HTTPS when native SSH isn't available), so any repo-scoped token works. For native ssh://git we register an SSH key to your account, which needs write:public_key on a classic PAT (or the \"Git SSH keys: write\" permission on a fine-grained token); without it git still works over HTTPS and we show the key to add manually. Workspace repos on GitHub also get a CI webhook (the Pipelines view + instant CI automations), which needs admin:repo_hook on a classic PAT (or \"Webhooks: write\"); without it the Pipelines view shows the hook to add manually.",
@@ -202,7 +202,7 @@
                 "kind": "cli",
                 "catalog": {
                     "name": "Outline",
-                    "logo": "outline/f5f5f5",
+                    "logo": "outline",
                     "description": "Connect your Outline wiki for docs and knowledge base.",
                     "category": "business",
                     "hint": "The agent uses the token with curl against the Outline API.",
@@ -375,7 +375,7 @@
                 "kind": "cli",
                 "catalog": {
                     "name": "MySQL",
-                    "logo": "mysql",
+                    "icon": "database",
                     "description": "Query your MySQL / MariaDB database from the agent.",
                     "category": "data",
                     "hint": "The agent queries your database with the mysql client.",

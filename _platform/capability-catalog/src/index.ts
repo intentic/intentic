@@ -33,7 +33,7 @@ export const INVENTORY_SERVICES: readonly InventoryServiceDescriptor[] = [
     {
         service: "outline",
         label: "Outline",
-        logo: "outline/f5f5f5",
+        logo: "outline",
         description: "Team wiki and docs.",
         fields: [{ key: "domain", label: "Domain", kind: "text" }],
     },

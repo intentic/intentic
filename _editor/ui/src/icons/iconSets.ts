@@ -94,6 +94,7 @@ export type IconName =
     | "sign-in"
     | "sign-out"
     | "sitemap"
+    | "slack"
     | "sliders-h"
     | "sparkles"
     | "spinner"
@@ -207,6 +208,9 @@ export const ICONS: Record<IconName, string> = {
     "sign-in": "ri:login-box-line",
     "sign-out": "ri:logout-box-line",
     sitemap: "ri:organization-chart",
+    // One of the few brands the icon CDN cannot serve at all — it holds no Slack mark, so the card that wants
+    // one has to find it here or fall to a generic speech bubble, which is what it did.
+    slack: "ri:slack-line",
     "sliders-h": "ri:equalizer-line",
     sparkles: "ri:sparkling-line",
     spinner: "ri:loader-4-line",

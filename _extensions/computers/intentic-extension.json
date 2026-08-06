@@ -33,7 +33,7 @@
                 "kind": "host",
                 "catalog": {
                     "name": "Linux PC",
-                    "logo": "linux/f5f5f5",
+                    "logo": "linux",
                     "description": "Let the agent work on your Linux computer — your shell, your files, your desktop session.",
                     "category": "machines",
                     "hint": "The name is how you and the agent refer to this computer (\"run the tests on my-desktop\"). Adding it hands you a one-liner to run on that machine.",
