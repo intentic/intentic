@@ -19,6 +19,18 @@ const THEME_DARK = `dark-plus`;
  * code.css's dark-mode flip governs these identically. */
 export type CodeToken = Pick<ThemedToken, "content" | "offset" | "htmlStyle">;
 
+/* A throwaway line, tokenized once per grammar the moment it loads. A grammar's patterns are compiled lazily —
+ * the JS engine transpiles each rule's Oniguruma to a RegExp the first time a line reaches that rule — and
+ * vscode-textmate charges that compile to the 500ms budget it runs PER LINE. Over budget, tokenization stops
+ * mid-line and hands back the remainder as one token, so the line renders silently mis-coloured (and the search
+ * list, which caches what it got, keeps it that way for the session). Cold, the first TypeScript line costs
+ * ~100ms; on a machine with every core busy that is over the budget, which is how a correct line came back flat.
+ * Paying the compile here — inside the load every caller already awaits, off the render path — leaves a real
+ * line at a millisecond or two, and the budget doing only what it is meant to do: bound a pathological line.
+ * The text is nonsense in most languages by design; it only has to drive the scanner through the rules a line
+ * of code hits (keywords, strings, brackets, a comment). */
+const WARM_UP = `export class A { async b(c = "d") { return [1, /e/g]; } } // f`;
+
 let core: Promise<HighlighterCore> | undefined;
 // lang → the load in flight or already settled. Keyed rather than a plain "loaded" set because grammar loads
 // arrive in bursts: a list of search snippets asks for the same language a few hundred times in one tick, and
@@ -56,6 +68,7 @@ const ensureLang = (lang: string): Promise<HighlighterCore | undefined> => {
     const loading = (async () => {
         const instance = await ensureCore();
         await instance.loadLanguage((await load()) as Parameters<HighlighterCore[`loadLanguage`]>[0]);
+        instance.codeToTokens(WARM_UP, { lang, themes: { light: THEME_LIGHT, dark: THEME_DARK } });
         return instance;
     })();
     grammars.set(lang, loading);
