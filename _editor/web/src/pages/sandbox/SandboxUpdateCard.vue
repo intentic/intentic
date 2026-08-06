@@ -2,6 +2,8 @@
 import { Card, StatusBadge, useOsPreference } from "@intentic/ui";
 import { computed } from "vue";
 import HostRecreate from "../../components/HostRecreate.vue";
+import { turnInFlight } from "../../composables/agents/agentStatus";
+import { useAgents } from "../../composables/agents/useAgents";
 import { useSandboxVersion } from "../../composables/sandbox/useSandboxVersion";
 
 /* "Update available" — the non-blocking prompt on the /sandbox hub when a newer sandbox image has shipped. The
@@ -24,6 +26,12 @@ const { cmdOs } = useOsPreference();
  * when taken is worse than no offer, and this one would fail at the moment the user most needs it to work. */
 const rollbackTo = computed(() => (cmdOs.value === `windows` ? undefined : info.value?.previousImage));
 const channel = computed(() => info.value?.channel);
+
+/* Recreating kills whatever the fleet is doing RIGHT NOW — resume-after-restart is off by default (it spends
+ * the owner's own allowance), so the default cost of updating mid-run is the run. The card said "your files
+ * are kept" and nothing about the forty-minute turn; this line is what makes updating mid-run a choice. */
+const { fleet } = useAgents();
+const midTurn = computed(() => fleet.value.filter(turnInFlight).length);
 </script>
 
 <template>
@@ -49,6 +57,11 @@ const channel = computed(() => info.value?.channel);
                 </p>
             </div>
         </div>
+
+        <p v-if="midTurn > 0" class="text-2xs text-warning">
+            {{ midTurn === 1 ? `An agent is` : `${midTurn} agents are` }} mid-turn right now — recreating the sandbox
+            interrupts {{ midTurn === 1 ? `its` : `their` }} work. Wait for the fleet to settle, or continue if that is acceptable.
+        </p>
 
         <template v-if="serverManaged">
             <p class="text-2xs text-subtle">

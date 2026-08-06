@@ -111,7 +111,7 @@ export const createWorkspaceProvider = (executor: SshExecutor = sshExecutor): Pr
         }
     },
     // Recreate on a sandbox-image bump or an agent-tools change (the container is stateless aside from the
-    // workspace volume, which persists across recreations).
+    // workspace, history and docker volumes, which persist across recreations).
     diff: (inputs, observed) => {
         const parsed = parse(inputs);
         const image = desiredImage(parsed);
@@ -176,8 +176,10 @@ export const createWorkspaceProvider = (executor: SshExecutor = sshExecutor): Pr
              * tools digest drives recreate-on-change), and the public resolvers (`intentic deploy apply` runs
              * `cloudflared access tcp` in here, and an operator resolver's negatively-cached NXDOMAIN on a
              * freshly-minted ssh-<id> tunnel name otherwise fails the dial with ECONNRESET). No --init, no
-             * network alias (the container NAME is the alias — one sandbox per host), and no /history volume,
-             * as this flavor always ran.
+             * network alias (the container NAME is the alias — one sandbox per host). /history rides as its
+             * own volume like every other shape: it holds the fleet, the transcripts and every repo's real
+             * git dir, and this flavor recreates the container on every image/tools/overlay change — running
+             * without the volume made each of those updates silently destroy all three.
              *
              * `baseImage` names what the overlay was built FROM alongside its hash. Without it the daemon
              * would infer a base from SANDBOX_IMAGE — here the overlay's own tag — and fall back to the
@@ -192,7 +194,6 @@ export const createWorkspaceProvider = (executor: SshExecutor = sshExecutor): Pr
                 unsupported,
                 init: false,
                 alias: false,
-                history: false,
                 ports: [
                     `${parsed.internalIp}:${parsed.previewPort}:${parsed.previewPort}`,
                     `${parsed.internalIp}:${parsed.daemonPort}:${parsed.daemonPort}`,

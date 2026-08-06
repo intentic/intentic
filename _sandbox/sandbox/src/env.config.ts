@@ -155,10 +155,11 @@ const configSchema = z.object({
             // sha256 of the approved overlay Dockerfile this container was built from, stamped by the rebuild
             // executor (recreate.sh / workspace provider). Empty ⇒ stock image.
             environmentHash: z.string().default(""),
-            /* WHICH RELEASE CHANNEL this sandbox follows, and WHAT IT WAS ON before the swap that created it.
-             * Both runner-set (recreate.sh, which is the only thing that can know either — it performed the
-             * swap, and the previous container is gone by the time the daemon boots), so the agent cannot
-             * influence what an update pulls or what a rollback returns to.
+            /* WHICH RELEASE CHANNEL this sandbox follows, and THE WAY BACK from the swap that created it —
+             * the protected tag ic pinned the replaced image under, exactly what `ic sandbox rollback` will
+             * run. Both runner-set (the recreate flow, which is the only thing that can know either — it
+             * performed the swap, and the previous container is gone by the time the daemon boots), so the
+             * agent cannot influence what an update pulls or what a rollback returns to.
              *
              * Empty channel ⇒ a sandbox created before channels existed, which is `stable` by construction:
              * that is the only tag update has ever pulled. Empty previousImage ⇒ nothing to roll back to,

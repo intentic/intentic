@@ -50,10 +50,18 @@ pub fn run(mode: Mode, slug: Option<String>) -> Result<()> {
     }
     let slug = resolve_slug(slug, &format!("ic sandbox {}", mode.name()))?;
     let container = format!("{CONTAINER_PREFIX}{slug}");
+    let parked = format!("{container}.previous");
     if !docker::container_exists(&container) {
-        bail!(
-            "sandbox container {container} does not exist on this machine — re-run connect first."
-        );
+        // A recreate that died between parking the old container and starting its replacement leaves the
+        // name empty and the sandbox parked — put it back rather than sending the owner to the wizard.
+        if !docker::container_exists(&parked) {
+            bail!(
+                "sandbox container {container} does not exist on this machine — re-run connect first."
+            );
+        }
+        println!("intentic: restoring the sandbox an interrupted recreate left parked…");
+        docker::quiet(&["rename", &parked, &container]);
+        docker::quiet(&["start", &container]);
     }
 
     // The tag this sandbox follows. An explicit --channel wins and is remembered; otherwise the remembered
@@ -81,6 +89,20 @@ pub fn run(mode: Mode, slug: Option<String>) -> Result<()> {
         }
     }
 
+    /* The EXACT image the running sandbox was built from, captured before anything pulls. Identity is what
+     * the update and rollback decisions below are made from, because every name involved (:stable, :beta)
+     * is a tag the registry MOVES — by name, a stock update is :stable → :stable even when the images
+     * differ, which is precisely the case rollback exists for. A stock container's base is the container's
+     * own image (inspect .Image — exact even on a shared daemon); an overlay container's is its base tag's
+     * local resolution, still un-moved this side of the pull. */
+    let current_base = container_env(&container, "SANDBOX_BASE_IMAGE");
+    let sandbox_image = container_env(&container, "SANDBOX_IMAGE");
+    let old_base_id = if current_base.is_none() || current_base == sandbox_image {
+        docker::inspect(&container, "{{.Image}}")
+    } else {
+        current_base.as_deref().and_then(docker::image_id)
+    };
+
     let log = Log::create_named("recreate", &format!("recreate-{}", mode.name()))?;
     let workdir = tempfile::tempdir()?;
     let overlay_path = workdir.path().join("overlay.Dockerfile");
@@ -103,19 +125,27 @@ pub fn run(mode: Mode, slug: Option<String>) -> Result<()> {
         }
         Mode::Update { .. } => {
             // Pull the latest base up front — a moved tag is exactly what makes an update available, and
-            // `docker run` reuses a cached tag without re-pulling. A no-op pull is reported honestly, not
+            // `docker run` reuses a cached tag without re-pulling. A no-op is reported honestly, not
             // recreated into the same image and claimed as success.
             println!("intentic: pulling {registry_image}…");
-            let before = docker::image_id(&registry_image);
+            let cached = docker::image_id(&registry_image);
             let _ = docker::pull(&registry_image, &log);
-            let after = docker::image_id(&registry_image);
-            if before.is_some() && before == after {
+            let pulled = docker::image_id(&registry_image);
+            if pulled.is_none() {
+                bail!("{registry_image} is not available (pull failed) — the sandbox is untouched. Log: {}", log.path.display());
+            }
+            /* "Already current" means THIS CONTAINER runs the image the tag now names — not that the pull
+             * moved nothing. Two sandboxes share one daemon: the first update refreshes the cache, and a
+             * cache-only before/after told the second it was current while it ran last week's build. The
+             * cache heuristic survives only for a base whose identity is unknowable. */
+            let already_current = match (&old_base_id, &pulled) {
+                (Some(old), Some(new)) => old == new,
+                _ => cached.is_some() && cached == pulled,
+            };
+            if already_current {
                 println!("intentic: no newer sandbox image is available yet — your sandbox is already on the latest :{channel} it can pull.");
                 println!("          If the app still shows an update, the new release's image may still be publishing — try again in a few minutes.");
                 return Ok(());
-            }
-            if after.is_none() {
-                bail!("{registry_image} is not available (pull failed) — the sandbox is untouched. Log: {}", log.path.display());
             }
             // Re-apply the approved overlay (if any) FROM the fresh base, so the extended environment carries on.
             copy_overlay_or_empty(&container, &overlay_path)?;
@@ -126,8 +156,9 @@ pub fn run(mode: Mode, slug: Option<String>) -> Result<()> {
             };
             registry_image = previous;
             // NO pull, and no "is there anything newer" check: the point of a rollback is to reach an image
-            // already on this machine — usually one the registry moved the tag away from, so a pull would at
-            // best no-op and at worst fetch the very build being rolled back from.
+            // already on this machine — one the registry moved the tag away from, pinned under the record's
+            // protected tag. (A registry ref here is an older record; for those the pull attempt below is
+            // still the only chance.)
             if !docker::image_exists(&registry_image) {
                 println!(
                     "intentic: {registry_image} is not on this machine any more — pulling it…"
@@ -136,6 +167,15 @@ pub fn run(mode: Mode, slug: Option<String>) -> Result<()> {
             }
             println!("intentic: rolling back to {registry_image}…");
             copy_overlay_or_empty(&container, &overlay_path)?;
+            /* The overlay must ride the TARGET, not its own FROM: the FROM names the channel tag, which now
+             * points at the very build being rolled back from. Hash the APPROVED content first — what the
+             * owner reviewed IS what gets applied, re-based onto a target no agent can choose (the record is
+             * a host-side file) — then the same first-FROM rewrite the dev flow uses. */
+            let overlay = std::fs::read_to_string(&overlay_path)?;
+            if !overlay.is_empty() {
+                env_hash = Some(sha256_hex(overlay.as_bytes()));
+                std::fs::write(&overlay_path, rewrite_from(&overlay, &registry_image))?;
+            }
         }
         Mode::Dev => {
             if !docker::image_exists(DEV_TAG) {
@@ -156,16 +196,17 @@ pub fn run(mode: Mode, slug: Option<String>) -> Result<()> {
     let overlay = std::fs::read_to_string(&overlay_path).unwrap_or_default();
 
     // The base the overlay extends, checked belt-and-braces (the daemon already enforced it at approval):
-    // any OFFICIAL sandbox image, or the exact base this container was created from (SANDBOX_BASE_IMAGE,
-    // set at docker run by whichever runner made it — not a value the agent can write).
-    let current_base = container_env(&container, "SANDBOX_BASE_IMAGE");
+    // any OFFICIAL sandbox image, the exact base this container was created from (SANDBOX_BASE_IMAGE, set
+    // at docker run by whichever runner made it — not a value the agent can write), or the rollback target
+    // the host-side record names (the rollback pre-step just rewrote the FROM to it).
+    let rollback_target = matches!(mode, Mode::Rollback).then(|| registry_image.clone());
     let mut base_image = String::new();
     if !overlay.is_empty() {
         base_image = overlay_base(&overlay).unwrap_or_default();
         if base_image.is_empty() {
             bail!("the approved overlay has no FROM instruction.");
         }
-        if !base_is_allowed(&base_image, current_base.as_deref()) {
+        if !base_is_allowed(&base_image, current_base.as_deref(), rollback_target.as_deref()) {
             bail!(
                 "the approved overlay must start with FROM {DEFAULT_REGISTRY}:<tag>\n       (or FROM this sandbox's own base, {}); found {base_image}.",
                 current_base.as_deref().unwrap_or("<none>")
@@ -183,9 +224,14 @@ pub fn run(mode: Mode, slug: Option<String>) -> Result<()> {
             println!("intentic: building {target_image} from the approved overlay…");
             build_overlay(&target_image, &overlay_path, false, &log);
         }
-        // One arm, because a rollback IS an update pointed at an older tag: same overlay rebuild, same base
-        // pinning, same health gate. Only where the image came from differs, and that was settled above.
+        /* One arm, because a rollback IS an update pointed at the pinned image — same overlay rebuild, same
+         * base pinning, same health gate — with one inversion: nothing may touch the registry. Update
+         * --pulls the overlay's FROM (the tag it just fetched); rollback must not, because the pin exists
+         * precisely BECAUSE the registry moved on, and a --pull here fetches the very build being escaped.
+         * Rollback's env hash was settled in its pre-step (the APPROVED content's, before the FROM
+         * rewrite), so only the image tag derives from the rewritten bytes. */
         Mode::Update { .. } | Mode::Rollback => {
+            let fresh = matches!(mode, Mode::Update { .. });
             target_image = registry_image.clone();
             if base_image.is_empty() {
                 base_image = registry_image.clone();
@@ -195,9 +241,14 @@ pub fn run(mode: Mode, slug: Option<String>) -> Result<()> {
                 // Applied); the first 12 chars tag the built image — same derivation as rebuild.
                 let hash = sha256_hex(overlay.as_bytes());
                 target_image = format!("intentic-sandbox-env-{slug}:{}", &hash[..12]);
-                env_hash = Some(hash);
-                println!("intentic: rebuilding your environment overlay on the new base…");
-                build_overlay(&target_image, &overlay_path, true, &log);
+                if env_hash.is_none() {
+                    env_hash = Some(hash);
+                }
+                println!(
+                    "intentic: rebuilding your environment overlay on the {} base…",
+                    if fresh { "new" } else { "rollback" }
+                );
+                build_overlay(&target_image, &overlay_path, fresh, &log);
             }
         }
         Mode::Dev => {
@@ -279,14 +330,27 @@ pub fn run(mode: Mode, slug: Option<String>) -> Result<()> {
     let dns = docker::inspect(&container, "{{join .HostConfig.Dns \" \"}}")
         .filter(|servers| !servers.is_empty());
 
-    let previous_image = current_base.clone();
+    /* What the record's `previous` becomes — the rollback target — decided by identity above and pinned
+     * under a protected local tag. Unpinned, the replaced image goes dangling the moment its tag moves,
+     * one routine `docker image prune` from deleting the only way back. The tag is created BEFORE the
+     * record that names it, so the record never points at nothing. */
+    let new_base_id = docker::image_id(&base_image);
+    let next = next_previous(&saved, old_base_id.as_deref(), new_base_id.as_deref(), &slug);
+    if next != saved.previous {
+        if let (Some(pin), Some(old)) = (next.as_deref(), old_base_id.as_deref()) {
+            docker::quiet(&["tag", old, pin]);
+        }
+    }
+
     let mounts_joined = (!mounts.is_empty()).then(|| mounts.join("\n"));
     let request = RunRequest {
         image: &target_image,
         slug: &slug,
         base_image: &base_image,
         channel: Some(&channel),
-        previous_image: previous_image.as_deref(),
+        // The daemon's Update card offers exactly what `ic sandbox rollback` will do — the record's own
+        // target — never the base tag that was replaced, a name whose meaning the registry moves.
+        previous_image: next.as_deref(),
         environment_hash: env_hash.as_deref(),
         runtime: (!runtime_lines.is_empty()).then_some(runtime_lines.as_str()),
         mounts: mounts_joined.as_deref(),
@@ -298,12 +362,17 @@ pub fn run(mode: Mode, slug: Option<String>) -> Result<()> {
     log.section(&format!("previous container logs ({container})"));
     docker::logs_into(&container, "5000", &log);
 
-    // The channel record — written BEFORE the rm, because the rm is what makes the old base unknowable, and
-    // before the LAUNCH: a swap that starts and then crash-loops is exactly the case rollback is for.
-    let next_previous = next_previous(&mode, &saved, previous_image.as_deref(), &base_image);
-    record::write(&slug, &channel, &base_image, next_previous.as_deref())?;
+    // The channel record — written BEFORE the swap and before the LAUNCH: a swap that starts and then
+    // crash-loops is exactly the case rollback is for. A launch that fails outright rewinds it below.
+    record::write(&slug, &channel, &base_image, next.as_deref())?;
 
-    docker::quiet(&["rm", "-f", &container]);
+    /* The cutover PARKS the old container instead of destroying it: stop, rename aside, and only a
+     * replacement that answers health earns the rm. Every failure path below puts the parked container
+     * back, so the worst outcome of an update is the sandbox you already had — `rm -f` first meant a
+     * failed launch left nothing, and the documented recovery was re-running the connect wizard. */
+    docker::quiet(&["rm", "-f", &parked]);
+    docker::quiet(&["stop", &container]);
+    docker::quiet(&["rename", &container, &parked]);
     log.section("run command");
 
     // Two attempts: everything the run can lose WITHOUT the sandbox being broken comes off together on the
@@ -315,11 +384,18 @@ pub fn run(mode: Mode, slug: Option<String>) -> Result<()> {
     if !docker::run_argv(&argv, &log) {
         docker::quiet(&["rm", "-f", &container]);
         let all_optional: Vec<String> = probes.iter().map(|probe| probe.token.clone()).collect();
-        let retry_argv = contract::run_command(&request, &env_nul, true, &all_optional, &log)?;
+        let retry_argv = match contract::run_command(&request, &env_nul, true, &all_optional, &log) {
+            Ok(retry_argv) => retry_argv,
+            Err(err) => {
+                restore_parked(&container, &parked, &slug, &channel, &saved);
+                return Err(err);
+            }
+        };
         if !docker::run_argv(&retry_argv, &log) {
+            restore_parked(&container, &parked, &slug, &channel, &saved);
             let tail = log.tail(5);
             bail!(
-                "starting the recreated sandbox failed (a runtime flag the host rejects, e.g. --privileged or /dev/net/tun?).\n{tail}\n       The previous container's logs and this error are saved to {}. Re-run your connect one-liner to restore the stock sandbox.",
+                "starting the recreated sandbox failed (a runtime flag the host rejects, e.g. --privileged or /dev/net/tun?).\n{tail}\n       Your previous sandbox was restored. The old container's logs and this error are saved to {}.",
                 log.path.display()
             );
         }
@@ -327,12 +403,28 @@ pub fn run(mode: Mode, slug: Option<String>) -> Result<()> {
     }
 
     println!("intentic: waiting for the sandbox daemon to come up…");
-    health::wait_answering(
+    if let Err(err) = health::wait_answering(
         &container,
         &log,
-        "\n       Re-run your connect one-liner to restore the stock sandbox.",
-    )?;
+        "\n       Your previous sandbox was restored — the update did not take.",
+    ) {
+        restore_parked(&container, &parked, &slug, &channel, &saved);
+        return Err(err);
+    }
     health::wait_ready(&container);
+    docker::quiet(&["rm", "-f", &parked]);
+
+    /* The record keeps ONE way back, so a superseded pin is dropped — kept, every update would retain a
+     * whole extra image, forever. Never the pin the record still names, and never the base just moved
+     * onto (a rollback's target IS the old `previous`). */
+    if let Some(old_pin) = saved.previous.as_deref() {
+        if old_pin.starts_with(&format!("intentic-sandbox-rollback-{slug}:"))
+            && Some(old_pin) != next.as_deref()
+            && old_pin != base_image
+        {
+            docker::quiet(&["rmi", old_pin]);
+        }
+    }
 
     match &mode {
         Mode::Rebuild { .. } => println!("intentic: sandbox rebuilt — the Environment card will show Applied once it reconnects."),
@@ -340,7 +432,7 @@ pub fn run(mode: Mode, slug: Option<String>) -> Result<()> {
             println!("intentic: sandbox updated to {target_image} (channel {channel}).");
             // Named on success, not only in the failure paths: a bad build is usually one that STARTS, and
             // the moment to learn the way back is before anyone needs it.
-            if previous_image.is_some() {
+            if next.is_some() {
                 println!("          Roll back with: ic sandbox rollback {slug}");
             }
         }
@@ -410,35 +502,87 @@ fn overlay_base(overlay: &str) -> Option<String> {
 
 /// May an overlay extend this base? Belt-and-braces — the daemon already enforced it at approval — but this
 /// is the last check before a build, and the overlay lives on a volume the AGENT can write. Allowed: any
-/// OFFICIAL sandbox image, the local dev tag, or the exact base this container was created from
+/// OFFICIAL sandbox image, the local dev tag, the exact base this container was created from
 /// (SANDBOX_BASE_IMAGE, stamped at `docker run` by whichever runner made it — not a value the agent can
-/// reach). Anything else would let an approved-looking overlay swap the base for an image of its choosing.
-fn base_is_allowed(base_image: &str, current_base: Option<&str>) -> bool {
+/// reach), or the rollback target the host-side channel record names (the rollback pre-step rewrites the
+/// FROM to it, and the record is not agent-writable either). Anything else would let an approved-looking
+/// overlay swap the base for an image of its choosing.
+fn base_is_allowed(
+    base_image: &str,
+    current_base: Option<&str>,
+    rollback_target: Option<&str>,
+) -> bool {
     let official = base_image
         .strip_prefix(&format!("{DEFAULT_REGISTRY}:"))
         .is_some_and(|tag| !tag.is_empty());
-    official || base_image == DEV_TAG || current_base == Some(base_image)
+    official
+        || base_image == DEV_TAG
+        || current_base == Some(base_image)
+        || rollback_target == Some(base_image)
 }
 
-/// What the record's `previous` becomes on this swap. `previous` is what a rollback returns to, and the
-/// property that matters is that a rollback SWAPS rather than appends: one button with no "how far back"
-/// control has to be its own undo, or pressing it twice walks backwards through history with no way
-/// forward. An unchanged base (a rebuild, a re-run of the same update) leaves the rollback target where it
-/// was — overwriting it with the image we are already on would quietly turn the button into a no-op. And a
-/// first-ever swap records none rather than inventing one: the daemon then offers no rollback, honestly.
+/// The protected local tag a rollback target is pinned under. The registry's tags MOVE — that is what an
+/// update is — and the moment one moves, the image it left becomes dangling: one routine
+/// `docker image prune` from deleting the only way back. A tag no other flow writes, per slug (two
+/// sandboxes on one daemon must not fight over it), named by the image's own id (re-pinning is idempotent).
+fn rollback_tag(slug: &str, image_id: &str) -> String {
+    let id = image_id.trim_start_matches("sha256:");
+    format!("intentic-sandbox-rollback-{slug}:{}", &id[..id.len().min(12)])
+}
+
+/// What the record's `previous` becomes on a swap whose bases resolved to these identities. `previous` is
+/// what a rollback returns to, and two properties matter. IDENTITY, not names: a stock stable-channel
+/// update is :stable → :stable by name while the images differ — exactly the case rollback exists for, and
+/// the string comparison this replaces is how every such sandbox ended up with nothing to roll back to.
+/// And a rollback SWAPS rather than appends: the build being LEFT becomes the new target, so one button
+/// with no "how far back" control is its own undo — pressing it twice returns you forward. An unchanged
+/// base (a rebuild, a re-run of the same update) keeps the target — overwriting it with the image we are
+/// already on would quietly turn the button into a no-op — and an unknowable identity keeps it too, rather
+/// than inventing one: on a first-ever swap the daemon then offers no rollback, honestly.
 fn next_previous(
-    mode: &Mode,
     saved: &record::ChannelRecord,
-    previous_image: Option<&str>,
-    base_image: &str,
+    old_base_id: Option<&str>,
+    new_base_id: Option<&str>,
+    slug: &str,
 ) -> Option<String> {
-    match mode {
-        Mode::Rollback => saved.current.clone(),
-        _ if previous_image.is_some() && previous_image != Some(base_image) => {
-            previous_image.map(str::to_string)
-        }
+    match (old_base_id, new_base_id) {
+        (Some(old), Some(new)) if old != new => Some(rollback_tag(slug, old)),
         _ => saved.previous.clone(),
     }
+}
+
+/// Put the parked container back under its name: the failed replacement (if any) is removed, the old
+/// container returns and starts, and the channel record is rewound to what it said before the swap — the
+/// swap it described did not happen. Best-effort on every step: this runs on the failure path, where the
+/// one job is to leave the machine as close to "before" as it can reach.
+fn restore_parked(
+    container: &str,
+    parked: &str,
+    slug: &str,
+    channel: &str,
+    saved: &record::ChannelRecord,
+) {
+    if !docker::container_exists(parked) {
+        return;
+    }
+    docker::quiet(&["rm", "-f", container]);
+    docker::quiet(&["rename", parked, container]);
+    docker::quiet(&["start", container]);
+    match &saved.current {
+        Some(current) => {
+            let _ = record::write(
+                slug,
+                saved.channel.as_deref().unwrap_or(channel),
+                current,
+                saved.previous.as_deref(),
+            );
+        }
+        // No record existed before this swap — none must exist after its failure.
+        None => {
+            let _ = std::fs::remove_file(record::record_path(slug));
+        }
+    }
+    println!("intentic: the previous sandbox container was restored and is starting again.");
 }
 
 fn container_env(container: &str, name: &str) -> Option<String> {
@@ -462,52 +606,82 @@ mod tests {
     }
 
     #[test]
-    fn an_update_records_what_it_replaced_and_a_rollback_swaps_the_pair() {
-        // Update img:1 → img:2: the replaced image becomes the rollback target.
-        let update = Mode::Update { channel: None };
-        assert_eq!(
-            next_previous(&update, &saved(None, None), Some("img:1"), "img:2").as_deref(),
-            Some("img:1")
-        );
-        // Rolling back onto img:1: `previous` becomes the image we are LEAVING, so the next rollback goes
-        // forward again — pressing the button twice returns you to where you started.
+    fn a_stock_stable_update_pins_the_replaced_image_even_though_the_names_match() {
+        // :stable → :stable is string-equal on every stock update; only the ids know the image moved. The
+        // string comparison this replaced recorded nothing here — every stock sandbox had no way back.
         assert_eq!(
             next_previous(
-                &Mode::Rollback,
-                &saved(Some("img:2"), Some("img:1")),
-                Some("img:2"),
-                "img:1"
+                &saved(None, None),
+                Some("sha256:0123456789abcdef"),
+                Some("sha256:fedcba9876543210"),
+                "abc"
             )
             .as_deref(),
-            Some("img:2")
+            Some("intentic-sandbox-rollback-abc:0123456789ab")
+        );
+    }
+
+    #[test]
+    fn a_rollback_pins_the_build_being_left_so_pressing_it_twice_returns_forward() {
+        // Rolling back from bad build (id f…) onto the pinned good one (id 0…): `previous` becomes the
+        // image being LEFT, so the next rollback goes forward again.
+        assert_eq!(
+            next_previous(
+                &saved(
+                    Some("ghcr.io/intentic/sandbox:stable"),
+                    Some("intentic-sandbox-rollback-abc:0123456789ab")
+                ),
+                Some("sha256:fedcba9876543210"),
+                Some("sha256:0123456789abcdef"),
+                "abc"
+            )
+            .as_deref(),
+            Some("intentic-sandbox-rollback-abc:fedcba987654")
         );
     }
 
     #[test]
     fn a_swap_that_does_not_move_the_base_leaves_the_rollback_target_alone() {
         // A rebuild (same base, new overlay) must not overwrite `previous` with the image we are already on.
-        let rebuild = Mode::Rebuild {
-            hash: "0".repeat(64),
-        };
         assert_eq!(
             next_previous(
-                &rebuild,
-                &saved(Some("img:2"), Some("img:1")),
-                Some("img:2"),
-                "img:2"
+                &saved(Some("img:2"), Some("intentic-sandbox-rollback-abc:0123456789ab")),
+                Some("sha256:aaaa"),
+                Some("sha256:aaaa"),
+                "abc"
             )
             .as_deref(),
-            Some("img:1")
+            Some("intentic-sandbox-rollback-abc:0123456789ab")
         );
     }
 
     #[test]
-    fn a_first_ever_swap_records_no_rollback_target_rather_than_inventing_one() {
-        let update = Mode::Update { channel: None };
+    fn an_unknowable_identity_keeps_the_target_rather_than_inventing_one() {
+        // First-ever swap, nothing known: no target is recorded, and the daemon offers no rollback, honestly.
         assert_eq!(
-            next_previous(&update, &saved(None, None), None, "img:1"),
+            next_previous(&saved(None, None), None, Some("sha256:bbbb"), "abc"),
             None
         );
+        // A target already on record survives a swap whose identities cannot be resolved.
+        assert_eq!(
+            next_previous(&saved(Some("img:2"), Some("pin:1")), None, None, "abc").as_deref(),
+            Some("pin:1")
+        );
+    }
+
+    #[test]
+    fn the_pin_is_per_slug_and_named_by_the_images_own_id() {
+        assert_eq!(
+            rollback_tag("abc", "sha256:0123456789abcdef0123"),
+            "intentic-sandbox-rollback-abc:0123456789ab"
+        );
+        // Docker prints ids both prefixed and bare — both pin to the same tag.
+        assert_eq!(
+            rollback_tag("abc", "0123456789abcdef0123"),
+            "intentic-sandbox-rollback-abc:0123456789ab"
+        );
+        // A short id is not sliced past its end.
+        assert_eq!(rollback_tag("a", "sha256:abc"), "intentic-sandbox-rollback-a:abc");
     }
 
     #[test]
@@ -532,38 +706,62 @@ mod tests {
     #[test]
     fn an_overlay_may_only_extend_an_official_base_the_dev_tag_or_its_own() {
         // Official releases, any tag.
-        assert!(base_is_allowed("ghcr.io/intentic/sandbox:stable", None));
-        assert!(base_is_allowed("ghcr.io/intentic/sandbox:1.2.3", None));
+        assert!(base_is_allowed("ghcr.io/intentic/sandbox:stable", None, None));
+        assert!(base_is_allowed("ghcr.io/intentic/sandbox:1.2.3", None, None));
         // The dogfood tag, so the dev loop and the rebuild loop are not mutually exclusive.
-        assert!(base_is_allowed(DEV_TAG, None));
+        assert!(base_is_allowed(DEV_TAG, None, None));
         // This container's own stamped base — the case that lets an already-extended sandbox rebuild.
         assert!(base_is_allowed(
             "intentic-sandbox-env-abc:0123456789ab",
-            Some("intentic-sandbox-env-abc:0123456789ab")
+            Some("intentic-sandbox-env-abc:0123456789ab"),
+            None
+        ));
+    }
+
+    #[test]
+    fn the_rollback_pin_is_an_allowed_base_only_when_the_host_record_names_it() {
+        // The rollback pre-step rewrites the FROM to the record's target; the record is host-side, so the
+        // rewritten base is trusted — but only during a rollback that actually named it.
+        assert!(base_is_allowed(
+            "intentic-sandbox-rollback-abc:0123456789ab",
+            None,
+            Some("intentic-sandbox-rollback-abc:0123456789ab")
+        ));
+        assert!(!base_is_allowed(
+            "intentic-sandbox-rollback-abc:0123456789ab",
+            None,
+            None
         ));
     }
 
     #[test]
     fn an_overlay_may_not_swap_the_base_for_an_image_of_its_choosing() {
         // The whole point of the check: the overlay lives on a volume the AGENT can write.
-        assert!(!base_is_allowed("alpine:latest", None));
+        assert!(!base_is_allowed("alpine:latest", None, None));
         assert!(!base_is_allowed(
             "evil.example.com/backdoor:latest",
-            Some("ghcr.io/intentic/sandbox:stable")
+            Some("ghcr.io/intentic/sandbox:stable"),
+            None
         ));
         // A tagless official reference is refused rather than resolving to :latest.
-        assert!(!base_is_allowed("ghcr.io/intentic/sandbox", None));
-        assert!(!base_is_allowed("ghcr.io/intentic/sandbox:", None));
+        assert!(!base_is_allowed("ghcr.io/intentic/sandbox", None, None));
+        assert!(!base_is_allowed("ghcr.io/intentic/sandbox:", None, None));
         // Near-misses on the registry path must not pass as official.
         assert!(!base_is_allowed(
             "ghcr.io/intentic/sandbox-evil:stable",
+            None,
             None
         ));
-        assert!(!base_is_allowed("ghcr.io/notintentic/sandbox:stable", None));
+        assert!(!base_is_allowed(
+            "ghcr.io/notintentic/sandbox:stable",
+            None,
+            None
+        ));
         // A different sandbox's env image is not this one's base.
         assert!(!base_is_allowed(
             "intentic-sandbox-env-other:abc",
-            Some("intentic-sandbox-env-mine:abc")
+            Some("intentic-sandbox-env-mine:abc"),
+            None
         ));
     }
 

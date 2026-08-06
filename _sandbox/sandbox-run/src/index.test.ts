@@ -42,21 +42,22 @@ test("the local shape carries the full posture: init, alias, all three volumes, 
     ]);
 });
 
-test("the hosted-provider shape drops init/alias/history and adds ports, labels, dns — same posture", () => {
+test("the hosted-provider shape drops init/alias and adds ports, labels, dns — same posture, same volumes", () => {
     const argv = sandboxRunArgv({
         names,
         image: "img:2",
         baseImage: "img:2",
         init: false,
         alias: false,
-        history: false,
         ports: ["10.0.0.2:5173:5173"],
         labels: ["intentic.type=workspace"],
         dns: ["1.1.1.1"],
     });
     expect(argv).not.toContain("--init");
     expect(argv).not.toContain("--network-alias");
-    expect(argv.join(" ")).not.toContain(":/history");
+    // /history rides every shape — the hosted flavor once skipped it, and each update wiped the fleet,
+    // the transcripts and every repo's real git dir while "your files are kept" stayed technically true.
+    expect(argv.join(" ")).toContain("intentic-history-abc-123:/history");
     expect(argv.join(" ")).toContain("--label intentic.type=workspace");
     expect(argv.join(" ")).toContain("--dns 1.1.1.1");
     expect(argv.join(" ")).toContain("-p 10.0.0.2:5173:5173");

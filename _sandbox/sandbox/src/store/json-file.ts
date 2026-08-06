@@ -19,6 +19,13 @@ import { basename, dirname, join } from "node:path";
  * change function inside a per-file promise queue, which is the whole concurrency story: these files are
  * kilobytes and their writes are user-gesture rare, so serializing them costs nothing worth measuring.
  *
+ * DOWNGRADES. `parse` rejecting is not only damage — it is also what a build reading state written by a NEWER
+ * build sees, which is the ordinary aftermath of `ic sandbox rollback`. Reading the fallback is right; letting
+ * the next `update` write that fallback over the only copy of the newer bytes is the quiet half of the loss:
+ * the rolled-back daemon "resets" the store, and rolling forward again finds nothing to recover. So an update
+ * about to replace content that EXISTS but could not be read sets the original aside first (<name>.corrupt,
+ * the agents-store convention). Absent is not unreadable — a file that never existed has nothing to protect.
+ *
  * ponytail: the queue is per file OBJECT, so it orders this daemon's own handlers and nothing else. The agent
  *           can write /work/.intentic files with its own tools, and a write of its that lands between our read
  *           and our rename is still lost. Atomicity means it loses a whole update rather than corrupting the
@@ -69,14 +76,24 @@ export const writeJsonFile = async (path: string, value: unknown, mode?: number)
 };
 
 export const jsonFile = <T>(path: string, { parse, fallback, mode }: JsonFileOptions<T>): JsonFile<T> => {
-    const read = async (): Promise<T> => {
+    // The file's value, and — for `update` — whether that answer stands in for CONTENT THAT EXISTS but could
+    // not be read (not JSON, or rejected by `parse`). Only `update` acts on the distinction; a read's answer
+    // is the same either way.
+    const readState = async (): Promise<{ value: T; unreadable: boolean }> => {
+        let text: string;
+        try {
+            text = await readFile(path, "utf8");
+        } catch {
+            return { value: fallback(), unreadable: false };
+        }
         let raw: unknown;
         try {
-            raw = JSON.parse(await readFile(path, "utf8"));
+            raw = JSON.parse(text);
         } catch {
-            return fallback();
+            return { value: fallback(), unreadable: true };
         }
-        return parse(raw) ?? fallback();
+        const parsed = parse(raw);
+        return parsed === undefined ? { value: fallback(), unreadable: true } : { value: parsed, unreadable: false };
     };
 
     // Chained rather than a lock object: `update` is the only writer, so the tail of this promise IS the queue.
@@ -85,12 +102,18 @@ export const jsonFile = <T>(path: string, { parse, fallback, mode }: JsonFileOpt
     let queue: Promise<unknown> = Promise.resolve();
 
     return {
-        read,
+        read: async () => (await readState()).value,
         update: (change) => {
             const next = queue.then(async () => {
-                const current = await read();
+                const { value: current, unreadable } = await readState();
                 const updated = change(current);
                 if (updated !== current) {
+                    // What this store could not read, it must not overwrite (the DOWNGRADES rule above): the
+                    // bytes move aside — recoverable by hand, or by the newer build that wrote them once a
+                    // rollback rolls forward again — and only then does fallback-derived state take the name.
+                    if (unreadable) {
+                        await rename(path, `${path}.corrupt`).catch(() => undefined);
+                    }
                     await writeJsonFile(path, updated, mode);
                 }
                 return updated;

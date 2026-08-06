@@ -277,9 +277,8 @@ export interface SandboxRun {
      * SANDBOX_IMAGE does — the runner decides per run, and replaying would pin a sandbox to the answer its
      * first host gave, so a machine that later grows a GPU could never say so. */
     readonly unsupported?: readonly string[];
-    // The hosted provider runs without a /history volume, --init, or the network alias (no tunnel sidecar
-    // shares its network); every local flow has all three. Defaults are the local shape.
-    readonly history?: boolean;
+    // The hosted provider runs without --init or the network alias (no tunnel sidecar shares its network);
+    // every local flow has both. Defaults are the local shape.
     readonly init?: boolean;
     readonly alias?: boolean;
 }
@@ -319,7 +318,12 @@ export const sandboxRunArgv = (run: SandboxRun): string[] => {
         ...(run.sandboxId !== undefined && run.localPublish !== false ? ["-p", `127.0.0.1:${localDaemonPort(run.sandboxId)}:${LOCAL_PORT}`] : []),
         "-v",
         `${run.names.workspaceVolume}:/work`,
-        ...(run.history === false ? [] : ["-v", `${run.names.historyVolume}:/history`]),
+        // /history is never optional: it holds the fleet registry, transcripts, every repo's real git dir and
+        // the checkpoints (sandbox-contract's history-state.ts). A sandbox recreated without it comes back
+        // with an empty agent board and a /work full of dangling gitdir pointers — which is how the hosted
+        // flavor lost its users' history on every update until this volume stopped being skippable.
+        "-v",
+        `${run.names.historyVolume}:/history`,
         "-v",
         `${run.names.dockerVolume}:/var/lib/docker`,
         ...(run.mounts ?? []).flatMap((mount) => ["-v", mount]),
