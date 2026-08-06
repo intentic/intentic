@@ -4,17 +4,25 @@ import type { Pairing } from "./config.js";
 import { type BridgeExec, bridgeRepo, listSandboxRepos, runGitBridge } from "./git-bridge.js";
 
 // A scripted BridgeExec: `handlers` maps a command-line PREFIX to its stdout (undefined = that command fails),
-// first match wins, anything unscripted succeeds with empty output. `existing` is the fake filesystem.
-const scripted = (handlers: Record<string, string | undefined>, existing: readonly string[] = []) => {
+// first match wins, anything unscripted succeeds with empty output. `existing` is the fake filesystem. An ARRAY
+// answers successive calls of the same command in order (the last entry repeats) — the bridge reads the
+// sandbox's remote-tracking ref both before and after a fetch, and the two readings are the whole point.
+const scripted = (handlers: Record<string, string | undefined | readonly (string | undefined)[]>, existing: readonly string[] = []) => {
     const calls: string[] = [];
     const paths = new Set(existing);
+    const seen = new Map<string, number>();
     const exec: BridgeExec = {
         run: (command, args) => {
             const line = [command, ...args].join(" ");
             calls.push(line);
             for (const [prefix, out] of Object.entries(handlers)) {
                 if (line.startsWith(prefix)) {
-                    return out;
+                    if (!Array.isArray(out)) {
+                        return out as string | undefined;
+                    }
+                    const nth = seen.get(prefix) ?? 0;
+                    seen.set(prefix, nth + 1);
+                    return out[Math.min(nth, out.length - 1)];
                 }
             }
             return "";
@@ -172,6 +180,49 @@ describe("bridgeRepo", () => {
                 "git rev-parse -q --verify refs/remotes/sandbox/main": `${TIP}\n`,
                 "git rev-parse -q --verify HEAD": `${DIVERGED}\n`,
                 [`git merge-base --is-ancestor HEAD ${TIP}`]: undefined, // diverged
+            },
+            [DIR, join(DIR, ".git")],
+        );
+        bridgeRepo(exec, ALIAS, LOCAL, "proj", (message) => logs.push(message));
+        expect(calls.some((line) => line.startsWith("git reset"))).toBe(false);
+        expect(logs.join("\n")).toContain("diverge");
+    });
+
+    // The rewind: the sandbox undoes a commit the bridge had already installed here. HEAD is then a commit the
+    // sandbox lacks — indistinguishable from local work by ancestry alone, and refusing it strands the desktop
+    // on discarded history while file sync keeps delivering every later commit as uncommitted noise.
+    it("follows the sandbox back when it rewinds history the bridge itself installed", () => {
+        const logs: string[] = [];
+        const { calls, exec } = scripted(
+            {
+                "git remote get-url": `${ALIAS}:/history/gits/proj\n`,
+                "git ls-remote": SYMREF_MAIN,
+                // Before the fetch the ref still holds what this bridge last installed (= local HEAD); after it,
+                // the tip the sandbox rewound to.
+                "git rev-parse -q --verify refs/remotes/sandbox/main": [`${DIVERGED}\n`, `${TIP}\n`],
+                "git rev-parse -q --verify HEAD": `${DIVERGED}\n`,
+                "git symbolic-ref --short -q HEAD": "main\n",
+                [`git merge-base --is-ancestor HEAD ${TIP}`]: undefined, // not a fast-forward
+            },
+            [DIR, join(DIR, ".git")],
+        );
+        bridgeRepo(exec, ALIAS, LOCAL, "proj", (message) => logs.push(message));
+        expect(calls).toContain(`git reset -q ${TIP}`);
+        expect(logs.join("\n")).toContain("rewound");
+    });
+
+    // The same shape, but the local tip is NOT what the bridge installed — someone committed here. That is work
+    // no sync may destroy, so the refusal stands.
+    it("still refuses when the local tip is a commit the bridge never installed", () => {
+        const logs: string[] = [];
+        const { calls, exec } = scripted(
+            {
+                "git remote get-url": `${ALIAS}:/history/gits/proj\n`,
+                "git ls-remote": SYMREF_MAIN,
+                "git rev-parse -q --verify refs/remotes/sandbox/main": [`${OLD}\n`, `${TIP}\n`],
+                "git rev-parse -q --verify HEAD": `${DIVERGED}\n`,
+                "git symbolic-ref --short -q HEAD": "main\n",
+                [`git merge-base --is-ancestor HEAD ${TIP}`]: undefined,
             },
             [DIR, join(DIR, ".git")],
         );

@@ -120,6 +120,10 @@ export const bridgeRepo = (exec: BridgeExec, alias: string, localDir: string, re
     if (head === remoteTip && localBranch === branch) {
         return; // nothing moved since the last pass — the overwhelmingly common case, and it ends here
     }
+    // Where the bridge itself last left this branch, read BEFORE the fetch overwrites the ref. It is the one
+    // fact that tells the user's own commits apart from history this bridge installed — which is what makes a
+    // sandbox REWIND recoverable below.
+    const lastBridged = exec.run("git", ["rev-parse", "-q", "--verify", `refs/remotes/sandbox/${branch}`], dir)?.trim();
     if (exec.run("git", ["fetch", "-q", "sandbox", `+refs/heads/${branch}:refs/remotes/sandbox/${branch}`], dir) === undefined) {
         log(`  ${repo}: fetch from the sandbox failed — will retry next pass`);
         return;
@@ -134,10 +138,19 @@ export const bridgeRepo = (exec: BridgeExec, alias: string, localDir: string, re
     if (head !== undefined && exec.run("git", ["diff", "--cached", "--quiet"], dir) === undefined) {
         return;
     }
-    // Fast-forward only: local commits the sandbox lacks stay exactly where they are.
+    /* Fast-forward only: local commits the sandbox lacks stay exactly where they are — UNLESS the local tip is
+     * EXACTLY what the bridge last installed, which means nobody committed here and the sandbox rewound its own
+     * history (a commit undone in the Changes panel, an amend, a reset). There is no local work to protect in
+     * that case, and refusing is not the safe choice it looks like: the desktop stays pinned to a commit the
+     * sandbox has thrown away, file sync keeps delivering every later commit's FILES, and the local `git status`
+     * grows without bound — hundreds of "changes" the user cannot commit, revert or explain, with nothing short
+     * of a hand-run `git reset` to clear them. So follow the rewind; the worktree is untouched either way. */
     if (head !== undefined && head !== tip && exec.run("git", ["merge-base", "--is-ancestor", "HEAD", tip], dir) === undefined) {
-        log(`  ${repo}: local commits diverge from the sandbox — leaving it alone`);
-        return;
+        if (head !== lastBridged) {
+            log(`  ${repo}: local commits diverge from the sandbox — leaving it alone`);
+            return;
+        }
+        log(`  ${repo}: the sandbox rewound ${branch} — following it back`);
     }
     if (localBranch !== branch) {
         // The sandbox checked out a different branch (or this repo was just initialized): follow it by name —
