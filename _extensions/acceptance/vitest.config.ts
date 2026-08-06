@@ -14,7 +14,13 @@ const here = (path: string): string => fileURLToPath(new URL(path, import.meta.u
  * its way in, and the assertions then failed as though the code under test were wrong. Aliasing the package ROOT
  * (not its index) keeps the subpath entries resolving to source too. Same reasoning as _sandbox/sandbox/vitest.config.ts. */
 export default defineConfig({
-    resolve: { alias: { "@intentic/sandbox-contract": here(`../../_sandbox/sandbox-contract/src`) } },
+    resolve: {
+        alias: {
+            "@intentic/extension-api": here(`../../_sandbox/extension-api/src`),
+            "@intentic/registry": here(`../../_sandbox/registry/src`),
+            "@intentic/sandbox-contract": here(`../../_sandbox/sandbox-contract/src`),
+        },
+    },
     test: {
         include: ["./src/**/*.test.ts"],
         environment: "node",

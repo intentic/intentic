@@ -9,16 +9,16 @@ const story: RunStory = {
     slug: `01-sign-in`,
     title: `Sign in`,
     conversationId: `xt-rabc-01-sign-in`,
+    content: `# Sign in\n\nAs a user I can sign in with Google.\n`,
+    criteria: [],
 };
 
-const brief = (over: Partial<Parameters<typeof briefFor>[0]> = {}): string =>
+const brief = (over: { readonly criteria?: readonly string[]; readonly projectNotes?: string | undefined } = {}): string =>
     briefFor({
-        story,
-        content: `# Sign in\n\nAs a user I can sign in with Google.\n`,
-        criteria: [],
+        story: { ...story, ...(over.criteria === undefined ? {} : { criteria: over.criteria }) },
         runId: `rabc`,
         baseUrl: `http://localhost:5173`,
-        ...over,
+        projectNotes: over.projectNotes,
     });
 
 describe(`briefFor`, () => {

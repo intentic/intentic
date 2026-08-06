@@ -18,7 +18,7 @@ import {
     type StoryResult,
     type Verdict,
 } from "./runs";
-import { type Story, targetKeyOf } from "./stories";
+import { criteriaOf, type Story, targetKeyOf, titleOf } from "./stories";
 
 /* Runs, and the fleet sessions that produce them.
  *
@@ -31,11 +31,17 @@ import { type Story, targetKeyOf } from "./stories";
  * watching a fan-out of ten. The blast radius is bounded the way the fleet bounds it — each session is in its
  * own worktree — and the brief's first paragraph is "you are a tester, do not modify the source".
  *
- * Status is JOINED, never stored: the conversation ids are derived from the run id, so `GET /agents` filtered by
- * prefix IS the run's live state. There is no bookkeeping here that can drift out of sync with the fleet. The
- * same join reaches one step further for the live BROWSER — see `browsers` below. */
+ * Live status is JOINED, never stored: the conversation ids are derived from the run id, so `GET /agents`
+ * filtered by prefix IS the state of every registered session. A refusal before registration is the one fact
+ * the fleet cannot carry, so the manifest keeps it until Retry succeeds. The same roster join reaches one step
+ * further for the live BROWSER — see `browsers` below. */
 
 const POLL_MS = 3000;
+
+const launchError = (reason: unknown): string => {
+    const message = reason instanceof Error ? reason.message : String(reason);
+    return message === `` ? `The session could not be started.` : message;
+};
 
 export interface RunRow {
     readonly manifest: RunManifest;
@@ -43,9 +49,21 @@ export interface RunRow {
     readonly running: boolean;
 }
 
+// A persisted refusal means "not started" only while the fleet has no session. This one rule also covers the
+// narrow success-before-manifest-write window of Retry: the live session is the stronger fact.
+export const launchFailureOf = (run: Pick<RunRow, "manifest" | "agents">, slug: string): string | undefined => {
+    const failure = run.manifest.launchFailures[slug];
+    if (failure === undefined) {
+        return undefined;
+    }
+    const conversationId = run.manifest.stories.find((story) => story.slug === slug)?.conversationId;
+    return run.agents.some((agent) => agent.id === conversationId) ? undefined : failure;
+};
+
 export interface StoryOutcome {
     readonly result?: StoryResult;
     readonly report?: string;
+    readonly invalidResult?: boolean;
 }
 
 // The live Chromium one test session is driving, when there is one to watch.
@@ -58,12 +76,9 @@ export interface LiveBrowser {
 
 export interface StartRunInput {
     readonly stories: readonly Story[];
-    readonly contents: Readonly<Record<string, string>>;
     // The app under test per story GROUP — keyed by stories.ts targetKeyOf, so a repo serving a marketing site
     // and a web app points each of their groups at its own server.
     readonly targets: Readonly<Record<string, string>>;
-    // The authored acceptance criteria per story path, so the brief can demand one verdict per criterion.
-    readonly criteria: Readonly<Record<string, readonly string[]>>;
     // Each repo's docs/user-stories/.acceptance.md, keyed by repo name.
     readonly notes: Readonly<Record<string, string>>;
     // The pair the header's chip resolved — the host names both, because a model id is only meaningful under the
@@ -79,23 +94,12 @@ export function useRuns() {
     const runsKey = computed(() => api.sandbox.key(`acceptance`, `runs`));
     const agentsKey = computed(() => api.sandbox.key(`acceptance`, `agents`));
 
-    const json = async <T>(path: string): Promise<T | undefined> => {
-        try {
-            return (await api.sandbox.json(path)) as T;
-        } catch {
-            return undefined;
-        }
-    };
-
     const runsQuery = useQuery({
         queryKey: runsKey,
         enabled: computed(() => api.sandbox.reachable()),
         queryFn: async (): Promise<RunManifest[]> => {
             // No runs directory yet is the ordinary first state, not an error.
-            const listing = await json<unknown>(`/workspace/children?path=${encodeURIComponent(RUNS_DIR)}`);
-            if (listing === undefined) {
-                return [];
-            }
+            const listing = await api.sandbox.json(`/workspace/children?path=${encodeURIComponent(RUNS_DIR)}`);
             const dirs = WorkspaceChildrenSchema.parse(listing).entries.filter((entry) => entry.type === `dir`);
             const manifests = await Promise.all(dirs.map(async (entry) => await api.workspace.file(`${entry.path}/run.json`)));
             return manifests
@@ -188,7 +192,10 @@ export function useRuns() {
                         const results = await Promise.all(
                             run.stories.map(
                                 async (story) =>
-                                    [story.slug, parseResult((await api.workspace.file(resultPath(run.runId, story.slug))) ?? ``)?.verdict] as const,
+                                    [
+                                        story.slug,
+                                        parseResult((await api.workspace.file(resultPath(run.runId, story.slug))) ?? ``, story)?.verdict,
+                                    ] as const,
                             ),
                         );
                         // The run's own key exists even when every story is still walking: "scanned, nothing
@@ -222,10 +229,14 @@ export function useRuns() {
                             api.workspace.file(resultPath(id, story.slug)),
                             api.workspace.file(reportPath(id, story.slug)),
                         ]);
-                        const parsed = result === undefined ? undefined : parseResult(result);
+                        const parsed = result === undefined ? undefined : parseResult(result, story);
                         return [
                             story.slug,
-                            { ...(parsed === undefined ? {} : { result: parsed }), ...(report === undefined ? {} : { report }) },
+                            {
+                                ...(parsed === undefined ? {} : { result: parsed }),
+                                ...(result !== undefined && parsed === undefined ? { invalidResult: true } : {}),
+                                ...(report === undefined ? {} : { report }),
+                            },
                         ] as const;
                     }),
                 );
@@ -238,51 +249,97 @@ export function useRuns() {
      * Order matters. The manifest is what makes a run discoverable — if a turn started before it existed and the
      * browser closed in between, there would be a fleet agent with a derived id and nothing on disk saying which
      * stories it belonged to. A manifest with no turns behind it is the recoverable failure; the reverse is not. */
+    const launch = async (manifest: RunManifest, story: RunManifest["stories"][number]): Promise<void> => {
+        const brief = briefFor({
+            story,
+            runId: manifest.runId,
+            baseUrl: manifest.targets[targetKeyOf(story)] ?? ``,
+            projectNotes: manifest.notes[story.repo],
+        });
+        const body = {
+            prompt: brief,
+            title: `Acceptance: ${story.title}`.slice(0, 80),
+            conversationId: story.conversationId,
+            isolated: true,
+            permissionMode: `bypassPermissions`,
+            // Unattended like every surface-started run — but this one keeps a picker, because a run
+            // fans a whole session out PER STORY and the tier is therefore a per-run decision about
+            // spend. An explicit model wins over the setting; an empty one lets it answer.
+            unattended: true,
+            agent: manifest.provider,
+            ...(manifest.model === undefined ? {} : { model: manifest.model }),
+        };
+        StartedTurnSchema.parse(
+            await api.sandbox.json(`/agent`, { method: `POST`, headers: { "content-type": `application/json` }, body: JSON.stringify(body) }),
+        );
+    };
+
     const start = async (input: StartRunInput): Promise<string> => {
         const createdAt = Date.now();
         const runId = runIdAt(createdAt);
+        // The list prefetch is deliberately bounded, but a run is not: every selected file is read HERE, at the
+        // point-in-time the run records. Missing text refuses before a manifest or any paid turn is created.
+        const snapshots = await Promise.all(
+            input.stories.map(async (story) => {
+                const content = await api.workspace.file(story.path);
+                if (content === undefined) {
+                    throw new Error(`Could not read ${story.path}; no acceptance sessions were started.`);
+                }
+                return { ...story, title: titleOf(story.path, content), content, criteria: criteriaOf(content) };
+            }),
+        );
         const manifest = runManifestOf({
             runId,
             createdAt,
             targets: input.targets,
+            notes: input.notes,
             provider: input.provider,
             model: input.model,
-            stories: input.stories,
+            stories: snapshots,
         });
         await api.workspace.write(runManifestPath(runId), JSON.stringify(manifest, null, 2));
         // Fired together rather than in sequence: the fleet runs them in parallel anyway, and awaiting each ack
         // in turn would make the last story's card appear seconds after the first's for no reason. The manifest's
         // own story entries are what the turns are built from, so the conversation id on disk is the one started.
-        await Promise.all(
-            manifest.stories.map(async (story) => {
-                const brief = briefFor({
-                    story,
-                    content: input.contents[story.path] ?? ``,
-                    criteria: input.criteria[story.path] ?? [],
-                    runId,
-                    baseUrl: input.targets[targetKeyOf(story)] ?? ``,
-                    projectNotes: input.notes[story.repo],
-                });
-                const body = {
-                    prompt: brief,
-                    title: `Acceptance: ${story.title}`.slice(0, 80),
-                    conversationId: story.conversationId,
-                    isolated: true,
-                    permissionMode: `bypassPermissions`,
-                    // Unattended like every surface-started run — but this one keeps a picker, because a run
-                    // fans a whole session out PER STORY and the tier is therefore a per-run decision about
-                    // spend. An explicit model wins over the setting; an empty one lets it answer.
-                    unattended: true,
-                    agent: input.provider,
-                    ...(input.model === undefined || input.model === `` ? {} : { model: input.model }),
-                };
-                StartedTurnSchema.parse(
-                    await api.sandbox.json(`/agent`, { method: `POST`, headers: { "content-type": `application/json` }, body: JSON.stringify(body) }),
-                );
-            }),
+        const launched = await Promise.allSettled(manifest.stories.map(async (story) => await launch(manifest, story)));
+        const launchFailures = Object.fromEntries(
+            launched.flatMap((result, index) =>
+                result.status === `fulfilled` ? [] : [[manifest.stories[index]?.slug ?? `unknown`, launchError(result.reason)] as const],
+            ),
         );
-        await queryClient.invalidateQueries({ queryKey: runsKey.value });
+        if (Object.keys(launchFailures).length > 0) {
+            await api.workspace.write(runManifestPath(runId), JSON.stringify({ ...manifest, launchFailures }, null, 2));
+        }
+        await Promise.all([queryClient.invalidateQueries({ queryKey: runsKey.value }), queryClient.invalidateQueries({ queryKey: agentsKey.value })]);
         return runId;
+    };
+
+    const retry = async (runId: string, slug: string): Promise<void> => {
+        const manifest = runsQuery.data.value?.find((run) => run.runId === runId);
+        const story = manifest?.stories.find((entry) => entry.slug === slug);
+        if (manifest === undefined || story === undefined || manifest.launchFailures[slug] === undefined) {
+            return;
+        }
+        try {
+            // This catch ends with the provider call. If clearing the manifest fails after the launch was
+            // acknowledged, that storage error must not be rewritten as though the provider refused a session.
+            try {
+                await launch(manifest, story);
+            } catch (error) {
+                await api.workspace.write(
+                    runManifestPath(runId),
+                    JSON.stringify({ ...manifest, launchFailures: { ...manifest.launchFailures, [slug]: launchError(error) } }, null, 2),
+                );
+                throw error;
+            }
+            const launchFailures = Object.fromEntries(Object.entries(manifest.launchFailures).filter(([failed]) => failed !== slug));
+            await api.workspace.write(runManifestPath(runId), JSON.stringify({ ...manifest, launchFailures }, null, 2));
+        } finally {
+            await Promise.all([
+                queryClient.invalidateQueries({ queryKey: runsKey.value }),
+                queryClient.invalidateQueries({ queryKey: agentsKey.value }),
+            ]);
+        }
     };
 
     const stop = async (conversationId: string): Promise<void> => {
@@ -302,12 +359,19 @@ export function useRuns() {
         // runId → slug → verdict, for the newest SCAN_RUNS runs. A runId that is absent was never read; a runId
         // present with no entry for a slug has no result written yet.
         verdicts: computed<Readonly<Record<string, Readonly<Record<string, Verdict>>>>>(() => verdictsQuery.data.value ?? {}),
-        error: computed(() => runsQuery.error.value?.message),
+        error: computed(
+            () =>
+                runsQuery.error.value?.message ??
+                agentsQuery.error.value?.message ??
+                browsersQuery.error.value?.message ??
+                verdictsQuery.error.value?.message,
+        ),
         isLoading: runsQuery.isLoading,
         refresh: async (): Promise<void> => {
             await queryClient.invalidateQueries({ queryKey: runsKey.value });
         },
         start,
+        retry,
         stop,
         useRunOutcomes,
     };

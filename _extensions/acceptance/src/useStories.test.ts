@@ -101,19 +101,26 @@ describe(`useStories`, () => {
             ]),
         );
 
-        const { stories, criteria, error } = await run(api);
+        const { stories, contents, error } = await run(api);
 
         // The assertion that pins the bug: a TDZ inside queryFn surfaces as the query's error, which is exactly
         // what the view renders in its banner.
         expect(error.value).toBeUndefined();
         expect(stories.value.map((story) => story.title)).toEqual([`Sign in with Google`]);
-        expect(criteria.value[`app/docs/user-stories/01-sign-in.md`]).toEqual([`The button is on the page`]);
+        expect(contents.value[`app/docs/user-stories/01-sign-in.md`]).toContain(`The button is on the page`);
     });
 
     it(`treats a repo with no stories directory as empty rather than an error`, async () => {
-        const { stories, error } = await run(routes({}));
+        const { stories, error } = await run(routes(Object.fromEntries([children(`app/docs/user-stories`, [])])));
 
         expect(error.value).toBeUndefined();
+        expect(stories.value).toEqual([]);
+    });
+
+    it(`surfaces a refused workspace read instead of presenting it as an empty story list`, async () => {
+        const { stories, error } = await run(routes({}));
+
+        expect(error.value).toContain(`404 /workspace/children`);
         expect(stories.value).toEqual([]);
     });
 });

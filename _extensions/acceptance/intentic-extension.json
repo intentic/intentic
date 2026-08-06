@@ -17,7 +17,6 @@
             "POST /agent",
             "POST /agent/stop",
             "GET /agents",
-            "GET /system/terminals",
             "GET /system/browsers"
         ]
     },

@@ -36,10 +36,6 @@ export interface BriefInput {
     // The MANIFEST's entry, not the story as listed: the brief is built from what was written to disk, so the
     // conversation the turn is started on and the directory it writes into are the ones the run recorded.
     readonly story: RunStory;
-    // The story file's text, inlined verbatim.
-    readonly content: string;
-    // The criteria parsed out of that text (stories.ts criteriaOf). Empty for a story that authored none.
-    readonly criteria: readonly string[];
     readonly runId: string;
     // Where the app under test answers, from the extension's perspective at run time.
     readonly baseUrl: string;
@@ -172,10 +168,10 @@ export const briefFor = (input: BriefInput): string => {
                 `if the two disagree, that disagreement is the finding.`,
             ``,
             `---`,
-            input.content.trim(),
+            input.story.content.trim(),
             `---`,
         ].join(`\n`),
-        criteria(input.criteria),
+        criteria(input.story.criteria),
         [
             `## The application under test`,
             ``,
@@ -191,7 +187,7 @@ export const briefFor = (input: BriefInput): string => {
             dir,
             report: `/work/${reportPath(input.runId, input.story.slug)}`,
             result: `/work/${resultPath(input.runId, input.story.slug)}`,
-            criteria: input.criteria,
+            criteria: input.story.criteria,
         }),
     ];
     // The repo's own notes go LAST so they read as amendments to the brief (a login to use, a seeded fixture, a

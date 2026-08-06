@@ -6,8 +6,9 @@ import type { Story } from "./stories";
  *
  *  • The run survives everything. Archive the fleet agents, discard them, close the browser, rebuild the image:
  *    the reports are still there, because nothing about them lives in the registry or in extension settings.
- *  • Live status needs no store either. A run's conversation ids are DERIVED (`xt-<runId>-<slug>`), so joining
- *    a run to the fleet is a filter over GET /agents, not a bookkeeping problem that can drift.
+ *  • Registered-session status needs no store either. A run's conversation ids are DERIVED
+ *    (`xt-<runId>-<slug>`), so joining a run to the fleet is a filter over GET /agents. Only a launch refusal is
+ *    recorded: no session exists for the roster to describe in that case.
  *
  * The directory sits under the workspace's `.intentic`, which is outside every repo (the root repo excludes it)
  * and is bound back in SHARED for isolated turns — so every agent in a run writes into the same tree the browser
@@ -36,6 +37,14 @@ export const SEEN_PATH = `${RUNS_DIR}/seen.json`;
 // 64 characters is a hard ceiling, not a style choice.
 const CONVERSATION_ID_MAX = 64;
 const PREFIX = "xt";
+const RUN_ID = /^r[0-9a-z]+$/;
+const STORY_SLUG = /^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$/;
+const CONVERSATION_ID = /^[a-zA-Z0-9][a-zA-Z0-9_-]{0,63}$/;
+const SHOT_PATH = /^shots\/[^/]+\.png$/i;
+
+// The only report-relative image path that can be resolved back through /workspace/raw. Shared by structured
+// result validation and rendered Markdown so the two evidence surfaces have one path boundary.
+export const isShotPath = (path: string): boolean => SHOT_PATH.test(path);
 
 // `r` + a base-36 timestamp: sortable, 8-ish characters, and readable enough to match a directory to a moment.
 // Taken from the caller so this module stays pure and testable.
@@ -59,6 +68,15 @@ export interface RunStory {
     readonly path: string;
     readonly title: string;
     readonly conversationId: string;
+    // The promise AS TESTED. A path is not a revision: keeping the text and its parsed criteria makes the run
+    // self-contained, and lets the stories list refuse to paint an edited promise with an old green verdict.
+    readonly content: string;
+    readonly criteria: readonly string[];
+}
+
+export interface StorySnapshot extends Story {
+    readonly content: string;
+    readonly criteria: readonly string[];
 }
 
 export interface RunManifest {
@@ -68,37 +86,53 @@ export interface RunManifest {
      * week later without it. A map rather than one URL: a run can walk the marketing site's stories at :4321 and
      * the app's at :5173, and one field could only ever describe one of them. */
     readonly targets: Readonly<Record<string, string>>;
+    // Project-specific instructions that shaped the turns, by repo. Kept with the evidence so Retry runs the
+    // same brief even when the repo's .acceptance.md changes later.
+    readonly notes: Readonly<Record<string, string>>;
     readonly provider: string;
     readonly model?: string;
     readonly stories: readonly RunStory[];
+    // A POST that was refused before the fleet registered a session. Persisted because roster absence alone
+    // cannot tell "not launched" from "finished and archived", and because these are the stories Retry can resume.
+    readonly launchFailures: Readonly<Record<string, string>>;
 }
 
 export const runManifestOf = (params: {
     readonly runId: string;
     readonly createdAt: number;
     readonly targets: Readonly<Record<string, string>>;
+    readonly notes: Readonly<Record<string, string>>;
     readonly provider: string;
     readonly model?: string | undefined;
-    readonly stories: readonly Story[];
+    readonly stories: readonly StorySnapshot[];
 }): RunManifest => ({
     runId: params.runId,
     createdAt: params.createdAt,
     targets: params.targets,
+    notes: params.notes,
     provider: params.provider,
     ...(params.model === undefined || params.model === `` ? {} : { model: params.model }),
-    stories: params.stories.map(({ slug, repo, group, path, title }) => ({
+    stories: params.stories.map(({ slug, repo, group, path, title, content, criteria }) => ({
         slug,
         repo,
         group,
         path,
         title,
         conversationId: conversationIdOf(params.runId, slug),
+        content,
+        criteria,
     })),
+    launchFailures: {},
 });
 
 // Every repo a run touched, first-appearance order — the run row's subtitle, and what the report joins
 // `targets` against.
 export const reposOf = (manifest: RunManifest): readonly string[] => [...new Set(manifest.stories.map((story) => story.repo))];
+
+// Whether a historical verdict still describes the promise on disk now. Unknown text is not a match: painting a
+// story green requires evidence, while withholding a badge until its bounded prefetch has read the file is honest.
+export const matchesStoryRevision = (story: Pick<RunStory, "content">, current: string | undefined): boolean =>
+    current !== undefined && story.content === current;
 
 // The verdict an agent writes into result.json. `blocked` is distinct from `fail` on purpose: "the app is broken
 // upstream of this story" is a different report to the author than "this story's behaviour is wrong".
@@ -139,48 +173,226 @@ export const storyStanding = (
 
 export interface StoryResult {
     readonly story: string;
-    readonly title?: string;
+    readonly title: string;
     readonly verdict: Verdict;
-    readonly criteria?: readonly { readonly text: string; readonly verdict: string; readonly note?: string }[];
-    readonly steps?: readonly {
+    readonly criteria: readonly { readonly text: string; readonly verdict: "pass" | "fail" | "untested"; readonly note: string }[];
+    readonly steps: readonly {
         readonly n: number;
         readonly action: string;
-        readonly expected?: string;
-        readonly observed?: string;
-        readonly shot?: string;
+        readonly expected: string;
+        readonly observed: string;
+        readonly shot: string;
     }[];
-    readonly defects?: readonly { readonly severity: string; readonly summary: string; readonly repro?: string; readonly shot?: string }[];
+    readonly defects: readonly {
+        readonly severity: "blocker" | "major" | "minor";
+        readonly summary: string;
+        readonly repro: string;
+        readonly shot: string;
+    }[];
 }
 
-// A result file the agent never wrote (still running, or the turn died) reads as undefined rather than as a
-// verdict — the UI shows the fleet's live status for those instead of inventing one.
-export const parseResult = (text: string): StoryResult | undefined => {
+const record = (value: unknown): Record<string, unknown> | undefined =>
+    typeof value === `object` && value !== null && !Array.isArray(value) ? (value as Record<string, unknown>) : undefined;
+
+const nonempty = (value: unknown): value is string => typeof value === `string` && value !== ``;
+const isString = (value: unknown): value is string => typeof value === `string`;
+const verdict = (value: unknown): value is Verdict => value === `pass` || value === `fail` || value === `blocked`;
+
+const criterionResult = (value: unknown): StoryResult["criteria"][number] | undefined => {
+    const found = record(value);
+    if (found === undefined) {
+        return undefined;
+    }
+    const { text: criterion, verdict: result, note } = found;
+    if (!nonempty(criterion) || (result !== `pass` && result !== `fail` && result !== `untested`) || !isString(note)) {
+        return undefined;
+    }
+    return { text: criterion, verdict: result, note };
+};
+
+const stepResult = (value: unknown): StoryResult["steps"][number] | undefined => {
+    const found = record(value);
+    if (found === undefined) {
+        return undefined;
+    }
+    const { n, action, expected, observed, shot } = found;
+    if (
+        typeof n !== `number` ||
+        !Number.isInteger(n) ||
+        n < 1 ||
+        !nonempty(action) ||
+        !isString(expected) ||
+        !isString(observed) ||
+        !isString(shot) ||
+        (shot !== `` && !isShotPath(shot))
+    ) {
+        return undefined;
+    }
+    return { n, action, expected, observed, shot };
+};
+
+const defectResult = (value: unknown): StoryResult["defects"][number] | undefined => {
+    const found = record(value);
+    if (found === undefined) {
+        return undefined;
+    }
+    const { severity, summary, repro, shot } = found;
+    if (
+        (severity !== `blocker` && severity !== `major` && severity !== `minor`) ||
+        !nonempty(summary) ||
+        !isString(repro) ||
+        !isString(shot) ||
+        (shot !== `` && !isShotPath(shot))
+    ) {
+        return undefined;
+    }
+    return { severity, summary, repro, shot };
+};
+
+const parsedArray = <T>(value: unknown, parse: (entry: unknown) => T | undefined): readonly T[] | undefined => {
+    if (!Array.isArray(value)) {
+        return undefined;
+    }
+    const parsed = value.map(parse);
+    return parsed.some((entry) => entry === undefined) ? undefined : (parsed as T[]);
+};
+
+/* A result is MODEL OUTPUT, not a trusted wire response. The shape in the brief is enforced here, including the
+ * authored criteria recorded in the manifest: a bare `{ "verdict": "pass" }` is not acceptance evidence, and
+ * neither is a result that silently dropped or paraphrased one of the promises it was asked to judge. */
+export const parseResult = (source: string, expected: Pick<RunStory, "slug" | "title" | "criteria">): StoryResult | undefined => {
     try {
-        const parsed: unknown = JSON.parse(text);
-        if (typeof parsed !== `object` || parsed === null) {
+        const parsed = record(JSON.parse(source));
+        if (parsed === undefined) {
             return undefined;
         }
-        const { verdict } = parsed as { verdict?: unknown };
-        return verdict === `pass` || verdict === `fail` || verdict === `blocked` ? (parsed as StoryResult) : undefined;
+        const { story, title, verdict: result, criteria: rawCriteria, steps: rawSteps, defects: rawDefects } = parsed;
+        if (!nonempty(story) || !nonempty(title) || !verdict(result)) {
+            return undefined;
+        }
+        const criteria = parsedArray(rawCriteria, criterionResult);
+        const steps = parsedArray(rawSteps, stepResult);
+        const defects = parsedArray(rawDefects, defectResult);
+        if (criteria === undefined || steps === undefined || defects === undefined || criteria.length === 0) {
+            return undefined;
+        }
+        if (story !== expected.slug || title !== expected.title) {
+            return undefined;
+        }
+        if (
+            expected.criteria.length > 0 &&
+            (criteria.length !== expected.criteria.length || criteria.some((entry, index) => entry.text !== expected.criteria[index]))
+        ) {
+            return undefined;
+        }
+        if (result === `pass` && criteria.some((entry) => entry.verdict !== `pass`)) {
+            return undefined;
+        }
+        if (result === `blocked` && criteria.some((entry) => entry.verdict !== `untested`)) {
+            return undefined;
+        }
+        return { story, title, verdict: result, criteria, steps, defects };
     } catch {
         return undefined;
     }
 };
 
-/* A run.json that is half-written, or written by a build whose shape has since changed, is SKIPPED rather than
- * thrown on: one bad directory must not blank the whole runs list. The required core is the identity plus the
- * stories — everything else is display, and defaults quietly. */
+const runStory = (value: unknown): RunStory | undefined => {
+    const found = record(value);
+    if (found === undefined) {
+        return undefined;
+    }
+    const { slug, repo, group, path, title, conversationId, content, criteria } = found;
+    if (
+        !nonempty(slug) ||
+        !STORY_SLUG.test(slug) ||
+        !nonempty(repo) ||
+        typeof group !== `string` ||
+        !nonempty(path) ||
+        !nonempty(title) ||
+        !nonempty(conversationId) ||
+        !CONVERSATION_ID.test(conversationId) ||
+        typeof content !== `string` ||
+        !Array.isArray(criteria) ||
+        !criteria.every(nonempty)
+    ) {
+        return undefined;
+    }
+    return {
+        slug,
+        repo,
+        group,
+        path,
+        title,
+        conversationId,
+        content,
+        criteria,
+    };
+};
+
+const stringRecord = (value: unknown): Readonly<Record<string, string>> | undefined => {
+    const found = record(value);
+    return found === undefined || Object.values(found).some((entry) => typeof entry !== `string`) ? undefined : (found as Record<string, string>);
+};
+
+/* A run.json that is half-written or malformed is skipped rather than allowed to manufacture paths, sessions or
+ * verdicts. There is no permissive fallback: a run is evidence, so all of the facts needed to interpret it must
+ * have been written atomically in the manifest. */
 export const parseManifest = (text: string): RunManifest | undefined => {
     try {
-        const parsed: unknown = JSON.parse(text);
-        if (typeof parsed !== `object` || parsed === null) {
+        const parsed = record(JSON.parse(text));
+        if (parsed === undefined) {
             return undefined;
         }
-        const manifest = parsed as Partial<RunManifest>;
-        if (typeof manifest.runId !== `string` || !Array.isArray(manifest.stories)) {
+        const {
+            runId,
+            createdAt,
+            provider,
+            model,
+            stories: rawStories,
+            targets: rawTargets,
+            notes: rawNotes,
+            launchFailures: rawLaunchFailures,
+        } = parsed;
+        if (
+            !nonempty(runId) ||
+            !RUN_ID.test(runId) ||
+            typeof createdAt !== `number` ||
+            !Number.isSafeInteger(createdAt) ||
+            createdAt < 0 ||
+            !nonempty(provider) ||
+            (model !== undefined && !nonempty(model)) ||
+            !Array.isArray(rawStories) ||
+            rawStories.length === 0
+        ) {
             return undefined;
         }
-        return { createdAt: 0, provider: `claude`, ...manifest, runId: manifest.runId, targets: manifest.targets ?? {}, stories: manifest.stories };
+        const targets = stringRecord(rawTargets);
+        const notes = stringRecord(rawNotes);
+        const launchFailures = stringRecord(rawLaunchFailures);
+        const stories = rawStories.map(runStory);
+        if (targets === undefined || notes === undefined || launchFailures === undefined || stories.some((story) => story === undefined)) {
+            return undefined;
+        }
+        const complete = stories as RunStory[];
+        if (
+            new Set(complete.map((story) => story.slug)).size !== complete.length ||
+            new Set(complete.map((story) => story.conversationId)).size !== complete.length ||
+            complete.some((story) => story.conversationId !== conversationIdOf(runId, story.slug)) ||
+            Object.entries(launchFailures).some(([slug, failure]) => failure === `` || !complete.some((story) => story.slug === slug))
+        ) {
+            return undefined;
+        }
+        return {
+            runId,
+            createdAt,
+            targets,
+            notes,
+            provider,
+            ...(model === undefined ? {} : { model }),
+            stories: complete,
+            launchFailures,
+        };
     } catch {
         return undefined;
     }

@@ -2,7 +2,7 @@ import { WorkspaceChildrenSchema } from "@intentic/sandbox-contract";
 import type { Disposable, ViewBadge } from "@intentic/extension-api";
 import { ref } from "vue";
 import { host } from "./host";
-import { parseManifest, parseResult, resultPath, RUNS_DIR, SCAN_RUNS, SEEN_PATH, type Verdict } from "./runs";
+import { parseManifest, parseResult, resultPath, RUNS_DIR, SCAN_RUNS, SEEN_PATH } from "./runs";
 
 /* The rail badge's source. Module state owned by activate(), NOT by the view: a badge that only updated while
  * you were already looking at Acceptance would never tell you anything you didn't know. That rules out the
@@ -16,13 +16,59 @@ import { parseManifest, parseResult, resultPath, RUNS_DIR, SCAN_RUNS, SEEN_PATH,
 // Slow on purpose. This drives a glance; the view's own polling serves anyone actually watching a run.
 const POLL_MS = 60_000;
 
-interface Unseen {
+export interface AcceptanceFinding {
     readonly runId: string;
-    readonly failed: number;
-    readonly blocked: number;
+    readonly slug: string;
+    readonly verdict: "fail" | "blocked";
 }
 
-const unseen = ref<Unseen[]>([]);
+const unseen = ref<AcceptanceFinding[]>([]);
+
+// Acknowledges an actual completed finding, never the moment its run happened to start. Including the verdict
+// means a corrected result file becomes new information rather than inheriting the acknowledgement of its draft.
+export const findingKey = (finding: AcceptanceFinding): string => `${finding.runId}/${finding.slug}/${finding.verdict}`;
+
+// seen.json is `{ "results": ["<run>/<story>/<verdict>"] }`. Anything else reads as nothing acknowledged:
+// malformed background bookkeeping may light a badge again, but it must never hide a failure.
+export const seenResultKeys = (source: string | undefined): ReadonlySet<string> => {
+    try {
+        const parsed: unknown = JSON.parse(source ?? ``);
+        const results = (parsed as { results?: unknown } | null)?.results;
+        return Array.isArray(results) && results.every((entry) => typeof entry === `string`) ? new Set(results) : new Set();
+    } catch {
+        return new Set();
+    }
+};
+
+export const unseenFindings = (findings: readonly AcceptanceFinding[], seen: ReadonlySet<string>): AcceptanceFinding[] =>
+    findings.filter((finding) => !seen.has(findingKey(finding)));
+
+const findings = async (): Promise<AcceptanceFinding[]> => {
+    const api = host();
+    const listing = WorkspaceChildrenSchema.parse(await api.sandbox.json(`/workspace/children?path=${encodeURIComponent(RUNS_DIR)}`));
+    const dirs = listing.entries
+        .filter((entry) => entry.type === `dir`)
+        .map((entry) => entry.path)
+        .toSorted((left, right) => right.localeCompare(left))
+        .slice(0, SCAN_RUNS);
+    const scanned = await Promise.all(
+        dirs.map(async (dir) => {
+            const manifest = parseManifest((await api.workspace.file(`${dir}/run.json`)) ?? ``);
+            if (manifest === undefined) {
+                return [];
+            }
+            return (
+                await Promise.all(
+                    manifest.stories.map(async (story): Promise<AcceptanceFinding | undefined> => {
+                        const verdict = parseResult((await api.workspace.file(resultPath(manifest.runId, story.slug))) ?? ``, story)?.verdict;
+                        return verdict === `fail` || verdict === `blocked` ? { runId: manifest.runId, slug: story.slug, verdict } : undefined;
+                    }),
+                )
+            ).flatMap((finding) => (finding === undefined ? [] : [finding]));
+        }),
+    );
+    return scanned.flat();
+};
 
 // Nothing in here may reject: it runs detached on a timer, where a throw becomes an unhandled rejection with no
 // one to catch it. That includes reading the host handle — an api shape without a sandbox transport (a test
@@ -33,61 +79,10 @@ const refresh = async (): Promise<void> => {
         if (!api.sandbox.reachable()) {
             return;
         }
-        const json = async <T>(path: string): Promise<T | undefined> => {
-            try {
-                return (await api.sandbox.json(path)) as T;
-            } catch {
-                return undefined;
-            }
-        };
-        const text = api.workspace.file;
-
-        const listing = await json<unknown>(`/workspace/children?path=${encodeURIComponent(RUNS_DIR)}`);
-        if (listing === undefined) {
-            // No runs directory yet is the ordinary first state, not an error — and not a reason to blank.
-            return;
-        }
-        const seenAt = seenStamp(await text(SEEN_PATH));
-        const dirs = WorkspaceChildrenSchema.parse(listing)
-            .entries.filter((entry) => entry.type === `dir`)
-            .map((entry) => entry.path)
-            .toSorted((left, right) => right.localeCompare(left))
-            .slice(0, SCAN_RUNS);
-
-        const scanned = await Promise.all(
-            dirs.map(async (dir) => {
-                const manifest = parseManifest((await text(`${dir}/run.json`)) ?? ``);
-                if (manifest === undefined || manifest.createdAt <= seenAt) {
-                    return undefined;
-                }
-                const verdicts = await Promise.all(
-                    manifest.stories.map(async (story) => parseResult((await text(resultPath(manifest.runId, story.slug))) ?? ``)?.verdict),
-                );
-                return tally(manifest.runId, verdicts);
-            }),
-        );
-        unseen.value = scanned.flatMap((entry) => (entry === undefined || entry.failed + entry.blocked === 0 ? [] : [entry]));
+        unseen.value = unseenFindings(await findings(), seenResultKeys(await api.workspace.file(SEEN_PATH)));
     } catch {
         // A refused or unreachable daemon leaves the last known state standing rather than blanking the badge:
         // "we can't reach the workspace" is not "everything passed", and a flapping tile is worse than a stale one.
-    }
-};
-
-const tally = (runId: string, verdicts: readonly (Verdict | undefined)[]): Unseen => ({
-    runId,
-    failed: verdicts.filter((verdict) => verdict === `fail`).length,
-    blocked: verdicts.filter((verdict) => verdict === `blocked`).length,
-});
-
-// seen.json is `{ "at": <ms> }`. Anything else — absent, truncated, written by hand — reads as "never
-// acknowledged", which shows a badge the user can clear rather than silently hiding a failure.
-const seenStamp = (text: string | undefined): number => {
-    try {
-        const parsed: unknown = JSON.parse(text ?? ``);
-        const at = (parsed as { at?: unknown } | null)?.at;
-        return typeof at === `number` ? at : 0;
-    } catch {
-        return 0;
     }
 };
 
@@ -100,8 +95,8 @@ export const startAcceptanceAttention = (): Disposable => {
 
 // Read inside the host's render computed — touching `unseen` here is what repaints the tile.
 export const acceptanceBadge = (): ViewBadge | undefined => {
-    const failed = unseen.value.reduce((total, entry) => total + entry.failed, 0);
-    const blocked = unseen.value.reduce((total, entry) => total + entry.blocked, 0);
+    const failed = unseen.value.filter((entry) => entry.verdict === `fail`).length;
+    const blocked = unseen.value.filter((entry) => entry.verdict === `blocked`).length;
     if (failed + blocked === 0) {
         return undefined;
     }
@@ -120,8 +115,9 @@ export const markAcceptanceSeen = async (): Promise<void> => {
         if (!api.sandbox.reachable()) {
             return;
         }
+        const current = await findings();
+        await api.workspace.write(SEEN_PATH, JSON.stringify({ results: current.map(findingKey) }));
         unseen.value = [];
-        await api.workspace.write(SEEN_PATH, JSON.stringify({ at: Date.now() }));
     } catch {
         // See above.
     }

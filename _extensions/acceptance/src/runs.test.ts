@@ -1,17 +1,30 @@
 import { describe, expect, it } from "vitest";
-import { conversationIdOf, parseManifest, parseResult, reposOf, runIdAt, runManifestOf, storyDir, storyStanding } from "./runs";
-import type { Story } from "./stories";
+import {
+    conversationIdOf,
+    isShotPath,
+    matchesStoryRevision,
+    parseManifest,
+    parseResult,
+    reposOf,
+    runIdAt,
+    runManifestOf,
+    storyDir,
+    storyStanding,
+    type StorySnapshot,
+} from "./runs";
 
 // The daemon's own guard on AgentTurn.conversationId — it lands in branch names (agent/<id>) and filesystem
 // paths, so a violation is not a validation error the UI can retry past.
 const CONVERSATION_ID = /^[a-zA-Z0-9][a-zA-Z0-9_-]{0,63}$/;
 
-const story = (slug: string, repo = `app`, group = ``): Story => ({
+const story = (slug: string, repo = `app`, group = ``): StorySnapshot => ({
     repo,
     path: `${repo}/docs/user-stories/${group === `` ? `` : `${group}/`}${slug}.md`,
     slug,
     title: slug,
     group,
+    content: `# ${slug}\n\n## Acceptance criteria\n\n- ${slug} works\n`,
+    criteria: [`${slug} works`],
 });
 
 describe(`conversationIdOf`, () => {
@@ -52,6 +65,7 @@ describe(`runManifestOf`, () => {
         runId: `rabc`,
         createdAt: 1_800_000_000_000,
         targets: { "app/site": `http://localhost:4321`, api: `http://localhost:3000` },
+        notes: { app: `Use the demo account` },
         provider: `claude`,
         model: `claude-sonnet-4-5`,
         stories: [story(`login`, `app`, `site`), story(`checkout`, `api`)],
@@ -68,6 +82,8 @@ describe(`runManifestOf`, () => {
                 path: `app/docs/user-stories/site/login.md`,
                 title: `login`,
                 conversationId: `xt-rabc-login`,
+                content: `# login\n\n## Acceptance criteria\n\n- login works\n`,
+                criteria: [`login works`],
             },
             {
                 slug: `checkout`,
@@ -76,8 +92,11 @@ describe(`runManifestOf`, () => {
                 path: `api/docs/user-stories/checkout.md`,
                 title: `checkout`,
                 conversationId: `xt-rabc-checkout`,
+                content: `# checkout\n\n## Acceptance criteria\n\n- checkout works\n`,
+                criteria: [`checkout works`],
             },
         ]);
+        expect(manifest.launchFailures).toEqual({});
     });
 
     // A run spans repos AND apps within one repo, so a single baseUrl could only ever describe one of them.
@@ -97,10 +116,20 @@ describe(`reposOf`, () => {
             runId: `rabc`,
             createdAt: 0,
             targets: {},
+            notes: {},
             provider: `claude`,
             stories: [story(`login`, `api`), story(`checkout`, `app`), story(`profile`, `api`)],
         });
         expect(reposOf(manifest)).toEqual([`api`, `app`]);
+    });
+});
+
+describe(`matchesStoryRevision`, () => {
+    it(`keeps an old verdict off a promise that changed at the same path`, () => {
+        const tested = story(`login`);
+        expect(matchesStoryRevision(tested, tested.content)).toBe(true);
+        expect(matchesStoryRevision(tested, `${tested.content}\n- A new promise`)).toBe(false);
+        expect(matchesStoryRevision(tested, undefined)).toBe(false);
     });
 });
 
@@ -110,16 +139,52 @@ describe(`storyDir`, () => {
     });
 });
 
+describe(`isShotPath`, () => {
+    it(`accepts only a flat PNG inside the story's shots directory`, () => {
+        expect(isShotPath(`shots/01-login.png`)).toBe(true);
+        expect(isShotPath(`../01-login.png`)).toBe(false);
+        expect(isShotPath(`shots/nested/01-login.png`)).toBe(false);
+        expect(isShotPath(`https://example.com/01-login.png`)).toBe(false);
+    });
+});
+
 /* One unreadable run directory must never blank the list — the runs view and the rail badge both walk every
  * directory they find, and a half-written run.json is an ordinary sight while a run is starting. */
 describe(`parseManifest`, () => {
     it(`reads a manifest back`, () => {
-        const manifest = parseManifest(`{"runId":"rabc","createdAt":7,"targets":{"app":"http://x"},"provider":"codex","stories":[]}`);
-        expect(manifest).toEqual({ runId: `rabc`, createdAt: 7, targets: { app: `http://x` }, provider: `codex`, stories: [] });
+        const source = runManifestOf({
+            runId: `rabc`,
+            createdAt: 7,
+            targets: { app: `http://x` },
+            notes: {},
+            provider: `codex`,
+            stories: [story(`login`)],
+        });
+        expect(parseManifest(JSON.stringify(source))).toEqual(source);
     });
 
-    it(`defaults the display fields rather than rejecting a manifest that lacks them`, () => {
-        expect(parseManifest(`{"runId":"rabc","stories":[]}`)).toEqual({ runId: `rabc`, createdAt: 0, targets: {}, provider: `claude`, stories: [] });
+    it(`rejects a manifest that cannot identify the exact story revision it tested`, () => {
+        expect(
+            parseManifest(
+                `{"runId":"rabc","createdAt":7,"targets":{},"notes":{},"provider":"codex","launchFailures":{},"stories":[{"slug":"login"}]}`,
+            ),
+        ).toBeUndefined();
+    });
+
+    it(`rejects identities that could escape the run or address a different fleet session`, () => {
+        const manifest = runManifestOf({
+            runId: `rabc`,
+            createdAt: 7,
+            targets: {},
+            notes: {},
+            provider: `codex`,
+            stories: [story(`login`)],
+        });
+        expect(parseManifest(JSON.stringify({ ...manifest, runId: `../outside` }))).toBeUndefined();
+        expect(
+            parseManifest(JSON.stringify({ ...manifest, stories: [{ ...manifest.stories[0], conversationId: `xt-some-other-run` }] })),
+        ).toBeUndefined();
+        expect(parseManifest(JSON.stringify({ ...manifest, launchFailures: { unknown: `refused` } }))).toBeUndefined();
     });
 
     it.each([`not json`, `null`, `{"stories":[]}`, `{"runId":"rabc"}`, `[]`])(`skips %s`, (text) => {
@@ -128,12 +193,48 @@ describe(`parseManifest`, () => {
 });
 
 describe(`parseResult`, () => {
-    it(`accepts a well-formed verdict`, () => {
-        expect(parseResult(`{"story":"login","verdict":"fail"}`)?.verdict).toBe(`fail`);
+    const expected = story(`login`);
+    const result = (over: Record<string, unknown> = {}): string =>
+        JSON.stringify({
+            story: `login`,
+            title: `login`,
+            verdict: `fail`,
+            criteria: [{ text: `login works`, verdict: `fail`, note: `the button did nothing` }],
+            steps: [{ n: 1, action: `clicked`, expected: `signed in`, observed: `nothing`, shot: `shots/01-click.png` }],
+            defects: [{ severity: `major`, summary: `Cannot sign in`, repro: `Click sign in`, shot: `shots/01-click.png` }],
+            ...over,
+        });
+
+    it(`accepts complete evidence matching the run's story snapshot`, () => {
+        expect(parseResult(result(), expected)?.verdict).toBe(`fail`);
     });
 
-    it.each([`not json`, `{"story":"login"}`, `{"verdict":"probably"}`, `null`])(`treats %s as no result yet rather than a verdict`, (text) => {
-        expect(parseResult(text)).toBeUndefined();
+    it(`rejects a bare verdict and criteria that were dropped or paraphrased`, () => {
+        expect(parseResult(`{"story":"login","verdict":"pass"}`, expected)).toBeUndefined();
+        expect(parseResult(result({ criteria: [{ text: `something else`, verdict: `fail`, note: `no` }] }), expected)).toBeUndefined();
+    });
+
+    it(`rejects pass unless every recorded criterion passed`, () => {
+        expect(parseResult(result({ verdict: `pass` }), expected)).toBeUndefined();
+        expect(
+            parseResult(result({ verdict: `pass`, criteria: [{ text: `login works`, verdict: `pass`, note: `worked` }], defects: [] }), expected)
+                ?.verdict,
+        ).toBe(`pass`);
+    });
+
+    it(`rejects evidence paths outside the story's flat shots directory`, () => {
+        expect(
+            parseResult(
+                result({
+                    steps: [{ n: 1, action: `clicked`, expected: `signed in`, observed: `nothing`, shot: `../secret.png` }],
+                }),
+                expected,
+            ),
+        ).toBeUndefined();
+    });
+
+    it.each([`not json`, `{"story":"login"}`, `{"verdict":"probably"}`, `null`])(`treats %s as no result yet rather than a verdict`, (source) => {
+        expect(parseResult(source, expected)).toBeUndefined();
     });
 });
 

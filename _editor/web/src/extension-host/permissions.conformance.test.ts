@@ -6,7 +6,7 @@ import { describe, expect, test } from "vitest";
 
 /* Conformance: every daemon route a first-party extension calls through api.sandbox.request/json must be declared
  * in its manifest's permissions.sandbox — otherwise the host (apiImpl.ts) would throw at runtime. This scans each
- * builtin extension's source and fails if a call isn't covered, so a newly-added route can't ship undeclared. */
+ * first-party extension's source and fails if a call isn't covered, so a newly-added route can't ship undeclared. */
 
 const extensionsRoot = resolve(dirname(fileURLToPath(import.meta.url)), "../../../../_extensions");
 

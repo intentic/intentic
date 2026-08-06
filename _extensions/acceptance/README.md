@@ -9,8 +9,8 @@ back. The agent drives a real browser; nothing here asserts against a mock.
 ## Responsibilities
 
 - Author and store stories, and keep them where a diff can review them.
-- Start a run against a target URL, watch it, and show what it found.
-- Carry a rail badge when a run has news, and stay quiet when it does not.
+- Start a run against one or more target URLs, watch it, retry sessions that were refused, and show what it found.
+- Carry a rail badge when a completed failure or block is new, and stay quiet after that finding is acknowledged.
 
 ## Key files
 
@@ -40,8 +40,19 @@ tested" is the honest evidence for offering the area.
   one; an address served from outside the box's terminals says "no terminal" instead of offering one that has
   never existed. Only a start still installing points at the panel's own session, where by definition it is.
 - Runs are evidence, not documents: they are point-in-time and live under `.intentic/`, unlike the architecture
-  pages, which are maintained artifacts that belong in the repo.
-- A session that DIED is a first-class outcome, not a blank. It writes no verdict and no report, so both surfaces
-  read its standing from the fleet instead (`storyStanding`, and the session's own `failure` sentence on the
-  row): a run refused on its first request — a spent plan, a seat with Claude Code switched off — otherwise
-  reported itself as a run nobody had started.
+  pages, which are maintained artifacts that belong in the repo. A manifest keeps the exact story text and
+  criteria, target addresses, project testing notes, provider and model that shaped its sessions. Editing a story
+  therefore retires the old verdict from the current stories list without changing the historical report.
+- Every selected story is read again when the run starts. The list deliberately prefetches only its first 200
+  files, but that display bound never turns an unreadable or stale file into an agent prompt.
+- A run is discoverable before its sessions are launched. Fan-out refusals are recorded per story while the
+  successful sessions continue; Retry uses that run's saved story, address and testing notes rather than today's
+  workspace state.
+- `result.json` is untrusted agent output. It becomes a verdict only when the complete shape is present and every
+  authored criterion appears verbatim and in order. Report images are resolved only from a flat `shots/*.png`
+  path inside that story's own run directory.
+- Opening Acceptance acknowledges the failed and blocked results that exist at that moment, not the age of their
+  run. A failure that finishes after the view closes is still new and lights the badge on the next scan.
+- A registered session that DIED is a first-class outcome, not a blank. It writes no verdict and no report, so
+  both surfaces read its standing from the fleet instead (`storyStanding`, and the session's own `failure`
+  sentence on the row).

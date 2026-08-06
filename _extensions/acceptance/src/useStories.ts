@@ -2,15 +2,14 @@ import { WorkspaceChildrenSchema, type WorkspaceTreeEntry } from "@intentic/sand
 import { useQuery, useQueryClient } from "@tanstack/vue-query";
 import { computed } from "vue";
 import { host } from "./host";
-import { BRIEF_OVERRIDE, criteriaOf, STORIES_DIR, type Story, storiesOf, uniqueOf } from "./stories";
+import { BRIEF_OVERRIDE, STORIES_DIR, type Story, storiesOf, uniqueOf } from "./stories";
 
 /* EVERY repo's stories, read straight off the workspace. Three facts shape this:
  *
  *  • The area is workspace-wide, so the walk is too: every repo the daemon says carries `userStories` is listed
  *    in one pass, and the repo becomes a field on each story rather than the thing that addressed the view.
- *  • The story TEXT is fetched up front, not on demand, because everything this view does needs it — the title
- *    comes from the file's first heading, the criteria come from its checklist section, and starting a run
- *    inlines the whole file into the brief. Fetching it lazily would mean the list shows filenames until you commit.
+ *  • Story text is prefetched for the list and editor — titles come from headings and rows show authored criteria.
+ *    A run reads every selected file again at launch, because this display cache is bounded and is not evidence.
  *  • Directories are walked to a bounded depth. A stories tree is written by hand; a deep one means someone
  *    pointed this at the wrong directory, and the walk should stop rather than crawl a repo.
  */
@@ -49,21 +48,8 @@ export function useStories() {
      * query typechecks fine and dies at runtime with `Cannot access 'walk' before initialization`, surfacing as
      * the view's error banner until a retry (by which time the closure is live) quietly succeeds. */
 
-    const children = async (path: string): Promise<WorkspaceTreeEntry[]> => {
-        try {
-            return WorkspaceChildrenSchema.parse(await api.sandbox.json(`/workspace/children?path=${encodeURIComponent(path)}`)).entries;
-        } catch {
-            return [];
-        }
-    };
-    const text = async (path: string): Promise<string | undefined> => {
-        try {
-            return await api.workspace.file(path);
-        } catch {
-            return undefined;
-        }
-    };
-
+    const children = async (path: string): Promise<WorkspaceTreeEntry[]> =>
+        WorkspaceChildrenSchema.parse(await api.sandbox.json(`/workspace/children?path=${encodeURIComponent(path)}`)).entries;
     // Breadth-first to MAX_DEPTH. A directory that does not exist (or was removed under us) is an empty level,
     // not an error — the stories dir is a convention, and the daemon's facts may be a poll stale.
     const walk = async (root: string): Promise<WorkspaceTreeEntry[]> => {
@@ -85,9 +71,11 @@ export function useStories() {
             const perRepo = await Promise.all(repos.value.map(async (repo) => ({ repo, entries: await walk(`${repo}/${STORIES_DIR}`) })));
             const files = uniqueOf(perRepo.flatMap(({ repo, entries }) => storiesOf(repo, entries)));
             const read = files.slice(0, MAX_PREFETCH);
-            const texts = await Promise.all(read.map(async (story) => [story.path, await text(story.path)] as const));
+            const texts = await Promise.all(read.map(async (story) => [story.path, await api.workspace.file(story.path)] as const));
             const contents = Object.fromEntries(texts.flatMap(([path, body]) => (body === undefined ? [] : [[path, body] as const])));
-            const overrides = await Promise.all(repos.value.map(async (repo) => [repo, await text(`${repo}/${BRIEF_OVERRIDE}`)] as const));
+            const overrides = await Promise.all(
+                repos.value.map(async (repo) => [repo, await api.workspace.file(`${repo}/${BRIEF_OVERRIDE}`)] as const),
+            );
             return {
                 // Re-derived with the fetched text so titles come from headings rather than filenames. The
                 // cross-repo renumbering runs again on the same input, so slugs are identical either way.
@@ -126,10 +114,6 @@ export function useStories() {
         stories,
         contents: computed<Readonly<Record<string, string>>>(() => query.data.value?.contents ?? {}),
         notes: computed<Readonly<Record<string, string>>>(() => query.data.value?.notes ?? {}),
-        // The authored criteria per story path — the count each row shows, and what the brief is handed.
-        criteria: computed<Readonly<Record<string, readonly string[]>>>(() =>
-            Object.fromEntries(stories.value.map((story) => [story.path, criteriaOf(query.data.value?.contents[story.path])])),
-        ),
         unread: computed<number>(() => query.data.value?.unread ?? 0),
         error: computed(() => query.error.value?.message),
         isLoading: query.isLoading,

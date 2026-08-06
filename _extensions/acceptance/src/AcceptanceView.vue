@@ -16,15 +16,14 @@ import {
 import { computed, onMounted, ref } from "vue";
 import { markAcceptanceSeen } from "./attention";
 import DevServerChip from "./DevServerChip.vue";
-import { reposOf, RUNS_DIR, SCAN_RUNS, storyStanding, type Verdict } from "./runs";
+import { matchesStoryRevision, reposOf, RUNS_DIR, SCAN_RUNS, storyStanding, type Verdict } from "./runs";
 import RunControls from "./RunControls.vue";
 import RunReport from "./RunReport.vue";
 import { type Story, storyMarkdown, targetKeyOf } from "./stories";
 import StoryComposer from "./StoryComposer.vue";
 import StoryRow from "./StoryRow.vue";
 import TargetChip from "./TargetChip.vue";
-import type { RunRow } from "./useRuns";
-import { useRuns } from "./useRuns";
+import { launchFailureOf, type RunRow, useRuns } from "./useRuns";
 import { useStories } from "./useStories";
 import { useTargets } from "./useTargets";
 
@@ -68,7 +67,6 @@ const {
     stories,
     contents,
     notes,
-    criteria,
     repos,
     unread,
     error: storiesError,
@@ -77,7 +75,7 @@ const {
     save,
     remove,
 } = useStories();
-const { runs, browsers, verdicts, error: runsError, isLoading: runsLoading, start, stop, useRunOutcomes } = useRuns();
+const { runs, browsers, verdicts, error: runsError, isLoading: runsLoading, start, retry, stop, useRunOutcomes } = useRuns();
 
 /* THE ADDRESS EACH GROUP WAS LAST RUN AGAINST — the newest run that named it wins. A group that points somewhere
  * other than its repo's dev server (a marketing site on its own port) should be typed once, not once per run, and
@@ -114,7 +112,7 @@ const actionError = ref<string | undefined>(undefined);
 const openRun = computed<RunRow | undefined>(() => runs.value.find((run) => run.manifest.runId === openRunId.value));
 const outcomes = useRunOutcomes(openRunId);
 
-const topError = computed(() => actionError.value ?? storiesError.value ?? runsError.value);
+const topError = computed(() => actionError.value ?? storiesError.value ?? targets.error.value ?? runsError.value ?? outcomes.error.value?.message);
 
 // Opening the area IS reading it — the rail's badge clears here rather than at the next poll.
 onMounted(() => void markAcceptanceSeen());
@@ -235,12 +233,20 @@ const statuses = computed<Readonly<Record<string, { readonly label: string; read
             if (found.has(entry.path)) {
                 continue;
             }
-            const standing = storyStanding(
-                verdicts.value[run.manifest.runId]?.[entry.slug],
-                run.agents.find((item) => item.id === entry.conversationId)?.status,
-            );
+            // A path is not a revision. Once the authored file changes, its prior verdict becomes history rather
+            // than the standing of the new promise. Unprefetched stories stay blank because their current text is
+            // unknown here; starting a run still reads every selected file in useRuns.
+            if (!matchesStoryRevision(entry, contents.value[entry.path])) {
+                continue;
+            }
+            const agent = run.agents.find((item) => item.id === entry.conversationId);
+            const standing = storyStanding(verdicts.value[run.manifest.runId]?.[entry.slug], agent?.status);
             if (standing !== undefined) {
                 found.set(entry.path, standing);
+                continue;
+            }
+            if (launchFailureOf(run, entry.slug) !== undefined) {
+                found.set(entry.path, { label: `not started`, variant: `danger` });
             }
         }
     }
@@ -267,15 +273,25 @@ const skeletonTitles = [`w-56`, `w-72`, `w-44`];
  * run this view knows nothing about. Opening it reads them. */
 const tally = (run: RunRow): { readonly label: string; readonly variant: StatusVariant } | undefined => {
     const known: Readonly<Record<string, Verdict>> | undefined = verdicts.value[run.manifest.runId];
+    const notStarted = run.manifest.stories.filter(
+        (story) => known?.[story.slug] === undefined && launchFailureOf(run, story.slug) !== undefined,
+    ).length;
     if (run.running) {
         // A finished story is one that WROTE something, or whose session has settled — not merely one whose
         // agent is off the roster: archiving a finished agent removes it, and counting roster absence as
         // unfinished would walk the progress backwards while the rest of the run is still going.
         const done = run.manifest.stories.filter((story) => {
             const agent = run.agents.find((entry) => entry.id === story.conversationId);
-            return known?.[story.slug] !== undefined || (agent !== undefined && agent.status !== `running` && agent.status !== `awaiting`);
+            return (
+                known?.[story.slug] !== undefined ||
+                launchFailureOf(run, story.slug) !== undefined ||
+                (agent !== undefined && agent.status !== `running` && agent.status !== `awaiting`)
+            );
         }).length;
         return { label: `${done}/${run.manifest.stories.length} done`, variant: `info` };
+    }
+    if (notStarted > 0 && known === undefined) {
+        return { label: `${notStarted} not started`, variant: `danger` };
     }
     if (known === undefined) {
         return undefined;
@@ -288,14 +304,18 @@ const tally = (run: RunRow): { readonly label: string; readonly variant: StatusV
         // A run every session of which died is a failure of the RUN, not a quiet "nothing came back": it wears
         // the danger tone so a fan-out that never reached the app is told apart at a glance from one that
         // walked it and wrote nothing.
+        if (notStarted > 0) {
+            return { label: `${notStarted} not started`, variant: `danger` };
+        }
         return run.agents.some((agent) => agent.status === `error`)
             ? { label: `errored`, variant: `danger` }
             : { label: `no results`, variant: `neutral` };
     }
     const failed = results.filter((verdict) => verdict === `fail`).length;
     const blocked = results.filter((verdict) => verdict === `blocked`).length;
-    if (failed > 0) {
-        return { label: `${failed} failed`, variant: `danger` };
+    if (failed + notStarted > 0) {
+        const parts = [...(failed > 0 ? [`${failed} failed`] : []), ...(notStarted > 0 ? [`${notStarted} not started`] : [])];
+        return { label: parts.join(` · `), variant: `danger` };
     }
     if (blocked > 0) {
         return { label: `${blocked} blocked`, variant: `warning` };
@@ -334,10 +354,9 @@ const toggle = (path: string): void => {
     created.value = undefined;
 };
 
-/* The run itself: the header decided WHO, the ticks decided WHAT, this adds the addresses and the text those
- * stories are made of. Kept here because the contents, criteria, repo notes and addresses are all this view's own
- * reads — threading them through the control so it could hand them straight back would be plumbing, not
- * composition. */
+/* The run itself: the header decided WHO, the ticks decided WHAT, and this adds the addresses. Story text is read
+ * again by useRuns at launch so the manifest records the exact revision handed to every session, including files
+ * beyond this list's display-prefetch bound. */
 const run = async (model: PickedModel): Promise<void> =>
     attempt(async () => {
         openRunId.value = await start({
@@ -345,8 +364,6 @@ const run = async (model: PickedModel): Promise<void> =>
             targets: Object.fromEntries(groups.value.map((story) => [targetKeyOf(story), targets.addressOf(story.repo, story.group) ?? ``])),
             provider: model.provider,
             model: model.model,
-            contents: contents.value,
-            criteria: criteria.value,
             notes: notes.value,
         });
     });
@@ -418,7 +435,14 @@ const run = async (model: PickedModel): Promise<void> =>
                 <Icon name="arrow-left" />
                 All runs
             </button>
-            <RunReport :run="openRun" :outcomes="outcomes.data.value ?? {}" :browsers="browsers" :loading="outcomes.isLoading.value" :stop="stop" />
+            <RunReport
+                :run="openRun"
+                :outcomes="outcomes.data.value ?? {}"
+                :browsers="browsers"
+                :loading="outcomes.isLoading.value"
+                :stop="stop"
+                :retry="retry"
+            />
         </template>
 
         <template v-else>

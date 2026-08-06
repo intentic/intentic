@@ -2,8 +2,8 @@
 import { Button, Card, cmp, Icon, Markdown, StatusBadge, type StatusVariant, timeAgo } from "@intentic/extension-ui";
 import { computed, onBeforeUnmount, reactive, ref, watch } from "vue";
 import { host } from "./host";
-import { storyDir, storyStanding } from "./runs";
-import type { LiveBrowser, RunRow, StoryOutcome } from "./useRuns";
+import { isShotPath, storyDir, storyStanding } from "./runs";
+import { launchFailureOf, type LiveBrowser, type RunRow, type StoryOutcome } from "./useRuns";
 
 /* One run, story by story: the verdict, the walkthrough the agent wrote, and the screenshots it took at each
  * step. A story with no result yet shows the live session instead — the fleet already knows what it is doing,
@@ -23,7 +23,7 @@ import type { LiveBrowser, RunRow, StoryOutcome } from "./useRuns";
  * a relative path alone. So the swap happens AFTER sanitizing, imperatively on the rendered DOM — which is also
  * the only place the fetch can be lazy, one story at a time, instead of pulling every shot of every story. */
 
-const { run, outcomes, browsers, loading, stop } = defineProps<{
+const { run, outcomes, browsers, loading, stop, retry } = defineProps<{
     run: RunRow;
     outcomes: Readonly<Record<string, StoryOutcome>>;
     // Live browsers by conversationId — see useRuns.
@@ -33,11 +33,14 @@ const { run, outcomes, browsers, loading, stop } = defineProps<{
     // started it — sending someone to the Agents board to find the ten cards this view already knows about is
     // the kind of errand that gets a run left running instead.
     stop: (conversationId: string) => Promise<void>;
+    // Relaunches a story whose POST was refused before a fleet session existed.
+    retry: (runId: string, slug: string) => Promise<void>;
 }>();
 
 const api = host();
 const open = ref(new Set<string>());
 const failure = ref<string | undefined>(undefined);
+const retrying = ref(new Set<string>());
 // Object URLs by workspace path, minted once per shot and revoked together when this view goes away.
 const shots = reactive<Record<string, string>>({});
 const reportEl = ref<Record<string, HTMLElement | undefined>>({});
@@ -57,21 +60,31 @@ const browserOf = (slug: string): LiveBrowser | undefined => {
 };
 
 const agentOf = (slug: string) => run.agents.find((entry) => entry.id === conversationOf(slug));
+const unstartedFailureOf = (slug: string): string | undefined =>
+    outcomes[slug]?.result === undefined && outcomes[slug]?.report === undefined && outcomes[slug]?.invalidResult !== true
+        ? launchFailureOf(run, slug)
+        : undefined;
 
 /* WHY A STORY WAS NEVER WALKED — the session's own last words, which the fleet carries only while its card
  * still reads as failed. A run whose sessions were refused on their first request (a spent plan, an
  * organization with Claude Code switched off) reported itself here as a grey "error" and "No report was
  * written", so the one place the reason existed was a transcript nobody opens for a fan-out of ten. */
-const failureOf = (slug: string): string | undefined => agentOf(slug)?.failure;
+const failureOf = (slug: string): string | undefined => agentOf(slug)?.failure ?? unstartedFailureOf(slug);
 
 /* This row's badge — the shared standing (runs.ts) with the two answers only a report can give: a run whose
  * artifacts are still being read, and a story whose session is not on the roster at all. Everything the stories
  * list also shows comes from the shared one, so the two surfaces cannot disagree about the same story again. */
 const verdictBadge = (slug: string): { readonly label: string; readonly variant: StatusVariant } => {
+    if (outcomes[slug]?.invalidResult === true) {
+        return { label: `invalid result`, variant: `danger` };
+    }
     const agent = agentOf(slug);
     const standing = storyStanding(outcomes[slug]?.result?.verdict, agent?.status);
     if (standing !== undefined) {
         return standing;
+    }
+    if (unstartedFailureOf(slug) !== undefined) {
+        return { label: `not started`, variant: `danger` };
     }
     if (agent === undefined) {
         return { label: loading ? `…` : `no session`, variant: `neutral` };
@@ -102,6 +115,20 @@ const halt = async (slug: string): Promise<void> => {
         await stop(id);
     } catch (error) {
         failure.value = error instanceof Error ? error.message : String(error);
+    }
+};
+
+const relaunch = async (slug: string): Promise<void> => {
+    retrying.value = new Set([...retrying.value, slug]);
+    failure.value = undefined;
+    try {
+        await retry(run.manifest.runId, slug);
+    } catch (error) {
+        failure.value = error instanceof Error ? error.message : String(error);
+    } finally {
+        const next = new Set(retrying.value);
+        next.delete(slug);
+        retrying.value = next;
     }
 };
 
@@ -137,9 +164,22 @@ const blobFor = async (path: string): Promise<string | undefined> => {
     }
 };
 
+// Markdown's decorator runs after sanitization but before v-html inserts the fragment. Removing every image
+// outside the story-local convention here prevents a remote/absolute source from being fetched even briefly;
+// resolveShots later replaces the accepted relative sources with authenticated object URLs.
+const restrictReportImages = (fragment: DocumentFragment): void => {
+    for (const image of fragment.querySelectorAll(`img`)) {
+        const relative = (image.getAttribute(`src`) ?? ``).replace(/^\.\//, ``);
+        image.removeAttribute(`srcset`);
+        if (!isShotPath(relative)) {
+            image.removeAttribute(`src`);
+        }
+    }
+};
+
 /* Resolve the rendered report's relative <img> sources against the story's own run directory. Runs after every
- * render of an open story (flush: post — the v-html has to exist first) and is idempotent: an image already
- * pointed at an object URL has no relative src left to match. */
+ * render of an open story (flush: post — the v-html has to exist first) and is idempotent: only object URLs
+ * minted below survive a later pass. restrictReportImages has already removed every untrusted source. */
 const resolveShots = (slug: string): void => {
     const container = reportEl.value[slug];
     if (container === undefined) {
@@ -147,12 +187,17 @@ const resolveShots = (slug: string): void => {
     }
     for (const image of container.querySelectorAll(`img`)) {
         const source = image.getAttribute(`src`) ?? ``;
-        if (source === `` || /^[a-z]+:/i.test(source) || source.startsWith(`/`)) {
+        image.removeAttribute(`srcset`);
+        if (source === `` || source.startsWith(`blob:`)) {
             continue;
         }
         image.removeAttribute(`src`);
         image.classList.add(`max-w-full`, `rounded-md`, `border`, `border-line`);
-        void blobFor(`${storyDir(run.manifest.runId, slug)}/${source.replace(/^\.\//, ``)}`).then((url) => {
+        const relative = source.replace(/^\.\//, ``);
+        if (!isShotPath(relative)) {
+            continue;
+        }
+        void blobFor(`${storyDir(run.manifest.runId, slug)}/${relative}`).then((url) => {
             if (url !== undefined) {
                 image.src = url;
             }
@@ -237,7 +282,17 @@ const addresses = computed(() => Object.entries(run.manifest.targets).map(([key,
                     >
                         <template #icon><Icon name="eye" /></template>
                     </Button>
-                    <Button label="Session" size="small" severity="secondary" @click="openSession(story.slug)">
+                    <Button
+                        v-if="unstartedFailureOf(story.slug)"
+                        label="Retry"
+                        size="small"
+                        severity="secondary"
+                        :loading="retrying.has(story.slug)"
+                        @click="relaunch(story.slug)"
+                    >
+                        <template #icon><Icon name="refresh" /></template>
+                    </Button>
+                    <Button v-if="agentOf(story.slug)" label="Session" size="small" severity="secondary" @click="openSession(story.slug)">
                         <template #icon><Icon name="comments" /></template>
                     </Button>
                     <Button v-if="isLive(story.slug)" label="Stop" size="small" severity="secondary" @click="halt(story.slug)">
@@ -252,12 +307,15 @@ const addresses = computed(() => Object.entries(run.manifest.targets).map(([key,
                          cap (see prose.css) — the screenshots under it still get the full column, which is where
                          the extra room is actually worth something. -->
                     <div v-if="outcomes[story.slug]?.report" :ref="(el) => (reportEl[story.slug] = el as HTMLElement)" style="--prose-measure: 68ch">
-                        <Markdown :source="outcomes[story.slug]?.report ?? ``" />
+                        <Markdown :source="outcomes[story.slug]?.report ?? ``" :decorate="restrictReportImages" />
                     </div>
                     <!-- A story whose session DIED is the one case where there is something to read without a
                          report, and it is the reader's whole answer: the provider's own sentence, in the alert
                          the rest of this view uses for a failure. Sending them to the session for it (which is
                          all this panel used to do) means opening a transcript whose only content is this line. -->
+                    <div v-else-if="outcomes[story.slug]?.invalidResult" :class="cmp.alertDanger()">
+                        The session wrote a result that did not match this run's story and acceptance criteria. Open the session to correct it.
+                    </div>
                     <div v-else-if="failureOf(story.slug)" :class="cmp.alertDanger()">{{ failureOf(story.slug) }}</div>
                     <div v-else :class="cmp.emptyState()">
                         {{
