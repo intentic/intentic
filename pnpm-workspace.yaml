@@ -67,6 +67,7 @@ allowBuilds:
   "@prisma/client": true
   "@prisma/engines": true
   "@resvg/resvg-js": true
+  baileys: true
   bun: true
   core-js: false
   cpu-features: false
