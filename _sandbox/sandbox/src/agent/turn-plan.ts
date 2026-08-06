@@ -370,16 +370,24 @@ export const planHarnessTurn = async (
      * turns in one week searched the index for "the Claude credential ... has been renewed" and pasted the
      * ranked answer to it over the question the user had actually asked. The words underneath are the ask.
      *
-     * AND ONLY ON THE MESSAGE THAT OPENS THE CONVERSATION, which is the gate the other three are special cases
-     * of. A week of real turns, scored on whether the agent then opened a file the note named: 75% on an
-     * opening message against a 27% chance floor, 37% on every later message against 13% — and the later ones
-     * mostly re-name files the conversation was already sitting in. The reason is structural rather than
-     * lexical, which is why no list of stopwords was ever going to fix it: a follow-up means what the turn
-     * before it meant. "Yes, fix it.", "Next iteration.", "Done. Verify if all is good." are questions to the
-     * index only if you cannot see the message above them, and the index cannot. An opening message has nothing
-     * above it, so it is the one place where the words carry the whole ask. */
+     * ONE NOTE PER CONVERSATION, AND ONLY WHERE A PERSON OPENED ONE BY TYPING — which is the rule the three
+     * paragraphs above are special cases of, and the only rule that holds without a list of stopwords behind it.
+     *
+     * A week of real turns, scored on whether the agent then opened a file the note named: 75% on a
+     * conversation's opening message against a 27% chance floor, 37% on every later message against 13% — and
+     * the later ones mostly re-name files the conversation was already sitting in. The reason is structural. A
+     * follow-up means what the turn above it meant, so "Yes, fix it.", "Next iteration." and "Done. Verify if
+     * all is good." are questions to the index only if you cannot see that turn — and the index cannot. An
+     * opening message is the one place where the words on screen carry the whole ask.
+     *
+     * The three clauses are that sentence, spelled: `unattended` drops everything a surface started (a loop
+     * iteration, a chore, an acceptance story, and every automation wake — a schedule mints a FRESH conversation
+     * on each fire, so nothing else here would tell it from a person opening one); `branchOf` drops a
+     * conversation cut from another, whose opening message continues a transcript it was handed rather than
+     * starting one; and a turn count of zero is what makes it once per conversation rather than once per
+     * message — the registry counts every turn that ran, however it ended. */
     const conversationTurns = input.conversationId === undefined ? 0 : (services.agents.entry(input.conversationId)?.turns ?? 0);
-    const contextEligible = iqContext && input.unattended !== true && conversationTurns === 0;
+    const contextEligible = iqContext && input.unattended !== true && input.branchOf === undefined && conversationTurns === 0;
     /* PRE-INJECTION'S OWN COIN FLIP, on the same terms as the terse steer's — a fraction of otherwise-eligible
      * turns run without the retrieved context so the two arms are populations of the same command stream.
      * Independent of the terse flip on purpose: two independent flips leave each experiment's other-arm turns
