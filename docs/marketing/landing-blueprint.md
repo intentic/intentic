@@ -179,14 +179,14 @@ Rules that keep them honest:
 ## The comparison shelf (`/compare/*`)
 
 The second content-driven shelf, and it works the same way: `_site/site-content/src/compare.ts` holds the
-four families plus one `ComparePage` per competitor, and `_site/site/src/pages/compare/` renders them with
+five families plus one `ComparePage` per competitor, and `_site/site/src/pages/compare/` renders them with
 one hub and one template. Positioning and the rules that keep it honest live in
 [positioning.md](positioning.md#competitive-frame); do not re-argue them here.
 
 What is a *layout* decision rather than a positioning one:
 
 - **The hub leads with a jump strip, not an argument.** A visitor arrives wanting to find their tool and
-  leave; the six pages are linkable inside the first viewport, before the two-questions band and before the
+  leave; every page is linkable inside the first viewport, before the two-questions band and before the
   families. The families sit last because their job is to answer for the tools that will never have a page.
 - **Nav is a bare top-level link, not a third mega-menu.** A menu of six competitor rows hands a visitor the
   names without the sorting, and the sorting is the part that changes their mind.

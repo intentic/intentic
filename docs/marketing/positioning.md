@@ -128,7 +128,7 @@ source of truth; changing a position here means changing that file in the same c
 **The reframe that makes the shelf work: most of the named tools are not competitors.** Four out of five
 times someone asks "how does intentic compare to X", X is something intentic *runs* or something they *keep*.
 Saying so plainly is both truer and more persuasive than a scorecard, and it is why the shelf leads with the
-taxonomy rather than with us. The field sorts into four families on two questions — *whose machine does the
+taxonomy rather than with us. The field sorts into five families on two questions — *whose machine does the
 agent run on* and *how much of the agent's environment can you change* (the same two the landing `#contrast`
 band argues).
 
@@ -136,6 +136,7 @@ band argues).
 |---|---|---|---|
 | **Agent CLIs** | Claude Code, Codex, Grok, Kimi Code, Gemini CLI, OpenCode, Goose, Qwen Code | *intentic runs these* | A harness is the engine, not the garage. Five are native (`_sandbox/sandbox-contract/src/agent-catalog.ts`); any ACP agent is one capability away (`_platform/capability-catalog/src/index.ts` — `opencode-acp`, `gemini-acp`, `acp-agent`). |
 | **AI editors** | Cursor, Windsurf, VS Code + Copilot, Zed, JetBrains AI | *keep yours* | Different primary operator: they put the human at the keyboard. Composes for real via desktop sync (`_sandbox/sync/`) and `@intentic/acp-bridge`, not diplomatically. |
+| **Personal AI assistants** | OpenClaw, Hermes, Khoj, Leon | *a different job* | Self-hosted on your hardware and your accounts — the same conviction — but pointed at a life rather than a repository. The unit of work is a reply, not a diff. Composes: an assistant that can call a webhook can start an agent here. |
 | **Local orchestrators** | Conductor, Nimbalyst, Crystal, Vibe Kanban, Sculptor | *same instinct, wider scope* | The closest neighbours; they got ownership right. The gap is everything around the agent: the image (overlay Dockerfile), capabilities, automations, browser/phone reach, team sharing. |
 | **Cloud agent platforms** | Devin, Cursor cloud agents, Codex cloud, Claude Code on the web, Jules, Replit Agent | *the opposite trade* | The only genuine either/or, and it is P1: whose computer holds your source and your service credentials. |
 

@@ -4,8 +4,9 @@
  * is the fastest way to lose the credibility the rest of the site is built on. So the shelf is organised
  * around a fact that is true and disarming: MOST of the tools people name are not competitors. Five of them
  * are agent harnesses this product runs (`_platform/capability-catalog/src/index.ts`, the ACP cards), the editors
- * keep working through desktop sync and `@intentic/acp-bridge`, and only the cloud agent platforms are a real
- * either/or. Saying that plainly is both truer and more persuasive than a scorecard.
+ * keep working through desktop sync and `@intentic/acp-bridge`, the personal assistants do a different job on the
+ * same hardware, and only the cloud agent platforms are a real either/or. Saying that plainly is both truer and
+ * more persuasive than a scorecard.
  *
  * Every page therefore carries a `pickThem` — the case for the other product, written to be usable — and
  * every table carries rows marked `theirs`. A table with no losing rows is a table nobody believes.
@@ -19,6 +20,8 @@
 export const compareHref = (slug: string): string => (slug ? `/compare/${slug}/` : `/compare/`);
 
 const PUBLISHED = "2026-08-01";
+/** The assistants shelf landed later, and structured data emits each page's own date rather than the shelf's. */
+const PUBLISHED_ASSISTANTS = "2026-08-06";
 
 /** One kind of tool people confuse this product with — the unit the hub is organised in. */
 export interface CompareFamily {
@@ -87,6 +90,13 @@ export const compareFamilies: CompareFamily[] = [
         verdict: "keep yours",
         body: "An AI editor puts you at the keyboard with a model helping. intentic puts the agent at the keyboard and you in review. Same files, different jobs: desktop sync mirrors the sandbox onto your machine, so your editor opens what an agent just wrote.",
         examples: ["Cursor", "Windsurf", "VS Code + Copilot", "Zed", "JetBrains AI"],
+    },
+    {
+        id: "assistants",
+        label: "Personal AI assistants",
+        verdict: "a different job",
+        body: "An assistant lives in your chat apps and runs the rest of your life: the inbox, the calendar, the notes, the house — self-hosted, on your own accounts, which is the same conviction this product is built on. It is pointed somewhere else. intentic is for the work that ends in a diff, and an assistant that can call a webhook can start an agent here.",
+        examples: ["OpenClaw", "Hermes", "Khoj", "Leon"],
     },
     {
         id: "orchestrators",
@@ -759,6 +769,213 @@ export const comparePages: ComparePage[] = [
         },
     },
     {
+        slug: "openclaw",
+        name: "OpenClaw",
+        url: "https://openclaw.ai/",
+        navLabel: "vs OpenClaw",
+        menuBlurb: "An assistant in your chats, or agents on your repos",
+        family: "assistants",
+        heading: "OpenClaw answers your messages. intentic answers for your repositories.",
+        sub: "Both are MIT, both self-hosted, both one tap away on a phone. What differs is where the agent is pointed, and what it leaves behind when it is done.",
+        theirPitch:
+            "“The AI that really does things.” A self-hosted gateway joining your models, your tools and the chat apps you already use — WhatsApp, Telegram, Slack, Discord, Signal, iMessage — with plugins and skills from ClawHub.",
+        verdict: [
+            "OpenClaw is a personal assistant you host yourself: a gateway on your own devices, reachable from whichever chat app you already have open, that clears an inbox, moves a calendar, files a note and turns off a light.",
+            "intentic is a workplace for coding agents. Each one gets a container built from an image you approve, a git worktree of its own, credentials for your systems, and a diff you read before anything lands.",
+            "So this is a division of labour rather than a choice, and running both is the ordinary outcome: the assistant for everything that is not a repository, intentic for everything that is.",
+        ],
+        overlap: {
+            title: "Where we agree",
+            body: "Almost line for line, the same convictions: an agent doing real work belongs on hardware you own, on model accounts that are yours, with nothing proxied and nothing marked up. Both are MIT and readable end to end, both extend through skills, and both assume the first thing you will want is to reach the thing from your phone.",
+        },
+        differences: [
+            {
+                title: "The artefact is a diff, not a reply",
+                body: "An assistant's output is the message it sends back and the change it has already made. Here the output is a change on a branch: every agent is cut its own git worktree the moment it starts, and nothing reaches your tree until you have read a diff and landed it.",
+            },
+            {
+                title: "A machine per agent, not the machine it runs on",
+                body: "OpenClaw's gateway runs on your devices, so what its tools can reach is what that device carries. In intentic the machine is the artefact — an overlay Dockerfile you read and approve — and it is per agent rather than per person, so the one that needs psql and a headless browser has them and your laptop does not.",
+            },
+            {
+                title: "Ten at once, sorted by who needs you",
+                body: "A chat thread is one conversation by construction. The fleet board runs ten, each on its own worktree, and an agent that needs a decision stops and says so — its card sorts into Attention with the reason on it, so a fleet reads as a short list of things only you can do.",
+            },
+            {
+                title: "Different systems on the other end",
+                body: "OpenClaw's integrations are the ones a life runs on: mail, calendars, notes, music, the house. Capabilities wire a sandbox to the ones work runs on — GitHub and GitLab, PostgreSQL and MySQL, Sentry, Stripe, SSH, a VPN, any MCP server — each keeping its credential inside the sandbox, injected per turn.",
+            },
+            {
+                title: "Chat is a door here, not the room",
+                body: "Invite an intentic agent into Discord or Slack and it reads the channel, replies and reacts — but that thread is one entrance to a workspace with a file tree, an editor, a terminal, a diff reader and a cost ledger behind it. For OpenClaw the thread is the product, which is exactly why it is better at being in one.",
+            },
+        ],
+        table: [
+            {
+                label: "What it is for",
+                intentic: "software work: a branch, a worktree, a diff",
+                them: "the rest of it: mail, calendars, notes, files, the house",
+                theirs: true,
+            },
+            { label: "Where it runs", intentic: "a Docker sandbox on hardware you own", them: "a gateway on your own devices" },
+            { label: "Host operating system", intentic: "macOS, Linux, Windows", them: "macOS, Linux, Windows" },
+            {
+                label: "How you reach it",
+                intentic: "any browser over a private tunnel, phone included; Discord and Slack when you invite it",
+                them: "the chat apps you already use — WhatsApp, Telegram, Slack, Discord, Signal, iMessage and more",
+                theirs: true,
+            },
+            {
+                label: "What you can change about the environment",
+                intentic: "the image, the capabilities, the context loaded each turn",
+                them: "the device it runs on, as it already is",
+            },
+            { label: "Isolation", intentic: "one container and one git worktree per agent", them: "one gateway, one operator, sessions inside it" },
+            {
+                label: "Reviewing what it did",
+                intentic: "a diff reader you tick through, then land or discard",
+                them: "the reply in the thread, and git afterwards",
+            },
+            {
+                label: "Where credentials live",
+                intentic: "inside the sandbox, injected per turn",
+                them: "with the gateway, on the device it runs on",
+            },
+            {
+                label: "Extending it",
+                intentic: "capabilities, extensions and any MCP server",
+                them: "plugins and skills, published and installed from ClawHub",
+                theirs: true,
+            },
+            {
+                label: "Starts on an event",
+                intentic: "automations: cron, webhook, chat, email, CI/CD, workspace events",
+                them: "a message, a webhook or an automation",
+            },
+            { label: "Account required", intentic: "a Google sign-in for the hosted workspace", them: "none at all", theirs: true },
+            { label: "Licence", intentic: "MIT throughout — sandbox, platform and CLI", them: "MIT" },
+        ],
+        together: {
+            title: "Hand the repository work over",
+            body: "An intentic automation answers a webhook, and an assistant that can call one can start an agent here — so the thing that noticed the failing nightly report can hand the fix to an agent that gets a container, a worktree and a diff. Or invite that agent into the same Discord or Slack channel the assistant already sits in, and ask both in one place.",
+        },
+        pickThem:
+            "The job is your life rather than your codebase: an assistant inside the chat app you already have open, answering mail, moving meetings, filing notes and driving the house — on your own devices, with no account anywhere and no container runtime to install.",
+        meta: {
+            title: "intentic vs OpenClaw · a personal assistant, and a workplace for agents",
+            description:
+                "OpenClaw is a self-hosted assistant that lives in your chat apps. intentic is where coding agents work: a container each, a worktree each, a diff before anything lands — and the two compose.",
+            datePublished: PUBLISHED_ASSISTANTS,
+        },
+    },
+    {
+        slug: "hermes",
+        name: "Hermes",
+        url: "https://hermes-agent.nousresearch.com/",
+        navLabel: "vs Hermes",
+        menuBlurb: "An agent that learns you, or a machine per agent",
+        family: "assistants",
+        heading: "Hermes gets better at you. intentic gives every agent a machine.",
+        sub: "Both are MIT, self-hosted and answerable from a chat app you already have. Hermes spends its effort on what an agent carries between sessions; intentic spends it on what an agent runs inside.",
+        theirPitch:
+            "“The self-improving AI agent built by Nous Research” — the only agent with a built-in learning loop: it creates skills from experience, improves them during use, and builds a deepening model of who you are across sessions.",
+        verdict: [
+            "Hermes is Nous Research's general-purpose agent. A terminal UI and twenty-odd chat channels sit over an agent that writes its own skills, remembers across sessions, schedules its own work, and can put its terminal on Docker, over SSH or on a hosted sandbox.",
+            "intentic is narrower on purpose — software work, and everything underneath it. A container built from an image you approve, one git worktree per agent from the moment it starts, capabilities that hand it your systems, and a diff before anything is yours.",
+            "On memory and self-improvement Hermes is doing something intentic does not attempt. On isolation, review and supervising ten agents at once, the reverse is true.",
+        ],
+        overlap: {
+            title: "Where we agree",
+            body: "Both are MIT and self-hosted, both run on model accounts that are yours, and both hold that an agent should be able to work on a machine you own rather than a vendor's. Both can put the work in a container, both can start themselves on a schedule, and both are reachable while you are away from the desk.",
+        },
+        differences: [
+            {
+                title: "What is learned, and what is written down",
+                body: "The learning loop is Hermes' product: skills generated from experience, memory that outlives a session, a model of you that deepens. intentic's context is authored instead — the repo's own instructions, the skill a capability brings with it, task lists and saved workflows that survive a rebuild — on the bet that when a coding agent has it wrong you want a file to edit rather than a memory to correct.",
+            },
+            {
+                title: "Isolation is the floor, not a backend",
+                body: "Hermes gives the terminal a choice: local, Docker, SSH or a hosted sandbox. Here there is no local option to pick. Every agent works inside the sandbox container and on a worktree cut for it, never on request, and landing replays its delta onto your tree as ordinary git changes you can stage, amend or revert.",
+            },
+            {
+                title: "Nothing is yours until you have read it",
+                body: "A general assistant acts and then tells you what it did. A change here is quarantined by construction: the diff reader diffs the code alone, you tick through it file by file, and then you land it, leave it on the branch or discard it.",
+            },
+            {
+                title: "Parallel at the top, not inside the conversation",
+                body: "Hermes delegates to isolated subagents within a conversation. intentic's parallelism is one level up: ten conversations at once, each with its own worktree and its own transcript, ranked by which one needs a decision from you.",
+            },
+            {
+                title: "Systems, with the credential kept inside",
+                body: "Capabilities wire a sandbox to GitHub, PostgreSQL, Sentry, Stripe, Discord, SSH and any MCP server. Each ships the skill that teaches the agent to drive that system and keeps its secret inside the sandbox, injected per turn, with no path from the platform to it.",
+            },
+        ],
+        table: [
+            {
+                label: "What it is",
+                intentic: "the machine and the workplace an agent works in",
+                them: "a general-purpose agent that learns as it goes",
+            },
+            {
+                label: "Memory across sessions",
+                intentic: "context you author: repo instructions, capability skills, task lists that survive a rebuild",
+                them: "a learning loop: generated skills, persistent memory, a model of you",
+                theirs: true,
+            },
+            {
+                label: "Where the work runs",
+                intentic: "always a Docker sandbox on hardware you own",
+                them: "local, Docker, SSH or a hosted sandbox, as you configure it",
+            },
+            {
+                label: "Isolation",
+                intentic: "one container and one git worktree per agent, never on request",
+                them: "isolated subagents inside a conversation",
+            },
+            {
+                label: "How you reach it",
+                intentic: "any browser over a private tunnel, phone included; Discord and Slack when you invite it",
+                them: "a terminal UI, plus Telegram, Discord, Slack, WhatsApp, Signal and email",
+                theirs: true,
+            },
+            {
+                label: "Reviewing changes",
+                intentic: "a diff reader over an isolated worktree, then land or discard",
+                them: "git, in the terminal it ran in",
+            },
+            {
+                label: "Which models",
+                intentic: "5 native harnesses on subscriptions you already pay for, plus any ACP agent",
+                them: "Nous Portal, OpenRouter, OpenAI or any compatible endpoint",
+                theirs: true,
+            },
+            { label: "Where credentials live", intentic: "inside the sandbox, injected per turn", them: "the environment the agent runs in" },
+            {
+                label: "Starts on an event",
+                intentic: "automations: cron, webhook, chat, email, CI/CD, workspace events",
+                them: "a scheduler you set in plain language",
+            },
+            {
+                label: "Sharing with a teammate",
+                intentic: "invite by email; grants enforced by the daemon",
+                them: "one operator, paired to their chats",
+            },
+            { label: "Licence", intentic: "MIT throughout — sandbox, platform and CLI", them: "MIT" },
+        ],
+        together: {
+            title: "One machine, two jobs",
+            body: "Both run on hardware you already own, and an intentic automation answers a webhook — so Hermes can hand the repository work down to an agent that gets a container, a worktree and a diff, then report back in whichever chat you asked from.",
+        },
+        pickThem:
+            "You want one agent that keeps getting better at you — writing its own skills, remembering how it solved something last month, reachable in whatever chat app you happen to be in — and your work is much broader than repositories.",
+        meta: {
+            title: "intentic vs Hermes · a self-improving assistant, and a sandbox per agent",
+            description:
+                "Hermes is Nous Research's self-improving agent: MIT, self-hosted, with generated skills and memory. intentic runs coding agents in a container and a git worktree each, with a diff before anything lands.",
+            datePublished: PUBLISHED_ASSISTANTS,
+        },
+    },
+    {
         slug: "cloud-agents",
         name: "cloud agent platforms",
         url: "https://www.cognition.ai/devin",
@@ -857,7 +1074,7 @@ export const compareIndex = {
     meta: {
         title: "How intentic compares · Conductor, Superset, T3 Code, Synara, Cursor",
         description:
-            "Where intentic sits among agent CLIs, AI editors, local orchestrators — Conductor, Superset, T3 Code, Synara — and cloud platforms, with the case for each.",
+            "Where intentic sits among agent CLIs, AI editors, personal assistants — OpenClaw, Hermes — local orchestrators and cloud platforms, with the case for each.",
         datePublished: PUBLISHED,
     },
 };
