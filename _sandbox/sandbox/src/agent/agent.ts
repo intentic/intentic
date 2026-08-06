@@ -59,6 +59,7 @@ import { isAuthFailureText, isEntitlementRefusalText, isUsageLimitText } from ".
 import {
     closeSubagents,
     noteDelegation,
+    noteSubagentSpawn,
     noteSubagentTask,
     settleDelegation,
     subagentCountsOf,
@@ -720,6 +721,18 @@ async function* streamSdk(
                             yield changed;
                         }
                     }
+                    /* The call that starts another AGENT. Its input is the only place that says whether the
+                     * parent walked away from the child (subagents.ts), and background is the tool's own
+                     * default — an explicit `false` is the one shape that means the turn blocks on it. `Agent`
+                     * is the Claude SDK's name for the tool, and the SDK task stream is the only thing that
+                     * files these children. */
+                    if (
+                        block.name === "Agent" &&
+                        subagents !== undefined &&
+                        (block.input as { run_in_background?: unknown })?.run_in_background !== false
+                    ) {
+                        noteSubagentSpawn(block.id);
+                    }
                     // First Bash of the turn: name the live `agent-<id>` tmux session so the browser surfaces
                     // that terminal. Same derivation the PreToolUse hook routes commands through, so they match.
                     // Remember every Bash tool_use id so the tool_result below can re-surface (the session may
@@ -740,11 +753,15 @@ async function* streamSdk(
                      * it runs in are named together — and detected for every Bash call, tmux or not, because
                      * whether the daemon can WATCH it is a different question from whether it happened. */
                     if (block.name === "Bash" && subagents !== undefined) {
-                        const command = (block.input as { command?: unknown } | undefined)?.command;
+                        const input = block.input as { command?: unknown; run_in_background?: unknown } | undefined;
+                        const command = input?.command;
                         if (typeof command === "string") {
                             const spawned = noteDelegation(subagents, {
                                 id: block.id,
                                 command,
+                                // A backgrounded command's result announces its START, so it may not end the
+                                // record it opens (settleDelegation).
+                                background: input?.run_in_background === true,
                                 ...(agentSession !== undefined ? { terminal: agentSession } : {}),
                             });
                             if (spawned !== undefined) {

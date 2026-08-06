@@ -197,7 +197,19 @@ const loaderElapsed = computed(() => {
     const startedAt = conversation.value.turnStartedAt.value;
     return startedAt === undefined ? undefined : formatElapsed(startedAt, now.value);
 });
-const loaderWord = computed(() => LOADER_WORDS[Math.floor(loaderSeconds.value / 2) % LOADER_WORDS.length] ?? `Thinking`);
+/* WHAT THE LOADER SAYS WHILE THE TURN IS ONLY WAITING ON ITS CHILDREN, which is the one stretch the whimsical
+ * words are wrong about. A turn that delegated has written its "I'll come back with their results" and gone
+ * quiet: nothing of its own is running, the transcript looks finished, and the only thing between it and the
+ * end is agents working somewhere else. "Percolating… (6m 12s)" over that reads as a model that has hung.
+ *
+ * The count is the roster's — the same number the board's card and the chat rail already say — so the three
+ * never disagree about how many are out (agentStatus.ts's rule). */
+const liveSubagents = computed(() => agentById(conversation.value.conversationId)?.subagents?.running ?? 0);
+const loaderWord = computed(() =>
+    liveSubagents.value > 0
+        ? `Waiting on ${liveSubagents.value} subagent${liveSubagents.value === 1 ? `` : `s`}`
+        : (LOADER_WORDS[Math.floor(loaderSeconds.value / 2) % LOADER_WORDS.length] ?? `Thinking`),
+);
 
 /* THE PROVIDER IS FAILING AND THIS TURN IS RIDING IT OUT (the provider_retry frame). It takes the loader line
  * over, because it answers the one question the cycling word cannot: the agent is not stuck, it is waiting, and

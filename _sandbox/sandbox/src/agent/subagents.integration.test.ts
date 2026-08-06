@@ -8,6 +8,7 @@ import {
     closeSubagents,
     listSubagentSessions,
     noteDelegation,
+    noteSubagentSpawn,
     noteSubagentTask,
     resetSubagents,
     settleDelegation,
@@ -57,6 +58,24 @@ describe("the SDK's own subagents", () => {
         expect(listSubagentSessions()).toMatchObject([
             { id: "call-1", kind: "subagent", conversationId: "conv-1", agentType: "Explore", status: "running" },
         ]);
+    });
+
+    /* THE ONE FACT THE TASK STREAM NEVER CARRIES. A child the parent walked away from is `is_backgrounded` on a
+     * task_updated patch that does not come — a real backgrounded child was watched through birth, work, report
+     * and death without it arriving once — so the spawning tool call is where it comes from instead. The mark is
+     * laid before the record exists, because that is the order the stream has, and it has to reach the BORN
+     * frame: no later frame carries the field. */
+    it("takes 'backgrounded' from the spawning tool call, onto the frame that announces the child", () => {
+        noteSubagentSpawn("call-1");
+        expect(noteSubagentTask(turn(), started())).toMatchObject({ kind: "subagent", id: "call-1", background: true });
+        expect(listSubagentSessions()).toMatchObject([{ id: "call-1", background: true }]);
+    });
+
+    // And a child the turn blocks on says nothing at all, rather than saying "background: false" — the pill is
+    // about the one case, and the absent field is what keeps it off every other card.
+    it("leaves an unmarked child without the flag", () => {
+        expect(noteSubagentTask(turn(), started())).not.toHaveProperty("background");
+        expect(listSubagentSessions()[0]).not.toHaveProperty("background");
     });
 
     // The id is the SPAWNING TOOL CALL's, which is what makes the card and the record point at each other with no
@@ -210,6 +229,7 @@ describe("delegations", () => {
             id: "bash-1",
             command: "codex exec --sandbox danger-full-access --cd /work 'Port the auth module to the new client'",
             terminal: "agent-abc12345",
+            background: false,
         });
         expect(frame).toEqual({
             kind: "subagent",
@@ -222,22 +242,30 @@ describe("delegations", () => {
     });
 
     it("recognizes an opencode run and remembers the session a continue names", () => {
-        noteDelegation(turn(), { id: "bash-2", command: "XDG_DATA_HOME=/agent-auth opencode run --session ses_7f3 --model xai/grok-4 'keep going'" });
+        noteDelegation(turn(), {
+            id: "bash-2",
+            command: "XDG_DATA_HOME=/agent-auth opencode run --session ses_7f3 --model xai/grok-4 'keep going'",
+            background: false,
+        });
         expect(subagentSource("bash-2")).toMatchObject({ kind: "grok", thread: "ses_7f3" });
     });
 
     // A resumed thread is the same agent carrying on, so it updates the record it names rather than opening a
     // second one — and a command that merely MENTIONS a delegation verb is not an agent at all.
     it("takes the thread id off a resume, and ignores a command that only mentions codex", () => {
-        noteDelegation(turn(), { id: "bash-3", command: "codex exec --sandbox danger-full-access resume 019fb7fd-349b-7571 'and now the tests'" });
+        noteDelegation(turn(), {
+            id: "bash-3",
+            command: "codex exec --sandbox danger-full-access resume 019fb7fd-349b-7571 'and now the tests'",
+            background: false,
+        });
         expect(subagentSource("bash-3")).toMatchObject({ kind: "codex", thread: "019fb7fd-349b-7571" });
-        expect(noteDelegation(turn(), { id: "bash-4", command: "grep -rn 'codex exec' docs/" })).toBeUndefined();
-        expect(noteDelegation(turn(), { id: "bash-5", command: "echo how to codex" })).toBeUndefined();
+        expect(noteDelegation(turn(), { id: "bash-4", command: "grep -rn 'codex exec' docs/", background: false })).toBeUndefined();
+        expect(noteDelegation(turn(), { id: "bash-5", command: "echo how to codex", background: false })).toBeUndefined();
         expect(listSubagentSessions().map((session) => session.id)).toEqual(["bash-3"]);
     });
 
     it("settles on the command's result, taking its tail as the report", () => {
-        noteDelegation(turn(), { id: "bash-6", command: "codex exec 'audit the gate'" });
+        noteDelegation(turn(), { id: "bash-6", command: "codex exec 'audit the gate'", background: false });
         expect(update(settleDelegation("bash-6", { failed: false, output: "  looked at 4 files\nthe gate is fine  " }))).toMatchObject({
             status: "completed",
             summary: "looked at 4 files\nthe gate is fine",
@@ -245,8 +273,33 @@ describe("delegations", () => {
         expect(settleDelegation("never-started", { failed: false, output: "x" })).toBeUndefined();
     });
 
+    /* A BACKGROUNDED DELEGATION'S RESULT ANNOUNCES ITS START, NOT ITS END. Settling on it is a measured lie: a
+     * `codex exec` sent to the background was marked completed 0.2 seconds in, and the roster said "done" for
+     * the 103 seconds the delegate went on working. So the start message settles nothing and the delegate keeps
+     * counting as one of the children the session is waiting on — the background task's own notification, which
+     * lands when the command exits, is what ends it and carries the report. */
+    it("leaves a backgrounded delegation running until its background task reports", () => {
+        expect(noteDelegation(turn(), { id: "bash-8", command: "codex exec 'audit the gate'", background: true })).toMatchObject({
+            kind: "subagent",
+            background: true,
+        });
+        expect(settleDelegation("bash-8", { failed: false, output: "Command running in background with ID: b1" })).toBeUndefined();
+        expect(subagentCountsOf("conv-1")).toEqual({ running: 1, total: 1 });
+        expect(
+            update(
+                noteSubagentTask(turn(), {
+                    subtype: "task_notification",
+                    tool_use_id: "bash-8",
+                    status: "completed",
+                    summary: "the gate is fine",
+                }),
+            ),
+        ).toMatchObject({ status: "completed", summary: "the gate is fine" });
+        expect(subagentCountsOf("conv-1")).toEqual({ running: 0, total: 1 });
+    });
+
     it("reports a failed delegation's tail as the error too", () => {
-        noteDelegation(turn(), { id: "bash-7", command: "codex exec 'audit the gate'" });
+        noteDelegation(turn(), { id: "bash-7", command: "codex exec 'audit the gate'", background: false });
         expect(update(settleDelegation("bash-7", { failed: true, output: "not logged in" }))).toMatchObject({
             status: "failed",
             error: "not logged in",
@@ -275,7 +328,7 @@ describe("the roster", () => {
     // settles them — a child left "running" forever is the lie this registry exists to remove.
     it("kills whatever is still live when the turn ends", () => {
         noteSubagentTask(turn(), started());
-        noteDelegation(turn(), { id: "bash-1", command: "codex exec 'go'" });
+        noteDelegation(turn(), { id: "bash-1", command: "codex exec 'go'", background: false });
         noteSubagentTask({ ...turn(), conversationId: "conv-2" }, started({ tool_use_id: "other", task_id: "task-z" }));
         expect(closeSubagents("conv-1").map((frame) => update(frame).id)).toEqual(["call-1", "bash-1"]);
         expect(

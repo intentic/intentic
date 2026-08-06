@@ -92,6 +92,23 @@ const sweep = (now: number): void => {
 const LIVE: ReadonlySet<SubagentStatus> = new Set<SubagentStatus>(["pending", "running", "paused"]);
 export const subagentRunning = (record: Pick<SubagentSession, "status">): boolean => LIVE.has(record.status);
 
+/* WHICH CHILDREN THE PARENT WALKED AWAY FROM — marked by the spawning tool call, because nothing else says so.
+ *
+ * The SDK models it as `is_backgrounded` on a task_updated patch, and that patch does not come: a child started
+ * with `run_in_background` was watched through its whole life here — born, worked, reported, finished — without
+ * the field ever being set once. So the card's "background" pill, the one label that explains why a call can sit
+ * unfinished while the turn moves on underneath it, could never render.
+ *
+ * Marked BEFORE the record exists, which is the ordering the stream actually has: the tool_use block arrives
+ * ahead of the `task_started` that opens one (the client's reducer leans on the same fact). `open` consumes the
+ * mark, so the flag rides the BORN frame — the only frame that carries it. */
+const backgrounded = new Set<string>();
+
+/** The tool call that spawned a child, as it streams: whether the parent walked away from this one. */
+export const noteSubagentSpawn = (id: string): void => {
+    backgrounded.add(id);
+};
+
 const wire = (record: SubagentRecord): SubagentSession => ({
     id: record.id,
     kind: record.kind,
@@ -197,7 +214,7 @@ const open = (turn: SubagentTurn, id: string, kind: SubagentKind, fields: Partia
         description: undefined,
         model: undefined,
         spawnDepth: undefined,
-        background: undefined,
+        background: backgrounded.delete(id) ? true : undefined,
         status: "running",
         startedAt: now,
         endedAt: undefined,
@@ -534,10 +551,12 @@ const promptOf = (command: string): string | undefined => {
 };
 
 /** A Bash command the turn is about to run: opens a delegation record when it starts one. `terminal` is the tmux
- *  session the command runs in — a delegation's live view, which an SDK subagent has no equivalent of. */
+ *  session the command runs in — a delegation's live view, which an SDK subagent has no equivalent of.
+ *  `background` is the call's own `run_in_background`, and it decides what may settle this record — see
+ *  settleDelegation. */
 export const noteDelegation = (
     turn: SubagentTurn,
-    call: { readonly id: string; readonly command: string; readonly terminal?: string },
+    call: { readonly id: string; readonly command: string; readonly terminal?: string; readonly background: boolean },
 ): AgentEvent | undefined => {
     const match = DELEGATIONS.find((entry) => entry.verb.test(call.command));
     if (match === undefined || records.has(call.id)) {
@@ -550,13 +569,21 @@ export const noteDelegation = (
             ...(promptOf(call.command) !== undefined ? { description: promptOf(call.command) } : {}),
             ...(resumed !== undefined ? { thread: resumed } : {}),
             ...(call.terminal !== undefined ? { terminal: call.terminal } : {}),
+            ...(call.background ? { background: true } : {}),
         }),
     );
 };
 
-/** That command's result: the delegate stopped, and what it last said is its report. */
+/** That command's result: the delegate stopped, and what it last said is its report.
+ *
+ * NOT FOR A BACKGROUNDED ONE, whose result says only that the command started. Taking that as the ending is a
+ * measured lie: a `codex exec` sent to the background was marked `completed` 0.2 seconds in and the roster went
+ * on saying "done" for the 103 seconds the delegate actually worked. What ends it instead is the background
+ * task's own notification, which lands when the command exits and carries its report (noteSubagentTask) — and
+ * until it does, the delegate counts as one of the children the session is still waiting on. */
 export const settleDelegation = (id: string, outcome: { readonly failed: boolean; readonly output: string }): AgentEvent | undefined => {
-    if (!records.has(id)) {
+    const record = records.get(id);
+    if (record === undefined || record.background === true) {
         return undefined;
     }
     const tail = outcome.output.trim().slice(-REPORT_TAIL).trim();
@@ -587,4 +614,5 @@ export const closeSubagents = (conversationId: string): AgentEvent[] => {
 export const resetSubagents = (): void => {
     records.clear();
     tasks.clear();
+    backgrounded.clear();
 };

@@ -6,6 +6,7 @@ import { ERRANDS, errandPrompt } from "../composables/chat/errands";
 import type { ChatMessage } from "../composables/chat/transcript";
 
 const clock = vi.hoisted(() => ({ turnStartedAt: undefined as number | undefined }));
+const roster = vi.hoisted(() => ({ running: 0 }));
 
 vi.hoisted(() => {
     globalThis.matchMedia ??= ((query: string) => ({
@@ -85,8 +86,9 @@ vi.mock("../composables/chat/useChat", async () => {
     };
 });
 
+// The roster's count of this conversation's live children — what the loader says it is waiting on.
 vi.mock("../composables/agents/useAgents", () => ({
-    useAgents: () => ({ agentById: () => undefined, setAutoLand: vi.fn() }),
+    useAgents: () => ({ agentById: () => ({ subagents: { running: roster.running, total: roster.running } }), setAutoLand: vi.fn() }),
 }));
 
 vi.mock("../composables/sandbox/useSandboxSettings", async () => {
@@ -121,6 +123,7 @@ beforeEach(() => {
     vi.useFakeTimers();
     vi.setSystemTime(1_000_000);
     clock.turnStartedAt = Date.now() - 35_000;
+    roster.running = 0;
 });
 
 afterEach(() => {
@@ -152,6 +155,24 @@ describe(`ChatMessageView loader`, () => {
         app = undefined;
         clock.turnStartedAt = Date.now() - 3_960_000;
         expect(mount().textContent).toContain(`(1h 6m)`);
+    });
+
+    /* THE ONE STRETCH THE CYCLING WORDS ARE WRONG ABOUT. A turn that delegated has written its "I'll come back
+     * with their results" and gone quiet: nothing of its own is running, and the only thing between it and the
+     * end is agents working elsewhere. "Percolating… (6m 12s)" over that reads as a model that has hung — so
+     * the line says what it is actually waiting for, and goes back to the words once they are all in. */
+    it(`names the children it is waiting on instead of cycling a word`, () => {
+        roster.running = 2;
+        expect(mount().textContent).toContain(`Waiting on 2 subagents…`);
+    });
+
+    it(`says one child in the singular`, () => {
+        roster.running = 1;
+        expect(mount().textContent).toContain(`Waiting on 1 subagent…`);
+    });
+
+    it(`goes back to the cycling word once they are all in`, () => {
+        expect(mount().textContent).not.toContain(`Waiting on`);
     });
 
     // The counter ticks off a `now` the interval refreshes — a turn whose start is unknown gets no parenthetical

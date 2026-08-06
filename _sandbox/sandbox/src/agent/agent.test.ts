@@ -535,7 +535,7 @@ test("a subagent still running holds the rebase off", async () => {
     let calls = 0;
     noteDelegation(
         { conversationId, cwd: "/work", sessionId: undefined, subagentsDir: undefined },
-        { id: "bash-1", command: "codex exec --sandbox danger-full-access --cd /work 'port the tests'" },
+        { id: "bash-1", command: "codex exec --sandbox danger-full-access --cd /work 'port the tests'", background: false },
     );
 
     await decide(
@@ -1163,6 +1163,86 @@ test("a result with a backgrounded child in flight holds the stream open for the
     ]);
 });
 
+/* WHERE "BACKGROUND" COMES FROM, since it does not come from the SDK. `is_backgrounded` rides a task_updated
+ * patch that never arrives, so the Agent tool call itself carries the fact — and it has to reach the frame that
+ * ANNOUNCES the child, because no later frame has a field for it. The block streams ahead of the task_started
+ * that opens the record, which is exactly why the mark is laid before there is a record to mark. */
+test("the Agent call's run_in_background reaches the frame that announces the child", async () => {
+    resetSubagents();
+    const events = await collect(
+        { ...request, conversationId: "c-bg" },
+        fakeQuery(
+            {
+                type: "assistant",
+                session_id: "s",
+                message: {
+                    content: [{ type: "tool_use", id: "call-1", name: "Agent", input: { description: "audit chapter 4", run_in_background: true } }],
+                },
+            },
+            {
+                type: "system",
+                subtype: "task_started",
+                session_id: "s",
+                task_id: "task-1",
+                tool_use_id: "call-1",
+                subagent_type: "Explore",
+                description: "audit chapter 4",
+            },
+            { type: "result", subtype: "success" },
+        ),
+    );
+    expect(events).toContainEqual({
+        kind: "subagent",
+        id: "call-1",
+        subagentKind: "subagent",
+        agentType: "Explore",
+        description: "audit chapter 4",
+        background: true,
+    });
+});
+
+/* A DELEGATION SENT TO THE BACKGROUND, whose result says only that the command started. Settling on it marked a
+ * codex run completed 0.2 seconds in and left the roster reading "done" for the 103 seconds it actually worked,
+ * so the result now ends nothing: the card keeps the child, and the background task's own notification is what
+ * finishes it. */
+test("a backgrounded delegation is not ended by the result that says it started", async () => {
+    withoutTmux();
+    resetSubagents();
+    const events = await collect(
+        { ...request, conversationId: "c-bgdel" },
+        fakeQuery(
+            {
+                type: "assistant",
+                session_id: "s",
+                message: {
+                    content: [
+                        { type: "tool_use", id: "bash-1", name: "Bash", input: { command: "codex exec 'audit the gate'", run_in_background: true } },
+                    ],
+                },
+            },
+            {
+                type: "user",
+                session_id: "s",
+                message: { content: [{ type: "tool_result", tool_use_id: "bash-1", content: "Command running in background with ID: b1" }] },
+            },
+            { type: "result", subtype: "success" },
+        ),
+    );
+    expect(events).toContainEqual({
+        kind: "subagent",
+        id: "bash-1",
+        subagentKind: "codex",
+        agentType: "Codex",
+        description: "audit the gate",
+        background: true,
+    });
+    // The result moved nothing. What ends the child here is the turn ending under it — the existing rule for
+    // every live child, and the only honest one once the stream it would have reported on is gone.
+    expect(events.filter((event) => event.kind === "subagent_update" && event.id === "bash-1")).toEqual([
+        { kind: "subagent_update", id: "bash-1", status: "killed" },
+    ]);
+});
+
 // The other way a hold can end: every child settled and no wake turn announced itself within the grace
 // window — closing the input is what lets the stream drain, exactly like the steered settle above. The
 // child's own report still made it out before the end.
@@ -1230,10 +1310,7 @@ test("a backgrounded shell does not hold the turn open", async () => {
             { type: "stream_event", session_id: "s", event: { type: "content_block_delta", delta: { type: "text_delta", text: "never" } } },
         ),
     );
-    expect(events).toEqual([
-        { kind: "session", sessionId: "s" },
-        { kind: "done" },
-    ]);
+    expect(events).toEqual([{ kind: "session", sessionId: "s" }, { kind: "done" }]);
 });
 
 /* THE SWALLOWED PROMPT. A resume that wakes to its own stale background-task notifications classifies the
@@ -1312,7 +1389,12 @@ test("a local command's own num_turns-0 success is a real answer, not a swallowe
     const steering = new SteeringQueue();
     const events = await collect({ ...request, steering }, localCommand);
     expect(drained).toEqual(["add a /ping route"]);
-    expect(events).toEqual([{ kind: "session", sessionId: "s" }, { kind: "delta", text: "Session: 12k tokens" }, { kind: "text_end" }, { kind: "done" }]);
+    expect(events).toEqual([
+        { kind: "session", sessionId: "s" },
+        { kind: "delta", text: "Session: 12k tokens" },
+        { kind: "text_end" },
+        { kind: "done" },
+    ]);
 });
 
 const throwing: QueryFn = async function* () {
