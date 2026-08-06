@@ -4,6 +4,7 @@ import Button from "primevue/button";
 import InputText from "primevue/inputtext";
 import { computed, onMounted, onUnmounted, ref, watch } from "vue";
 import { useDesktopSync } from "../../composables/sandbox/useDesktopSync";
+import ScriptSourceSwitch from "../../components/ScriptSourceSwitch.vue";
 
 /* Desktop sync enablement (on the /sandbox hub). Three states over useDesktopSync: pick a folder and Enable →
  * copy-paste one-liner carrying a single-use pairing token → "enabled" once the daemon reports the key enrolled.
@@ -232,6 +233,10 @@ onUnmounted(stop);
                             sandbox's dev servers on your localhost — no sign-in needed.
                         </template>
                     </p>
+                    <!-- Both forms are on screen at once here, and the switch rewrites the pair — so it sits
+                         above them rather than beside either. The computer being enrolled is by definition not
+                         the sandbox's own machine, and need not be the developer's. -->
+                    <ScriptSourceSwitch />
                     <Code :code="linuxCommand" lang="bash" label="Linux / macOS" :wrap="true" />
                     <Code :code="windowsCommand" lang="powershell" label="Windows (PowerShell)" :wrap="true" />
                     <p class="text-2xs text-subtle">

@@ -138,7 +138,10 @@ const removeEntry = async (entryName: string): Promise<void> => {
 // inventory entry + stored SSH key) vs wiping the machine itself — which only the cleanup one-liner run ON
 // the server can do. The dialog shows both so nobody is left with a machine full of orphaned containers.
 const removingServer = ref<string | undefined>();
-const cleanupHostCommand = bashCommand(`cleanupHost`, `sudo `, ``);
+// Computed, not a constant: in local dev the script's delivery is the developer's choice (scriptSource), and a
+// command built once when the screen mounted would go on offering the checkout path after they asked for the
+// released one — on the single command here that is guaranteed to be run somewhere the checkout is not.
+const cleanupHostCommand = computed(() => bashCommand(`cleanupHost`, `sudo `, ``));
 const confirmRemoveServer = async (): Promise<void> => {
     const name = removingServer.value;
     if (name === undefined) {

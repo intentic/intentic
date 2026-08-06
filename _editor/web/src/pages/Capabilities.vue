@@ -364,6 +364,13 @@ const openLogin = (platform: string, label: string): void => {
     loginLabel.value = label;
     loginVisible.value = true;
 };
+/* A browser capability goes pending on one of TWO different things, and they lead to opposite places: its
+ * Chromium is not installed yet (a sandbox rebuild, on another screen) or it is and nobody has signed in (the
+ * login window, right here). The daemon tells them apart by the word "rebuild" in the detail — see the
+ * handler, which is written to keep that word in one and out of the other. Read in both places that act on the
+ * distinction, so the hint under a card and the hand-off after an add can never disagree about it. */
+const awaitingLogin = (instance: CapabilitySummary): boolean =>
+    instance.status.state === `pending` && !String(instance.status.detail ?? ``).includes(`rebuild`);
 
 // A completed login flips the capability's status pending → active; refresh the list so it shows.
 const onLoginDone = (): void => {
@@ -816,14 +823,27 @@ const submit = async (): Promise<void> => {
                 devFillSet(`capability.${entry.id}.${field.key}`, (values[field.key] ?? ``).trim());
             }
         }
-        // ADDING A COMPUTER IS HALF THE STEP. The other half runs on the machine itself, and this card is the
-        // only place its one-time command exists — so the add hands straight over to that command instead of
-        // returning to the catalog, where the reader is left in front of a grid with a capability that has
-        // quietly gone `pending` and nothing saying what to do about it. Every other kind is finished when the
-        // apply is, and goes back as before.
+        /* AN APPLY THAT ENDS `pending` HAS NOT FINISHED SETTING THE CAPABILITY UP, and going back to the
+         * catalog is what stranded it: the reader lands in front of a grid, with a capability that has quietly
+         * gone pending and nothing on screen saying what remains. The card they were just on already says it —
+         * the instance row's hint names the missing step and leads to it, in all three flavours (a machine's
+         * one-liner, a browser's login, a sandbox rebuild). So: pending stays, finished goes back.
+         *
+         * The two whose missing step is a DIALOG on this very card open it outright rather than leaving a hint
+         * to click, because the reader is standing there waiting for exactly that. The rebuild flavour cannot —
+         * it lives on the Sandbox screen — and deliberately does not get a bar or a redirect for it: a standing
+         * condition belongs on the sandbox chip that already carries it (see sandboxAttention.ts), and the row's
+         * link is the hand-off. */
         const added = capabilities.value.find((capability) => capability.id === input.id);
-        if (entry.kind === `host` && added !== undefined) {
-            openConnect(added);
+        if (added?.status.state === `pending`) {
+            // A machine that has never checked in is waiting on the one-liner. One that HAS is merely asleep,
+            // and a fresh pairing is not what wakes it — that is the same distinction the row's button draws
+            // when it relabels itself Reconnect.
+            if (entry.kind === `host` && hostFor(added.id)?.lastSeen === undefined) {
+                openConnect(added);
+            } else if (entry.kind === `browser` && awaitingLogin(added)) {
+                openLogin(String(added.config[`platform`]), entry.name);
+            }
             return;
         }
         back();
@@ -1005,11 +1025,7 @@ const submitLabel = computed(() =>
                                          rebuild — make the hint open the login window (same action as the button above), never
                                          the /sandbox rebuild hub. Keyed off the daemon's "rebuild" detail (see handlers/browser.ts). -->
                                     <button
-                                        v-if="
-                                            instance.status.state === 'pending' &&
-                                            selected.kind === 'browser' &&
-                                            !String(instance.status.detail ?? '').includes('rebuild')
-                                        "
+                                        v-if="selected.kind === 'browser' && awaitingLogin(instance)"
                                         type="button"
                                         class="inline-flex w-fit items-center gap-1 text-2xs text-warning hover:underline"
                                         @click="openLogin(String(instance.config[`platform`]), selected.name)"

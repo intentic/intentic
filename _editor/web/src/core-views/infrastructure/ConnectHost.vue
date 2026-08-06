@@ -8,6 +8,7 @@ import { useInventory } from "../../composables/extensions/useInventory";
 import { useSandbox } from "../../composables/sandbox/useSandbox";
 import { errorMessage } from "../../composables/useAsyncAction";
 import { bashCommand, psCommand } from "../../environments/scriptCommand";
+import ScriptSourceSwitch from "../../components/ScriptSourceSwitch.vue";
 import { zoneFromUrl } from "@intentic/sandbox-contract";
 import { normalizeHostName } from "./hostName";
 
@@ -246,7 +247,12 @@ onUnmounted(() => clearInterval(timer));
                 <span>{{ lockedReason }}</span>
             </div>
             <template v-else>
-                <Segmented v-model="cmdOs" :options="OS_OPTIONS" />
+                <div class="flex flex-wrap items-center justify-between gap-2">
+                    <Segmented v-model="cmdOs" :options="OS_OPTIONS" />
+                    <!-- The strongest case for the switch in the app: this command is run on a SERVER, which
+                         never has the developer's checkout, so a dev build's repo-path form cannot work there. -->
+                    <ScriptSourceSwitch />
+                </div>
                 <Code
                     :code="cmdOs === `windows` ? connectHostCommandPs : connectHostCommand"
                     :lang="commandLang(cmdOs)"

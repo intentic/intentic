@@ -1,11 +1,10 @@
 <script setup lang="ts">
-import { Code, Segmented } from "@intentic/ui";
+import { Code } from "@intentic/ui";
 import Button from "primevue/button";
 import Dialog from "primevue/dialog";
 import { computed, onBeforeUnmount, watch } from "vue";
 import { useHostConnect } from "../composables/sandbox/useHostConnect";
-import { environment } from "../environments/environment";
-import { type ScriptSource, scriptSource } from "../environments/scriptCommand";
+import ScriptSourceSwitch from "./ScriptSourceSwitch.vue";
 
 /* "Connect this computer" for a `host`-kind capability. The counterpart of the browser-login dialog: that one
  * signs a session in FOR the user, this one hands them a command to run ON the machine they want connected —
@@ -27,15 +26,6 @@ const host = computed(() => hostFor(props.id));
 const online = computed(() => host.value?.online === true);
 const command = computed(() => (props.platform === `windows` ? windowsCommand.value : linuxCommand.value));
 const shell = computed(() => (props.platform === `windows` ? `PowerShell` : `a terminal`));
-
-/* LOCAL DEV ONLY, and the one place the choice actually bites. Everywhere else a dev command is pasted on the
- * dev machine, so the working-tree form is simply right; this command is pasted on ANOTHER computer, where the
- * checkout does not exist and the path form cannot run. The switch is the same shape as setup's Linux/Windows/
- * Compose one, for the same reason: it changes what the command below IS, so it sits on top of it. */
-const SOURCE_OPTIONS: { label: string; value: ScriptSource; title: string }[] = [
-    { label: `Local`, value: `checkout`, title: `Runs the script from your checkout — only on a machine that has the repo` },
-    { label: `Standard`, value: `published`, title: `Fetches the released script from intentic.dev — runs on any machine` },
-];
 
 // Opening mints; closing forgets. A pairing left live in a closed tab is a credential nobody is watching.
 watch(
@@ -84,13 +74,8 @@ onBeforeUnmount(stop);
             <div v-else-if="minting || pairToken === undefined" class="text-sm text-muted">Preparing a one-time connection code…</div>
 
             <template v-else>
-                <!-- Above the command, because it rewrites it. Warning-toned and prefixed like every other
-                     local-dev note in the app (setup's "builds from your checkout"): it is addressed to
-                     whoever is developing intentic itself, and never renders for anyone else. -->
-                <div v-if="!environment.production" class="flex items-center gap-2 text-2xs text-warning">
-                    <span>Local dev: script source</span>
-                    <Segmented v-model="scriptSource" :options="SOURCE_OPTIONS" size="xs" />
-                </div>
+                <!-- Above the command, because it rewrites it. -->
+                <ScriptSourceSwitch />
                 <Code :code="command" :lang="platform === `windows` ? `powershell` : `bash`" :wrap="true" />
                 <p class="text-2xs text-subtle">
                     The code in this command works once and expires in about ten minutes. This window updates by itself when the computer connects.

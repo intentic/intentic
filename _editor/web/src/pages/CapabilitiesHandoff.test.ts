@@ -1,13 +1,14 @@
 // @vitest-environment jsdom
 //
-// ADDING A COMPUTER IS HALF A STEP. The other half runs on the machine itself, and the card is the only place
-// its one-time command exists — so the add has to land ON that command. It used to navigate back to the
-// catalog instead, which left the reader in front of a grid, a capability that had quietly gone `pending`, and
-// nothing at all saying what to do next. That is what these pin: what is on screen when the apply finishes.
+// AN ADD THAT ENDS `pending` HAS NOT FINISHED. The remaining step differs by kind — a machine's one-liner, a
+// browser's login, a sandbox rebuild — but it is named on the card the user just filled in, and the form used
+// to navigate away from it the moment the apply succeeded. That left the reader on the catalog grid with a
+// capability quietly gone pending and nothing on screen saying what to do. These pin what is on screen when
+// the apply finishes, for each of the three.
 import { expect, it, vi } from "vitest";
 import { createApp, defineComponent, h, nextTick, ref } from "vue";
 import type { AddCapabilityInput } from "@intentic-app/capability-catalog";
-import type { CapabilitySummary } from "@intentic-app/api-contract";
+import type { CapabilityStatus, CapabilitySummary } from "@intentic-app/api-contract";
 
 // The import-time globals a mounted view needs (see Capabilities.test.ts): ui's useDevice reads matchMedia at
 // module scope, environment.ts reads window.env and throws without it.
@@ -28,15 +29,19 @@ vi.hoisted(() => {
     };
 });
 
+// Which card the page is on. Read once during setup, so setting it before mount is enough — the page is
+// URL-driven and nothing here navigates.
+let card = `linux`;
 const push = vi.fn();
 vi.mock(import(`vue-router`), async (importOriginal) => ({
     ...(await importOriginal()),
-    useRoute: () => ({ params: { card: `linux` }, query: {} }) as never,
+    useRoute: () => ({ params: { card }, query: {} }) as never,
     useRouter: () => ({ push, replace: vi.fn() }) as never,
 }));
 
-// The computer cards are CONTRIBUTED, not static — there is no `linux` entry in the catalog to route to unless
-// an enabled extension declares one. This is the computers extension's manifest narrowed to what a card needs.
+// Both cards are CONTRIBUTED, not static — there is no `linux` or `reddit` entry in the catalog to route to
+// unless an enabled extension declares one. These are the computers and social manifests narrowed to what a
+// card needs; the permission switches a computer carries are added by the catalog itself, not by the manifest.
 vi.mock(`../composables/extensions/useExtensions`, () => ({
     useExtensions: () => ({
         contributionOf: () => undefined,
@@ -58,16 +63,35 @@ vi.mock(`../composables/extensions/useExtensions`, () => ({
                     },
                 },
             },
+            {
+                id: `intentic.social`,
+                manifest: {
+                    contributes: {
+                        capabilities: [
+                            {
+                                id: `reddit`,
+                                kind: `browser`,
+                                catalog: { name: `Reddit`, category: `social`, description: `Let the agent act as you on Reddit.` },
+                                fields: [],
+                            },
+                        ],
+                    },
+                },
+            },
         ]),
     }),
 }));
 
-// The apply, and the list it lands in. `add` writes the instance the daemon would have written, because what
-// the page does next is read off that list — an add that "succeeded" into an empty list is the one case where
-// there is nothing to open a command for.
+/* The apply, and the list it lands in. `add` writes the instance the daemon would have written, because what
+ * the page does next is read off that list and off the STATUS its handler reported — which is the whole
+ * subject here. Each test sets the status that handler would have returned. */
 const capabilities = ref<CapabilitySummary[]>([]);
+let applied: CapabilityStatus = { state: `pending` };
 const add = vi.fn<(input: AddCapabilityInput) => Promise<void>>(async (input) => {
-    capabilities.value = [...capabilities.value, { id: input.id, kind: `host`, status: { state: `pending` }, config: input.config }];
+    capabilities.value = [
+        ...capabilities.value,
+        { id: input.id, kind: card === `linux` ? `host` : `browser`, status: applied, config: input.config },
+    ];
 });
 vi.mock(`../composables/extensions/useCapabilities`, () => ({
     useCapabilities: () => ({
@@ -85,18 +109,26 @@ vi.mock(`../composables/terminal/useBackgroundProcesses`, () => ({
     useBackgroundProcesses: () => ({ rows: ref([]), busy: ref(undefined), start: vi.fn(), stop: vi.fn() }),
     viewProcessLogs: vi.fn(),
 }));
+// No machine has ever checked in, which is what a just-added computer looks like.
 vi.mock(`../composables/sandbox/useHostConnect`, () => ({
     useHostConnect: () => ({ hostFor: () => undefined, revoke: vi.fn(), refresh: vi.fn(), start: vi.fn(), stop: vi.fn() }),
 }));
 vi.mock(`../composables/sandbox/useVpn`, () => ({ importForticlient: vi.fn(), useVpn: () => ({ links: ref([]) }) }));
-vi.mock(`../components/BrowserLoginDialog.vue`, () => ({ default: defineComponent({ render: () => null }) }));
-// The real dialog mints a pairing token against a daemon. What matters here is only that it is open, on which
-// machine, and with which grant — so the stub renders exactly that and nothing else.
+// The two dialogs mint real credentials against a daemon. What matters here is only that one is open and on
+// what — so the stubs render that and nothing else.
 vi.mock(`../components/HostConnectDialog.vue`, () => ({
     default: defineComponent({
         props: { visible: Boolean, id: String, platform: String, permissions: String },
         render() {
             return this.visible ? h(`div`, { "data-connect": this.id, "data-platform": this.platform }, this.permissions) : null;
+        },
+    }),
+}));
+vi.mock(`../components/BrowserLoginDialog.vue`, () => ({
+    default: defineComponent({
+        props: { visible: Boolean, platform: String, label: String },
+        render() {
+            return this.visible ? h(`div`, { "data-login": this.platform }, this.label) : null;
         },
     }),
 }));
@@ -116,13 +148,16 @@ const mount = (): HTMLElement => {
             },
         }),
     );
+    // Registered app-wide by the router plugin in the real app, which this mount deliberately does without.
+    // `href` is kept because one of these tests is about WHERE a row leads.
     app.component(
         `RouterLink`,
         defineComponent({
+            props: { to: String },
             setup:
-                (_, { slots }) =>
+                (props, { slots }) =>
                 () =>
-                    h(`a`, slots["default"]?.()),
+                    h(`a`, { href: props.to }, slots["default"]?.()),
         }),
     );
     app.directive(`tooltip`, {});
@@ -138,11 +173,17 @@ const submitForm = async (el: HTMLElement): Promise<void> => {
     await nextTick();
 };
 
-it(`hands over the machine's command when the computer is added, instead of returning to the catalog`, async () => {
+const start = (onCard: string, status: CapabilityStatus): HTMLElement => {
+    card = onCard;
+    applied = status;
     capabilities.value = [];
     add.mockClear();
     push.mockClear();
-    const el = mount();
+    return mount();
+};
+
+it(`hands over the machine's command when a computer is added, instead of returning to the catalog`, async () => {
+    const el = start(`linux`, { state: `pending`, detail: `click Connect and run the one-liner on that computer` });
 
     await submitForm(el);
 
@@ -152,16 +193,46 @@ it(`hands over the machine's command when the computer is added, instead of retu
     expect(dialog?.getAttribute(`data-platform`)).toBe(`linux`);
     // The grant the dialog states is the one the switches were left on, not a fixed sentence.
     expect(dialog?.textContent).toContain(`run commands`);
-    // And the card stayed put: navigating back is what used to strand the reader.
     expect(push).not.toHaveBeenCalled();
 });
 
+it(`opens the sign-in window when a browser account is added and the login is what is missing`, async () => {
+    const el = start(`reddit`, { state: `pending`, detail: `log in to connect your account` });
+
+    await submitForm(el);
+
+    expect(el.querySelector(`[data-login]`)?.getAttribute(`data-login`)).toBe(`reddit`);
+    expect(push).not.toHaveBeenCalled();
+});
+
+// The same card, pending on the OTHER thing. Opening the login here would point at the wrong step: there is no
+// browser installed to sign into yet, and the remedy is a rebuild on another screen.
+it(`does not open the sign-in window when the browser is still waiting on a rebuild`, async () => {
+    const el = start(`reddit`, { state: `pending`, detail: `rebuild the sandbox to install the browser (Environment card)` });
+
+    await submitForm(el);
+
+    expect(el.querySelector(`[data-login]`)).toBeNull();
+    // Still no navigation: the card is where the row that names the rebuild — and leads to it — lives.
+    expect(push).not.toHaveBeenCalled();
+    const link = [...el.querySelectorAll(`a`)].find((anchor) => anchor.getAttribute(`href`) === `/sandbox/environment`);
+    expect(link?.textContent).toContain(`rebuild the sandbox to install the browser`);
+});
+
+// The other half of the rule: an apply that actually finished has nothing left to hand over, and the catalog
+// is the right place to land.
+it(`returns to the catalog when the capability came back active`, async () => {
+    const el = start(`reddit`, { state: `active` });
+
+    await submitForm(el);
+
+    expect(el.querySelector(`[data-login]`)).toBeNull();
+    expect(push).toHaveBeenCalled();
+});
+
 it(`leaves the form on screen with the failure when the apply fails, offering no command`, async () => {
-    capabilities.value = [];
-    add.mockClear();
-    push.mockClear();
+    const el = start(`linux`, { state: `pending` });
     add.mockRejectedValueOnce(new Error(`no host platform "linux"`));
-    const el = mount();
 
     await submitForm(el);
 

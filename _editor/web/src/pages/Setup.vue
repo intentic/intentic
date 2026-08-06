@@ -19,7 +19,7 @@ import { sandboxIdFromToken } from "../composables/sandbox/sandboxIdFromToken";
 import { useSandbox } from "../composables/sandbox/useSandbox";
 import { DESKTOP_DOWNLOADS, desktopSetupLink, desktopVersion, openDesktopLink } from "../environments/desktop";
 import { environment } from "../environments/environment";
-import { bashCommand, psCommand } from "../environments/scriptCommand";
+import { bashCommand, psCommand, scriptSource } from "../environments/scriptCommand";
 import SetupCompose from "./SetupCompose.vue";
 import SetupHandoff from "./SetupHandoff.vue";
 import SetupRunDetails from "./SetupRunDetails.vue";
@@ -626,17 +626,30 @@ const mint = async (chosen: SetupCodeTarget, key: string): Promise<void> => {
 // tag: it uses the local image, or builds it from the checkout the dev command runs the script from.
 const DEV_SANDBOX_IMAGE = `intentic-sandbox:dev`;
 
+/* …AND ONLY WHEN THE COMMAND STILL RUNS FROM THAT CHECKOUT. `intentic-sandbox:dev` carries no registry, so
+ * nothing can ever pull it: connect.sh builds it, and it can only build it when invoked BY PATH, which is the
+ * one form that has a repo to build from. Asking for the released script (scriptSource, the switch the
+ * connect-a-computer and connect-a-server blocks carry) and still naming the dev tag would hand out a command
+ * that silently runs whatever stale `:dev` image happens to be lying around — or dies on a tag it cannot
+ * fetch. So the tag rides the checkout form and nothing else; the rest of the dev env is a URL and a volume
+ * name, and travels either way. */
+const buildsFromCheckout = computed(() => platformUrlOverride.value !== undefined && scriptSource.value === `checkout`);
+
 // The shared env suffix each command carries: the local-dev PLATFORM_URL override (plus the shared dev
 // agent-auth volume, so sandboxes created against a localhost platform keep their AI logins across resets,
 // and the locally-built sandbox image so the daemon matches the working tree), and SYNC_DIR when desktop
 // sync is opted in (a folder path, not a secret — the connect script runs the sync agent only when it's set).
 const platformEnv = (): string =>
     platformUrlOverride.value
-        ? ` PLATFORM_URL='${platformUrlOverride.value}' INTENTIC_AGENT_AUTH_VOLUME='intentic-dev-agent-auth' SANDBOX_IMAGE='${DEV_SANDBOX_IMAGE}'`
+        ? ` PLATFORM_URL='${platformUrlOverride.value}' INTENTIC_AGENT_AUTH_VOLUME='intentic-dev-agent-auth'${
+              buildsFromCheckout.value ? ` SANDBOX_IMAGE='${DEV_SANDBOX_IMAGE}'` : ``
+          }`
         : ``;
 const platformEnvPs = (): string =>
     platformUrlOverride.value
-        ? `$env:PLATFORM_URL='${platformUrlOverride.value}'; $env:INTENTIC_AGENT_AUTH_VOLUME='intentic-dev-agent-auth'; $env:SANDBOX_IMAGE='${DEV_SANDBOX_IMAGE}'; `
+        ? `$env:PLATFORM_URL='${platformUrlOverride.value}'; $env:INTENTIC_AGENT_AUTH_VOLUME='intentic-dev-agent-auth'; ${
+              buildsFromCheckout.value ? `$env:SANDBOX_IMAGE='${DEV_SANDBOX_IMAGE}'; ` : ``
+          }`
         : ``;
 const syncEnv = (): string => (syncEnabled.value ? ` SYNC_DIR='${syncDir.value}'` : ``);
 const syncEnvPs = (): string => (syncEnabled.value ? `$env:SYNC_DIR='${syncDir.value}'; ` : ``);
@@ -1330,8 +1343,11 @@ watch(commandReady, (ready) => {
                                     <!-- Local dev only: platformEnv() injects SANDBOX_IMAGE=intentic-sandbox:dev — connect.sh
                                  rebuilds it from this checkout on every run (layer-cached), so the pasted command is
                                  self-sufficient and never runs a stale image after sandbox edits. Folded shut: it is a
-                                 note to whoever is developing intentic itself, not a step in setting a sandbox up. -->
-                                    <details v-if="platformUrlOverride" class="text-xs text-warning">
+                                 note to whoever is developing intentic itself, not a step in setting a sandbox up.
+                                 Gated on the same condition as the tag it describes: asked for the released script,
+                                 this command builds nothing, and a note promising otherwise would be the only thing
+                                 on screen still claiming it. -->
+                                    <details v-if="buildsFromCheckout" class="text-xs text-warning">
                                         <summary class="flex cursor-pointer list-none items-center gap-2 [&::-webkit-details-marker]:hidden">
                                             <Icon name="box" class="shrink-0" />
                                             <span class="min-w-0">Local dev: builds from your checkout</span>
