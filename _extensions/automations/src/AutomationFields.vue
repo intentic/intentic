@@ -3,7 +3,6 @@ import { WEBCHAT_DAILY_MAX_DEFAULT } from "@intentic/sandbox-contract";
 import { cmp, formatDateTime, Icon, ToggleSwitch } from "@intentic/extension-ui";
 import { computed, ref } from "vue";
 import { host } from "./host";
-import { LISTENER_SOURCES } from "./listenerSources";
 import { useCiDelivery } from "./useCiDelivery";
 import type { AutomationFormState, TriggerKind } from "./useAutomationForm";
 
@@ -33,8 +32,10 @@ const {
     form,
     schedule,
     isDoorbell,
+    listenerSource,
     branchField,
     liveSources,
+    visibleSources,
     cronPreview,
     starterPrompt,
     staleStarter,
@@ -108,7 +109,11 @@ const ANTI_BOT_OPTIONS = [
 const WORKSPACE_EVENTS = [
     { value: `turn.settled`, label: `A turn settles`, hint: `After every isolated agent turn — including the ones that errored or conflicted.` },
     { value: `agent.landed`, label: `Work lands`, hint: `Only when an agent's work actually reaches your workspace.` },
-    { value: `deps.broken`, label: `Checks break`, hint: `A landed change drifted the dependencies, and the reinstalled tree failed its own checks.` },
+    {
+        value: `deps.broken`,
+        label: `Checks break`,
+        hint: `A landed change drifted the dependencies, and the reinstalled tree failed its own checks.`,
+    },
     { value: `deps.fixed`, label: `Checks recover`, hint: `A later land turned those failing checks green again.` },
 ] as const;
 
@@ -191,7 +196,7 @@ const setKind = (kind: TriggerKind): void => {
 };
 // Switching source changes what an event IS, so the event filter cannot carry over — `pipeline_failed` is not a
 // thing Discord sends, and a filter no source matches is a row that never fires.
-const setProvider = (provider: keyof typeof LISTENER_SOURCES): void => {
+const setProvider = (provider: string): void => {
     form.provider = provider;
     form.eventType = undefined;
 };
@@ -309,17 +314,19 @@ const setProvider = (provider: keyof typeof LISTENER_SOURCES): void => {
                         <span class="ui-field-label">Source</span>
                         <div class="flex flex-wrap gap-2">
                             <button
-                                v-for="source in liveSources"
+                                v-for="source in visibleSources"
                                 :key="source.provider"
                                 type="button"
                                 class="flex items-center gap-2 rounded-md px-3 py-2 text-xs font-medium transition-colors"
                                 :class="form.provider === source.provider ? CARD_SELECTED : CARD_IDLE"
                                 :aria-pressed="form.provider === source.provider"
+                                :disabled="!source.available"
                                 @click="setProvider(source.provider)"
                             >
                                 <img v-if="source.logo" :src="`https://cdn.simpleicons.org/${source.logo}`" class="h-4 w-4" alt="" />
                                 <Icon v-else :name="source.icon ?? 'bolt'" class="text-2xs" />
                                 {{ source.label }}
+                                <span v-if="!source.available" class="text-2xs text-warning">Unavailable</span>
                                 <Icon name="check-circle" v-if="form.provider === source.provider" class="ml-auto" />
                             </button>
                         </div>
@@ -441,7 +448,7 @@ const setProvider = (provider: keyof typeof LISTENER_SOURCES): void => {
                                 Any
                             </button>
                             <button
-                                v-for="eventOption in LISTENER_SOURCES[form.provider].events"
+                                v-for="eventOption in listenerSource.events"
                                 :key="eventOption.value"
                                 type="button"
                                 :class="[CHIP_BASE, form.eventType === eventOption.value ? CHIP_SELECTED : CHIP_IDLE]"
@@ -451,19 +458,14 @@ const setProvider = (provider: keyof typeof LISTENER_SOURCES): void => {
                                 {{ eventOption.label }}
                             </button>
                         </div>
-                        <label v-if="form.eventType === 'message'" class="flex items-center gap-2 text-xs text-muted">
-                            <ToggleSwitch v-model="form.mentioned" :aria-label="LISTENER_SOURCES[form.provider].mentionLabel" />
-                            {{ LISTENER_SOURCES[form.provider].mentionLabel }}
+                        <label v-if="form.eventType === 'message' && listenerSource.mentionLabel" class="flex items-center gap-2 text-xs text-muted">
+                            <ToggleSwitch v-model="form.mentioned" :aria-label="listenerSource.mentionLabel" />
+                            {{ listenerSource.mentionLabel }}
                         </label>
                     </div>
                     <label v-if="!isDoorbell" class="ui-field">
-                        <span class="ui-field-label">{{ LISTENER_SOURCES[form.provider].channel.label }}</span>
-                        <input
-                            v-model="form.channelId"
-                            :placeholder="LISTENER_SOURCES[form.provider].channel.placeholder"
-                            class="font-mono"
-                            :class="cmp.input()"
-                        />
+                        <span class="ui-field-label">{{ listenerSource.channel.label }}</span>
+                        <input v-model="form.channelId" :placeholder="listenerSource.channel.placeholder" class="font-mono" :class="cmp.input()" />
                     </label>
                     <!-- The second narrowing axis, for the one source that has one: CI's branch. Without it, "wake me
                  when CI fails" means every agent's branch as well as the one that ships. -->
@@ -543,8 +545,7 @@ const setProvider = (provider: keyof typeof LISTENER_SOURCES): void => {
                     </p>
                 </template>
                 <p v-else-if="form.kind === 'listener'" class="text-xs text-muted">
-                    Fires instantly over {{ LISTENER_SOURCES[form.provider].label }}'s live connection when the selected events happen — "Any" wakes
-                    on every kind.
+                    Fires instantly over {{ listenerSource.label }}'s live connection when the selected events happen — "Any" wakes on every kind.
                 </p>
             </div>
 
@@ -562,7 +563,7 @@ const setProvider = (provider: keyof typeof LISTENER_SOURCES): void => {
                         Prompt
                         <span v-if="recipeNote" class="ml-1 text-2xs font-normal text-subtle">· starter from {{ recipeNote }}</span>
                         <span v-else-if="starterPrompt && form.prompt === starterPrompt" class="ml-1 text-2xs font-normal text-subtle">
-                            · {{ LISTENER_SOURCES[form.provider].label }} starter — edit it, or leave it and it follows the source
+                            · {{ listenerSource.label }} starter — edit it, or leave it and it follows the source
                         </span>
                     </span>
                     <!-- IT TAKES WHATEVER HEIGHT THE TRIGGER LEAVES, rather than a fixed six rows. It is the
@@ -585,12 +586,9 @@ const setProvider = (provider: keyof typeof LISTENER_SOURCES): void => {
                     </span>
                     <p v-else-if="staleStarter" class="flex flex-wrap items-baseline gap-x-1.5 text-2xs text-warning">
                         <Icon name="exclamation-triangle" class="text-2xs" />
-                        <span
-                            >This is {{ staleStarter.label }}'s starter, but {{ LISTENER_SOURCES[form.provider].label }} sends a different
-                            payload.</span
-                        >
+                        <span>This is {{ staleStarter.label }}'s starter, but {{ listenerSource.label }} sends a different payload.</span>
                         <button type="button" class="cursor-pointer text-link hover:underline" @click="applyStarter">
-                            Use the {{ LISTENER_SOURCES[form.provider].label }} starter
+                            Use the {{ listenerSource.label }} starter
                         </button>
                     </p>
                 </label>
@@ -669,8 +667,8 @@ const setProvider = (provider: keyof typeof LISTENER_SOURCES): void => {
                         </button>
                     </div>
                     <p v-if="form.account === ``" class="text-xs text-muted">
-                        On the default account this runs on whichever comes first — so it starts failing when that one runs out of headroom
-                        or its plan is switched off. Pin one to keep this automation on an account you know can answer.
+                        On the default account this runs on whichever comes first — so it starts failing when that one runs out of headroom or its
+                        plan is switched off. Pin one to keep this automation on an account you know can answer.
                     </p>
                     <p v-if="form.model === ``" class="text-xs text-muted">
                         On the default model the provider picks one at each wake, which is what keeps this working after a model is retired.
@@ -697,8 +695,8 @@ const setProvider = (provider: keyof typeof LISTENER_SOURCES): void => {
                     seconds before it starts
                 </label>
                 <p v-if="form.holdForSeconds > 0 && !form.requireApproval" class="-mt-1 text-2xs text-subtle">
-                    Each fire waits that long under "Waiting for you", with a countdown — cancel it, start it early, or let it run. It also
-                    never starts while another agent is mid-turn.
+                    Each fire waits that long under "Waiting for you", with a countdown — cancel it, start it early, or let it run. It also never
+                    starts while another agent is mid-turn.
                 </p>
                 <p v-if="form.holdForSeconds > 0 && form.requireApproval" class="-mt-1 text-2xs text-warning">
                     "Require my approval" wins: the hold never runs by itself while that is on — only your click starts it.
@@ -707,8 +705,8 @@ const setProvider = (provider: keyof typeof LISTENER_SOURCES): void => {
                      nobody reads those while flipping a toggle, and a support chat that can never answer is not
                      what "require my approval" sounds like. -->
                 <p v-if="form.requireApproval && isDoorbell" class="-mt-1 text-2xs text-warning">
-                    On a Doorbell this means visitors never get an answer in the widget: they see "a human will review this", and the
-                    approved reply lands on the conversation for you to handle, not back on their chat.
+                    On a Doorbell this means visitors never get an answer in the widget: they see "a human will review this", and the approved reply
+                    lands on the conversation for you to handle, not back on their chat.
                 </p>
             </template>
         </div>

@@ -10,7 +10,8 @@ import { computed, type Ref } from "vue";
 import { host } from "./host";
 
 /* The sandbox's automations manifest (.intentic/automations.json), read/written via the daemon's /automations
- * routes. `save` upserts by id (the enabled toggle re-posts the automation with the flag flipped); the daemon's
+ * routes. `save` upserts by id; `setEnabled` has its own narrow route so switching a row cannot discard fields;
+ * the daemon's
  * scheduler picks changes up on its next poll — nothing to provision, so no streamed apply. `pending` is the
  * owner's approval queue: a `requireApproval` automation holds each fire there instead of waking; `approve`
  * runs the held wake, `reject` drops it. All daemon access goes through the host api. */
@@ -109,6 +110,15 @@ export function useAutomations() {
             }),
         onSuccess: invalidate,
     });
+    const setEnabled = useMutation({
+        mutationFn: ({ id, enabled }: { id: string; enabled: boolean }) =>
+            api.sandbox.json(`/automations/${encodeURIComponent(id)}/enabled`, {
+                method: `POST`,
+                headers: { "content-type": `application/json` },
+                body: JSON.stringify({ enabled }),
+            }),
+        onSuccess: invalidate,
+    });
     const remove = useMutation({
         mutationFn: (id: string) => api.sandbox.json(`/automations/${encodeURIComponent(id)}`, { method: `DELETE` }),
         onSuccess: invalidate,
@@ -139,6 +149,7 @@ export function useAutomations() {
         error: computed(() => query.error.value?.message),
         isLoading: query.isLoading,
         save,
+        setEnabled,
         remove,
         run,
         approve,

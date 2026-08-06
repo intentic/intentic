@@ -2,6 +2,7 @@ import { tmpdir } from "node:os";
 import { basename, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { HookJSONOutput, SyncHookJSONOutput } from "@anthropic-ai/claude-agent-sdk";
+import type { ListenerContribution } from "@intentic/extension-api";
 import type { IsolatedAgent, PersistedAgent } from "./agents/agents-store.js";
 import type { IsolationPlan, TurnIsolation } from "./agents/isolation.js";
 import { overlaysDir } from "./agents/isolation.js";
@@ -23,6 +24,18 @@ import type { Config } from "./env.config.js";
 // The real first-party connectors/discord extensions, so a cli capability's image fragment and a
 // cli-capability test's provider data both resolve against the tree the daemon actually ships.
 export const EXTENSIONS_DIR = fileURLToPath(new URL("../../../_extensions", import.meta.url));
+
+// A manifest listener contribution whose wording is deliberately plain: route/process tests care about the
+// provider and event vocabulary, while the required automation metadata keeps the fixture on the public shape.
+export const listenerContribution = (provider: string, eventTypes: readonly string[]): ListenerContribution => ({
+    provider,
+    events: eventTypes.map((type) => ({ type, label: type })),
+    automation: {
+        label: provider,
+        channel: { label: "Channel", placeholder: "all channels" },
+        starterPrompt: `Handle ${provider} events.`,
+    },
+});
 
 /* Every config field at its schema default. Config is DATA, not a seam of methods, so it is spelled out whole
  * rather than stood in for: `unstubbed` answers an unread key with a throwing FUNCTION, which a `if

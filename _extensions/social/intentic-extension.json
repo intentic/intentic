@@ -4,7 +4,7 @@
     "version": "1.0.0",
     "category": "connections",
     "icon": "users",
-    "engines": { "intentic": "^1.0.0" },
+    "engines": { "intentic": "^2.0.0" },
     "contributes": {
         "capabilities": [
             {

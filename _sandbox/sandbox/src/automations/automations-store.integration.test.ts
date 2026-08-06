@@ -35,6 +35,24 @@ test("upsert appends, then edits by id keeping the run history", async () => {
     expect(await store.list()).toHaveLength(2);
 });
 
+test("setEnabled changes only the switch on the current record", async () => {
+    const { store } = tempStore();
+    await store.upsert({
+        id: "support",
+        trigger: { kind: "listener", provider: "webchat", allowedOrigins: ["https://example.com"] },
+        prompt: "answer support questions",
+        webchat: { antiBot: "turnstile", turnstileSecret: "secret" },
+        allowedTools: ["Read"],
+        enabled: true,
+    });
+    await store.recordRun("support", { at: 1, outcome: "completed" });
+    const before = await store.get("support");
+
+    expect(await store.setEnabled("missing", false)).toBe(false);
+    expect(await store.setEnabled("support", false)).toBe(true);
+    expect(await store.get("support")).toEqual({ ...before, enabled: false });
+});
+
 test("recordRun prepends newest-first, caps the history, and drops runs for removed automations", async () => {
     const { store } = tempStore();
     await store.upsert(automation("inbox"));

@@ -3,6 +3,7 @@ import { Button, cmp, CopyButton, Icon } from "@intentic/extension-ui";
 import { computed, nextTick, ref } from "vue";
 import AutomationFields from "./AutomationFields.vue";
 import { host } from "./host";
+import type { ListenerSource } from "./listenerSources";
 import { AUTOMATION_RECIPES, type AutomationRecipe } from "./recipes";
 import { embedSnippet, useAutomations, webhookUrl } from "./useAutomations";
 import { triggerKey, useAutomationForm } from "./useAutomationForm";
@@ -27,11 +28,11 @@ import { triggerKey, useAutomationForm } from "./useAutomationForm";
  * act happened, so the panel stays in place and swaps its body for what to paste — the list is above and below
  * it the whole time, never covered. */
 
-const { prefill } = defineProps<{ prefill?: AutomationRecipe }>();
+const { prefill, listenerSources } = defineProps<{ prefill?: AutomationRecipe; listenerSources: readonly ListenerSource[] }>();
 const emit = defineEmits<{ created: [id: string]; close: [] }>();
 
 const { automations, save } = useAutomations();
-const state = useAutomationForm();
+const state = useAutomationForm(computed(() => listenerSources));
 const { form, valid, touchAll, build, loadRecipe } = state;
 
 const capabilities = computed(() => host().workspace.capabilities());

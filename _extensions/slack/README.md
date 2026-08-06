@@ -5,6 +5,7 @@ Slack as a place the agent works: it reads channels, replies in thread, and reac
 ## Responsibilities
 
 - Hold a gateway connection and turn Slack events into agent turns.
+- Declare the event labels, filters and starter prompt the generic automation editor renders.
 - Give the agent the ability to post, thread, react and read history.
 
 ## Key files

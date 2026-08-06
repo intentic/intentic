@@ -30,7 +30,18 @@ const connector = `"capabilities": [
 const processes = `"processes": [
     { "name": "gateway", "command": "node dist/gateway.js", "port": "auto", "autoStart": true }
 ],
-"listener": { "provider": "linear", "eventTypes": ["issue_created", "comment_added"] }`;
+"listener": {
+    "provider": "linear",
+    "events": [
+        { "type": "issue_created", "label": "Issues created" },
+        { "type": "comment_added", "label": "Comments added" }
+    ],
+    "automation": {
+        "label": "Linear",
+        "channel": { "label": "Team ID (optional)", "placeholder": "all teams" },
+        "starterPrompt": "Linear events arrived. Triage each issue or comment and use the Linear capability when a response or update is needed."
+    }
+}`;
 ---
 
 <DocsLayout
@@ -47,7 +58,7 @@ const processes = `"processes": [
             <tr><td><code>publisher</code></td><td>yes</td><td>Lowercase slug. With <code>name</code> it derives the extension id, <code>acme.incidents</code>.</td></tr>
             <tr><td><code>name</code></td><td>yes</td><td>Lowercase slug, unique within the publisher.</td></tr>
             <tr><td><code>version</code></td><td>yes</td><td>Your semver, for display. The <em>code</em> identity is always the installed commit sha.</td></tr>
-            <tr><td><code>engines.intentic</code></td><td>yes</td><td>Semver range over the host's extension-API version, checked before activation. Current API: <strong>1.0.0</strong>.</td></tr>
+            <tr><td><code>engines.intentic</code></td><td>yes</td><td>Semver range over the host's extension-API version, checked before activation. Current API: <strong>2.0.0</strong>.</td></tr>
             <tr><td><code>category</code></td><td>no</td><td>The section your extension sits under in the sandbox's Extensions tab: <code>work</code>, <code>workspace</code>, <code>connections</code>, <code>knowledge</code> or <code>sandbox</code>. Anything else (or nothing) lists it under <em>Other</em>; it installs and runs either way.</td></tr>
             <tr><td><code>logo</code></td><td>no</td><td>A <a href="https://simpleicons.org/" rel="noopener">simple-icons</a> slug — <code>"linear"</code>, <code>"notion"</code> — drawn wherever your extension is listed. Add <code>"/&lt;hex&gt;"</code> (<code>"github/f5f5f5"</code>) to force a colour for a mark that would otherwise vanish against the surface.</td></tr>
             <tr><td><code>icon</code></td><td>no</td><td>A glyph from the app's own icon set, drawn when there is no brand to use — and when an offline sandbox can't reach the icon CDN. Neither field is required and neither can break the page: a slug that 404s, a glyph this build has never heard of, or nothing at all all fall through to your extension's initials.</td></tr>
@@ -187,7 +198,11 @@ const processes = `"processes": [
             <tr><td><code>processes[].preview</code></td><td>Exposes the port on a tunneled preview hostname.</td></tr>
             <tr><td><code>processes[].autoStart</code></td><td>Launch on install and on daemon boot.</td></tr>
             <tr><td><code>listener.provider</code></td><td>The slug automation triggers fire on.</td></tr>
-            <tr><td><code>listener.eventTypes</code></td><td>The kinds a trigger may narrow to. The daemon validates automations against this list.</td></tr>
+            <tr><td><code>listener.events</code></td><td>The event ids the daemon accepts and the labels the automation editor shows for them.</td></tr>
+            <tr><td><code>listener.automation.label</code></td><td>The source name shown in the automation editor.</td></tr>
+            <tr><td><code>listener.automation.mentionLabel</code></td><td>Optional wording for a mention-only filter when addressed messages have provider-specific semantics.</td></tr>
+            <tr><td><code>listener.automation.channel</code></td><td>The label and placeholder for the optional channel, mailbox, chat, or equivalent source filter.</td></tr>
+            <tr><td><code>listener.automation.starterPrompt</code></td><td>The initial prompt that teaches a new automation how to interpret this provider's event payload.</td></tr>
         </tbody>
     </table>
     <p>

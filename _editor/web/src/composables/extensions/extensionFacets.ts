@@ -96,7 +96,9 @@ export const facetsOf = (manifest: ExtensionManifest): ExtensionFacet[] => {
     ]);
     // The provider rides the label rather than the names: "discord listener" is the fact, and the event types
     // are the detail underneath it.
-    take(`listener`, (listener) => [{ kind: `listener`, label: `${listener.provider} listener`, names: [...listener.eventTypes], surface: true }]);
+    take(`listener`, (listener) => [
+        { kind: `listener`, label: `${listener.provider} listener`, names: listener.events.map((event) => event.type), surface: true },
+    ]);
     take(`processes`, (processes) => [
         {
             kind: `processes`,

@@ -2,6 +2,7 @@ import { oc } from "@orpc/contract";
 import {
     AutomationApprovalIdParamSchema,
     AutomationApprovalsListSchema,
+    AutomationEnabledInputSchema,
     AutomationIdParamSchema,
     AutomationSchema,
     AutomationsListSchema,
@@ -10,12 +11,14 @@ import {
 
 // The sandbox's automations manifest (scheduled agent wake-ups). `list` returns each automation with its recent
 // runs + next fire time. `upsert` adds or edits by id (nothing to provision — the scheduler picks it up on its
-// next poll), so the enabled toggle is a plain re-post. `remove` deletes.
+// next poll); `setEnabled` changes only the switch, so a list-row action never has to reconstruct the record.
+// `remove` deletes.
 // The `pending*` routes are the owner's approval queue: a `requireApproval` automation holds each fire here
 // instead of waking; `approve` runs the held wake, `reject` drops it.
 export const automationsContract = {
     list: oc.route({ method: "GET", path: "/automations" }).output(AutomationsListSchema),
     upsert: oc.route({ method: "POST", path: "/automations" }).input(AutomationSchema).output(OkSchema),
+    setEnabled: oc.route({ method: "POST", path: "/automations/{id}/enabled" }).input(AutomationEnabledInputSchema).output(OkSchema),
     remove: oc.route({ method: "DELETE", path: "/automations/{id}" }).input(AutomationIdParamSchema).output(OkSchema),
     /* Fire one automation NOW, by hand — the answer to "I wrote a 3 a.m. cron and I have no way to try it".
      * It runs the SAME path the real trigger runs: a schedule stays a headless main-tree wake, because a

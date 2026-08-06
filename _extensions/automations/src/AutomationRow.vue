@@ -4,7 +4,7 @@ import { Button, cmp, CopyButton, formatDateTime, Icon, type IconName, ToggleSwi
 import { computed, ref } from "vue";
 import { nextIn, scheduleLabel, since } from "./cronSchedule";
 import { host } from "./host";
-import { LISTENER_SOURCES } from "./listenerSources";
+import { listenerSourceOf, type ListenerSource } from "./listenerSources";
 import AutomationFields from "./AutomationFields.vue";
 import { embedSnippet, useAutomations, webhookUrl } from "./useAutomations";
 import { useAutomationForm } from "./useAutomationForm";
@@ -18,7 +18,7 @@ import { useAutomationForm } from "./useAutomationForm";
  * Shared by both shelves on the Automations page (chores and integrations) because an enabled chore IS an
  * ordinary automation and must not grow a second presentation that can drift from it. */
 
-const props = defineProps<{ automation: AutomationSummary; expanded: boolean; busy?: boolean }>();
+const props = defineProps<{ automation: AutomationSummary; listenerSources: readonly ListenerSource[]; expanded: boolean; busy?: boolean }>();
 const emit = defineEmits<{ toggle: [enabled: boolean]; remove: []; expand: []; run: []; install: [] }>();
 
 const trigger = computed<Trigger>(() => props.automation.trigger);
@@ -41,7 +41,7 @@ const triggerLabel = computed<string>(() => {
     }
     // A provider with no source entry is a gateway extension this build doesn't know — it reads as its own id
     // rather than as a blank.
-    const source = LISTENER_SOURCES[fires.provider as keyof typeof LISTENER_SOURCES]?.label ?? fires.provider;
+    const source = listenerSourceOf(props.listenerSources, fires.provider, fires.eventType).label;
     return [
         // "live" means a gateway is holding a connection open. CI has none — its events arrive by webhook or
         // by poll — so saying it there would be describing a thing that isn't running.
@@ -107,7 +107,7 @@ const nextLabel = computed<string | undefined>(() => (props.automation.nextRun !
  * between keystrokes. */
 const editing = ref(false);
 const editError = ref<string | undefined>(undefined);
-const editForm = useAutomationForm();
+const editForm = useAutomationForm(computed(() => props.listenerSources));
 const { save } = useAutomations();
 const saving = computed(() => save.isPending.value);
 

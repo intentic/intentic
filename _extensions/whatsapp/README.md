@@ -7,6 +7,7 @@ groups, replies in them, and wakes when it is addressed.
 
 - Hold a paired multi-device session per configured number and turn WhatsApp messages into agent turns.
 - Run the pairing ceremony: request a code for the configured number and publish it until the phone links.
+- Declare the event labels, filters and starter prompt the generic automation editor renders.
 - Give the agent the ability to send text and files and to fetch received media, through the `whatsapp` CLI.
 
 ## Key files

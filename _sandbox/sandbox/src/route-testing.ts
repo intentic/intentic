@@ -111,6 +111,14 @@ export const memoryAutomationsStore = (initial: AutomationRecord[] = []): Automa
             const runs = automations.find((existing) => existing.id === automation.id)?.runs ?? [];
             automations = [...automations.filter((existing) => existing.id !== automation.id), { ...automation, runs }];
         },
+        setEnabled: async (id, enabled) => {
+            const existing = automations.find((automation) => automation.id === id);
+            if (existing === undefined) {
+                return false;
+            }
+            existing.enabled = enabled;
+            return true;
+        },
         remove: async (id) => {
             const next = automations.filter((automation) => automation.id !== id);
             const existed = next.length !== automations.length;

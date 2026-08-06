@@ -5,12 +5,21 @@
     "category": "connections",
     "icon": "slack",
     "engines": {
-        "intentic": "^1.0.0"
+        "intentic": "^2.0.0"
     },
     "contributes": {
         "listener": {
             "provider": "slack",
-            "eventTypes": ["message", "reaction_added"]
+            "events": [
+                { "type": "message", "label": "Messages" },
+                { "type": "reaction_added", "label": "Reactions" }
+            ],
+            "automation": {
+                "label": "Slack",
+                "mentionLabel": "Only when the app is addressed (direct message or @mention)",
+                "channel": { "label": "Channel ID (optional)", "placeholder": "all channels the app can read" },
+                "starterPrompt": "Slack events just arrived — each line of the payload is one JSON event: type `message` (author, channelId, content, thread timestamp; `mentioned: true` when the app was addressed) or `reaction_added` (the emoji and the message it was added to). Handle messages that need attention with your Slack capability and keep replies in their thread; use reactions as lightweight acknowledgement or workflow signals rather than replying unless the prompt calls for it."
+            }
         },
         "processes": [
             {

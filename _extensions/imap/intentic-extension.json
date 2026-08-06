@@ -5,12 +5,22 @@
     "category": "connections",
     "icon": "envelope",
     "engines": {
-        "intentic": "^1.0.0"
+        "intentic": "^2.0.0"
     },
     "contributes": {
         "listener": {
             "provider": "imap",
-            "eventTypes": ["message", "flags", "expunge"]
+            "events": [
+                { "type": "message", "label": "New mail" },
+                { "type": "flags", "label": "Flag changes" },
+                { "type": "expunge", "label": "Deletions" }
+            ],
+            "automation": {
+                "label": "Email (IMAP)",
+                "mentionLabel": "Only mail addressed directly to you (your address in To)",
+                "channel": { "label": "Mailbox (optional)", "placeholder": "the watched mailbox, e.g. INBOX" },
+                "starterPrompt": "Email events just arrived — each line of the payload is one JSON event: type `message` (new mail: the author is the sender, content holds the subject and a text excerpt, extra carries uid/messageId/attachments), `flags` (a message's flags changed) or `expunge` (a message was deleted). Triage the new mail and summarize anything urgent; fetch a full message over IMAP (curl imaps://, by its extra.uid) when the excerpt isn't enough."
+            }
         },
         "processes": [
             {

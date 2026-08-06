@@ -1,7 +1,6 @@
 import { CHORES, choreAutomationPrompt, FIX_DEPS_AUTOMATION } from "@intentic/sandbox-contract/chores";
 import type { WorkspaceEventKind } from "@intentic/sandbox-contract";
 import type { IconName } from "@intentic/extension-ui";
-import type { ListenerEventType } from "./listenerSources";
 
 /* "Start from" suggestions in the new-automation dialog, shown only when the matching capability provider is
  * enabled. Pure prefill — the daemon knows nothing about recipes. Discord and IMAP listen live over their
@@ -39,7 +38,7 @@ export interface AutomationRecipe {
     readonly trigger:
         | { readonly kind: "event" }
         | { readonly kind: "schedule"; readonly cron: string }
-        | { readonly kind: "listener"; readonly provider: "webchat" | "discord" | "imap" | "ci"; readonly eventType?: ListenerEventType }
+        | { readonly kind: "listener"; readonly provider: string; readonly eventType?: string }
         | { readonly kind: "workspace"; readonly event: WorkspaceEventKind };
     // Prefills the guard command (a shell one-liner; non-zero exit skips the wake).
     readonly guard?: string;

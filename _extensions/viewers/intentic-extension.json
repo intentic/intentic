@@ -4,7 +4,7 @@
     "version": "1.0.0",
     "category": "workspace",
     "icon": "image",
-    "engines": { "intentic": "^1.0.0" },
+    "engines": { "intentic": "^2.0.0" },
     "contributes": {
         "viewers": [
             { "id": "image", "extensions": ["png", "jpg", "jpeg", "gif", "webp", "avif", "bmp", "ico"], "fetch": "blob" },

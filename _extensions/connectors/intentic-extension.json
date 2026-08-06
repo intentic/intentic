@@ -5,7 +5,7 @@
     "category": "connections",
     "icon": "link",
     "engines": {
-        "intentic": "^1.0.0"
+        "intentic": "^2.0.0"
     },
     "contributes": {
         "capabilities": [

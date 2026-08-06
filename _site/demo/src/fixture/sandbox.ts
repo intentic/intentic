@@ -201,7 +201,20 @@ const CONNECTOR_EXTENSIONS: Omit<ExtensionSummary, "enabled">[] = [
                         skill: `skills/discord/SKILL.md`,
                     },
                 ],
-                listener: { provider: `discord`, eventTypes: [`message`, `voice_utterance`, `voice_transcript`] },
+                listener: {
+                    provider: `discord`,
+                    events: [
+                        { type: `message`, label: `Messages` },
+                        { type: `voice_utterance`, label: `Voice utterances` },
+                        { type: `voice_transcript`, label: `Voice transcripts` },
+                    ],
+                    automation: {
+                        label: `Discord`,
+                        mentionLabel: `Only when mentioned`,
+                        channel: { label: `Channel ID (optional)`, placeholder: `all channels` },
+                        starterPrompt: `Handle the Discord event.`,
+                    },
+                },
             },
         },
     },

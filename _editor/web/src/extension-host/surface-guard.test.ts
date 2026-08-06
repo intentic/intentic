@@ -30,6 +30,7 @@ interface RecordedSurface {
     readonly manifest: readonly string[];
     readonly contributes: readonly string[];
     readonly api: readonly string[];
+    readonly listener?: readonly string[];
 }
 
 const recorded: Record<string, RecordedSurface> = JSON.parse(readFileSync(resolve(sdkRoot, `src/surface.json`), `utf8`));
@@ -56,6 +57,7 @@ const liveSurface = (): RecordedSurface => ({
     manifest: Object.keys(ExtensionManifestSchema.shape).toSorted(),
     contributes: Object.keys(ExtensionManifestSchema.shape.contributes.unwrap().shape).toSorted(),
     api: apiMembers(),
+    listener: Object.keys(ExtensionManifestSchema.shape.contributes.unwrap().shape.listener.unwrap().shape).toSorted(),
 });
 
 test(`the surface this version promises is the surface it has`, () => {

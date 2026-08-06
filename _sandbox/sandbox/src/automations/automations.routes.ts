@@ -75,6 +75,13 @@ export const createAutomationsRoutes = (services: Services) => {
             void reconcileListenerProcesses(services);
             return { ok: true } as const;
         }),
+        setEnabled: i.setEnabled.handler(async ({ input }) => {
+            if (!(await services.automations.setEnabled(input.id, input.enabled))) {
+                throw new ORPCError("NOT_FOUND", { message: "no automation with that id" });
+            }
+            void reconcileListenerProcesses(services);
+            return { ok: true } as const;
+        }),
         remove: i.remove.handler(async ({ input }) => {
             if (!(await services.automations.remove(input.id))) {
                 throw new ORPCError("NOT_FOUND", { message: "no automation with that id" });

@@ -185,7 +185,7 @@ export const listenerProvidersOf = async (services: ExtensionHost): Promise<Map<
     for (const extension of await enabledExtensions(services)) {
         const listener = extension.manifest.contributes?.listener;
         if (listener !== undefined) {
-            providers.set(listener.provider, new Set(listener.eventTypes));
+            providers.set(listener.provider, new Set(listener.events.map((event) => event.type)));
         }
     }
     return providers;

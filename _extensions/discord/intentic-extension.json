@@ -5,12 +5,22 @@
     "category": "connections",
     "logo": "discord",
     "engines": {
-        "intentic": "^1.0.0"
+        "intentic": "^2.0.0"
     },
     "contributes": {
         "listener": {
             "provider": "discord",
-            "eventTypes": ["message", "voice_utterance", "voice_transcript"]
+            "events": [
+                { "type": "message", "label": "Messages" },
+                { "type": "voice_utterance", "label": "Voice utterances" },
+                { "type": "voice_transcript", "label": "Voice transcripts" }
+            ],
+            "automation": {
+                "label": "Discord",
+                "mentionLabel": "Only when the bot is mentioned (@mention or reply)",
+                "channel": { "label": "Channel ID (optional)", "placeholder": "all channels the bot can read" },
+                "starterPrompt": "Discord events just arrived — each line of the event payload is one JSON event: type `message` (a new message: author, channelId, content; `mentioned: true` when the bot was tagged or replied to), `voice_utterance` (one transcribed utterance from a live voice session), or `voice_transcript` (a finished voice session — read the transcript at its `extra.path`). Handle messages that need attention with your Discord capability; treat utterances as live conversation context; turn finished transcripts into notes and action items in the workspace."
+            }
         },
         "processes": [
             {

@@ -1,10 +1,9 @@
-import type { AgentHarness, AgentProvider, Automation, AutomationSummary, WorkspaceEventKind } from "@intentic/sandbox-contract";
-import { WEBCHAT_DAILY_MAX_DEFAULT } from "@intentic/sandbox-contract";
+import type { AgentHarness, AgentProvider, Automation, AutomationSummary, WebchatConfig, WorkspaceEventKind } from "@intentic/sandbox-contract";
+import { AutomationSchema, WEBCHAT_DAILY_MAX_DEFAULT } from "@intentic/sandbox-contract";
 import { Cron } from "croner";
-import { computed, reactive, watch } from "vue";
+import { computed, type ComputedRef, reactive, watch } from "vue";
 import { cronOf, defaultSchedule, parseCron } from "./cronSchedule";
-import { host } from "./host";
-import { type ListenerEventType, LISTENER_SOURCES, type ListenerSource } from "./listenerSources";
+import { listenerSourceOf, type ListenerSource } from "./listenerSources";
 import { AUTOMATION_RECIPES, type AutomationRecipe } from "./recipes";
 
 /* ONE automation form, for both the thing that creates automations and the thing that edits them.
@@ -38,16 +37,11 @@ export const triggerKey = (trigger: { readonly kind: TriggerKind; readonly provi
 /* TEXT THE FORM PUT IN THE BOX, rather than the user — a live source's starter, a template's prompt, or nothing
  * typed yet. Compared verbatim, and that is the whole test: one keystroke makes the prompt the user's and
  * nothing here rewrites it again. */
-const FORM_PROMPTS = new Set<string>([
-    ``,
-    ...Object.values(LISTENER_SOURCES).map((source) => source.starterPrompt),
-    ...AUTOMATION_RECIPES.map((recipe) => recipe.prompt),
-]);
+const RECIPE_PROMPTS = new Set<string>(AUTOMATION_RECIPES.map((recipe) => recipe.prompt));
 const FORM_GUARDS = new Set<string>([``, ...AUTOMATION_RECIPES.flatMap((recipe) => (recipe.guard === undefined ? [] : [recipe.guard]))]);
 
-export function useAutomationForm() {
-    const capabilities = computed(() => host().workspace.capabilities());
-
+export function useAutomationForm(sources: ComputedRef<readonly ListenerSource[]>) {
+    let original: Automation | undefined;
     const form = reactive({
         kind: `schedule` as TriggerKind,
         id: ``,
@@ -62,11 +56,11 @@ export function useAutomationForm() {
         requireApproval: false,
         // 0 = fire instantly; positive = each fire is held, visibly and cancellably, for this many seconds.
         holdForSeconds: 0,
-        provider: `discord` as keyof typeof LISTENER_SOURCES,
+        provider: `discord`,
         channelId: ``,
-        eventType: undefined as ListenerEventType | undefined,
+        eventType: undefined as string | undefined,
         mentioned: false,
-        // The CI trigger's second axis (LISTENER_SOURCES.ci.branchField); ignored by every other source.
+        // The CI trigger's second axis; ignored by every other source.
         branch: ``,
         workspaceEvent: `turn.settled` as WorkspaceEventKind,
         repo: ``,
@@ -91,24 +85,18 @@ export function useAutomationForm() {
     /* ---- derived ---- */
 
     const isDoorbell = computed(() => form.kind === `listener` && form.provider === `webchat`);
+    const listenerSource = computed(() => listenerSourceOf(sources.value, form.provider, form.eventType));
 
     // The picked source's second narrowing axis, when it has one (only CI does). Drives both the extra input
     // and whether `build` writes the field at all — switching source must not leave a branch on a Discord
     // trigger, where the daemon would match it against a message that has no branch and never fire.
-    const branchField = computed(() => (form.kind === `listener` ? LISTENER_SOURCES[form.provider].branchField : undefined));
-
-    const liveSources = computed(() => {
-        const connected = new Set(capabilities.value.map((capability) => capability.config[`provider`]));
-        return (Object.keys(LISTENER_SOURCES) as (keyof typeof LISTENER_SOURCES)[])
-            .filter(
-                (provider) =>
-                    // A core source has nothing to connect (the Doorbell's "connection" is a script tag on the
-                    // customer's site), so it is always offered; the rest wait for their capability.
-                    LISTENER_SOURCES[provider].core === true ||
-                    (LISTENER_SOURCES[provider].providers ?? [provider]).some((capability) => connected.has(capability)),
-            )
-            .map((provider) => Object.assign({ provider }, LISTENER_SOURCES[provider]));
-    });
+    const branchField = computed(() => (form.kind === `listener` ? listenerSource.value.branchField : undefined));
+    const liveSources = computed(() => sources.value.filter((source) => source.available));
+    const visibleSources = computed(() =>
+        listenerSource.value.available
+            ? liveSources.value
+            : [listenerSource.value, ...liveSources.value.filter((source) => source.provider !== form.provider)],
+    );
 
     // The typed ceiling, or undefined for "leave it to the default". Anything not a positive integer reads as
     // blank — the schema would reject it, and a silently-dropped field beats a save that fails on a keystroke.
@@ -145,7 +133,14 @@ export function useAutomationForm() {
 
     // The starting point for whatever is picked right now. Only a live source has one: every other trigger's
     // payload is whatever its sender POSTs, and no starter can describe that.
-    const starterPrompt = computed<string | undefined>(() => (form.kind === `listener` ? LISTENER_SOURCES[form.provider].starterPrompt : undefined));
+    const starterPrompt = computed<string | undefined>(() => (form.kind === `listener` ? listenerSource.value.starterPrompt : undefined));
+    const formPrompts = computed(
+        () =>
+            new Set<string>([
+                ...sources.value.flatMap((source) => (source.starterPrompt === undefined ? [] : [source.starterPrompt])),
+                ...RECIPE_PROMPTS,
+            ]),
+    );
 
     /* Which trigger the prompt now in the box was written for. Both directions below stamp it, because filling
      * the form from a template — or from a stored automation — sets the trigger and the prompt in one go, and
@@ -159,7 +154,7 @@ export function useAutomationForm() {
     watch(
         () => triggerKey(form),
         (key) => {
-            if (key === promptFor || !FORM_PROMPTS.has(form.prompt)) {
+            if (key === promptFor || (form.prompt !== `` && !formPrompts.value.has(form.prompt))) {
                 return;
             }
             form.prompt = starterPrompt.value ?? ``;
@@ -180,7 +175,7 @@ export function useAutomationForm() {
         if (form.kind !== `listener` || form.prompt === starterPrompt.value) {
             return undefined;
         }
-        return Object.values(LISTENER_SOURCES).find((source) => source.starterPrompt === form.prompt);
+        return sources.value.find((source) => source.starterPrompt === form.prompt);
     });
 
     // Take the picked source's starter by hand — and hand the prompt back to the form, so it keeps following.
@@ -230,6 +225,7 @@ export function useAutomationForm() {
     /* ---- the two directions ---- */
 
     const reset = (): void => {
+        original = undefined;
         Object.assign(form, {
             kind: `schedule`,
             id: ``,
@@ -290,6 +286,7 @@ export function useAutomationForm() {
     // top: a save that changes nothing must round-trip to an identical automation.
     const load = (automation: AutomationSummary | Automation): void => {
         reset();
+        original = AutomationSchema.parse(automation);
         const trigger = automation.trigger;
         form.kind = trigger.kind;
         form.id = automation.id;
@@ -310,8 +307,8 @@ export function useAutomationForm() {
             form.repo = trigger.repo ?? ``;
         }
         if (trigger.kind === `listener`) {
-            form.provider = trigger.provider as keyof typeof LISTENER_SOURCES;
-            form.eventType = trigger.eventType as ListenerEventType | undefined;
+            form.provider = trigger.provider;
+            form.eventType = trigger.eventType;
             form.mentioned = trigger.mentioned === true;
             form.channelId = trigger.channelId ?? ``;
             form.branch = trigger.branch ?? ``;
@@ -336,15 +333,38 @@ export function useAutomationForm() {
         promptFor = triggerKey(form);
     };
 
-    // The record to upsert. Fields carrying a default stay ABSENT rather than being written explicitly, so an
-    // automation's stored shape doesn't drift as the defaults move.
-    const build = (): Automation => ({
-        id: form.id.trim(),
-        trigger:
+    const webchatOf = (): WebchatConfig => {
+        const webchat: WebchatConfig = { ...original?.webchat, access: form.access };
+        if (form.antiBot === `off`) {
+            delete webchat.antiBot;
+        } else {
+            webchat.antiBot = form.antiBot;
+        }
+        if (form.googleClientId.trim() === ``) delete webchat.googleClientId;
+        else webchat.googleClientId = form.googleClientId.trim();
+        if (form.turnstileSiteKey.trim() === ``) delete webchat.turnstileSiteKey;
+        else webchat.turnstileSiteKey = form.turnstileSiteKey.trim();
+        // A stripped secret is an empty input meaning "unchanged". A supplied one replaces it.
+        if (form.turnstileSecret.trim() !== ``) webchat.turnstileSecret = form.turnstileSecret.trim();
+        if (form.greeting.trim() === ``) delete webchat.greeting;
+        else webchat.greeting = form.greeting.trim();
+        if (dailyMessageMax.value === undefined) delete webchat.dailyMessageMax;
+        else webchat.dailyMessageMax = dailyMessageMax.value;
+        return webchat;
+    };
+
+    // The record to upsert. The editor owns the fields it exposes and carries every opaque field from the loaded
+    // record through untouched. Identity-bearing values (the webhook token and enabled state) never change as a
+    // side effect of editing some other field.
+    const build = (): Automation => {
+        const trigger: Automation["trigger"] =
             form.kind === `schedule`
                 ? { kind: `schedule`, cron: effectiveCron.value as string }
                 : form.kind === `event`
-                  ? { kind: `event` }
+                  ? {
+                        kind: `event`,
+                        ...(original?.trigger.kind === `event` && original.trigger.token !== undefined ? { token: original.trigger.token } : {}),
+                    }
                   : form.kind === `workspace`
                     ? { kind: `workspace`, event: form.workspaceEvent, ...(form.repo.trim() !== `` ? { repo: form.repo.trim() } : {}) }
                     : {
@@ -356,48 +376,61 @@ export function useAutomationForm() {
                           ...(branchField.value !== undefined && form.branch.trim() !== `` ? { branch: form.branch.trim() } : {}),
                           // The Doorbell's admission list lives on the trigger, beside the provider it gates.
                           ...(isDoorbell.value ? { allowedOrigins: originList.value } : {}),
-                      },
-        ...(form.guard.trim() !== `` ? { guard: form.guard.trim() } : {}),
-        prompt: form.prompt,
-        // Defaults stay absent (schema: absent agent = claude, absent harness = native); claude never carries a
-        // harness — the two loops are identical for it.
-        ...(form.agent !== `claude` ? { agent: form.agent } : {}),
-        // Blank ⇒ absent ⇒ the provider's first account. Written for claude too, unlike `agent`: "claude" is the
-        // default PROVIDER, but which of its accounts runs the wake is a choice on every provider alike.
-        ...(form.account !== `` ? { account: form.account } : {}),
-        ...(form.agent !== `claude` && form.harness !== `native` ? { harness: form.harness } : {}),
-        ...(form.model !== `` ? { model: form.model } : {}),
-        ...(form.requireApproval ? { requireApproval: true } : {}),
-        ...(form.holdForSeconds > 0 ? { holdForSeconds: form.holdForSeconds } : {}),
-        // A workspace trigger is a chore by definition (nothing but this codebase can fire it); anything else
-        // carries the flag it was created with.
-        ...(form.kind === `workspace` || form.chore ? { chore: true } : {}),
-        ...(isDoorbell.value
-            ? {
-                  webchat: {
-                      access: form.access,
-                      ...(form.antiBot === `off` ? {} : { antiBot: form.antiBot }),
-                      ...(form.googleClientId.trim() !== `` ? { googleClientId: form.googleClientId.trim() } : {}),
-                      ...(form.turnstileSiteKey.trim() !== `` ? { turnstileSiteKey: form.turnstileSiteKey.trim() } : {}),
-                      ...(form.turnstileSecret.trim() !== `` ? { turnstileSecret: form.turnstileSecret.trim() } : {}),
-                      ...(form.greeting.trim() !== `` ? { greeting: form.greeting.trim() } : {}),
-                      // Omitted when blank so the automation keeps tracking the default rather than freezing
-                      // today's number into its record.
-                      ...(dailyMessageMax.value === undefined ? {} : { dailyMessageMax: dailyMessageMax.value }),
-                  },
-                  allowedTools: [...DOORBELL_TOOLS],
-              }
-            : {}),
-        enabled: true,
-    });
+                      };
+        // Start with the stored record so a field added to the contract is preserved until the editor explicitly
+        // owns it. The assignments below are the complete set this form does own, including clearing defaults.
+        const automation: Automation = {
+            ...original,
+            id: form.id.trim(),
+            trigger,
+            prompt: form.prompt,
+            enabled: original?.enabled ?? true,
+        };
+        if (form.guard.trim() === ``) delete automation.guard;
+        else automation.guard = form.guard.trim();
+        if (form.agent === `claude`) {
+            delete automation.agent;
+            delete automation.harness;
+        } else {
+            automation.agent = form.agent;
+            if (form.harness === `native`) delete automation.harness;
+            else automation.harness = form.harness;
+        }
+        // Blank ⇒ absent ⇒ the provider's first account, independent of which provider is selected.
+        if (form.account === ``) delete automation.account;
+        else automation.account = form.account;
+        if (form.model === ``) delete automation.model;
+        else automation.model = form.model;
+        if (form.requireApproval) automation.requireApproval = true;
+        else delete automation.requireApproval;
+        if (form.holdForSeconds > 0) automation.holdForSeconds = form.holdForSeconds;
+        else delete automation.holdForSeconds;
+        // A workspace trigger is a chore by definition; clock-based chores carry the stored form flag.
+        if (form.kind === `workspace` || form.chore) automation.chore = true;
+        else delete automation.chore;
+        if (isDoorbell.value) {
+            automation.webchat = webchatOf();
+            const wasDoorbell = original?.trigger.kind === `listener` && original.trigger.provider === `webchat`;
+            // A new Doorbell (or an existing one that predates the restriction) gets the safe read-only floor.
+            // An already-restricted Doorbell keeps its exact allowlist: editing its greeting must never widen it.
+            if (!wasDoorbell || original?.allowedTools === undefined) {
+                automation.allowedTools = [...DOORBELL_TOOLS];
+            }
+        } else {
+            delete automation.webchat;
+        }
+        return automation;
+    };
 
     return {
         form,
         schedule,
         // derived
         isDoorbell,
+        listenerSource,
         branchField,
         liveSources,
+        visibleSources,
         originList,
         effectiveCron,
         cronPreview,

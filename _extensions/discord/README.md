@@ -5,6 +5,7 @@ Discord as a place the agent works: it reads channels, replies, and can join a v
 ## Responsibilities
 
 - Hold a gateway connection and turn Discord events into agent turns.
+- Declare the event labels, filters and starter prompt the generic automation editor renders.
 - Give the agent the ability to post, react, and read history.
 - Join voice, stream audio in and out.
 

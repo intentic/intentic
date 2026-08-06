@@ -7,7 +7,7 @@ import { expect, test } from "vitest";
 import type { AutomationRecord } from "../automations/automations-store.js";
 import type { Services } from "../composition.js";
 import { unstubbed } from "@intentic/testing";
-import { testConfig } from "../testing.js";
+import { listenerContribution, testConfig } from "../testing.js";
 import { readWorkspaceFile } from "../workspace/workspace-files.js";
 import { extensionProcessIndex, extensionProcessKey, reconcileListenerProcesses, startAllExtensionProcesses } from "./extension-processes.js";
 
@@ -19,7 +19,7 @@ const discordManifest = {
     version: "1.0.0",
     engines: { intentic: "^0.2.0" },
     contributes: {
-        listener: { provider: "discord", eventTypes: ["message"] },
+        listener: listenerContribution("discord", ["message"]),
         processes: [{ name: "gateway", command: "node dist/gateway.js", autoStart: true }],
     },
 };

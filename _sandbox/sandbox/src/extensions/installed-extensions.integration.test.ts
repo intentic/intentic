@@ -6,7 +6,7 @@ import type { Capability } from "@intentic/sandbox-contract";
 import { expect, test } from "vitest";
 import type { Services } from "../composition.js";
 import { unstubbed } from "@intentic/testing";
-import { testConfig } from "../testing.js";
+import { listenerContribution, testConfig } from "../testing.js";
 import { extensionDir, workspaceExtensionsRoot } from "../capabilities/extension-dirs.js";
 import { readWorkspaceFile } from "../workspace/workspace-files.js";
 import { enabledExtensions, extensionBinDirsOf, extensionInventory, installedExtensions, listenerProvidersOf } from "./installed-extensions.js";
@@ -101,7 +101,7 @@ test("listenerProvidersOf maps each contributes.listener provider to its declare
     const baked = mkdtempSync(join(tmpdir(), "installed-baked-"));
     await writeManifest(join(baked, "intentic.discord"), {
         ...manifest("intentic", "discord"),
-        contributes: { listener: { provider: "discord", eventTypes: ["message", "voice_utterance"] } },
+        contributes: { listener: listenerContribution("discord", ["message", "voice_utterance"]) },
     });
     const providers = await listenerProvidersOf(services(mkdtempSync(join(tmpdir(), "installed-work-")), baked, []));
     expect([...(providers.get("discord") ?? [])]).toEqual(["message", "voice_utterance"]);
@@ -141,7 +141,7 @@ test("a disabled extension contributes no listener provider and no PATH entry", 
     const baked = mkdtempSync(join(tmpdir(), "installed-baked-"));
     await writeManifest(join(baked, "intentic.discord"), {
         ...manifest("intentic", "discord"),
-        contributes: { bin: "bin", listener: { provider: "discord", eventTypes: ["message"] } },
+        contributes: { bin: "bin", listener: listenerContribution("discord", ["message"]) },
     });
     await writeEnablement(root, { "intentic.discord": false });
 

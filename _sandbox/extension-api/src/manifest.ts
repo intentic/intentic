@@ -148,15 +148,37 @@ export const AgentContributionSchema = z.object({
 });
 export type AgentContribution = z.infer<typeof AgentContributionSchema>;
 
-// A realtime listener the extension's gateway process (contributes.processes) implements: `provider` is the
-// slug its automation triggers fire on (Trigger.provider) and `eventTypes` the kinds those triggers may narrow
-// to (Trigger.eventType). The daemon validates listener automations against these, and serves the gateway a
+// A realtime listener the extension's gateway process (contributes.processes) implements. This is the ONE
+// catalog both halves consume: the daemon derives its accepted event types from `events`, while the automation
+// editor derives the source picker, filters and starter from `automation`. Keeping those facts on the provider
+// extension is what lets a newly installed listener become configurable without a matching app release.
+//
+// `provider` is the slug its automation triggers fire on (Trigger.provider). The daemon serves the gateway a
 // provider-scoped control surface — GET /listeners/<provider>/state to reconcile, POST …/dispatch to wake an
 // automation (optionally holding a turn-stream), …/failure + …/status to report. The daemon holds no provider
 // connection itself; the extension's process does.
 export const ListenerContributionSchema = z.object({
     provider: z.string().regex(/^[a-z0-9][a-z0-9-]*$/),
-    eventTypes: z.array(z.string().regex(/^[a-z0-9][a-z0-9_]*$/)).min(1),
+    events: z
+        .array(
+            z.object({
+                type: z.string().regex(/^[a-z0-9][a-z0-9_]*$/),
+                label: z.string().min(1),
+            }),
+        )
+        .min(1)
+        .refine((events) => new Set(events.map((event) => event.type)).size === events.length, {
+            message: "listener event types must be unique",
+        }),
+    automation: z.object({
+        label: z.string().min(1),
+        // Only sources whose `message` events distinguish addressed messages declare this. Absent means the
+        // generic editor offers no mention-only filter rather than inventing provider semantics.
+        mentionLabel: z.string().min(1).optional(),
+        channel: z.object({ label: z.string().min(1), placeholder: z.string().min(1) }),
+        // The provider owns the payload vocabulary, so it also owns the first prompt that explains that payload.
+        starterPrompt: z.string().min(1),
+    }),
 });
 export type ListenerContribution = z.infer<typeof ListenerContributionSchema>;
 
@@ -274,42 +296,47 @@ const contributionBase = { id: z.string().regex(/^[a-z0-9][a-z0-9-]*$/), catalog
  *
  * `${id}` in a skill file is substituted with the instance name at apply time (so a host pack's tool names read
  * `mcp__my-laptop__run_command`), and, for `cli`, each `$ENVVAR` becomes its per-instance suffixed name. */
-export const CapabilityContributionSchema = z.discriminatedUnion("kind", [
-    // A CLI tool the AGENT gets, authenticated: the env vars its shell receives (value templates over the
-    // fields — `${field}` substitutes, `${field:uri}` percent-encodes), a SKILL.md cheatsheet, and an optional
-    // image fragment holding the client binary (psql, mysql, whisper).
-    z.object({
-        ...contributionBase,
-        kind: z.literal("cli"),
-        fields: z.array(CapabilityFieldSchema).min(1),
-        env: z.record(z.string().regex(/^[A-Z][A-Z0-9_]*$/), z.string()),
-        skill: z.string().min(1),
-        fragment: z.string().min(1).optional(),
-    }),
-    // A site the agent acts on AS THE OWNER, through the shared logged-in Chromium. `loginUrl` is what the
-    // guided-login window opens; the profile it persists is the credential. No `env` and no `fragment`: the
-    // browser itself is core (one Chromium install serves every platform), only the identity is per-entry.
-    z.object({ ...contributionBase, kind: z.literal("browser"), loginUrl: z.url(), skill: z.string().min(1) }),
-    // An operating system a connected computer can run — the skill pack that teaches the agent THAT machine's
-    // shell. The enrollment, the socket and the scope enforcement are core; only the pack varies.
-    z.object({ ...contributionBase, kind: z.literal("host"), skill: z.string().min(1) }),
-    /* A PRESET over a core kind: no payload at all, just a named card whose `fields` carry the defaults. What an
-     * ACP agent needs is a command, so "OpenCode" is entirely a name, a logo and a filled-in form — which is
-     * exactly what a catalog row is. */
-    z.object({ ...contributionBase, kind: z.literal("agent") }),
-]).superRefine((spec, ctx) => {
-    // The totp flag's one invariant, enforced where the manifest is parsed rather than trusted to authors: a
-    // seed the daemon mints codes from must never ride the env into the agent's shell — that would hand the
-    // agent the second factor itself instead of one expiring code at a time.
-    if (spec.kind !== "cli") {
-        return;
-    }
-    for (const field of spec.fields.filter((candidate) => candidate.totp === true)) {
-        if (Object.values(spec.env).some((template) => template.includes(`\${${field.key}}`) || template.includes(`\${${field.key}:uri}`))) {
-            ctx.addIssue({ code: "custom", message: `env must not reference the totp field "${field.key}" — the daemon mints codes from it instead` });
+export const CapabilityContributionSchema = z
+    .discriminatedUnion("kind", [
+        // A CLI tool the AGENT gets, authenticated: the env vars its shell receives (value templates over the
+        // fields — `${field}` substitutes, `${field:uri}` percent-encodes), a SKILL.md cheatsheet, and an optional
+        // image fragment holding the client binary (psql, mysql, whisper).
+        z.object({
+            ...contributionBase,
+            kind: z.literal("cli"),
+            fields: z.array(CapabilityFieldSchema).min(1),
+            env: z.record(z.string().regex(/^[A-Z][A-Z0-9_]*$/), z.string()),
+            skill: z.string().min(1),
+            fragment: z.string().min(1).optional(),
+        }),
+        // A site the agent acts on AS THE OWNER, through the shared logged-in Chromium. `loginUrl` is what the
+        // guided-login window opens; the profile it persists is the credential. No `env` and no `fragment`: the
+        // browser itself is core (one Chromium install serves every platform), only the identity is per-entry.
+        z.object({ ...contributionBase, kind: z.literal("browser"), loginUrl: z.url(), skill: z.string().min(1) }),
+        // An operating system a connected computer can run — the skill pack that teaches the agent THAT machine's
+        // shell. The enrollment, the socket and the scope enforcement are core; only the pack varies.
+        z.object({ ...contributionBase, kind: z.literal("host"), skill: z.string().min(1) }),
+        /* A PRESET over a core kind: no payload at all, just a named card whose `fields` carry the defaults. What an
+         * ACP agent needs is a command, so "OpenCode" is entirely a name, a logo and a filled-in form — which is
+         * exactly what a catalog row is. */
+        z.object({ ...contributionBase, kind: z.literal("agent") }),
+    ])
+    .superRefine((spec, ctx) => {
+        // The totp flag's one invariant, enforced where the manifest is parsed rather than trusted to authors: a
+        // seed the daemon mints codes from must never ride the env into the agent's shell — that would hand the
+        // agent the second factor itself instead of one expiring code at a time.
+        if (spec.kind !== "cli") {
+            return;
         }
-    }
-});
+        for (const field of spec.fields.filter((candidate) => candidate.totp === true)) {
+            if (Object.values(spec.env).some((template) => template.includes(`\${${field.key}}`) || template.includes(`\${${field.key}:uri}`))) {
+                ctx.addIssue({
+                    code: "custom",
+                    message: `env must not reference the totp field "${field.key}" — the daemon mints codes from it instead`,
+                });
+            }
+        }
+    });
 export type CapabilityContribution = z.infer<typeof CapabilityContributionSchema>;
 // The arms carrying a per-instance SKILL.md — the daemon templates and installs these identically.
 export type SkillContribution = Extract<CapabilityContribution, { skill: string }>;

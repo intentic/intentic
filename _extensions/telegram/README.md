@@ -6,6 +6,7 @@ Telegram as a place the agent works: it reads chats and groups, replies in them,
 
 - Hold a long-polling connection per bot and turn Telegram messages into agent turns.
 - Give the agent the ability to send, react, and move files in both directions.
+- Declare the event labels, filters and starter prompt the generic automation editor renders.
 - Keep enough of a chat's recent traffic to answer "why are you telling me this?", since Telegram will not.
 
 ## Key files

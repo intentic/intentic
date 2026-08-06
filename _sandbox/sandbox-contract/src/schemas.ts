@@ -3074,7 +3074,7 @@ export type ExtensionProcessStatus = z.infer<typeof ExtensionProcessStatusSchema
 // narrows message events to those that @mention one of the workspace's bots or reply to a bot's message;
 // absent ⇒ all messages. `provider` and `eventType` are open strings — a realtime source is now extension-
 // declared (contributes.listener), so the daemon validates a listener trigger at upsert against `webchat` ∪ the
-// installed extensions' declared providers/eventTypes rather than a hardcoded enum here.
+// installed extensions' declared providers/events rather than a hardcoded enum here.
 // `webchat` is the exception: it has no gateway. An embeddable widget POSTs a visitor's message to
 // /webchat/<id>/message and the agent's reply streams back over SSE. Its address is the public automation id, so
 // allowedOrigins (the widget's embed sites) + a per-conversation rate limit are its abuse boundary — no secret
@@ -3393,6 +3393,7 @@ export const AutomationSummarySchema = AutomationSchema.extend({
 export type AutomationSummary = z.infer<typeof AutomationSummarySchema>;
 export const AutomationsListSchema = z.object({ automations: z.array(AutomationSummarySchema) });
 export const AutomationIdParamSchema = z.object({ id: z.string() });
+export const AutomationEnabledInputSchema = z.object({ id: z.string(), enabled: z.boolean() });
 
 // ---- workflows: a designed graph of sessions ----
 /* THE THIRD DRIVER. An automation answers "run this at 3am", a loop answers "run this until it is done", and a

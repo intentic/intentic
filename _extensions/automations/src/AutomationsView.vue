@@ -9,6 +9,7 @@ import { since } from "./cronSchedule";
 import { host } from "./host";
 import { AUTOMATION_RECIPES, type AutomationRecipe } from "./recipes";
 import { useAutomations } from "./useAutomations";
+import { useListenerSources } from "./useListenerSources";
 
 /* Automations: agent wake-ups, native to every sandbox (no capability to enable). One automation = trigger
  * (cron, webhook, a live listener on the daemon's provider connection, or a moment in this workspace's own
@@ -34,7 +35,8 @@ import { useAutomations } from "./useAutomations";
  * asked while writing one are "do I already have this?" and "what did the last one say?", and a modal covers
  * the only thing that answers them. */
 
-const { automations, pending, error: listError, save, remove, run, approve, reject } = useAutomations();
+const { automations, pending, error: listError, save, setEnabled, remove, run, approve, reject } = useAutomations();
+const { sources: listenerSources, error: listenerError } = useListenerSources();
 
 // The filter bar costs a line, so it earns it only once the list is long enough that scanning it by eye stops
 // being instant. Below that the whole list is on screen and a filter is chrome in front of the answer.
@@ -58,7 +60,7 @@ const confirmRemoveId = ref<string | undefined>(undefined);
 const search = ref(``);
 const view = ref<View>(`all`);
 
-const topError = computed(() => actionError.value ?? listError.value);
+const topError = computed(() => actionError.value ?? listError.value ?? listenerError.value);
 
 /* The countdown holds' clock. One ticking ref for the whole section rather than a timer per row — it exists
  * only while a hold with a deadline is on screen, and a second's granularity is the reading a person does.
@@ -143,24 +145,11 @@ const closeComposer = (): void => {
     createPrefill.value = undefined;
 };
 
-// The enabled toggle is a plain re-post of the automation with the flag flipped (upsert keeps the run history).
+// Enablement is its own mutation: a switch changes one fact and never serializes the automation around it.
 const toggle = async (automation: AutomationSummary, enabled: boolean): Promise<void> => {
     actionError.value = undefined;
     try {
-        await save.mutateAsync({
-            id: automation.id,
-            trigger: automation.trigger,
-            ...(automation.guard !== undefined ? { guard: automation.guard } : {}),
-            prompt: automation.prompt,
-            ...(automation.agent !== undefined ? { agent: automation.agent } : {}),
-            ...(automation.harness !== undefined ? { harness: automation.harness } : {}),
-            ...(automation.model !== undefined ? { model: automation.model } : {}),
-            ...(automation.requireApproval !== undefined ? { requireApproval: automation.requireApproval } : {}),
-            // Round-tripped like every other stored field — dropping it here would move a chore to the other
-            // group the first time someone toggled it off and on.
-            ...(automation.chore !== undefined ? { chore: automation.chore } : {}),
-            enabled,
-        });
+        await setEnabled.mutateAsync({ id: automation.id, enabled });
     } catch (err) {
         actionError.value = err instanceof Error ? err.message : `Could not update the automation.`;
     }
@@ -284,7 +273,9 @@ const toggleDetail = (id: string): void => {
                         <span class="shrink-0 truncate text-xs font-medium text-content">{{ item.automationId }}</span>
                         <!-- A countdown hold runs ITSELF when the timer passes — the row's job is to say so
                              and keep the cancel in reach. An approval hold waits for the reader, as ever. -->
-                        <span v-if="item.autoRunAt !== undefined" class="shrink-0 text-2xs font-medium text-warning">{{ startsIn(item.autoRunAt) }}</span>
+                        <span v-if="item.autoRunAt !== undefined" class="shrink-0 text-2xs font-medium text-warning">{{
+                            startsIn(item.autoRunAt)
+                        }}</span>
                         <span v-else class="shrink-0 text-2xs text-subtle">fired {{ since(item.createdAt) }}</span>
                         <code v-if="item.payload" class="min-w-0 flex-1 truncate font-mono text-2xs text-subtle" v-tooltip.top="item.payload">
                             {{ item.payload }}
@@ -316,6 +307,7 @@ const toggleDetail = (id: string): void => {
                 v-if="createOpen"
                 :key="createPrefill?.id ?? `blank`"
                 :prefill="createPrefill"
+                :listener-sources="listenerSources"
                 @created="expanded.add($event)"
                 @close="closeComposer"
             />
@@ -368,8 +360,9 @@ const toggleDetail = (id: string): void => {
                     v-for="chore in chores"
                     :key="chore.id"
                     :automation="chore"
+                    :listener-sources="listenerSources"
                     :expanded="expanded.has(chore.id)"
-                    :busy="save.isPending.value || run.isPending.value"
+                    :busy="save.isPending.value || setEnabled.isPending.value || run.isPending.value"
                     @toggle="toggle(chore, $event)"
                     @expand="toggleDetail(chore.id)"
                     @remove="confirmRemoveId = chore.id"
@@ -383,8 +376,9 @@ const toggleDetail = (id: string): void => {
                     v-for="automation in integrations"
                     :key="automation.id"
                     :automation="automation"
+                    :listener-sources="listenerSources"
                     :expanded="expanded.has(automation.id)"
-                    :busy="save.isPending.value || run.isPending.value"
+                    :busy="save.isPending.value || setEnabled.isPending.value || run.isPending.value"
                     @toggle="toggle(automation, $event)"
                     @expand="toggleDetail(automation.id)"
                     @remove="confirmRemoveId = automation.id"

@@ -8,6 +8,7 @@ cron expression, or a listener a connector provides) with the prompt to run when
 ## Responsibilities
 
 - Compose an automation: its trigger, its prompt, and which agent runs it.
+- Derive live trigger choices from installed listener contributions rather than owning provider knowledge.
 - Translate a schedule into something a person can read back before they save it.
 - Offer recipes — the automations most workspaces want, pre-written.
 - Install the doorbell widget, the automation whose trigger is a visitor on your website.
@@ -17,6 +18,7 @@ cron expression, or a listener a connector provides) with the prompt to run when
 - [src/useAutomations.ts](src/useAutomations.ts) — the list, and the writes that change it.
 - [src/cronSchedule.ts](src/cronSchedule.ts) — schedule parsing and the plain-language sentence it renders as.
 - [src/listenerSources.ts](src/listenerSources.ts) — which non-time triggers exist, from the connectors that are on.
+- [src/useListenerSources.ts](src/useListenerSources.ts) — installed listener declarations joined to connected capabilities.
 - [src/recipes.ts](src/recipes.ts) — the pre-written automations, and what each is for.
 - [src/useAutomationForm.ts](src/useAutomationForm.ts) — the composer's state and its validation.
 
@@ -33,6 +35,8 @@ unconditionally and the rail tile is permanent.
   click, while `holdForSeconds` holds it under a visible countdown and the daemon starts it itself once the
   timer passes on a quiet fleet — cancel and start-now stay one click away the whole time. When both are set,
   approval wins.
+- Enablement is a narrow mutation, while an edit starts from the complete stored record. Switching or editing a
+  row therefore preserves webhook identity, disabled state, provider-owned settings and security restrictions.
 - One automation arrives seeded: the dependency fix chore ("Fix what a dependency change broke"), enabled with a
   60-second hold, defined once in the contract's chore book and offered again as a recipe only after the owner
   deletes it.

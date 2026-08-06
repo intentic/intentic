@@ -385,6 +385,32 @@ test("automations.run fires by hand on the real path — a disabled automation t
     expect((await store.get("gated"))?.runs[0]?.outcome).toBe("completed");
 });
 
+test("automations.setEnabled changes only enablement on a security-sensitive automation", async () => {
+    const support = {
+        id: "support",
+        trigger: { kind: "listener" as const, provider: "webchat", eventType: "message", allowedOrigins: ["https://site.example"] },
+        prompt: "answer support questions",
+        webchat: {
+            access: "google" as const,
+            antiBot: "turnstile" as const,
+            googleClientId: "client-id",
+            turnstileSiteKey: "site-key",
+            turnstileSecret: "secret-key",
+        },
+        allowedTools: ["Read", "Grep"],
+        account: "night-account",
+        holdForSeconds: 30,
+        enabled: true,
+        runs: [{ at: 1, outcome: "completed" as const }],
+    };
+    const store = memoryAutomationsStore([support]);
+    const client = clientFor(createApp(services({ automations: store })));
+
+    await expect(client.automations.setEnabled({ id: "missing", enabled: false })).rejects.toThrow();
+    expect(await client.automations.setEnabled({ id: "support", enabled: false })).toEqual({ ok: true });
+    expect(await store.get("support")).toEqual({ ...support, enabled: false });
+});
+
 test("POST /webchat/:id/message skips bearer auth, gates on the origin allowlist, reflects CORS, and records a run", async () => {
     const store = memoryAutomationsStore([
         {

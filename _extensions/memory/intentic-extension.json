@@ -4,7 +4,7 @@
     "version": "1.0.0",
     "category": "knowledge",
     "icon": "sparkles",
-    "engines": { "intentic": "^1.0.0" },
+    "engines": { "intentic": "^2.0.0" },
     "permissions": {
         "sandbox": ["GET /memory", "GET /memory/file", "PUT /memory/file", "DELETE /memory/file"]
     },

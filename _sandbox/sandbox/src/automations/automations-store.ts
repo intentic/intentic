@@ -32,6 +32,8 @@ export interface AutomationsStore {
     readonly get: (id: string) => Promise<AutomationRecord | undefined>;
     // Upsert by id (re-adding the same id edits its config); an edit keeps the existing run history.
     readonly upsert: (automation: Automation) => Promise<void>;
+    // Atomically change one switch on the current record. True when the id existed.
+    readonly setEnabled: (id: string, enabled: boolean) => Promise<boolean>;
     // True when an automation of that id existed and was removed.
     readonly remove: (id: string) => Promise<boolean>;
     // Prepend a run (newest first), capped at RUNS_KEPT. A run for a just-removed automation is dropped.
@@ -52,6 +54,20 @@ export const fileAutomationsStore = (path: string): AutomationsStore => {
                 const existing = automations.find((record) => record.id === automation.id);
                 return [...automations.filter((record) => record.id !== automation.id), { ...automation, runs: existing?.runs ?? [] }];
             });
+        },
+        setEnabled: async (id, enabled) => {
+            let found = false;
+            await file.update((automations) => {
+                const existing = automations.find((automation) => automation.id === id);
+                if (existing === undefined) {
+                    return automations;
+                }
+                found = true;
+                return existing.enabled === enabled
+                    ? automations
+                    : automations.map((automation) => (automation.id === id ? { ...automation, enabled } : automation));
+            });
+            return found;
         },
         remove: async (id) => {
             let removed = false;

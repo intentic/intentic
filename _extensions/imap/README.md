@@ -6,6 +6,7 @@ Email as a place the agent works: it watches a mailbox over IMAP and turns new m
 
 - Hold an IMAP connection to a mailbox and notice new messages.
 - Normalise a message into something an agent can be handed.
+- Declare the event labels, filters and starter prompt the generic automation editor renders.
 - Remember how far it has read, so a reconnect does not replay the inbox.
 
 ## Key files

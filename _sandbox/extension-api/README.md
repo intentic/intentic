@@ -16,6 +16,9 @@ With `@intentic/extension-ui`, one of only two packages an extension may depend 
   `processes`, `agent`, `environment`, `capabilities`, `listener`, `bin`, plus the `permissions.sandbox` route
   allowlist. That list is not prose to be kept in sync by hand — `surface-guard.test.ts` reads it back out of
   this file and fails when it stops matching the schema.
+  A `listener` owns both halves of its public vocabulary: labelled event types for daemon validation and the
+  source/filter/starter wording a generic automation editor renders. Installing a listener therefore adds a
+  configurable automation source without an app release or a second provider table.
   Identity is derived, never declared — `extensionIdOf(manifest) = ${publisher}.${name}`.
 - **[api.ts](src/api.ts)** — `IntenticApi`, the host surface delivered to `activate(api, context)`. There is
   no ambient global; everything an extension registers is a `Disposable` pushed onto
@@ -30,6 +33,9 @@ opens the provider's component as a tab beside the code. A monorepo is one repo 
 packages, which is exactly the case a per-repo `detect()` cannot express.
 - **[stream.ts](src/stream.ts)**, **[version.ts](src/version.ts)** — SSE/ndjson helpers and the host API
   version (`engines.intentic` is checked against it before activation).
+
+Version 2 makes listener contributions self-describing (`events` + `automation`); version 1 listeners only
+declared bare event ids and cannot describe a generic editor.
 
 ## The data plane
 

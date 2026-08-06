@@ -4,7 +4,7 @@
     "version": "1.0.0",
     "category": "work",
     "icon": "sitemap",
-    "engines": { "intentic": "^1.0.0" },
+    "engines": { "intentic": "^2.0.0" },
     "permissions": {
         "sandbox": [
             "GET /workflows",
