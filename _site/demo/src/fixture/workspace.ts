@@ -196,15 +196,141 @@ const SOFT_DELETE_AFTER = `export const users = pgTable("users", {
 export const liveUsers = () => db.select().from(users).where(isNull(users.deletedAt));
 `;
 
-const CHECKOUT_LIB_BEFORE = `export const checkout = async (priceId: string) => {
+/* THE CHECKOUT STORY, in full. These four are the files the featured run works on, so they are the ones a
+ * visitor is most likely to open a diff for — the chat names each of them while it writes them, and the Changes
+ * panel then has to show the same edit the transcript just described. turn.ts reads the same constants, so the
+ * tool card and the diff row cannot drift apart. */
+export const CHECKOUT_LIB_BEFORE = `export const checkout = async (priceId: string) => {
     throw new Error("NotImplemented");
 };
 `;
 
-const CHECKOUT_LIB_AFTER = `export const checkout = async (priceId: string) => {
+export const CHECKOUT_LIB_AFTER = `export const checkout = async (priceId: string) => {
     const response = await api.post("/checkout/session", { priceId });
     window.location.assign(response.url);
 };
+`;
+
+// The endpoint the run writes first, and the only file in the story that is created rather than edited.
+export const CHECKOUT_ROUTE = `import { stripe } from "../stripe";
+
+export const createCheckoutSession = async (req: Request, res: Response) => {
+    const { priceId } = checkoutBody.parse(req.body);
+    const session = await stripe.checkout.sessions.create({
+        mode: "subscription",
+        line_items: [{ price: priceId, quantity: 1 }],
+        success_url: \`\${env.WEB_ORIGIN}/welcome?session={CHECKOUT_SESSION_ID}\`,
+        cancel_url: \`\${env.WEB_ORIGIN}/pricing\`,
+    });
+    res.json({ url: session.url });
+};
+`;
+
+const CHECKOUT_PANEL_BEFORE = `import { checkout } from "../lib/checkout";
+import type { Plan } from "./plans";
+
+export const CheckoutPanel = ({ plan }: { plan: Plan }) => {
+    const start = () => {
+        checkout(plan.priceId);
+    };
+
+    return (
+        <div className="panel">
+            <h3>{plan.name}</h3>
+            <p className="price">{plan.amount}</p>
+            <button type="button" className="cta" onClick={start}>
+                Start with {plan.name}
+            </button>
+        </div>
+    );
+};
+`;
+
+/* The last edit of the run, and the one the visitor's own answer decides: the question card asks what the CTA
+ * should do while the redirect is in flight, and "inline spinner" is the recommended option it comes back with. */
+const CHECKOUT_PANEL_AFTER = `import { useState } from "react";
+import { Spinner } from "../common/Spinner";
+import { checkout } from "../lib/checkout";
+import type { Plan } from "./plans";
+
+// Stripe takes a moment to answer, and a CTA that still looks idle while it does is one people press twice — so
+// the button owns the whole redirect: pending, failed, and the way back out of a failure.
+type Status = "idle" | "pending" | "failed";
+
+export const CheckoutPanel = ({ plan }: { plan: Plan }) => {
+    const [status, setStatus] = useState<Status>("idle");
+
+    const start = async () => {
+        setStatus("pending");
+        try {
+            await checkout(plan.priceId);
+        } catch {
+            // The redirect never happened, so this page is still here to say so.
+            setStatus("failed");
+        }
+    };
+
+    return (
+        <div className="panel">
+            <h3>{plan.name}</h3>
+            <p className="price">{plan.amount}</p>
+            <button type="button" className="cta" onClick={start} disabled={status === "pending"}>
+                {status === "pending" ? <Spinner label="Redirecting…" /> : \`Start with \${plan.name}\`}
+            </button>
+            {status === "failed" && (
+                <p className="cta-error" role="alert">
+                    Couldn't reach checkout.{" "}
+                    <button type="button" className="link" onClick={start}>
+                        Try again
+                    </button>
+                </p>
+            )}
+        </div>
+    );
+};
+`;
+
+// The three the run's last todo covers — the redirect, the failure path, and the button that must not be
+// pressable twice. Their names are what the terminal prints when the run's \`pnpm test\` goes green.
+const CHECKOUT_SPEC = `import { render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
+import { expect, test, vi } from "vitest";
+import { checkout } from "../src/lib/checkout";
+import { CheckoutPanel } from "../src/pricing/CheckoutPanel";
+
+vi.mock("../src/lib/checkout", () => ({ checkout: vi.fn() }));
+
+const growth: Plan = { name: "Growth", amount: "$29", priceId: "price_growth" };
+
+test("pressing the CTA opens a checkout session for that plan's price", async () => {
+    vi.mocked(checkout).mockResolvedValue();
+    render(<CheckoutPanel plan={growth} />);
+
+    await userEvent.click(screen.getByRole("button", { name: /start with growth/i }));
+
+    expect(checkout).toHaveBeenCalledWith("price_growth");
+});
+
+test("the CTA cannot be pressed twice while the redirect is in flight", async () => {
+    vi.mocked(checkout).mockReturnValue(new Promise(() => {}));
+    render(<CheckoutPanel plan={growth} />);
+
+    const cta = screen.getByRole("button", { name: /start with growth/i });
+    await userEvent.click(cta);
+
+    expect(cta).toBeDisabled();
+    expect(screen.getByText("Redirecting…")).toBeVisible();
+});
+
+test("a session that never opens leaves the page with a way to retry", async () => {
+    vi.mocked(checkout).mockRejectedValue(new Error("stripe unreachable"));
+    render(<CheckoutPanel plan={growth} />);
+
+    await userEvent.click(screen.getByRole("button", { name: /start with growth/i }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("Couldn't reach checkout");
+    expect(screen.getByRole("button", { name: /try again/i })).toBeEnabled();
+});
 `;
 
 const USERS_ROUTE_BEFORE = `export const deleteUser = async (id: string) => {
@@ -222,17 +348,30 @@ const USERS_ROUTE_AFTER = `export const deleteUser = async (id: string) => {
 
 // Keyed `<repo>/<repo-relative path>` — the two file-diff routes are addressed by that pair, and the join is
 // what keeps `src/db/schema.ts` in two repos from being one entry.
+// A file the tree ADDED has no before side, exactly as the daemon reports it — the left pane is empty and the
+// whole file reads as an addition.
 const DIFFS: Record<string, FileDiff> = {
     "api/src/db/schema.ts": { before: SOFT_DELETE_BEFORE, after: SOFT_DELETE_AFTER },
     "api/src/routes/users.ts": { before: USERS_ROUTE_BEFORE, after: USERS_ROUTE_AFTER },
+    "api/src/routes/checkout.ts": { after: CHECKOUT_ROUTE },
     "web/src/lib/checkout.ts": { before: CHECKOUT_LIB_BEFORE, after: CHECKOUT_LIB_AFTER },
+    "web/src/pricing/CheckoutPanel.tsx": { before: CHECKOUT_PANEL_BEFORE, after: CHECKOUT_PANEL_AFTER },
+    "web/tests/checkout.spec.ts": { after: CHECKOUT_SPEC },
 };
 
 /* A file the recording does not carry a diff for still has to open — a review panel whose rows go nowhere is
- * worse than one with fewer rows — so it says so in the file it opens, in place of pretending to a change. */
-const UNRECORDED = `// The demo carries a few diffs in full; this file's is not one of them.\n`;
+ * worse than one with fewer rows — so it says so in the file it opens, in place of pretending to a change.
+ *
+ * It says so as an ADDITION, and in prose, because both halves of that are what make it visible at all. A note
+ * carried identically on BOTH sides is not a change, so the diff has nothing to render; and a note written as a
+ * COMMENT is taken back out by the reading setting that strips comments before the diff is computed. Either one
+ * alone leaves the reader looking at two empty panes with nothing to explain them. */
+const UNRECORDED = `This file's diff is not one of the few the demo carries in full.
 
-export const fileDiff = (repo: string, path: string): FileDiff => DIFFS[`${repo}/${path}`] ?? { before: UNRECORDED, after: UNRECORDED };
+Open web/src/lib/checkout.ts or api/src/db/schema.ts to read one it does.
+`;
+
+export const fileDiff = (repo: string, path: string): FileDiff => DIFFS[`${repo}/${path}`] ?? { after: UNRECORDED };
 
 const README = `# acme-shop
 
@@ -272,13 +411,13 @@ const SOURCES: [string, string | number][] = [
 
     // The storefront.
     [`web/src/pricing/PricingPage.tsx`, 3_184],
-    [`web/src/pricing/CheckoutPanel.tsx`, 2_240],
+    [`web/src/pricing/CheckoutPanel.tsx`, CHECKOUT_PANEL_AFTER],
     [`web/src/pricing/plans.ts`, 812],
     [`web/src/lib/checkout.ts`, CHECKOUT_LIB_AFTER],
     [`web/src/lib/api.ts`, 1_120],
     [`web/src/App.tsx`, 1_940],
     [`web/src/main.tsx`, 420],
-    [`web/tests/checkout.spec.ts`, 1_460],
+    [`web/tests/checkout.spec.ts`, CHECKOUT_SPEC],
     [`web/tests/signup.spec.ts`, 2_010],
     [`web/.github/workflows/ci.yml`, 1_240],
     [`web/package.json`, 780],
@@ -289,7 +428,7 @@ const SOURCES: [string, string | number][] = [
     [`web/node_modules/vite/package.json`, 4_040],
 
     // The API.
-    [`api/src/routes/checkout.ts`, 1_020],
+    [`api/src/routes/checkout.ts`, CHECKOUT_ROUTE],
     [`api/src/routes/users.ts`, 2_460],
     [`api/src/db/schema.ts`, SOFT_DELETE_AFTER],
     [`api/src/db/migrations.ts`, 1_180],

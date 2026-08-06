@@ -1,4 +1,5 @@
 import type { AgentEvent, AgentReply } from "@intentic/sandbox-contract";
+import { CHECKOUT_LIB_AFTER, CHECKOUT_LIB_BEFORE, CHECKOUT_ROUTE } from "./fixture/workspace";
 import type { StreamSink } from "./sse";
 
 /* THE TURN THE VISITOR WATCHES — a recorded `AgentEvent` sequence played back on a timer.
@@ -32,20 +33,6 @@ const todos = (done: number, running: number): AgentEvent => ({
         index === running ? { content, status: `in_progress`, activeForm: content } : { content, status: index < done ? `completed` : `pending` },
     ),
 });
-
-const CHECKOUT_ROUTE = `import { stripe } from "../stripe";
-
-export const createCheckoutSession = async (req: Request, res: Response) => {
-    const { priceId } = checkoutBody.parse(req.body);
-    const session = await stripe.checkout.sessions.create({
-        mode: "subscription",
-        line_items: [{ price: priceId, quantity: 1 }],
-        success_url: \`\${env.WEB_ORIGIN}/welcome?session={CHECKOUT_SESSION_ID}\`,
-        cancel_url: \`\${env.WEB_ORIGIN}/pricing\`,
-    });
-    res.json({ url: session.url });
-};
-`;
 
 /* The featured run: the Stripe-checkout agent, mid-turn. It opens on a plan card (so the very first thing the
  * visitor is asked to do is approve a plan), works through four todos, and ends on a question — the two moments
@@ -143,21 +130,7 @@ Prices come from the existing \`STRIPE_PRICE_*\` env vars, so nothing new needs 
             kind: `tool_call_update`,
             id: `tc_edit_cta`,
             status: `completed`,
-            content: [
-                {
-                    type: `diff`,
-                    path: `web/src/lib/checkout.ts`,
-                    oldText: `export const checkout = async (priceId: string) => {
-    throw new Error("NotImplemented");
-};
-`,
-                    newText: `export const checkout = async (priceId: string) => {
-    const response = await api.post("/checkout/session", { priceId });
-    window.location.assign(response.url);
-};
-`,
-                },
-            ],
+            content: [{ type: `diff`, path: `web/src/lib/checkout.ts`, oldText: CHECKOUT_LIB_BEFORE, newText: CHECKOUT_LIB_AFTER }],
         },
     },
     { after: 400, event: { kind: `terminal`, session: `agent-checkout-stripe` } },

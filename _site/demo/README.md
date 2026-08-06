@@ -50,6 +50,12 @@ paths to it, and the extensions walk exactly what they would walk against a real
 `demoPanels()` is the other half of that: the per-repo facts every extension's `detect()` runs over, and
 therefore which tiles the rail carries at all.
 
+It also owns the file CONTENT the featured run edits, which `turn.ts` imports rather than repeats — the tool
+card in the chat and the row in the Changes panel are the same edit seen twice, and two copies of the string
+drift. A path it carries no diff for opens on a note saying so, written as an addition in prose: two identical
+sides are not a change and there would be nothing to render, and a note written as a comment is taken back out
+by the reading setting that strips comments before the diff is computed.
+
 Anything the fixture does not serve answers 404 and logs one line naming the method and path. That console line
 is the tool: it is how the served routes were found, and how the next one will be.
 

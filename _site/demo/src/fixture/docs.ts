@@ -149,7 +149,7 @@ const WEB_PAGES: readonly { readonly dir: string; readonly doc: PageDoc; readonl
             oneLiner: `The three plans, and the button that starts a subscription.`,
             keyFiles: [
                 { path: `src/pricing/PricingPage.tsx`, what: `The page itself: fetches the plans, renders the three cards.` },
-                { path: `src/pricing/CheckoutPanel.tsx`, line: 24, what: `The Growth card's call to action — where a sale begins.` },
+                { path: `src/pricing/CheckoutPanel.tsx`, line: 27, what: `The Growth card's call to action — where a sale begins.` },
                 { path: `src/pricing/plans.ts`, what: `Plan names and the price ids they map to.` },
             ],
         },

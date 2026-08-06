@@ -34,8 +34,12 @@ let original: Monaco.editor.ITextModel | undefined;
 let modified: Monaco.editor.ITextModel | undefined;
 let lang: string | undefined;
 let disposed = false;
-// The file changed, but not once the comments come out — an empty diff has to say why it is empty.
-const commentsOnly = ref(false);
+/* WHY THERE IS NOTHING TO LOOK AT, when there is nothing to look at. A diff with no hunks renders as either an
+ * unmarked file or — once stripping empties both models — two blank panes, and neither says which of the two
+ * reasons it is. `comments` has a way out and offers it; `identical` does not, and saying so is the whole fix:
+ * the daemon genuinely answers with two equal sides (a file staged and then opened from the unstaged row, a
+ * worktree compared against a HEAD that already contains it), and that used to arrive as a blank panel. */
+const changeless = ref<"comments" | "identical">();
 
 // Unchanged lines kept next to a change: what a collapsed region leaves either side of the code it hides, and
 // the gap above the hunk a diff opens on. One number, because it is one answer to how much of the code around a
@@ -64,7 +68,7 @@ const render = async (editor: Monaco.editor.IStandaloneDiffEditor): Promise<void
     modified?.setValue(right.text);
     editor.getOriginalEditor().updateOptions({ lineNumbers: left.lineNumbers });
     editor.getModifiedEditor().updateOptions({ lineNumbers: right.lineNumbers });
-    commentsOnly.value = left.text === right.text && (before ?? ``) !== (after ?? ``);
+    changeless.value = (before ?? ``) === (after ?? ``) ? `identical` : left.text === right.text ? `comments` : undefined;
 };
 
 /* Land the reader on a change instead of line 1: the change is often mid-file, and Monaco opens at the top,
@@ -179,9 +183,9 @@ watch(showComments, async () => {
     if (diff.value === undefined) {
         return;
     }
-    // Revealing on every toggle would yank a scroll position the reader chose. Out of a comments-only diff
-    // there is no such position — the pane held no change at all — so land on the hunks the toggle un-hid.
-    const wasChangeless = commentsOnly.value;
+    // Revealing on every toggle would yank a scroll position the reader chose. Out of a changeless diff there is
+    // no such position — the pane held no change at all — so land on the hunks the toggle un-hid.
+    const wasChangeless = changeless.value !== undefined;
     await render(diff.value);
     if (wasChangeless) {
         await reveal(diff.value);
@@ -199,10 +203,12 @@ onBeforeUnmount(() => {
 <template>
     <div class="relative flex h-full min-h-0">
         <div ref="host" class="h-full min-w-0 flex-1 overflow-hidden bg-canvas"></div>
-        <!-- Hiding comments can leave nothing at all to look at. Saying so — and offering the one click that
-             brings the change back — beats a blank diff the reader has to explain to themselves. -->
-        <div v-if="commentsOnly" class="pointer-events-none absolute inset-x-0 top-2 z-10 flex justify-center px-9">
+        <!-- A diff with no hunks has to explain itself, whichever way it got there: hiding comments can leave
+             nothing at all to look at, and so can two sides that were equal to begin with. The first has one
+             click that brings the change back; the second has nothing to offer and says only what it is. -->
+        <div v-if="changeless !== undefined" class="pointer-events-none absolute inset-x-0 top-2 z-10 flex justify-center px-9">
             <button
+                v-if="changeless === `comments`"
                 type="button"
                 class="pointer-events-auto flex items-center gap-1.5 rounded-full border border-line bg-card/95 px-3 py-1 text-2xs text-muted shadow-sm backdrop-blur transition-colors hover:text-content"
                 @click="toggleShowComments()"
@@ -210,6 +216,13 @@ onBeforeUnmount(() => {
                 <Icon name="eye-slash" class="text-2xs" />
                 Only comments changed — show them
             </button>
+            <p
+                v-else
+                class="flex items-center gap-1.5 rounded-full border border-line bg-card/95 px-3 py-1 text-2xs text-muted shadow-sm backdrop-blur"
+            >
+                <Icon name="info-circle" class="text-2xs" />
+                No changes — both sides are identical
+            </p>
         </div>
         <!-- Touch chunk navigation (side-by-side collapses to unified on mobile). -->
         <div v-if="mobile" class="absolute bottom-4 right-4 z-10 flex gap-2">
