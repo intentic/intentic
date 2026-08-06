@@ -213,10 +213,10 @@ export interface Services {
     // a <video>/<audio> element fetching its own byte ranges (auth/media-tickets.ts).
     readonly mediaTickets: MediaTickets;
     readonly panelToken: string;
-    // A per-boot secret the in-container `vpn` CLI presents (x-intentic-agent), written to a 0600 file at
-    // AGENT_TOKEN_PATH so the agent's shell and the owner's terminals can both read it. UNLIKE panelToken it is
-    // scoped hard to the /vpn routes (vpnScoped in app.ts): the agent may dial and drop the owner's tunnels,
-    // never read the credentials behind them. Never leaves the container.
+    // A per-boot secret the in-container `vpn` and `otp` CLIs present (x-intentic-agent), written to a 0600
+    // file at AGENT_TOKEN_PATH so the agent's shell and the owner's terminals can both read it. UNLIKE
+    // panelToken it is scoped hard (agentReach in auth/grants.ts): the agent may dial and drop the owner's
+    // tunnels and mint expiring one-time codes, never read the credentials behind them. Never leaves the container.
     readonly agentToken: string;
     // A per-boot secret the AGENT's host tools carry (as their MCP bearer) to reach /mcp/hosts/:id — the door
     // onto a connected computer of the user's. Deliberately NOT the machine's own enrollment token: that one

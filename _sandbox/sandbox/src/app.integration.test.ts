@@ -743,6 +743,24 @@ test("capabilities.setSecret replaces just the secret, and reveal returns it —
     expect(await errorCode(client.capabilities.setSecret({ id: "ghost", value: "x" }))).toBe("NOT_FOUND");
 });
 
+test("capabilities.otp mints an expiring code off the stored seed and never reveals it", async () => {
+    const npm: Capability = {
+        id: "npm",
+        kind: "cli",
+        config: { provider: "npm", token: "npm-tok", totpSecret: "GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ" },
+    };
+    const bare: Capability = { id: "bare", kind: "cli", config: { provider: "npm", token: "npm-tok" } };
+    const client = clientFor(createApp(services({ capabilities: memoryCapabilitiesStore([npm, bare]) })));
+    const minted = await client.capabilities.otp({ id: "npm" });
+    // A six-digit code with its period's countdown — and nothing that could be the seed itself.
+    expect(minted).toEqual({ code: expect.stringMatching(/^\d{6}$/), secondsRemaining: expect.any(Number) });
+    expect(minted.secondsRemaining).toBeGreaterThan(0);
+    expect(minted.secondsRemaining).toBeLessThanOrEqual(30);
+    // A connection without a stored seed is CONFLICT; an unknown id is NOT_FOUND.
+    expect(await errorCode(client.capabilities.otp({ id: "bare" }))).toBe("CONFLICT");
+    expect(await errorCode(client.capabilities.otp({ id: "ghost" }))).toBe("NOT_FOUND");
+});
+
 test("agent.run surfaces a connect-your-account error (not an opaque CLI failure) when no account and no env creds", async () => {
     let agentCalled = false;
     const client = clientFor(

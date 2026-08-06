@@ -17,7 +17,7 @@ import { seedDefaultAutomations } from "./automations/default-automations.js";
 import { createAutomationsScheduler } from "./automations/scheduler.js";
 import { statePath } from "./workspace/state-paths.js";
 import { capabilityCtx } from "./capabilities/capability.js";
-import { restoreConnectorGitAccess } from "./capabilities/cli/git-access.js";
+import { restoreConnectorHooks } from "./capabilities/cli/connector-hooks.js";
 import { linkSshHosts } from "./capabilities/ssh-hosts.js";
 import { startTranslator } from "./agent/translator.js";
 import { DOCKER_PANEL_KEY, startDockerdIfEnabled } from "./capabilities/handlers/docker.js";
@@ -532,12 +532,13 @@ const main = async (): Promise<void> => {
     // the daemon log, not the boot path.
     const bootCtx = capabilityCtx(services);
     void reconnectVpns(services.capabilities, services.logger);
-    // Git access dies with the container the same way: the keypair is on /history (linked above), but the
-    // credential helper, the https line and the ssh-config Include were in HOME — re-derive them from the
-    // manifest so the owner's first `git pull` and the agent's first clone authenticate. HOME-level like the
-    // links it rides on, so it is the owning daemon's to write (see the claim above).
+    // Connector hooks' side effects die with the container the same way: the git keypair is on /history
+    // (linked above), but the credential helper, the https line, the ssh-config Include and npm's ~/.npmrc
+    // auth line were in HOME — re-derive them from the manifest so the owner's first `git pull` and the
+    // agent's first clone or publish authenticate. HOME-level like the links they ride on, so it is the
+    // owning daemon's to write (see the claim above).
     if (ownsHome) {
-        void restoreConnectorGitAccess(services.capabilities, services.logger);
+        void restoreConnectorHooks(services.capabilities, services.logger);
     }
     void startDockerdIfEnabled(bootCtx);
     // The translator (CLIProxyAPI) backing "Codex/Grok under the Claude Code harness": starts when TRANSLATOR_URL

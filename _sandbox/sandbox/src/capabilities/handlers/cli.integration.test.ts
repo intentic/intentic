@@ -2,6 +2,7 @@ import { existsSync, mkdtempSync, readFileSync, statSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { CapabilityContributionSchema } from "@intentic/extension-api";
 import { exec } from "@intentic/scaffold";
 import type { Capability, CliConfig } from "@intentic/sandbox-contract";
 import { expect, test } from "vitest";
@@ -14,15 +15,9 @@ import type { CapabilityCtx } from "../capability.js";
 import { echoConfig } from "../summary.js";
 import { cliEnvOf } from "../cli-env.js";
 import { contributionRegistry } from "../contributions.js";
-import {
-    type GitAccessDeps,
-    gitAccessWired,
-    gitHostOf,
-    restoreConnectorGitAccess,
-    restoreGitAccess,
-    setupGitAccess,
-    teardownGitAccess,
-} from "../cli/git-access.js";
+import { restoreConnectorHooks } from "../cli/connector-hooks.js";
+import { type GitAccessDeps, gitAccessWired, gitHostOf, restoreGitAccess, setupGitAccess, teardownGitAccess } from "../cli/git-access.js";
+import { stripNpmAuth, upsertNpmAuth } from "../cli/npm-access.js";
 import { linkSshHosts } from "../ssh-hosts.js";
 import { cliHandler } from "./cli.js";
 
@@ -406,7 +401,7 @@ test("git access whose ssh alias was taken out from under it pends instead of re
     expect(await cliHandler.status(ctx, "gitlab", gitlabOn)).toEqual({ state: "pending", detail: "git access needs a re-add" });
 });
 
-test("restoreConnectorGitAccess walks the manifest: git connectors only, one failure never stops the rest", async () => {
+test("restoreConnectorHooks walks the manifest: hooked connectors only, one failure never stops the rest", async () => {
     const history = mkdtempSync(join(tmpdir(), "git-cap-history-"));
     gitHome();
     await linkSshHosts(history);
@@ -429,12 +424,83 @@ test("restoreConnectorGitAccess walks the manifest: git connectors only, one fai
         ],
     } as unknown as CapabilitiesStore;
 
-    await restoreConnectorGitAccess(capabilities, { warn: (message) => void warnings.push(message) });
+    await restoreConnectorHooks(capabilities, { warn: (message) => void warnings.push(message) });
 
     const credentials = readFileSync(join(home, ".git-credentials"), "utf8");
     expect(credentials).toContain("@gitlab.com");
     // discord has no git hook, and github's git access is off — neither writes a credential.
     expect(credentials).not.toContain("@github.com");
     expect(warnings).toHaveLength(1);
-    expect(warnings[0]).toContain("git access broken:");
+    expect(warnings[0]).toContain("connector broken:");
+});
+
+// ---- npm (the ~/.npmrc auth line the npm CLI reads) ----
+
+const npm: Capability = {
+    id: "npm",
+    kind: "cli",
+    config: { provider: "npm", token: "npm-tok-1", totpSecret: "GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ" },
+};
+
+test("npm auth rewrite is an upsert that keeps the rest of ~/.npmrc", () => {
+    expect(upsertNpmAuth("", "t1")).toBe("//registry.npmjs.org/:_authToken=t1\n");
+    const mixed = "save-exact=true\n//registry.npmjs.org/:_authToken=old\nregistry=https://registry.npmjs.org/\n";
+    expect(upsertNpmAuth(mixed, "rotated")).toBe("save-exact=true\nregistry=https://registry.npmjs.org/\n//registry.npmjs.org/:_authToken=rotated\n");
+    expect(stripNpmAuth(upsertNpmAuth(mixed, "rotated"))).toBe("save-exact=true\nregistry=https://registry.npmjs.org/\n");
+    expect(stripNpmAuth("//registry.npmjs.org/:_authToken=only\n")).toBe("");
+});
+
+test("npm: apply writes the auth line + templated skill; a wiped HOME pends until the boot restore rewrites it", async () => {
+    const { ctx, root } = tempCtx();
+    const home = process.env["HOME"] ?? "";
+
+    await drain(cliHandler.apply(ctx, "npm", npm.config));
+
+    const skill = await readWorkspaceFile(skillPath(root, "npm"));
+    expect(skill).toContain("name: npm");
+    // The skill's otp examples are minted for THIS instance, and its env var carries the instance suffix.
+    expect(skill).toContain('$(otp npm)');
+    expect(skill).toContain("$NPM_TOKEN_NPM");
+    expect(readFileSync(join(home, ".npmrc"), "utf8")).toBe("//registry.npmjs.org/:_authToken=npm-tok-1\n");
+    expect(statSync(join(home, ".npmrc")).mode & 0o777).toBe(0o600);
+    expect(await cliHandler.status(ctx, "npm", npm.config)).toEqual({ state: "active" });
+
+    // A container recreate wipes HOME while the connection survives — the card must say so, and the boot
+    // restore must heal it without a re-add.
+    process.env["HOME"] = mkdtempSync(join(tmpdir(), "npm-cap-home-"));
+    expect(await cliHandler.status(ctx, "npm", npm.config)).toEqual({ state: "pending", detail: "npm auth needs a re-add" });
+    await restoreConnectorHooks({ list: async () => [npm] } as unknown as CapabilitiesStore, { warn: () => {} });
+    expect(await cliHandler.status(ctx, "npm", npm.config)).toEqual({ state: "active" });
+
+    await cliHandler.remove!(ctx, "npm", npm.config);
+    expect(readFileSync(join(process.env["HOME"] ?? "", ".npmrc"), "utf8")).toBe("");
+    expect(await cliHandler.status(ctx, "npm", npm.config)).toEqual({ state: "inactive" });
+});
+
+test("a cli contribution whose env references a totp field fails to parse", () => {
+    const spec = {
+        id: "x",
+        kind: "cli",
+        catalog: { name: "X", description: "d", category: "code" },
+        fields: [
+            { key: "token", label: "Token", secret: true },
+            { key: "totpSecret", label: "Seed", secret: true, totp: true, optional: true },
+        ],
+        env: { X_TOKEN: "${token}" },
+        skill: "skills/x/SKILL.md",
+    };
+    expect(CapabilityContributionSchema.safeParse(spec).success).toBe(true);
+    // The one thing a totp field must never do — ride the env into the agent's shell.
+    const leaking = CapabilityContributionSchema.safeParse({ ...spec, env: { ...spec.env, X_SEED: "${totpSecret}" } });
+    expect(leaking.success ? [] : leaking.error.issues.map((issue) => issue.message)).toEqual([
+        'env must not reference the totp field "totpSecret" — the daemon mints codes from it instead',
+    ]);
+});
+
+test("npm: the totp seed reaches neither the echo nor the agent env", async () => {
+    const connectors = await contributionRegistry(hostFor([]));
+    // Both secrets are withheld; hasSecret speaks for the rotatable token, never the seed's value.
+    expect(echoConfig(npm, connectors)).toEqual({ provider: "npm", hasSecret: true });
+    // The env template exports the token alone — the manifest schema would reject one referencing totpSecret.
+    expect(await cliEnvOf(hostFor([npm]))).toEqual({ NPM_TOKEN_NPM: "npm-tok-1" });
 });

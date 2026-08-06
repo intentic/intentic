@@ -6,8 +6,9 @@
 // the UI, a tunnel the user drops disappears for the agent, and there is exactly one implementation of what
 // connecting means (see _sandbox/sandbox/src/vpn/).
 //
-// Auth is the per-boot agent token from /run/intentic/agent.token, which app.ts admits ONLY to /vpn. So this
-// command can dial and drop the tunnels the owner configured, and cannot read the credentials behind them.
+// Auth is the per-boot agent token from /run/intentic/agent.token, which auth/grants.ts admits only to /vpn
+// (and bin/otp's code mint). So this command can dial and drop the tunnels the owner configured, and cannot
+// read the credentials behind them.
 
 import { readFileSync } from "node:fs";
 

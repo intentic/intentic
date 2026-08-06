@@ -14,7 +14,9 @@ import {
     hostOf,
     validateContributionConfig,
 } from "../contributions.js";
-import { CORE_CONNECTOR_HOOKS, gitAccessWired, gitHostOf } from "../cli/git-access.js";
+import { CORE_CONNECTOR_HOOKS } from "../cli/connector-hooks.js";
+import { gitAccessWired, gitHostOf } from "../cli/git-access.js";
+import { npmAuthWired } from "../cli/npm-access.js";
 
 // A CLI-tool integration: give the AGENT an authenticated command-line tool. The provider's card/fields/env/
 // skill/fragment are DATA in an installed extension's `contributes.capabilities` (see contributions.ts) — this
@@ -76,7 +78,7 @@ export const cliHandler: CapabilityHandler = {
         // job session — surfaced only when it actually shells out. A returned message is a non-fatal warning.
         const hook = CORE_CONNECTOR_HOOKS[provider];
         const session = capabilityJobSession(id);
-        if (hook !== undefined && ctx.terminalRun.visible) {
+        if (hook !== undefined && hook.silent !== true && ctx.terminalRun.visible) {
             yield { kind: "terminal", session };
         }
         const warning = await hook?.apply(cliConfig, terminalExec(ctx.terminalRun, session, ctx.workspace.root));
@@ -96,6 +98,11 @@ export const cliHandler: CapabilityHandler = {
         const cliConfig = config as CliConfig;
         if (cliConfig["git"] === "on" && CORE_CONNECTOR_HOOKS[cliConfig.provider] !== undefined && !(await gitAccessWired(gitHostOf(cliConfig)))) {
             return { state: "pending", detail: "git access needs a re-add" };
+        }
+        // npm's credential rides the same seam: the ~/.npmrc auth line is container-local, a recreate wipes it,
+        // and the boot restore rewrites it — so a missing line is a restore that couldn't, not a healthy card.
+        if (cliConfig.provider === "npm" && !(await npmAuthWired())) {
+            return { state: "pending", detail: "npm auth needs a re-add" };
         }
         // Discord's voice transcription rides whisper.cpp from the connector's overlay fragment — until the owner
         // rebuilds, the text tools work but voice doesn't. The gateway process reports whisper's presence via

@@ -207,6 +207,12 @@ export const CapabilityFieldSchema = z.object({
     // A fixed value baked into the config rather than asked for — how a card pins a discriminator
     // (platform="reddit", provider="stripe"). Rendered as nothing; sent as itself.
     value: z.string().optional(),
+    /* This field holds a TOTP seed — the base32 key (or otpauth:// URI) a service shows when enrolling an
+     * authenticator app. Declare it WITH `secret: true`: the seed is a durable second factor, so it is never
+     * echoed and, unlike an ordinary secret, never enters the agent's environment either — the daemon mints the
+     * six-digit codes on demand (`otp <name>` / GET /capabilities/<id>/otp) and only those cross, each dead
+     * within its period. A cli entry whose env references a totp field therefore fails to parse (see below). */
+    totp: z.boolean().optional(),
 });
 export type CapabilityField = z.infer<typeof CapabilityFieldSchema>;
 
@@ -291,7 +297,19 @@ export const CapabilityContributionSchema = z.discriminatedUnion("kind", [
      * ACP agent needs is a command, so "OpenCode" is entirely a name, a logo and a filled-in form — which is
      * exactly what a catalog row is. */
     z.object({ ...contributionBase, kind: z.literal("agent") }),
-]);
+]).superRefine((spec, ctx) => {
+    // The totp flag's one invariant, enforced where the manifest is parsed rather than trusted to authors: a
+    // seed the daemon mints codes from must never ride the env into the agent's shell — that would hand the
+    // agent the second factor itself instead of one expiring code at a time.
+    if (spec.kind !== "cli") {
+        return;
+    }
+    for (const field of spec.fields.filter((candidate) => candidate.totp === true)) {
+        if (Object.values(spec.env).some((template) => template.includes(`\${${field.key}}`) || template.includes(`\${${field.key}:uri}`))) {
+            ctx.addIssue({ code: "custom", message: `env must not reference the totp field "${field.key}" — the daemon mints codes from it instead` });
+        }
+    }
+});
 export type CapabilityContribution = z.infer<typeof CapabilityContributionSchema>;
 // The arms carrying a per-instance SKILL.md — the daemon templates and installs these identically.
 export type SkillContribution = Extract<CapabilityContribution, { skill: string }>;

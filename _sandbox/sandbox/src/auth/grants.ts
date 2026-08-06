@@ -46,10 +46,12 @@ const fixedSecretGrant = (header: string, name: string, reaches: (method: string
     },
 });
 
-// The `vpn` CLI on the agent's PATH (and in the owner's terminals) reaches the daemon over loopback with the
-// per-boot agent token. Scoped hard: the agent may dial and drop the tunnels the owner configured, and may
-// never read /secrets or /capabilities, which would hand it the credentials behind them.
-const vpnReach = (_method: string, path: string): boolean => path === "/vpn" || path.startsWith("/vpn/");
+// The `vpn` and `otp` CLIs on the agent's PATH (and in the owner's terminals) reach the daemon over loopback
+// with the per-boot agent token. Scoped hard: the agent may dial and drop the tunnels the owner configured and
+// may mint one-time codes off a stored TOTP seed — each derived, expiring within its period — and may never
+// read /secrets or /capabilities themselves, which would hand it the credentials behind them.
+const agentReach = (method: string, path: string): boolean =>
+    path === "/vpn" || path.startsWith("/vpn/") || (method === "GET" && /^\/capabilities\/[^/]+\/otp$/.test(path));
 
 // The one WIDE grant, listed with an explicit always-true reach rather than left out of the table so that
 // "this one is unscoped" reads as a line somebody chose. A panel's backend is server-side code running inside
@@ -85,7 +87,7 @@ export interface GrantSources {
 
 export const grantsOf = ({ panelToken, agentToken, controlTokens, verifySync }: GrantSources): readonly Grant[] => [
     fixedSecretGrant("x-intentic-panel", "panel token", panelReach, panelToken),
-    fixedSecretGrant("x-intentic-agent", "agent token", vpnReach, agentToken),
+    fixedSecretGrant("x-intentic-agent", "agent token", agentReach, agentToken),
     {
         header: "x-intentic-control",
         name: "control token",

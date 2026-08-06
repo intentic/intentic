@@ -2817,6 +2817,10 @@ export const CapabilitySecretInputSchema = z.object({ id: z.string(), value: z.s
 // POST /capabilities/{id}/login response: the interactive tmux session running the agent's loginCommand,
 // which the web surfaces in the terminal panel for the user to complete the sign-in.
 export const CapabilityLoginSchema = z.object({ session: z.string() });
+// GET /capabilities/{id}/otp response: one freshly minted TOTP code off the capability's stored seed — what the
+// in-sandbox `otp` command prints. The seed itself never crosses; secondsRemaining is the caller's cue to
+// re-mint rather than submit a code about to die.
+export const CapabilityOtpSchema = z.object({ code: z.string(), secondsRemaining: z.number() });
 
 // ---- hosts: the user's own connected computers (the `host` capability's live half) ----
 // The manifest says which machines the user INTENDS to have connected; this says which are actually holding a

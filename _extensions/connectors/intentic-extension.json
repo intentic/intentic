@@ -113,6 +113,47 @@
                 "skill": "skills/gitlab/SKILL.md"
             },
             {
+                "id": "npm",
+                "kind": "cli",
+                "catalog": {
+                    "name": "npm",
+                    "logo": "npm",
+                    "description": "Publish and manage your packages on the npm registry — publish, dist-tags, deprecations, owners, and private installs.",
+                    "category": "code",
+                    "hint": "The agent uses the npm CLI, already authenticated against registry.npmjs.org. Publishing may ask for a one-time 2FA code: with a TOTP secret stored below, the agent mints codes itself (`otp <name>`) and only ever sees the expiring code, never the secret. Write tokens expire after at most 90 days — when one dies, paste a fresh one under Sandbox ▸ Secrets.",
+                    "guide": {
+                        "url": "https://www.npmjs.com/",
+                        "linkLabel": "Open npmjs.com",
+                        "scopes": "granular access token: `Read and write` on the packages/scopes the agent manages",
+                        "steps": [
+                            "Sign in on npmjs.com, click your avatar → `Access Tokens` → `Generate New Token` → `Granular Access Token` (classic tokens no longer exist).",
+                            "Grant `Read and write` on just the packages or scopes the agent should manage, pick the expiry deliberately (write tokens live at most `90 days`, `7` by default), and paste the token here.",
+                            "Publishing enforces 2FA: either enable `Bypass 2FA` on the token (npm is narrowing this to staging a publish you then approve on the site), or store your TOTP secret below so the agent can answer OTP prompts.",
+                            "The TOTP secret is the base32 key behind your authenticator's QR code (`Can't scan the QR code?` at enrollment). Only accounts already on TOTP have one — npm no longer offers new TOTP enrollments, and WebAuthn/passkey 2FA cannot be stored."
+                        ]
+                    }
+                },
+                "fields": [
+                    {
+                        "key": "token",
+                        "label": "Granular access token",
+                        "secret": true
+                    },
+                    {
+                        "key": "totpSecret",
+                        "label": "2FA TOTP secret",
+                        "secret": true,
+                        "totp": true,
+                        "optional": true,
+                        "hint": "Never shown to the agent — it mints expiring codes from it instead. Leave empty if your account uses WebAuthn/passkeys or publishing rides a Bypass-2FA token."
+                    }
+                ],
+                "env": {
+                    "NPM_TOKEN": "${token}"
+                },
+                "skill": "skills/npm/SKILL.md"
+            },
+            {
                 "id": "sentry",
                 "kind": "cli",
                 "catalog": {

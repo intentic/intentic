@@ -3,8 +3,8 @@ import { access, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { directExec, type ExecInTerminal } from "../../terminal/terminal-run.js";
-import type { CapabilitiesStore } from "../capabilities-store.js";
 import { hostConfPath, hostKeyPath, hostsDir, removeSshHost, writeSshHost } from "../ssh-hosts.js";
+import type { ConnectorHook } from "./connector-hooks.js";
 
 // A connected git provider (github/gitlab) with git access on gets more than the curl-API skill: real git creds so
 // the owner can `git pull`/`git push` in the interactive terminal (Ctrl+`) and the agent can clone/push too. Two
@@ -308,19 +308,7 @@ export const teardownGitAccess = async (host: GitHost, exec: ExecInTerminal, dep
     await removeHttpsCredential(host);
 };
 
-// A connector's privileged side effect beyond env + skill, run by cliHandler around the skill write/remove.
-// This CANNOT be data (it shells out with the host's credentials + registers account keys), so it stays core,
-// keyed by PROVIDER NAME — a connector extension declares the name, the daemon owns what that name is allowed
-// to do. Only the git providers have one; every other connector is pure data.
-export interface ConnectorHook {
-    readonly apply: (config: CliConfig, exec: ExecInTerminal) => Promise<string | undefined>;
-    readonly remove: (config: CliConfig, exec: ExecInTerminal) => Promise<void>;
-    // What a recreated container has to get back at boot — the connection survives on /work, its side effect on
-    // the container's own filesystem does not.
-    readonly restore: (config: CliConfig, exec: ExecInTerminal) => Promise<string | undefined>;
-}
-
-const gitAccessHook: ConnectorHook = {
+export const gitAccessHook: ConnectorHook = {
     // `git: "on"` sets up git-over-ssh + the https credential; an explicit "off" (or a previously-on connection
     // switched off) tears down so re-applies are idempotent both directions.
     apply: async (config, exec) => {
@@ -334,31 +322,4 @@ const gitAccessHook: ConnectorHook = {
     remove: (config, exec) => teardownGitAccess(gitHostOf(config), exec),
     // Nothing to restore with git access off — the connector is then env + skill, both already on /work.
     restore: async (config, exec) => (config["git"] === "on" ? restoreGitAccess(gitHostOf(config), exec) : undefined),
-};
-
-export const CORE_CONNECTOR_HOOKS: Record<string, ConnectorHook> = { github: gitAccessHook, gitlab: gitAccessHook };
-
-// main.ts's boot restore over the manifest — the git counterpart to reconnectVpns: git access dies with the
-// container while the connection survives on /work, so every connected provider gets its container-local git
-// config back before the first turn (or the owner's first `git pull`) needs it. Best-effort per entry, and
-// silent when it works: a failure here degrades one connection, never the daemon, and the capability's own
-// status reports the result (gitAccessWired) rather than a boot log nobody reads.
-export const restoreConnectorGitAccess = async (capabilities: CapabilitiesStore, logger: { warn: (message: string) => void }): Promise<void> => {
-    for (const capability of await capabilities.list()) {
-        if (capability.kind !== "cli") {
-            continue;
-        }
-        const hook = CORE_CONNECTOR_HOOKS[capability.config.provider];
-        if (hook === undefined) {
-            continue;
-        }
-        try {
-            const warning = await hook.restore(capability.config, directExec);
-            if (warning !== undefined) {
-                logger.warn(`git access ${capability.id}: ${warning}`);
-            }
-        } catch (error) {
-            logger.warn(`git access ${capability.id}: could not restore: ${error instanceof Error ? error.message : String(error)}`);
-        }
-    }
 };

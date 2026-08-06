@@ -1,6 +1,6 @@
 # @intentic/ext-connectors
 
-The systems an agent can be wired to — GitHub, GitLab, Sentry, Redmine, Outline, SigNoz, Komodo, Postgres, MySQL.
+The systems an agent can be wired to — GitHub, GitLab, npm, Sentry, Redmine, Outline, SigNoz, Komodo, Postgres, MySQL.
 
 Connecting one does two things at once: it turns on the capability other surfaces gate on (Pipelines appears when
 github or gitlab is on; Deployments when Komodo is), and it teaches the agent how to use that system by shipping
@@ -14,7 +14,7 @@ a skill alongside the credential.
 
 ## Key files
 
-- [intentic-extension.json](intentic-extension.json) — the nine connectors, and what each one grants. This file
+- [intentic-extension.json](intentic-extension.json) — the ten connectors, and what each one grants. This file
   IS the package; there is no `src/`.
 - [skills/github](skills/github) — a worked example of the shipped-skill half.
 - [env/postgres.Dockerfile](env/postgres.Dockerfile) — a connector that needs a client installed in the sandbox,
@@ -31,3 +31,5 @@ here to every view that gates on them.
 - A connector without its skill is a credential nobody knows how to use. The two ship together deliberately.
 - Two connectors of the same kind are two estates. Surfaces that gate on these facts generally want one tile per
   connection rather than one per extension.
+- npm's `totpSecret` field is marked `totp`: the daemon mints one-time codes from it (the agent's `otp` command)
+  and the seed never enters the agent's environment — a manifest whose `env` referenced it would fail to parse.

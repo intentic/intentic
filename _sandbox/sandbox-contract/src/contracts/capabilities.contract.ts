@@ -5,6 +5,7 @@ import {
     CapabilityCardParamSchema,
     CapabilityIdParamSchema,
     CapabilityLoginSchema,
+    CapabilityOtpSchema,
     CapabilitySchema,
     CapabilitySecretInputSchema,
     CapabilityStatusSchema,
@@ -32,4 +33,8 @@ export const capabilitiesContract = {
     // Start an agent-kind capability's interactive login (its declared loginCommand) in a visible terminal
     // session the user types into — device-code sign-in flows. Returns the session the panel attaches to.
     login: oc.route({ method: "POST", path: "/capabilities/{id}/login" }).input(CapabilityIdParamSchema).output(CapabilityLoginSchema),
+    // Mint one TOTP code from the capability's stored seed (a field its card marks `totp`). The one capability
+    // read the agent token is admitted to (see auth/grants): a code expires within its period and never reveals
+    // the seed, so the in-sandbox `otp` command can answer a 2FA prompt without the agent holding the factor.
+    otp: oc.route({ method: "GET", path: "/capabilities/{id}/otp" }).input(CapabilityIdParamSchema).output(CapabilityOtpSchema),
 };

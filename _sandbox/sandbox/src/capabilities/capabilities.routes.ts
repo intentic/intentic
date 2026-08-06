@@ -13,7 +13,8 @@ import { reconcileListenerProcesses, startAutoStartProcesses } from "../extensio
 import { enabledExtensions } from "../extensions/installed-extensions.js";
 import { capabilityCtx } from "./capability.js";
 import { echoConfig, secretField } from "./summary.js";
-import { contributionRegistry } from "./contributions.js";
+import { contributionFor, contributionRegistry } from "./contributions.js";
+import { totpCode } from "./totp.js";
 import { browseMarketplace } from "./marketplace.js";
 import { capabilityRecommendations } from "./recommend.js";
 import { registry } from "./registry.js";
@@ -209,6 +210,27 @@ export const createCapabilitiesRoutes = (services: Services) => {
             await run("tmux", ["send-keys", "-t", `=${session}:`, "-l", loginCommand]);
             await run("tmux", ["send-keys", "-t", `=${session}:`, "Enter"]);
             return { session };
+        }),
+        // One TOTP code off the capability's stored seed — the `otp` command's whole backend. The seed field is
+        // whichever one the capability's card marks `totp`; the code is minted here so the seed never crosses
+        // the wire (this route is the single capability read the per-boot agent token is admitted to).
+        otp: i.otp.handler(async ({ input }) => {
+            const capability = await services.capabilities.get(input.id);
+            if (capability === undefined) {
+                throw new ORPCError("NOT_FOUND", { message: "no capability with that id" });
+            }
+            const contribution = contributionFor(await contributionRegistry(services), capability.kind, capability.config);
+            const field = contribution?.spec.fields.find((candidate) => candidate.totp === true);
+            const seed = field === undefined ? undefined : (capability.config as Record<string, unknown>)[field.key];
+            if (typeof seed !== "string" || seed === "") {
+                throw new ORPCError("CONFLICT", { message: `"${input.id}" stores no TOTP secret — add one on its capability card` });
+            }
+            try {
+                return totpCode(seed, Date.now());
+            } catch (error) {
+                const reason = error instanceof Error ? error.message : String(error);
+                throw new ORPCError("CONFLICT", { message: `the stored TOTP secret is unusable (${reason}) — re-add it on the capability card` });
+            }
         }),
     };
 };
