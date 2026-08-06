@@ -821,9 +821,7 @@ describe(`Conversation`, () => {
         const planMessage = conversation.messages.value.find((message) => message.plan !== undefined);
 
         sandboxRequestMock.mockResolvedValue({ ok: true } as Response);
-        await conversation.decidePlan(planMessage!, false, `this bit is wrong`, [
-            { name: `shot.png`, path: `.intentic/attachments/a1/shot.png` },
-        ]);
+        await conversation.decidePlan(planMessage!, false, `this bit is wrong`, [{ name: `shot.png`, path: `.intentic/attachments/a1/shot.png` }]);
 
         const [, body] = sandboxRequestMock.mock.calls.at(-1) as [string, RequestInit];
         expect(JSON.parse(String(body.body))).toMatchObject({
@@ -970,12 +968,23 @@ describe(`Conversation`, () => {
         sandboxRequestMock.mockImplementation(sseResponse([{ kind: `session`, sessionId: `s-1` }]));
         await conversation.send(`first`, settings);
 
-        // The sandbox lost the transcript (rebuild before the store persisted, or the session was deleted).
-        sandboxRequestMock.mockImplementation(sseResponse([{ kind: `error`, code: `session-not-found`, message: `gone` }, { kind: `done` }]));
+        // The agent lost the session inside its own process mid-turn — the daemon reseeds whatever it can see for
+        // itself, so this code reaches the client only for the one runtime whose sessions it cannot see.
+        sandboxRequestMock.mockImplementation(
+            sseResponse([
+                { kind: `error`, code: `session-not-found`, message: `The agent restarted and cannot resume this chat's session.` },
+                { kind: `done` },
+            ]),
+        );
         await conversation.send(`second`, settings);
 
         expect(conversation.session.value).toBeUndefined();
-        expect(conversation.messages.value.at(-1)!.role).toBe(`notice`);
+        // The runtime's OWN sentence: this line used to state a cause it cannot know ("the sandbox was rebuilt or
+        // the session was deleted"), which was usually neither.
+        expect(conversation.messages.value.at(-1)).toMatchObject({
+            role: `notice`,
+            text: `The agent restarted and cannot resume this chat's session.`,
+        });
         expect(conversation.error.value).toBeNull();
         expect(conversation.status.value).not.toBe(`error`);
 

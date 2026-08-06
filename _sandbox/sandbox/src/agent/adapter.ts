@@ -1,6 +1,6 @@
 import type { AgentCapabilities, AgentTurn } from "@intentic/sandbox-contract";
 import type { Services } from "../composition.js";
-import type { TurnContext, TurnPlan, TurnRefusal } from "./turn-plan.js";
+import type { TurnContext, TurnPlan } from "./turn-plan.js";
 
 /* THE SEAM EVERY AGENT RUNTIME SITS BEHIND.
  *
@@ -13,8 +13,12 @@ import type { TurnContext, TurnPlan, TurnRefusal } from "./turn-plan.js";
  * WHAT AN ADAPTER OWES, and why each part is here rather than at the call site:
  *
  * `preflight` is the arm itself — the one thing genuinely per-runtime. It answers with a PLAN or a REFUSAL,
- * never a throw, because everything it can discover (no subscription connected, a session that outlived its
- * transcript, an uninstalled agent capability) is an ordinary state of a sandbox rather than a failure.
+ * never a throw, because everything it can discover (no subscription connected, an uninstalled agent
+ * capability) is an ordinary state of a sandbox rather than a failure.
+ *
+ * `holdsSession` is which store to ask whether a resume can still happen. Only that — what a missing session
+ * MEANS is the same for every runtime and belongs to the one caller (agent.routes.ts), which is what stops the
+ * three arms answering it three ways again.
  *
  * `health` is new, and it is the reason this is an interface rather than a lookup table. A runtime whose CLI is
  * missing, whose account is signed out, or whose version is too old was previously discoverable in exactly one
@@ -53,23 +57,13 @@ export interface AgentAdapter<R extends AgentCapabilities["runtime"] = AgentCapa
     ) => Promise<TurnPlan>;
     // Cheap, cached, and never on a turn's path — see adapter-health.ts for the caching and the schedule.
     readonly health: (services: Services) => Promise<AdapterHealth>;
+    /* Does this runtime still hold `sessionId`, so a turn naming it would CONTINUE rather than open a session
+     * with no past? `cwd` is the workspace root as the agent sees it — the key the stores that scope sessions by
+     * working directory are asked under.
+     *
+     * Answered from the store rather than from the id's existence, because the two come apart routinely and the
+     * gap is invisible from here: a runtime reports its session id the moment it starts and writes the session
+     * out seconds later, so a turn stopped in its opening seconds leaves a live-looking id behind that nothing
+     * was ever saved under. */
+    readonly holdsSession: (services: Services, sessionId: string, cwd: string) => Promise<boolean>;
 }
-
-/* THE REFUSAL THREE ARMS USED TO SPELL OUT SEPARATELY. A session id that outlived the store holding it is the
- * single most common way a turn fails for a reason the client can act on, and the action is always the same:
- * drop the dead id so the next send starts fresh. Coded, because the UI keys the drop off the code — a plain
- * message would leave the client re-sending the same dead id on every retry, which is what it used to do.
- *
- * `probe` is the runtime's own existence check. Passing it in rather than branching keeps the one thing that
- * genuinely differs per runtime (which store to ask) separate from the thing that must not (what a missing
- * session means and how it is reported). */
-export const missingSession = async (sessionId: string | undefined, probe: (id: string) => Promise<boolean>): Promise<TurnRefusal | undefined> => {
-    if (sessionId === undefined || (await probe(sessionId))) {
-        return undefined;
-    }
-    return {
-        ok: false,
-        code: "session-not-found",
-        message: "This chat's session no longer exists on the sandbox — it was deleted or lost in a rebuild. The next message starts a fresh session.",
-    };
-};

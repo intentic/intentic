@@ -653,24 +653,25 @@ test("agent.run gates a Gemini turn with no Google account connected as subscrip
     expect(events.some((event) => event.kind === "error" && event.code === "subscription-required")).toBe(true);
 });
 
-test("agent.run pre-flights a Codex resume whose thread no longer exists as session-not-found", async () => {
-    let codexCalled = false;
+test("agent.run runs a Codex turn whose thread is gone as a fresh one, rather than refusing it", async () => {
+    let seen: { sessionId?: string } | undefined;
     const client = clientFor(
         createApp(
             services({
                 config: withTranslator,
                 cliProxy: codexConnectedProxy,
                 codexThreadExists: async () => false,
-                codexAgent: async function* () {
-                    codexCalled = true;
+                codexAgent: async function* (request) {
+                    seen = request;
                     yield { kind: "done" };
                 },
             }),
         ),
     );
     const events = await runAgentTurn(client, { prompt: "hi", agent: "codex", sessionId: "gone" });
-    expect(codexCalled).toBe(false);
-    expect(events.some((event) => event.kind === "error" && event.code === "session-not-found")).toBe(true);
+    // The dead id is dropped rather than handed on — a resume against it fails opaquely inside the CLI.
+    expect(seen?.sessionId).toBeUndefined();
+    expect(events.some((event) => event.kind === "error")).toBe(false);
 });
 
 test("agent.run sends a Grok turn an explicit live-valid model, replacing an invalid or absent pinned id", async () => {
@@ -758,8 +759,18 @@ test("agent.run surfaces a connect-your-account error (not an opaque CLI failure
     expect(events.some((event) => event.kind === "error" && event.message.includes("No Claude account connected"))).toBe(true);
 });
 
-test("agent.run pre-flights a dead resume target with a coded error instead of spawning the CLI to fail", async () => {
-    let agentCalled = false;
+/* THE STOPPED-IN-ITS-OPENING-SECONDS CASE, which is what makes this the ordinary path rather than the rebuilt-
+ * sandbox curiosity it was written for. A runtime reports its session id in its first frame and writes the
+ * session out seconds later, so a turn stopped in between leaves the conversation holding an id nothing was ever
+ * saved under — and the next message was refused, telling the user their history was gone (naming two causes,
+ * neither of which had happened) and asking them to send it again. The record outlives every session, so there
+ * is nothing here the user was needed for. */
+test("agent.run reopens a conversation whose session the sandbox never stored, seeded from its own record", async () => {
+    let seen: { prompt?: string; sessionId?: string } | undefined;
+    const recorded: RestoredMessage[] = [
+        { role: "user", text: "what is 2+2?" },
+        { role: "assistant", text: "4" },
+    ];
     const client = clientFor(
         createApp(
             services({
@@ -770,17 +781,28 @@ test("agent.run pre-flights a dead resume target with a coded error instead of s
                     prompts: async () => [],
                     exists: async () => false,
                 },
-                agent: async function* () {
-                    agentCalled = true;
+                agent: async function* (request) {
+                    seen = request;
                     yield { kind: "done" };
+                },
+                transcripts: {
+                    read: async () => recorded,
+                    open: async () => {},
+                    fork: async () => {},
+                    append: async () => {},
+                    prompts: async () => [],
+                    count: async () => recorded.length,
+                    truncate: async () => 0,
                 },
             }),
         ),
     );
-    const events = await runAgentTurn(client, { prompt: "do it", sessionId: "gone" });
-    expect(agentCalled).toBe(false);
-    // The `code` field must survive the oRPC eventIterator round-trip — the UI keys its self-heal on it.
-    expect(events.some((event) => event.kind === "error" && event.code === "session-not-found")).toBe(true);
+    const events = await runAgentTurn(client, { prompt: "and now?", conversationId: "conv-stopped", sessionId: "gone" });
+    expect(events.some((event) => event.kind === "error")).toBe(false);
+    // Fresh session, carrying what the conversation already said — the same handoff a provider switch gets.
+    expect(seen?.sessionId).toBeUndefined();
+    expect(seen?.prompt).toContain("User: what is 2+2?");
+    expect(seen?.prompt?.endsWith("and now?")).toBe(true);
 });
 
 test("agent.run folds a switched conversation's history into the prompt as a role-attributed preamble", async () => {

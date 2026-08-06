@@ -28,6 +28,40 @@ test("each runtime is claimed exactly once", () => {
     expect(new Set(runtimes).size).toBe(runtimes.length);
 });
 
+/* WHICH STORE EACH RUNTIME IS ASKED ABOUT A RESUME. The answer decides whether a turn continues a conversation
+ * or opens a blank one, so an arm wired to the wrong store — or to the right one with its arguments the wrong
+ * way round, which is why the calls are recorded rather than counted — loses a conversation its context without
+ * anything failing. ACP is the deliberate exception: its sessions live inside the agent's own process, where the
+ * daemon cannot see them, so it answers yes and lets the agent itself say otherwise at resume time. */
+test("each runtime is asked about a resume by its own session store", async () => {
+    const asked: string[] = [];
+    const stores = services({
+        sessions: {
+            exists: async (cwd: string, id: string) => {
+                asked.push(`claude:${cwd}:${id}`);
+                return false;
+            },
+        },
+        codexThreadExists: async (id: string) => {
+            asked.push(`codex:${id}`);
+            return false;
+        },
+        openCode: {
+            sessionExists: async (id: string, cwd: string) => {
+                asked.push(`opencode:${id}:${cwd}`);
+                return false;
+            },
+        },
+    });
+
+    const held = Object.fromEntries(
+        await Promise.all(ADAPTERS.map(async (adapter) => [adapter.runtime, await adapter.holdsSession(stores, "s-1", "/work")])),
+    );
+
+    expect(asked.toSorted()).toEqual(["claude:/work:s-1", "codex:s-1", "opencode:s-1:/work"]);
+    expect(held).toEqual({ "claude-code": false, codex: false, opencode: false, acp: true });
+});
+
 /* Health is a fact about the daemon's configuration, so it is probed against a stubbed one. What matters here
  * is the THREE-STATE distinction: a probe that fails must answer "unknown", never "unavailable" — the latter
  * greys a provider out, and doing that because an account listing blipped is worse than saying nothing. */

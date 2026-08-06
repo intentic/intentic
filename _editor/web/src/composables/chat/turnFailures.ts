@@ -134,13 +134,16 @@ export class TurnFailures {
                 this.host.transcript.notice(`${message} Your message is held below — send it again and it goes as written.`);
                 return;
             case `session-not-found`:
-                // The sandbox no longer has this chat's transcript — drop the dead session so the next send starts
-                // a fresh one instead of replaying the failure forever. A muted notice, not the error ref: the
-                // condition is self-healed, so the red line + error tab status would overstate it.
+                /* The runtime could not pick this chat's session back up mid-turn — drop the dead id so the next
+                 * send starts a fresh one instead of replaying the failure forever. A muted notice, not the error
+                 * ref: the condition is self-healed, so the red line + error tab status would overstate it.
+                 *
+                 * The runtime's OWN sentence, not one written here. This used to state a cause — "the sandbox was
+                 * rebuilt or the session was deleted" — for a condition it cannot see the cause of, and the two it
+                 * named were usually both wrong: the daemon now seeds a fresh session from its record whenever it
+                 * can, so what still reaches this line is an agent that lost the session inside its own process. */
                 this.host.session.value = undefined;
-                this.host.transcript.notice(
-                    `This chat's server-side history is gone (the sandbox was rebuilt or the session was deleted). Your last message wasn't processed — send it again; a fresh session starts, seeded with this window's transcript.`,
-                );
+                this.host.transcript.notice(message);
                 return;
             case `codex-advisory`:
                 // Codex warned about the turn it then ran to completion (its pinned CLI has no metadata for a model

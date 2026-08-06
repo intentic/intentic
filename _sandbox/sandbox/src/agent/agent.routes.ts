@@ -30,6 +30,7 @@ import { type RepoSync, syncConversation } from "../agents/sync.js";
 import { recordConversationPrompt, recordPrompt } from "../sessions/prompt-index.js";
 import { handoffHistory, turnStartIndex } from "../sessions/turn-transcript.js";
 import type { AgentRequest, ParkedSync } from "./agent.js";
+import { adapterFor } from "./adapter-registry.js";
 import { withAttachmentNote } from "./attachment-note.js";
 import { syncNote } from "./turn-preamble.js";
 import { resolveRequest } from "./agent-requests.js";
@@ -451,6 +452,28 @@ async function* runConversationTurn(
 // already shown the user a "connecting" flash.
 const SLOW_PREFLIGHT_MS = 5_000;
 
+/* The session this turn resumes: the one it named, or none — because the runtime serving it does not have that
+ * one any more. Which store answers is the adapter's (adapter.ts holdsSession); what a "no" MEANS is here, and
+ * it is the same for all four: the turn opens a fresh session, seeded from the conversation's record by the
+ * handoff its caller already runs for every other way a session gets retired.
+ *
+ * A store that cannot be read at all is trusted rather than doubted — retiring a live session over a failed
+ * probe would throw away a conversation's context to answer a question that was never asked. */
+const sessionToResume = async (services: Services, input: AgentTurn, effectiveCwd: string): Promise<string | undefined> => {
+    const { sessionId } = input;
+    if (sessionId === undefined) {
+        return undefined;
+    }
+    const adapter = adapterFor(input.agent ?? "claude", input.harness ?? "native");
+    const held = await services.perf
+        .track("turn.preflight.session", {}, () => adapter.holdsSession(services, sessionId, effectiveCwd))
+        .catch((error: unknown) => {
+            services.logger.warn({ err: error, sessionId }, "session probe failed — resuming as asked");
+            return true;
+        });
+    return held ? sessionId : undefined;
+};
+
 // One agent turn's body, on the main tree (`worktree` undefined) or inside an isolated conversation's
 // worktree — the cwd override is the single binding point every provider adapter, the tmux Bash path, and the
 // SDK session store follow.
@@ -561,12 +584,26 @@ async function* runTurn(
               });
     // Editor context attaches to THIS message, so it folds in before the (older) history preamble wraps it.
     const promptWithEditor = input.editorContext !== undefined ? `${input.prompt}\n\n${editorContextNote(input.editorContext)}` : input.prompt;
+    /* WHAT THIS TURN CAN ACTUALLY CONTINUE FROM — asked of the runtime's own store before anything is built on
+     * the answer, because a session id is a claim about that store rather than a fact.
+     *
+     * A resume names a session the runtime may no longer hold, and NOT ONLY after the sandbox was rebuilt or the
+     * session deleted: a runtime reports its session id in its first frame and writes the session out seconds
+     * later, so a turn stopped in its opening seconds leaves an id behind that nothing was ever saved under.
+     * That was reported to the user as "this chat's history is gone (the sandbox was rebuilt or the session was
+     * deleted)" — two causes, neither of which had happened — and the turn was refused, so the words they had
+     * just typed went nowhere and the fix on offer was to send them again.
+     *
+     * Nothing about that needed the user. The conversation's own record is right here and outlives every
+     * session, so a forgotten session is a HANDOFF like any other: drop the dead id and let the fresh session be
+     * seeded from the record, which is what the refusal was asking the user to trigger by hand. */
+    const resumed = await sessionToResume(services, input, effectiveCwd);
     /* A turn that resumes no session, on a conversation that has already said something, is a runtime handoff:
      * the switch retired the old session and this one has to carry the conversation across. Read at turn start,
      * in the window every caller guarantees — the record is open and adopted (startConversationTurn awaits that
      * before the pump invokes the provider) and this turn's own messages are not appended until it settles. */
     const history =
-        input.sessionId === undefined && input.conversationId !== undefined
+        resumed === undefined && input.conversationId !== undefined
             ? await handoffHistory(services, { ...input, conversationId: input.conversationId })
             : [];
     mark("history");
@@ -579,7 +616,7 @@ async function* runTurn(
         ...(isolation !== undefined ? { isolation } : {}),
         signal: signal ?? new AbortController().signal,
         ...(Object.keys(cliEnv).length > 0 ? { cliEnv } : {}),
-        ...(input.sessionId !== undefined ? { sessionId: input.sessionId } : {}),
+        ...(resumed !== undefined ? { sessionId: resumed } : {}),
         ...(input.model !== undefined ? { model: input.model } : {}),
         ...(input.permissionMode !== undefined ? { permissionMode: input.permissionMode } : {}),
         ...(input.allowedTools !== undefined ? { allowedTools: input.allowedTools } : {}),
@@ -672,7 +709,10 @@ async function* runTurn(
     // completion with usage) that survives rebuilds and the agent's own reach, while full content stays in
     // the SDK transcript. Fire-and-forget: logging must never delay or fail a turn.
     const provider = input.agent ?? "claude";
-    let sessionId = input.sessionId;
+    // The session the turn is RUNNING on, not the one the client asked for: an id the runtime no longer holds was
+    // dropped above, and stamping it on this turn's rows would file them against a session that does not exist.
+    // Replaced by the stream's own `session` frame the moment a resume advances it or a fresh one is minted.
+    let sessionId = resumed;
     // The reset instant the stream last named (rate_limit_event rides ahead of the refusal it explains), so a
     // rate_limit frame can tell the client when the spent window reopens.
     let limitReset: number | undefined;

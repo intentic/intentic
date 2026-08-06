@@ -61,6 +61,7 @@ const CLAUDE_CODE_ADAPTER: AgentAdapter<"claude-code"> = {
         }
         return accounts.length > 0 ? ready() : unavailable("Connect your Claude subscription in Sandbox ▸ Agent.");
     },
+    holdsSession: (services, sessionId, cwd) => services.sessions.exists(cwd, sessionId),
 };
 
 const CODEX_ADAPTER: AgentAdapter<"codex"> = {
@@ -80,6 +81,8 @@ const CODEX_ADAPTER: AgentAdapter<"codex"> = {
                 : "Connect your ChatGPT subscription in Sandbox ▸ Agent to run Codex.",
         );
     },
+    // One sandbox-wide CODEX_HOME serves every turn (see planCodexTurn), so a thread is looked up without a cwd.
+    holdsSession: (services, sessionId) => services.codexThreadExists(sessionId),
 };
 
 const OPENCODE_ADAPTER: AgentAdapter<"opencode"> = {
@@ -92,6 +95,7 @@ const OPENCODE_ADAPTER: AgentAdapter<"opencode"> = {
         }
         return connected ? ready() : unavailable("Sign in with your xAI (SuperGrok/X Premium) account in Setup.");
     },
+    holdsSession: (services, sessionId, cwd) => services.openCode.sessionExists(sessionId, cwd),
 };
 
 const ACP_ADAPTER: AgentAdapter<"acp"> = {
@@ -110,6 +114,11 @@ const ACP_ADAPTER: AgentAdapter<"acp"> = {
             ? ready()
             : unavailable("Add an Agent capability to run an ACP agent here.");
     },
+    /* An ACP session lives inside the agent's own process and there is no store to ask from out here — so this
+     * answers for the only case that reaches a turn: the pool spawns the agent, and it either replays the
+     * session or says it cannot (acp/acp-agent.ts asks it directly, at resume time). Answering "gone" from
+     * here would retire every ACP session on a daemon that simply cannot see them. */
+    holdsSession: async () => true,
 };
 
 export const ADAPTERS: readonly AgentAdapter[] = [CLAUDE_CODE_ADAPTER, CODEX_ADAPTER, OPENCODE_ADAPTER, ACP_ADAPTER];

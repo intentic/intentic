@@ -17,7 +17,6 @@ import { extensionAgentDirsOf } from "../extensions/installed-extensions.js";
 import { createHashlineServer } from "../hashline/hashline-tools.js";
 import type { AgentRequest, ParkedSync } from "./agent.js";
 import { adapterFor } from "./adapter-registry.js";
-import { missingSession } from "./adapter.js";
 import { isUnknownSlashCommand } from "./agent-commands.js";
 import type { SteeringQueue } from "./agent-steering.js";
 import { withAttachmentNote } from "./attachment-note.js";
@@ -38,10 +37,12 @@ import { setupNoticeFor, workspaceSetup } from "../workspace/workspace-setup.js"
  * never leak through, and the Grok gate learned the same lesson separately, months later.
  *
  * A REFUSAL IS A VALUE, exactly as in harness-credentials.ts (which this calls, and whose header explains why).
- * Every one of these is an ordinary state of a sandbox — a session id that outlived its transcript, a
- * subscription nobody connected, an Agent capability that was uninstalled — not an exception. The route turns
- * one into the single error frame the composer's connect gate reads; the previous shape spelled that frame out
- * five times, and each copy was also a `return` that skipped the caller's cleanup (see the anchor it leaked). */
+ * Every one is an ordinary state of a sandbox — a subscription nobody connected, an Agent capability that was
+ * uninstalled — rather than an exception, and every one needs the USER. A session the runtime has forgotten used
+ * to be among them and is not any more, on exactly that test: the daemon can answer that one itself, by seeding
+ * a fresh session from the conversation's record (agent.routes.ts sessionToResume). The route turns a refusal
+ * into the single error frame the composer's connect gate reads; the previous shape spelled that frame out five
+ * times, and each copy was also a `return` that skipped the caller's cleanup (see the anchor it leaked). */
 
 export type TurnRefusal = {
     readonly ok: false;
@@ -198,14 +199,8 @@ const honoured = (services: Services, context: TurnContext, capabilities: AgentC
 
 // Codex has no sandbox-owned OAuth: it authenticates through the translator on the user's ChatGPT SUBSCRIPTION
 // (the same connection the claude-code harness rides), or the container OPENAI_API_KEY on a bare dev run with no
-// translator. There's a single sandbox-wide CODEX_HOME (the adapter's default), so a resume is a plain existence
-// check against it; a missing thread self-heals like the harness path below. Claude-only fields (plugins, MCP,
-// thinking) don't apply here.
+// translator. Claude-only fields (plugins, MCP, thinking) don't apply here.
 export const planCodexTurn = async (services: Services, input: AgentTurn, context: TurnContext): Promise<TurnPlan> => {
-    const deadThread = await missingSession(input.sessionId, (id) => services.codexThreadExists(id));
-    if (deadThread !== undefined) {
-        return deadThread;
-    }
     // The subscription (via the translator) is the credential; the container OPENAI_API_KEY is the only fallback
     // (a bare dev run with no translator baked).
     const translatorReady = services.config.translator.url !== "" && (await services.cliProxy.accounts()).codex.length > 0;
@@ -249,10 +244,6 @@ export const planGrokTurn = async (services: Services, input: AgentTurn, context
             ok: false,
             message: "No Grok account connected — sign in with your xAI (SuperGrok/X Premium) account in Setup before chatting.",
         };
-    }
-    const deadSession = await missingSession(input.sessionId, (id) => services.openCode.sessionExists(id, context.effectiveCwd));
-    if (deadSession !== undefined) {
-        return deadSession;
     }
     // Grok MUST ride an explicit, live-valid xAI model id: OpenCode's own default is a retired models.dev id
     // (grok-code-fast-1) xAI rejects, and its catalog is empty for xai — so an omitted model makes the turn fall
@@ -312,24 +303,17 @@ export const planHarnessTurn = async (
     context: TurnContext,
     installed: readonly Capability[],
 ): Promise<TurnPlan> => {
-    /* THE THREE THINGS NOTHING ELSE HERE DEPENDS ON, together — a token refresh that may go to the network, a
-     * transcript existence check, and a settings read. They used to be three awaits in a row in front of every
-     * gate, which meant every turn paid all three end to end before the first byte of planning happened.
-     *
-     * The REFUSALS below are still asked in their old order, and that ordering is the only thing the old shape
-     * was really buying: a turn with no subscription and a dead session id should say "connect an account",
-     * because that is the one the user acts on first. Doing the other two reads on a turn that then refuses
-     * costs a file read nobody will use, which is the trade. */
-    const [resolved, dead, settings] = await Promise.all([
+    /* THE TWO THINGS NOTHING ELSE HERE DEPENDS ON, together — a token refresh that may go to the network, and a
+     * settings read. They used to be awaits in a row in front of every gate, which meant every turn paid both
+     * end to end before the first byte of planning happened. Doing the settings read on a turn that then refuses
+     * for its credential costs a file read nobody will use, which is the trade. */
+    const [resolved, settings] = await Promise.all([
         services.perf.track("turn.plan.credentials", { provider: input.agent ?? "claude" }, () =>
             resolveHarnessCredentials(services, {
                 agent: input.agent,
                 ...(input.account !== undefined ? { account: input.account } : {}),
                 ...(input.model !== undefined ? { model: input.model } : {}),
             }),
-        ),
-        services.perf.track("turn.plan.session", {}, () =>
-            missingSession(input.sessionId, (id) => services.sessions.exists(context.effectiveCwd, id)),
         ),
         // Per-sandbox agent toggles. stableSystemPrompt keeps the preset system prompt byte-stable so the
         // provider prompt cache survives the turn — the cross-provider delegation note then rides the user
@@ -338,9 +322,6 @@ export const planHarnessTurn = async (
     ]);
     if (!resolved.ok) {
         return { ok: false, ...(resolved.code !== undefined ? { code: resolved.code } : {}), message: resolved.message };
-    }
-    if (dead !== undefined) {
-        return dead;
     }
     const { oauthToken, refreshOauthToken, endpoint, allowance } = resolved.credentials;
     // Internal (intent-declared, from env) tools first, then external mcp-kind capabilities — a same-named

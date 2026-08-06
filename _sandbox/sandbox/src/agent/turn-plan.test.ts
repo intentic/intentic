@@ -9,7 +9,8 @@ import { planTurn, type TurnContext } from "./turn-plan.js";
 /* WHAT A TURN IS ALLOWED TO RUN ON, and what it is handed once it may. Every case here used to be reachable
  * only through app.test.ts booting the whole daemon, which is why the four provider arms drifted apart in the
  * first place — each learned the same lessons separately (resolve a concrete model, or the SDK's own retired
- * default gets used; refuse a dead session id up front, or the CLI spawns just to fail opaquely).
+ * default gets used). Which session a turn may resume is NOT among them: it is one rule for all four runtimes
+ * and lives with the route that acts on it (app.integration.test.ts covers it end to end).
  *
  * A refusal is a VALUE here, so the gates are assertable without a stream: `ok: false` plus the machine-readable
  * code the composer's connect gate keys off. */
@@ -73,15 +74,6 @@ beforeEach(() => {
 
 // --- the gates: each refuses for an ordinary state of a sandbox, and says which one -----------------------
 
-test("a Codex thread that no longer exists is refused by code, so the client can drop the dead id", async () => {
-    const services = servicesWith({ codexThreadExists: async () => false });
-
-    const plan = await planTurn(services, turn({ agent: "codex", sessionId: "thread-gone" }), context);
-
-    expect(plan.ok).toBe(false);
-    expect(plan).toMatchObject({ code: "session-not-found" });
-});
-
 test("Codex with neither a translator subscription nor an api key names which of the two is missing", async () => {
     const noImage = await planTurn(servicesWith({ codexThreadExists: async () => true }), turn({ agent: "codex" }), context);
     expect(noImage).toMatchObject({ ok: false, code: "subscription-required" });
@@ -106,18 +98,6 @@ test("Grok with no xAI sign-in is refused before a turn spawns", async () => {
     expect((plan as { message: string }).message).toContain("No Grok account connected");
 });
 
-// The gate every other arm had and this one didn't: OpenCode answers a dead session id with a rejection that
-// names nothing, so the chat kept re-sending it. The code is what lets the client drop it.
-test("a Grok session OpenCode no longer holds is refused by code, not re-sent forever", async () => {
-    const services = servicesWith({
-        openCode: unstubbed<Services["openCode"]>("openCode", { connected: async () => true, sessionExists: async () => false }),
-    });
-
-    const plan = await planTurn(services, turn({ agent: "grok", sessionId: "ses-gone" }), context);
-
-    expect(plan).toMatchObject({ ok: false, code: "session-not-found" });
-});
-
 test("an ACP provider whose capability is gone is refused by name", async () => {
     const services = servicesWith({
         capabilities: unstubbed<Services["capabilities"]>("capabilities", {
@@ -137,14 +117,6 @@ test("a harness refusal rides through with the credential resolver's own code", 
     const plan = await planTurn(servicesWith({}), turn(), context);
 
     expect(plan).toMatchObject({ ok: false, code: "claude-reauth", message: "Your Claude sign-in expired." });
-});
-
-test("a Claude session id the sandbox no longer holds is refused by code, not spawned and failed", async () => {
-    const services = servicesWith({ sessions: unstubbed<Services["sessions"]>("sessions", { exists: async () => false }) });
-
-    const plan = await planTurn(services, turn({ sessionId: "s-gone" }), context);
-
-    expect(plan).toMatchObject({ ok: false, code: "session-not-found" });
 });
 
 // --- what a permitted turn is handed ----------------------------------------------------------------------

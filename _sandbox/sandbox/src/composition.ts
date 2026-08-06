@@ -355,7 +355,7 @@ export interface Services {
     // adapter defaults to it, and the Claude agent's shell delegation points `codex` at it.
     readonly codexHome: string;
     // Whether a Codex thread's rollout still exists in the sandbox-wide CODEX_HOME, so a resume of a
-    // deleted/lost thread surfaces session-not-found instead of an opaque mid-turn failure.
+    // deleted/lost thread opens a fresh thread seeded from the record instead of failing opaquely mid-turn.
     readonly codexThreadExists: (threadId: string) => Promise<boolean>;
     // The shared OpenCode runtime backing the Grok provider: the warm server/client plus xAI OAuth
     // connect/disconnect. OpenCode owns the xAI credential, so there's no GrokStore twin.
