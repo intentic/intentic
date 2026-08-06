@@ -1,4 +1,5 @@
-import type { AdmissionPolicy, AdmissionRule, Trigger, WakeSource } from "@intentic/sandbox-contract";
+import type { AdmissionPolicy, AdmissionRule, CommandClass, Trigger, WakeSource } from "@intentic/sandbox-contract";
+import { COMMAND_CLASS_LABELS } from "./command-classes.js";
 import { ALLOW, DENY, defineGuardedAction, HOLD } from "./guard.js";
 
 /* The action catalog — every gated decision, defined once at this module edge and consulted by value.
@@ -79,5 +80,35 @@ export const outboundSend = defineGuardedAction<OutboundSendInput>({
             return HOLD(`${provider} ${type} requires owner approval`);
         }
         return ALLOW(`no action rule restricts ${provider} ${type}`);
+    },
+});
+
+export interface CommandRunInput {
+    // ONE of the classes the command fell in (guard/command-classes.ts). A command in two classes is two
+    // consults, and the gate keeps the most restrictive answer — which is what makes "most restrictive wins"
+    // observable at the consult site instead of hidden inside a decide that was handed a list.
+    readonly commandClass: CommandClass;
+    // SandboxSettings.commandRules. Unlisted ⇒ allowed: the rulebook names what to stop, not what to permit.
+    readonly rules: Partial<Readonly<Record<CommandClass, AdmissionRule>>>;
+}
+
+/* May the agent run this shell command? Consulted by the PreToolUse command gate before the command executes.
+ *
+ * A "hold" here means the real thing, unlike outbound.send's: the gate raises a permission card and the command
+ * waits for an answer. The difference is that a send has an approvable ARTIFACT to fall back on (the draft) and
+ * a command does not — there is no held form of `git push --force`, only the command or not the command. So an
+ * unattended turn, with nobody to raise the card to, gets the refusal instead; the gate words that, because
+ * whether anyone is watching is a property of the turn and not of the policy. */
+export const commandRun = defineGuardedAction<CommandRunInput>({
+    action: "command.run",
+    decide: ({ commandClass, rules }) => {
+        const rule = rules[commandClass] ?? "allow";
+        if (rule === "deny") {
+            return DENY(`commands that ${COMMAND_CLASS_LABELS[commandClass]} are refused by the command rules`);
+        }
+        if (rule === "hold") {
+            return HOLD(`the command rules hold commands that ${COMMAND_CLASS_LABELS[commandClass]} for your approval`);
+        }
+        return ALLOW(`no command rule restricts ${commandClass}`);
     },
 });

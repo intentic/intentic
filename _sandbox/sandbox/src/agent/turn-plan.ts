@@ -362,6 +362,7 @@ export const planHarnessTurn = async (
         subagentsPerTurn,
         subagentDepth,
         actionRules,
+        commandRules,
         systemPrompt: customPrompt,
     } = settings;
     /* THE TERSE EXPERIMENT'S COIN FLIP. The steer is eligible only where the daemon still appends to the
@@ -526,6 +527,9 @@ export const planHarnessTurn = async (
             ...(verifyOnStop ? { verifyOnStop } : {}),
             // The sniffer's rulebook, forwarded only when the owner wrote a rule — same no-hook economy.
             ...(Object.keys(actionRules).length > 0 ? { actionRules } : {}),
+            // The command gate's rulebook, on the same terms: no rule, no hook, and a workspace that has never
+            // opened this pays nothing for it.
+            ...(Object.keys(commandRules).length > 0 ? { commandRules } : {}),
             // Which base the prompt is built on, plus either the owner's own text (under "custom") or what to
             // append to a built-in base — never both, which is what turnPromptPlacement decided above.
             systemPromptMode,

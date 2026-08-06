@@ -1,6 +1,6 @@
 import { describe, expect, test } from "vitest";
 import type { AdmissionPolicy } from "@intentic/sandbox-contract";
-import { outboundSend, sessionStart, wakeSourceOf } from "./actions.js";
+import { commandRun, outboundSend, sessionStart, wakeSourceOf } from "./actions.js";
 import { defineGuardedAction, guard, type GuardedAction, HOLD, isGuardedAction, listGuardedActions } from "./guard.js";
 
 const allowAll: AdmissionPolicy = { schedule: "allow", event: "allow", listener: "allow", webchat: "allow", workspace: "allow", workflow: "allow" };
@@ -33,7 +33,7 @@ describe("guard mechanism", () => {
     // invents its own gate instead of defining an action here is discoverable by its absence.
     test("the catalog carries the shipped actions", () => {
         const actions = listGuardedActions();
-        for (const expected of ["session.start", "outbound.send"]) {
+        for (const expected of ["session.start", "outbound.send", "command.run"]) {
             expect(actions, `catalog is missing "${expected}"`).toContain(expected);
         }
     });
@@ -87,6 +87,30 @@ describe("outbound.send", () => {
         const rules = { "slack.message.send": "hold", "slack.message.edit": "deny" } as const;
         expect(guard(outboundSend, { provider: "slack", type: "message.send", rules }).effect).toBe("hold");
         expect(guard(outboundSend, { provider: "slack", type: "message.edit", rules }).effect).toBe("deny");
+    });
+});
+
+describe("command.run", () => {
+    test("an unlisted class is allowed — the rulebook names what to stop", () => {
+        expect(guard(commandRun, { commandClass: "git.destructive", rules: {} }).effect).toBe("allow");
+        expect(guard(commandRun, { commandClass: "git.destructive", rules: { "package.publish": "deny" } }).effect).toBe("allow");
+    });
+
+    test("hold and deny come back as themselves — the gate decides how to say them", () => {
+        expect(guard(commandRun, { commandClass: "files.destructive", rules: { "files.destructive": "hold" } }).effect).toBe("hold");
+        expect(guard(commandRun, { commandClass: "files.destructive", rules: { "files.destructive": "deny" } }).effect).toBe("deny");
+    });
+
+    // A hold here is a real ask, so it must never carry the countdown that would turn it into "unless I'm slow".
+    test("a hold carries no auto-run window", () => {
+        const verdict = guard(commandRun, { commandClass: "secrets.access", rules: { "secrets.access": "hold" } });
+        expect("autoRunAfterS" in verdict && verdict.autoRunAfterS).toBeFalsy();
+    });
+
+    test("the reason says what the command would do, not which settings key matched", () => {
+        expect(guard(commandRun, { commandClass: "network.outbound", rules: { "network.outbound": "deny" } }).reason).toContain(
+            "send a request out to the internet",
+        );
     });
 });
 

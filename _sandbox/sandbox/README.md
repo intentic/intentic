@@ -11,10 +11,13 @@ The **per-project AI-agent dev daemon** — a Docker image that runs as the proj
 - Keep the tree true after lands: reinstall drifted dependencies, run the project's own checks, and announce the
   edges (`deps.broken`/`deps.fixed`) that wake the seeded fix chore — every step in a visible terminal panel and
   the activity feed (src/workspace/reconcile-deps.ts → verify-deps.ts → src/automations).
-- Gate what runs without the owner: every outside-driven wake (automations, listeners, the Doorbell, the
-  workflow release gate) consults one decision seam before a session starts — allow, hold for approval, or
-  refuse — and classified outbound provider calls are checked against the owner's action rules before they
-  execute (src/guard).
+- Gate what runs without the owner, in two layers that share one decision seam (src/guard). Before a session
+  starts: every outside-driven wake (automations, listeners, the Doorbell, the workflow release gate) is
+  allowed, held for approval, or refused. Inside a session already running: classified outbound provider calls
+  are checked against the owner's action rules, and shell commands whose class the owner holds — destructive
+  git, recursive deletes, credential reads, publishes, outbound fetches — park on a permission card before they
+  execute. Both in-turn gates are PreToolUse hooks, which is what makes them hold in the autonomous posture
+  where the permission cards are never raised at all.
 
 ## Key files
 
@@ -23,7 +26,7 @@ The **per-project AI-agent dev daemon** — a Docker image that runs as the proj
 - [src/agents](src/agents) — **plural**: the fleet. The registry, `worktrees.ts`, `isolation.ts`, `land.ts`, `origins.ts`.
 - [src/git/git.routes.ts](src/git/git.routes.ts) — status/commit/push over the wire; [src/workspace](src/workspace) — the repo layout the daemon serves.
 - [src/composition.ts](src/composition.ts) — what is wired to what; [src/main.ts](src/main.ts) — the entrypoint that builds it and serves.
-- [src/guard/guard.ts](src/guard/guard.ts) — the one gate every gated action consults (fail-closed); [src/guard/actions.ts](src/guard/actions.ts) is the catalog of decisions.
+- [src/guard/guard.ts](src/guard/guard.ts) — the one gate every gated action consults (fail-closed); [src/guard/actions.ts](src/guard/actions.ts) is the catalog of decisions, and [src/guard/command-gate.ts](src/guard/command-gate.ts) is the one that can park a running turn on a card.
 
 ## How it fits
 

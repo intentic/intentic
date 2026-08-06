@@ -85,6 +85,27 @@ export type WakeSource = z.infer<typeof WakeSourceSchema>;
 export const AdmissionRuleSchema = z.enum(["allow", "hold", "deny"]);
 export type AdmissionRule = z.infer<typeof AdmissionRuleSchema>;
 
+/* WHAT KIND OF THING A SHELL COMMAND IS — the command gate's key space, the second layer under the admission
+ * floor above. The floor decides whether a session may START; these decide whether one PARTICULAR command
+ * inside a running session may go ahead, which is the only question left once the agent is already working.
+ *
+ * Five, chosen for one property: everything in them is hard or impossible to take back, so a person seeing it
+ * once beats an audit trail read afterwards. Everything else an agent runs — builds, tests, greps, edits — is
+ * recoverable in a container that is itself disposable, and gating it would be friction bought with nothing. */
+export const CommandClassSchema = z.enum([
+    // Rewrites or discards committed work: force-push, hard reset, force-delete a branch, clean -f, filter-branch.
+    "git.destructive",
+    // Recursive-force deletion (`rm -rf`).
+    "files.destructive",
+    // Names credential material: a .env file, an ssh key, ~/.aws/credentials, .npmrc, a stored token file.
+    "secrets.access",
+    // Publishes outward and irreversibly: npm/pnpm/yarn/cargo publish, gh release create, docker push.
+    "package.publish",
+    // curl/wget to a non-local address — the general exfiltration channel under the per-provider actionRules.
+    "network.outbound",
+]);
+export type CommandClass = z.infer<typeof CommandClassSchema>;
+
 /* THE ADMISSION FLOOR — the workspace-wide rule per wake source, consulted by the session.start guard on every
  * outside-driven wake. Per-automation `requireApproval` / `holdForSeconds` remain the per-object override; the
  * floor composes with them most-restrictive-wins, so "hold every webchat session" needs no edit to each
@@ -1230,6 +1251,19 @@ export const SandboxSettingsSchema = z.object({
      * workspace pays nothing. "hold" cannot park a running turn (nobody may be there to answer); it refuses the
      * live call and points the agent at the drafts outbox, which IS the held form of a send. */
     actionRules: z.record(z.string(), AdmissionRuleSchema).default({}),
+    /* THE COMMAND GATE'S RULEBOOK — a verdict per CommandClass, for shell commands the agent runs itself. This
+     * is the layer that still applies once a session is already running: the admission floor above decides who
+     * may wake the agent, and after that every command it types is inside one already-admitted session.
+     *
+     * "hold" means what it says here, unlike in actionRules: the gate raises a permission card and the command
+     * waits for a real answer, in EVERY posture — hooks fire under bypassPermissions, where the card machinery
+     * on its own never would. An UNATTENDED turn has nobody to answer, so a hold there refuses instead and says
+     * why; that is the honest form of "ask me" when there is no me.
+     *
+     * An unlisted class is allowed, and an empty rulebook wires no hook at all — an owner who has never opened
+     * this pays nothing for it. Keys are the CommandClass enum, so a typo is a settings error rather than a rule
+     * that silently never matches. */
+    commandRules: z.partialRecord(CommandClassSchema, AdmissionRuleSchema).default({}),
     /* HOW MUCH AN AGENT MAY DELEGATE — the three ceilings the Claude Code harness enforces on its own Agent
      * tool, surfaced here because their defaults are tuned for a laptop and this is a container the owner sized.
      *

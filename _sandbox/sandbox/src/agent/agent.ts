@@ -23,6 +23,7 @@ import {
     type AgentEvent,
     type AgentReply,
     type AskQuestion,
+    type CommandClass,
     type FastModeState,
     type PermissionMode,
     sendableEffort,
@@ -39,6 +40,7 @@ import { browserServerOfTool, browserSessionHooks } from "../browser/browser-ses
 import { localCommandText, unknownCommandName } from "./agent-commands.js";
 import { editDiagnosticsHooks } from "./agent-diagnostics.js";
 import { installSteeringHooks } from "./agent-installs.js";
+import { commandGateHooks } from "../guard/command-gate.js";
 import { outboundGateHooks } from "../guard/outbound-gate.js";
 import { type AgentTool, mcpServersOf } from "./agent-tools.js";
 import { createRequest } from "./agent-requests.js";
@@ -168,6 +170,11 @@ export interface AgentRequest {
     // The sniffer's rulebook (settings.actionRules) — verdicts per classified outbound call, enforced by the
     // PreToolUse outbound gate. Absent/empty ⇒ the gate is not wired at all (guard/outbound-gate.ts).
     readonly actionRules?: Readonly<Record<string, AdmissionRule>>;
+    // The command gate's rulebook (settings.commandRules) — a verdict per class of shell command, enforced
+    // before the command runs. A "hold" parks the turn on a permission card, in every posture, which is what
+    // makes it the layer that still applies once bypassPermissions has taken the cards away
+    // (guard/command-gate.ts). Absent/empty ⇒ no hook.
+    readonly commandRules?: Partial<Readonly<Record<CommandClass, AdmissionRule>>>;
     // Measurement control: a fraction [0,1] of commands whose output bypasses cleaning (INTENTIC_OUTPUT_HOLDOUT),
     // recorded raw so the savings report has a real cleaned-vs-raw baseline. 0/undefined ⇒ no holdout.
     readonly outputHoldout?: number;
@@ -1207,6 +1214,10 @@ const baseOptions = (
     // The turn handle the subagent registry files children under. Absent ⇒ this turn belongs to no conversation
     // (the bench), so its children are not surfaced and the hooks are not wired.
     subagents: SubagentTurn | undefined,
+    // The turn's event sink. A hook can park the turn on a card the same way canUseTool does, and the command
+    // gate is the one that needs to — its whole point is holding a command in the posture where canUseTool is
+    // never called at all.
+    push: (event: AgentEvent) => void,
 ): OauthRecoveryOptions => ({
     cwd: request.cwd,
     // Only for a native Claude turn on a sandbox-owned credential: a translator endpoint authenticates with its
@@ -1279,6 +1290,18 @@ const baseOptions = (
     // same problem noticed one step earlier. Diagnostics: every native Edit/Write is type-checked by the
     // resident lsp service and compile errors ride back as additionalContext.
     hooks: mergeHooks(
+        /* The command gate goes FIRST, ahead of the tmux wrapper, so the classifier and the card both read the
+         * agent's own command line rather than ~100 characters of daemon boilerplate wrapped around it. Nothing
+         * downstream is skipped by that order: a denied command never reaches the wrapper, and an approved one
+         * is rewritten exactly as it would have been. */
+        request.commandRules !== undefined && Object.keys(request.commandRules).length > 0
+            ? commandGateHooks({
+                  rules: request.commandRules,
+                  unattended: request.unattended === true,
+                  push,
+                  signal: request.signal,
+              })
+            : {},
         tmuxEnabled ? bashTmuxHooks(Object.keys(request.cliEnv ?? {}), request.isolation) : {},
         installSteeringHooks(),
         // The outbound sniffer's enforcing half: classified provider calls (a discord curl) are checked against
@@ -1540,7 +1563,7 @@ export async function* runAgent(
     const shell: { sessionId: string | undefined } = { sessionId: request.sessionId };
     let stderr = "";
     const options: Options = {
-        ...baseOptions(request, abortController, permissionMode, tmuxEnabled, subagents),
+        ...baseOptions(request, abortController, permissionMode, tmuxEnabled, subagents, push),
         /* Always on, whatever mode the turn STARTS in: the flag legalises bypassPermissions, it does not
          * activate it — `permissionMode` above still decides the posture. Any turn can land in bypass
          * mid-session (an approved plan setModes to POST_PLAN_MODE), and the CLI refuses that switch unless
