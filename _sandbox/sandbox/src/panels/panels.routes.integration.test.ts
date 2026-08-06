@@ -1,4 +1,5 @@
 import { mkdirSync, writeFileSync } from "node:fs";
+import http from "node:http";
 import { join } from "node:path";
 import { panelsContract } from "@intentic/sandbox-contract";
 import { expect, test } from "vitest";
@@ -23,9 +24,19 @@ const panelsClient = (workspace: WorkspacePaths, overrides: Partial<PanelsRoutes
             panelToken: "panel-secret",
             processes: fakeProcesses(),
             ensurePreviewRoutes: async () => {},
+            // Nothing listening unless a test says otherwise — the scan is a seam here rather than the real
+            // machine's sockets, which used to make "no servers" depend on what happened to be up.
+            scanPorts: async () => [],
             ...overrides,
         }),
     );
+
+// Listen on an OS-assigned port and hand it back — the probe behind `servers` dials for real.
+const serve = async (server: http.Server): Promise<number> => {
+    await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+    const address = server.address();
+    return typeof address === "object" && address !== null ? address.port : 0;
+};
 
 test("panels.list enumerates every repo with its operator panel + runtime status", async () => {
     const workspace = tempWorkspace([{ name: "app", panel: true }, { name: "desired-state" }]);
@@ -119,6 +130,49 @@ test("panels.list advertises no previewUrl without a connect token (loopback —
             },
         ],
     });
+});
+
+/* WHAT IS OCCUPYING THE PORT, AND WHERE. A monorepo serving two apps is two addresses and two answers to "where
+ * do I go to stop this" — the terminal the scan traced each listener back to. The second one has none: a dev
+ * server outside the sandbox answers just as well, and saying so is the whole point of the field. */
+test("panels.list names the terminal each answering dev server is running in", async () => {
+    const workspace = tempWorkspace([{ name: "app", panel: true }]);
+    const site = http.createServer((_request, response) => response.end("site"));
+    const web = http.createServer((_request, response) => response.end("web"));
+    const [sitePort, webPort] = await Promise.all([serve(site), serve(web)]);
+    const client = panelsClient(workspace, {
+        scanPorts: async () => [
+            { port: sitePort, host: "127.0.0.1", forwardable: true, cwd: join(workspace.root, "app", "_site", "site"), session: "web-3f2a" },
+            { port: webPort, host: "127.0.0.1", forwardable: true, cwd: join(workspace.root, "app", "_editor", "web") },
+        ],
+    });
+
+    const [panel] = (await client.list()).panels;
+    expect(panel?.healthy).toBe(true);
+    // Ordered by port, which the OS assigned — so the expectation sorts the same way rather than assuming.
+    expect(panel?.servers).toEqual(
+        [
+            { port: sitePort, url: `http://localhost:${sitePort}`, dir: join("_site", "site"), session: "web-3f2a" },
+            { port: webPort, url: `http://localhost:${webPort}`, dir: join("_editor", "web") },
+        ]
+            .toSorted((a, b) => a.port - b.port)
+            .map(({ port: _port, ...server }) => server),
+    );
+    site.close();
+    web.close();
+});
+
+// A panel the daemon started answers with ITS terminal even when procfs gave up the cwd — the daemon put the
+// process there, so the session is a fact rather than an attribution.
+test("panels.list gives the panel's own terminal to the assigned port the scan couldn't attribute", async () => {
+    const workspace = tempWorkspace([{ name: "app", panel: true }]);
+    const server = http.createServer((_request, response) => response.end("ok"));
+    const port = await serve(server);
+    const client = panelsClient(workspace, { processes: fakeProcesses({ app: port }) });
+
+    const [panel] = (await client.list()).panels;
+    expect(panel?.servers).toEqual([{ url: `http://localhost:${port}`, session: "panel-app" }]);
+    server.close();
 });
 
 test("panels.start runs the repo's operator dir, rejects unknown repos + repos with no panel; stop is idempotent", async () => {

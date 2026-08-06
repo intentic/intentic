@@ -4070,7 +4070,11 @@ export const PanelSummarySchema = z.object({
     // the scheme each speaks (a Vite on a committed dev cert serves https). One entry for the ordinary repo; a
     // monorepo whose `dev` fans out across packages has one per app, which is why `dir` is here — `_editor/web` vs
     // `_site/site` is the only thing that tells them apart. Empty when nothing answers.
-    servers: z.array(z.object({ url: z.string(), dir: z.string().optional() })),
+    //
+    // `session` is the terminal it is running in: the panel's own when the daemon started it, the user's when
+    // they ran it by hand, and ABSENT when nothing in the sandbox owns it. That last case is the one worth
+    // designing for — the repo is plainly answering, and no terminal here can show, stop or restart it.
+    servers: z.array(z.object({ url: z.string(), dir: z.string().optional(), session: z.string().optional() })),
     // https://preview-<repo>-<sandboxId>.<zone>; absent when the sandbox has no zone or connect token (loopback/tests).
     previewUrl: z.string().optional(),
     // The workspace role this repo dir occupies (the three fixed dirs); absent for extra clones.
@@ -4121,6 +4125,10 @@ export const PortSummarySchema = z.object({
     command: z.string().optional(),
     // The process working directory (how the UI attributes a port to a repo).
     cwd: z.string().optional(),
+    // The tmux session the listener descends from — the terminal to watch it in or stop it from. Absent when
+    // nothing in its ancestry is a pane (a daemon-managed runtime, a published container's docker-proxy), which
+    // is the honest "you cannot reach this from here" rather than a terminal that would open onto nothing.
+    session: z.string().optional(),
     forwarded: z.boolean(),
     // https://port-<slot>-<sandboxId>.<zone>; present only while forwarded AND the sandbox has a zone + id.
     previewUrl: z.string().optional(),

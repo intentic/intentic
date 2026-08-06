@@ -5,7 +5,8 @@ What the outside world can reach: a repo's dev server, the ports the box is forw
 ## Responsibilities
 
 - Show any runnable repo's dev server in an iframe — the fallback for repos no first-party view already serves.
-- List what is listening inside the box and what the tunnel currently exposes, and let exposure be revoked.
+- List what is listening inside the box, what took each port and which terminal it is running in, and what the
+  tunnel currently exposes — and let exposure be revoked.
 - Show what is published from the workspace's `public/` folder with nothing running at all.
 
 ## Key files
@@ -30,3 +31,7 @@ is forwarded, the way a VPN shield does.
 
 - Everything in `public/` is served to anyone with the link, with no sign-in. The view says so where it matters;
   the directory not existing means nothing is published.
+- A port is reported with the terminal it descends from, so the row is somewhere to GO, not just something to
+  read. Ports with none — the box's own runtimes, a container's published port — say "no terminal" rather than
+  offering one: nothing here can show their output or stop them, and a button that opens an empty panel is worse
+  than the plain fact. Same rule on the panel view: its Terminal button appears only when a session exists.

@@ -2,7 +2,7 @@ import { mkdirSync, mkdtempSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { expect, test } from "vitest";
-import { portKind, scanListeningPorts } from "./port-scan.js";
+import { parentPid, portKind, scanListeningPorts, withOwningSessions } from "./port-scan.js";
 
 // A procfs fixture tree: net/tcp{,6} tables plus /proc/<pid>/{fd,cmdline,cwd}. The fd entries are dangling
 // symlinks whose TARGET STRING is the socket marker — exactly what readlink returns on the real thing.
@@ -87,9 +87,73 @@ test("falls back to /proc/<pid>/comm when a listening process has an empty cmdli
     await expect(scanListeningPorts(root)).resolves.toEqual([{ port: 8081, host: "127.0.0.1", forwardable: true, pid: 200, command: "cloudflared" }]);
 });
 
+/* WHO IS OCCUPYING THE PORT — traced to the terminal, not to the process.
+ *
+ * The pid holding the socket is three generations below anything a person launched (`pnpm dev` → turbo → vite),
+ * so the pane is found by walking parents. `/proc/<pid>/stat`'s comm field is deliberately hostile here: it is
+ * parenthesized, and it may itself contain spaces and parens. */
+const statFile = (pid: number, comm: string, ppid: number): string => `${pid} (${comm}) S ${ppid} ${pid} ${pid} 0 -1 4194304 0 0`;
+
+test("traces a listener up its ancestry to the tmux pane it is running in", async () => {
+    const root = mkdtempSync(join(tmpdir(), "port-scan-"));
+    // vite (pid 400) ← turbo (399) ← pnpm (398) ← the pane's shell (397), which tmux reports for `web-3f2a`.
+    for (const [pid, comm, ppid] of [
+        [400, "node (vite)", 399],
+        [399, "turbo", 398],
+        [398, "pnpm dev", 397],
+        [397, "bash", 1],
+    ] as const) {
+        mkdirSync(join(root, String(pid)), { recursive: true });
+        writeFileSync(join(root, String(pid), "stat"), statFile(pid, comm, ppid));
+    }
+    const listeners = [
+        { port: 4321, host: "127.0.0.1" as const, forwardable: true, pid: 400 },
+        // Nothing in ITS ancestry is a pane: the daemon's own runtime, which no terminal can show or stop.
+        { port: 8787, host: "127.0.0.1" as const, forwardable: true, pid: 397_000 },
+        // Unattributable to any process at all — nothing to walk.
+        { port: 5440, host: "127.0.0.1" as const, forwardable: true },
+    ];
+    await expect(withOwningSessions(listeners, new Map([[397, "web-3f2a"]]), root)).resolves.toEqual([
+        { port: 4321, host: "127.0.0.1", forwardable: true, pid: 400, session: "web-3f2a" },
+        { port: 8787, host: "127.0.0.1", forwardable: true, pid: 397_000 },
+        { port: 5440, host: "127.0.0.1", forwardable: true },
+    ]);
+});
+
+test("a process that IS the pane's own root process owns its port (a panel running its dev server directly)", async () => {
+    const root = mkdtempSync(join(tmpdir(), "port-scan-"));
+    mkdirSync(join(root, "247"), { recursive: true });
+    writeFileSync(join(root, "247", "stat"), statFile(247, "dockerd", 1));
+    const listeners = [{ port: 5440, host: "127.0.0.1" as const, forwardable: true, pid: 247 }];
+    await expect(withOwningSessions(listeners, new Map([[247, "panel-docker"]]), root)).resolves.toEqual([
+        { port: 5440, host: "127.0.0.1", forwardable: true, pid: 247, session: "panel-docker" },
+    ]);
+});
+
+test("no tmux server annotates nothing, and a stat file that lies about its parent can't loop the walk", async () => {
+    const root = mkdtempSync(join(tmpdir(), "port-scan-"));
+    // A cycle: 500's parent is 501, whose parent is 500. Kernel links never do this; a raced read of a recycled
+    // pid could, and the walk has to end either way.
+    mkdirSync(join(root, "500"), { recursive: true });
+    mkdirSync(join(root, "501"), { recursive: true });
+    writeFileSync(join(root, "500", "stat"), statFile(500, "node", 501));
+    writeFileSync(join(root, "501", "stat"), statFile(501, "node", 500));
+    const listeners = [{ port: 3000, host: "127.0.0.1" as const, forwardable: true, pid: 500 }];
+    await expect(withOwningSessions(listeners, new Map(), root)).resolves.toEqual(listeners);
+    await expect(withOwningSessions(listeners, new Map([[999, "web-1"]]), root)).resolves.toEqual(listeners);
+});
+
+test("parentPid reads the ppid past a comm containing spaces and parentheses", () => {
+    expect(parentPid(statFile(400, "node (vite)", 399))).toBe(399);
+    expect(parentPid(statFile(1, "systemd", 0))).toBeUndefined(); // pid 1 has no parent to walk to
+    expect(parentPid("")).toBeUndefined(); // the process died between the readdir and the read
+});
+
 test("portKind: repo cwds and terminal processes are workspace; sandbox machinery and unknowns are system", () => {
     // A cwd inside a repo wins outright — even for a binary that is otherwise sandbox machinery.
-    expect(portKind({ command: "node /work/intentic/_editor/web/node_modules/.bin/vite", cwd: "/work/intentic/_editor/web" }, "/work")).toBe("workspace");
+    expect(portKind({ command: "node /work/intentic/_editor/web/node_modules/.bin/vite", cwd: "/work/intentic/_editor/web" }, "/work")).toBe(
+        "workspace",
+    );
     expect(portKind({ command: "opencode serve --port=4096", cwd: "/work/myrepo" }, "/work")).toBe("workspace");
     // Known sandbox binaries at the workspace root are system.
     expect(portKind({ command: "opencode serve --hostname=127.0.0.1 --port=4096", cwd: "/work" }, "/work")).toBe("system");

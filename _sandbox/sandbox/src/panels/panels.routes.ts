@@ -9,7 +9,8 @@ import type { Services } from "../composition.js";
 import type { OrpcContext } from "../context.js";
 import { discoverPanels, listenerDir, listenersByRepo, oneServerPerDir, panelKey, panelRunDir } from "./panels.js";
 import { detectScheme } from "../ports/port-probe.js";
-import { type ListeningPort, scanListeningPorts } from "../ports/port-scan.js";
+import type { ListeningPort } from "../ports/port-scan.js";
+import { panelSession } from "../processes/managed-processes.js";
 
 // The per-repository panel routes. `list` enumerates every repo with its runtime status + the content FACTS
 // the web app's extensions detect on (role, marker files — evidence, not identity); `start`/`stop` drive the
@@ -24,22 +25,31 @@ const mentionsVitest = (file: string): boolean => existsSync(file) && readFileSy
 // one file each. A directory rather than a marker file because the stories ARE the evidence.
 const USER_STORIES_DIR = join("docs", "user-stories");
 
-export type PanelsRoutesDeps = Pick<Services, "config" | "ensurePreviewRoutes" | "panelToken" | "processes" | "workspace">;
+export type PanelsRoutesDeps = Pick<Services, "config" | "ensurePreviewRoutes" | "panelToken" | "processes" | "scanPorts" | "workspace">;
 
-// The repo's answering dev servers, each probed for the scheme it speaks and named by the package that bound it.
-// The panel's ASSIGNED port is probed alongside the attributed ones even when the scan didn't claim it: a dev
-// server that honors PORT is the ordinary case, and a cwd procfs wouldn't give up must not turn a serving app
-// into a dead one. Ordered by port so the list is stable across polls.
+/* The repo's answering dev servers, each probed for the scheme it speaks, named by the package that bound it,
+ * and carrying the terminal it is running in.
+ *
+ * The panel's ASSIGNED port is probed alongside the attributed ones even when the scan didn't claim it: a dev
+ * server that honors PORT is the ordinary case, and a cwd procfs wouldn't give up must not turn a serving app
+ * into a dead one. That synthesized candidate takes the panel's own session, which is not a guess — the daemon
+ * started it there.
+ *
+ * THE SESSION IS WHY THIS LIST IS ACTIONABLE. Every address here is something occupying a port, and the only
+ * useful next question is where it is running: a repo the daemon started answers "the panel's terminal", a dev
+ * server someone launched by hand answers with THEIR terminal, and something outside the sandbox answers
+ * nothing — which a surface must be able to say out loud rather than offering a terminal that never existed.
+ * Ordered by port so the list is stable across polls. */
 const detectServers = async (
     workspaceRoot: string,
     repo: string,
     listeners: readonly ListeningPort[],
-    assigned: number | undefined,
-): Promise<{ url: string; dir?: string }[]> => {
+    panel: { readonly port: number; readonly session: string } | undefined,
+): Promise<{ url: string; dir?: string; session?: string }[]> => {
     const candidates =
-        assigned === undefined || listeners.some((listener) => listener.port === assigned)
+        panel === undefined || listeners.some((listener) => listener.port === panel.port)
             ? listeners
-            : [...listeners, { port: assigned, host: "127.0.0.1" as const, forwardable: true }];
+            : [...listeners, { port: panel.port, host: "127.0.0.1" as const, forwardable: true, session: panel.session }];
     const probed = await Promise.all(
         candidates
             .toSorted((a, b) => a.port - b.port)
@@ -53,7 +63,14 @@ const detectServers = async (
                 // the very checks a story walks through. The family the scan recorded is for OUR dial only.
                 const url = `${scheme}://localhost:${listener.port}`;
                 const dir = listenerDir(listener, workspaceRoot, repo);
-                return dir === undefined ? { url } : { url, dir };
+                const server: { url: string; dir?: string; session?: string } = { url };
+                if (dir !== undefined) {
+                    server.dir = dir;
+                }
+                if (listener.session !== undefined) {
+                    server.session = listener.session;
+                }
+                return server;
             }),
     );
     return oneServerPerDir(probed.filter((server) => server !== undefined));
@@ -70,7 +87,7 @@ export const createPanelsRoutes = (services: PanelsRoutesDeps) => {
             // ONE procfs walk for the whole list: the scan is a per-sandbox fact, and asking it per repo would
             // re-read every process's fd table once per repository.
             const attributed = listenersByRepo(
-                await scanListeningPorts(),
+                await services.scanPorts(),
                 services.workspace.root,
                 discovered.map(({ repo }) => repo),
             );
@@ -80,7 +97,9 @@ export const createPanelsRoutes = (services: PanelsRoutesDeps) => {
                     const port = key !== undefined ? services.processes.portOf(key) : undefined;
                     const url = key !== undefined ? previewUrl(key, zone, sandboxId) : undefined;
                     const dir = join(services.workspace.root, repo);
-                    const servers = await detectServers(services.workspace.root, repo, attributed.get(repo) ?? [], port);
+                    // The panel the daemon runs, when it runs one: its assigned port and the terminal it put it in.
+                    const panel = key !== undefined && port !== undefined ? { port, session: panelSession(key) } : undefined;
+                    const servers = await detectServers(services.workspace.root, repo, attributed.get(repo) ?? [], panel);
                     // Content facts, computed in one pass so the browser never N+1-scans /work: each extension
                     // decides its own presence from this evidence (see the web app's extensions/extension.ts).
                     const summary = {

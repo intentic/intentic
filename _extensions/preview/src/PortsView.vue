@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { Button, cmp, Icon, InfoHint, Row, RowGroup, StatusBadge } from "@intentic/extension-ui";
 import { computed, ref } from "vue";
+import { host } from "./host";
 import SharePreview from "./SharePreview.vue";
 import { usePorts } from "./usePorts";
 
@@ -10,6 +11,11 @@ import { usePorts } from "./usePorts";
  * muted section below, listed for transparency rather than previewing. "Preview" forwards the port onto its
  * public port-<slot> hostname and opens it; forwarded rows keep a live link until "Stop". Forwarding is the
  * explicit exposure gesture — previews are public.
+ *
+ * AND WHERE IT IS RUNNING, which is what makes the list something you can act on rather than only read. The
+ * command and cwd say what took the port; the terminal it descends from is the place to watch it, Ctrl+C it, or
+ * kill it, and it is one click from the row. A port with no terminal (the sandbox's own runtimes, a published
+ * container's proxy) says so, because "no way to reach this from here" is itself the answer.
  *
  * Mounted as a tab on the sandbox hub (surface: "sandbox"), so it renders a BODY — the hub owns the Page and
  * the header above the tab strip. What would have been the page's description rides the section's InfoHint. */
@@ -91,6 +97,11 @@ const stop = async (port: number): Promise<void> => {
 
 // Cosmetic: the workspace mounts at /work, so a cwd reads better repo-relative.
 const displayCwd = (cwd: string): string => cwd.replace(/^\/work\//, ``);
+
+const openTerminal = (session: string): void => host().terminal.open(session);
+// Said the same way wherever a port has no terminal — the sandbox's own runtimes and a container's published
+// port both land here, and the useful part is that this view is not where they get stopped.
+const NO_TERMINAL_HINT = `Not running in any of this sandbox's terminals — nothing here can show its output or stop it.`;
 </script>
 
 <template>
@@ -128,8 +139,24 @@ const displayCwd = (cwd: string): string => cwd.replace(/^\/work\//, ``);
                         {{ entry.command ?? `unknown process` }}
                     </span>
                 </template>
+                <!-- Where it runs, on the line under what it is: the directory it was launched from, and the
+                     terminal it descends from. The terminal is a link because reaching it is the point — a port
+                     you can see and not reach is a port you can only wonder about. -->
                 <template #description>
-                    <span v-if="entry.cwd" class="block truncate" :title="entry.cwd">{{ displayCwd(entry.cwd) }}</span>
+                    <span class="flex min-w-0 items-baseline gap-2">
+                        <span v-if="entry.cwd" class="truncate" :title="entry.cwd">{{ displayCwd(entry.cwd) }}</span>
+                        <button
+                            v-if="entry.session"
+                            type="button"
+                            :class="cmp.linkButton(`shrink-0 gap-1 text-2xs text-muted hover:text-content hover:no-underline`)"
+                            v-tooltip.bottom="`Open ${entry.session} — the terminal this is running in`"
+                            @click="openTerminal(entry.session)"
+                        >
+                            <Icon name="desktop" class="shrink-0" />
+                            {{ entry.session }}
+                        </button>
+                        <span v-else class="shrink-0 text-2xs text-subtle" v-tooltip.bottom="NO_TERMINAL_HINT">no terminal</span>
+                    </span>
                 </template>
 
                 <template #control>
@@ -184,6 +211,19 @@ const displayCwd = (cwd: string): string => cwd.replace(/^\/work\//, ``);
                     <span class="block truncate font-mono text-2xs font-normal text-subtle" :title="entry.command">
                         {{ entry.command ?? `unknown process` }}
                     </span>
+                </template>
+                <!-- Internals mostly have no terminal, so only the ones that DO say anything here — a dev server
+                     misfiled as machinery is exactly the case worth being able to reach. -->
+                <template v-if="entry.session" #description>
+                    <button
+                        type="button"
+                        :class="cmp.linkButton(`gap-1 text-2xs text-subtle hover:text-content hover:no-underline`)"
+                        v-tooltip.bottom="`Open ${entry.session} — the terminal this is running in`"
+                        @click="openTerminal(entry.session)"
+                    >
+                        <Icon name="desktop" class="shrink-0" />
+                        {{ entry.session }}
+                    </button>
                 </template>
 
                 <template #control>

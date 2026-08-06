@@ -120,7 +120,7 @@ import { createPreviewRouteEnsurer } from "./panels/preview-route.js";
 import { type PushStore, filePushStore } from "./push/push-store.js";
 import { createPushSender, type PushSender } from "./push/push.js";
 import { type PortForwards, createPortForwards } from "./ports/port-forwards.js";
-import { type ListeningPort, scanListeningPorts } from "./ports/port-scan.js";
+import { type ListeningPort, scanListeningPorts, withOwningSessions } from "./ports/port-scan.js";
 import {
     listWorkspaceSessions,
     readWorkspaceSession,
@@ -143,6 +143,7 @@ import { type BootTracker, createBootTracker } from "./platform/boot.js";
 import { createPerfTracker, type PerfTracker } from "./platform/perf.js";
 import { postToPlatform, type PlatformResponse } from "./platform/platform-client.js";
 import { createTerminalRunner, type TerminalRunner } from "./terminal/terminal-run.js";
+import { panePids } from "./terminal/terminal-session.js";
 import { version } from "./version.js";
 import { type AgentTool, internalTools } from "./agent/agent-tools.js";
 import { type UsageStore, fileUsageStore } from "./usage/usage-store.js";
@@ -198,7 +199,8 @@ export interface Services {
     // The forwarded-port slot table the /ports routes drive and the preview proxy resolves port-<slot> hosts
     // against (see ports/port-forwards.ts).
     readonly portForwards: PortForwards;
-    // Discovers every listening TCP socket via procfs — the /ports routes' discovery seam.
+    // Discovers every listening TCP socket via procfs, each traced back to the terminal it runs in — the
+    // discovery seam behind both the Ports view and a repo's answering dev servers.
     readonly scanPorts: () => Promise<ListeningPort[]>;
     // Runs user-triggered shell commands inside visible job-* tmux sessions (window per command) — the
     // surfacing substrate for capability adds and the infra check (see terminal-run.ts for the principle).
@@ -693,7 +695,12 @@ export const createServices = (config: Config, logger: Logger): Services => {
         // Slot names are salted with the connect token, so a forwarded port's public hostname can't be guessed
         // from the sandbox id alone (tunnel-ids.ts). The daemon and the platform derive the same eight.
         portForwards: createPortForwards(portSlotsFromToken(config.connectToken)),
-        scanPorts: () => scanListeningPorts(),
+        // The pane listing rides along with the scan rather than behind it: both are cheap reads of live state,
+        // and a port whose terminal is unknown is a port nobody can do anything about.
+        scanPorts: async () => {
+            const [listeners, panes] = await Promise.all([scanListeningPorts(), panePids()]);
+            return withOwningSessions(listeners, panes);
+        },
         terminalRun,
         wsTickets: createWsTickets(),
         mediaTickets: createMediaTickets(),

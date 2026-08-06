@@ -30,11 +30,13 @@ const panel = (over: Partial<PanelSummary> & { repo: string }): PanelSummary => 
 });
 
 // The intentic repo as the daemon reports it: one `pnpm dev`, a turbo fan-out, three pinned ports and two
-// schemes. The case that made the panel spin "Starting…" forever.
+// schemes. The case that made the panel spin "Starting…" forever — and, in its sessions, the three ways an
+// address comes to be occupied: the panel the daemon started, something outside this sandbox's terminals, and a
+// dev server someone launched in a terminal of their own.
 const MONOREPO = [
-    { url: `https://localhost:47145`, dir: `_editor/web` },
+    { url: `https://localhost:47145`, dir: `_editor/web`, session: `panel-intentic` },
     { url: `https://localhost:6480`, dir: `_platform/api` },
-    { url: `http://localhost:4321`, dir: `_site/site` },
+    { url: `http://localhost:4321`, dir: `_site/site`, session: `web-3f2a` },
 ];
 
 const hostFor = (panels: readonly PanelSummary[]): IntenticApi =>
@@ -116,6 +118,24 @@ describe(`useTargets`, () => {
 
         expect(stateOf(`app`)).toBe(`ready`);
         expect(localUrl(`app`)).toBe(`http://localhost:5173`);
+    });
+
+    /* WHICH TERMINAL TO OPEN, which is a different question from "is it up" and used to be answered by guessing
+     * `panel-<repo>` — the session a Start WOULD have made. For a dev server started by hand that session has
+     * never existed, so the terminals panel opened onto an empty strip. */
+    it(`opens the terminal a lone dev server is actually served from, and offers none when it has one`, async () => {
+        const byHand = await read([panel({ repo: `app`, running: false, servers: [{ url: `http://localhost:5173`, session: `web-3f2a` }] })]);
+        expect(byHand.terminalOf(`app`)).toBe(`web-3f2a`);
+
+        // Answering from outside this sandbox's terminals: green, walkable, and nothing to open.
+        const outside = await read([panel({ repo: `app`, running: false, servers: [{ url: `http://localhost:5173` }] })]);
+        expect(outside.stateOf(`app`)).toBe(`ready`);
+        expect(outside.terminalOf(`app`)).toBeUndefined();
+
+        // Several servers have no ONE terminal either — each row in the popover carries its own.
+        const monorepo = await read([panel({ repo: `intentic`, running: true, healthy: true, servers: MONOREPO })]);
+        expect(monorepo.terminalOf(`intentic`)).toBeUndefined();
+        expect(monorepo.serversOf(`intentic`).map((server) => server.session)).toEqual([`panel-intentic`, undefined, `web-3f2a`]);
     });
 
     it(`never falls back to the preview URL — a stopped panel answers it with a 502`, async () => {

@@ -35,6 +35,10 @@ tested" is the honest evidence for offering the area.
 
 - A story is prose, not a script. The agent reads it and decides how to drive the app, which is what lets a story
   survive a redesign that would have broken a selector.
+- **A repo is green when something ANSWERS, whoever started it** — and the heading's chip therefore cannot assume
+  it owns the dev server. Each address carries the terminal it is actually served from, so the chip opens that
+  one; an address served from outside the box's terminals says "no terminal" instead of offering one that has
+  never existed. Only a start still installing points at the panel's own session, where by definition it is.
 - Runs are evidence, not documents: they are point-in-time and live under `.intentic/`, unlike the architecture
   pages, which are maintained artifacts that belong in the repo.
 - A session that DIED is a first-class outcome, not a blank. It writes no verdict and no report, so both surfaces

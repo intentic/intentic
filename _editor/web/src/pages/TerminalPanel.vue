@@ -115,7 +115,10 @@ const popoutHint = computed(() => withShortcut(popout.poppedOut.value ? `Dock pa
 // pills: docked, the panel drops back down to its dock (chevron-down, pointing where it goes); floating, there
 // is nothing to drop into and the press retires the window, which is the one place a × still tells the truth.
 const closeHint = computed(() =>
-    withShortcut(popout.poppedOut.value ? `Close the window — the terminals keep running` : `Hide the panel — the terminals keep running`, `terminal.toggle`),
+    withShortcut(
+        popout.poppedOut.value ? `Close the window — the terminals keep running` : `Hide the panel — the terminals keep running`,
+        `terminal.toggle`,
+    ),
 );
 const segmentIcon = (name: string): IconName => terminalMeta(name).icon ?? KIND_ICONS[tabByName.value.get(name)?.kind ?? `shell`];
 const segmentColor = (name: string): string | undefined => {
@@ -738,6 +741,20 @@ let disposeSpawn: (() => void) | undefined;
 // tmux session that no live panel will ever show.
 let live = true;
 
+/* The session this panel is still WAITING for, if any — set for as long as the bounded relist behind `focus`
+ * runs. An empty panel means two different things across those couple of seconds: before, the tab is on its way
+ * (a Start's tmux session is born a moment after the POST); after, it is never coming. The empty state below
+ * says both, and needs this to tell them apart — without it every Start would flash "isn't running" first. */
+const awaiting = ref<string | undefined>(initial?.name);
+const openRequested = async (name: string): Promise<void> => {
+    awaiting.value = name;
+    await tabs.focus(name);
+    // A newer request may have overtaken this one; only the outstanding name clears itself.
+    if (awaiting.value === name) {
+        awaiting.value = undefined;
+    }
+};
+
 onMounted(async () => {
     registerPanelCommands();
     if (container.value === undefined) {
@@ -762,7 +779,7 @@ onMounted(async () => {
         }
     }
     if (live && initial !== undefined) {
-        await tabs.focus(initial.name);
+        await openRequested(initial.name);
     }
 });
 onBeforeUnmount(() => {
@@ -782,7 +799,7 @@ watch(
     () => initial,
     (request) => {
         if (request !== undefined) {
-            void tabs.focus(request.name);
+            void openRequested(request.name);
         }
     },
 );
@@ -971,24 +988,61 @@ const endResize = (event: PointerEvent): void => {
                 <button type="button" :class="cmp.iconButton()" @click="popout.toggle()" v-tooltip.top="popoutHint" :aria-label="popoutHint">
                     <Icon :name="popout.poppedOut.value ? 'arrow-down-left' : 'external-link'" class="text-xs" />
                 </button>
-                <button
-                    type="button"
-                    :class="cmp.iconButton()"
-                    @click="emit(`close`)"
-                    v-tooltip.top="closeHint"
-                    :aria-label="closeHint"
-                >
+                <button type="button" :class="cmp.iconButton()" @click="emit(`close`)" v-tooltip.top="closeHint" :aria-label="closeHint">
                     <Icon :name="popout.poppedOut.value ? 'times' : 'chevron-down'" class="text-xs" />
                 </button>
             </div>
         </div>
         <!-- The panes and the touch keys under them: always a column, whichever side the bar is on. -->
-        <div class="flex min-h-0 min-w-0 flex-1 flex-col">
+        <div class="relative flex min-h-0 min-w-0 flex-1 flex-col">
             <!-- xterm sizes to this container; the session's fit observer keeps each cell filling its share of
                  the pane (useTerminal's mount builds one .term-cell per split). The right-click is caught here
                  rather than per cell because the cells are built imperatively — the handler reads which session
                  it landed in off the cell's own dataset. -->
             <div ref="container" class="term-body flex min-h-0 min-w-0 flex-1 bg-terminal p-2" @contextmenu="onGridContextMenu"></div>
+            <!-- NOTHING TO SHOW, SAID OUT LOUD. The panel opened FOR a session suppresses the empty-panel shell
+                 (see attach) because that session is normally seconds away — but a surface can ask for one that
+                 will never arrive: a dev server someone started outside this sandbox has no terminal here, and
+                 the button offering it left a black rectangle with no tabs, no message and no way to tell a slow
+                 start from a session that never existed. An OVERLAY rather than a v-if on the container: the
+                 container is the imperative mount target and must stay in the DOM at its real size. -->
+            <div
+                v-if="order.length === 0 && awaiting !== undefined"
+                class="pointer-events-none absolute inset-0 flex flex-col items-center justify-center gap-2 p-6 text-center"
+            >
+                <Icon name="spinner" class="animate-spin text-lg text-subtle" />
+                <p class="text-sm text-muted">
+                    Opening <span class="font-mono text-content">{{ awaiting }}</span
+                    >…
+                </p>
+            </div>
+            <div
+                v-else-if="order.length === 0"
+                class="pointer-events-none absolute inset-0 flex flex-col items-center justify-center gap-2 p-6 text-center"
+            >
+                <Icon name="desktop" class="text-2xl text-subtle" />
+                <p v-if="initial" class="text-sm text-muted">
+                    <span class="font-mono text-content">{{ initial.name }}</span> isn't running.
+                </p>
+                <p v-else class="text-sm text-muted">No terminals open.</p>
+                <p class="max-w-md text-2xs text-subtle">
+                    {{
+                        initial
+                            ? `Nothing in this sandbox runs under that name — it was started outside it, or it has already stopped.`
+                            : `Open one to run something here.`
+                    }}
+                </p>
+                <Button
+                    v-if="newTab !== undefined"
+                    class="pointer-events-auto mt-1"
+                    label="New terminal"
+                    size="small"
+                    severity="secondary"
+                    @click="newTab()"
+                >
+                    <template #icon><Icon name="plus" class="text-2xs" /></template>
+                </Button>
+            </div>
             <!-- Touch extra-keys row (coarse pointers only). pointerdown.prevent keeps the terminal focused so
                  the soft keyboard stays up while the key is injected. -->
             <div v-if="coarse" class="scrollbar-thin flex shrink-0 items-center gap-1 overflow-x-auto border-t border-line bg-card px-1.5 py-1.5">

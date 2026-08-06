@@ -122,6 +122,37 @@ export const reapableSessions = (stdout: string, now: number, keep: (session: st
         .map(([name]) => name);
 };
 
+/* WHICH SESSION A PROCESS IS RUNNING IN, from the one end tmux will tell us about: each pane's root process.
+ * Everything a pane runs descends from that pid, so a listener's owner is found by walking its ancestry until a
+ * pane pid matches (see ports/port-scan.ts) — which is the only way a port bound by `pnpm dev`'s great-grandchild
+ * can be traced back to the terminal a user could Ctrl+C it in.
+ *
+ * The pure parse is separate so the walk is testable without a tmux server. A pane whose pid doesn't parse is
+ * skipped rather than defaulting: a wrong session name sends the user to someone else's terminal. */
+export const panePidSessions = (stdout: string): Map<number, string> => {
+    const panes = new Map<number, string>();
+    for (const line of stdout.split("\n")) {
+        const [name, pid] = line.split(" ");
+        const paneProcess = Number(pid);
+        if (name === undefined || name === "" || !Number.isInteger(paneProcess) || paneProcess <= 0) {
+            continue;
+        }
+        panes.set(paneProcess, name);
+    }
+    return panes;
+};
+
+// Every live pane's root pid → its session name. Empty when there is no tmux server, which is the same answer
+// as "nothing here runs in a terminal" and needs no distinction.
+export const panePids = async (): Promise<Map<number, string>> => {
+    try {
+        const { stdout } = await execFileAsync("tmux", ["list-panes", "-a", "-F", "#{session_name} #{pane_pid}"]);
+        return panePidSessions(stdout);
+    } catch {
+        return new Map();
+    }
+};
+
 export const reapFinishedSessions = async (keep: (session: string) => boolean): Promise<void> => {
     let stdout: string;
     try {

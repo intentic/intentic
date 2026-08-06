@@ -7,7 +7,8 @@ The **per-project AI-agent dev daemon** — a Docker image that runs as the proj
 - Serve the daemon API (`/agent`, `/intentic`, `/git/:repo/*`, `/inventory`, `/info`, `/preview`, `/health`); the browser calls it directly over the sandbox's tunnel, each request authenticated by the owner's Google ID token (`/health` carved out for liveness).
 - Run one Claude Agent turn (`runAgent`) over the workspace, streaming typed `AgentEvent`s as SSE `data:` frames.
 - Run the `intentic` CLI in-workspace and stream its ndjson lines; commit/push the repos.
-- Manage the app dev server and report preview status.
+- Manage the app dev server and report preview status — including what is ACTUALLY answering inside the box: each
+  listening port with the process that took it and the terminal that process descends from, whoever started it.
 - Keep the tree true after lands: reinstall drifted dependencies, run the project's own checks, and announce the
   edges (`deps.broken`/`deps.fixed`) that wake the seeded fix chore — every step in a visible terminal panel and
   the activity feed (src/workspace/reconcile-deps.ts → verify-deps.ts → src/automations).

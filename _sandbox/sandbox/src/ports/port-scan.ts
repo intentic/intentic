@@ -22,7 +22,70 @@ export interface ListeningPort {
     readonly pid?: number;
     readonly command?: string;
     readonly cwd?: string;
+    // The tmux session the listener is running in — the terminal a user can watch it in, Ctrl+C it in, or kill.
+    // Absent when nothing in its ancestry is a pane: a daemon-managed runtime, or the process's parents died and
+    // left it reparented to init. See `withOwningSessions`.
+    readonly session?: string;
 }
+
+/* WHO IS OCCUPYING THIS PORT, in the only terms a user can act on: the terminal it is running in.
+ *
+ * A port's own process is rarely the one anybody launched — `pnpm dev` becomes turbo becomes vite, three
+ * generations down from the pane. So the socket's owner is walked UP its parents until one of them is a tmux
+ * pane's root process, and that pane's session is the answer. Without it a listening port is a fact you can
+ * read and nothing you can do: the surfaces could say "something is on 4321" and had no way to say where it is.
+ *
+ * Bounded and visited-guarded because this walks kernel-supplied parent links: a pid namespace's init is the
+ * natural stop, but a stat file racing a dying process must not be able to spin here.
+ */
+const ANCESTRY_LIMIT = 64;
+
+// The ppid out of /proc/<pid>/stat. `comm` sits in parentheses and may itself contain spaces AND parentheses,
+// so the fields are read after the LAST `)` — splitting the line on whitespace mis-indexes on `(node (old))`.
+export const parentPid = (stat: string): number | undefined => {
+    const fields = stat
+        .slice(stat.lastIndexOf(")") + 1)
+        .trim()
+        .split(/\s+/);
+    const ppid = Number(fields[1]);
+    return Number.isInteger(ppid) && ppid > 0 ? ppid : undefined;
+};
+
+// Each listener annotated with the tmux session it descends from. `panes` maps a pane's root pid to its session
+// (terminal/terminal-session.ts panePids); an empty map — no tmux server — annotates nothing.
+export const withOwningSessions = async (
+    listeners: readonly ListeningPort[],
+    panes: ReadonlyMap<number, string>,
+    procRoot = "/proc",
+): Promise<ListeningPort[]> => {
+    if (panes.size === 0) {
+        return [...listeners];
+    }
+    // One read per pid across the whole scan: sibling dev servers under one `pnpm dev` share every ancestor
+    // above their own process, and a monorepo's fan-out is exactly that shape.
+    const parents = new Map<number, number | undefined>();
+    const parentOf = async (pid: number): Promise<number | undefined> => {
+        if (!parents.has(pid)) {
+            parents.set(pid, parentPid(await readFile(join(procRoot, String(pid), "stat"), "utf8").catch(() => "")));
+        }
+        return parents.get(pid);
+    };
+    return Promise.all(
+        listeners.map(async (listener) => {
+            const visited = new Set<number>();
+            let pid = listener.pid;
+            for (let hop = 0; pid !== undefined && hop < ANCESTRY_LIMIT && !visited.has(pid); hop++) {
+                const session = panes.get(pid);
+                if (session !== undefined) {
+                    return { ...listener, session };
+                }
+                visited.add(pid);
+                pid = await parentOf(pid);
+            }
+            return listener;
+        }),
+    );
+};
 
 // A /proc/net/tcp{,6} LISTEN row's local address, hex-encoded (IPv4 little-endian), resolved to how the preview
 // proxy reaches it: the loopback address it must DIAL, and whether that dial actually lands. `undefined` means

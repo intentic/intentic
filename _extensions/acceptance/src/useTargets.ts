@@ -125,9 +125,21 @@ export function useTargets(
 
     const panelOf = (repo: string): PanelSummary | undefined => query.data.value?.find((entry) => entry.repo === repo);
 
-    // What the repo is actually serving, in the daemon's order (by port). Empty is the honest answer for a repo
-    // that is stopped, still installing, or has no panel at all.
-    const serversOf = (repo: string): readonly { url: string; dir?: string }[] => panelOf(repo)?.servers ?? [];
+    /* What the repo is actually serving, in the daemon's order (by port). Empty is the honest answer for a repo
+     * that is stopped, still installing, or has no panel at all.
+     *
+     * Each carries the terminal it runs in, which is the only thing that makes an occupied port actionable —
+     * and which is ABSENT for a server answering from outside this sandbox's terminals. Both cases look
+     * identical from the address alone, and telling them apart is the difference between a button that opens
+     * the boot log and one that opens nothing. */
+    const serversOf = (repo: string): readonly { url: string; dir?: string; session?: string }[] => panelOf(repo)?.servers ?? [];
+
+    // The repo's ONE server, when it has exactly one — the case where the repo itself has an answer to give
+    // rather than each group stating its own.
+    const soleServer = (repo: string): { url: string; dir?: string; session?: string } | undefined => {
+        const found = serversOf(repo);
+        return found.length === 1 ? found[0] : undefined;
+    };
 
     /* Answering beats spawned, in both directions. A repo with something serving is `ready` even when the daemon
      * did not start it — a dev server run by hand in a terminal is exactly as walkable, and offering Start for it
@@ -146,10 +158,7 @@ export function useTargets(
 
     // THE REPO's address — the one every group under it inherits without being asked. Defined only when the repo
     // serves exactly one thing; with several there is no repo-level answer to give, and each group states its own.
-    const localUrl = (repo: string): string | undefined => {
-        const found = serversOf(repo);
-        return found.length === 1 ? found[0]?.url : undefined;
-    };
+    const localUrl = (repo: string): string | undefined => soleServer(repo)?.url;
 
     const addressOf = (repo: string, group: string): string | undefined => {
         const target = targetKeyOf({ repo, group });
@@ -166,6 +175,14 @@ export function useTargets(
         serversOf,
         localUrl,
         addressOf,
+        /* THE TERMINAL BEHIND THE REPO'S ONE ADDRESS, or undefined when there is nothing to open.
+         *
+         * The chip used to send everyone to `panel-<repo>` — the session a Start WOULD have created — whoever
+         * had actually started the server. A repo serving from a terminal the user opened themselves, or from
+         * outside the sandbox entirely, is `ready` all the same (answering beats spawned, above), so the button
+         * was offered against a session that had never existed and the terminals panel opened onto nothing.
+         * The daemon now says which session each address is served from; undefined means say so, not guess. */
+        terminalOf: (repo: string): string | undefined => soleServer(repo)?.session,
         // What a group's chip shows: nothing when it points at the repo's own dev server, because the heading
         // above it already says where that is and at what state.
         isElsewhere: (repo: string, group: string): boolean => {
@@ -197,9 +214,6 @@ export function useTargets(
         refresh: async (): Promise<void> => {
             await queryClient.invalidateQueries({ queryKey: key });
         },
-        // The dev server's own terminal, in the shell's global panel. What a start actually does — install,
-        // compile, bind, or fail — is only visible here, so nothing about it is hidden behind a status word.
-        showLog: (repo: string): void => api.terminal.open(panelSessionOf(repo)),
         startPanel: async (repo: string): Promise<void> => {
             /* Open the panel BY NAME before the POST, then again after. The session does not exist until the
              * POST lands, and a panel opened with no name on an empty strip fills the gap with its own `web-*`

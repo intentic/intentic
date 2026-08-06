@@ -1,5 +1,5 @@
 import { expect, test } from "vitest";
-import { reapableSessions } from "./terminal-session.js";
+import { panePidSessions, reapableSessions } from "./terminal-session.js";
 
 /* The retention sweep's policy. What it must never do is take something someone is using or something still
  * working — everything else it takes costs nothing, because the pane's bytes are already in the terminal logs.
@@ -52,4 +52,17 @@ test("an unreadable activity stamp reads as just-now, so the sweep leaves it alo
 test("no tmux server (empty output) and blank lines yield nothing", () => {
     expect(reap("")).toEqual([]);
     expect(reap("\n\n")).toEqual([]);
+});
+
+/* The pane→session map the port scan walks a listener's ancestry against. A pane whose pid doesn't parse is
+ * skipped rather than defaulted: a wrong name here sends someone to another terminal entirely. */
+test("panePidSessions maps each pane's root pid to its session, skipping lines with no usable pid", () => {
+    expect(panePidSessions("web-3f2a 397\npanel-docker 247\n")).toEqual(
+        new Map([
+            [397, "web-3f2a"],
+            [247, "panel-docker"],
+        ]),
+    );
+    expect(panePidSessions("")).toEqual(new Map());
+    expect(panePidSessions("web-broken \nweb-negative -1\nweb-nan abc\n 500\n")).toEqual(new Map());
 });

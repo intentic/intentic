@@ -16,6 +16,14 @@ const repo = computed(() => props.repo);
 const { panels, error: listError, isLoading, start, stop } = usePanels();
 const openTerminal = (session: string): void => host().terminal.open(session);
 const panel = computed(() => panels.value.find((entry) => entry.repo === repo.value));
+/* THE TERMINAL THERE IS, not the one a Start would have made. `panel-<repo>` is right whenever the daemon runs
+ * this panel — including after a failed start, where that pane holds the error and is the only place it exists.
+ * A repo answering from a dev server SOMEBODY ELSE started has no such session, so the address's own session is
+ * the answer; when neither exists there is nothing to open, and offering it anyway is how a button comes to lead
+ * to an empty panel. Start is right there for that case. */
+const terminal = computed(() =>
+    panel.value?.running === true ? `panel-${repo.value}` : panel.value?.servers.find((server) => server.session !== undefined)?.session,
+);
 
 const busy = ref(false);
 const actionError = ref<string | undefined>(undefined);
@@ -156,7 +164,7 @@ watch(
                 <!-- Share the live app: its previewUrl is public the moment it's running, so this is the one-click
                      "send someone your running app" gesture — a demo + an invite in one link. -->
                 <SharePreview v-if="panel.previewUrl && panel.running" :url="panel.previewUrl" />
-                <Button label="Terminal" size="small" severity="secondary" @click="openTerminal(`panel-${repo}`)">
+                <Button v-if="terminal" label="Terminal" size="small" severity="secondary" @click="openTerminal(terminal)">
                     <template #icon><Icon name="align-left" /></template>
                 </Button>
                 <Button v-if="!panel.running" label="Start" size="small" :disabled="busy" @click="act(start)">
