@@ -14,7 +14,9 @@
 #   3. THE DEEP LINK. `intentic://` is the whole channel from the SPA into the app. The chain has four links —
 #      the .desktop MIME entry, the OS handler lookup, the second instance's argv, and the single-instance
 #      plugin's forward — and every one of them is invisible to a unit test. Firing a real `xdg-open` at a real
-#      installed app and watching the setup screen appear exercises all four.
+#      installed app and watching it ask, then answering, then watching the setup screen appear exercises all
+#      four. It asks because everything xdg-open delivers is an EXTERNAL link, and windows.rs does not run one
+#      of those unasked — so the confirmation is part of the chain here, not an obstacle to it.
 #      Twice, because a link finds the app in one of TWO states and they share almost no mechanism. Running: the
 #      OS starts a second copy, whose argv the single-instance plugin forwards over DBus to the first. NOT
 #      running: the OS starts the app WITH the link in argv, and the app has to notice it at startup. The second
@@ -29,7 +31,8 @@
 # The app shows ONE window and swaps two screens through it (windows.rs), so the title is what says which
 # screen is up — and it is load-bearing here for a reason a count could not carry. The failure this tier exists
 # to catch is a link that is WON and then dropped: the OS starts the app, the app sees no url, and it opens on
-# the workspace. A window would appear either way. Only its title says whether the link arrived.
+# the workspace. A window would appear either way. Only its title says whether the link arrived — and the
+# confirmation's title says it first, being a window that has no other reason to exist.
 set -euo pipefail
 
 KIND="${1:?usage: smoke.sh deb|appimage}"
@@ -95,11 +98,32 @@ window_titled() { xdotool search --name "$1"; }
 mapped_windows() { xdotool search --onlyvisible --name "^Intentic"; }
 
 # The link every tier fires. A setup link, because it is the one a first-time user meets and the only one whose
-# arrival is VISIBLE without a test hook: it parks a pending setup and raises the setup screen.
+# arrival is VISIBLE without a test hook: it asks whether to run, then parks a pending setup and raises the
+# setup screen.
 LINK="intentic://setup?code=smoke-test-code&name=Smoke"
 # What that screen calls itself. Matched on the distinctive half rather than the whole title, so the assertion
 # survives the copy being reworded around it.
 SETUP_TITLE="Setting up"
+
+# TWO WINDOWS NOW, AND THE FIRST ONE IS THE BETTER PROOF.
+# Every link this script fires goes through xdg-open, which is the OS handler path — so all of them are
+# EXTERNAL by construction, and windows.rs asks before running any of them (a setup link is one anybody can
+# send, on nothing more than a browser's "Open Intentic?"). That confirmation is now what says a link arrived,
+# and it says it better than the setup screen ever did: it is a window that exists for no other reason, where
+# the old assertion had to lean on a title to tell "the link arrived" apart from "the link was dropped and the
+# app opened on the workspace".
+CONFIRM_TITLE="Set up a sandbox on this computer"
+
+# Say yes to it. GTK focuses the first button in the action area and rfd adds the affirmative one first, so
+# Return is "Set up" — which this never assumes: the setup-screen assertion after it is what proves it landed.
+answer_confirm() {
+    local id
+    id=$(window_titled "$CONFIRM_TITLE" | head -1)
+    [ -n "$id" ] || return 1
+    # Activated, then a real XTEST keypress — GTK ignores the synthetic event `xdotool key --window` sends.
+    xdotool windowactivate --sync "$id" 2>/dev/null || true
+    xdotool key --clearmodifiers Return
+}
 
 # A deep link fired at a machine where the app is NOT running — a different mechanism from the one a running
 # instance gets, and the one a first-time user meets. The OS has to start the app AND hand it the url in argv;
@@ -107,10 +131,13 @@ SETUP_TITLE="Setting up"
 # existed. Neither half is exercised by firing a link at an app that is already up.
 cold_link() {
     xdg-open "$LINK" >/tmp/xdg-open-cold.log 2>&1 || true
-    until_true 60 "$1" window_titled "$SETUP_TITLE" || {
+    until_true 60 "the setup link reached the app, which asked before running it" window_titled "$CONFIRM_TITLE" || {
         echo "--- xdg-open output ---" >&2
         cat /tmp/xdg-open-cold.log >&2 || true
+        return 1
     }
+    answer_confirm
+    until_true 30 "$1" window_titled "$SETUP_TITLE"
 }
 
 # Leave no window behind — and ASSERT it, because this is the precondition the cold tiers rest on. Every
@@ -292,12 +319,18 @@ fi
 # the MIME entry and the handler lookup along with the app's own forwarding.
 xdg-open "$LINK" >/tmp/xdg-open.log 2>&1 || true
 
-until_true 45 "the setup link opened the setup screen" window_titled "$SETUP_TITLE" || {
+if until_true 45 "the setup link reached the running app, which asked before running it" window_titled "$CONFIRM_TITLE"; then
+    answer_confirm
+    until_true 30 "the setup link opened the setup screen" window_titled "$SETUP_TITLE" || {
+        echo "--- app output ---" >&2
+        cat "$LOG" >&2 || true
+    }
+else
     echo "--- xdg-open output ---" >&2
     cat /tmp/xdg-open.log >&2 || true
     echo "--- app output ---" >&2
     cat "$LOG" >&2 || true
-}
+fi
 
 # ...IN the workspace's frame, not beside it. This is the whole window model as one assertion, and the reason
 # it is worth an assertion is that the failure it guards is invisible to every other one here: a setup screen

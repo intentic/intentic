@@ -1,7 +1,7 @@
 use tauri::{AppHandle, Manager, WebviewUrl, WebviewWindow, WebviewWindowBuilder, WindowEvent};
-use tauri_plugin_dialog::{DialogExt, MessageDialogKind};
+use tauri_plugin_dialog::{DialogExt, MessageDialogButtons, MessageDialogKind};
 
-use crate::setup_link::{parse_link, Link};
+use crate::setup_link::{parse_link, Link, SetupArgs, Source};
 
 /* ONE WINDOW ON SCREEN, EVER — these two labels are two FACES of it, not two windows.
  *
@@ -100,7 +100,8 @@ pub fn show_workspace_at(app: &AppHandle, path: Option<&str>) {
                 let app = link_handler.clone();
                 let link = url.to_string();
                 tauri::async_runtime::spawn(async move {
-                    crate::handle_intentic_link(&app, &link);
+                    // The one direction that is this app's own window navigating — the SPA's button.
+                    crate::handle_intentic_link(&app, &link, Source::App);
                 });
                 return false;
             }
@@ -190,16 +191,16 @@ pub fn show_launcher(app: &AppHandle) {
 /// argv, and the OS handler. A setup parks its request for the launcher face to pick up and run — which it
 /// does in the frame the workspace was just occupying; an auth handoff goes straight back into the workspace
 /// face, which is the only place it means anything.
-pub fn handle_link(app: &AppHandle, link: &str) {
-    match parse_link(link) {
-        Some(Link::Setup(args)) => {
-            *app.state::<crate::state::AppState>()
-                .pending
-                .lock()
-                .unwrap() = Some(*args);
-            show_launcher(app);
-            let _ = tauri::Emitter::emit(app, "desktop://pending-setup", ());
-        }
+///
+/// `source` separates the first direction from the other two: only the webview's own navigation is a link
+/// this app watched its own window ask for. See [`Source`] for what an external one loses, and
+/// [`confirm_setup`] for what it has to answer first.
+pub fn handle_link(app: &AppHandle, link: &str, source: Source) {
+    match parse_link(link, source) {
+        Some(Link::Setup(args)) => match source {
+            Source::App => park_setup(app, *args),
+            Source::External => confirm_setup(app, *args),
+        },
         Some(Link::Recreate(args)) => {
             *app.state::<crate::state::AppState>()
                 .pending_recreate
@@ -216,4 +217,57 @@ pub fn handle_link(app: &AppHandle, link: &str) {
         Some(Link::Auth(args)) => crate::auth::complete(app, &args),
         None => {}
     }
+}
+
+/// Hand a setup to the launcher face, which runs it on arrival (App.vue says why).
+fn park_setup(app: &AppHandle, args: SetupArgs) {
+    *app.state::<crate::state::AppState>()
+        .pending
+        .lock()
+        .unwrap() = Some(args);
+    show_launcher(app);
+    let _ = tauri::Emitter::emit(app, "desktop://pending-setup", ());
+}
+
+/* A SETUP THIS APP NEVER SAW ITS OWN WINDOW ASK FOR — so ask, before anything runs.
+ *
+ * A parked setup runs immediately, and the consent for that is the SPA's own "Set up on this computer"
+ * button, which states what it does in the sentence directly above it. That argument holds for exactly one of
+ * the three directions a link arrives from. An `intentic://setup` from the OS is a link ANY page can navigate
+ * to, and all the user was shown before it got here is the browser's "Open Intentic?" — a question about
+ * opening an app, answered by someone who is about to get a container, a tunnel putting it on the internet,
+ * and (with `syncDir`) a folder of theirs mirrored into it.
+ *
+ * So this says those things out loud and defaults to no. It is the same shape as the `state` nonce on an auth
+ * handoff (auth.rs): a request this process cannot tie to something it started is not one it acts on.
+ *
+ * Non-blocking, like the tray notice and for the same reason: links reach here from the deep-link callback
+ * and from a second instance's argv, either of which can be the main thread — and waiting there for an answer
+ * waits on the thread that has to draw it. */
+fn confirm_setup(app: &AppHandle, args: SetupArgs) {
+    let sync = match args.sync_dir.as_deref() {
+        Some(dir) => {
+            format!("\n\nIt will also keep {dir} on this computer in sync with that sandbox.")
+        }
+        None => String::new(),
+    };
+    let handle = app.clone();
+    app.dialog()
+        .message(format!(
+            "Something asked Intentic to set up a sandbox on this computer.\n\n\
+             That starts a container here and publishes it on the internet, where it is reachable by whoever \
+             the setup link came from.{sync}\n\n\
+             If you did not just choose \"Set up on this computer\" in Intentic, cancel this.",
+        ))
+        .title("Set up a sandbox on this computer?")
+        .kind(MessageDialogKind::Warning)
+        .buttons(MessageDialogButtons::OkCancelCustom(
+            "Set up".into(),
+            "Cancel".into(),
+        ))
+        .show(move |confirmed| {
+            if confirmed {
+                park_setup(&handle, args);
+            }
+        });
 }

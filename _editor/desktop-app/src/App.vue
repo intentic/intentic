@@ -146,7 +146,11 @@ const runSetup = async (): Promise<void> => {
 /* A parked setup RUNS on arrival rather than waiting to be asked. The SPA's "Set up on this computer" button
  * is the consent — it says what this does, in the sentence directly above it — and repeating the question on
  * a screen the user did not open is what made the handoff read as a second, unrelated installer. The guard in
- * `runSetup` is what keeps the two ways in here (the event, and the read below on mount) to one run. */
+ * `runSetup` is what keeps the two ways in here (the event, and the read below on mount) to one run.
+ *
+ * That consent only covers a link the SPA's own window navigated to. One arriving from the OS — which any page
+ * can send, on nothing more than a browser's "Open Intentic?" — is asked about in windows.rs BEFORE it is
+ * parked, so anything that reaches this screen has been agreed to one way or the other. */
 const loadPending = async (): Promise<void> => {
     pending.value = (await pendingSetup()) ?? undefined;
     await runSetup();

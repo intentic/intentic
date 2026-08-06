@@ -357,6 +357,7 @@ name = "ic"
 version = "0.0.0"
 dependencies = [
  "clap",
+ "http",
  "serde",
  "serde_json",
  "sha2",

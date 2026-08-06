@@ -34,9 +34,9 @@ installed for that tier — never in the image, which has to stay bare for the d
 | on disk | the executable, the `.desktop` entry, and the bundled `scripts/` the app spawns |
 | registration | `xdg-mime query default x-scheme-handler/intentic` resolves — the AppImage's is checked *after* launch, since it has no installer and registers itself at runtime |
 | launch | the process survives startup and maps its workspace window |
-| deep link, app running | a real `xdg-open intentic://setup?code=…` reaches the instance that was already running and puts its setup screen up |
+| deep link, app running | a real `xdg-open intentic://setup?code=…` reaches the instance that was already running, which **asks first** — everything xdg-open delivers is an external link, and the app does not run one of those unasked. Answering it puts the setup screen up |
 | one window | …**in the workspace's place**, not beside it: exactly one mapped window before the link and after it. The app has two screens and one frame (`_editor/desktop-app/src-tauri/src/windows.rs`), and a setup that opened as a second window would satisfy every other row here |
-| deep link, app not running | the same link **starts** the app straight onto that screen — fired at the deb *before its first launch*, so the package's own entry is the handler, and at the AppImage *after it has been run and quit*, since nothing installs an AppImage's entry and it registers itself at runtime |
+| deep link, app not running | the same link **starts** the app, which asks the same question and then lands on that screen — fired at the deb *before its first launch*, so the package's own entry is the handler, and at the AppImage *after it has been run and quit*, since nothing installs an AppImage's entry and it registers itself at runtime |
 
 The two deep-link rows share the link and nothing else. A running app is reached by starting a second copy whose
 argv the single-instance plugin forwards over DBus; a stopped one is reached by the OS starting it *with* the

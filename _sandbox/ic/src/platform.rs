@@ -19,11 +19,26 @@ pub struct Claim {
     pub owner_email: Option<String>,
 }
 
+/* Is this address a platform on THIS machine? The one question that turns TLS verification off, so it is
+ * asked of the parsed HOST and nothing else.
+ *
+ * It used to be a substring search for "//localhost" anywhere in the string, which any address can be dressed
+ * up to satisfy — `https://not-your-platform.example//localhost` is a perfectly ordinary URL whose host is
+ * not local at all, and it silently bought a claim that accepts any certificate. `http::Uri` is already in
+ * this binary's dependency graph (ureq parses with it), so the honest answer costs nothing to ship. */
+fn is_local(platform_url: &str) -> bool {
+    let host = platform_url
+        .parse::<http::Uri>()
+        .ok()
+        .and_then(|uri| uri.host().map(str::to_ascii_lowercase));
+    matches!(host.as_deref(), Some("localhost" | "127.0.0.1"))
+}
+
 /// POST `<platform>/setup/claim` with the code. LOCAL DEV ONLY: a localhost platform runs on a repo-CA cert
 /// the system doesn't trust, so localhost claims skip TLS verification — never for real domains.
 pub fn claim(platform_url: &str, code: &str) -> Result<Claim> {
     println!("intentic: redeeming the setup code…");
-    let localhost = platform_url.contains("//localhost") || platform_url.contains("//127.0.0.1");
+    let localhost = is_local(platform_url);
     let agent = ureq::Agent::config_builder()
         .timeout_global(Some(Duration::from_secs(30)))
         .tls_config(
@@ -63,4 +78,29 @@ pub fn claim(platform_url: &str, code: &str) -> Result<Claim> {
         sync_pair_token: lookup("SYNC_PAIR_TOKEN"),
         owner_email: lookup("OWNER_EMAIL"),
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn only_a_real_local_host_skips_verification() {
+        assert!(is_local("http://localhost:6480"));
+        assert!(is_local("https://127.0.0.1:6480/api"));
+        assert!(is_local("http://LOCALHOST:6480"));
+        assert!(!is_local("https://api.intentic.dev"));
+    }
+
+    /* THE DRESSED-UP ADDRESS THE OLD SUBSTRING CHECK ACCEPTED.
+     *
+     * Every one of these contains "//localhost" or "//127.0.0.1" somewhere, and not one of them is served by
+     * this machine — so each used to redeem a setup code over a connection that accepts any certificate. */
+    #[test]
+    fn a_remote_host_cannot_dress_itself_up_as_local() {
+        assert!(!is_local("https://evil.example//localhost"));
+        assert!(!is_local("https://evil.example/x//127.0.0.1"));
+        assert!(!is_local("https://evil.example/?next=//localhost"));
+        assert!(!is_local("https://localhost.evil.example"));
+    }
 }

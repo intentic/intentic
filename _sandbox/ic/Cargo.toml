@@ -6,6 +6,9 @@ publish = false
 
 [dependencies]
 clap = { version = "4", features = ["derive", "env"] }
+# ureq already parses with this, so naming it here costs no bytes — and the alternative for the one host
+# comparison in platform.rs is the `url` crate, whose idna tables a binary downloaded on every run would feel.
+http = "1"
 ureq = { version = "3", features = ["json"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"

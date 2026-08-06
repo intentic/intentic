@@ -53,10 +53,12 @@ So `windows.rs` keeps exactly one of them on screen: whichever screen is being s
 position and size, then the other hides. The title follows the content (`App.vue` sets it), the frame does
 not, and clicking a handoff reads as the window changing screens. Two consequences worth knowing:
 
-- **A cold start with a link opens no workspace first.** `intentic://setup` in argv means the setup screen is
-  what appears — otherwise the app would load the SPA only to cover it a frame later.
-- **A parked setup runs on arrival.** The SPA's button is the consent; asking again on a screen the user did
-  not open is what made the handoff feel like a second, unrelated installer.
+- **A cold start with the SPA's own link opens no workspace first.** `intentic://setup` in argv means the setup
+  screen is what appears — otherwise the app would load the SPA only to cover it a frame later.
+- **A parked setup runs on arrival — when the SPA's own window asked for it.** That button is the consent;
+  asking again on a screen the user did not open is what made the handoff feel like a second, unrelated
+  installer. It is also the *only* direction that consent covers, which is what [the link's
+  source](#a-link-from-outside-is-not-a-link-from-us) is about.
 - **Closing the workspace face hides it; the app lives in the tray.** The window is hidden rather than
   destroyed, so reopening is instant and the webview keeps the session it signed in with. Closing the launcher
   face is a step back to the workspace. **Quit** in the tray menu is the only thing that ends the process.
@@ -135,7 +137,26 @@ Four actions, and it is the whole channel between the SPA and the app
 | `intentic://signin` | the login screen | sign in, in the user's real browser |
 | `intentic://auth?handoff=…&state=…` | the browser, after sign-in | the credential coming back |
 
-Each one works identically from an external browser, where the OS routes it to the installed app.
+Each one works from an external browser too, where the OS routes it to the installed app — with the one
+difference the next section is about.
+
+### A link from outside is not a link from us
+
+`intentic://` is a public scheme. Any page can navigate to one, and what the user is shown before the OS hands
+it over is *"Open Intentic?"* — a question about opening an app, not about what the link then does. So
+`setup_link.rs` records which of the three directions a link arrived from, and the app believes an external one
+less:
+
+- **`platform` and `cfToken` are dropped** from an external setup link. `platform` names the server the setup
+  code is redeemed against, and that server's answer decides the new sandbox's connect token, the tunnel that
+  publishes it, and **which account owns it** — so a stranger's copy stands up a sandbox on this machine that
+  answers to them. Nothing real is lost: the SPA sets `platform` only against a localhost platform in local
+  dev, and `cfToken` was already documented as riding the in-app webview only (that was enforced on the
+  sending side alone, which is no enforcement against a sender who is not us).
+- **An external setup asks first**, in the OS's own dialog, naming the container, the fact that it is published
+  on the internet, and the folder `syncDir` would mirror into it. Cancel is the default. It is the same shape
+  as the `state` nonce on an auth handoff: a request this process cannot tie to something it started is not one
+  it acts on.
 
 **How a link gets in** depends on whether the app is already running, and the two paths share nothing but the
 url. If it is, the OS starts a second copy and `tauri-plugin-single-instance` forwards that copy's argv to the

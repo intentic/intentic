@@ -10,9 +10,10 @@ use tauri::tray::TrayIconBuilder;
 use tauri::{AppHandle, Emitter, Manager};
 
 /// Every `intentic://` link — intercepted webview navigation, OS deep link, or second-instance argv — funnels
-/// through here.
-pub fn handle_intentic_link(app: &AppHandle, link: &str) {
-    windows::handle_link(app, link);
+/// through here, carrying which of those it was: only the first is a link this app watched its own window ask
+/// for, and `setup_link::Source` is what that distinction buys.
+pub(crate) fn handle_intentic_link(app: &AppHandle, link: &str, source: setup_link::Source) {
+    windows::handle_link(app, link, source);
 }
 
 /// Open the platform's sign-in page in the default browser (see auth.rs).
@@ -33,7 +34,7 @@ pub fn run() {
             .plugin(tauri_plugin_single_instance::init(|app, argv, _cwd| {
                 for arg in &argv {
                     if arg.starts_with("intentic://") {
-                        handle_intentic_link(app, arg);
+                        handle_intentic_link(app, arg, setup_link::Source::External);
                         return;
                     }
                 }
@@ -73,7 +74,7 @@ pub fn run() {
                 let handle = app.handle().clone();
                 app.deep_link().on_open_url(move |event| {
                     for url in event.urls() {
-                        handle_intentic_link(&handle, url.as_str());
+                        handle_intentic_link(&handle, url.as_str(), setup_link::Source::External);
                     }
                 });
                 // A COLD start: the OS starts the app with the link in argv (that is the whole Linux/Windows
@@ -84,7 +85,11 @@ pub fn run() {
                 // url itself, so ask for it.
                 if let Ok(Some(urls)) = app.deep_link().get_current() {
                     for url in urls {
-                        handle_intentic_link(app.handle(), url.as_str());
+                        handle_intentic_link(
+                            app.handle(),
+                            url.as_str(),
+                            setup_link::Source::External,
+                        );
                     }
                 }
                 spawn_update_check(app.handle().clone());

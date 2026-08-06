@@ -10,6 +10,30 @@ use serde::{Deserialize, Serialize};
  * Four actions, and the parse is deliberately total — anything unrecognised, or missing a value it cannot do
  * without, returns None rather than half a request. */
 
+/* WHO SENT THIS LINK — the whole of what this app can know about whether to believe it.
+ *
+ * `App` is a navigation the workspace window made itself: the SPA's own "Set up on this computer" button,
+ * which says what it does in the sentence above it. `External` is everything else — the OS protocol handler
+ * and a second instance's argv — where the link is one ANYBODY can put on a page, in an email or in a chat
+ * message, and all the OS showed the user before handing it over was "Open Intentic?".
+ *
+ * Two of a setup link's values are dropped when it arrives `External`, because both are chosen by the sender
+ * and neither is anything the user is shown:
+ *   • `platform` names the server the setup code is redeemed against, and that server's answer decides the
+ *     new sandbox's own token, the tunnel that puts it on the internet, and WHICH ACCOUNT OWNS IT. Honouring
+ *     a stranger's copy stands up a sandbox on this computer that answers to them. Nothing real loses
+ *     anything: the SPA only ever sets it when the platform is served from localhost, in local dev.
+ *   • `cfToken` is dropped back to where this file's own doc comment already put it — riding the link only
+ *     from the in-app webview, where the navigation is cancelled in-process and never reaches the OS. That
+ *     was enforced on the SENDING side alone, which is no enforcement at all against a sender who isn't us.
+ *
+ * What survives (`code`, `name`, `syncDir`) is what the confirmation in windows.rs puts to the user instead. */
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Source {
+    App,
+    External,
+}
+
 /// `intentic://setup?code=…` — run the sandbox this setup code was minted for on this computer.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -18,9 +42,11 @@ pub struct SetupArgs {
     pub name: Option<String>,
     /// Own-Cloudflare only. It rides the link ONLY from the in-app webview, where the navigation is cancelled
     /// in-process and never reaches the OS — an external browser's deep link may be logged by the protocol
-    /// handler, so from there the launcher asks for the token itself.
+    /// handler, so from there the launcher asks for the token itself. [`Source`] is what enforces that.
     pub cf_token: Option<String>,
     pub sync_dir: Option<String>,
+    /// The API origin the setup code is redeemed against. Local dev only, and [`Source::App`] only — see
+    /// [`Source`] for what a stranger's copy of this value would buy them.
     pub platform_url: Option<String>,
 }
 
@@ -54,7 +80,7 @@ pub enum Link {
     Auth(AuthArgs),
 }
 
-pub fn parse_link(url: &str) -> Option<Link> {
+pub fn parse_link(url: &str, source: Source) -> Option<Link> {
     let parsed = url::Url::parse(url).ok()?;
     if parsed.scheme() != "intentic" {
         return None;
@@ -73,13 +99,16 @@ pub fn parse_link(url: &str) -> Option<Link> {
             .map(|(_, value)| value.clone())
     };
     match parsed.host_str()? {
-        "setup" => Some(Link::Setup(Box::new(SetupArgs {
-            code: get("code")?,
-            name: get("name"),
-            cf_token: get("cfToken"),
-            sync_dir: get("syncDir"),
-            platform_url: get("platform"),
-        }))),
+        "setup" => {
+            let from_app = source == Source::App;
+            Some(Link::Setup(Box::new(SetupArgs {
+                code: get("code")?,
+                name: get("name"),
+                cf_token: get("cfToken").filter(|_| from_app),
+                sync_dir: get("syncDir"),
+                platform_url: get("platform").filter(|_| from_app),
+            })))
+        }
         "signin" => Some(Link::SignIn),
         "recreate" => Some(Link::Recreate(RecreateArgs {
             slug: get("slug")?,
@@ -98,7 +127,7 @@ mod tests {
     use super::*;
 
     fn setup_of(url: &str) -> Option<SetupArgs> {
-        match parse_link(url)? {
+        match parse_link(url, Source::App)? {
             Link::Setup(args) => Some(*args),
             _ => None,
         }
@@ -122,20 +151,26 @@ mod tests {
 
     #[test]
     fn parses_a_signin_request() {
-        assert_eq!(parse_link("intentic://signin"), Some(Link::SignIn));
+        assert_eq!(
+            parse_link("intentic://signin", Source::App),
+            Some(Link::SignIn)
+        );
     }
 
     #[test]
     fn parses_both_recreate_modes() {
         assert_eq!(
-            parse_link("intentic://recreate?slug=sandbox-abc"),
+            parse_link("intentic://recreate?slug=sandbox-abc", Source::App),
             Some(Link::Recreate(RecreateArgs {
                 slug: "sandbox-abc".into(),
                 hash: None
             }))
         );
         assert_eq!(
-            parse_link("intentic://recreate?slug=sandbox-abc&hash=deadbeef"),
+            parse_link(
+                "intentic://recreate?slug=sandbox-abc&hash=deadbeef",
+                Source::App
+            ),
             Some(Link::Recreate(RecreateArgs {
                 slug: "sandbox-abc".into(),
                 hash: Some("deadbeef".into())
@@ -145,7 +180,9 @@ mod tests {
 
     #[test]
     fn parses_an_auth_handoff() {
-        let Some(Link::Auth(args)) = parse_link("intentic://auth?handoff=tok&state=nonce") else {
+        let Some(Link::Auth(args)) =
+            parse_link("intentic://auth?handoff=tok&state=nonce", Source::App)
+        else {
             panic!("expected an auth link");
         };
         assert_eq!(args.handoff, "tok");
@@ -154,10 +191,42 @@ mod tests {
 
     #[test]
     fn rejects_foreign_or_incomplete_links() {
-        assert_eq!(parse_link("https://app.intentic.dev/setup?code=x"), None);
-        assert_eq!(parse_link("intentic://other?code=x"), None);
-        assert_eq!(parse_link("intentic://setup?name=nameless"), None);
+        assert_eq!(
+            parse_link("https://app.intentic.dev/setup?code=x", Source::App),
+            None
+        );
+        assert_eq!(parse_link("intentic://other?code=x", Source::App), None);
+        assert_eq!(
+            parse_link("intentic://setup?name=nameless", Source::App),
+            None
+        );
         // A handoff with no state cannot be matched to the request that started it, so it is not a handoff.
-        assert_eq!(parse_link("intentic://auth?handoff=tok"), None);
+        assert_eq!(parse_link("intentic://auth?handoff=tok", Source::App), None);
+    }
+
+    /* THE ONE-CLICK TAKEOVER THIS DROP EXISTS TO STOP.
+     *
+     * Any page can navigate to `intentic://setup?…`, and the OS hands it to this app on a prompt that says
+     * only "Open Intentic?". Were `platform` honoured from there, the setup code would be redeemed against
+     * the sender's own server — which answers with the connect token, the tunnel that publishes the sandbox,
+     * and the owner email. The victim's machine would then be running a sandbox the sender signs in to. */
+    #[test]
+    fn an_external_link_cannot_choose_the_platform_or_supply_a_cloudflare_token() {
+        let url = "intentic://setup?code=abc123&syncDir=%2Fhome%2Fme&cfToken=cf&platform=https%3A%2F%2Fevil.example";
+        let Some(Link::Setup(args)) = parse_link(url, Source::External) else {
+            panic!("expected a setup link");
+        };
+        assert_eq!(args.platform_url, None);
+        assert_eq!(args.cf_token, None);
+        // The rest survives — it is what the confirmation puts to the user.
+        assert_eq!(args.code, "abc123");
+        assert_eq!(args.sync_dir.as_deref(), Some("/home/me"));
+
+        // …and the same link from the app's own window keeps both, which is the local-dev path.
+        let Some(Link::Setup(args)) = parse_link(url, Source::App) else {
+            panic!("expected a setup link");
+        };
+        assert_eq!(args.platform_url.as_deref(), Some("https://evil.example"));
+        assert_eq!(args.cf_token.as_deref(), Some("cf"));
     }
 }
