@@ -3999,8 +3999,10 @@ export const PrepushRunSchema = z.object({
     session: z.string().optional(),
     /* What the fix proposal quotes, and its only reader — tail-capped (PREPUSH_OUTPUT_BYTES) so a prompt seeded
      * from a red run stays about fixing rather than scrolling. The TAIL, not the head: a suite's verdict and its
-     * failure summary are at the end. Empty while the run is going, and for a run that was killed: the pane (and
-     * its log) is where the whole of it lives. */
+     * failure summary are at the end. PLAIN TEXT, not what the terminal received: the suite's colour codes and
+     * redrawn progress lines are resolved away (terminal/plain-text.ts) before the cap, so a quoted tail reads
+     * as a failure instead of as litter. Empty while the run is going, and for a run that was killed: the pane
+     * (and its log) is where the whole of it lives. */
     output: z.string(),
 });
 export type PrepushRun = z.infer<typeof PrepushRunSchema>;

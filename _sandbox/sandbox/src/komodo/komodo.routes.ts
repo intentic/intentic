@@ -5,6 +5,7 @@ import { startConversationTurn } from "../agent/turn-resume.js";
 import type { WakeFn } from "../automations/scheduler.js";
 import type { Services } from "../composition.js";
 import type { OrpcContext } from "../context.js";
+import { plainText } from "../terminal/plain-text.js";
 import { discoverRepos } from "../workspace/repo-discovery.js";
 import { type FetchFn, komodoClient, komodoConnectionFor, type KomodoConnection } from "./komodo-client.js";
 import { deployAlerts, deploymentResource, serverEntry, stackResource } from "./komodo-overview.js";
@@ -186,7 +187,9 @@ export const createKomodoRoutes = (services: Services, wake: WakeFn = streamAgen
             const log = await komodoClient(connection, fetchFn)
                 .logs(input.kind, resource.name, LOG_TAIL)
                 .catch(() => ({ stdout: "", stderr: "" }));
-            const tail = `${log.stdout}\n${log.stderr}`.trim().slice(-FIX_LOG_BYTES);
+            // A container's log is written for a terminal (an app's colour, a progress line rewriting itself), so
+            // it is reduced to plain text before the cap — the budget then buys failure, not escape codes.
+            const tail = plainText(`${log.stdout}\n${log.stderr}`).trim().slice(-FIX_LOG_BYTES);
             const where = resource.server === undefined ? "" : ` on ${resource.server}`;
             const prompt = [
                 `The Komodo ${input.kind} "${resource.name}"${where} is ${resource.state}${resource.status === undefined ? "" : ` (${resource.status})`}. Investigate and fix it.`,

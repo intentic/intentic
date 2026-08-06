@@ -1,5 +1,6 @@
 import type { PipelineJob, PipelineRun, PipelineStatus } from "@intentic/sandbox-contract";
 import { githubHeaders } from "../capabilities/cli/git-access.js";
+import { plainText } from "../terminal/plain-text.js";
 import type { CiProject } from "./projects.js";
 import { resolveNeeds } from "./workflowGraph.js";
 
@@ -25,7 +26,9 @@ export interface CiClient {
     readonly failedJobs: (project: CiProject, runId: number) => Promise<string[]>;
     // All jobs in a run with their individual statuses — the expanded-row enrichment for the view.
     readonly allJobs: (project: CiProject, runId: number) => Promise<PipelineJob[]>;
-    // The failed jobs' log tails, concatenated and capped — the fix conversation's context.
+    // The failed jobs' log tails, concatenated and capped — the fix conversation's context. A runner prints for
+    // a terminal, so each log is reduced to plain text (plain-text.ts) before it is capped: the cap then buys
+    // failure rather than colour codes, and the prompt is readable to the human editing it.
     readonly failedJobLogs: (project: CiProject, runId: number, maxBytes: number) => Promise<string>;
     readonly rerun: (project: CiProject, runId: number) => Promise<void>;
     readonly cancel: (project: CiProject, runId: number) => Promise<void>;
@@ -237,7 +240,7 @@ const githubClient = (fetchFn: FetchFn): CiClient => {
                 // The logs endpoint 302-redirects to a short-lived blob url; fetch follows it. A job whose log
                 // is already expired shouldn't sink the whole context — skip it and say so.
                 const response = await fetchFn(githubApi(project, `/actions/jobs/${job.id}/logs`), { headers: githubHeaders(project.account.token) });
-                const text = response.ok ? await response.text() : `(log unavailable: ${response.status})`;
+                const text = response.ok ? plainText(await response.text()) : `(log unavailable: ${response.status})`;
                 const tail = text.slice(-budget);
                 budget -= tail.length;
                 parts.push(`--- job: ${job.name} (log tail) ---\n${tail}`);
@@ -541,7 +544,7 @@ const gitlabClient = (fetchFn: FetchFn): CiClient => {
                     break;
                 }
                 const response = await fetchFn(gitlabApi(project, `/jobs/${job.id}/trace`), { headers: gitlabHeaders(project) });
-                const text = response.ok ? await response.text() : `(log unavailable: ${response.status})`;
+                const text = response.ok ? plainText(await response.text()) : `(log unavailable: ${response.status})`;
                 const tail = text.slice(-budget);
                 budget -= tail.length;
                 parts.push(`--- job: ${job.name} (log tail) ---\n${tail}`);

@@ -1,6 +1,7 @@
 import type { PrepushRun } from "@intentic/sandbox-contract";
 import type { Services } from "../composition.js";
 import { prepushFailed } from "../push/notifications.js";
+import { plainText } from "../terminal/plain-text.js";
 import { PREPUSH_SESSION } from "../terminal/terminal-session.js";
 
 /* THE PRE-PUSH CHECK — the workspace's own answer to "would this push go red", asked at the push and answered
@@ -33,7 +34,8 @@ import { PREPUSH_SESSION } from "../terminal/terminal-session.js";
 
 // How much of the output is kept for the fix turn seeded from a red run. Enough to see the actual failure,
 // bounded so the prompt stays about fixing rather than scrolling — the whole run is in the pane (and its log)
-// for anyone who wants it. The TAIL, because a suite's verdict and its failure summary are at the end.
+// for anyone who wants it. The TAIL, because a suite's verdict and its failure summary are at the end. Counted
+// on the CLEANED text (plain-text.ts), so the budget buys failure and not a runner's colour codes.
 const PREPUSH_OUTPUT_BYTES = 24_000;
 
 const IDLE: PrepushRun = { status: "idle", command: "", output: "" };
@@ -107,7 +109,9 @@ export const createPrepushCheck = (services: PrepushDeps): PrepushCheck => {
                 startedAt,
                 finishedAt: Date.now(),
                 ...(session !== undefined ? { session } : {}),
-                output: fields.output.slice(-PREPUSH_OUTPUT_BYTES),
+                // The suite ran in a real terminal and printed for one; what it printed is about to be quoted
+                // into a prompt a human edits and a model reads, so it arrives as text (plain-text.ts).
+                output: plainText(fields.output).slice(-PREPUSH_OUTPUT_BYTES),
             };
             current = settled;
             logger.info(

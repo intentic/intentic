@@ -326,3 +326,34 @@ test("github allJobs still returns the jobs when the workflow file cannot be rea
         expect(jobs[0]).toMatchObject({ name: "preflight", status: "success", durationSeconds: 60 });
     }
 });
+
+/* THE FIX CONVERSATION'S EVIDENCE. A runner prints for a terminal — a coloured verdict, a progress line that
+ * rewrites itself — and this log tail is quoted into a prompt the user edits and a model reads, where those
+ * bytes are litter with the failure buried in it. Both vendors, because both traces carry them. */
+const logsFetch = (log: string): FetchFn =>
+    (async (input: RequestInfo | URL) => {
+        const url = String(input);
+        if (url.includes("/jobs?per_page=100")) {
+            return new Response(JSON.stringify({ jobs: [{ id: 11, name: "verify", conclusion: "failure" }] }), {
+                status: 200,
+                headers: { "content-type": "application/json" },
+            });
+        }
+        if (url.includes("/pipelines/7/jobs")) {
+            return new Response(JSON.stringify([{ id: 11, name: "verify", status: "failed", stage: "test" }]), {
+                status: 200,
+                headers: { "content-type": "application/json" },
+            });
+        }
+        return new Response(log, { status: 200 });
+    }) as FetchFn;
+
+test("a failed job's log tail is plain text, not the runner's own bytes", async () => {
+    const esc = String.fromCodePoint(0x1b);
+    const log = `${esc}[31mFAIL${esc}[0m src/a.test.ts\ninstalling 1/2\rinstalling 2/2\n`;
+    for (const provider of ["github", "gitlab"] as const) {
+        const project = provider === "github" ? githubProject : gitlabProject;
+        const logs = await ciClientFor(provider, logsFetch(log)).failedJobLogs(project, 7, 24_000);
+        expect(logs).toBe("--- job: verify (log tail) ---\nFAIL src/a.test.ts\ninstalling 2/2\n");
+    }
+});

@@ -144,6 +144,19 @@ test("a non-zero exit is a failed result carrying the output", async () => {
     expect(state.output).toContain("boom");
 });
 
+/* The suite printed for a terminal — a test runner colours its verdict and rewrites its progress line — and the
+ * output's one reader is a PROMPT: a message the user edits in the composer and a model reads. Escape codes
+ * quoted into that arrive as `[2m` litter with the failure buried in it, so what the run keeps is what the
+ * screen showed. */
+test("the output a failure carries is plain text, not the terminal's own bytes", async () => {
+    const { services } = fakeServices({ prepushCommand: String.raw`printf '\033[31mboom\033[0m\n1/2\r2/2 done\n'; exit 1` });
+    const check = createPrepushCheck(services);
+    await check.run();
+    await vi.waitFor(async () => expect((await check.state()).status).toBe("failed"), { timeout: 5_000 });
+    const { output } = await check.state();
+    expect(output).toBe("boom\n2/2 done\n");
+});
+
 // The cap is what keeps a fix turn seeded from a red run about fixing rather than scrolling — the whole of the
 // output is in the pane (and its log) for anyone who wants it.
 test("the output a failure carries is capped to its tail", async () => {
