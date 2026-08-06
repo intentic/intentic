@@ -180,6 +180,25 @@ describe(`useTargets`, () => {
         expect(moved.addressOf(`intentic`, `01-arrive`)).toBeUndefined();
     });
 
+    /* THE RUN THIS FIX IS NAMED AFTER. `pnpm dev` fans out and the apps come up seconds apart, so a window exists
+     * in which the intentic repo is serving exactly one thing — the web app — and the marketing group has no
+     * memory yet. Inheriting the only address up made the run legal, and a fan-out walked the landing page's
+     * stories through the app's sign-in screen; the manifest then remembered that address as if someone had
+     * chosen it. A package's dev server is one app of several however alone it is at that instant. */
+    it(`refuses to hand a group the one app that happens to be up while the rest of the repo boots`, async () => {
+        const booting = await read([panel({ repo: `intentic`, running: true, healthy: true, servers: [MONOREPO[0]!] })]);
+
+        expect(booting.stateOf(`intentic`)).toBe(`ready`);
+        expect(booting.addressOf(`intentic`, `01-arrive`)).toBeUndefined();
+        // And the row says so, because the pick that unblocks it lives there.
+        expect(booting.needsAddress(`intentic`, `01-arrive`)).toBe(true);
+
+        // The site's own server arriving is what the group was waiting for — still its own choice to state.
+        const up = await read([panel({ repo: `intentic`, running: true, healthy: true, servers: MONOREPO })]);
+        up.aimAt(`intentic`, `01-arrive`, `http://localhost:4321`);
+        expect(up.addressOf(`intentic`, `01-arrive`)).toBe(`http://localhost:4321`);
+    });
+
     it(`reports a repo the daemon runs nothing for as having no dev server at all`, async () => {
         const { stateOf, localUrl } = await read([panel({ repo: `docs`, hasPanel: false })]);
 
@@ -264,8 +283,13 @@ describe(`useTargets`, () => {
  * to spend an agent session per story. Tested against the pure function rather than through the query, because
  * every interesting case is a combination of four inputs and none of them is about HTTP. */
 describe(`aimOf`, () => {
-    const ONE = [`http://localhost:5173`];
-    const THREE = MONOREPO.map((server) => server.url);
+    // The ordinary repo: one dev server, bound at the repo root, which is why it carries no package `dir`. That
+    // absence is load-bearing — it is what makes this address the REPO's rather than one app's.
+    const ONE = [{ url: `http://localhost:5173` }];
+    const THREE = MONOREPO;
+    // The same monorepo caught mid-boot: `pnpm dev` has brought the web app up and the other two are still
+    // compiling. One address, and still no answer to "which app does this group walk".
+    const ONE_OF_THREE = [MONOREPO[0]!];
 
     it(`sends a group at its repo's dev server, which is what almost every group means`, () => {
         expect(aimOf({ typed: undefined, remembered: undefined, state: `ready`, servers: ONE })).toBe(`http://localhost:5173`);
@@ -282,6 +306,17 @@ describe(`aimOf`, () => {
         expect(aimOf({ typed: undefined, remembered: undefined, state: `ready`, servers: THREE })).toBeUndefined();
     });
 
+    /* AND REFUSES JUST AS FLATLY WHEN ONLY ONE OF THEM HAS FINISHED BOOTING, which is the failure this rule was
+     * rewritten for. `_editor/web` answering alone is not "the repo's address" — it is the first app up out of a
+     * turbo fan-out, and a marketing group that inherits it walks a sign-in screen looking for a landing page.
+     * The package `dir` is the whole difference: a server bound at the repo ROOT is the repo and every group takes
+     * it; a server a package bound is one app, and one app is never the answer to "which app". */
+    it(`refuses the one app that is up while its siblings are still compiling`, () => {
+        expect(aimOf({ typed: undefined, remembered: undefined, state: `ready`, servers: ONE_OF_THREE })).toBeUndefined();
+        // Same instant, same single address, no `dir`: an ordinary repo, and its group inherits without asking.
+        expect(aimOf({ typed: undefined, remembered: undefined, state: `ready`, servers: ONE })).toBe(`http://localhost:5173`);
+    });
+
     /* THE BUG THIS RULE EXISTS TO CLOSE. The old derivation compared the remembered address against the repo's
      * single address, which is undefined precisely when the server is down — so a remembered
      * `http://localhost:5173` "differed from" nothing, was read as a deliberate elsewhere, and let a fan-out be
@@ -295,8 +330,17 @@ describe(`aimOf`, () => {
     // keeping. Without this, a monorepo's groups would have to be re-aimed every single run.
     it(`keeps a remembered loopback address while it is still one of the repo's servers`, () => {
         expect(aimOf({ typed: undefined, remembered: `http://localhost:4321`, state: `ready`, servers: THREE })).toBe(`http://localhost:4321`);
-        // The same memory once that app is no longer among them is the dead port again.
-        expect(aimOf({ typed: undefined, remembered: `http://localhost:4321`, state: `ready`, servers: ONE })).toBe(`http://localhost:5173`);
+        // A repo whose ONE server moved port is the same app at a new number, so the memory's death costs nothing.
+        expect(aimOf({ typed: undefined, remembered: `http://localhost:5199`, state: `ready`, servers: ONE })).toBe(`http://localhost:5173`);
+    });
+
+    /* WHAT A DEAD MEMORY MUST NEVER BECOME: a different app. The marketing group was remembered at the site's own
+     * port, that port went away, and the rule handed it the only address left — the web app's — which reads as a
+     * deliberate aim ever after, because the run manifests are the memory. A group that was aimed once is not the
+     * repo's to re-aim; with nothing safe to offer, the honest answer is to ask. */
+    it(`never substitutes a sibling app for a group's remembered address`, () => {
+        expect(aimOf({ typed: undefined, remembered: `http://localhost:4321`, state: `ready`, servers: ONE_OF_THREE })).toBeUndefined();
+        expect(aimOf({ typed: undefined, remembered: `http://localhost:4321`, state: `ready`, servers: [MONOREPO[0]!, MONOREPO[1]!] })).toBeUndefined();
     });
 
     it(`keeps aiming a group at the elsewhere it was last run against, so it is typed once and not once per run`, () => {

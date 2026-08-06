@@ -29,10 +29,12 @@ import { targetKeyOf } from "./stories";
  * be pointed at it. Conflating them is what made "Start" look like it had done nothing.
  *
  * AND SERVING IS NOT ONE THING. The daemon reports every dev server it can attribute to the repo, so a repo whose
- * `pnpm dev` fans a turbo run out across packages arrives here as three addresses, not one. One server is the
- * repo's address and every group under it aims there unasked; several is not an ambiguity to resolve by picking
- * the lowest port, because the cost of guessing wrong is a fan-out of agent sessions walking marketing stories
- * through a sign-in screen. So several means each group says which, once — and the run manifests remember it. */
+ * `pnpm dev` fans a turbo run out across packages arrives here as three addresses, not one. A server at the repo
+ * ROOT is the repo's address and every group under it aims there unasked; a server a PACKAGE bound is one app of
+ * several, and which app a group's stories walk is not an ambiguity to resolve by picking the lowest port — or by
+ * picking whichever came up first, which is the same guess wearing a stopwatch. The cost of getting it wrong is a
+ * fan-out of agent sessions walking marketing stories through a sign-in screen, so each group says which, once —
+ * and the run manifests remember it. */
 
 // While a start is in flight — and only then. Once every panel has settled (healthy, or never started) there is
 // no transition left to watch, and this composable lives on a view that stays open.
@@ -68,20 +70,28 @@ const LOOPBACK = /^https?:\/\/(?:localhost|127\.0\.0\.1|\[::1\])(?::|\/|$)/i;
  * With nothing typed the group's own history is consulted before the dev server, which is what saves a marketing
  * site's group from being re-aimed every run.
  *
- * A REPO SERVING ONE THING ANSWERS FOR EVERY GROUP UNDER IT; a repo serving three answers for none of them, and
- * each group carries its own pick. That is why the whole server LIST comes in rather than a single address.
+ * WHAT A GROUP MAY INHERIT WITHOUT BEING ASKED IS THE REPO'S OWN SERVER, and that is a narrower thing than "the
+ * only address answering right now". A dev server at the repo ROOT (no `dir`) is the repo: there is no second app
+ * under it for a group to be confused with, so every group takes it, and a port it moved to is still the same app.
+ * A server a PACKAGE bound (`_editor/web`, `_site/site`) is one app among the repo's several, and the count of
+ * them answering is a snapshot of a boot, not a fact about the repo — one `pnpm dev` fans out and the apps come up
+ * seconds apart. Inheriting "the only one up so far" is how a marketing group came to be aimed at the web app:
+ * the run started in that window, the app's sign-in screen was walked as if it were the landing page, and because
+ * the run manifests ARE the memory, every later run confirmed the wrong address.
  *
  * AND A REMEMBERED LOOPBACK ADDRESS IS ONLY WORTH KEEPING WHILE IT IS STILL BEING SERVED. `http://localhost:5173`
  * remembered from a past run names a port, not a place: if it is one of the addresses this repo is serving right
- * now it is the marketing site's own port, picked once and rightly not asked about again — and if it is not, it
- * is a dead socket, and pointing a fan-out at it is the exact failure this gate exists to prevent. (The rule used
- * to compare the memory against the repo's single address, which is undefined precisely when the server is down,
- * so "differs from nothing" read as a deliberate elsewhere and the fan-out went to the dead port anyway.) */
+ * now it is the marketing site's own port, picked once and rightly not asked about again — and if it is not, it is
+ * a dead socket, and pointing a fan-out at it is the exact failure this gate exists to prevent. What a dead memory
+ * falls back to is the repo's own server and NEVER a sibling app: a group that was once aimed somewhere is a group
+ * whose address is not the repo's to guess, and substituting another app for a port that went away is a wrong
+ * answer that looks exactly like a right one. With nothing safe to fall back to the group says it needs an
+ * address, which is a question with a one-click answer on its own row. */
 export const aimOf = (input: {
     readonly typed: string | undefined;
     readonly remembered: string | undefined;
     readonly state: PanelState;
-    readonly servers: readonly string[];
+    readonly servers: readonly { readonly url: string; readonly dir?: string }[];
 }): string | undefined => {
     if (input.typed !== undefined) {
         return input.typed.trim() === `` ? undefined : input.typed.trim();
@@ -90,12 +100,16 @@ export const aimOf = (input: {
         // There is no dev server, so the only address this group has ever had is one somebody typed.
         return input.remembered;
     }
-    // The repo's own address, when it has exactly one thing to offer.
+    // The repo's own address: one server, bound at the repo root. Anything else is a particular app, and which
+    // app a group's stories belong to is the group's own fact to state.
     const only = input.servers.length === 1 ? input.servers[0] : undefined;
+    const inheritable = only !== undefined && only.dir === undefined ? only.url : undefined;
     if (input.remembered === undefined) {
-        return only;
+        return inheritable;
     }
-    return !LOOPBACK.test(input.remembered) || input.servers.includes(input.remembered) ? input.remembered : only;
+    return !LOOPBACK.test(input.remembered) || input.servers.some((server) => server.url === input.remembered)
+        ? input.remembered
+        : inheritable;
 };
 
 export function useTargets(
@@ -156,8 +170,10 @@ export function useTargets(
         return panel.running ? `starting` : `stopped`;
     };
 
-    // THE REPO's address — the one every group under it inherits without being asked. Defined only when the repo
-    // serves exactly one thing; with several there is no repo-level answer to give, and each group states its own.
+    // THE REPO's address — what the heading above the group rows already says, and therefore what a group
+    // pointing THERE has no need to repeat (see isElsewhere). Defined only when the repo serves exactly one
+    // thing; with several there is no repo-level answer to show, and each group states its own. Not the same
+    // question as what a group may inherit unasked, which is narrower — see aimOf.
     const localUrl = (repo: string): string | undefined => soleServer(repo)?.url;
 
     const addressOf = (repo: string, group: string): string | undefined => {
@@ -166,7 +182,9 @@ export function useTargets(
             typed: aimed.value[target],
             remembered: remembered.value[target],
             state: stateOf(repo),
-            servers: serversOf(repo).map((server) => server.url),
+            // Whole servers, not just their addresses: the package that bound one is what says whether it is the
+            // repo's answer or one app's.
+            servers: serversOf(repo),
         });
     };
 

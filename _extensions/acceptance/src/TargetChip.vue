@@ -38,6 +38,21 @@ const toggle = (event: Event): void => popover.value?.toggle(event);
  * run button was dead, the heading was green, and the one control that could unblock it was the invisible
  * hover affordance below. */
 const stated = (): boolean => targets.isElsewhere(repo, group) || targets.needsAddress(repo, group);
+
+/* THE REPO'S APPS, OFFERED BY NAME — whenever this group actually has a choice to make. Several answering is one
+ * such moment; the other is a group with NO address, which is now reachable with a single app serving (a monorepo
+ * mid-boot, or a memory whose port has gone — aimOf refuses to substitute a sibling app for either). That case
+ * used to fall through to the bare text field, so the remedy for "needs an address" was to read a port off a
+ * terminal and retype it. A repo already serving the answer should never ask anyone to type it. */
+const picks = (): ReturnType<typeof targets.serversOf> =>
+    targets.serversOf(repo).length > 1 || targets.addressOf(repo, group) === undefined ? targets.serversOf(repo) : [];
+
+/* WHICH APP THAT ADDRESS IS, named by the package that bound it. A port is not a thing anyone recognises: the
+ * marketing group in this workspace read `→ https://localhost:47145` for three runs and nobody could see from the
+ * row that it was the web app. `_editor/web` on a group of landing-page stories is wrong at a glance, which is
+ * the only kind of wrong a list of groups can catch. Undefined when the address is not one the repo is serving —
+ * a staging deployment names itself. */
+const app = (): string | undefined => targets.serversOf(repo).find((server) => server.url === targets.addressOf(repo, group))?.dir;
 </script>
 
 <template>
@@ -55,6 +70,7 @@ const stated = (): boolean => targets.isElsewhere(repo, group) || targets.needsA
     >
         <Icon name="arrow-right" class="shrink-0 text-subtle" />
         {{ targets.addressOf(repo, group) ?? `needs an address` }}
+        <span v-if="app()" class="text-subtle">{{ app() }}</span>
     </button>
 
     <!-- The default. Quiet until the row is under the pointer: the heading above already answered this. -->
@@ -72,12 +88,12 @@ const stated = (): boolean => targets.isElsewhere(repo, group) || targets.needsA
     <Popover ref="popover">
         <div class="flex w-80 flex-col gap-2 p-1">
             <p class="text-sm font-medium text-content">Where does this group's app answer?</p>
-            <!-- The repo's own apps, offered by name. Only when there are several: a repo serving one thing has
-                 already handed that address to this group, and a list of one choice is a question with an
-                 obvious answer. -->
-            <template v-if="targets.serversOf(repo).length > 1">
+            <!-- The repo's own apps, offered by name — when there are several, and when this group has nothing to
+                 point at yet. A repo serving one thing that this group already inherited needs no list: that is a
+                 question with an obvious answer, already answered. -->
+            <template v-if="picks().length > 0">
                 <button
-                    v-for="server in targets.serversOf(repo)"
+                    v-for="server in picks()"
                     :key="server.url"
                     type="button"
                     :class="[
@@ -109,9 +125,9 @@ const stated = (): boolean => targets.isElsewhere(repo, group) || targets.needsA
                 The daemon runs no dev server for <span class="font-mono">{{ repo }}</span> — start the app yourself in a terminal, or point at a
                 deployment. The agents reach it from inside the sandbox, so a localhost address is the direct route.
             </p>
-            <!-- With several apps there is no "leave it to the repo" to offer: the choice above IS the answer,
-                 and the run remembers it so this is asked once rather than once per run. -->
-            <p v-else-if="targets.serversOf(repo).length > 1" class="text-2xs text-subtle">
+            <!-- Once the apps are listed there is no "leave it to the repo" to offer: the choice above IS the
+                 answer, and the run remembers it so this is asked once rather than once per run. -->
+            <p v-else-if="picks().length > 0" class="text-2xs text-subtle">
                 Pick the app these stories belong to. The next run against this group starts here, so this is a question you answer once.
             </p>
             <template v-else>
