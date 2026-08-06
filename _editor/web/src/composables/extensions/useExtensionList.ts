@@ -30,7 +30,7 @@ export interface ExtensionEntry {
 }
 
 export function useExtensionList() {
-    const { extensions, setEnabled, isLoading, error } = useExtensions();
+    const { extensions, invalid, setEnabled, isLoading, error } = useExtensions();
     const { capabilities } = useCapabilities();
 
     const entries = computed<ExtensionEntry[]>(() => {
@@ -64,5 +64,5 @@ export function useExtensionList() {
         return extensionStatuses.value.filter((status) => !listed.has(status.id));
     });
 
-    return { entries, unlisted, setEnabled, isLoading, error };
+    return { entries, invalid, unlisted, setEnabled, isLoading, error };
 }

@@ -121,7 +121,7 @@ const loadUnlisted = async (listed: ReadonlySet<string>, host: HostBindings, det
         [...builtinModules]
             .filter(([extensionId]) => !listed.has(extensionId))
             .map(async ([extensionId, module]): Promise<ExtensionHostStatus> => {
-                const summary: ExtensionSummary = { id: extensionId, manifest: module.manifest, commit: `builtin`, builtin: true, enabled: true };
+                const summary: ExtensionSummary = { id: extensionId, manifest: module.manifest, commit: `builtin`, source: `builtin`, enabled: true };
                 try {
                     await runActivate(summary, host, module);
                     return { id: extensionId, extensionId, state: `unlisted`, detail };

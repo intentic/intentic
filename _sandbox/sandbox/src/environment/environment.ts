@@ -3,7 +3,7 @@ import { join } from "node:path";
 import type { Environment } from "@intentic/sandbox-contract";
 import { sha256Hex } from "@intentic/sandbox-contract/tunnel-ids";
 import type { Services } from "../composition.js";
-import { capabilityFragments } from "./fragment-sources.js";
+import { capabilityFragments, workspaceExtensionFragments } from "./fragment-sources.js";
 import { statePath } from "../workspace/state-paths.js";
 
 // The overlay Dockerfile extending the sandbox image. The approved file is DAEMON-COMPOSED from three parts:
@@ -98,7 +98,10 @@ const writeComposed = async (services: Services, path: string, content: string):
 export const composeEnvironment = async (services: Services): Promise<string | undefined> => {
     const capabilities = await services.capabilities.list();
     const fragments = [
-        ...new Set((await Promise.all(capabilities.map((capability) => capabilityFragments(services, capability)))).flat()),
+        ...new Set([
+            ...(await Promise.all(capabilities.map((capability) => capabilityFragments(services, capability)))).flat(),
+            ...(await workspaceExtensionFragments(services)),
+        ]),
     ].toSorted();
     const custom = ((await services.files.read(customPath(services))) ?? "").trim();
     // The base this container was built from, so a rebuild is version-preserving rather than a silent rollback.

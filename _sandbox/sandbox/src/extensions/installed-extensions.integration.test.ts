@@ -7,9 +7,9 @@ import { expect, test } from "vitest";
 import type { Services } from "../composition.js";
 import { unstubbed } from "@intentic/testing";
 import { testConfig } from "../testing.js";
-import { extensionDir } from "../capabilities/extension-dirs.js";
+import { extensionDir, workspaceExtensionsRoot } from "../capabilities/extension-dirs.js";
 import { readWorkspaceFile } from "../workspace/workspace-files.js";
-import { enabledExtensions, extensionBinDirsOf, installedExtensions, listenerProvidersOf } from "./installed-extensions.js";
+import { enabledExtensions, extensionBinDirsOf, extensionInventory, installedExtensions, listenerProvidersOf } from "./installed-extensions.js";
 
 const manifest = (publisher: string, name: string): object => ({
     publisher,
@@ -40,10 +40,52 @@ test("enumerates baked extensions from the extensions dir and git-installed capa
     const capabilities: Capability[] = [{ id: "my-ext", kind: "extension", config: { url: "https://x/y.git", ref: "a".repeat(40) } }];
     const result = await installedExtensions(services(root, baked, capabilities));
 
-    expect(result.map((e) => ({ id: e.id, builtin: e.builtin }))).toEqual([
-        { id: "intentic.discord", builtin: true },
-        { id: "my-ext", builtin: false },
+    expect(result.map((e) => ({ id: e.id, source: e.source }))).toEqual([
+        { id: "intentic.discord", source: "builtin" },
+        { id: "my-ext", source: "installed" },
     ]);
+});
+
+test("enumerates workspace extensions after the pinned sources, with their own switch", async () => {
+    const root = mkdtempSync(join(tmpdir(), "installed-work-"));
+    await writeManifest(join(workspaceExtensionsRoot(root), "notes"), manifest("acme", "notes"));
+    await writeEnablement(root, { "acme.notes": false });
+
+    const result = await extensionInventory(services(root, "", []));
+    expect(result.invalid).toEqual([]);
+    expect(result.extensions.map((e) => ({ id: e.id, source: e.source, enabled: e.enabled }))).toEqual([
+        { id: "acme.notes", source: "workspace", enabled: false },
+    ]);
+    expect(result.extensions[0]?.dir).toBe(join(workspaceExtensionsRoot(root), "notes"));
+});
+
+test("a workspace directory that is not an extension is reported, not silently skipped", async () => {
+    const root = mkdtempSync(join(tmpdir(), "installed-work-"));
+    await mkdir(join(workspaceExtensionsRoot(root), "empty"), { recursive: true });
+    await mkdir(join(workspaceExtensionsRoot(root), "broken"), { recursive: true });
+    await writeFile(join(workspaceExtensionsRoot(root), "broken", "intentic-extension.json"), "{");
+
+    const result = await extensionInventory(services(root, "", []));
+    expect(result.extensions).toEqual([]);
+    expect(result.invalid.map((entry) => entry.dir)).toEqual(["broken", "empty"]);
+    expect(result.invalid[1]?.error).toContain("no intentic-extension.json");
+});
+
+test("a workspace extension can never shadow a pinned source — the collision is reported instead", async () => {
+    const root = mkdtempSync(join(tmpdir(), "installed-work-"));
+    const baked = mkdtempSync(join(tmpdir(), "installed-baked-"));
+    await writeManifest(join(baked, "intentic.discord"), manifest("intentic", "discord"));
+    // Colliding on the MANIFEST identity of a git-installed extension, not its capability entry id — the
+    // switch and the settings are keyed by publisher.name, so that is the identity that must stay unique.
+    await writeManifest(extensionDir(root, "my-ext"), manifest("acme", "tool"));
+    await writeManifest(join(workspaceExtensionsRoot(root), "impostor"), manifest("intentic", "discord"));
+    await writeManifest(join(workspaceExtensionsRoot(root), "tool-again"), manifest("acme", "tool"));
+
+    const capabilities: Capability[] = [{ id: "my-ext", kind: "extension", config: { url: "https://x/y.git", ref: "a".repeat(40) } }];
+    const result = await extensionInventory(services(root, baked, capabilities));
+    expect(result.extensions.map((e) => e.id)).toEqual(["intentic.discord", "my-ext"]);
+    expect(result.invalid.map((entry) => entry.dir)).toEqual(["impostor", "tool-again"]);
+    expect(result.invalid[0]?.error).toContain("already taken");
 });
 
 test("an empty extensions dir yields only git-installed extensions", async () => {

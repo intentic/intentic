@@ -1,5 +1,5 @@
 import type { CapabilityContribution } from "@intentic/extension-api";
-import type { CapabilityKind } from "@intentic/sandbox-contract";
+import type { CapabilityKind, InvalidWorkspaceExtension } from "@intentic/sandbox-contract";
 import { type ExtensionSummary, ExtensionsListSchema } from "@intentic/sandbox-contract";
 import { computed } from "vue";
 import { sandboxJson } from "../sandbox/sandboxClient";
@@ -16,9 +16,12 @@ const QUERY_KEY = sandboxKey(`extensions`);
 export function useExtensions() {
     const { query, error } = useSandboxQuery({
         queryKey: QUERY_KEY,
-        queryFn: async () => ExtensionsListSchema.parse(await sandboxJson(`/extensions`)).extensions,
+        queryFn: async () => ExtensionsListSchema.parse(await sandboxJson(`/extensions`)),
     });
-    const extensions = computed<ExtensionSummary[]>(() => query.data.value ?? []);
+    const extensions = computed<ExtensionSummary[]>(() => query.data.value?.extensions ?? []);
+    // Workspace-extension directories that failed to enumerate, and why — their author's only feedback, since
+    // nothing install-shaped ever rejected them. Rendered by the Extensions tab beside the rows that did load.
+    const invalid = computed<InvalidWorkspaceExtension[]>(() => query.data.value?.invalid ?? []);
     // What actually contributes right now. A disabled extension stays LISTED (that is what keeps its switch
     // reachable) but the daemon wires none of its contributions up, so anything derived from a contribution —
     // the /capabilities cards above all — must read this list, not `extensions`. Reading the wrong one is how a
@@ -40,6 +43,7 @@ export function useExtensions() {
             .find((contribution) => contribution.kind === kind && contribution.id === id);
     return {
         extensions,
+        invalid,
         enabled: enabledExtensions,
         setEnabled,
         contributionOf,

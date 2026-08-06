@@ -11,9 +11,10 @@ import { reloadExtensions } from "../../extension-host/useExtensionHost";
 import ExtensionRow from "./ExtensionRow.vue";
 
 /* The Sandbox hub's "Extensions" tab: EVERY first-party and installed extension — the ones compiled into this
- * bundle, the ones baked into the sandbox image, and the git-installed capabilities — each with its on/off
- * switch. Install/remove happens on the Capabilities page like every other capability; this tab is the
- * management surface.
+ * bundle, the ones baked into the sandbox image, the git-installed capabilities, and the workspace extensions
+ * living under .intentic/workspace-extensions/ — each with its on/off switch. Install/remove happens on the
+ * Capabilities page like every other capability (a workspace extension is instead created and deleted as files,
+ * typically by an agent); this tab is the management surface.
  *
  * IT IS A LIST OF SEVENTEEN THINGS, AND GROWING, so it is built to be scanned rather than read. Four decisions
  * follow from that, and they are the design:
@@ -34,7 +35,7 @@ import ExtensionRow from "./ExtensionRow.vue";
  *     "the CI thing", "whatever talks to Discord". The filter and the switcher moved OUT of a group header
  *     and above the sections for it: they narrow the whole tab, and each section is now only a part of it. */
 
-const { entries, unlisted, setEnabled, isLoading, error } = useExtensionList();
+const { entries, invalid, unlisted, setEnabled, isLoading, error } = useExtensionList();
 
 // Below this many rows the list IS the overview: a filter box and a state switcher would be more chrome than
 // the thing they filter. The threshold is a display choice, so it lives here rather than in the row model.
@@ -180,6 +181,20 @@ const reload = async (): Promise<void> => {
             <span>{{ emptyNote }}</span>
             <Button v-if="matches.length === 0 && entries.length > 0" size="small" label="Clear filter" @click="clearFilters" />
         </div>
+
+        <!-- Workspace-extension directories the daemon could not enumerate: no manifest, one that does not
+             parse, or an id something else already owns. Named per directory because nothing install-shaped
+             ever rejected them — this group is where their author (usually an agent, via GET /extensions)
+             learns why the row is missing. -->
+        <RowGroup v-if="invalid.length > 0" label="Not loadable" caption="workspace-extension directories the sandbox could not read">
+            <div v-for="entry in invalid" :key="entry.dir" class="flex items-start justify-between gap-3 px-3 py-2">
+                <div class="min-w-0">
+                    <p class="truncate text-sm font-medium text-content">.intentic/workspace-extensions/{{ entry.dir }}</p>
+                    <p class="text-2xs text-danger">{{ entry.error }}</p>
+                </div>
+                <StatusBadge variant="danger" label="invalid" size="xs" />
+            </div>
+        </RowGroup>
 
         <!-- Running in this app build, absent from the daemon's list: no row to sit in, no switch to offer. -->
         <RowGroup v-if="unlisted.length > 0" label="Running but not listed" caption="compiled into this app build, unknown to the sandbox image">

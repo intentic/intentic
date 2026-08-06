@@ -1,4 +1,5 @@
 import { mkdtempSync } from "node:fs";
+import { mkdir, writeFile } from "node:fs/promises";
 
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -6,6 +7,8 @@ import { join } from "node:path";
 import { expect, test } from "vitest";
 
 import { createApp } from "../app.js";
+
+import { workspaceExtensionsRoot } from "../capabilities/extension-dirs.js";
 
 import { listenerProvidersOf } from "./installed-extensions.js";
 
@@ -43,6 +46,40 @@ test("extensions.setEnabled keeps the extension listed, switches it off, and unw
     // And back on, from the same list the tab renders.
     await client.extensions.setEnabled({ id: "intentic.discord", enabled: true });
     expect((await listed())["intentic.discord"]).toBe(true);
+});
+
+test("a workspace extension lists like any other and serves its bundle by content hash", async () => {
+    const workspace = workspacePaths(mkdtempSync(join(tmpdir(), "ext-workspace-")));
+    const dir = join(workspaceExtensionsRoot(workspace.root), "hello");
+    await mkdir(join(dir, "dist"), { recursive: true });
+    await writeFile(
+        join(dir, "intentic-extension.json"),
+        JSON.stringify({ publisher: "acme", name: "hello", version: "1.0.0", engines: { intentic: "^0.2.0" }, entry: "dist/index.js" }),
+    );
+    await writeFile(join(dir, "dist", "index.js"), "export const activate = () => {};");
+    // A sibling directory that is not an extension rides the same list as a named failure — the author's
+    // feedback channel, since nothing install-shaped ever rejected it.
+    await mkdir(join(workspaceExtensionsRoot(workspace.root), "scratch"), { recursive: true });
+
+    const app = createApp(services({ workspace }));
+    const list = await clientFor(app).extensions.list();
+    expect(list.extensions.find((extension) => extension.id === "acme.hello")).toMatchObject({
+        source: "workspace",
+        commit: "workspace",
+        enabled: true,
+    });
+    expect(list.invalid).toEqual([{ dir: "scratch", error: expect.stringContaining("no intentic-extension.json") }]);
+
+    // The bundle's identity is its bytes: same bytes answer 304, edited bytes are a new ETag — the live-edit
+    // loop a sha-pinned checkout never needs.
+    const bundle = await app.request("/extensions/acme.hello/bundle");
+    expect(bundle.status).toBe(200);
+    expect(await bundle.text()).toBe("export const activate = () => {};");
+    const etag = bundle.headers.get("etag") ?? "";
+    expect(etag).toMatch(/^[0-9a-f]{64}$/);
+    expect((await app.request("/extensions/acme.hello/bundle", { headers: { "if-none-match": etag } })).status).toBe(304);
+    await writeFile(join(dir, "dist", "index.js"), "export const activate = () => { /* v2 */ };");
+    expect((await app.request("/extensions/acme.hello/bundle", { headers: { "if-none-match": etag } })).status).toBe(200);
 });
 
 test("the extension list carries every first-party extension, compiled-in UI ones included", async () => {

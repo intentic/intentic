@@ -1,8 +1,14 @@
 import { readdir } from "node:fs/promises";
 import { join } from "node:path";
 import { type ExtensionManifest, extensionIdOf } from "@intentic/extension-api";
-import type { Capability } from "@intentic/sandbox-contract";
-import { extensionDir, extensionRootOf, readExtensionManifest } from "../capabilities/extension-dirs.js";
+import type { Capability, ExtensionSummary, InvalidWorkspaceExtension } from "@intentic/sandbox-contract";
+import {
+    extensionDir,
+    extensionRootOf,
+    parseExtensionManifest,
+    readExtensionManifest,
+    workspaceExtensionsRoot,
+} from "../capabilities/extension-dirs.js";
 import { readExtensionEnablement } from "./extension-enablement.js";
 
 // The daemon surface the extension enumerator needs — a structural subset of Services, so callers pass
@@ -14,23 +20,27 @@ export interface ExtensionHost {
     readonly config: { readonly extensionsDir: string };
 }
 
-/* The union of git-installed extension capabilities and image-baked extensions — the single enumerator every
- * extension consumer (agent plugin dirs, processes, settings, env, the list route) iterates, so a baked
- * first-party extension (ext-discord, ext-connectors) behaves identically to one a user cloned. Baked ones live
- * under services.config.extensionsDir (EXTENSIONS_DIR), one subdir per checkout, the iq-plugin precedent
- * — no capability entry, not removable, present because they shipped in the image. The web-builtin UI
- * extensions bake their MANIFEST ONLY (the code is compiled into the web bundle), so every first-party
- * extension enumerates here and the Extensions tab is a complete list rather than a view of one load path. */
+/* The union of image-baked, git-installed and workspace extensions — the single enumerator every extension
+ * consumer (agent plugin dirs, processes, settings, env, the list route) iterates, so a baked first-party
+ * extension (ext-discord, ext-connectors) behaves identically to one a user cloned or one an agent wrote into
+ * the workspace. Baked ones live under services.config.extensionsDir (EXTENSIONS_DIR), one subdir per checkout,
+ * the iq-plugin precedent — no capability entry, not removable, present because they shipped in the image. The
+ * web-builtin UI extensions bake their MANIFEST ONLY (the code is compiled into the web bundle). Workspace ones
+ * live under .intentic/workspace-extensions/, one subdir per extension, consumed in place — no capability entry
+ * and no install moment, which is why their parse failures are reported (extensionInventory) rather than
+ * silently skipped. So every extension enumerates here and the Extensions tab is a complete list rather than a
+ * view of one load path. */
 
 export interface InstalledExtension {
     // The routing handle: the capability entry id for a git-installed extension, or the manifest-derived
-    // publisher.name for a baked one (which has no capability entry).
+    // publisher.name for a baked or workspace one (which have no capability entry).
     readonly id: string;
     // The manifest's directory (config.path applied for git-installed).
     readonly dir: string;
     readonly manifest: ExtensionManifest;
-    // Image-baked (no clone, not removable) vs a git-installed extension capability.
-    readonly builtin: boolean;
+    // Where the code comes from — see ExtensionSummary. A workspace extension's dir is live-edited, so unlike
+    // the sha-pinned sources its code has no immutable identity (the bundle route hashes the bytes instead).
+    readonly source: ExtensionSummary["source"];
     // The owner's switch (extension-enablement.json). A disabled extension stays in THIS list — the Extensions
     // tab needs its row to render the toggle — and drops out of enabledExtensions(), which is what every
     // consumer that actually wires something up iterates.
@@ -53,16 +63,60 @@ const bakedExtensions = async (services: ExtensionHost, enabledOf: (manifest: Ex
         const dir = join(root, name);
         const manifest = await readExtensionManifest(dir);
         if (manifest !== undefined) {
-            found.push({ id: extensionIdOf(manifest), dir, manifest, builtin: true, enabled: enabledOf(manifest) });
+            found.push({ id: extensionIdOf(manifest), dir, manifest, source: "builtin", enabled: enabledOf(manifest) });
         }
     }
     return found;
 };
 
+/* The workspace-extension directories, and the ones that failed to be an extension. `taken` carries every
+ * identity the other two sources already answer for — route ids AND manifest identities, because the switch and
+ * the settings are keyed by publisher.name whatever the route id is — so a workspace extension can never shadow
+ * a baked or installed one. The refusal is REPORTED, like a parse failure: with no install moment to reject it,
+ * the list is where the author learns the id is the problem rather than the manifest. */
+const workspaceExtensions = async (
+    services: ExtensionHost,
+    enabledOf: (manifest: ExtensionManifest) => boolean,
+    taken: ReadonlySet<string>,
+): Promise<{ extensions: InstalledExtension[]; invalid: InvalidWorkspaceExtension[] }> => {
+    const root = workspaceExtensionsRoot(services.workspace.root);
+    let names: string[];
+    try {
+        names = (await readdir(root, { withFileTypes: true }))
+            .filter((entry) => entry.isDirectory() && !entry.name.startsWith("."))
+            .map((entry) => entry.name)
+            .toSorted();
+    } catch {
+        return { extensions: [], invalid: [] };
+    }
+    const extensions: InstalledExtension[] = [];
+    const invalid: InvalidWorkspaceExtension[] = [];
+    const seen = new Set(taken);
+    for (const name of names) {
+        const dir = join(root, name);
+        const result = await parseExtensionManifest(dir);
+        if ("error" in result) {
+            invalid.push({ dir: name, error: result.error });
+            continue;
+        }
+        const id = extensionIdOf(result.manifest);
+        if (seen.has(id)) {
+            invalid.push({ dir: name, error: `the id "${id}" is already taken by another extension` });
+            continue;
+        }
+        seen.add(id);
+        extensions.push({ id, dir, manifest: result.manifest, source: "workspace", enabled: enabledOf(result.manifest) });
+    }
+    return { extensions, invalid };
+};
+
 // Baked first (a baked id shadows a git-installed collision — install already rejects the collision, so this is
-// only a safety net), then the git-installed extension capabilities whose checkout still parses. Every row
-// carries the owner's switch; nothing is filtered here (see enabledExtensions).
-export const installedExtensions = async (services: ExtensionHost): Promise<InstalledExtension[]> => {
+// only a safety net), then the git-installed extension capabilities whose checkout still parses, then the
+// workspace extensions. Every row carries the owner's switch; nothing is filtered here (see enabledExtensions).
+// `invalid` is workspace-only by construction: the other sources were validated at bake or install time.
+export const extensionInventory = async (
+    services: ExtensionHost,
+): Promise<{ extensions: InstalledExtension[]; invalid: InvalidWorkspaceExtension[] }> => {
     const capabilities = await services.capabilities.list();
     // Keyed by publisher.name, not the capability entry id, so the switch survives a remove/re-add.
     const enablement = await readExtensionEnablement(services.workspace.root);
@@ -75,13 +129,18 @@ export const installedExtensions = async (services: ExtensionHost): Promise<Inst
         const dir = extensionRootOf(extensionDir(services.workspace.root, capability.id), capability.config.path);
         const manifest = await readExtensionManifest(dir);
         if (manifest !== undefined) {
-            installed.push({ id: capability.id, dir, manifest, builtin: false, enabled: enabledOf(manifest) });
+            installed.push({ id: capability.id, dir, manifest, source: "installed", enabled: enabledOf(manifest) });
         }
     }
     const baked = await bakedExtensions(services, enabledOf);
     const bakedIds = new Set(baked.map((extension) => extension.id));
-    return [...baked, ...installed.filter((extension) => !bakedIds.has(extension.id))];
+    const pinned = [...baked, ...installed.filter((extension) => !bakedIds.has(extension.id))];
+    const taken = new Set(pinned.flatMap((extension) => [extension.id, extensionIdOf(extension.manifest)]));
+    const workspace = await workspaceExtensions(services, enabledOf, taken);
+    return { extensions: [...pinned, ...workspace.extensions], invalid: workspace.invalid };
 };
+
+export const installedExtensions = async (services: ExtensionHost): Promise<InstalledExtension[]> => (await extensionInventory(services)).extensions;
 
 /* What the daemon actually wires up. Only the Extensions tab (via the list route) wants the full set — a
  * disabled extension has to keep its row to keep its toggle. Everything below, and every consumer outside this

@@ -479,7 +479,7 @@ RUN/ENV-only Dockerfile fragment baked into the sandbox image overlay); `bin` (e
 agent's PATH); `listener` (a realtime event provider its gateway process implements); and
 `permissions.sandbox`, the daemon-route allowlist gating its data plane.
 
-First-party extensions live in `_extensions/` and reach the product by one of **three load paths** — but by
+First-party extensions live in `_extensions/` and reach the product by one of **four load paths** — but by
 **one list**: every extension, whatever its path, is enumerated by `installedExtensions()`
 ([installed-extensions.ts](_sandbox/sandbox/src/extensions/installed-extensions.ts)) and served by
 `GET /extensions`, which is what the Sandbox hub's Extensions tab renders and what the on/off switch acts on.
@@ -492,7 +492,7 @@ First-party extensions live in `_extensions/` and reach the product by one of **
   ways image and bundle can disagree are surfaced as states, not silence: `missing` (manifest, no module) and
   `unlisted` (module, no manifest — activated anyway, so the rail survives an older image).
 - **Baked into the sandbox image** — the daemon-side ones ship their whole checkout at `/opt/extensions`
-  (Dockerfile bake, `EXTENSIONS_DIR`) and are served as `builtin: true` — present in every sandbox, not
+  (Dockerfile bake, `EXTENSIONS_DIR`) and are served as `source: "builtin"` — present in every sandbox, not
   removable, no capability entry. Four are pure data and exist to hold the `/capabilities` grid's derived
   cards (`connectors`, `social`, `computers`, `acp-agents`); three ship a gateway process as well (`discord`,
   `slack`, `imap`). This is how those cards exist out of the box, and why switching one of those packs off
@@ -500,6 +500,14 @@ First-party extensions live in `_extensions/` and reach the product by one of **
 - **Git-installed** — the `extension` capability: an owner-only, full-sha-pinned clone into
   `.intentic/extensions/<id>`, validated before swap. Third-party extensions arrive this way; of the
   first-party ones only `rtk` does, because its environment fragment composes per capability entry.
+- **Workspace** — a directory per extension under `.intentic/workspace-extensions/`, consumed in place: no
+  clone, no capability entry, no install moment. The path for extensions authored *inside* the sandbox,
+  typically by an agent with its own file tools — `.intentic` is shared across sessions, so one written from
+  an isolated worktree is live for the daemon at once, and an edit to its UI entry is simply a new bundle
+  identity (the bundle route ETags the bytes rather than a commit). A workspace id can never shadow a baked
+  or installed one, and a directory that fails to enumerate — no manifest, a manifest that doesn't parse, a
+  taken id — is *reported* on `GET /extensions` (`invalid`) and rendered by the tab: with no install step to
+  reject it, the list is the author's feedback channel.
 
 Any of them can be **switched off** — `POST /extensions/{id}/enabled`, recorded in
 `.intentic/extension-enablement.json` by `publisher.name`. A disabled extension stays listed (that is what

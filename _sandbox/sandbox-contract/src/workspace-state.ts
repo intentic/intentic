@@ -166,6 +166,11 @@ const STATE_FILES = [
         invalidates: ["extensions"],
         portability: "carry",
     },
+    /* Workspace extensions: one directory per extension, consumed straight from the workspace — no clone, no
+     * install moment. Written like drafts, by the agent's own file tools (which is the point: an agent authors
+     * an extension and it is live for the daemon and every session at once, since .intentic is shared), so this
+     * push is what makes one appearing or changing show up on the Extensions tab while the owner watches. */
+    { path: ".intentic/workspace-extensions/", invalidates: ["extensions"], portability: "carry" },
     {
         path: ".intentic/members.json",
         invalidates: [],

@@ -8,7 +8,7 @@ import type { OrpcContext } from "../context.js";
 import { writeExtensionEnablement } from "./extension-enablement.js";
 import { extensionProcessKey, reconcileListenerProcesses, startAutoStartProcesses, startExtensionProcess } from "./extension-processes.js";
 import { readAllExtensionSettings, writeExtensionSettings } from "./extension-settings.js";
-import { type InstalledExtension, installedExtensions } from "./installed-extensions.js";
+import { extensionInventory, type InstalledExtension, installedExtensions } from "./installed-extensions.js";
 
 // Installed extensions (git-installed capabilities ∪ image-baked) resolved to their approved manifests +
 // per-extension settings values. The web extension host boots from `list`; the bundle bytes ride the plain
@@ -40,20 +40,22 @@ export const createExtensionsRoutes = (services: Services) => {
     };
     return {
         list: i.list.handler(async () => {
+            const inventory = await extensionInventory(services);
             const extensions: ExtensionSummary[] = [];
-            for (const extension of await installedExtensions(services)) {
-                // A baked extension has no git checkout — its identity is the shipped image, so commit is a
-                // sentinel; a git-installed one reports its pinned HEAD (the bundle route's ETag).
-                const commit = extension.builtin ? `builtin` : await services.git.head(extensionDir(root, extension.id));
+            for (const extension of inventory.extensions) {
+                // Only a git-installed extension has a code identity to report — its pinned HEAD. A baked one's
+                // identity is the shipped image, and a workspace one's dir is live-edited (the bundle route
+                // hashes the bytes it serves), so both get their source as a sentinel.
+                const commit = extension.source === "installed" ? await services.git.head(extensionDir(root, extension.id)) : extension.source;
                 extensions.push({
                     id: extension.id,
                     manifest: extension.manifest,
                     commit,
-                    builtin: extension.builtin,
+                    source: extension.source,
                     enabled: extension.enabled,
                 });
             }
-            return { extensions };
+            return { extensions, invalid: inventory.invalid };
         }),
         settings: i.settings.handler(async ({ input }) => {
             const { manifest } = await find(input.id);

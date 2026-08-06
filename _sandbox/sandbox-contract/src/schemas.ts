@@ -2936,16 +2936,23 @@ export const ExtensionSummarySchema = z.object({
     id: extensionId,
     manifest: ExtensionManifestSchema,
     commit: z.string(),
-    // Image-baked first-party extension (no git checkout, not removable) vs a git-installed capability — the
-    // web hides the uninstall affordance for baked ones.
-    builtin: z.boolean(),
+    /* Where the code comes from — which is also what the web varies per row: `builtin` (image-baked, no git
+     * checkout, not removable) hides the uninstall affordance, `installed` (a git capability) shows the pinned
+     * commit, `workspace` (a directory under .intentic/workspace-extensions/, created and edited in place —
+     * typically by an agent) is "uninstalled" by deleting its directory. */
+    source: z.enum(["builtin", "installed", "workspace"]),
     // The owner's switch (.intentic/extension-enablement.json). A disabled extension is still listed — that's
     // what makes it switchable back on — but the daemon wires none of its contributions up and the web host
     // doesn't activate it.
     enabled: z.boolean(),
 });
 export type ExtensionSummary = z.infer<typeof ExtensionSummarySchema>;
-export const ExtensionsListSchema = z.object({ extensions: z.array(ExtensionSummarySchema) });
+// A workspace-extension directory that failed to enumerate, and why. Its only feedback channel: there is no
+// install moment to reject a bad manifest, so the parse failure (or id collision) rides the list instead of
+// silently dropping the row — the Extensions tab renders it, and an authoring agent reads it off GET /extensions.
+export const InvalidWorkspaceExtensionSchema = z.object({ dir: z.string(), error: z.string() });
+export type InvalidWorkspaceExtension = z.infer<typeof InvalidWorkspaceExtensionSchema>;
+export const ExtensionsListSchema = z.object({ extensions: z.array(ExtensionSummarySchema), invalid: z.array(InvalidWorkspaceExtensionSchema) });
 // The extension's contributes.settings values, persisted daemon-side (.intentic/extension-settings.json) keyed
 // by the manifest-derived extension id — the checkout stays pristine, so a re-clone update never loses them.
 // Secret-marked values are stripped from `settings`; `secretsSet` lists the secret keys that DO hold a value,

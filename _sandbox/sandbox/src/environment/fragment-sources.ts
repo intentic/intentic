@@ -3,6 +3,7 @@ import type { Capability } from "@intentic/sandbox-contract";
 import { contributionFor, contributionFragmentPath, contributionRegistry } from "../capabilities/contributions.js";
 import { registry } from "../capabilities/registry.js";
 import { extensionDir, extensionRead, extensionRootOf, readExtensionManifest } from "../capabilities/extension-dirs.js";
+import { enabledExtensions } from "../extensions/installed-extensions.js";
 import type { Services } from "../composition.js";
 
 /* The single resolver for every Dockerfile fragment a capability contributes to the composed overlay. Two
@@ -67,6 +68,22 @@ export const capabilityFragments = async (services: Services, capability: Capabi
         const fragmentPath = connector === undefined ? undefined : contributionFragmentPath(connector);
         if (fragmentPath !== undefined) {
             fragments.push(...(await readFragment(services, capability.id, fragmentPath)));
+        }
+    }
+    return fragments;
+};
+
+// A WORKSPACE extension's contributes.environment fragment. It has no capability entry, so the per-capability
+// resolver above never reaches it — and no install moment either, so unlike a checkout the allowlist check
+// below is its ONLY gate. That is enough: the fragment still only reaches the image through the overlay the
+// owner approves and rebuilds out-of-band. Baked extensions stay out deliberately (their fragments are inert
+// by design — rtk is git-install opt-in for exactly that reason).
+export const workspaceExtensionFragments = async (services: Services): Promise<string[]> => {
+    const fragments: string[] = [];
+    for (const extension of await enabledExtensions(services)) {
+        const fragmentPath = extension.manifest.contributes?.environment?.fragment;
+        if (extension.source === "workspace" && fragmentPath !== undefined) {
+            fragments.push(...(await readFragment(services, extension.id, join(extension.dir, fragmentPath))));
         }
     }
     return fragments;

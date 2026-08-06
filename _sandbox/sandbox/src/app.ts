@@ -11,7 +11,8 @@ import { CONTROL_SCOPES } from "./auth/control-tokens.js";
 import { grantsOf } from "./auth/grants.js";
 import { streamAgent } from "./agent/agent.routes.js";
 import { fireAutomation, PAYLOAD_MAX } from "./automations/scheduler.js";
-import { extensionDir, extensionRootOf, readExtensionManifest } from "./capabilities/extension-dirs.js";
+import { extensionDir, extensionRead } from "./capabilities/extension-dirs.js";
+import { installedExtensions } from "./extensions/installed-extensions.js";
 import type { Services } from "./composition.js";
 import { type AppEnv, buildOrpcContext } from "./context.js";
 import { createDiffRawRoute } from "./git/diff-raw.js";
@@ -854,30 +855,28 @@ export const createApp = (services: Services): Hono<AppEnv> => {
         }
     });
 
-    // An installed extension's prebuilt ESM bundle — raw JS bytes, so a plain Hono route like /environment
-    // (oRPC is for JSON). The web loader fetches this with auth → Blob URL → import(). ETag = the pinned
-    // checkout's HEAD sha: sha-pinned installs make the bundle immutable per commit, so 304s do the caching.
+    // An extension's prebuilt ESM bundle — raw JS bytes, so a plain Hono route like /environment (oRPC is for
+    // JSON). The web loader fetches this with auth → Blob URL → import(). The ETag is the code identity: the
+    // pinned HEAD sha for a git-installed extension (sha-pinned installs make the bundle immutable per commit),
+    // and the content hash for a workspace one, whose dir is live-edited and has no commit to stand for it.
     app.get("/extensions/:id/bundle", async (c) => {
         const id = c.req.param("id");
-        const capability = await services.capabilities.get(id);
-        if (capability === undefined || capability.kind !== "extension") {
+        const extension = (await installedExtensions(services)).find((entry) => entry.id === id);
+        if (extension === undefined) {
             return c.json({ error: "no extension with that id" }, 404);
         }
-        const dir = extensionDir(services.workspace.root, id);
-        const extensionRoot = extensionRootOf(dir, capability.config.path);
-        const manifest = await readExtensionManifest(extensionRoot);
-        if (manifest?.entry === undefined) {
+        if (extension.manifest.entry === undefined) {
             return c.json({ error: "the extension has no UI entry" }, 404);
         }
-        const commit = await services.git.head(dir);
-        if (c.req.header("if-none-match") === commit) {
+        const source = await extensionRead(join(extension.dir, extension.manifest.entry));
+        if (source === undefined) {
+            return c.json({ error: "the entry bundle is missing from the extension" }, 404);
+        }
+        const etag = extension.source === "installed" ? await services.git.head(extensionDir(services.workspace.root, id)) : sha256Text(source);
+        if (c.req.header("if-none-match") === etag) {
             return c.body(null, 304);
         }
-        const source = await services.files.read(join(extensionRoot, manifest.entry));
-        if (source === undefined) {
-            return c.json({ error: "the entry bundle is missing from the checkout" }, 404);
-        }
-        return c.body(source, 200, { "content-type": "text/javascript; charset=utf-8", etag: commit });
+        return c.body(source, 200, { "content-type": "text/javascript; charset=utf-8", etag });
     });
 
     // The realtime-listener control surface for an extension's gateway process (ext-discord): it reconciles via

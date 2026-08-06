@@ -112,7 +112,7 @@ const tone = computed(() => TONE[entry.state.variant] ?? `text-muted`);
                              is a muddier grey than the palette's own muted one, and it takes the hover tint
                              with it. -->
                         <span class="min-w-0 flex-1 truncate text-sm sm:w-48 sm:flex-none">
-                            <span v-if="!entry.extension.builtin" class="text-subtle">{{ manifest.publisher }}.</span
+                            <span v-if="entry.extension.source !== `builtin`" class="text-subtle">{{ manifest.publisher }}.</span
                             ><span class="font-medium" :class="entry.extension.enabled ? `text-content` : `text-muted`">{{ manifest.name }}</span>
                         </span>
                         <span
@@ -183,7 +183,14 @@ const tone = computed(() => TONE[entry.state.variant] ?? `text-muted`);
                  with the version and commit that say WHICH code this is. -->
             <p class="border-t border-line pt-2.5 text-2xs text-subtle">
                 <span class="text-muted">{{ extensionIdOf(manifest) }}</span> · v{{ manifest.version }} ·
-                {{ entry.extension.builtin ? `built into the sandbox image` : `installed · ${entry.extension.commit.slice(0, 12)}` }} · needs intentic
+                {{
+                    entry.extension.source === `builtin`
+                        ? `built into the sandbox image`
+                        : entry.extension.source === `workspace`
+                          ? `from .intentic/workspace-extensions`
+                          : `installed · ${entry.extension.commit.slice(0, 12)}`
+                }}
+                · needs intentic
                 {{ manifest.engines.intentic }}
             </p>
         </div>

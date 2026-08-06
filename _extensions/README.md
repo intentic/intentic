@@ -60,7 +60,7 @@ fails any extension that reaches `/{provider}/models` or `/{provider}/accounts` 
 | `imap` | daemon gateway | A `process` + `listener` watching an IMAP mailbox (new-mail / flags / expunge wakes), plus the imap connector. |
 | `rtk` | environment fragment | Ships the rtk binary into the sandbox image overlay (output-filter benchmarking); git-install opt-in. |
 
-## How they load — three paths, one list
+## How they load — four paths, one list
 
 Every extension below is enumerated by
 [installedExtensions()](../_sandbox/sandbox/src/extensions/installed-extensions.ts) and served by
@@ -85,6 +85,16 @@ renders and what the on/off switch acts on. The paths differ only in where the *
 - **Git-installed** (the `extension` capability): an owner-only, full-sha-pinned clone into
   `.intentic/extensions/<id>` — the path for third-party extensions and for opt-in first-party ones like
   `rtk` (its environment fragment composes per capability entry, so baking it would be inert).
+- **Workspace** (none in this directory — they are not first-party by definition): a directory per extension
+  under `.intentic/workspace-extensions/`, consumed in place with no clone and no install moment — the path
+  for extensions authored *inside* the sandbox, typically by an agent with its own file tools. `.intentic` is
+  shared across sessions, so an extension written from an isolated worktree is live for the daemon at once,
+  and an edit to its UI entry is a new bundle identity (the bundle route ETags the bytes, not a commit).
+  Because nothing install-shaped ever rejects one, a directory that fails to enumerate — no manifest, a
+  manifest that doesn't parse, an id a baked or installed extension already owns — is *reported* on
+  `GET /extensions` (`invalid`) and rendered by the tab, rather than silently skipped. A workspace extension
+  that proves out graduates by moving to a real repo and being git-installed; its id and its
+  enablement/settings keys survive the move, since both derive from the manifest.
 
 ## Switching one off
 
