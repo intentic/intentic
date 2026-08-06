@@ -32,7 +32,7 @@ import {
 import { agentSessionName, browserSessionName } from "@intentic/sandbox-contract/session-names";
 import { relative, sep } from "node:path";
 import { z } from "zod";
-import { daemonMountNs, inWorktree, type IsolationAnchor, nsenterArgv, TMUX_NS_ENV, type TurnPlacement } from "../agents/isolation.js";
+import { daemonMountNs, type IsolationAnchor, nsenterArgv, TMUX_NS_ENV, type TurnPlacement } from "../agents/isolation.js";
 import { worktreeRedirectHooks } from "../agents/worktree-redirect.js";
 import { browserArtifactHooks, screenshotImage } from "../browser/browser-artifacts.js";
 import { browserServerOfTool, browserSessionHooks } from "../browser/browser-sessions.js";
@@ -1304,10 +1304,10 @@ const baseOptions = (
         // this pair is what makes the Subagents area's door open on anything (agent/subagents.ts). Pure
         // record-keeping — the card already learned the child exists from the task stream.
         subagents !== undefined ? subagentHooks(subagents) : {},
-        // The hook body runs in the DAEMON, outside the turn's namespace, so the file the agent just edited
-        // has to be named the way the daemon can reach it — otherwise an isolated turn type-checks the main
-        // tree's copy of the path and reports diagnostics for code it did not write.
-        editDiagnosticsHooks(inWorktree(request.cwd, request.isolation?.plan), request.isolation?.plan),
+        // Handed the turn's placement whole, because where the check STANDS is the difference between an answer
+        // and a fiction: an anchored turn's dependencies exist only inside its namespace, so the check is placed
+        // in there and speaks the agent's own paths (agent-diagnostics.ts).
+        editDiagnosticsHooks(request.cwd, request.isolation),
     ),
     // Enter the namespace by wrapping the CLI's own spawn: the agent process (and everything it forks) is born
     // inside it, so there is no window in which the turn can see the shared tree.

@@ -1,7 +1,7 @@
 import { extname } from "node:path";
-import { diagnoseVia } from "@intentic/lsp/client";
+import { diagnoseVia, type ServiceLocation } from "@intentic/lsp/client";
 import type { HookCallbackMatcher, HookEvent } from "@anthropic-ai/claude-agent-sdk";
-import { inWorktree, type IsolationPlan } from "../agents/isolation.js";
+import { fromWorktree, inWorktree, nsenterArgv, type TurnPlacement } from "../agents/isolation.js";
 import { modulesNear, type NearbyModules } from "../workspace/dependency-drift.js";
 
 /* Post-edit diagnostics feedback — the VSCode Claude Code loop, reproduced daemon-side: after every native
@@ -42,21 +42,35 @@ const MAX_CHARS = 4_000;
 // Ask the resident service about one file. Undefined means "no answer to be had" — no TypeScript project above
 // the file, or no daemon we could reach — which must stay distinguishable from "checked, and clean".
 // `unavailable` is the daemon itself refusing: it reached the file's project and could not load it well enough
-// to vouch for anything (typically a worktree whose installed tree is mounted in a namespace the daemon cannot
-// see), so it checked nothing rather than answer from a half-loaded program. The refusal reason names daemon-side
-// paths the agent has no window onto, so it is not carried here — the notice below says what is true from here.
+// to vouch for anything, so it checked nothing rather than answer from a half-loaded program. The refusal reason
+// names service-side paths the agent may have no window onto, so it is not carried here — the notice below says
+// what is true from here.
 export type DiagAnswer = { readonly kind: "checked"; readonly lines: readonly string[] } | { readonly kind: "unavailable" };
-export type DiagRunner = (file: string, cwd: string) => Promise<DiagAnswer | undefined>;
 
-const runResidentDiag: DiagRunner = async (file, cwd) => {
-    const report = await diagnoseVia(cwd, { files: [file], touched: [file] });
+// One file's check, and everything about WHERE it is asked. `service` places the language service in the view
+// the paths are named for (undefined when that is this process's own), and `named` turns a file the service
+// reported back into the name the agent uses for it — identity when the two stand in the same view.
+export interface DiagRequest {
+    readonly file: string;
+    readonly cwd: string;
+    readonly service: ServiceLocation | undefined;
+    readonly named: (file: string) => string;
+}
+
+export type DiagRunner = (request: DiagRequest) => Promise<DiagAnswer | undefined>;
+
+const runResidentDiag: DiagRunner = async ({ file, cwd, service, named }) => {
+    const report = await diagnoseVia(cwd, { files: [file], touched: [file], ...(service !== undefined ? { service } : {}) });
     if (report === undefined) {
         return undefined;
     }
     if (report.unavailable.length > 0) {
         return { kind: "unavailable" };
     }
-    return { kind: "checked", lines: report.diagnostics.map((d) => `${d.file}:${d.line}:${d.column}: ${d.category} TS${d.code}: ${d.message}`) };
+    return {
+        kind: "checked",
+        lines: report.diagnostics.map((d) => `${named(d.file)}:${d.line}:${d.column}: ${d.category} TS${d.code}: ${d.message}`),
+    };
 };
 
 // Compress to the error lines the model must act on. Warnings/suggestions are dropped — they'd steer the model
@@ -112,20 +126,51 @@ const staleNote = (missing: readonly string[]): string =>
 // clean files, non-TS files, and any failure — feedback must never break or stall an edit. Created once
 // per turn (baseOptions), so `explained` scopes each standing notice to one telling per turn: the model needs
 // a reason once, not stapled to every edit it makes for the rest of the conversation.
+/* WHERE THE CHECK STANDS, which decides whether it can answer at all.
+ *
+ * An isolated turn names its files inside its own mount namespace (/work/...), which from the daemon — where
+ * this hook body runs — is the MAIN checkout: the same path, a different file. There are two ways to be
+ * truthful about that, and which one applies turns on whether the namespace was actually built.
+ *
+ * ANCHORED. The turn holds a namespace open, and its dependencies live ONLY in there: the worktree's own
+ * node_modules are empty mount points on disk with the installed tree bound in over them. Translating the path
+ * and checking from out here is therefore not a smaller version of the right answer, it is a different tree
+ * with no dependencies in it — the state that produced 43,000 phantom "cannot find module 'vue'" errors in one
+ * week of transcripts, and then, once the checker learned to refuse, near-total silence in their place. So the
+ * service is placed INSIDE the turn instead (lsp/client.ts) and asked about the agent's own paths. It resolves
+ * what the agent resolves, and it answers in the names the agent uses, which is also the end of reports that
+ * quote a worktree path the agent must never reach for.
+ *
+ * UNANCHORED. No namespace could be built (no CAP_SYS_ADMIN), so the worktree stands on its own with its
+ * dependency directories symlinked rather than mounted — reachable from here, and the translation IS the whole
+ * of it. Only the reported names have to be mapped back for the agent to recognise its own files.
+ */
 export const editDiagnosticsHooks = (
+    // The agent's own workspace root, in the agent's own naming.
     cwd: string,
-    // An isolated turn names its files inside its own namespace (/work/...), which from the daemon — where
-    // this hook body and the resident type-checker both run — is the MAIN checkout: the same path, a different
-    // file. Everything below therefore works on the translated path, and only the message the agent reads
-    // keeps the name the agent used.
-    isolation?: IsolationPlan,
+    placement?: TurnPlacement,
     diag: DiagRunner = runResidentDiag,
     modules: ModulesProbe = modulesNear,
 ): Partial<Record<HookEvent, HookCallbackMatcher[]>> => {
+    const plan = placement?.plan;
+    const anchor = placement?.anchor;
+    // Both halves of the boundary, settled once: an anchored turn is asked in its own names and answers in
+    // them, so nothing is translated in either direction.
+    const service: ServiceLocation | undefined =
+        anchor === undefined
+            ? undefined
+            : { reachableCwd: inWorktree(cwd, plan), enter: (command, args) => nsenterArgv(anchor.pid, anchor.cwd, command, args) };
+    const checkedCwd = anchor === undefined ? inWorktree(cwd, plan) : cwd;
+    const asAgentNames = anchor === undefined ? (file: string): string => fromWorktree(file, plan) : (file: string): string => file;
     // Per PACKAGE, not per turn: a turn that edits two packages has two different answers to give, and one
     // shared flag would silence whichever it reached second. The absent and refused cases key on "" — they are
     // the same fact, and there is only ever one of it worth saying.
     const explained = new Set<string>();
+    // The last thing said about each file, so the same thing is not said twice running. Agents edit in bursts —
+    // six edits to one file inside a minute re-check the same program and produce the same list — and one report
+    // went out verbatim 2,923 times across the transcripts. Per file rather than global: two files failing the
+    // same way are two facts.
+    const lastReport = new Map<string, string>();
     return {
         PostToolUse: [
             {
@@ -139,7 +184,13 @@ export const editDiagnosticsHooks = (
                         if (typeof file !== "string" || !CHECKED_EXTENSIONS.has(extname(file))) {
                             return {};
                         }
-                        const target = inWorktree(file, isolation);
+                        const target = anchor === undefined ? inWorktree(file, plan) : file;
+                        // Anchored, this reads the MAIN checkout's installed tree — which is the right answer,
+                        // because that tree is literally what the namespace binds in over the worktree's empty
+                        // directories, so it is what the agent resolves against. The one thing it cannot see is
+                        // a manifest the agent edited THIS turn: a dependency added and not yet installed reads
+                        // as resolvable here, and its unresolved-import error arrives without the sentence
+                        // explaining it. The errors are still right; only the reason for them goes unsaid.
                         const nearby = await modules(target);
                         if (nearby.kind === "absent") {
                             if (explained.has("")) {
@@ -148,7 +199,7 @@ export const editDiagnosticsHooks = (
                             explained.add("");
                             return { hookSpecificOutput: { hookEventName: "PostToolUse", additionalContext: UNAVAILABLE_NOTE } };
                         }
-                        const output = await diag(target, cwd);
+                        const output = await diag({ file: target, cwd: checkedCwd, service, named: asAgentNames });
                         // The daemon refusing is the same fact as an absent tree — no truthful diagnostics from
                         // here — and shares its once-per-turn telling, keyed on "".
                         if (output !== undefined && output.kind === "unavailable") {
@@ -167,12 +218,22 @@ export const editDiagnosticsHooks = (
                         }
                         const errors = output === undefined ? undefined : errorLines(output.lines);
                         if (errors === undefined) {
+                            // Forgotten rather than remembered as empty: a file that came clean and breaks again
+                            // later is news, and would be swallowed by a match against a stale entry.
+                            lastReport.delete(file);
                             // Nothing to report about the edit itself — but a first sighting of a drifted tree
                             // is still worth the one sentence, because the next tool the model reaches for
                             // (a test, a lint) will fail on the same missing package.
                             return stale
                                 ? { hookSpecificOutput: { hookEventName: "PostToolUse", additionalContext: staleNote(nearby.missing) } }
                                 : {};
+                        }
+                        const repeat = lastReport.get(file) === errors;
+                        lastReport.set(file, errors);
+                        // Silent only when there is nothing new in it at all: a first drift sentence is new even
+                        // when the errors under it are not.
+                        if (repeat && !stale) {
+                            return {};
                         }
                         return {
                             hookSpecificOutput: {

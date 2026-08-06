@@ -1061,8 +1061,10 @@ export const BuiltinPromptSchema = z.object({ base: z.enum(["intentic", "claude"
 //                        firing forever; 0 (default) ⇒ never.
 //   subagentsAtOnce / subagentsPerTurn / subagentDepth — the harness's own ceilings on delegation, raised or
 //                        lowered from one place; each defaults to what the CLI enforces on its own.
-// The booleans default off, skills defaults [] (no skill loaded), outputCleaners defaults "off" (cleaning off)
-// and outputHoldout 0 — a fresh sandbox starts with cleaning and iq off until the owner enables them.
+// The booleans default off, outputCleaners defaults "off" (cleaning off) and outputHoldout 0 — a fresh sandbox
+// starts with cleaning and iq off until the owner enables them. `skills` is the exception and defaults to the
+// baked tools worth having on: a skill file is the ONLY thing that tells the agent a baked binary exists, and
+// with the list empty `lsp` went used once in 866 sessions — not declined, never learned about.
 //
 // Every field carries that default IN THE SCHEMA, so a settings object written before a field existed still
 // parses — the absent key reads as its default. That is not a compatibility layer, it is the seam this shape
@@ -1074,7 +1076,7 @@ export const BuiltinPromptSchema = z.object({ base: z.enum(["intentic", "claude"
 
 export const SandboxSettingsSchema = z.object({
     stableSystemPrompt: z.boolean().default(false),
-    skills: z.array(z.string()).default([]),
+    skills: z.array(z.string()).default(["lsp"]),
     hashlineEdits: z.boolean().default(false),
     terseOutput: z.boolean().default(false),
     /* Measurement control for the terse steer, at TURN level — the same trick `outputHoldout` plays over

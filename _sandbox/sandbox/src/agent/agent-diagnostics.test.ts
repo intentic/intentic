@@ -1,7 +1,14 @@
 import type { HookInput, HookJSONOutput } from "@anthropic-ai/claude-agent-sdk";
 import { expect, test } from "vitest";
+import type { IsolationPlan, TurnPlacement } from "../agents/isolation.js";
 import { syncHookOutput } from "../testing.js";
-import { type DiagRunner, editDiagnosticsHooks, type ModulesProbe } from "./agent-diagnostics.js";
+import { type DiagRequest, type DiagRunner, editDiagnosticsHooks, type ModulesProbe } from "./agent-diagnostics.js";
+
+const PLAN: IsolationPlan = { worktree: "/history/worktrees/c1", root: "/work", mirrors: ["intentic/node_modules"], overlays: "/history/overlays/c1" };
+// A turn that got its namespace, which is the ordinary case wherever the container can build one.
+const ANCHORED: TurnPlacement = { plan: PLAN, anchor: { pid: 4321, cwd: "/work", plan: PLAN, dispose: () => {} } };
+// A turn that is isolated but unenforced — no CAP_SYS_ADMIN, so the worktree stands on its own paths.
+const UNANCHORED: TurnPlacement = { plan: PLAN };
 
 const RESOLVABLE: ModulesProbe = async () => ({ kind: "installed", missing: [] });
 const MISSING: ModulesProbe = async () => ({ kind: "absent" });
@@ -154,4 +161,88 @@ test("the drift sentence is told once per package, and again when the set of mis
 
 test("a fully installed tree says nothing extra — the diagnostics stand on their own", async () => {
     expect(contextOf(await runHook(withErrors, { file_path: "/work/src/app.ts" }))).not.toContain("not installed");
+});
+
+// Capture what the runner was ASKED, which is the whole of this fix: the same edit is a different question
+// depending on which view of the tree it is put to.
+const asked = (): { requests: DiagRequest[]; diag: DiagRunner } => {
+    const requests: DiagRequest[] = [];
+    return {
+        requests,
+        diag: async (request) => {
+            requests.push(request);
+            return { kind: "checked", lines: [] };
+        },
+    };
+};
+
+/* An anchored turn's dependencies exist ONLY inside its namespace — the worktree's node_modules are empty mount
+ * points with the installed tree bound in over them — so a check that translates the path and runs out here is
+ * not a weaker answer, it is a different tree with nothing installed in it. Ask in the agent's own names, and
+ * place the service where those names are true. */
+test("an anchored turn is checked in its own names, by a service placed inside its namespace", async () => {
+    const { requests, diag } = asked();
+    await fire(editDiagnosticsHooks("/work", ANCHORED, diag, RESOLVABLE), { file_path: "/work/src/app.ts" });
+    const [request] = requests;
+    expect(request?.file).toBe("/work/src/app.ts");
+    expect(request?.cwd).toBe("/work");
+    expect(request?.service?.reachableCwd).toBe("/history/worktrees/c1");
+    // The wrapper is what puts the service on the far side; without it the daemon starts one blind out here.
+    expect(request?.service?.enter("/usr/bin/node", ["cli.js", "daemon", "/work"])).toEqual({
+        command: "nsenter",
+        args: ["--mount=/proc/4321/ns/mnt", "--wd=/work", "--", "/usr/bin/node", "cli.js", "daemon", "/work"],
+    });
+});
+
+// No namespace was built, so the worktree is reachable from here and the translation is the whole of it.
+test("an unanchored turn is checked on the worktree path, with no service to place", async () => {
+    const { requests, diag } = asked();
+    await fire(editDiagnosticsHooks("/work", UNANCHORED, diag, RESOLVABLE), { file_path: "/work/src/app.ts" });
+    expect(requests[0]?.file).toBe("/history/worktrees/c1/src/app.ts");
+    expect(requests[0]?.cwd).toBe("/history/worktrees/c1");
+    expect(requests[0]?.service).toBeUndefined();
+});
+
+/* A worktree path is a real path the agent can open and the wrong one to hand it: reaching it directly is what
+ * puts a turn's edits outside its own namespace. Whatever the check was asked, the report comes back in the
+ * names the agent uses. */
+test("an unanchored report is renamed back to the paths the agent knows", async () => {
+    const { requests, diag } = asked();
+    await fire(editDiagnosticsHooks("/work", UNANCHORED, diag, RESOLVABLE), { file_path: "/work/src/app.ts" });
+    expect(requests[0]?.named("/history/worktrees/c1/src/app.ts")).toBe("/work/src/app.ts");
+});
+
+test("an anchored report is already in the agent's names and is left alone", async () => {
+    const { requests, diag } = asked();
+    await fire(editDiagnosticsHooks("/work", ANCHORED, diag, RESOLVABLE), { file_path: "/work/src/app.ts" });
+    expect(requests[0]?.named("/work/src/app.ts")).toBe("/work/src/app.ts");
+});
+
+/* Agents edit in bursts, and six edits to one file re-check the same program and produce the same list — one
+ * report went out verbatim 2,923 times across the transcripts. Saying it again teaches nothing. */
+test("a report identical to this file's last one is not sent twice", async () => {
+    const hooks = editDiagnosticsHooks("/work", undefined, withErrors, RESOLVABLE);
+    expect(contextOf(await fire(hooks, { file_path: "/work/src/app.ts" }))).toContain("error TS2304");
+    expect(await fire(hooks, { file_path: "/work/src/app.ts" })).toEqual({});
+    // Another file failing the same way is a different fact, and still told.
+    expect(contextOf(await fire(hooks, { file_path: "/work/src/other.ts" }))).toContain("error TS2304");
+});
+
+test("a changed report is always news, even to the same file", async () => {
+    const lines = ["src/app.ts:12:5: error TS2304: Cannot find name 'foo'."];
+    const hooks = editDiagnosticsHooks("/work", undefined, async () => ({ kind: "checked", lines: [...lines] }), RESOLVABLE);
+    expect(contextOf(await fire(hooks, { file_path: "/work/src/app.ts" }))).toContain("TS2304");
+    lines[0] = "src/app.ts:12:5: error TS2322: Type 'number' is not assignable to type 'string'.";
+    expect(contextOf(await fire(hooks, { file_path: "/work/src/app.ts" }))).toContain("TS2322");
+});
+
+// Suppression must not outlive what it suppressed: a file that came clean and breaks the same way again is news.
+test("a file that goes clean and breaks again is reported again", async () => {
+    let lines: string[] = ["src/app.ts:12:5: error TS2304: Cannot find name 'foo'."];
+    const hooks = editDiagnosticsHooks("/work", undefined, async () => ({ kind: "checked", lines }), RESOLVABLE);
+    expect(contextOf(await fire(hooks, { file_path: "/work/src/app.ts" }))).toContain("TS2304");
+    lines = [];
+    expect(await fire(hooks, { file_path: "/work/src/app.ts" })).toEqual({});
+    lines = ["src/app.ts:12:5: error TS2304: Cannot find name 'foo'."];
+    expect(contextOf(await fire(hooks, { file_path: "/work/src/app.ts" }))).toContain("TS2304");
 });

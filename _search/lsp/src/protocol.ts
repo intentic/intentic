@@ -56,14 +56,21 @@ export interface ErrorResponse {
 
 export type Response = DiagResponse | OkResponse | ErrorResponse;
 
-// One daemon per workspace root AS THIS CALLER SEES IT. The path alone is not an identity: an isolated turn
-// bind-mounts its own tree over the same /work path, so two mount namespaces name two DIFFERENT trees
-// identically, and a daemon keyed on the path answered one caller with the other's files — every diagnostic
-// about the wrong content. dev:ino pins the socket to the directory the caller can actually reach: each view
-// spawns a daemon that shares its view, and two paths to one tree (a symlink) still converge on one daemon.
+// One daemon per workspace root, named by WHAT the directory is rather than what it is called. The path is not
+// an identity: an isolated turn bind-mounts its own tree over the same /work path, so two mount namespaces name
+// two DIFFERENT trees identically, and a daemon keyed on the path answered one caller with the other's files —
+// every diagnostic about the wrong content.
+//
+// dev:ino alone, and deliberately WITHOUT the path: the same directory has different names on either side of a
+// mount boundary, and a hook outside a turn's namespace has to derive the socket of a daemon living inside it
+// from the only name it can reach (client.ts). Including the path would give those two names two sockets and the
+// caller would talk to a daemon that cannot see the files it is asking about — which is the whole failure this
+// keying exists to prevent. It also makes true what this always claimed: two paths to one tree (a symlink, a
+// bind mount) converge on one daemon.
+//
 // Hashed because socket paths are length-capped (~104 bytes on most platforms) and a deep worktree path blows
 // straight through that.
 export const socketPathFor = (root: string): string => {
     const stat = statSync(root);
-    return join(tmpdir(), `intentic-lsp-${createHash("sha256").update(`${root}\0${stat.dev}\0${stat.ino}`).digest("hex").slice(0, 16)}.sock`);
+    return join(tmpdir(), `intentic-lsp-${createHash("sha256").update(`${stat.dev}\0${stat.ino}`).digest("hex").slice(0, 16)}.sock`);
 };

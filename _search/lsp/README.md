@@ -16,6 +16,14 @@ program can see. "Checked, and clean" and "could not check" are never conflated.
 not its path — an isolated worktree that mounts its own tree over the same path gets its own daemon that
 actually sees that tree, instead of sharing one that answers about different files by the same name.
 
+**A caller can put the service somewhere it cannot stand itself.** Identity keying cuts both ways: because the
+name is not in it, one directory named differently on either side of a mount boundary yields one socket. So a
+caller outside a mount namespace can find — or start, through a wrapper it supplies — a daemon *inside* it, and
+ask in that namespace's own names (`DiagnoseOptions.service` in [src/client.ts](src/client.ts)). This is not a
+nicety: an isolated turn's `node_modules` are empty mount points on disk with the installed tree bound in only
+for the turn, so a checker started outside resolves nothing at all. The sandbox's post-edit hook is the caller
+that needs it.
+
 `.vue` imports resolve through a built-in shim as `any`: unchecked here (that is vue-tsc's job) rather than
 falsely reported as missing modules.
 

@@ -3,7 +3,17 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { shellQuote } from "@intentic/sandbox-run/quote";
 import { afterEach, expect, test } from "vitest";
-import { ANCHOR_READY, inWorktree, type IsolationPlan, isolationScript, MAIN_MOUNT, mirroredDirs, nsenterArgv, nsenterPrefix } from "./isolation.js";
+import {
+    ANCHOR_READY,
+    fromWorktree,
+    inWorktree,
+    type IsolationPlan,
+    isolationScript,
+    MAIN_MOUNT,
+    mirroredDirs,
+    nsenterArgv,
+    nsenterPrefix,
+} from "./isolation.js";
 
 /* The namespace itself needs CAP_SYS_ADMIN, which no test runner is guaranteed to have — so what is asserted
  * here is the PLAN: the ordering that makes the mounts correct, and the path translation the daemon depends
@@ -122,6 +132,24 @@ test("a path the agent reports is translated back to the worktree for the daemon
     expect(inWorktree("/root/.claude/memory/x.md", plan)).toBe("/root/.claude/memory/x.md");
     // Not isolated at all.
     expect(inWorktree("/work/intentic/src/x.ts", undefined)).toBe("/work/intentic/src/x.ts");
+});
+
+/* The same mapping backwards, for quoting a daemon-side answer into the conversation — a type diagnostic above
+ * all. The worktree path is real and openable, and reaching it directly is what puts a turn's edits outside its
+ * own namespace, so a report that names it reads as an instruction to go there. */
+test("a path the daemon reports is translated back to the name the agent uses", () => {
+    expect(fromWorktree("/history/worktrees/abc/intentic/src/x.ts", plan)).toBe("/work/intentic/src/x.ts");
+    expect(fromWorktree("/history/worktrees/abc", plan)).toBe("/work");
+    // Already in the agent's naming, outside the root, or not isolated: left exactly as it is.
+    expect(fromWorktree("/work/intentic/src/x.ts", plan)).toBe("/work/intentic/src/x.ts");
+    expect(fromWorktree("/root/.claude/memory/x.md", plan)).toBe("/root/.claude/memory/x.md");
+    expect(fromWorktree("/history/worktrees/abc/intentic/src/x.ts", undefined)).toBe("/history/worktrees/abc/intentic/src/x.ts");
+    // A sibling worktree whose path merely starts the same way is a different conversation's tree.
+    expect(fromWorktree("/history/worktrees/abcd/intentic/src/x.ts", plan)).toBe("/history/worktrees/abcd/intentic/src/x.ts");
+});
+
+test("translating a worktree path out and back is the path it started as", () => {
+    expect(fromWorktree(inWorktree("/work/intentic/src/x.ts", plan), plan)).toBe("/work/intentic/src/x.ts");
 });
 
 test("re-bound subtrees resolve to the main tree in both namespaces and are never translated", () => {

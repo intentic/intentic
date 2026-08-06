@@ -714,9 +714,13 @@ them by spawning a process, never by import:
   keeps the markers for edited files current on a debounce, exactly as VS Code's tsserver does for open
   buffers. Both callers — the agent's `lsp diag` and the daemon's post-edit hook
   ([agent-diagnostics.ts](_sandbox/sandbox/src/agent/agent-diagnostics.ts), which imports
-  `@intentic/lsp/client`) — converge on one socket per repository *as each caller sees it* (the socket is
-  keyed on the root's `dev:ino`, so an isolated worktree mounted over the same path gets its own daemon that
-  sees its own tree). It matters because the cold path was ~0.8-1.3s per edit against this monorepo and the
+  `@intentic/lsp/client`) — converge on one socket per repository *as each caller sees it*: the socket is
+  keyed on the root's `dev:ino` alone, so an isolated worktree mounted over the same path gets its own daemon
+  that sees its own tree, and the same directory named differently on either side of a mount boundary
+  converges on one. That last property is what lets the hook place the service where the files mean what the
+  agent means — an anchored turn's dependencies exist ONLY inside its namespace, so the hook starts the daemon
+  in there (through an `nsenter` wrapper it supplies) and asks about the agent's own paths, rather than
+  translating the path and checking a tree with nothing installed in it. It matters because the cold path was ~0.8-1.3s per edit against this monorepo and the
   warm one is ~40-90ms, which is what makes checking after *every* edit affordable. The daemon is started by
   the first caller with a tsconfig above its file and exits after 15 min idle, so a workspace with no
   TypeScript in it never starts one. A project whose tsconfig chain or type foundations cannot be loaded from

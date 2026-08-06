@@ -87,11 +87,30 @@ const ask = (socket: Socket, request: Request): Promise<Response> =>
         socket.write(`${JSON.stringify(request)}\n`);
     });
 
+/* WHERE THE SERVICE HAS TO STAND, when that is not where the caller stands.
+ *
+ * A turn's dependencies exist only inside the turn's mount namespace: the worktree's own node_modules are empty
+ * mount points on disk, and the installed tree is bound in over them for the turn's lifetime. A checker started
+ * outside therefore resolves nothing — not `vue`, not `node:path` — and either refuses or reports a whole file
+ * as broken. The answer is not to translate paths harder; it is to put the service where the files mean what
+ * the agent means, and ask about the agent's own paths so the report comes back in the agent's own names.
+ *
+ * The caller supplies both halves because only it knows the boundary: `reachableCwd` is the same directory as
+ * `cwd` named from HERE — the workspace root is found from each name the same way, and the pair's dev:ino is one
+ * number on both sides, so it yields the very socket a daemon over there will bind — and `enter` wraps the spawn
+ * so the daemon starts on the far side. */
+export interface ServiceLocation {
+    readonly reachableCwd: string;
+    readonly enter: (command: string, args: readonly string[]) => { readonly command: string; readonly args: readonly string[] };
+}
+
 // Start a detached daemon for this root. Detached and fully un-piped on purpose: it must outlive the hook that
 // started it, and an inherited stdio pipe nobody drains would wedge it the first time it logged anything.
-const spawnDaemon = (root: string): void => {
+const spawnDaemon = (root: string, location: ServiceLocation | undefined): void => {
     const cli = fileURLToPath(new URL("cli.js", import.meta.url));
-    const child = spawn(process.execPath, [cli, "daemon", root], { detached: true, stdio: "ignore" });
+    const argv = [cli, "daemon", root];
+    const { command, args } = location === undefined ? { command: process.execPath, args: argv } : location.enter(process.execPath, argv);
+    const child = spawn(command, args, { detached: true, stdio: "ignore" });
     // Demoted: the daemon's project load is a whole-monorepo parse (hundreds of MB, minutes of CPU) that runs
     // once per agent worktree — background tooling that must lose to the sandbox's control plane under
     // contention. Best-effort: an unsupported platform keeps the default priority, never loses the daemon.
@@ -105,13 +124,15 @@ const spawnDaemon = (root: string): void => {
     child.unref();
 };
 
-const connectOrSpawn = async (root: string): Promise<Socket | undefined> => {
-    const path = socketPathFor(root);
+// `socketRoot` is the root as THIS process can stat it and `root` the name the daemon is started with — the same
+// directory, one number, two names, and only the first can be stat'ed from here (protocol.ts).
+const connectOrSpawn = async (root: string, socketRoot: string, location: ServiceLocation | undefined): Promise<Socket | undefined> => {
+    const path = socketPathFor(socketRoot);
     const existing = await tryConnect(path);
     if (existing !== undefined) {
         return existing;
     }
-    spawnDaemon(root);
+    spawnDaemon(root, location);
     for (let attempt = 0; attempt < SPAWN_ATTEMPTS; attempt += 1) {
         await sleep(SPAWN_RETRY_MS);
         const socket = await tryConnect(path);
@@ -126,6 +147,9 @@ export interface DiagnoseOptions {
     readonly files: readonly string[];
     // Files the caller knows just changed, so the daemon re-reads them before answering.
     readonly touched?: readonly string[];
+    // Present when `cwd` and `files` are named for a view of the tree this process is not standing in — the
+    // service is placed there instead of here, and answers in those same names.
+    readonly service?: ServiceLocation;
 }
 
 // The daemon's report for these files. Returns undefined — never throws — when there is no answer to be had at
@@ -135,10 +159,15 @@ export interface DiagnoseOptions {
 // enough to vouch for anything, so nothing was checked and nothing should be relayed as if it had been).
 export const diagnoseVia = async (cwd: string, options: DiagnoseOptions): Promise<DiagReport | undefined> => {
     const [first] = options.files;
+    // Asked with the far-side names when there is a service location, and answerable with them: the two views
+    // are checkouts of one repository, so "is there a tsconfig above this file" and "where is the workspace
+    // root" have the same answer under either naming. What differs between the views is what is INSTALLED, and
+    // that is exactly the question being handed to the service rather than answered here.
     if (first === undefined || !hasTsconfig(first)) {
         return undefined;
     }
-    const socket = await connectOrSpawn(daemonRootFor(cwd));
+    const service = options.service;
+    const socket = await connectOrSpawn(daemonRootFor(cwd), daemonRootFor(service === undefined ? cwd : service.reachableCwd), service);
     if (socket === undefined) {
         return undefined;
     }

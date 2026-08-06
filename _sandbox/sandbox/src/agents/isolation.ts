@@ -495,3 +495,16 @@ export const inWorktree = (path: string, plan: IsolationPlan | undefined): strin
     // The root itself is the worktree root: `ls /work` must list the agent's own tree, not the shared one.
     return rel === "" ? plan.worktree : join(plan.worktree, rel);
 };
+
+/* The same mapping read backwards: what the AGENT would call a file the daemon named. Needed wherever a
+ * daemon-side answer is quoted back into the conversation — a type diagnostic, most of all — because the
+ * worktree path is a real path the agent can open and the wrong one to hand it. Reaching it directly is what
+ * puts a turn's edits outside its own namespace, so a report that names it is not merely confusing but an
+ * instruction to go there.
+ */
+export const fromWorktree = (path: string, plan: IsolationPlan | undefined): string => {
+    if (plan === undefined || (path !== plan.worktree && !path.startsWith(`${plan.worktree}/`))) {
+        return path;
+    }
+    return path === plan.worktree ? plan.root : join(plan.root, path.slice(plan.worktree.length + 1));
+};
