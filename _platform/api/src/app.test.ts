@@ -216,7 +216,7 @@ describe(`POST /sandbox/preview-route`, () => {
         expect((await previewRoute(prisma, `tok`, [`preview-my.repo`])).status).toBe(400);
         expect((await previewRoute(prisma, `tok`, [`preview-my_repo`])).status).toBe(400);
         expect((await previewRoute(prisma, `tok`, [`preview--app`])).status).toBe(400);
-        // Only the two preview schemes mint — an arbitrary label could shadow sandbox-/ssh- hostnames.
+        // Only the contract's three schemes mint — an arbitrary label could shadow sandbox-/ssh- hostnames.
         expect((await previewRoute(prisma, `tok`, [`app`])).status).toBe(400);
         expect((await previewRoute(prisma, `tok`, [`sandbox-app`])).status).toBe(400);
         // One bad label poisons the whole batch.
@@ -236,7 +236,7 @@ describe(`POST /sandbox/preview-route`, () => {
         // later, at the missing row).
         const prisma404 = fakePrisma({ sandbox: { findUnique: vi.fn().mockResolvedValue(null) } });
         expect((await previewRoute(prisma404, `tok`, [`preview-shop--web`])).status).toBe(404);
-        expect((await previewRoute(prisma404, `tok`, [`preview-app`, `port-a`])).status).toBe(404);
+        expect((await previewRoute(prisma404, `tok`, [`preview-app`, `port-a`, `public-a`])).status).toBe(404);
         expect((await previewRoute(prisma404, `tok`, [`preview-${`a`.repeat(42)}`])).status).toBe(404);
     });
 

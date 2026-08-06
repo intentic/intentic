@@ -75,11 +75,13 @@ const expectedDaemonHost = (
     return sandbox.daemonUrl === null ? undefined : hostOf(sandbox.daemonUrl);
 };
 
-// A mintable preview-route label. Only the two preview schemes are allowed (an arbitrary label could shadow
-// sandbox-/ssh- hostnames); ≤50 chars keeps the full first label `<label>-<12-hex id>` inside DNS's 63-char
-// label limit.
+// A mintable preview-route label. Only the three schemes the hostname contract defines (previewLabel /
+// portLabel / publicLabel in @intentic/sandbox-contract) are allowed — an arbitrary label could shadow
+// sandbox-/ssh- hostnames; ≤50 chars keeps the full first label `<label>-<12-hex id>` inside DNS's 63-char
+// label limit. The daemon sweeps all of its labels in ONE call, so a scheme missing here 400s the whole
+// batch and none of the sandbox's hostnames resolve.
 const validPreviewLabel = (label: unknown): boolean =>
-    typeof label === `string` && /^(preview|port)-[a-z0-9][a-z0-9-]*$/.test(label) && label.length <= 50;
+    typeof label === `string` && /^(preview|port|public)-[a-z0-9][a-z0-9-]*$/.test(label) && label.length <= 50;
 
 const logUnexpectedError = (log: Logger, error: unknown): void => {
     // oRPC "expected" errors (UNAUTHORIZED, NOT_FOUND, …) are control flow, not incidents — don't log them.
@@ -328,7 +330,7 @@ export const createApp = (config: Config, prisma: PrismaClient, logger: Logger):
         const body = (await c.req.json().catch(() => undefined)) as { labels?: unknown } | undefined;
         const labels = body?.labels;
         if (!Array.isArray(labels) || labels.length === 0 || labels.length > 64 || !labels.every(validPreviewLabel)) {
-            return c.text(`error: labels must be 1-64 lowercase DNS-safe preview-* or port-* names of at most 50 characters`, 400);
+            return c.text(`error: labels must be 1-64 lowercase DNS-safe preview-*, port-* or public-* names of at most 50 characters`, 400);
         }
         const sandbox = await prisma.sandbox.findUnique({ where: { tokenDigest: sha256Hex(token) } });
         if (!sandbox) {
