@@ -1,23 +1,12 @@
 import { randomBytes } from "node:crypto";
 import { apiContract } from "@intentic-app/api-contract";
 import { implement, ORPCError } from "@orpc/server";
-import { getPlan, PLAN_ENTITLEMENTS, paymentRequired } from "../billing/entitlements.js";
 import type { OrpcContext } from "../context.js";
 import { requireOwnedSandbox, requireUser } from "../guards.js";
 import { sendInviteEmail } from "./email.js";
 import { INVITE_TTL_MS, inviteAcceptDecision, inviteStatus, toInviteRecord } from "./invites.js";
 
 const os = implement(apiContract).$context<OrpcContext>();
-
-// Plan gate for the sharing surface (invite.list/create/resend). invite.revoke and sandbox.leave stay ungated so
-// revocation always works, even after a downgrade. Callers gate owner-only routes (requireOwnedSandbox first), so
-// the caller IS the owner whose plan is checked.
-const requireSharing = async (context: OrpcContext) => {
-    const user = requireUser(context);
-    if (!PLAN_ENTITLEMENTS[await getPlan(context.config, context.prisma, user)].sandboxSharing) {
-        throw paymentRequired(`Sharing sandboxes is a Pro feature — upgrade to invite teammates.`);
-    }
-};
 
 // The owner's access roster, shaped for the wire (pending/accepted/expired derived per row). Shared by every
 // invite mutation so they all return the fresh list.
@@ -32,7 +21,6 @@ export const inviteRoutes = {
     // own authorized list is pushed separately by the owner's browser — the server can't call the daemon.
     list: os.invite.list.handler(async ({ context, input }) => {
         const sandbox = await requireOwnedSandbox(context, input.sandboxId);
-        await requireSharing(context);
         return listInvites(context, sandbox.id);
     }),
     // Invite an email: record a PENDING grant with a one-shot token and email the accept link. Idempotent for a
@@ -42,7 +30,6 @@ export const inviteRoutes = {
     create: os.invite.create.handler(async ({ context, input }) => {
         const user = requireUser(context);
         const sandbox = await requireOwnedSandbox(context, input.sandboxId);
-        await requireSharing(context);
         const email = input.email.toLowerCase();
         const existing = await context.prisma.sandboxMember.findUnique({ where: { sandboxId_email: { sandboxId: sandbox.id, email } } });
         if (existing?.acceptedAt) {
@@ -62,7 +49,6 @@ export const inviteRoutes = {
     resend: os.invite.resend.handler(async ({ context, input }) => {
         const user = requireUser(context);
         const sandbox = await requireOwnedSandbox(context, input.sandboxId);
-        await requireSharing(context);
         const email = input.email.toLowerCase();
         const existing = await context.prisma.sandboxMember.findUnique({ where: { sandboxId_email: { sandboxId: sandbox.id, email } } });
         if (!existing) {
@@ -77,8 +63,8 @@ export const inviteRoutes = {
         await sendInviteEmail(context.config, context.logger, { to: email, sandboxName: sandbox.name, inviterName: user.name, token });
         return listInvites(context, sandbox.id);
     }),
-    // Revoke access (pending or accepted). Ungated so it always works. The owner's browser then removes the
-    // email from the daemon's authorized list.
+    // Revoke access (pending or accepted). The owner's browser then removes the email from the daemon's
+    // authorized list.
     revoke: os.invite.revoke.handler(async ({ context, input }) => {
         const sandbox = await requireOwnedSandbox(context, input.sandboxId);
         await context.prisma.sandboxMember.deleteMany({ where: { sandboxId: sandbox.id, email: input.email.toLowerCase() } });

@@ -11,7 +11,7 @@ The **Vue 3 SPA** (Vite + PrimeVue) — the platform's workspace UI. A user sign
 ## Layout
 
 - **[src/composables/](src/composables)** — module-level singletons + vue-query wrappers:
-  - `useAuth.ts` — Better Auth session, Google sign-in/out, Stripe plan/upgrade. Guards live in the router.
+  - `useAuth.ts` — Better Auth session, Google sign-in/out, profile + account deletion. Guards live in the router.
   - `useApi.ts` — the oRPC `ContractRouterClient` singleton; the platform surface is just `setup.*` (+ `me`).
   - `sandbox/useSandbox.ts` — the browser's sandbox state: `daemonUrl` (from `setup.binding`) + `reachable` (the live SSE probe in `useSandboxLiveness.ts`); the browser alone judges liveness.
   - `useGoogleIdentity.ts` — Google Identity Services: mints/caches the ID token the daemon verifies.

@@ -54,11 +54,10 @@ volume self-initializes and an image bump self-migrates — no manual db step.
 
 ## Notes
 
-- **Stripe / email / analytics are optional.** Billing 404s, invites log server-side, and analytics stay off
-  until their env vars are set. Google + the tunnel + the secrets are the only hard requirements.
+- **Email / analytics are optional.** Invites log server-side and analytics stay off until their env vars are
+  set. Google + the tunnel + the secrets are the only hard requirements.
 - **Intentic-provided sandbox tunnels** need `INTENTIC_CLOUDFLARE_API_TOKEN` (+ zone). Without it, user setup
   offers only the bring-your-own-Cloudflare flow. This is intentic's own Cloudflare account credential.
-- **Stripe webhook** (if billing): point it at `https://api.intentic.dev/api/auth/stripe/webhook`.
 - **Scaling:** the api is stateless (DB-backed sessions) and safe to run at `--scale api=N`; the retention
   reaper + sandbox-pool top-up take a Postgres advisory lock so replicas don't duplicate the work.
 - **No host ports are published** — everything is reached over the tunnel. Add a `ports:` mapping to `api`/`web`

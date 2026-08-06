@@ -71,14 +71,10 @@ services:
             INTENTIC_CLOUDFLARE_REAP_AFTER_DAYS: ${INTENTIC_CLOUDFLARE_REAP_AFTER_DAYS:-7}
             INTENTIC_CLOUDFLARE_REAP_DRY_RUN: ${INTENTIC_CLOUDFLARE_REAP_DRY_RUN:-false}
             # Billing (optional — the upgrade flow 404s until set).
-            STRIPE_SECRET_KEY: ${STRIPE_SECRET_KEY:-}
-            STRIPE_WEBHOOK_SECRET: ${STRIPE_WEBHOOK_SECRET:-}
-            STRIPE_PRO_PRICE_ID: ${STRIPE_PRO_PRICE_ID:-}
             # Sandbox-invite email via Resend (optional — invites are logged server-side until set).
             EMAIL_API_KEY: ${EMAIL_API_KEY:-}
             EMAIL_FROM: ${EMAIL_FROM:-}
             # Comma-separated emails always entitled to `pro` without Stripe (comp/test accounts).
-            PERMANENT_PREMIUM_EMAILS: ${PERMANENT_PREMIUM_EMAILS:-}
             LOG_LEVEL: ${LOG_LEVEL:-info}
             # OTLP traces (tracing.ts). Unset → no provider is registered and the overhead is zero.
             OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-}

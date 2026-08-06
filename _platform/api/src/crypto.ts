@@ -5,7 +5,7 @@ import type { Config } from "./config.js";
 // Account, the sandbox connect token, setup payloads). AES-256-GCM; the effective key is the SHA-256 of
 // SECRETS_KEY, so any sufficiently random string works as key material. Wire format:
 // enc1:<iv>:<auth tag>:<ciphertext>, all base64url. SECRETS_KEY unset → values pass through as plaintext
-// so unconfigured dev still boots (main.ts warns, matching the Stripe/Google soft-warn pattern).
+// so unconfigured dev still boots (main.ts warns, matching the Google soft-warn pattern).
 const PREFIX = `enc1:`;
 
 const keyOf = (config: Config): Buffer | undefined =>

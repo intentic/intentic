@@ -25,11 +25,9 @@ const context = (overrides?: Partial<OrpcContext>): OrpcContext =>
         prisma: fakePrisma({}),
         config: {
             webOrigin: `https://app.test`,
-            stripe: { secretKey: ``, proPriceId: `` },
             intenticCloudflare: { apiToken: ``, zone: `` },
             secrets: { key: `` },
             email: { apiKey: ``, from: `` },
-            permanentPremiumEmails: [],
         },
         user,
         logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() },
@@ -419,20 +417,10 @@ describe(`sandbox routes`, () => {
         expect(order[0]).toBe(`row`);
     });
 
-    it(`gates create at the free plan's sandbox limit and lets pro through`, async () => {
+    it(`creates a second sandbox for an owner who already has one — there is no cap`, async () => {
         const create = vi.fn().mockResolvedValue({ ...sandboxRow, id: `s2` });
-        const free = fakePrisma({
-            subscription: { findFirst: vi.fn().mockResolvedValue(null) },
-            sandbox: { count: vi.fn().mockResolvedValue(1), create },
-        });
-        await expectOrpcCode(call(sandboxRoutes.create, { name: `second` }, { context: context({ prisma: free }) }), `PAYMENT_REQUIRED`);
-        expect(create).not.toHaveBeenCalled();
-
-        const pro = fakePrisma({
-            subscription: { findFirst: vi.fn().mockResolvedValue({ status: `active` }) },
-            sandbox: { create },
-        });
-        const summary = await call(sandboxRoutes.create, { name: `second` }, { context: context({ prisma: pro }) });
+        const prisma = fakePrisma({ sandbox: { create } });
+        const summary = await call(sandboxRoutes.create, { name: `second` }, { context: context({ prisma }) });
         expect(summary).toMatchObject({ id: `s2`, role: `owner` });
     });
 
@@ -443,7 +431,6 @@ describe(`sandbox routes`, () => {
             { ...sandboxRow, id: `s3` },
         ];
         const config = {
-            stripe: { secretKey: ``, proPriceId: `` },
             intenticCloudflare: { apiToken: `cf-api`, zone: `intentic.dev` },
             secrets: { key: `` },
         } as OrpcContext[`config`];
@@ -454,7 +441,6 @@ describe(`sandbox routes`, () => {
 
         // The zone alone defaults even when the feature is off (no token) — it must not flag on its own.
         const tokenless = {
-            stripe: { secretKey: ``, proPriceId: `` },
             intenticCloudflare: { apiToken: ``, zone: `intentic.dev` },
             secrets: { key: `` },
         } as OrpcContext[`config`];

@@ -12,7 +12,7 @@ export const meRoutes = {
     // setup payloads are secrets, not personal data.
     export: os.me.export.handler(async ({ context }) => {
         const user = requireUser(context);
-        const [sessions, accounts, sandboxes, memberships, invitesSent, subscriptions] = await Promise.all([
+        const [sessions, accounts, sandboxes, memberships, invitesSent] = await Promise.all([
             context.prisma.session.findMany({
                 where: { userId: user.id },
                 select: { createdAt: true, expiresAt: true, ipAddress: true, userAgent: true },
@@ -30,8 +30,7 @@ export const meRoutes = {
                 where: { sandbox: { ownerId: user.id } },
                 select: { sandboxId: true, email: true, createdAt: true },
             }),
-            context.prisma.subscription.findMany({ where: { referenceId: user.id } }),
         ]);
-        return { user, sessions, accounts, sandboxes, memberships, invitesSent, subscriptions };
+        return { user, sessions, accounts, sandboxes, memberships, invitesSent };
     }),
 };

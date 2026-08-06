@@ -24,7 +24,7 @@ export const pageMeta: Record<string, PageMeta> = {
     },
     "/terms/": {
         title: "Terms of Service · intentic",
-        description: "The terms governing use of the intentic platform: accounts, billing, acceptable use, and liability.",
+        description: "The terms governing use of the intentic platform: accounts, acceptable use, and liability.",
         datePublished: "2026-07-03",
     },
     "/about/": aboutMeta,

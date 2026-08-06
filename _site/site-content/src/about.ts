@@ -89,7 +89,7 @@ export const trustCards: TrustCard[] = [
     },
     {
         title: "Honest about its age",
-        body: "No case studies, no testimonials, no logo wall. The project is young, and the free plan is a real sandbox rather than a trial. Read what it does before pointing it at something you care about.",
+        body: "No case studies, no testimonials, no logo wall. The project is young, and what you get is a real sandbox rather than a trial. Read what it does before pointing it at something you care about.",
     },
 ];
 

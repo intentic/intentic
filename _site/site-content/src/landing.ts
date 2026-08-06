@@ -139,7 +139,7 @@ export const landingContent: LandingContent = {
         // "Worktree", not "branch" — a branch is a name, and what keeps ten agents off each other is that
         // each has a checkout of its own (`_sandbox/sandbox/src/agents/worktrees.ts`).
         subhead: "Every agent gets its own sandbox and git worktree, on hardware you own. Run ten at once. Nothing lands until you have read the diff.",
-        chips: ["Free plan", "Bring your own agent", "Runs on your hardware"],
+        chips: ["Free and open source", "Bring your own agent", "Runs on your hardware"],
         shot: {
             name: "fleet-board",
             alt: "The intentic fleet board: an agent waiting on approval for a Stripe billing change and another with a question for you, beside three agents actively drafting a changelog and migrating queries. Each card shows its model, branch, cost and diff stats.",
@@ -232,7 +232,7 @@ export const landingContent: LandingContent = {
             { name: "Kimi Code", detail: "on your Kimi Membership" },
             { name: "Google", detail: "Gemini, Claude and GPT-OSS, free on a Google sign-in" },
         ],
-        points: ["No per-token metering. No markup on your model usage.", "No rented cloud compute. Agents run where you run them.", "Free for one sandbox; Pro unlocks the fleet and sharing."],
+        points: ["No per-token metering. No markup on your model usage.", "No rented cloud compute. Agents run where you run them.", "Free, whole: every sandbox, capability and shared workspace included."],
     },
     extend: {
         eyebrow: "Extend it",

@@ -4,7 +4,7 @@
 // The clickwrap legal version: the platform (@intentic-app/api) stamps the accepted version on each account
 // at sign-up; intentic.dev renders the /terms and /privacy documents under it. Bump on any material change
 // to the terms or privacy policy — one edit, both sides move together.
-export const LEGAL_VERSION = "2026-07-03";
+export const LEGAL_VERSION = "2026-08-06";
 export const LEGAL_CONTACT_EMAIL = "contact@intentic.dev";
 
 /* The hosted web app's origin — the ONE browser origin a sandbox daemon expects to be called from, and

@@ -74,8 +74,8 @@ this page.
     wizard — never as a standalone "install intentic" instruction.
   - Requirements stated honestly wherever setup is shown: a machine with Docker (auto-installed
     with confirmation), Google account, **no Cloudflare account required**.
-  - Free-tier limits come from `_platform/api/src/billing/entitlements.ts` (free: 1 sandbox, no
-    sharing; pro: unlimited + sharing). **Never hardcode Stripe prices.**
+  - There are no tiers and no limits: every sandbox, capability and shared workspace is included,
+    and nothing on the page may imply otherwise.
   - Every screenshot is real product UI. Re-shoot on UI shifts; never mock a screen the app doesn't render.
 
 ## Page architecture
@@ -103,14 +103,14 @@ because `/about/` shares it.
    dashed and off-path. Code and keys never leave your machine; the platform keeps identity and a URL.
    Give it room — competitors can't copy this without re-architecting. (P1)
 4. **Economics (`#economics`)** — the deal, and the answer to the reflex that "ten agents" triggers:
-   bring your own model subscription, run on your own hardware, pay a flat platform fee — never a meter
-   on model usage. Carries the free story. (P7)
+   bring your own model subscription, run on your own hardware, pay us nothing — never a meter on model
+   usage. Carries the free story. (P7)
 5. **Extend it (`#extend`)** — *"A small core. Everything else is an extension."* Six one-line rows,
    each linking to the page that owns it: automations, Discord & Slack, Doorbell, team sharing,
    memory/pipelines/previews, a whole company of agents. **Deliberately the quietest band on the
    page** — no screenshots, no figures, no argument. Its job is to be findable, not persuasive; every
    row here used to be a band of its own, and together they were what made a visitor lose the thread.
-   Keep it to one screen. (P5, P6, Pro)
+   Keep it to one screen. (P5, P6)
 6. **About the creator (`#trust`)** — the last objection before the command. The page has just asked a
    visitor to run a container on their own machine and hand it a GitHub token and a database password;
    `#ownership` answers the architectural half of *"can I trust this"*, and this answers the human half.
@@ -200,9 +200,10 @@ What is a *layout* decision rather than a positioning one:
 
 ### No dedicated pricing section (deliberate — do not re-add)
 
-No standalone pricing block and no "Pricing" nav/footer link. The free-first story is carried
-softly: the hero "Free plan" chip, the economics band, the final CTA, and the FAQ answer "What's
-free and what's Pro?". The `SoftwareApplication` JSON-LD `offers` price "0" reinforces free for SEO.
+No standalone pricing block and no "Pricing" nav/footer link — there is nothing to price. The free
+story is carried softly: the hero "Free and open source" chip, the economics band, the final CTA, and
+the FAQ answer "Is any of it paid?". The `SoftwareApplication` JSON-LD `offers` price "0" reinforces
+free for SEO.
 Note for any auto-improver (`loop.md`): **do not** reintroduce a pricing section, and **do not**
 re-add deployment-engine framing — the deployment engine is not part of the product. Both are
 recorded decisions, not omissions.
@@ -232,7 +233,7 @@ it is a row in `#extend`.
 - [ ] `#trust` still concedes something, and still shows no number that could be zero.
 - [ ] The `#trust` commit figures came from git, not from a paste — check a real `astro build`, not dev.
 - [ ] Full-page height at 1440 has not crept back over ~10,000 px (it was 16,254; it is 9,592).
-- [ ] Entitlement copy matches `_platform/api/src/billing/entitlements.ts` at build time; no dollar amounts on the page.
+- [ ] Nothing on the page implies a paid tier, a limit or a price.
 - [ ] Every screenshot is real product UI (`_site/site/src/assets/product/`); re-shoot on UI shifts.
 - [ ] `prefers-reduced-motion` respected (`.fade-in` noscript fallback — keep).
 - [ ] Lighthouse ≥ 95 perf/SEO/a11y on `/` (static Astro + inlined CSS baseline — keep).

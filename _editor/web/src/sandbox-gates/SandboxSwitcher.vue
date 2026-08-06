@@ -12,19 +12,16 @@ import { badgeClass, badgeText } from "../core-views/viewBadge";
 import { type SandboxAttentionItem, useSandboxAttention } from "../composables/sandbox/sandboxAttention";
 import { sandboxIdFromToken } from "../composables/sandbox/sandboxIdFromToken";
 import { useSandbox } from "../composables/sandbox/useSandbox";
-import { useAuth } from "../composables/useAuth";
 import { bashCommand, psCommand } from "../environments/scriptCommand";
 
 /* Rail control to switch between the user's sandboxes (owned + shared) or add another. The active sandbox drives
  * the whole workspace (useSandbox) — selecting here re-points every sandbox-backed view + the liveness probe at
  * the chosen daemon. Settings, access and everything else about the active sandbox live on the tabbed /sandbox
- * hub (opened from here). Plan-gated "Add sandbox" preflights the loaded entitlements to upsell early — the
- * API's 402 is the real gate. */
+ * hub (opened from here). */
 
 const sandbox = useSandbox();
 const router = useRouter();
 const route = useRoute();
-const { entitlements, upgradeOpen } = useAuth();
 // Everything the sandbox needs from its owner (sandboxAttention): a corner badge on the chip, and one routed
 // row per item inside the popover. The hub behind them has no rail tile, so without this the only way to learn
 // a rebuild is pending would be to go asking — which is the hole the bars above the app used to plug.
@@ -117,11 +114,6 @@ const openTab = (to: string): void => {
 
 const addSandbox = (): void => {
     panel.value?.hide();
-    const limit = entitlements.value?.sandboxLimit;
-    if (limit !== undefined && sandbox.sandboxes.value.filter((option) => option.role === `owner`).length >= limit) {
-        upgradeOpen.value = true;
-        return;
-    }
     void router.push(`/setup`);
 };
 

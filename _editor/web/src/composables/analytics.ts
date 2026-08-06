@@ -41,7 +41,7 @@ export const initAnalytics = (): void => {
         },
     });
 
-    const { user, plan, upgradeOpen } = useAuth();
+    const { user } = useAuth();
     // Session resolves (sign-in or reload) → stable identity; sign-out / account deletion → drop it.
     watch(user, (current, previous) => {
         if (current) {
@@ -50,19 +50,6 @@ export const initAnalytics = (): void => {
         }
         if (previous) {
             posthog.reset();
-        }
-    });
-    // Billing tier as a person property, so funnels/replays can split free vs pro.
-    watch(plan, (current) => {
-        if (user.value && current) {
-            posthog.setPersonProperties({ plan: current });
-        }
-    });
-    // The app's single Upgrade dialog (App.vue) opens through this shared ref from every plan gate — one watch
-    // sees every upsell impression; checkout completion shows up as the $pageview with ?billing=success.
-    watch(upgradeOpen, (open) => {
-        if (open) {
-            posthog.capture(`upgrade_dialog_shown`);
         }
     });
 };

@@ -80,7 +80,7 @@ export const restorePersistedQueries = async (userId: string): Promise<void> => 
         maxAge: 7 * 24 * 60 * 60 * 1000,
         // Two exclusions, for opposite reasons: sandbox.list carries per-sandbox connect tokens (the tunnel
         // secret), and an UNPERSISTED-marked query carries more bytes than the mirror can afford (above).
-        // Every other daemon query (workspace/info/capabilities/… keys) and billing.plan still persist.
+        // Every other daemon query (workspace/info/capabilities/… keys) still persists.
         // Composed with the default so non-success queries stay out too.
         dehydrateOptions: {
             shouldDehydrateQuery: (query) =>

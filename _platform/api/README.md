@@ -18,7 +18,7 @@ The **platform backend** — Hono + oRPC + Prisma + Better Auth. The platform is
 
 - [src/main.ts](src/main.ts) — entrypoint: `serve(...)`.
 - [src/app.ts](src/app.ts) — the Hono app factory + all route wiring; [src/router.ts](src/router.ts) + [src/context.ts](src/context.ts) — oRPC.
-- [src/auth.ts](src/auth.ts) — Better Auth (Google sign-in + the Stripe billing plugin).
+- [src/auth.ts](src/auth.ts) — Better Auth (Google sign-in + the desktop one-time-token handoff).
 - [src/config.ts](src/config.ts) — `@puristic/env` config; [src/prisma.ts](src/prisma.ts) — client factory; [src/types.ts](src/types.ts) — the shared Prisma type.
 
 ## Conventions & gotchas

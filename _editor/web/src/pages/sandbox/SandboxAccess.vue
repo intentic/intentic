@@ -5,7 +5,7 @@ import Button from "primevue/button";
 import { computed, onMounted, ref } from "vue";
 import { sandboxJson } from "../../composables/sandbox/sandboxClient";
 import { jsonBody } from "../../composables/sandbox/jsonBody";
-import { apiClient, isPaymentRequired } from "../../composables/useApi";
+import { apiClient } from "../../composables/useApi";
 import { errorMessage } from "../../composables/useAsyncAction";
 import { useAuth } from "../../composables/useAuth";
 import { useSandbox } from "../../composables/sandbox/useSandbox";
@@ -16,9 +16,9 @@ import { presenceActivity, presenceOthers } from "../../composables/usePresence"
  * daemon's ENFORCED /members list (pushed first from the owner's browser, since the server can't reach the
  * daemon) then the platform invite record + email. sandboxJson throws on any non-2xx, so a grant the enforcer
  * never got is never recorded (fail closed). Members see a read-only view. "Here now" (live presence) shows for
- * everyone. Inviting is plan-gated — a PAYMENT_REQUIRED opens the upgrade dialog. */
+ * everyone. */
 
-const { user, upgradeOpen } = useAuth();
+const { user } = useAuth();
 const sandbox = useSandbox();
 
 const isOwner = computed(() => sandbox.active.value?.role === `owner`);
@@ -30,15 +30,6 @@ const error = ref<string>();
 const emailTouched = ref(false);
 
 const validEmail = (value: string): boolean => /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(value);
-
-// Inviting is plan-gated: a PAYMENT_REQUIRED anywhere opens the upgrade dialog; anything else shows inline.
-const gateOrError = (err: unknown, fallback: string): void => {
-    if (isPaymentRequired(err)) {
-        upgradeOpen.value = true;
-        return;
-    }
-    error.value = errorMessage(err, fallback);
-};
 
 const badge = (status: InviteRecord["status"]): { label: string; class: string } => {
     if (status === `accepted`) {
@@ -59,7 +50,7 @@ const load = async (): Promise<void> => {
     try {
         members.value = (await apiClient.invite.list({ sandboxId: id })).members;
     } catch (err) {
-        gateOrError(err, `Couldn't load the access list.`);
+        error.value = errorMessage(err, `Couldn't load the access list.`);
     }
 };
 
@@ -89,7 +80,7 @@ const invite = async (): Promise<void> => {
         // The daemon push (or an offline sandbox) can fail before the invite is recorded; resync so a pending
         // invite created just before an email failure still shows with a Resend action.
         void load();
-        gateOrError(err, `Couldn't send the invite — is the sandbox online?`);
+        error.value = errorMessage(err, `Couldn't send the invite — is the sandbox online?`);
     } finally {
         busy.value = false;
     }
@@ -105,7 +96,7 @@ const resend = async (target: string): Promise<void> => {
     try {
         members.value = (await apiClient.invite.resend({ sandboxId: id, email: target })).members;
     } catch (err) {
-        gateOrError(err, `Couldn't resend the invite.`);
+        error.value = errorMessage(err, `Couldn't resend the invite.`);
     } finally {
         busy.value = false;
     }
@@ -149,7 +140,7 @@ const revoke = async (target: string): Promise<void> => {
         await sandboxJson<{ emails: string[] }>(`/members`, jsonBody(`DELETE`, { email: target }));
         members.value = (await apiClient.invite.revoke({ sandboxId: id, email: target })).members;
     } catch (err) {
-        gateOrError(err, `Couldn't revoke access — is the sandbox online?`);
+        error.value = errorMessage(err, `Couldn't revoke access — is the sandbox online?`);
     } finally {
         busy.value = false;
     }

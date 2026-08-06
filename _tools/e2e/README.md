@@ -38,7 +38,7 @@ its requirement is a whole local stack, which no environment variable can announ
 
 ## Not covered here (by design)
 
-Real Google OAuth, Stripe billing and invites — platform unit tests cover their logic. Everything that needs
+Real Google OAuth and invites — platform unit tests cover their logic. Everything that needs
 real infrastructure or real Discord lives in the gated tiers beside this one: `_deploy/cli/src/cli.e2e.test.ts`
 (Cloudflare), `_sandbox/sandbox/src/discord.e2e.test.ts` (Discord + Whisper), and
 `_deploy/cli/src/hermetic.e2e.test.ts` (the secret-free control-plane run). `ARCHITECTURE.md` → *What each tier

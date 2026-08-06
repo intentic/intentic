@@ -40,17 +40,6 @@ const configSchema = z.object({
             clientSecret: z.string().default(``).meta({ secret: true }),
         })
         .prefault({}),
-    // Billing for the platform's OWN SaaS. Subscription state belongs to the central account (like Session),
-    // the one sanctioned platform-owned addition (CLAUDE.md). The Stripe checkout/customer-portal/webhook logic
-    // is the Better Auth Stripe plugin (auth.ts). Distinct from the sandbox-side i.have.stripe capability, whose
-    // STRIPE_API_KEY lives in the user's sandbox .env — these credentials are the platform's, like Google's.
-    stripe: z
-        .object({
-            secretKey: z.string().default(``).meta({ secret: true }), // STRIPE_SECRET_KEY (sk_…)
-            webhookSecret: z.string().default(``).meta({ secret: true }), // STRIPE_WEBHOOK_SECRET (whsec_…)
-            proPriceId: z.string().default(``), // STRIPE_PRO_PRICE_ID (price_…)
-        })
-        .prefault({}),
     // Transactional email (Resend) — sandbox invites, and the setup link a phone sends itself to finish on a
     // real machine (mail.ts). `apiKey` is the Resend API key (re_…); `from` is the verified sender (e.g.
     // "intentic <invites@your-domain>"). Unset → both are still accepted but the link is logged server-side
@@ -61,22 +50,10 @@ const configSchema = z.object({
             from: z.string().default(``), // EMAIL_FROM
         })
         .prefault({}),
-    // Emails that always resolve to the `pro` plan without a Stripe subscription (entitlements.ts getPlan) —
-    // comp'd/test accounts. PERMANENT_PREMIUM_EMAILS, comma-separated; matched case-insensitively.
-    // ponytail: env .transform → string[]; if @puristic/env chokes on it, keep a plain string and split in getPlan.
-    permanentPremiumEmails: z
-        .string()
-        .default(``)
-        .transform((value) =>
-            value
-                .split(`,`)
-                .map((email) => email.trim().toLowerCase())
-                .filter(Boolean),
-        ),
     // Intentic-OWNED Cloudflare token + zone, used ONLY to provision sandbox tunnels for users who bring no
     // Cloudflare of their own: the platform creates the tunnel + DNS server-side and hands the sandbox a narrow
     // per-tunnel connector token (never this API token). This is intentic's own credential — a documented, scoped
-    // exception to the secret-free model above, like Google's and Stripe's here. Unset (either field) → the
+    // exception to the secret-free model above, like Google's here. Unset (either field) → the
     // intentic-provided path is disabled and setup offers only the bring-your-own-Cloudflare flow.
     intenticCloudflare: z
         .object({
@@ -135,8 +112,6 @@ export const CONFIG_SECRETS = [
     `betterAuth.secret`,
     `secrets.key`,
     `google.clientSecret`,
-    `stripe.secretKey`,
-    `stripe.webhookSecret`,
     `email.apiKey`,
     `intenticCloudflare.apiToken`,
 ];

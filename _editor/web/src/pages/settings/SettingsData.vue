@@ -29,7 +29,7 @@ const exportData = async (): Promise<void> => {
     }
 };
 
-// GDPR account deletion: two-step inline confirm, then Better Auth deletes the Stripe customer + user row
+// GDPR account deletion: two-step inline confirm, then Better Auth deletes the user row
 // (cascading sandboxes, sessions and grants) and we land back on the login page.
 const confirmingDelete = ref(false);
 const deleting = ref(false);
@@ -60,7 +60,7 @@ const confirmDelete = async (): Promise<void> => {
                 icon="trash"
                 tone="danger"
                 title="Delete account"
-                description="Permanently removes your account, sandboxes, shared access and billing data. Cannot be undone."
+                description="Permanently removes your account, sandboxes and shared access. Cannot be undone."
             >
                 <template #control>
                     <Button

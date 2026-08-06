@@ -1,8 +1,7 @@
 <script setup lang="ts">
 import { useDevice } from "@intentic/ui";
-import { defineAsyncComponent, onMounted, watch } from "vue";
+import { defineAsyncComponent, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
-import { useAuth } from "../composables/useAuth";
 import { useExtensionHost } from "../extension-host/useExtensionHost";
 
 /* The persistent post-login CHROME, split by form factor: ShellDesktop (rail + docked chat column + terminal
@@ -21,7 +20,6 @@ const ShellDesktop = defineAsyncComponent(() => import("./ShellDesktop.vue"));
 const ShellMobile = defineAsyncComponent(() => import("./ShellMobile.vue"));
 
 const { mobile } = useDevice();
-const { refreshPlan } = useAuth();
 // Boot installed third-party extensions once the sandbox is reachable (idempotent across shell remounts).
 useExtensionHost();
 const router = useRouter();
@@ -36,11 +34,6 @@ watch(mobile, (isMobile) => {
     }
 });
 
-onMounted(() => {
-    // Load the account's plan/entitlements once for the whole app, so plan-gated actions (the sandbox
-    // switcher's "Add sandbox" preflight) upsell before navigating instead of after a 402 on /setup.
-    void refreshPlan();
-});
 // A dead active sandbox no longer bounces the whole shell to /setup (that now creates a NEW sandbox). The
 // liveness probe keeps `reachable` live and the rail's SandboxSwitcher lets the user switch or add one.
 </script>

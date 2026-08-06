@@ -18,7 +18,7 @@ open source on GitHub — the trust layer you can read and run yourself.
 - Provider-agnostic: intentic works with Claude Code, Codex, Grok, and whatever ships next. Name
   providers as plural examples for credibility, never as the headline or the brand hook — the
   subject is always the **specialized agent** (the autonomous employee), never one provider.
-- Honesty is a feature: the free tier is stated plainly; the app is new and says so.
+- Honesty is a feature: that it is free and MIT is stated plainly; the app is new and says so.
 
 ## Message hierarchy
 
@@ -46,9 +46,9 @@ of surfaces earn the "workspace" claim, and every band on the page ladders up to
   transcripts: the surfaces that let you *watch and steer* the agents you run.
 
 **Ownership** is the trust foundation under both (agent on your own hardware, platform off the
-command path, code and keys never leave your machine). **Automations** make agents event-driven;
-**Pro** runs a whole team of them; the **economics** are BYO subscription + your own hardware + a
-flat fee — never a meter on model usage.
+command path, code and keys never leave your machine). **Automations** make agents event-driven, and
+a whole team of them costs nothing extra; the **economics** are BYO subscription + your own hardware
++ a product that is free and MIT — never a meter on model usage.
 
 Landing copy lives in code: `_site/site-content/src/landing.ts` is a single `LandingContent` object
 — **one page, no variants** (there is no `SITE_VARIANT`, no `/preview` route, no a/b/c doors).
@@ -78,12 +78,11 @@ Discord teammate) → **carry the trust** (ownership, shared safely) → **zoom 
 (the whole picture) → **the deal** (economics) → **get connected** → **final CTA**. Each pain from
 positioning.md (P1–P7) surfaces where its band lands.
 
-**Free-first, no pricing section (principle, not a section).** There is deliberately no on-page
-pricing block and no "Pricing" nav/footer link — a monetization-forward page reads as slop that
-wants money, when in fact everything is free to explore and users upgrade in-app. The free story is
-carried softly by the hero "Free plan" chip, the economics band, the final CTA "Free to start.", and
-the FAQ answer "What's free and what's Pro?" (free = one full sandbox; Pro = unlimited sandboxes +
-team sharing). Do not reintroduce a pricing section.
+**Free, no pricing section (principle, not a section).** There is deliberately no on-page pricing
+block and no "Pricing" nav/footer link — there is nothing to price. The whole product is free and
+MIT, and the page says so softly rather than loudly: the hero "Free and open source" chip, the
+economics band, the final CTA, and the FAQ answer "Is any of it paid?". Do not introduce a pricing
+section.
 
 ## Glossary (use these words, exactly)
 
@@ -142,9 +141,9 @@ team sharing). Do not reintroduce a pricing section.
    in plan mode: it proposes, you approve. Every file change is reviewable as a diff you can discard
    or commit; environment (Dockerfile) changes require your explicit approval; stricter and looser
    modes are one click away.
-7. **What's free and what's Pro?** — Free: one full sandbox — every capability, the agent, and
-   automations included. Pro: unlimited sandboxes and team sharing (invite by email). Pricing at
-   checkout via Stripe; cancel anytime. Removing access (revoke, leave) never requires Pro.
+7. **Is any of it paid?** — No. Every sandbox, every capability, the agent, automations and team
+   sharing are free, with no tiers and no card. The whole product is MIT on GitHub. You pay only
+   your own model provider, directly.
 8. **What are automations?** — Scheduled or event-driven agent wake-ups: GitHub/GitLab pushes,
    Sentry alerts, Stripe payments, new email, Discord messages, or plain cron — each run a fresh
    agent session with a transcript, optionally gated by a guard command you define.
@@ -154,7 +153,7 @@ team sharing). Do not reintroduce a pricing section.
    browser workspace, the fleet board, capabilities, automations, and teams.
 10. **What about my data — export, deletion?** — Settings → Export downloads everything the
     platform stores about your account as JSON (deliberately excluding credentials). Account
-    deletion cancels billing and cascades sandboxes, sessions, and grants.
+    deletion cascades sandboxes, sessions, and grants.
 11. **Is it production-ready?** — The app is new and says so. Because the sandbox and CLI are MIT on
     GitHub, you can read exactly what runs on your machine before you trust it with anything you
     care about — and because the agent is co-piloted (plan mode, reviewable diffs, owner-approved

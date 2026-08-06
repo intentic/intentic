@@ -20,8 +20,7 @@ export const setupRedirect = (sandboxes: readonly SandboxSummary[]): RouteLocati
         return undefined;
     }
     /* Carry the unfinished sandbox so /setup RESUMES it instead of opening a blank create form. Not tidiness:
-     * the free plan includes one sandbox, so a blank form is a form whose Create can only 402 against the very
-     * row that caused this redirect — and the row itself is invisible from there.
+     * a blank form hides the very row that caused this redirect, so the way to finish it is invisible from there.
      *
      * Owned only. A member cannot mint a setup code for someone else's sandbox, so resuming theirs would strand
      * them on a step they are not allowed to finish; they get the plain form, which offers the attach lane. */

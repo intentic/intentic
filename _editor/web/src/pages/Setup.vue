@@ -69,7 +69,7 @@ const route = useRoute();
 // this drives is content the md: classes below cannot reach: the run tabs' labels, and the size and emphasis
 // of the controls that carry them.
 const { mobile } = useDevice();
-const { user, entitlements, refreshPlan } = useAuth();
+const { user } = useAuth();
 const { getIdToken, warmIdToken } = useGoogleIdentity();
 
 // The sandbox created in this setup session (holds its connection token). Null until the user names + creates it.
@@ -79,13 +79,6 @@ const resuming = ref(false);
 const name = ref(``);
 const creating = ref(false);
 const error = ref<string | null>(null);
-
-// Whether the account is at its owned-sandbox cap — mirrors the server gate (router.ts) and the switcher
-// preflight, so nobody fills in a name for a Create that could only 402.
-const atLimit = computed(() => {
-    const limit = entitlements.value?.sandboxLimit;
-    return limit !== undefined && sandbox.sandboxes.value.filter((entry) => entry.role === `owner`).length >= limit;
-});
 
 // Is there a workspace to go BACK to — some sandbox other than the one being set up here that has actually
 // reported in. Both halves matter: a row this page created moments ago is not somewhere to return to, and
@@ -536,9 +529,6 @@ const createSandbox = async (): Promise<void> => {
     try {
         created.value = await sandbox.create(name.value.trim());
     } catch (err) {
-        // A plan-gate hit renders the server's message inline like any other failure. It does NOT raise the
-        // Upgrade dialog: a modal sell on top of a half-finished setup is the same pitch this screen just
-        // stopped making, and the message already names the cap.
         error.value = errorMessage(err, `Could not create your sandbox.`);
     } finally {
         creating.value = false;
@@ -547,7 +537,7 @@ const createSandbox = async (): Promise<void> => {
 
 // Connect a sandbox that is ALREADY reachable: probe the pasted address from this browser, and only once the
 // daemon has authorized us record it on the platform. Verifying BEFORE creating anything means a typo can't
-// leave an orphan sandbox behind (or burn the free plan's single slot); a retry after a failed attach re-uses
+// leave an orphan sandbox behind; a retry after a failed attach re-uses
 // the row the previous attempt created. On success there is nothing left to do — straight to the workspace.
 const connectDomain = async (): Promise<void> => {
     const url = normalizedDomain.value;
@@ -573,7 +563,7 @@ const connectDomain = async (): Promise<void> => {
             return;
         }
         // Reuses the row when there already is one — a resumed sandbox, or one a previous attempt created whose
-        // attach then failed — so retrying never mints a second sandbox against the plan's quota.
+        // attach then failed — so retrying never leaves a stray sandbox behind.
         const row = created.value ?? (await sandbox.create(attachedName.value));
         created.value = row;
         await sandbox.attach(row.id, url);
@@ -727,8 +717,7 @@ const composeArgs = computed<ComposeArgs | undefined>(() => {
  *
  * The second exists because leaving mid-setup is normal — you name it, mean to paste the command on the other
  * machine, and close the tab. Coming back to a blank "Name your sandbox" is worse than useless there: it hides
- * the sandbox you already made, and on the free plan (one sandbox) the Create it offers can only 402 against
- * that very row. So an account whose only sandbox is unfinished resumes it wherever it enters from.
+ * the sandbox you already made. So an account whose only sandbox is unfinished resumes it wherever it enters from.
  *
  * Gated on there being no connected sandbox anywhere, which is what keeps the switcher's "Add sandbox" honest
  * — that button exists to make a SECOND sandbox, and it is only reachable from a shell that already has a
@@ -737,7 +726,6 @@ const composeArgs = computed<ComposeArgs | undefined>(() => {
  * Owned only — a member can't mint someone else's setup code, so their id falls through to the create form.
  * The check loop acts on the ACTIVE sandbox, so select it to make the URL self-contained. */
 onMounted(async () => {
-    void refreshPlan(); // so atLimit is accurate even on a direct navigation to /setup
     const loaded = await sandbox.list();
     const requested = route.query[`sandbox`];
     const named = typeof requested === `string` ? loaded.find((entry) => entry.id === requested) : undefined;
@@ -778,30 +766,6 @@ const startFresh = (): void => {
     attachToken.value = ``;
     attachOutcome.value = undefined;
     void router.replace({ path: `/setup` }); // drop ?sandbox= so a reload doesn't re-resume
-};
-
-/* Delete the resumed sandbox and start over. Only offered for one that NEVER started, and only at the plan
- * cap — which together are the one situation where `startFresh` alone is a dead end: it drops to a create form
- * whose Create can only 402, because the row occupying the slot is the one being abandoned. There is nothing
- * to lose in this case by construction (no daemon ever ran, so no workspace exists), and it is the only way
- * back to a different name now that a never-started sandbox no longer opens the shell — where the switcher's
- * trash icon used to be the escape hatch. */
-const discarding = ref(false);
-const discard = async (): Promise<void> => {
-    const abandoned = created.value;
-    if (abandoned === null || discarding.value) {
-        return;
-    }
-    discarding.value = true;
-    try {
-        await sandbox.remove(abandoned.id);
-        startFresh();
-        void refreshPlan(); // the freed slot is what makes the create form usable again
-    } catch (err) {
-        error.value = errorMessage(err, `Could not remove this sandbox.`);
-    } finally {
-        discarding.value = false;
-    }
 };
 
 // Watch the registry while we sit on /setup; the moment the daemon reports in, open the workspace.
@@ -1063,44 +1027,32 @@ watch(commandReady, (ready) => {
                             </button>
                         </template>
                         <template v-else-if="created === null">
-                            <!-- At the plan cap: say so plainly instead of offering a name form whose Create can only
-                         402. No upgrade pitch — this screen's job is to get a machine connected, and someone
-                         who came here to do that is the worst possible audience for a plan sell; upgrading
-                         lives in the account panel, where a person goes when that is the thing they want. -->
-                            <p v-if="atLimit" class="text-xs text-muted">
-                                Every sandbox your plan includes is already in use, so there's none spare to set up here. Reconnect one from the
-                                switcher, or remove one you've finished with.
-                            </p>
-                            <template v-else>
-                                <p class="text-xs text-muted">
-                                    Give this sandbox a name so you can tell it apart in the switcher — you can run several.
-                                </p>
-                                <div class="flex flex-col gap-2 md:flex-row md:items-center">
-                                    <input
-                                        v-model="name"
-                                        autocomplete="off"
-                                        spellcheck="false"
-                                        placeholder="e.g. work, staging, my-laptop"
-                                        :class="cmp.input('w-full font-mono text-base md:text-sm')"
-                                        @keydown.enter="createSandbox"
-                                    />
-                                    <Button
-                                        label="Create"
-                                        class="w-full justify-center md:w-auto"
-                                        :loading="creating"
-                                        :disabled="name.trim().length === 0"
-                                        @click="createSandbox"
-                                    >
-                                        <template #icon><Icon name="plus" /></template>
-                                    </Button>
-                                </div>
-                                <div v-if="error" :class="cmp.alertDanger()">{{ error }}</div>
-                                <!-- The one-step lane, kept to a single line: it costs the common path nothing and the
+                            <p class="text-xs text-muted">Give this sandbox a name so you can tell it apart in the switcher — you can run several.</p>
+                            <div class="flex flex-col gap-2 md:flex-row md:items-center">
+                                <input
+                                    v-model="name"
+                                    autocomplete="off"
+                                    spellcheck="false"
+                                    placeholder="e.g. work, staging, my-laptop"
+                                    :class="cmp.input('w-full font-mono text-base md:text-sm')"
+                                    @keydown.enter="createSandbox"
+                                />
+                                <Button
+                                    label="Create"
+                                    class="w-full justify-center md:w-auto"
+                                    :loading="creating"
+                                    :disabled="name.trim().length === 0"
+                                    @click="createSandbox"
+                                >
+                                    <template #icon><Icon name="plus" /></template>
+                                </Button>
+                            </div>
+                            <div v-if="error" :class="cmp.alertDanger()">{{ error }}</div>
+                            <!-- The one-step lane, kept to a single line: it costs the common path nothing and the
                              user who needs it is looking for exactly these words. -->
-                                <button type="button" :class="cmp.linkButton()" @click="setLane(`attach`)">
-                                    Already running a sandbox somewhere? Connect it by domain →
-                                </button>
-                            </template>
+                            <button type="button" :class="cmp.linkButton()" @click="setLane(`attach`)">
+                                Already running a sandbox somewhere? Connect it by domain →
+                            </button>
                         </template>
                         <template v-else>
                             <template v-if="resuming">
@@ -1110,35 +1062,15 @@ watch(commandReady, (ready) => {
                                      be describing a machine that never existed. -->
                                 <p class="text-xs text-muted">
                                     <template v-if="neverStarted">
-                                        You named this one but never started it — pick up where you left off<template v-if="!atLimit">
-                                            , or create a new sandbox instead</template
-                                        >.
+                                        You named this one but never started it — pick up where you left off, or create a new sandbox instead.
                                     </template>
                                     <template v-else>
                                         This sandbox still exists on the platform — the CLI cleanup only cleared its local container. Reconnect it
-                                        below to start a fresh daemon<template v-if="!atLimit">, or create a new sandbox instead</template>.
+                                        below to start a fresh daemon, or create a new sandbox instead.
                                     </template>
                                 </p>
-                                <!-- At the cap there is no second sandbox to offer, so `startFresh` (which drops
-                                     to a blank create form) would only lead to a 402. Removing this one is the
-                                     move that actually frees the slot, and it is safe precisely here: a sandbox
-                                     that never started has no workspace to lose. -->
-                                <button
-                                    v-if="!atLimit"
-                                    type="button"
-                                    :class="cmp.linkButton(`text-muted underline hover:text-content`)"
-                                    @click="startFresh"
-                                >
+                                <button type="button" :class="cmp.linkButton(`text-muted underline hover:text-content`)" @click="startFresh">
                                     Not this one? Create a new sandbox instead
-                                </button>
-                                <button
-                                    v-else-if="neverStarted"
-                                    type="button"
-                                    :class="cmp.linkButton(`text-muted underline hover:text-content`)"
-                                    :disabled="discarding"
-                                    @click="discard"
-                                >
-                                    {{ discarding ? `Removing…` : `Not this one? Remove it and start over` }}
                                 </button>
                             </template>
                             <!-- Offered from EVERY created state, not just a resumed one: the realisation that this

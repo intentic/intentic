@@ -45,7 +45,7 @@ const extensionRow = (active: ActiveExtension): AreaRow => {
 
 const router = useRouter();
 const sandbox = useSandbox();
-const { user, plan, entitlements, upgradeOpen, signOut } = useAuth();
+const { user, signOut } = useAuth();
 const { panels } = usePanels();
 const { capabilities } = useCapabilities();
 /* What the sandbox needs from its owner. The desktop splits this across two surfaces — a badge on the rail's
@@ -83,11 +83,6 @@ const sandboxRows: readonly AreaRow[] = [
 ];
 
 const addSandbox = (): void => {
-    const limit = entitlements.value?.sandboxLimit;
-    if (limit !== undefined && sandbox.sandboxes.value.filter((option) => option.role === `owner`).length >= limit) {
-        upgradeOpen.value = true;
-        return;
-    }
     void router.push(`/setup`);
 };
 
@@ -211,34 +206,16 @@ const logout = async (): Promise<void> => {
             </RouterLink>
         </section>
 
-        <!-- Account: identity + billing tier and the actions the desktop avatar popover holds. -->
+        <!-- Account: identity and the actions the desktop avatar popover holds. -->
         <section class="flex flex-col gap-1 pb-4">
             <h2 class="px-1 text-2xs font-semibold uppercase tracking-wide text-subtle">Account</h2>
             <div class="flex h-14 items-center gap-3 px-2">
                 <Avatar :size="40" :src="user?.image" />
                 <span class="min-w-0 flex-1">
-                    <span class="flex items-center gap-2">
-                        <span class="truncate text-sm font-medium text-content">{{ user?.email }}</span>
-                        <span
-                            v-if="plan"
-                            class="shrink-0 rounded-full px-1.5 py-0.5 text-2xs font-semibold leading-none"
-                            :class="plan === 'pro' ? 'bg-primary-600/15 text-link' : 'bg-content/10 text-subtle'"
-                        >
-                            {{ plan === "pro" ? "Pro" : "Free" }}
-                        </span>
-                    </span>
+                    <span class="truncate text-sm font-medium text-content">{{ user?.email }}</span>
                     <span v-if="user?.name" class="block truncate text-xs text-muted">{{ user.name }}</span>
                 </span>
             </div>
-            <button
-                v-if="plan === 'free'"
-                type="button"
-                class="flex h-12 items-center gap-3 rounded-lg px-2 text-left text-sm text-content transition-colors active:bg-overlay"
-                @click="upgradeOpen = true"
-            >
-                <span class="flex h-8 w-8 shrink-0 items-center justify-center"><Icon name="arrow-circle-up" class="text-base text-muted" /></span>
-                Upgrade
-            </button>
             <button
                 type="button"
                 class="flex h-12 items-center gap-3 rounded-lg px-2 text-left text-sm text-content transition-colors active:bg-overlay"

@@ -21,9 +21,6 @@ logger.info({ config: mask(config, CONFIG_SECRETS) }, `config loaded`);
 if (!config.google.clientId || !config.google.clientSecret) {
     logger.warn(`GOOGLE_CLIENT_ID/GOOGLE_CLIENT_SECRET unset — Google sign-in will fail until they are provided`);
 }
-if (!config.stripe.secretKey || !config.stripe.webhookSecret || !config.stripe.proPriceId) {
-    logger.warn(`STRIPE_SECRET_KEY/STRIPE_WEBHOOK_SECRET/STRIPE_PRO_PRICE_ID unset — billing (upgrade) will fail until they are provided`);
-}
 if (!config.secrets.key) {
     logger.warn(`SECRETS_KEY unset — OAuth/sandbox tokens will be persisted in plaintext (never run production like this)`);
 }

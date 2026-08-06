@@ -38,16 +38,15 @@ The shape of the product: you sign in with Google and run a sandbox on a machine
 laptop, a VPS), reached by your browser over a private Cloudflare tunnel. Inside it, a coding agent
 (Claude Code, Codex, or Grok) works your files and repos with human-in-the-loop approval. You grow
 it with capabilities (GitHub, databases, Discord, Stripe, SSH, MCP servers…), wake it on
-**automations**, and — on **Pro** — run a whole team of agents. The platform is architecturally a
+**automations**, and run a whole team of agents. The platform is architecturally a
 thin identity store that *cannot* touch your code, secrets, or systems (`README.md`, `ARCHITECTURE.md`).
 
 **Category**: specialized coding agents you own — cloud-grade agent UX and observability with
 local-grade ownership.
 
-**Business model**: bring your own model subscription + your own hardware + a flat platform fee —
-never a meter on model usage. Free (1 sandbox) / Pro (unlimited sandboxes + team sharing), Stripe
-billing (`_platform/api/src/billing/entitlements.ts`). The sandbox and CLI are MIT open source
-(`LICENSE`, GitHub).
+**Business model**: bring your own model subscription + your own hardware, and nothing to pay us —
+never a meter on model usage. There are no tiers and no limits: every sandbox, capability and shared
+workspace is included. The whole product is MIT open source (`LICENSE`, GitHub).
 
 ## Who it's for
 
@@ -64,8 +63,8 @@ capabilities, all configured once and supervised from a single fleet board (`_ed
 Job to be done: *"Stand up an agent per job, wire it to the right systems, and steer the whole
 workforce from one place."*
 
-**Secondary — teams sharing an agent workspace (Pro).** Owner invites teammates by email; grants
-are enforced by the sandbox daemon fail-closed; revoke/leave always work even after downgrade
+**Secondary — teams sharing an agent workspace.** Owner invites teammates by email; grants
+are enforced by the sandbox daemon fail-closed
 (`_platform/api/src/invite/invites.ts`, `_platform/api/src/invite/invite.routes.ts`).
 
 **Emerging — the automation operator.** Wants the agent on-call: wake on a Sentry alert, a Stripe
@@ -111,14 +110,14 @@ or live on `/product/*`, `/docs/*` and `/compare/`. See
    observability surfaces (fleet board, plan mode, permission modes, changes review, transcripts)
    exist for exactly that. Trust is a UX feature, not a policy PDF. (P4)
 5. **Economics that don't punish usage** — bring your own model subscription, run on your own
-   hardware, pay a flat platform fee. Never a meter on model tokens. It earns its band because "ten
-   agents" triggers "that must cost a fortune". (P7)
+   hardware, pay us nothing. Never a meter on model tokens. It earns its band because "ten agents"
+   triggers "that must cost a fortune". (P7)
 6. **Minutes to a live workspace** — Google sign-in, one copy-paste command, no Cloudflare account,
    no open ports, workspace opens itself when the sandbox reports in. (P3)
 7. **A lean core plus extensions** — automations, Discord/Slack, IMAP, memory, pipelines, previews and
    the Doorbell webchat are things you bolt on, not what the product is (`_extensions/README.md`, the
    VSCode bet). This is genuinely a selling point *and* the thing that blurred the site when it was
-   sold band by band; on the landing page it is one quiet index with links out. (P5, P6, Pro)
+   sold band by band; on the landing page it is one quiet index with links out. (P5, P6)
 
 ## Competitive frame
 
@@ -158,7 +157,7 @@ Rules that keep the shelf credible — it is the easiest page on the site to tur
 
 ## Honest maturity (say it, don't hide it)
 
-- The hosted app is new (launching at app.intentic.dev); the free tier is a real sandbox, not a demo.
+- The hosted app is new (launching at app.intentic.dev); it is free, and a real sandbox rather than a demo.
 - The sandbox and CLI that run on your machine are MIT and developed in the open on GitHub — read
   exactly what executes on your hardware before you trust it. Verify test counts at build time —
   never hardcode stale numbers.

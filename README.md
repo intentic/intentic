@@ -8,19 +8,19 @@ An autonomous agent still needs a human in the loop. AI has to have its context 
 
 ## What you get
 
-- **A fleet of specialized agents** — each in its own sandbox on a machine you own (laptop, workstation, VPS), reached from your browser over a private Cloudflare tunnel. One agent per role; Pro runs a whole team.
+- **A fleet of specialized agents** — each in its own sandbox on a machine you own (laptop, workstation, VPS), reached from your browser over a private Cloudflare tunnel. One agent per role, and as many as you care to run.
 - **A real workspace, not a chat box** — a file tree, a Monaco editor, terminals that survive reconnects, live preview panels, and workspace search.
 - **Plan-and-review by default** — agents propose before they act; every change is a diff you land or discard; environment changes need your explicit approval.
 - **Capabilities** — wire an agent into GitHub, databases, Sentry, Stripe, SSH hosts, MCP servers, Claude plugins, and more, a click each. Credentials stay inside the sandbox.
 - **Automations** — wake an agent on a schedule, a webhook, or a live event (a push, an alert, a payment, an email), each run leaving a transcript.
 - **Ownership by construction** — code and credentials never leave your machine; the platform stores your identity, the sandbox's URL and the secrets that pair the two, and sits off the command path. All of intentic — sandbox, CLI, workspace and platform — is MIT on [GitHub](https://github.com/intentic/intentic), so you can verify it.
-- **Your subscriptions, your hardware, a flat fee** — each agent runs on your own Claude, ChatGPT, or SuperGrok plan; intentic never meters your model usage.
+- **Your subscriptions, your hardware, free** — each agent runs on your own Claude, ChatGPT, or SuperGrok plan; intentic charges nothing and never meters your model usage.
 
 ## How it runs
 
 Sign in with Google, name a sandbox, and paste one command on the machine that should host it. The command starts the sandbox daemon and an outbound-only tunnel; the workspace opens the moment the daemon reports in. From there you specialize the agent — install its tools, connect its systems, curate its context — then give it work and review what it does.
 
-The product is three parts, all in this monorepo: a thin **platform** (identity + billing + the sandbox's URL), the per-user **sandbox** daemon (where the agent and your code actually live), and the browser **workspace**. See [ARCHITECTURE.md](ARCHITECTURE.md) for how they fit together and why the platform can't reach your code.
+The product is three parts, all in this monorepo: a thin **platform** (identity + the sandbox's URL), the per-user **sandbox** daemon (where the agent and your code actually live), and the browser **workspace**. See [ARCHITECTURE.md](ARCHITECTURE.md) for how they fit together and why the platform can't reach your code.
 
 ## Develop locally
 

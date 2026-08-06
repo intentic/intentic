@@ -1,15 +1,13 @@
-import type { Plan, User } from "@intentic-app/api-contract";
+import type { User } from "@intentic-app/api-contract";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { nextTick, ref } from "vue";
 
 // Plain refs stand in for useAuth's module singletons; the mock factory closes over them so re-imported
 // analytics modules (vi.resetModules per test) keep watching the same instances.
 const user = ref<User | null>(null);
-const plan = ref<Plan | undefined>(undefined);
-const upgradeOpen = ref(false);
-vi.mock("./useAuth", () => ({ useAuth: () => ({ user, plan, upgradeOpen }) }));
+vi.mock("./useAuth", () => ({ useAuth: () => ({ user }) }));
 vi.mock("posthog-js", () => ({
-    default: { init: vi.fn(), identify: vi.fn(), reset: vi.fn(), capture: vi.fn(), setPersonProperties: vi.fn() },
+    default: { init: vi.fn(), identify: vi.fn(), reset: vi.fn(), capture: vi.fn() },
 }));
 
 const bootAnalytics = async (posthogKey: string) => {
@@ -25,8 +23,6 @@ beforeEach(() => {
     // The posthog-js mock instance is shared across vi.resetModules boots — drop the previous test's calls.
     vi.clearAllMocks();
     user.value = null;
-    plan.value = undefined;
-    upgradeOpen.value = false;
 });
 
 describe(`initAnalytics`, () => {
@@ -37,7 +33,7 @@ describe(`initAnalytics`, () => {
         expect(literal.init).not.toHaveBeenCalled();
     });
 
-    it(`identifies on session resolve, resets on sign-out, captures upgrade dialog opens`, async () => {
+    it(`identifies on session resolve and resets on sign-out`, async () => {
         const { posthog } = await bootAnalytics(`phc_test`);
         // The proxied api_host is what keeps replay alive past an ad blocker, and sessionStorage is what keeps
         // one visit in one recording across reloads — both are load-bearing enough to pin here.
@@ -49,14 +45,6 @@ describe(`initAnalytics`, () => {
         user.value = { id: `u1`, email: `a@b.c`, name: `A`, image: null };
         await nextTick();
         expect(posthog.identify).toHaveBeenCalledWith(`u1`, { email: `a@b.c`, name: `A` });
-
-        plan.value = `pro`;
-        await nextTick();
-        expect(posthog.setPersonProperties).toHaveBeenCalledWith({ plan: `pro` });
-
-        upgradeOpen.value = true;
-        await nextTick();
-        expect(posthog.capture).toHaveBeenCalledWith(`upgrade_dialog_shown`);
 
         user.value = null;
         await nextTick();

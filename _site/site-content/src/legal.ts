@@ -35,7 +35,6 @@ export const privacyDoc: LegalDoc = {
             list: [
                 "Account data: your name, email address, and avatar, received from Google when you sign in.",
                 "Session data: a session token plus the IP address and browser user agent of each sign-in, kept for security. Expired sessions are purged automatically.",
-                "Billing data: a Stripe customer is created for your account and subscription status is stored. Card details go directly to Stripe and never touch our servers.",
                 "Sandbox records: sandbox names, their public URLs, and the connection tokens used to reach them.",
                 "Teammate emails: addresses you enter when sharing a sandbox, stored so the invitee's account can find it. Unaccepted invitations are purged after 90 days.",
             ],
@@ -58,7 +57,6 @@ export const privacyDoc: LegalDoc = {
             paragraphs: ["We share personal data only with the processors needed to run the service:"],
             list: [
                 "Google: sign-in (Google Identity Services); the app also loads Google Fonts, which discloses your IP address to Google.",
-                "Stripe: subscription billing and invoicing.",
                 "Cloudflare: website hosting, DNS, and the tunnels that expose your sandbox.",
                 "Anthropic: only via your own sandbox and credentials, as described above.",
             ],
@@ -66,20 +64,20 @@ export const privacyDoc: LegalDoc = {
         {
             heading: "Legal bases and international transfers",
             paragraphs: [
-                "We process account, sandbox, and billing data to perform our contract with you (GDPR Art. 6(1)(b)), and session/security data under our legitimate interest in keeping accounts safe (Art. 6(1)(f)).",
-                "Google, Stripe, Cloudflare, and Anthropic are US-based providers; transfers are covered by the EU–US Data Privacy Framework and/or EU Standard Contractual Clauses under each provider's data processing agreement.",
+                "We process account and sandbox data to perform our contract with you (GDPR Art. 6(1)(b)), and session/security data under our legitimate interest in keeping accounts safe (Art. 6(1)(f)).",
+                "Google, Cloudflare, and Anthropic are US-based providers; transfers are covered by the EU–US Data Privacy Framework and/or EU Standard Contractual Clauses under each provider's data processing agreement.",
             ],
         },
         {
             heading: "Retention",
             paragraphs: [
-                "Account and sandbox data are kept until you delete your account, which removes them immediately. Expired sessions and stale invitations are purged automatically. Billing records are retained by Stripe and by us as long as statutory bookkeeping obligations require.",
+                "Account and sandbox data are kept until you delete your account, which removes them immediately. Expired sessions and stale invitations are purged automatically. The service is free, so there are no billing records to keep.",
             ],
         },
         {
             heading: "Your rights",
             paragraphs: [
-                "You can access, correct, export, and erase your data at any time: Settings offers self-service data export and account deletion (which also removes your Stripe customer). You additionally have the rights to restriction, objection, and portability under the GDPR, and to lodge a complaint with the Polish supervisory authority (UODO, uodo.gov.pl) or your local data protection authority.",
+                "You can access, correct, export, and erase your data at any time: Settings offers self-service data export and account deletion. You additionally have the rights to restriction, objection, and portability under the GDPR, and to lodge a complaint with the Polish supervisory authority (UODO, uodo.gov.pl) or your local data protection authority.",
                 `For anything else, write to ${LEGAL_CONTACT_EMAIL}.`,
             ],
         },
@@ -99,7 +97,7 @@ export const termsDoc: LegalDoc = {
         {
             heading: "The service",
             paragraphs: [
-                "The intentic platform provides accounts, billing, and the connection layer between your browser and sandboxes you run on your own infrastructure. The intentic software is open source under the MIT license in its entirety, the platform included; these terms cover the hosted service we operate, not your self-hosted components.",
+                "The intentic platform provides accounts and the connection layer between your browser and sandboxes you run on your own infrastructure. It is free of charge, with no paid tier and no usage limits. The intentic software is open source under the MIT license in its entirety, the platform included; these terms cover the hosted service we operate, not your self-hosted components.",
             ],
         },
         {
@@ -121,9 +119,9 @@ export const termsDoc: LegalDoc = {
             ],
         },
         {
-            heading: "Plans and billing",
+            heading: "Price",
             paragraphs: [
-                "The free plan is limited; the Pro plan is a recurring subscription billed through Stripe at the price shown at checkout. Subscriptions renew automatically until cancelled; cancellation takes effect at the end of the paid period. We may change prices with advance notice; changes apply from your next renewal.",
+                "The platform is provided free of charge. We take no payment and process none: any money you spend on running your agents is paid directly to your own model, hosting and infrastructure providers under your agreements with them.",
             ],
         },
         {
@@ -138,7 +136,7 @@ export const termsDoc: LegalDoc = {
         {
             heading: "Disclaimers and liability",
             paragraphs: [
-                'The platform is provided "as is" and "as available", without warranties of any kind, and is under active development, so features may change or break. To the maximum extent permitted by law, our total liability is limited to the fees you paid us in the twelve months before the claim, and we are not liable for indirect damages, lost data on your own infrastructure, or costs incurred in your third-party accounts. Nothing in these terms limits liability that cannot be limited by law, including your statutory rights as an EU consumer.',
+                'The platform is provided "as is" and "as available", without warranties of any kind, and is under active development, so features may change or break. Because the service is free of charge, our liability is excluded to the maximum extent permitted by law, and in particular we are not liable for indirect damages, lost data on your own infrastructure, or costs incurred in your third-party accounts. Nothing in these terms limits liability that cannot be limited by law, including your statutory rights as an EU consumer.',
             ],
         },
         {

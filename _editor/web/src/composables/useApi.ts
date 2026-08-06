@@ -13,13 +13,3 @@ export const apiClient: ContractRouterClient<typeof apiContract> = createORPCCli
         fetch: (request) => globalThis.fetch(request, { credentials: `include` }),
     }),
 );
-
-// The API's plan-gate signal (entitlements.ts → PAYMENT_REQUIRED/402); callers open the Upgrade dialog on it
-// instead of surfacing a raw error.
-export const isPaymentRequired = (err: unknown): boolean => {
-    if (err && typeof err === `object`) {
-        const e = err as { code?: unknown; status?: unknown };
-        return e.code === `PAYMENT_REQUIRED` || e.status === 402;
-    }
-    return false;
-};

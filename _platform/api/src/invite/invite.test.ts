@@ -14,11 +14,9 @@ const context = (overrides?: Partial<OrpcContext>): OrpcContext =>
         prisma: fakePrisma({}),
         config: {
             webOrigin: `https://app.test`,
-            stripe: { secretKey: ``, proPriceId: `` },
             intenticCloudflare: { apiToken: ``, zone: `` },
             secrets: { key: `` },
             email: { apiKey: ``, from: `` },
-            permanentPremiumEmails: [],
         },
         user,
         logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() },
@@ -48,7 +46,6 @@ describe(`invite routes`, () => {
         ]);
         const prisma = fakePrisma({
             sandbox: { findFirst: vi.fn().mockResolvedValue(sandboxRow) },
-            subscription: { findFirst: vi.fn().mockResolvedValue({ status: `active` }) },
             sandboxMember: { findUnique, upsert, findMany },
         });
 
@@ -88,17 +85,5 @@ describe(`invite routes`, () => {
     it(`invite.accept 404s an unknown token`, async () => {
         const prisma = fakePrisma({ sandboxMember: { findUnique: vi.fn().mockResolvedValue(null) } });
         await expectOrpcCode(call(inviteRoutes.accept, { token: `nope` }, { context: context({ prisma }) }), `NOT_FOUND`);
-    });
-
-    it(`gates invite.create and invite.list behind the sharing entitlement`, async () => {
-        const prisma = fakePrisma({
-            sandbox: { findFirst: vi.fn().mockResolvedValue(sandboxRow) },
-            subscription: { findFirst: vi.fn().mockResolvedValue(null) },
-        });
-        await expectOrpcCode(
-            call(inviteRoutes.create, { sandboxId: `s1`, email: `guest@example.com` }, { context: context({ prisma }) }),
-            `PAYMENT_REQUIRED`,
-        );
-        await expectOrpcCode(call(inviteRoutes.list, { sandboxId: `s1` }, { context: context({ prisma }) }), `PAYMENT_REQUIRED`);
     });
 });

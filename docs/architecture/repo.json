@@ -90,7 +90,7 @@
             "accent": "neutral",
             "id": "platform",
             "name": "Account",
-            "oneLiner": "Sign-in and billing. Off to one side of everything else.",
+            "oneLiner": "Sign-in and the sandbox registry. Off to one side of everything else.",
             "packages": ["_platform/api", "_platform/api-contract", "_platform/capability-catalog", "_platform/prisma"]
         },
         {

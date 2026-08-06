@@ -1,16 +1,15 @@
 <script setup lang="ts">
 import { Avatar } from "@intentic/ui";
 import Popover from "primevue/popover";
-import { computed, onMounted, ref } from "vue";
+import { computed, ref } from "vue";
 import { useRouter } from "vue-router";
 import { useAuth } from "../composables/useAuth";
 
-/* The rail's bottom account control: an avatar that opens a popover scoped to the account (email + name),
- * the billing tier, and the account actions (Upgrade, Settings, Sign out). The sandbox and its status live
- * in the rail's top switcher; personal preferences (theme) live on the /settings page. The Upgrade dialog
- * itself is mounted once in App.vue — opened from here via useAuth's shared `upgradeOpen`. */
+/* The rail's bottom account control: an avatar that opens a popover scoped to the account (email + name)
+ * and the account actions (Settings, Sign out). The sandbox and its status live in the rail's top switcher;
+ * personal preferences (theme) live on the /settings page. */
 
-const { user, plan, upgradeOpen, refreshPlan, signOut } = useAuth();
+const { user, signOut } = useAuth();
 const router = useRouter();
 
 const panel = ref<InstanceType<typeof Popover> | null>(null);
@@ -20,13 +19,6 @@ const avatarImage = computed<string | null>(() => (avatarFailed.value ? null : (
 
 const avatarLoadFailed = (): void => {
     avatarFailed.value = true;
-};
-
-onMounted(() => void refreshPlan());
-
-const openUpgrade = (): void => {
-    upgradeOpen.value = true;
-    panel.value?.hide();
 };
 
 const openSettings = (): void => {
@@ -52,37 +44,19 @@ const logout = async (): Promise<void> => {
         <Icon name="user" v-else class="text-base" />
     </button>
 
-    <Popover ref="panel" append-to="body" @show="refreshPlan">
+    <Popover ref="panel" append-to="body">
         <div class="flex w-72 flex-col p-1">
-            <!-- Central account: email + name, with the billing tier badge. -->
+            <!-- Central account: email + name. -->
             <div class="flex items-center gap-3 px-2 py-2">
                 <Avatar :size="40" :src="avatarImage" />
                 <div class="min-w-0 flex-1">
-                    <div class="flex items-center gap-2">
-                        <span class="truncate text-sm font-medium text-content">{{ user?.email }}</span>
-                        <span
-                            v-if="plan"
-                            class="shrink-0 rounded-full px-1.5 py-0.5 text-2xs font-semibold leading-none"
-                            :class="plan === 'pro' ? 'bg-primary-600/15 text-link' : 'bg-content/10 text-subtle'"
-                        >
-                            {{ plan === "pro" ? "Pro" : "Free" }}
-                        </span>
-                    </div>
+                    <span class="truncate text-sm font-medium text-content">{{ user?.email }}</span>
                     <div v-if="user?.name" class="truncate text-xs text-muted">{{ user.name }}</div>
                 </div>
             </div>
 
             <div class="my-1 border-t border-line"></div>
 
-            <button
-                v-if="plan === 'free'"
-                type="button"
-                class="flex w-full items-center gap-2.5 rounded-md px-2 py-1.5 text-sm text-content transition-colors hover:bg-content/5"
-                @click="openUpgrade"
-            >
-                <Icon name="arrow-circle-up" class="text-base text-muted" />
-                Upgrade
-            </button>
             <button
                 type="button"
                 class="flex w-full items-center gap-2.5 rounded-md px-2 py-1.5 text-sm text-content transition-colors hover:bg-content/5"

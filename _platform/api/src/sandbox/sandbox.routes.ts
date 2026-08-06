@@ -1,7 +1,6 @@
 import { randomBytes } from "node:crypto";
 import { apiContract } from "@intentic-app/api-contract";
 import { implement, ORPCError } from "@orpc/server";
-import { getPlan, PLAN_ENTITLEMENTS, paymentRequired } from "../billing/entitlements.js";
 import type { OrpcContext } from "../context.js";
 import { sha256Hex } from "@intentic/sandbox-contract/tunnel-ids";
 import { decryptSecret, encryptSecret } from "../crypto.js";
@@ -78,19 +77,9 @@ export const sandboxRoutes = {
             ],
         };
     }),
-    // Mint a new sandbox for the caller, within the plan's limit. Only OWNED sandboxes count against the
-    // quota (memberships never do), and the gate is create-only — sandboxes already over a downgraded limit
-    // keep working.
+    // Mint a new sandbox for the caller. Unlimited — own as many as you like.
     create: os.sandbox.create.handler(async ({ context, input }) => {
         const user = requireUser(context);
-        const { sandboxLimit } = PLAN_ENTITLEMENTS[await getPlan(context.config, context.prisma, user)];
-        if (sandboxLimit !== undefined) {
-            // ponytail: count-then-create race can overshoot the limit by one on concurrent requests; harmless.
-            const owned = await context.prisma.sandbox.count({ where: { ownerId: user.id } });
-            if (owned >= sandboxLimit) {
-                throw paymentRequired(`The free plan includes ${sandboxLimit} sandbox — upgrade to Pro to add more.`);
-            }
-        }
         // Claim a pre-provisioned subdomain when the pool is enabled and stocked (sandbox-pool.ts): its token +
         // intentic tunnel are copied verbatim (already encrypted), so setupCode's tunnelToken is already set and
         // its Cloudflare round-trips are skipped — the wizard's "preparing your domain" step becomes instant.

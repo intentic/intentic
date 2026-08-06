@@ -85,11 +85,11 @@ export const faqGroups: FaqGroup[] = [
                 answer: ["No. The tunnel is provisioned under intentic's own domain by default. Bring your own zone if you prefer; the token is used once and never stored."],
             },
             {
-                id: "free-vs-pro",
-                question: "What's free and what's Pro?",
+                id: "is-any-of-it-paid",
+                question: "Is any of it paid?",
                 answer: [
-                    "Free is one full sandbox with every capability included. Pro adds unlimited sandboxes and team sharing.",
-                    "Billed through Stripe, cancel anytime. Removing access never requires Pro.",
+                    "No. Every sandbox, every capability and team sharing are free — no tiers, no limits, no card.",
+                    "All of intentic is MIT on GitHub, platform included. You pay your own model provider, directly.",
                 ],
             },
             {
@@ -104,7 +104,7 @@ export const faqGroups: FaqGroup[] = [
                 id: "production-ready",
                 question: "Is it production-ready?",
                 answer: [
-                    "The app is new and says so, but it isn't a demo: the free plan is a real, full sandbox.",
+                    "The app is new and says so, but it isn't a demo: what you get is a real, full sandbox.",
                     "Every agent starts in plan mode and every change lands as a reviewable diff, so you build trust with the wheel in your hands.",
                 ],
             },
@@ -136,14 +136,14 @@ export const faqGroups: FaqGroup[] = [
                 question: "Is it open source?",
                 answer: [
                     "Yes, all of it. intentic is MIT on GitHub — the sandbox, the CLI, the workspace and the hosted platform, developed in one public repo — so you can read every line that touches your code before you run it.",
-                    "The platform adds accounts, billing and the connection layer. It stays off the command path, and now you can check that for yourself rather than take our word for it.",
+                    "The platform adds accounts and the connection layer. It stays off the command path, and now you can check that for yourself rather than take our word for it.",
                 ],
             },
             {
                 id: "my-data",
                 question: "Can I export or delete my data?",
                 answer: [
-                    "Settings → Export downloads everything the platform stores about you as JSON. Account deletion cancels billing and cascades sandboxes, sessions and grants.",
+                    "Settings → Export downloads everything the platform stores about you as JSON. Account deletion cascades sandboxes, sessions and grants.",
                 ],
             },
         ],

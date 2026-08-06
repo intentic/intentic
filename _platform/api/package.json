@@ -12,7 +12,6 @@
         "test": "vitest run"
     },
     "dependencies": {
-        "@better-auth/stripe": "catalog:",
         "@hono/otel": "catalog:",
         "@intentic-app/api-contract": "workspace:*",
         "@intentic-app/localhost-https": "workspace:*",
@@ -38,7 +37,6 @@
         "pino": "catalog:",
         "pino-pretty": "catalog:",
         "prisma": "catalog:",
-        "stripe": "catalog:",
         "tslib": "catalog:",
         "zod": "catalog:"
     },

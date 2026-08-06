@@ -286,33 +286,6 @@ export type User = z.infer<typeof UserSchema>;
 // lands in a row. Enforced by sandbox.update's input and the auth user.update hook.
 export const ImageDataUrlSchema = z.string().startsWith("data:image/").max(150_000);
 
-// The platform's "pro" plan price, read live from Stripe (STRIPE_PRO_PRICE_ID) so the upgrade dialog never
-// shows a figure that drifts from what's charged. `amount` is in the currency's minor unit (Stripe unit_amount,
-// e.g. cents); `currency` is the lowercase ISO code (Stripe convention); `interval` is the billing period.
-export const PricingSchema = z.object({
-    amount: z.number(),
-    currency: z.string(),
-    interval: z.string(),
-});
-export type Pricing = z.infer<typeof PricingSchema>;
-
-// The platform's billing tiers. The tier is resolved SERVER-side from the persisted Subscription rows the
-// Better Auth Stripe plugin writes — never from client-listed subscriptions — because it gates API routes.
-export const PlanSchema = z.enum(["free", "pro"]);
-export type Plan = z.infer<typeof PlanSchema>;
-
-// What the caller's plan entitles them to, resolved from the API's PLAN_ENTITLEMENTS config (the single source
-// of truth for what's gated). `sandboxLimit` absent = unlimited. The web uses this only to render upsell states
-// early — gated routes enforce regardless and throw PAYMENT_REQUIRED (402).
-export const EntitlementsSchema = z.object({
-    sandboxLimit: z.number().optional(),
-    sandboxSharing: z.boolean(),
-});
-export type Entitlements = z.infer<typeof EntitlementsSchema>;
-
-export const PlanInfoSchema = z.object({ plan: PlanSchema, entitlements: EntitlementsSchema });
-export type PlanInfo = z.infer<typeof PlanInfoSchema>;
-
 // Remove-by-name input for the inventory routes (one sandbox per user, so the name identifies the entry).
 export const RemoveInventoryInputSchema = z.object({
     name: z.string().min(1),

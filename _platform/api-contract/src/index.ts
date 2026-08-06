@@ -7,8 +7,6 @@ import {
     ImageDataUrlSchema,
     InviteListSchema,
     InvitePreviewSchema,
-    PlanInfoSchema,
-    PricingSchema,
     SandboxSummarySchema,
     SetupCodeSchema,
     SetupCodeTargetSchema,
@@ -76,9 +74,9 @@ export const sandboxContract = {
         .output(z.object({ ok: z.boolean() })),
 };
 
-// Sharing a sandbox with teammates by email. Owner side (all take `sandboxId`, owner-only, Pro-gated except
-// `revoke` so revocation always works after a downgrade): `list` is the access roster; `create` records a pending
-// invite and emails the link; `resend` mints a fresh link + email; `revoke` removes an email's access. Invitee
+// Sharing a sandbox with teammates by email. Owner side (all take `sandboxId`, owner-only): `list` is the
+// access roster; `create` records a pending invite and emails the link; `resend` mints a fresh link + email;
+// `revoke` removes an email's access. Invitee
 // side (token-facing): `preview` is the public read the accept page renders while logged out; `accept` (session
 // required, email-locked) flips the caller's pending invite to an active member. The daemon's own authorized list
 // is still pushed by the owner's browser at invite time — the server can't reach the daemon.
@@ -94,16 +92,6 @@ export const inviteContract = {
         .route({ method: "POST", path: "/invite/accept" })
         .input(tokenInput)
         .output(z.object({ sandboxId: z.string() })),
-};
-
-// The platform's own billing. `pricing` returns the live "pro" price (read from Stripe) so the upgrade dialog
-// can show the real figure; NOT_FOUND when billing is unconfigured. `plan` returns the caller's server-resolved
-// tier + entitlements (reads only Postgres, so it works with Stripe unconfigured); gated routes throw
-// PAYMENT_REQUIRED (402). Checkout/portal/webhook stay with the Better Auth stripe plugin (mounted under
-// /api/auth), not oRPC.
-export const billingContract = {
-    pricing: oc.route({ method: "GET", path: "/billing/pricing" }).output(PricingSchema),
-    plan: oc.route({ method: "GET", path: "/billing/plan" }).output(PlanInfoSchema),
 };
 
 /* Carrying ONE sign-in from the user's real browser into the desktop app's webview (_editor/desktop-app).
@@ -134,7 +122,6 @@ export const desktopContract = {
 // and implemented on the server by the per-domain implement() route factories.
 export const apiContract = {
     me: meContract,
-    billing: billingContract,
     sandbox: sandboxContract,
     invite: inviteContract,
     desktop: desktopContract,

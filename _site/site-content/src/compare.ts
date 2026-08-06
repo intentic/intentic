@@ -447,7 +447,7 @@ export const comparePages: ComparePage[] = [
             },
             {
                 title: "More than one person",
-                body: "Invite a teammate by email and they reach the same sandbox signed in as themselves, with grants enforced fail-closed. Sharing is a Pro feature; revoking or leaving never is.",
+                body: "Invite a teammate by email and they reach the same sandbox signed in as themselves, with grants enforced fail-closed. Sharing is free, like everything else here.",
             },
         ],
         table: [
@@ -780,7 +780,7 @@ export const comparePages: ComparePage[] = [
         differences: [
             {
                 title: "Custody, stated architecturally",
-                body: "Your browser holds the token that commands the sandbox; the platform never does. It stores identity, a URL, billing state, grants and the connection secrets that pair a browser to a sandbox — encrypted at rest under a key the platform holds. What it never stores is your code, your prompts or your capability credentials: those live only inside the sandbox.",
+                body: "Your browser holds the token that commands the sandbox; the platform never does. It stores identity, a URL, grants and the connection secrets that pair a browser to a sandbox — encrypted at rest under a key the platform holds. What it never stores is your code, your prompts or your capability credentials: those live only inside the sandbox.",
             },
             {
                 title: "Real access, safely",
@@ -788,7 +788,7 @@ export const comparePages: ComparePage[] = [
             },
             {
                 title: "Your subscription, no meter",
-                body: "Cloud platforms bill you for the model and for the machine, usually with a markup on both. intentic runs on the account you already pay for, on hardware you already own, for a flat fee that never meters tokens.",
+                body: "Cloud platforms bill you for the model and for the machine, usually with a markup on both. intentic runs on the account you already pay for, on hardware you already own, and charges you nothing at all.",
             },
             {
                 title: "An exit that is not a migration",

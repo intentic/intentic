@@ -19,9 +19,6 @@ model User {
     email            String             @unique
     emailVerified    Boolean            @default(false)
     image            String?
-    // Stripe customer for the platform's own SaaS billing — created on sign-up by the Better Auth Stripe
-    // plugin. Central-account state (like the session/account rows), the one sanctioned platform-owned store.
-    stripeCustomerId String?
     // Consent capture: which clickwrap version (auth.ts TERMS_VERSION = intentic.dev's LEGAL_VERSION) the
     // login page showed when this account was created, and when. Stamped by the user-create hook.
     termsAcceptedAt  DateTime?
@@ -33,33 +30,6 @@ model User {
     sandboxes        Sandbox[]
 
     @@map("user")
-}
-
-// Platform SaaS subscription, written by the Better Auth Stripe plugin (auth.ts) from Stripe webhook events.
-// `referenceId` is the owning user id (the plugin's default) and is intentionally a plain String, not a
-// relation — the plugin queries it directly. Full field set the plugin writes; do not trim.
-model Subscription {
-    id                   String    @id @default(cuid())
-    plan                 String
-    referenceId          String
-    stripeCustomerId     String?
-    stripeSubscriptionId String?
-    status               String
-    periodStart          DateTime?
-    periodEnd            DateTime?
-    cancelAtPeriodEnd    Boolean?
-    cancelAt             DateTime?
-    canceledAt           DateTime?
-    endedAt              DateTime?
-    seats                Int?
-    trialStart           DateTime?
-    trialEnd             DateTime?
-    billingInterval      String?
-    stripeScheduleId     String?
-
-    // getPlan (entitlements.ts) runs findFirst({ referenceId, status }) on every gated route.
-    @@index([referenceId])
-    @@map("subscription")
 }
 
 model Session {

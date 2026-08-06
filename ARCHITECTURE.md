@@ -18,10 +18,10 @@ of its tools; that path is optional. The engine flow shown later is what runs *i
 flowchart TB
     operator(["Operator (browser)"])
 
-    subgraph cloud["Intentic Platform — identity + sandbox-URL store + billing"]
+    subgraph cloud["Intentic Platform — identity + sandbox-URL store"]
         web["Web UI · Vue (SPA)"]
         api["API · Hono / oRPC"]
-        db[("Postgres<br/>account + billing + connection token<br/>+ sandbox URL + tunnel pool")]
+        db[("Postgres<br/>account + connection token<br/>+ sandbox URL + tunnel pool")]
         web --> api --> db
     end
 
@@ -44,9 +44,8 @@ flowchart TB
     cli ==>|reconcile| appplane
 ```
 
-- **Platform (identity + sandbox-URL store + billing)** — Vue SPA + Hono/oRPC API. Persists the
-  operator's account and Stripe subscription (Better Auth; free = 1 sandbox, pro = unlimited +
-  sharing), one secret-free per-user connection token, the sandbox's public `daemonUrl` (announced
+- **Platform (identity + sandbox-URL store)** — Vue SPA + Hono/oRPC API. Persists the
+  operator's account (Better Auth), one secret-free per-user connection token, the sandbox's public `daemonUrl` (announced
   by the **daemon** on boot), member invites (a discovery mirror — the daemon is the enforcer), and
   a pool of pre-provisioned tunnels (`ReservedSandbox`) so setup pays no Cloudflare round-trips
   inline. It never probes the sandbox, owns no infrastructure, and sits **off the command path**.
@@ -422,7 +421,7 @@ dependency edges into `@intentic/*` all go through `sandbox-contract` (and one t
 | Package | Role |
 | --- | --- |
 | [`@intentic-app/web`](_editor/web) | The Vue 3 SPA shell — the editor UI (rail · workspace tree + file viewers + Monaco · chat). Signs in against the platform, then drives the sandbox daemon **directly** over its tunnel. The **extension host** lives here. |
-| [`@intentic-app/api`](_platform/api) | The thin platform: Better Auth sign-in + the `setup.*` handshake + Stripe. Off the command path (see topology above). |
+| [`@intentic-app/api`](_platform/api) | The thin platform: Better Auth sign-in + the `setup.*` handshake. Off the command path (see topology above). |
 | [`@intentic/desktop-app`](_editor/desktop-app) | The Windows/Linux desktop app (Tauri 2). Its workspace window IS the hosted SPA, with no IPC — the only channel in is an intercepted `intentic://` link. The native half runs the SHIPPED scripts (`connect.sh`, `recreate.sh`, `cleanup.sh` and their PowerShell twins) rather than reimplementing them, so the desktop and terminal paths are the same file; and because the daemon holds no host Docker socket, this app is the only thing that can turn "paste this command on the machine that runs your sandbox" into a button. Sign-in happens in the user's real browser and returns over the deep link (Google refuses embedded webviews). See [_editor/desktop-app/README.md](_editor/desktop-app/README.md). |
 | [`@intentic/sandbox`](_sandbox/sandbox) | The per-user daemon (documented under [The sandbox daemon](#the-sandbox-daemon)) — also the app plane's whole backend: workspace files, chat, terminals, panels, search, settings, and the daemon-side half of the extension system. |
 | [`@intentic/sandbox-contract`](_sandbox/sandbox-contract) | **The keystone wire contract** — the oRPC route + schema surface shared by the daemon, the web client, and every UI extension (~15 dependents). It is deliberately *the* first-party data contract: because everything that consumes it is in-repo and compiled together, a wire change is caught by the compiler and fixed atomically, so there is no separate "stable API" shim to maintain. |

@@ -25,7 +25,7 @@ A private box per project. Your code lives in it, AI agents work in it, and you 
     {"id": "search", "label": "Code search", "note": "how they find code", "accent": "4"},
     {"id": "deploy", "label": "Deployment engine", "note": "a bundled tool", "accent": "5"},
     {"id": "computers", "label": "Your computer", "note": "your own machine", "accent": "neutral"},
-    {"id": "account", "label": "Account", "note": "sign-in, billing", "accent": "neutral"},
+    {"id": "account", "label": "Account", "note": "sign-in, sandbox registry", "accent": "neutral"},
     {"id": "site", "label": "The website", "note": "public pages", "accent": "neutral"}
   ],
   "edges": [
@@ -63,7 +63,7 @@ part it belongs to before you open it.
 
 **Deployment engine** (`_deploy/`) — A bundled tool that turns 'what I want' into running servers. Not part of the product. · 8 packages, 27.5k lines
 
-**Account** (`_platform/`) — Sign-in and billing. Off to one side of everything else. · 4 packages, 22.1k lines
+**Account** (`_platform/`) — Sign-in and the sandbox registry. Off to one side of everything else. · 4 packages, 22.1k lines
 
 **The website** (`_site/`) — The public site and its playable demo. · 4 packages, 9.8k lines
 

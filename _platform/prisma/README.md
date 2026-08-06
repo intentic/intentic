@@ -4,7 +4,7 @@ The **database layer** — the Prisma schema, the generated client, and the migr
 
 ## Responsibilities
 
-- Define the schema: the Better Auth tables (`User`/`Session`/`Account`/`Verification`), `Subscription` (the platform's own Stripe billing), and `SandboxConnection` (one per user — the connection token + the sandbox's `daemonUrl`; no liveness state).
+- Define the schema: the Better Auth tables (`User`/`Session`/`Account`/`Verification`) and `SandboxConnection` (one per user — the connection token + the sandbox's `daemonUrl`; no liveness state).
 - Generate the client and own the migration history.
 - Provide nothing at runtime beyond the client — no business logic.
 

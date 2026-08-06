@@ -195,7 +195,7 @@ export function buildSoftwareAppSchema() {
             price: "0",
             priceCurrency: "USD",
             availability: "https://schema.org/InStock",
-            description: "Free plan: one full sandbox, with every capability, the agent and automations included.",
+            description: "Free and MIT open source: unlimited sandboxes, with every capability, the agent and automations included.",
         },
         // Ordered the way the landing page argues: run many in parallel, on your hardware, nothing
         // landing unread — then the reasons those agents are any good.

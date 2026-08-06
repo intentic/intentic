@@ -376,7 +376,7 @@ export const productPages: ProductPage[] = [
             },
             {
                 title: "What the platform actually holds",
-                body: "Identity, the sandbox's URL, billing state, and the grants that let a teammate reach it. Not your code, not your keys, not your transcripts.",
+                body: "Identity, the sandbox's URL, and the grants that let a teammate reach it. Not your code, not your keys, not your transcripts.",
                 figure: "platform-boundary",
             },
             {
@@ -390,7 +390,7 @@ export const productPages: ProductPage[] = [
                 bullets: [
                     "Invite by email; grants are enforced by the daemon, fail-closed.",
                     "Teammates chat, drive and review, and mirror the sandbox's ports.",
-                    "Sharing is a Pro feature; revoking or leaving never is.",
+                    "Revoking or leaving takes effect the moment you press it.",
                 ],
                 figure: "sharing",
             },
