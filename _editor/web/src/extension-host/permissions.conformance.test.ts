@@ -10,9 +10,6 @@ import { describe, expect, test } from "vitest";
 
 const extensionsRoot = resolve(dirname(fileURLToPath(import.meta.url)), "../../../../_extensions");
 
-// The builtin UI extensions loaded by extension-host/builtins.ts (each reaches the daemon via api.sandbox).
-const BUILTINS = ["activity", "automations", "documentation", "logs", "memory", "preview", "repo-apps"];
-
 const sourceFiles = (dir: string): string[] => {
     const out: string[] = [];
     for (const entry of readdirSync(dir, { withFileTypes: true })) {
@@ -56,16 +53,56 @@ const scanMethodHelpers = (text: string): Map<string, string> => {
     return helpers;
 };
 
+/* Route-producing helpers defined in the file: `const post = (action: string, …) =>
+ * api.sandbox.json(`/git/${encode(repo.value)}/${action}`, …)`, called as post(`checkout`, …).
+ *
+ * Without this both segments normalize to wildcards and NO precise declaration could ever match the call, so
+ * the only way to pass would be a manifest that wildcards the action — exactly the over-broad grant this file
+ * argues against. Resolved the same way methods are: find the helper whose FIRST parameter is the interpolated
+ * identifier and expand the call over every literal its call sites pass, so what gets checked is the declared
+ * "POST /git/<repo>/checkout" rather than a wildcard that hides which write action ran.
+ *
+ * Only route-segment-shaped literals count — a helper whose first string parameter is prose (a title, a
+ * message) is not a route and must not be expanded into one. */
+const ROUTE_SEGMENT = /^[a-z][a-z0-9/-]*$/i;
+const scanRouteSegments = (text: string): Map<string, readonly string[]> => {
+    const segments = new Map<string, readonly string[]>();
+    const re = /(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*(?:async\s*)?(?:<[^>]*>\s*)?\(\s*([A-Za-z_$][\w$]*)\s*:\s*string/g;
+    let match: RegExpExecArray | null;
+    while ((match = re.exec(text)) !== null) {
+        const helper = match[1] ?? "";
+        const parameter = match[2] ?? "";
+        const literals = [...text.matchAll(new RegExp(`\\b${helper}\\s*\\(\\s*[\`'"]([^\`'"]+)`, "g"))]
+            .map((hit) => hit[1] ?? "")
+            .filter((literal) => ROUTE_SEGMENT.test(literal));
+        if (literals.length > 0) {
+            segments.set(parameter, literals);
+        }
+    }
+    return segments;
+};
+
+// One raw path per resolvable combination of its bare-identifier interpolations. `${encode(repo.value)}` is not
+// a bare identifier and stays a wildcard — the repo name is genuinely one segment of anything.
+const expandSegments = (raw: string, segments: Map<string, readonly string[]>): readonly string[] => {
+    const hit = /\$\{([A-Za-z_$][\w$]*)\}/.exec(raw);
+    const literals = hit === null ? undefined : segments.get(hit[1] ?? "");
+    if (hit === null || literals === undefined) {
+        return [raw];
+    }
+    return literals.flatMap((literal) => expandSegments(raw.replace(hit[0], literal), segments));
+};
+
 // Every api.sandbox.request/json (or host().sandbox.*) call in a source file: its first string/template-literal
 // path arg (normalized — query stripped, `${…}` → `*`) and its method — a literal `method:` in the options
-// object, else a method-producing helper passed as the options, else GET.
-const scanCalls = (text: string, helpers: Map<string, string>): Call[] => {
+// object, else a method-producing helper passed as the options, else GET. A call whose path interpolates a
+// route helper's parameter yields one entry per literal that helper is called with.
+const scanCalls = (text: string, helpers: Map<string, string>, segments: Map<string, readonly string[]>): Call[] => {
     const calls: Call[] = [];
     const re = /sandbox\.(?:json|request)(?:<[^>]*>)?\(\s*[`'"]([^`'"]*)/g;
     let match: RegExpExecArray | null;
     while ((match = re.exec(text)) !== null) {
         const raw = match[1] ?? "";
-        const path = raw.split("?")[0]?.replace(/\$\{[^}]*\}/g, "*") ?? "";
         // The call's opening `(` sits just before the path's quote (regex allows only `\s*` between them). Anchor
         // there rather than lastIndexOf("(") — a path like `/x/${encodeURIComponent(id)}` carries its own parens.
         let paren = match[0].length - raw.length - 2;
@@ -74,7 +111,9 @@ const scanCalls = (text: string, helpers: Map<string, string>): Call[] => {
         const literal = /method:\s*[`'"]([A-Za-z]+)/.exec(args)?.[1];
         const helper = literal ? undefined : [...helpers].find(([helperName]) => new RegExp(`\\b${helperName}\\s*\\(`).test(args));
         const method = literal ?? helper?.[1] ?? "GET";
-        calls.push({ method, path });
+        for (const expanded of expandSegments(raw, segments)) {
+            calls.push({ method, path: expanded.split("?")[0]?.replace(/\$\{[^}]*\}/g, "*") ?? "" });
+        }
     }
     return calls;
 };
@@ -96,6 +135,18 @@ const everyExtension = readdirSync(extensionsRoot, { withFileTypes: true })
     .filter((entry) => entry.isDirectory() && existsSync(join(extensionsRoot, entry.name, "intentic-extension.json")))
     .map((entry) => entry.name);
 
+// Every sandbox call one extension's source makes — none for a data-only pack, which ships a manifest and no `src`.
+const callsOf = (name: string): Call[] => {
+    const dir = join(extensionsRoot, name, "src");
+    if (!existsSync(dir)) {
+        return [];
+    }
+    return sourceFiles(dir).flatMap((file) => {
+        const text = readFileSync(file, "utf8");
+        return scanCalls(text, scanMethodHelpers(text), scanRouteSegments(text));
+    });
+};
+
 describe.each(everyExtension)("%s reads models and accounts through api.models, not the daemon", (name) => {
     const root = join(extensionsRoot, name);
     const manifest = ExtensionManifestSchema.parse(JSON.parse(readFileSync(join(root, "intentic-extension.json"), "utf8")));
@@ -106,32 +157,40 @@ describe.each(everyExtension)("%s reads models and accounts through api.models, 
     });
 
     test("calls no model or account catalog route", () => {
-        const dir = join(root, "src");
-        const called = !existsSync(dir)
-            ? []
-            : sourceFiles(dir)
-                  .flatMap((file) => {
-                      const text = readFileSync(file, "utf8");
-                      return scanCalls(text, scanMethodHelpers(text));
-                  })
-                  .filter((call) => CATALOG_ROUTE.test(call.path));
-        expect(called).toEqual([]);
+        expect(callsOf(name).filter((call) => CATALOG_ROUTE.test(call.path))).toEqual([]);
     });
 });
 
-describe.each(BUILTINS)("%s declares every sandbox route it calls", (name) => {
+/* EVERY extension in the directory, derived — never a hand-kept list.
+ *
+ * This check used to name seven extensions. Fourteen UI extensions ship, and three of the seven it omitted were
+ * calling a route they had never declared: Acceptance asked for the browser listing behind its live-run column,
+ * and the Pipelines and Deployments fix buttons both read the sandbox setting that names the model they are
+ * about to spend. All three threw at the guard on every call, so all three features were silently dead — a
+ * blank column and two buttons that could never say what they cost — while this file reported 97 passes.
+ *
+ * The lesson is not that the list was short; it is that a list of what to check ages badly against a directory
+ * anyone can add to. Reading the directory instead means the day an extension lands it is already covered. */
+const sandboxPermissionsOf = (name: string): readonly string[] => {
     const manifest = ExtensionManifestSchema.parse(JSON.parse(readFileSync(join(extensionsRoot, name, "intentic-extension.json"), "utf8")));
-    const permissions = manifest.permissions?.sandbox ?? [];
-    const calls = sourceFiles(join(extensionsRoot, name, "src")).flatMap((file) => {
-        const text = readFileSync(file, "utf8");
-        return scanCalls(text, scanMethodHelpers(text));
-    });
+    return manifest.permissions?.sandbox ?? [];
+};
 
-    test("makes at least one sandbox call (scanner sanity)", () => {
-        expect(calls.length).toBeGreaterThan(0);
-    });
+// The extensions that reach the daemon from the browser. A data-only pack and a daemon-side one make no
+// api.sandbox call at all, which is why this is filtered rather than asserted over the whole directory.
+const callers = everyExtension.filter((name) => callsOf(name).length > 0);
 
-    test.each(calls.map((call) => [`${call.method} ${call.path}`, call] as const))("declares %s", (_label, call) => {
+/* The scanner is regex over source, so a silent failure to match would make every check below vacuously pass —
+ * which is the shape the bug above already took once. An extension that DECLARES sandbox routes is one the
+ * scanner must find calls in; if this fails, suspect the regexes before the manifest. */
+test("the scanner finds calls in every extension that declares sandbox routes", () => {
+    const declaring = everyExtension.filter((name) => sandboxPermissionsOf(name).length > 0);
+    expect(declaring.filter((name) => !callers.includes(name))).toEqual([]);
+});
+
+describe.each(callers)("%s declares every sandbox route it calls", (name) => {
+    const permissions = sandboxPermissionsOf(name);
+    test.each(callsOf(name).map((call) => [`${call.method} ${call.path}`, call] as const))("declares %s", (_label, call) => {
         expect(sandboxRouteAllowed(permissions, call.method, call.path)).toBe(true);
     });
 });

@@ -12,7 +12,8 @@
             "POST /komodo/*/link",
             "POST /komodo/*/logs",
             "POST /komodo/*/fix",
-            "POST /komodo/*/seen"
+            "POST /komodo/*/seen",
+            "GET /settings"
         ]
     },
     "contributes": {
