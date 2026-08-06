@@ -84,7 +84,7 @@ const CONNECTOR_EXTENSIONS: Omit<ExtensionSummary, "enabled">[] = [
     {
         id: `intentic.connectors`,
         commit: `9f2c41d`,
-        builtin: true,
+        source: `builtin`,
         manifest: {
             publisher: `intentic`,
             name: `connectors`,
@@ -176,7 +176,7 @@ const CONNECTOR_EXTENSIONS: Omit<ExtensionSummary, "enabled">[] = [
     {
         id: `intentic.discord`,
         commit: `4ab7e10`,
-        builtin: true,
+        source: `builtin`,
         manifest: {
             publisher: `intentic`,
             name: `discord`,
@@ -215,7 +215,7 @@ const CONNECTOR_EXTENSIONS: Omit<ExtensionSummary, "enabled">[] = [
  *
  * `commit` is `demo` for the same reason `info.version` is: the recording is not a build of anything. */
 const compiledExtensions = (): Omit<ExtensionSummary, "enabled">[] =>
-    [...builtinModules].map(([id, module]) => ({ id, manifest: module.manifest, commit: `demo`, builtin: true }));
+    [...builtinModules].map(([id, module]) => ({ id, manifest: module.manifest, commit: `demo`, source: `builtin` }));
 
 // Built once and then LIVE: the hub's Extensions tab really writes these switches, because the daemon persists
 // a flip and every later read reflects it — a fixture that answered read-only would have a toggle that springs

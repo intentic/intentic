@@ -94,10 +94,10 @@ test("pre-injection reports both search readings over one arm assignment, headli
     const { context } = await readTurnExperiments(storeOf(contextArms(40, 30, 3.2, 6.4)), {});
     expect(context?.metrics.map((reading) => reading.metric)).toEqual(["searchCalls", "openingSearches"]);
     // The same turns, counted differently — so the arms underneath both readings are the same size.
-    expect(context?.metrics[1].on.turns).toBe(40);
-    expect(context?.metrics[1].off.turns).toBe(30);
-    expect(context?.metrics[1].on.mean).toBe(1.6);
-    expect(context?.metrics[1].off.mean).toBe(3.2);
+    expect(context?.metrics[1]?.on.turns).toBe(40);
+    expect(context?.metrics[1]?.off.turns).toBe(30);
+    expect(context?.metrics[1]?.on.mean).toBe(1.6);
+    expect(context?.metrics[1]?.off.mean).toBe(3.2);
 });
 
 test("each experiment reads its own arms, so a turn in both counts in both", async () => {
