@@ -23,7 +23,13 @@ const MAX_TOKENIZED_LINE = 20_000;
 // lands on is emitted verbatim, so the file comes back part-read with no sign anything went wrong. The walk is
 // awaited before the diff renders rather than run inside a frame, so the budget is generous: it exists to stop a
 // pathological grammar, and blowing it abandons the file (false) instead of half-doing it.
-const TIME_BUDGET = 5_000;
+//
+// Generous has to mean far more than a walk costs, because what the budget really has to clear is a COLD grammar:
+// the tokenizer compiles a rule's regexes the first time a line reaches it, once per language per session. C++'s
+// come to ~0.4s on an idle machine and ~10s on one oversubscribed 10× (a CI runner sharing a desktop with five
+// others) — against ~4ms a line once compiled. A budget sized for the walk therefore fires on a two-line C++ file
+// that happens to be the first one opened, and the reader silently loses the import skip on it.
+const TIME_BUDGET = 30_000;
 
 export const isBlank = (line: string): boolean => line.trim() === ``;
 
