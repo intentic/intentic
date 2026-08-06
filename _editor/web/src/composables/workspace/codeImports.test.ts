@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+import { useHighlighter } from "@intentic/ui";
 import type * as Monaco from "monaco-editor-core";
 import { describe, expect, it, vi } from "vitest";
 import { firstChangeBeyondImports, type ImportSide, importLines } from "./codeImports";
@@ -20,7 +21,25 @@ vi.hoisted(() => {
 // test with a hand-rolled fake grammar would be testing nothing. The languages below are the ones whose import
 // syntax the scope families were derived from, and the traps are the lines that LOOK like imports to a regex.
 
-const lines = (source: readonly string[], lang: string) => importLines(source.join(`\n`), lang);
+/* The grammar is COMPILED first, so that the walk under test is not the one paying for it. The tokenizer compiles
+ * a rule's regexes the first time a line reaches them, once per language per session — C++'s come to ~0.6s on an
+ * idle machine against ~4ms a line once compiled — and that compile is charged to the walk's hang guard
+ * (codeTokens' TIME_BUDGET). On a runner busy enough, the guard is what fires: the walk abandons the file, and the
+ * empty set it hands back reads here as the grammar's ANSWER rather than as a busy machine. That is exactly how
+ * the C++ case below failed on CI, where every package's suite runs at once and a walk measures ~10× an idle one.
+ * The warm-up runs the same lines through the same grammar under no limit at all — the 0 the tokenizer reads as
+ * unbounded — so the walk that follows spends only the per-line cost these assertions are about. */
+const lines = async (source: readonly string[], lang: string): Promise<ReadonlySet<number>> => {
+    const grammar = (await useHighlighter().ensureLang(lang))?.getLanguage(lang);
+    if (grammar !== undefined) {
+        // Carried, like the walk's own stack — a line inside an open statement reaches rules a fresh one doesn't.
+        let stack: Parameters<typeof grammar.tokenizeLine>[1] = null;
+        for (const line of source) {
+            stack = grammar.tokenizeLine(line, stack, 0).ruleStack;
+        }
+    }
+    return importLines(source.join(`\n`), lang);
+};
 
 describe(`importLines`, () => {
     it(`takes a multi-line import whole, and stops at the code below it`, async () => {
@@ -53,6 +72,9 @@ describe(`importLines`, () => {
         expect(await lines(python, `python`)).toEqual(new Set([1, 2, 3, 4, 5]));
     });
 
+    // Six grammars compiled from cold in one test, C++ among them, is seconds of real work rather than the
+    // milliseconds every other test here spends — and the suite-wide timeout is sized for the milliseconds. Its
+    // own budget, then, big enough that only a hang reaches it on a runner shared with every other suite.
     it(`covers the other languages we ship a grammar for`, async () => {
         expect(await lines([`use std::collections::HashMap;`, `pub fn main() {}`], `rust`)).toEqual(new Set([1]));
         expect(await lines([`package a;`, `import java.util.List;`, `class A {}`], `java`)).toEqual(new Set([2]));
@@ -60,7 +82,7 @@ describe(`importLines`, () => {
         expect(await lines([`require "json"`, `class A; end`], `ruby`)).toEqual(new Set([1]));
         expect(await lines([`#include <vector>`, `int main() {}`], `cpp`)).toEqual(new Set([1]));
         expect(await lines([`@import "./base.css";`, `.a { color: red; }`], `css`)).toEqual(new Set([1]));
-    });
+    }, 60_000);
 
     it(`leaves alone the lines that only LOOK like imports`, async () => {
         // A C# using STATEMENT is a scoped resource, not a directive; SCSS's @include invokes a mixin; Ruby's
