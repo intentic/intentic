@@ -1,9 +1,42 @@
 ---
-import { docsHref, docsPages } from "@intentic-dev/site-content/docs";
+import { docsHref, docsSections } from "@intentic-dev/site-content/docs";
 import DocsLayout from "../../components/DocsLayout.astro";
 
-// Cards for the "Start here" grid — everything except this overview page.
-const cards = docsPages.filter((page) => page.id);
+/* The overview's job is to route, not to summarise. Two questions bring people here — "what IS this?" and
+ * "how do I get one?" — and the second used to be answered by a grid of ten cards that made Quickstart a
+ * peer of Manifest reference. So the install decision is now stated as the four routes it actually is, with
+ * links straight into the section of Quickstart that answers each, and the card grid drops to the sections
+ * that are genuinely further reading (everything outside "Get started"). */
+
+const readingSections = docsSections.filter((section) => section.label !== `Get started`);
+
+// The install decision, in the order a reader eliminates them: least typing first.
+const paths = [
+    {
+        name: `The desktop app`,
+        href: `/docs/quickstart/#desktop-app`,
+        who: `You'd rather not open a terminal, and want updates as a button.`,
+        run: `An installer, then one click`,
+    },
+    {
+        name: `The setup command`,
+        href: `/docs/quickstart/#setup-command`,
+        who: `You're on a server, a Mac, or anywhere over SSH.`,
+        run: `One pasted line`,
+    },
+    {
+        name: `Docker Compose`,
+        href: `/docs/quickstart/#docker-compose`,
+        who: `You want to read the whole definition before anything runs.`,
+        run: `docker compose up -d`,
+    },
+    {
+        name: `Plain docker run`,
+        href: `/docs/quickstart/#docker-run`,
+        who: `You're scripting this into your own provisioning tooling.`,
+        run: `Five docker commands`,
+    },
+];
 ---
 
 <DocsLayout
@@ -27,23 +60,41 @@ const cards = docsPages.filter((page) => page.id);
         </li>
     </ul>
     <p>
-        Read <a href="/docs/architecture/">Architecture</a> for the full picture, or jump straight to bringing one up.
+        Read <a href="/docs/architecture/">Architecture</a> for the full picture, or bring one up now.
     </p>
 
-    <h2>Start here</h2>
-    <div class="docs-embed mt-4 grid gap-4 sm:grid-cols-2">
-        {
-            cards.map((card) => (
-                <a
-                    href={docsHref(card.id)}
-                    class="card p-5 no-underline transition-colors hover:border-primary-600/40"
-                >
-                    <h3 class="text-sm font-medium text-content">{card.title}</h3>
-                    <p class="mt-2 text-sm leading-relaxed text-muted">{card.meta.description}</p>
-                </a>
-            ))
-        }
-    </div>
+    <h2>Get one running</h2>
+    <p>
+        Every route starts the same way — sign in at the platform, which mints a short-lived setup code — and every route ends with the same
+        two containers on your machine. They differ only in who types the docker commands.
+    </p>
+    <table>
+        <thead>
+            <tr>
+                <th>Route</th>
+                <th>Choose it when</th>
+                <th>You run</th>
+            </tr>
+        </thead>
+        <tbody>
+            {
+                paths.map((path) => (
+                    <tr>
+                        <td>
+                            <a href={path.href}>{path.name}</a>
+                        </td>
+                        <td>{path.who}</td>
+                        <td>{path.run}</td>
+                    </tr>
+                ))
+            }
+        </tbody>
+    </table>
+    <p>
+        <a href="/docs/quickstart/">Quickstart</a> walks all four end to end with copy-pasteable commands.
+        <a href="/docs/docker/">Docker setup</a> is the anatomy they share: what gets created, where your data lives, and how to update or
+        remove it. If you'd like the installer without reading further, it's on the <a href="/download/">download page</a>.
+    </p>
 
     <h2>What's in a sandbox</h2>
     <p>Everything an agent needs to do real work, and nothing the platform can see:</p>
@@ -54,4 +105,21 @@ const cards = docsPages.filter((page) => page.id);
         <li><strong>An environment</strong>: libraries and dev-tools baked into the image, proposed by the agent and applied on your approval.</li>
         <li><strong>Automations</strong>: schedules, webhooks, and event listeners that wake the agent while you're away.</li>
     </ul>
+
+    <h2>Once it's up</h2>
+    {
+        readingSections.map((section) => (
+            <div class="docs-embed mt-6">
+                <div class="eyebrow mb-3">{section.label}</div>
+                <div class="grid gap-4 sm:grid-cols-2">
+                    {section.items.map((page) => (
+                        <a href={docsHref(page.id)} class="card p-5 no-underline transition-colors hover:border-primary-600/40">
+                            <h3 class="text-sm font-medium text-content">{page.title}</h3>
+                            <p class="mt-2 text-sm leading-relaxed text-muted">{page.meta.description}</p>
+                        </a>
+                    ))}
+                </div>
+            </div>
+        ))
+    }
 </DocsLayout>

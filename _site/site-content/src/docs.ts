@@ -38,22 +38,22 @@ export const docsSections: DocsSection[] = [
             {
                 id: "quickstart",
                 title: "Quickstart",
-                blurb: "Sign in, name a sandbox, paste one command",
+                blurb: "Four ways to bring a sandbox up, end to end",
                 meta: {
                     title: "Quickstart · intentic docs",
                     description:
-                        "Sign in, name a sandbox, and paste one curl command to bring a live agent workspace up on your own machine. No inbound ports.",
+                        "Bring a live agent workspace up on your own machine four ways: the desktop app, one setup command, Docker Compose, or plain docker run.",
                     datePublished: "2026-07-23",
                 },
             },
             {
                 id: "docker",
                 title: "Docker setup",
-                blurb: "The container, the engine inside it, and updates",
+                blurb: "What gets created, and how to live with it",
                 meta: {
                     title: "Docker setup · intentic docs",
                     description:
-                        "What the sandbox container is, how Docker gets installed, the isolated in-sandbox engine, environment overlays, and the update helpers.",
+                        "The anatomy every install path shares: the containers, volumes and network created, the capability posture, the nested engine, overlays and updates.",
                     datePublished: "2026-07-23",
                 },
             },
