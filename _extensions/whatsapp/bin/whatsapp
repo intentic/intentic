@@ -1,0 +1,85 @@
+#!/usr/bin/env node
+// The agent's WhatsApp tool: `whatsapp chats` / `whatsapp send <chat> <text>` / `whatsapp send-file <chat>
+// <path>` / `whatsapp download <messageId>`. WhatsApp has no public API to curl — the paired socket lives in
+// the long-lived gateway process — so every command forwards to the gateway's loopback control surface, whose
+// address the gateway writes to a gateway.url file under the workspace (the discord-voice pattern). ESM (the
+// package is type:module) with no deps, so it runs as a bare executable on the agent's PATH.
+import { readFile } from "node:fs/promises";
+import { dirname, join } from "node:path";
+
+const findGatewayUrl = async () => {
+    // Walk up from the agent's cwd to the workspace root, which holds .intentic/extensions-runtime/whatsapp/gateway.url.
+    let dir = process.cwd();
+    for (;;) {
+        try {
+            const url = (await readFile(join(dir, ".intentic", "extensions-runtime", "whatsapp", "gateway.url"), "utf8")).trim();
+            if (url !== "") {
+                return url;
+            }
+        } catch {
+            // keep walking up
+        }
+        const parent = dirname(dir);
+        if (parent === dir) {
+            return undefined;
+        }
+        dir = parent;
+    }
+};
+
+const usage = () => {
+    console.error("usage: whatsapp <chats | send <chat> <text…> | send-file <chat> <path> | download <messageId>>");
+    process.exit(2);
+};
+
+const [command, ...rest] = process.argv.slice(2);
+if (command !== "chats" && command !== "send" && command !== "send-file" && command !== "download") {
+    usage();
+}
+if ((command === "send" || command === "send-file") && rest.length < 2) {
+    usage();
+}
+if (command === "download" && rest.length < 1) {
+    usage();
+}
+
+const base = await findGatewayUrl();
+if (base === undefined) {
+    console.error("The WhatsApp gateway isn't running yet (no gateway.url). It starts with the sandbox — wait a moment and retry.");
+    process.exit(1);
+}
+
+const request =
+    command === "chats"
+        ? { path: "/chats", init: {} }
+        : command === "send"
+          ? {
+                path: "/send",
+                init: {
+                    method: "POST",
+                    headers: { "content-type": "application/json" },
+                    body: JSON.stringify({ chat: rest[0], text: rest.slice(1).join(" ") }),
+                },
+            }
+          : command === "send-file"
+            ? {
+                  path: "/send-file",
+                  init: {
+                      method: "POST",
+                      headers: { "content-type": "application/json" },
+                      body: JSON.stringify({ chat: rest[0], path: rest[1] }),
+                  },
+              }
+            : {
+                  path: "/download",
+                  init: { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ id: rest[0] }) },
+              };
+
+const res = await fetch(`${base}${request.path}`, request.init).catch(() => undefined);
+if (res === undefined) {
+    console.error("The WhatsApp gateway did not answer — it may be restarting. Retry in a few seconds.");
+    process.exit(1);
+}
+const body = await res.text();
+console.log(body);
+process.exit(res.ok ? 0 : 1);

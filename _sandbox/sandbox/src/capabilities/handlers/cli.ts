@@ -103,6 +103,12 @@ export const cliHandler: CapabilityHandler = {
         if (cliConfig.provider === "discord" && listenerStatus("discord", Date.now())?.whisperReady === false) {
             return { state: "pending", detail: "voice needs a rebuild (whisper)" };
         }
+        // WhatsApp's credential is a pairing ceremony, not a token: while the gateway is waiting for the phone
+        // to link, it publishes the code via /listeners/whatsapp/status and THIS is where the owner reads it.
+        const pairingCode = cliConfig.provider === "whatsapp" ? listenerStatus("whatsapp", Date.now())?.pairing?.[id] : undefined;
+        if (pairingCode !== undefined) {
+            return { state: "pending", detail: `enter ${pairingCode} on the phone: WhatsApp → Linked devices → Link with phone number` };
+        }
         return { state: "active" };
     },
     remove: async (ctx, id, config) => {

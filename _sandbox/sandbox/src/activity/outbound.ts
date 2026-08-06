@@ -146,8 +146,31 @@ const matchTelegram = (command: string): OutboundCall | undefined => {
     };
 };
 
-// One matcher per cli provider (the cli/providers.ts key space); the chat providers whose skills teach curl.
-const matchers: readonly ((command: string) => OutboundCall | undefined)[] = [matchDiscord, matchSlack, matchTelegram];
+/* WhatsApp is not curl at all: the paired socket lives in the gateway process and the skill teaches the
+ * `whatsapp` CLI, so the shape to match is a bin invocation rather than a URL. Only the sending verbs record —
+ * `chats` and `download` are reads, and a read that logged as an outbound send would teach the action rules to
+ * lie. The endpoint is the subcommand, which is also what the `whatsapp.message.send` rule key matches on. */
+const unquote = (value: string): string => value.replace(/^["']/, "").replace(/["']$/, "");
+
+const matchWhatsApp = (command: string): OutboundCall | undefined => {
+    const invocation = /(?:^|[;&|(]\s*)whatsapp\s+(send|send-file)\s+("[^"]+"|'[^']+'|\S+)\s+([\S\s]+)/.exec(command);
+    if (invocation === null) {
+        return undefined;
+    }
+    const rest = (invocation[3] as string).trim();
+    return {
+        provider: "whatsapp",
+        type: "message.send",
+        method: "POST",
+        endpoint: `/${invocation[1] as string}`,
+        channelId: unquote(invocation[2] as string),
+        content: unquote(rest),
+    };
+};
+
+// One matcher per cli provider (the cli/providers.ts key space); the chat providers whose skills teach curl —
+// plus whatsapp, whose skill teaches a bin.
+const matchers: readonly ((command: string) => OutboundCall | undefined)[] = [matchDiscord, matchSlack, matchTelegram, matchWhatsApp];
 
 // The classifier, shared with the enforcing PreToolUse gate (guard/outbound-gate.ts) — one parser for audit
 // and enforcement, so the two can never disagree about what a command is.

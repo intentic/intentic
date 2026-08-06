@@ -183,6 +183,51 @@ test("telegram reports a refusal in `description` where slack uses `error` — b
     expect(appended.map(({ outcome, error }) => ({ outcome, error }))).toEqual([{ outcome: "error", error: "Bad Request: chat not found" }]);
 });
 
+/* WhatsApp's skill teaches a BIN, not curl — the paired socket lives in the gateway and the agent drives it
+ * with `whatsapp send …`. The matcher parses that command shape, so sends land in the activity feed and the
+ * `whatsapp.message.send` action rule has something to bite on. */
+test("a whatsapp CLI send records message.send with the chat and text, whatever the quoting", () => {
+    const { appended, services } = capture();
+    const sniffer = createOutboundSniffer(services, TURN);
+    sniffer.observe(tool(`whatsapp send 4915112345678@s.whatsapp.net deploy is out, all green`, "t1"));
+    sniffer.observe(result("Sent to 4915112345678@s.whatsapp.net.", "t1"));
+    sniffer.observe(tool(`whatsapp send-file "1203630000000000@g.us" /work/report.pdf`, "t2"));
+    sniffer.observe(result("Sent /work/report.pdf to 1203630000000000@g.us.", "t2"));
+    expect(appended.map(({ provider, type, endpoint, channelId, content }) => ({ provider, type, endpoint, channelId, content }))).toEqual([
+        {
+            provider: "whatsapp",
+            type: "message.send",
+            endpoint: "/send",
+            channelId: "4915112345678@s.whatsapp.net",
+            content: "deploy is out, all green",
+        },
+        { provider: "whatsapp", type: "message.send", endpoint: "/send-file", channelId: "1203630000000000@g.us", content: "/work/report.pdf" },
+    ]);
+});
+
+test("whatsapp reads record nothing, and the word whatsapp in ordinary text is not a send", () => {
+    const { appended, services } = capture();
+    const sniffer = createOutboundSniffer(services, TURN);
+    sniffer.observe(tool(`whatsapp chats`, "t1"));
+    sniffer.observe(result("...", "t1"));
+    sniffer.observe(tool(`whatsapp download ABC123`, "t2"));
+    sniffer.observe(result("/work/.intentic/extensions-runtime/whatsapp/media/ABC123-voice.ogg", "t2"));
+    sniffer.observe(tool(`grep -r "whatsapp send" _extensions/`, "t3"));
+    sniffer.observe(result("", "t3"));
+    sniffer.flush();
+    expect(appended.filter((event) => event.direction === "out")).toEqual([]);
+});
+
+test("a failed whatsapp CLI call records the gateway's sentence as the error", () => {
+    const { appended, services } = capture();
+    const sniffer = createOutboundSniffer(services, TURN);
+    sniffer.observe(tool(`whatsapp send 4915112345678 hello there`, "t1"));
+    sniffer.observe(result("WhatsApp is not connected — pair the device from the capability card first.", "t1", true));
+    expect(appended.map(({ outcome, error }) => ({ outcome, error }))).toEqual([
+        { outcome: "error", error: "WhatsApp is not connected — pair the device from the capability card first." },
+    ]);
+});
+
 test("an interim update (live output snapshot, no status) keeps the call pending", () => {
     const { appended, services } = capture();
     const sniffer = createOutboundSniffer(services, TURN);

@@ -57,6 +57,7 @@ fails any extension that reaches `/{provider}/models` or `/{provider}/accounts` 
 | `discord` | daemon gateway | A `process` + `listener` bridging Discord to the daemon, plus the discord connector. |
 | `slack` | daemon gateway | A `process` + `listener` bridging Slack to the daemon over Socket Mode (outbound WebSocket — no public URL, no request signing), plus the slack connector. Mention replies are painted into the thread live. |
 | `telegram` | daemon gateway | A `process` + `listener` bridging Telegram to the daemon over long polling (outbound HTTPS — no public URL, no webhook), plus the telegram connector. Dependency-free: the Bot API is `fetch` and JSON. Replies are painted into the chat live. |
+| `whatsapp` | daemon gateway | A `process` + `listener` bridging WhatsApp to the daemon as a paired **linked device** (baileys, outbound WebSocket), plus the whatsapp connector and the agent's `whatsapp` CLI (`contributes.bin`). Unofficial by nature — the card says so and asks for a dedicated number. Replies send once, complete, behind a typing indicator; the pairing code rides the status route onto the capability card. |
 | `imap` | daemon gateway | A `process` + `listener` watching an IMAP mailbox (new-mail / flags / expunge wakes), plus the imap connector. |
 | `rtk` | environment fragment | Ships the rtk binary into the sandbox image overlay (output-filter benchmarking); git-install opt-in. |
 
@@ -77,7 +78,7 @@ renders and what the on/off switch acts on. The paths differ only in where the *
   `_editor/web/src/core-views/coreViews.ts` are **not** extensions — they're privileged in-app views coupled to
   platform internals; see that file and ARCHITECTURE.md.)
 - **Baked into the sandbox image** (`connectors`, `social`, `computers`, `acp-agents`, `discord`, `slack`,
-  `telegram`, `imap`): the whole checkout copied to `/opt/extensions` by the sandbox
+  `telegram`, `whatsapp`, `imap`): the whole checkout copied to `/opt/extensions` by the sandbox
   [Dockerfile](../_sandbox/sandbox/Dockerfile) and read via `EXTENSIONS_DIR` — present in every sandbox,
   `builtin: true` on `GET /extensions`, not removable, no capability entry. This is how the `/capabilities`
   grid's derived cards exist out of the box — and why switching one of these packs off removes exactly its

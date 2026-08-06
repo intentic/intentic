@@ -1,0 +1,22 @@
+{
+    "name": "@intentic/ext-whatsapp",
+    "version": "1.0.0",
+    "description": "WhatsApp — a linked-device connection as an agent tool, plus the multi-device gateway as a baked extension process",
+    "license": "MIT",
+    "private": true,
+    "type": "module",
+    "scripts": {
+        "build": "tsgo",
+        "typecheck": "tsgo --noEmit -p tsconfig.test.json",
+        "test": "vitest run"
+    },
+    "dependencies": {
+        "baileys": "7.0.0-rc14"
+    },
+    "devDependencies": {
+        "@intentic/tsconfig": "workspace:*",
+        "@types/node": "catalog:",
+        "@typescript/native-preview": "catalog:",
+        "vitest": "catalog:"
+    }
+}

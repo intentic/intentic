@@ -54,6 +54,7 @@
                 "_extensions/social",
                 "_extensions/telegram",
                 "_extensions/viewers",
+                "_extensions/whatsapp",
                 "_extensions/workflows"
             ]
         },

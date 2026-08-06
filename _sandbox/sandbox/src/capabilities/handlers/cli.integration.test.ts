@@ -81,6 +81,22 @@ test("apply writes the connector's SKILL.md; discord voice pends only when the g
     expect(await cliHandler.status(ctx, "discord", discord.config)).toEqual({ state: "pending", detail: "voice needs a rebuild (whisper)" });
 });
 
+test("whatsapp pends with the pairing code while the gateway is waiting for the phone, and clears when it stops", async () => {
+    const whatsapp: Capability = { id: "whatsapp", kind: "cli", config: { provider: "whatsapp", phoneNumber: "+49 151 12345678" } };
+    const { ctx } = tempCtx();
+    await drain(cliHandler.apply(ctx, "whatsapp", whatsapp.config));
+    // The gateway publishes each waiting capability's code via /listeners/whatsapp/status; the card shows it.
+    setListenerStatus("whatsapp", { connections: [], pairing: { whatsapp: "ABCD-EFGH" } }, Date.now());
+    expect(await cliHandler.status(ctx, "whatsapp", whatsapp.config)).toEqual({
+        state: "pending",
+        detail: "enter ABCD-EFGH on the phone: WhatsApp → Linked devices → Link with phone number",
+    });
+    // Paired: the gateway stops publishing the code and the card goes active. The code is keyed by capability
+    // id, so ANOTHER whatsapp capability's pairing must not pend this one.
+    setListenerStatus("whatsapp", { connections: [], pairing: { other: "ZZZZ-YYYY" } }, Date.now());
+    expect(await cliHandler.status(ctx, "whatsapp", whatsapp.config)).toEqual({ state: "active" });
+});
+
 test("a provider without image needs (github) goes straight to active", async () => {
     const github: Capability = { id: "github", kind: "cli", config: { provider: "github", token: "gh", git: "off" } };
     const { ctx } = tempCtx();

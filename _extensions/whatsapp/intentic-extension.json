@@ -1,0 +1,55 @@
+{
+    "publisher": "intentic",
+    "name": "whatsapp",
+    "version": "1.0.0",
+    "category": "connections",
+    "logo": "whatsapp",
+    "engines": {
+        "intentic": "^0.4.0"
+    },
+    "contributes": {
+        "listener": {
+            "provider": "whatsapp",
+            "eventTypes": ["message"]
+        },
+        "processes": [
+            {
+                "name": "gateway",
+                "command": "node dist/gateway.js",
+                "autoStart": true
+            }
+        ],
+        "bin": "bin",
+        "capabilities": [
+            {
+                "id": "whatsapp",
+                "kind": "cli",
+                "catalog": {
+                    "name": "WhatsApp",
+                    "logo": "whatsapp",
+                    "description": "Let the agent read and reply in WhatsApp chats and groups — paired as a linked device on a number you dedicate to it.",
+                    "category": "communication",
+                    "hint": "This is an UNOFFICIAL connection — it links to WhatsApp the way WhatsApp Web does, which is against WhatsApp's terms of service, and numbers do get banned. Use a DEDICATED number (a prepaid SIM or eSIM), never your personal one: the agent acts as that number. No Meta account, no webhook, no public URL — pairing takes a minute.",
+                    "guide": {
+                        "linkLabel": "WhatsApp on the paired phone",
+                        "steps": [
+                            "Get WhatsApp running on a dedicated number (any spare phone, prepaid SIM or eSIM).",
+                            "Enter that phone number here, with country code (e.g. +49151…).",
+                            "This card will show a pairing code. On the phone: WhatsApp → `Settings` → `Linked devices` → `Link a device` → `Link with phone number instead`, and type the code.",
+                            "The card turns active. Message the number (or add it to a group) and create an automation with WhatsApp as its source."
+                        ]
+                    }
+                },
+                "fields": [
+                    {
+                        "key": "phoneNumber",
+                        "label": "Phone number (with country code)",
+                        "placeholder": "+49151…"
+                    }
+                ],
+                "env": {},
+                "skill": "skills/whatsapp/SKILL.md"
+            }
+        ]
+    }
+}

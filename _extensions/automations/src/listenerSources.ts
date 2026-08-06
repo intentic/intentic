@@ -30,7 +30,7 @@ export interface ListenerSource {
     readonly starterPrompt: string;
 }
 
-export const LISTENER_SOURCES: Record<`webchat` | `discord` | `telegram` | `imap` | `ci`, ListenerSource> = {
+export const LISTENER_SOURCES: Record<`webchat` | `discord` | `telegram` | `whatsapp` | `imap` | `ci`, ListenerSource> = {
     webchat: {
         label: `Doorbell`,
         icon: `globe`,
@@ -64,6 +64,14 @@ export const LISTENER_SOURCES: Record<`webchat` | `discord` | `telegram` | `imap
         // spelling out, because it is the one id here a user cannot read off a right-click menu.
         channel: { label: `Chat ID (optional)`, placeholder: `every chat the bot is in` },
         starterPrompt: `A Telegram message just arrived — each line of the event payload is one JSON event of type \`message\`: \`author\` is who wrote it, \`channelId\` is the chat, \`content\` is the text (a \`[voice note]\`-style marker when they sent a file instead, with the file ids in \`extra.attachments\`), and \`mentioned: true\` means it was addressed to the bot. \`history\` holds the recent messages the gateway watched go by — a bot cannot read a chat's past, so that is all the context there is. Reply in plain text: your answer is streamed into the chat for you, and Telegram renders markdown literally, so no asterisks, headings or link syntax.`,
+    },
+    whatsapp: {
+        label: `WhatsApp`,
+        logo: `whatsapp`,
+        events: [{ value: `message`, label: `Messages` }],
+        mentionLabel: `Only when addressed (direct chat, @mention or reply)`,
+        channel: { label: `Chat JID (optional)`, placeholder: `every chat — a JID from \`whatsapp chats\`` },
+        starterPrompt: `A WhatsApp message just arrived — each line of the event payload is one JSON event of type \`message\`: \`author\` is who wrote it, \`channelId\` is the chat, \`content\` is the text (a \`[voice note]\`-style marker when they sent media instead — fetch it with \`whatsapp download <extra.attachments[].id>\`), and \`mentioned: true\` means it was addressed to you. \`history\` holds the recent messages the gateway watched go by — WhatsApp is end-to-end encrypted and has no history to fetch, so that is all the context there is. Reply in plain text (no markdown; WhatsApp renders it literally): your answer is sent into the chat for you when you finish. This number can be BANNED for bot-like behavior — reply only, never send bulk or unsolicited messages.`,
     },
     imap: {
         label: `Email (IMAP)`,
