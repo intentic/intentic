@@ -5,6 +5,7 @@ import { computed } from "vue";
 import { useSavings } from "../../../composables/sandbox/useSavings";
 import { useSandboxSettings } from "../../../composables/sandbox/useSandboxSettings";
 import { asPercent, commitPercent } from "./numberInputs";
+import { dilutionOf, readingVerdict } from "../savingsChart";
 import CodeSearchInfo from "./CodeSearchInfo.vue";
 
 /* HOW THE ASSISTANT FINDS ITS WAY AROUND THE CODE. Two settings that compose and are easy to confuse, which is
@@ -17,10 +18,30 @@ const { savings } = useSavings({});
 // The pre-injection's measurement control, the same turn-level holdout the terse steer takes.
 const iqContextHoldoutPercent = computed<number>(() => asPercent(settings.value?.iqContextHoldout));
 
-// The biggest reason the treated arm went untreated — the daemon already orders these largest-first, so the
-// first non-delivery is it. One is enough for a settings card: it separates a gate declining on purpose from a
-// deadline eating the feature, and the tail belongs in the ledger.
-const largestContextLoss = computed(() => savings.value?.context?.outcomes?.find((row) => row.outcome !== `note`));
+/* WHAT THE EXPERIMENT SAYS SO FAR, one line per reading, worded exactly as the Savings card words it — the two
+ * screens read the same report and a settings row that paraphrased it would be a second opinion.
+ *
+ * The retrieval is judged on searches, not on what the turn cost. Cost per turn spent nine days reporting a
+ * ±25-point interval that turned out to be the coin flip handing one arm the bigger jobs; searches are what the
+ * mechanism actually removes, so they are what can see it. */
+const contextReadings = computed(() => {
+    const experiment = savings.value?.context;
+    if (experiment === undefined) {
+        return [];
+    }
+    // The arms travel alongside the verdict because this row has no chart to carry them, and a figure with no
+    // account of how much data is behind it is one a reader cannot weigh. On the Savings card the bars say it.
+    return experiment.metrics.map((reading) => ({
+        verdict: readingVerdict(reading, experiment.minTurns),
+        on: reading.on.turns,
+        off: reading.off.turns,
+    }));
+});
+
+// …and how much of the assigned arm the retrieval actually reached, with the biggest reason it didn't. Said
+// once under both readings, since it qualifies them equally. The daemon orders the outcomes largest-first, so
+// the first non-delivery is the one worth naming; the tail belongs in the ledger.
+const contextDilution = computed(() => (savings.value?.context === undefined ? `` : dilutionOf(savings.value.context)));
 </script>
 
 <template>
@@ -57,8 +78,8 @@ const largestContextLoss = computed(() => savings.value?.context?.outcomes?.find
             </template>
             <template #below>
                 <!-- Same control the terse steer takes, for the same reason: a turn cannot be re-run without
-                     the context it opened with, so the only way to know whether the injected tokens paid for
-                     themselves is to leave a slice of turns cold and compare the cost. -->
+                     the context it opened with, so the only way to know whether the retrieval saved the turn
+                     any searching is to leave a slice of turns cold and count what they searched. -->
                 <template v-if="settings?.iqContext === true">
                     <label class="flex items-center justify-between gap-3">
                         <span class="flex min-w-0 flex-col">
@@ -83,40 +104,22 @@ const largestContextLoss = computed(() => savings.value?.context?.outcomes?.find
                             <span class="text-xs text-muted">%</span>
                         </span>
                     </label>
-                    <p v-if="savings?.context !== undefined" class="mt-2 border-t border-line pt-2 text-2xs">
-                        <template v-if="savings.context.deltaPct !== undefined">
-                            <span class="tabular-nums" :class="savings.context.deltaPct < 0 ? `text-success` : `text-muted`">
-                                {{ savings.context.deltaPct < 0 ? `↓` : `↑` }}{{ Math.abs(savings.context.deltaPct) }}%
+                    <!-- One line per reading, both off the same coin flip: every search a turn ran, and the ones
+                         it ran before it opened a file. Judged on searches rather than on what the turn cost —
+                         cost is dominated by how big the job was, which is not what the retrieval changes. -->
+                    <div v-if="contextReadings.length > 0" class="mt-2 flex flex-col gap-1 border-t border-line pt-2 text-2xs">
+                        <p v-for="row in contextReadings" :key="row.verdict.unit">
+                            <span class="tabular-nums" :class="row.verdict.tone === `success` ? `text-success` : `text-muted`">
+                                {{ row.verdict.value }}
                             </span>
                             <span class="text-muted">
-                                cost per turn ± {{ savings.context.marginPct }}pp, over {{ savings.context.on.turns }} retrieved vs
-                                {{ savings.context.off.turns }} cold turns.
+                                {{ row.verdict.unit }} — {{ row.verdict.detail }}, over {{ row.on }} retrieved vs {{ row.off }} cold turns.
                             </span>
-                        </template>
-                        <!-- Both arms are past the threshold and the effect still hasn't separated from zero. Distinct from
-                             "measuring": the reader has waited long enough for the arms and the answer is that the spread is
-                             wider than the effect, which the old copy hid by repeating "of 30 needed per arm" at 52 turns. -->
-                        <span v-else-if="savings.context.marginPct !== undefined" class="text-muted">
-                            No effect yet distinguishable from zero — anything real is inside ±{{ savings.context.marginPct }}pp, over
-                            {{ savings.context.on.turns }} retrieved vs {{ savings.context.off.turns }} cold turns.
-                            <template v-if="savings.context.controlTurnsNeeded !== undefined">
-                                Narrowing that to a width worth acting on needs about {{ savings.context.controlTurnsNeeded }} more cold turns.
-                            </template>
-                        </span>
-                        <span v-else class="text-muted">
-                            Measuring — {{ savings.context.on.turns }} retrieved and {{ savings.context.off.turns }} cold turns so far, of
-                            {{ savings.context.minTurns }} needed per arm.
-                        </span>
+                        </p>
                         <!-- The arm is intention-to-treat, so most of it may never have been treated. Naming the largest
                              reason is what turns "19% delivered" from an alarm into a fact you can act on. -->
-                        <span v-if="savings.context.deliveredPct !== undefined" class="text-muted">
-                            The note reached {{ savings.context.deliveredPct }}% of the retrieved arm<template
-                                v-if="largestContextLoss !== undefined"
-                            >
-                                ; most of the rest was {{ largestContextLoss.outcome }} ({{ largestContextLoss.turns }} turns)</template
-                            >.
-                        </span>
-                    </p>
+                        <p v-if="contextDilution !== ``" class="text-muted">{{ contextDilution }}</p>
+                    </div>
                 </template>
             </template>
         </Row>

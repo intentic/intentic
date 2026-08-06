@@ -1334,36 +1334,21 @@ export const SavingsArmSchema = z.object({ turns: z.number(), mean: z.number() }
 export const IqContextOutcomeSchema = z.enum(["note", "ineligible", "deadline", "indexing", "no-hits", "failed"]);
 export type IqContextOutcome = z.infer<typeof IqContextOutcomeSchema>;
 
-/* A turn-level A/B — the one shape both of this sandbox's turn experiments report in, because they differ in
- * nothing but which flag flips and what the turns are judged on. Only turns the mechanism was ELIGIBLE for are
- * counted: a turn under a custom system prompt drops the terse steer along with everything else the daemon
- * appends, so it belongs to neither arm.
+/* ONE METRIC'S READING of a turn-level experiment: the two arms, and whatever the arithmetic over them will
+ * stand behind. An experiment can carry several — see TurnExperimentSchema.
  *
- * `metric` says what `mean` counts and what `deltaPct` is a delta in. The terse steer is judged on the model's
- * own PROSE, which is the thing it steers and the only part of its output that responds to being asked to be
- * brief (see UsageTurn.proseChars for why the turn's total output tokens cannot answer this). Pre-injection is
- * judged on COST, because it spends input tokens deliberately to buy back search turns — scored on output
- * tokens it would look like a pure expense, and scored on input tokens like a pure loss; the trade only nets
- * out in money. */
-export const TurnExperimentSchema = z.object({
-    metric: z.enum(["proseChars", "costUsd"]),
+ * `metric` says what `mean` counts and what `deltaPct` is a delta in, and choosing it is most of the work.
+ *   proseChars      — the terse steer: the thing it steers, and the only part of the model's output that
+ *                     responds to being asked to be brief (UsageTurn.proseChars has why output tokens cannot).
+ *   searchCalls     — pre-injection: the searches a turn ran, which the retrieval directly removes.
+ *   openingSearches — pre-injection, narrower: the searches before the turn first touched a file.
+ * Pre-injection used to be judged on COST, and could not be. UsageTurn.searchCalls has the nine days of data
+ * that settled it — cost is a whole turn's work, retrieval moves one part of it, and the part sat inside the
+ * noise of the rest exactly as the steer's effect once sat inside its tool-call arguments. */
+export const TurnMetricReadingSchema = z.object({
+    metric: z.enum(["proseChars", "searchCalls", "openingSearches"]),
     on: SavingsArmSchema,
     off: SavingsArmSchema,
-    /* How much of the treatment arm the treatment actually REACHED, when that is knowable and less than all of
-     * it — pre-injection's arm is the coin flip (intention-to-treat, deliberately), and a turn can be assigned
-     * the retrieval and still have nothing to prepend. Measured at four turns in five, which is the difference
-     * between a mechanism worth little and one worth five times what the delta says.
-     *
-     * Absent ⇒ delivery is not a separate question for this experiment (the terse steer always lands) or no
-     * turn in the window recorded it. The screen shows the delta as diluted rather than silently scaling it:
-     * the correction is a division by a rate this small only when the rate is itself well measured. */
-    deliveredPct: z.number().optional(),
-    /* WHERE THE REST OF THE TREATMENT ARM WENT, most common first. `deliveredPct` says a mechanism reached one
-     * turn in five; this says whether the other four were the eligibility gate declining on purpose or a
-     * two-second deadline quietly eating the feature, which are the same number and opposite problems.
-     *
-     * Absent ⇒ the experiment has no delivery question (the terse steer always lands) or no turn recorded one. */
-    outcomes: z.array(z.object({ outcome: IqContextOutcomeSchema, turns: z.number() })).optional(),
     /* HOW MUCH LONGER, when the margin spans zero and the honest answer is "keep collecting": the additional
      * CONTROL turns at which the resolution would reach a width worth acting on (turn-experiments.ts sets it),
      * holding the spread where it sits today.
@@ -1380,9 +1365,6 @@ export const TurnExperimentSchema = z.object({
      * Absent ⇒ nothing to wait for: the arms are under `minTurns`, the delta is published, or the resolution is
      * already good enough and the effect is simply smaller than it. */
     controlTurnsNeeded: z.number().optional(),
-    // Turns per arm before a delta is reported at all. Carried on the wire so the screen's "measuring…" state
-    // counts toward the daemon's real threshold instead of a number the browser guessed.
-    minTurns: z.number(),
     /* THE RESOLUTION, present as soon as both arms clear `minTurns`: ± percentage points at 95% (Welch,
      * unequal variances and unequal arms). Present even when the delta below is withheld, because "whatever
      * this mechanism does, it is smaller than ±35 points" is a true and useful thing to be told — it is the
@@ -1399,9 +1381,47 @@ export const TurnExperimentSchema = z.object({
      * withhold-until-it-means-something rule applied to the thing that actually decides whether it does.
      *   deltaPct — change in the metric's mean per turn under the mechanism; negative is a saving.
      *   saved    — what the delta is worth over the turns that actually ran with it, in this window, in the
-     *              metric's own unit (characters, or dollars). */
+     *              metric's own unit (characters, or searches). */
     deltaPct: z.number().optional(),
     saved: z.number().optional(),
+});
+export type TurnMetricReading = z.infer<typeof TurnMetricReadingSchema>;
+
+/* A turn-level A/B — the one shape both of this sandbox's turn experiments report in, because they differ in
+ * nothing but which flag flips and what the turns are judged on. Only turns the mechanism was ELIGIBLE for are
+ * counted: a turn under a custom system prompt drops the terse steer along with everything else the daemon
+ * appends, so it belongs to neither arm.
+ *
+ * ONE COIN FLIP, SEVERAL READINGS. `metrics` is a list because pre-injection is judged on two — the searches a
+ * turn ran, and the ones it ran before touching a file — and they are two readings of the SAME experiment, not
+ * two experiments. Splitting them into separate entries would duplicate the arm assignment and the delivery
+ * rate below, and let a screen show a turn count on one that disagrees with the other. Headline first: the
+ * screens read `metrics[0]` for the big number and the rest as supporting lines. */
+export const TurnExperimentSchema = z.object({
+    // A head and a tail rather than a plain array, because an experiment judged on nothing is not an experiment:
+    // the screens take the first reading for their headline and stack the rest under it, and this is what makes
+    // "there is always a headline" a fact the type carries instead of a check every screen repeats. (`.nonempty()`
+    // would not do it — in zod 4 it adds a min-length rule and leaves the inferred type a plain array.)
+    metrics: z.tuple([TurnMetricReadingSchema], TurnMetricReadingSchema),
+    // Turns per arm before a delta is reported at all. Carried on the wire so the screen's "measuring…" state
+    // counts toward the daemon's real threshold instead of a number the browser guessed. Shared by every
+    // reading: they are the same turns counted differently, so they clear it together.
+    minTurns: z.number(),
+    /* How much of the treatment arm the treatment actually REACHED, when that is knowable and less than all of
+     * it — pre-injection's arm is the coin flip (intention-to-treat, deliberately), and a turn can be assigned
+     * the retrieval and still have nothing to prepend. Measured at four turns in five, which is the difference
+     * between a mechanism worth little and one worth five times what the delta says.
+     *
+     * Absent ⇒ delivery is not a separate question for this experiment (the terse steer always lands) or no
+     * turn in the window recorded it. The screen shows the delta as diluted rather than silently scaling it:
+     * the correction is a division by a rate this small only when the rate is itself well measured. */
+    deliveredPct: z.number().optional(),
+    /* WHERE THE REST OF THE TREATMENT ARM WENT, most common first. `deliveredPct` says a mechanism reached one
+     * turn in five; this says whether the other four were the eligibility gate declining on purpose or a
+     * two-second deadline quietly eating the feature, which are the same number and opposite problems.
+     *
+     * Absent ⇒ the experiment has no delivery question (the terse steer always lands) or no turn recorded one. */
+    outcomes: z.array(z.object({ outcome: IqContextOutcomeSchema, turns: z.number() })).optional(),
 });
 export type TurnExperiment = z.infer<typeof TurnExperimentSchema>;
 
@@ -4762,6 +4782,38 @@ export const UsageTurnSchema = z.object({
      * Absent ⇒ the turn predates this being measured; `armOf` drops it from the population rather than reading
      * it as a silent turn. */
     proseChars: z.number().optional(),
+    /* SEARCHES THIS TURN RAN — every tool call that went looking for code, the dedicated search tools and the
+     * CLI searches alike (isSearchCall owns the rule; `iq q` is Bash and would otherwise not be counted at all).
+     * What pre-injection is judged on, and the same correction `proseChars` is to the terse steer.
+     *
+     * COST PER TURN CANNOT SERVE, which is what this replaced. Nine days of real use reported +27.0% ± 29.9pp on
+     * cost, an interval from −2.9% to +56.9%, and reading it against the transcripts showed the gap was not the
+     * mechanism: every raw per-turn outcome moved with it (reads +58%, duration +73%, cache-read tokens +28%)
+     * and every one of them was flat to within a point once turn size was divided out. It was the coin flip
+     * handing the treatment arm the bigger jobs. Cost is a whole turn's worth of work, and retrieval touches one
+     * part of it, so the part lives inside the noise of the rest — exactly the shape that made output tokens
+     * unable to see the steer.
+     *
+     * Searches are what the mechanism acts on directly: a turn handed the anchors up front does not go and find
+     * them. Turns that never search stay in the population at zero rather than being filtered out — they dilute
+     * both arms equally, while selecting on "did it search" would select on the treatment itself.
+     *
+     * Absent ⇒ the turn predates this being measured; `armOf` drops it rather than reading it as a turn that
+     * searched nothing. */
+    searchCalls: z.number().optional(),
+    /* …and how many of them came BEFORE the turn first opened or changed a file — the orientation burst, which
+     * is the part retrieval is actually aimed at. A turn that already knows where to look starts working; one
+     * that doesn't goes hunting first, and pre-injection's whole claim is that it removes that hunt.
+     *
+     * The narrower of the two readings and the less confounded: `searchCalls` still grows with the size of the
+     * job, while the walk up to the first file is roughly the same act whatever the job turns out to be.
+     *
+     * A turn that never reads or edits counts all of its searches here — it never arrived, so all of it was
+     * orientation. Dropping those instead would select the population by an OUTCOME the treatment moves (a turn
+     * handed its anchors is likelier to reach a file), which is the one bias an arm-based reading cannot absorb.
+     *
+     * Absent ⇒ as for `searchCalls`. */
+    openingSearches: z.number().optional(),
 });
 export type UsageTurn = z.infer<typeof UsageTurnSchema>;
 

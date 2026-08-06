@@ -35,6 +35,7 @@ import { syncNote } from "./turn-preamble.js";
 import { resolveRequest } from "./agent-requests.js";
 import { rewindConversation } from "./rewind.js";
 import { commandsOf } from "./agent-commands.js";
+import { isSearchCall } from "./tool-calls.js";
 import { mentionsSpentAllowance } from "./failure-sentences.js";
 import { registerTurn, SteeringQueue, steerTurn, stopTurn } from "./agent-steering.js";
 import { OUTAGE_MAX_ATTEMPTS, recordProviderFailure, recordProviderSuccess } from "./provider-health.js";
@@ -707,6 +708,16 @@ async function* runTurn(
      * the number and cannot be seen there. Counted here because `delta` is the only frame that carries prose,
      * and nothing downstream of this loop still knows which bytes were which. */
     let proseChars = 0;
+    /* The turn's search work — pre-injection's metric, on exactly the same footing as `proseChars` above: the
+     * mechanism removes searches, so searches are what it has to be scored on, and cost per turn could never see
+     * it (UsageTurn.searchCalls carries the nine days of data that says so).
+     *
+     * `openingSearches` stops at the first file the turn opens or changes, which is the moment orientation ended
+     * and the work began. Counted here for the same reason as the prose: the frame stream is the only place that
+     * still knows the ORDER things happened in. */
+    let searchCalls = 0;
+    let openingSearches = 0;
+    let reachedTheWork = false;
     const record = (event: Omit<ActivityEvent, "id" | "at" | "provider" | "direction">): void => {
         // Read per event, never captured once: nameAgentTitle runs concurrently with this turn, so turn.started
         // often writes before a fresh conversation has a name and turn.completed writes after. The feed takes the
@@ -797,6 +808,19 @@ async function* runTurn(
                 // Every prose frame, subagent narration included: they run on the same steered system prompt,
                 // and a turn that delegates its writing would otherwise read as a turn that wrote nothing.
                 proseChars += event.text.length;
+            }
+            if (event.kind === "tool_call") {
+                // Subagents' calls included, on the same rule as the prose above: a turn that sends an Explore
+                // agent looking still went looking, and the retrieval it was handed is what it would have used.
+                // `tool_call` only — an update is a later state of a call already counted.
+                if (isSearchCall(event)) {
+                    searchCalls += 1;
+                    if (!reachedTheWork) {
+                        openingSearches += 1;
+                    }
+                } else if (event.category === "read" || event.category === "edit") {
+                    reachedTheWork = true;
+                }
             }
             if (event.kind === "session") {
                 sessionId = event.sessionId;
@@ -965,6 +989,10 @@ async function* runTurn(
                     // Counted off this turn's own frames rather than taken from the provider, which reports one
                     // output total and no breakdown — see UsageTurn.proseChars.
                     proseChars,
+                    // Likewise off the frames, and in their order — see UsageTurn.searchCalls for why the
+                    // pre-injection experiment is judged on these and not on what the turn cost.
+                    searchCalls,
+                    openingSearches,
                     // The turn experiments' arms, when this turn was in them — the ledger is the only place they
                     // are recorded, and without them the steer's and the pre-injection's effects are
                     // unmeasurable after the fact.

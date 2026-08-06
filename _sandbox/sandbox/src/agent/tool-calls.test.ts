@@ -1,5 +1,5 @@
 import { expect, test } from "vitest";
-import { displayNameOf, editDiffContent, toolCategoryOf, toolLocations, toolTarget } from "./tool-calls.js";
+import { displayNameOf, editDiffContent, isSearchCall, toolCategoryOf, toolLocations, toolTarget } from "./tool-calls.js";
 
 const CWD = "/work";
 
@@ -21,6 +21,25 @@ test("toolCategoryOf categorizes builtin names case-insensitively", () => {
     expect(toolCategoryOf("websearch")).toBe("search");
     expect(toolCategoryOf("Task")).toBe("other");
     expect(toolCategoryOf("mystery")).toBe("other");
+});
+
+/* THE CATEGORY ALONE CANNOT ANSWER "was this a search", and the pre-injection experiment is judged on the
+ * answer. This workspace's own search tool is a CLI — `iq q "…"` is Bash, which categorizes as `execute` — so
+ * counting the `search` category would miss every search on a sandbox with iq switched on, which is the sandbox
+ * the retrieval is being measured against. */
+test("isSearchCall counts the CLI searches the category misses, and leaves shell plumbing alone", () => {
+    expect(isSearchCall({ category: "search", target: "createServer" })).toBe(true);
+    expect(isSearchCall({ category: "execute", target: `iq q "where is the floor enforced"` })).toBe(true);
+    // Past a `cd`, and past a path: the statement that matters is rarely the first word of the command.
+    expect(isSearchCall({ category: "execute", target: `cd /work/intentic && iq def createIgnoreScope` })).toBe(true);
+    expect(isSearchCall({ category: "execute", target: `/usr/bin/rg -n "TODO" src` })).toBe(true);
+    expect(isSearchCall({ category: "execute", target: `RG_FLAGS=x grep -rn needle .` })).toBe(true);
+    // A command that greps its OWN output is shell plumbing, not the model looking for code.
+    expect(isSearchCall({ category: "execute", target: `git log --oneline | grep fix` })).toBe(false);
+    expect(isSearchCall({ category: "execute", target: `pnpm test` })).toBe(false);
+    // A tool with no command to read — a browser click is `execute` too.
+    expect(isSearchCall({ category: "execute" })).toBe(false);
+    expect(isSearchCall({ category: "read", target: "src/index.ts" })).toBe(false);
 });
 
 test("toolCategoryOf categorizes MCP names by their tool segment's trailing verb", () => {

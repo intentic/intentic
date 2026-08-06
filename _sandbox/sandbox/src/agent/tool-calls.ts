@@ -133,6 +133,43 @@ export const toolCategoryOf = (name: string): ToolKind => {
     return "other";
 };
 
+/* The programs that go looking for code. `ls`/`tree` are in because the LS TOOL already categorizes as
+ * `search` above, and a taxonomy that counts one spelling of a directory listing and not the other is one that
+ * reports whichever spelling the model happened to reach for. */
+const SEARCH_COMMANDS = new Set(["iq", "grep", "rg", "ag", "ack", "find", "fd", "fdfind", "locate", "ls", "tree"]);
+
+/* Each statement's leading program, past an env prefix and a path — `cd /work && iq q "…"` runs two and the
+ * second is the one that matters, and `/usr/bin/rg` is `rg`.
+ *
+ * Split on statement separators and NEVER on a pipe: `git log | grep fix` filters a command's own output, which
+ * is not the model looking for code, and counting it would put ordinary shell plumbing in a search figure. */
+const commandHeads = (command: string): string[] =>
+    command.split(/&&|\|\||;|\n/).map((statement) => {
+        const head =
+            statement
+                .trim()
+                .split(/\s+/)
+                .find((word) => !/^[A-Za-z_][A-Za-z0-9_]*=/.test(word)) ?? "";
+        return head.split("/").pop() ?? head;
+    });
+
+/* DID THIS TOOL CALL GO LOOKING FOR CODE — what the pre-injection experiment is judged on, and a question the
+ * category alone cannot answer.
+ *
+ * `toolCategoryOf` reads a tool's NAME, and this workspace's own search tool is a CLI: `iq q "…"` arrives as
+ * Bash and categorizes as `execute`, next to every `grep`/`rg`/`find` the model runs by hand. Counting only the
+ * `search` category would score retrieval against the searches it does not replace while missing every one it
+ * does — precisely backwards on a sandbox with iq turned on. */
+export const isSearchCall = (call: { readonly category: ToolKind; readonly target?: string | undefined }): boolean => {
+    if (call.category === "search") {
+        return true;
+    }
+    if (call.category !== "execute" || call.target === undefined) {
+        return false;
+    }
+    return commandHeads(call.target).some((head) => SEARCH_COMMANDS.has(head));
+};
+
 // The file path / command / query a tool acts on, for the tool_call frame's target (the raw mono string on
 // the card). Key order matters: the most specific spelling wins. `element` is @playwright/mcp's own
 // human-readable description of what a click/type/hover is aimed at ("Submit button") — the only thing those

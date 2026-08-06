@@ -8,7 +8,7 @@ import { relativeTime } from "../../composables/chat/catalog";
 import { useSavings } from "../../composables/sandbox/useSavings";
 import { useUsage } from "../../composables/sandbox/useUsage";
 import PlanLimitsPanel from "./PlanLimitsPanel.vue";
-import { compositionOf, verdictOf } from "./savingsChart";
+import { compositionOf, dilutionOf, verdictsOf } from "./savingsChart";
 import SavingsArmsChart from "./SavingsArmsChart.vue";
 import SavingsCard from "./SavingsCard.vue";
 import SavingsStackBar from "./SavingsStackBar.vue";
@@ -151,11 +151,18 @@ const hasSavings = computed(
 // under a 7-day filter and the same total over all time are the same digits with different meanings.
 const savingsPeriod = computed(() => (preset.value === `all` ? `all time` : `this range`));
 
-// Both experiments' headlines come from one function, so "Measuring" and "Off" land in the same slot, at the
-// same size, as a delta would — see verdictOf. It takes the undefined case itself, which is what lets these be
-// two plain computeds and the cards one shape.
-const outputVerdict = computed(() => verdictOf(savings.value?.output));
-const contextVerdict = computed(() => verdictOf(savings.value?.context));
+/* Both experiments' headlines come from one function, so "Measuring" and "Off" land in the same slot, at the
+ * same size, as a delta would — see verdictsOf. It takes the undefined case itself, which is what lets these be
+ * two plain computeds and the cards one shape.
+ *
+ * A LIST, because an experiment can be read more than one way: the retrieval reports the searches a turn ran
+ * and the searches it ran before touching a file, off one coin flip. The first is the card's headline and the
+ * rest stack under it — a second card would claim a second experiment, which there isn't. */
+const outputVerdicts = computed(() => verdictsOf(savings.value?.output));
+const contextVerdicts = computed(() => verdictsOf(savings.value?.context));
+// How much of the assigned arm the retrieval actually reached — one sentence about the coin flip, so it sits
+// under the readings rather than inside any of them.
+const contextDilution = computed(() => (savings.value?.context === undefined ? `` : dilutionOf(savings.value.context)));
 
 // ---- the table and the export -------------------------------------------------------------------------------
 
@@ -376,20 +383,20 @@ const hasSpend = computed(() => current.value.length > 0);
 
                         <SavingsCard
                             title="Assistant's own output"
-                            :value="outputVerdict.value"
-                            :unit="outputVerdict.unit"
-                            :tone="outputVerdict.tone"
+                            :value="outputVerdicts.headline.value"
+                            :unit="outputVerdicts.headline.unit"
+                            :tone="outputVerdicts.headline.tone"
                         >
                             <template #hint>
-                                Mean output tokens per turn with the terse steer appended, against a random unsteered control — the only honest way to
+                                Mean prose written per turn with the terse steer appended, against a random unsteered control — the only honest way to
                                 measure it, since a turn can't be re-run to see what it would have said. Only turns the steer was eligible for count:
                                 a turn under a custom system prompt drops it along with everything else the daemon appends.
                             </template>
 
                             <SavingsArmsChart
                                 v-if="savings?.output !== undefined"
-                                :experiment="savings.output"
-                                :detail="outputVerdict.detail"
+                                :reading="savings.output.metrics[0]"
+                                :detail="outputVerdicts.headline.detail"
                                 on-label="steer on"
                                 off-label="steer off · control"
                             />
@@ -408,29 +415,42 @@ const hasSpend = computed(() => current.value.length > 0);
                             <template #footnote>terse steer · A/B against a random holdout</template>
                         </SavingsCard>
 
-                        <!-- Pre-injected search context. Judged on COST, not tokens: it spends input tokens on
-                             purpose to buy back the search turns the model would otherwise have paid for, so the
-                             only number that can settle whether it was worth it is the one with both halves in
-                             it — which is why this card's unit differs from its neighbour's and says so. -->
+                        <!-- Pre-injected search context. Judged on SEARCHES — the thing it removes — after cost
+                             per turn spent nine days measuring which arm had drawn the bigger jobs. Two readings
+                             off one coin flip, so they share a card: the headline counts every search a turn
+                             ran, the line under the bars counts only the ones before it opened a file. -->
                         <SavingsCard
                             title="Search before the turn"
-                            :value="contextVerdict.value"
-                            :unit="contextVerdict.unit"
-                            :tone="contextVerdict.tone"
+                            :value="contextVerdicts.headline.value"
+                            :unit="contextVerdicts.headline.unit"
+                            :tone="contextVerdicts.headline.tone"
                         >
                             <template #hint>
-                                Mean cost per turn when the daemon retrieves for the message up front, against a random control that starts cold.
-                                Scored in money on purpose: the injected context costs input tokens to save search turns, so on output tokens it would
-                                look like a pure expense and on input tokens like a pure loss. The trade only nets out in dollars.
+                                Mean searches per turn when the daemon retrieves for the message up front, against a random control that starts cold.
+                                Scored in searches on purpose: the retrieval hands over the anchors a turn would otherwise go and find, so searches
+                                are the thing it moves. Cost per turn cannot see it — a turn's price is dominated by how big the job was, and the coin
+                                flip does not deal both arms the same jobs.
                             </template>
 
                             <SavingsArmsChart
                                 v-if="savings?.context !== undefined"
-                                :experiment="savings.context"
-                                :detail="contextVerdict.detail"
+                                :reading="savings.context.metrics[0]"
+                                :detail="contextVerdicts.headline.detail"
                                 on-label="context injected"
                                 off-label="cold start · control"
                             />
+                            <!-- The narrower reading, as a line rather than a second pair of bars: it is the same
+                                 turns counted differently, and drawing it again at full size would read as a
+                                 second experiment agreeing with the first. -->
+                            <p v-for="verdict in contextVerdicts.also" :key="verdict.unit" class="text-2xs text-subtle">
+                                <span class="tabular-nums" :class="verdict.tone === `success` ? `text-success` : `text-muted`">{{
+                                    verdict.value
+                                }}</span>
+                                {{ verdict.unit }} · {{ verdict.detail }}
+                            </p>
+                            <!-- Said once, under every reading, because it qualifies all of them: the arm is the
+                                 coin flip's, and most of it may never have been treated at all. -->
+                            <p v-if="contextDilution !== ``" class="text-2xs text-subtle">{{ contextDilution }}</p>
                             <template v-else>
                                 <p class="text-xs text-muted">
                                     Needs the switch on and a turn holdout set — with no control arm there is nothing to compare against.

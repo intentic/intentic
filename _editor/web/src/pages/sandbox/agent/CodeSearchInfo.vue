@@ -56,10 +56,10 @@ const PREFETCH_COMPARISON = [
             <Icon name="wave-pulse" class="mt-0.5 shrink-0 text-2xs text-subtle" />
             <p class="text-2xs text-muted">
                 <span class="font-medium text-content">Measure it</span> runs a slice of messages without the head start, as a control — the same
-                arrangement the terse steer uses, and for the same reason. The figure here is
-                <span class="font-medium text-content">cost per turn</span>, not tokens: the context it hands over costs input tokens on purpose, to
-                buy back the searches that would have followed. It lands under
-                <span class="font-medium text-content">Usage → Search before the turn</span>.
+                arrangement the terse steer uses, and for the same reason. The figures are
+                <span class="font-medium text-content">searches per turn</span> and the searches before the assistant first opens a file: the head
+                start removes searching, so searching is what shows it. What a turn costs cannot — that is mostly a matter of how big the job was.
+                Both land under <span class="font-medium text-content">Usage → Search before the turn</span>.
             </p>
         </div>
     </InfoDialog>

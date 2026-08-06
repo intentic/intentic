@@ -1,6 +1,6 @@
 import type { FigureAccent } from "@intentic/ui/markdown";
 import { seriesColor } from "@intentic/ui/series";
-import type { InputSavings, TurnExperiment } from "@intentic/sandbox-contract";
+import type { InputSavings, TurnExperiment, TurnMetricReading } from "@intentic/sandbox-contract";
 import { formatCompact } from "./usageChart";
 
 /* Every number and every mark on the Savings surfaces, as pure functions over the daemon's savings report —
@@ -117,6 +117,31 @@ export const compositionOf = (input: InputSavings): Composition => {
 
 // --- the turn experiments -------------------------------------------------------------------------------------
 
+/* WHAT EACH METRIC IS A QUANTITY OF, said in the reader's words rather than the ledger's. The unit is never
+ * decoration: "↓12%" alone does not say twelve percent of what, and the retrieval experiment reports two
+ * readings at once whose whole difference is which of these they count.
+ *
+ * `searches per turn` and `searches before the first file` are deliberately near-identical phrases. They ARE
+ * near-identical quantities — the second is a prefix of the first — and naming them as if they were unrelated
+ * would invite a reader to treat two readings of one experiment as two findings. */
+const METRIC_UNITS = {
+    proseChars: `prose written per turn`,
+    searchCalls: `searches per turn`,
+    openingSearches: `searches before the first file`,
+} satisfies Record<TurnMetricReading["metric"], string>;
+
+// An arm's mean in the metric's own unit. Prose compact (a turn writes thousands of characters), searches to
+// the tenth (a turn runs a handful, and the delta between two arms is a fraction of one) — the same split the
+// daemon rounds on, in turn-experiments.ts.
+export const meanLabel = (reading: TurnMetricReading, value: number): string =>
+    reading.metric === `proseChars` ? `${formatCompact(value)} chars/turn` : `${value} searches/turn`;
+
+// What the mechanism was worth over this window, in whole units. Searches are rounded to one: the figure is a
+// count of things that either happened or didn't, and a mean difference's spare decimal is arithmetic, not a
+// fifth of a search anybody ran.
+const savedLabel = (reading: TurnMetricReading): string =>
+    reading.metric === `proseChars` ? `${formatCompact(reading.saved ?? 0)} chars` : `${Math.round(reading.saved ?? 0)} searches`;
+
 /* Both A/B cards' HEADLINE, from one function, because the two experiments differ in nothing a reader cares
  * about: each states a verdict, what the verdict is a verdict about, and the one line the figure is worthless
  * without. Same three slots either way.
@@ -128,7 +153,7 @@ export const compositionOf = (input: InputSavings): Composition => {
 export interface ExperimentVerdict {
     readonly value: string;
     readonly unit: string;
-    // Down is the direction that saves money, so a measured saving is the only thing that earns success. An
+    // Down is the direction that saves work, so a measured saving is the only thing that earns success. An
     // increase is stated, not alarmed about: an experiment reporting the mechanism cost more is working.
     readonly tone: "success" | "content" | "muted";
     // The qualification the figure is meaningless without — its margin and what it bought, or how far the
@@ -136,69 +161,83 @@ export interface ExperimentVerdict {
     readonly detail: string;
 }
 
-// `undefined` ⇒ the experiment isn't running at all (its flag off, or no holdout set), which is a verdict like
-// any other and gets the same three slots. Handled here rather than by a second function at the call site, so
-// the card cannot end up saying "Off" in a shape the measured states don't share.
-export const verdictOf = (experiment: TurnExperiment | undefined): ExperimentVerdict => {
-    if (experiment === undefined) {
-        return { value: `Off`, unit: `not being measured`, tone: `muted`, detail: `` };
-    }
-
-    const unit = experiment.metric === `costUsd` ? `cost per turn` : `prose written per turn`;
-    // What the arm was worth is a claim about the turns the mechanism REACHED, and pre-injection reaches only
-    // some of the arm it is assigned (a prompt that named its own file is retrieved for and finds nothing worth
-    // prepending). Said plainly wherever a figure appears, because a delta over a four-fifths-untreated arm is
-    // a fifth of the delta over the treated ones and a reader has no way to know that from the number.
-    // …and WHERE THE REST WENT, when the ledger knows. "19% delivered" reads as a broken mechanism; "19%
-    // delivered, the rest ineligible" reads as a gate doing its job, and the two want opposite responses from
-    // whoever is looking at the card. Only the largest non-delivery is named — the tail is for the ledger.
-    const lost = experiment.outcomes?.find((row) => row.outcome !== `note`);
-    const dilution =
-        experiment.deliveredPct === undefined
-            ? ``
-            : ` · note actually landed on ${experiment.deliveredPct}% of the treated arm${lost === undefined ? `` : `, most of the rest ${lost.outcome}`}`;
+/* ONE READING'S verdict, and only what that reading can answer for. The clause about how much of the arm the
+ * treatment reached is NOT in here: it is a fact about the coin flip, equally true of every reading over it,
+ * and folding it into each one would print it as many times as there are metrics — see dilutionOf. */
+export const readingVerdict = (reading: TurnMetricReading, minTurns: number): ExperimentVerdict => {
+    const unit = METRIC_UNITS[reading.metric];
 
     // The margin arrives as soon as both arms clear minTurns; the delta waits for the margin to exclude zero.
     // Two states, two shortfalls, and neither is allowed to borrow the other's headline.
-    if (experiment.marginPct === undefined) {
-        const shortfall = Math.max(experiment.minTurns - experiment.on.turns, experiment.minTurns - experiment.off.turns);
-        return {
-            value: `Measuring`,
-            unit,
-            tone: `muted`,
-            detail: `needs ${experiment.minTurns} turns per arm — ${shortfall} more on the shorter one${dilution}`,
-        };
+    if (reading.marginPct === undefined) {
+        const shortfall = Math.max(minTurns - reading.on.turns, minTurns - reading.off.turns);
+        return { value: `Measuring`, unit, tone: `muted`, detail: `needs ${minTurns} turns per arm — ${shortfall} more on the shorter one` };
     }
     /* MEASURED, AND THE ANSWER IS "NOT YET DISTINGUISHABLE FROM NOTHING". A separate verdict from "Measuring"
      * because it is a different fact — the arms are big enough, the spread is simply wider than the effect —
      * and the reader's next move differs: one waits, the other asks whether the mechanism is worth its keep.
      * The resolution is what it gets instead of a number, since that is the honest content of the reading. */
-    if (experiment.deltaPct === undefined) {
+    if (reading.deltaPct === undefined) {
         /* "Keep collecting" for how long, though. Without a figure the reader cannot tell an experiment three
          * days from an answer apart from one whose holdout is too small to ever produce one, and both look like
          * patience. The daemon's estimate is coarse by construction (turn-experiments.ts) so it is rounded hard
          * and said as an order of magnitude. */
         const wait =
-            experiment.controlTurnsNeeded === undefined
+            reading.controlTurnsNeeded === undefined
                 ? `keep collecting`
-                : `~${formatCompact(experiment.controlTurnsNeeded)} more control turns would settle it`;
+                : `~${formatCompact(reading.controlTurnsNeeded)} more control turns would settle it`;
         return {
             value: `No effect`,
             unit: `measurable in ${unit}`,
             tone: `muted`,
-            detail: `anything real is inside ±${experiment.marginPct}pp (95%) — ${wait}${dilution}`,
+            detail: `anything real is inside ±${reading.marginPct}pp (95%) — ${wait}`,
         };
     }
 
-    // Dollars to the cent, characters compact: a turn costs cents and writes thousands of characters
-    // respectively, the same split the daemon rounds on (turn-experiments.ts).
-    const saved = experiment.metric === `costUsd` ? `$${(experiment.saved ?? 0).toFixed(2)}` : `${formatCompact(experiment.saved ?? 0)} chars`;
     return {
         // Direction is spelled with an arrow AND a sign, so it never rests on colour.
-        value: `${experiment.deltaPct < 0 ? `↓` : `↑`}${Math.abs(experiment.deltaPct)}%`,
+        value: `${reading.deltaPct < 0 ? `↓` : `↑`}${Math.abs(reading.deltaPct)}%`,
         unit,
-        tone: experiment.deltaPct < 0 ? `success` : `content`,
-        detail: `±${experiment.marginPct}pp (95%)${(experiment.saved ?? 0) > 0 ? ` · ~${saved} saved in this range` : ``}${dilution}`,
+        tone: reading.deltaPct < 0 ? `success` : `content`,
+        detail: `±${reading.marginPct}pp (95%)${(reading.saved ?? 0) > 0 ? ` · ~${savedLabel(reading)} saved in this range` : ``}`,
+    };
+};
+
+/* THE DILUTION SENTENCE, printed once under all of an experiment's readings because it qualifies every one of
+ * them equally: what an arm was worth is a claim about the turns the mechanism REACHED, and pre-injection
+ * reaches only some of the arm it is assigned (a prompt that named its own file is retrieved for and finds
+ * nothing worth prepending). A delta over a four-fifths-untreated arm is a fifth of the delta over the treated
+ * ones, and a reader has no way to know that from the number.
+ *
+ * …and WHERE THE REST WENT, when the ledger knows, with the turns behind it. "19% delivered" reads as a broken
+ * mechanism; "19% delivered, the rest ineligible" reads as a gate doing its job, and the two want opposite
+ * responses from whoever is looking at the card. Only the largest non-delivery is named — the tail is for the
+ * ledger. Empty ⇒ delivery is not a separate question here (the terse steer always lands). */
+export const dilutionOf = (experiment: TurnExperiment): string => {
+    if (experiment.deliveredPct === undefined) {
+        return ``;
+    }
+    const lost = experiment.outcomes?.find((row) => row.outcome !== `note`);
+    const rest = lost === undefined ? `` : ` Most of the rest was ${lost.outcome} (${lost.turns} turns).`;
+    return `The note actually landed on ${experiment.deliveredPct}% of the treated arm.${rest}`;
+};
+
+/* Every reading an experiment carries, split the way a card reads it: the `headline` fills the verdict slot at
+ * the top, and `also` stacks under the evidence. Split here rather than by index at the call site, because
+ * "there is always exactly one headline" is a fact about experiments and not something each screen should
+ * rediscover with a `[0]`.
+ *
+ * `undefined` ⇒ the experiment isn't running at all (its flag off, or no holdout set), which is a verdict like
+ * any other and gets the same three slots — so a card cannot end up saying "Off" in a shape the measured
+ * states don't share. */
+export const verdictsOf = (experiment: TurnExperiment | undefined): { headline: ExperimentVerdict; also: ExperimentVerdict[] } => {
+    if (experiment === undefined) {
+        return { headline: { value: `Off`, unit: `not being measured`, tone: `muted`, detail: `` }, also: [] };
+    }
+    const [first, ...rest] = experiment.metrics;
+    return {
+        headline: readingVerdict(first, experiment.minTurns),
+        also: rest.map((reading) => readingVerdict(reading, experiment.minTurns)),
     };
 };
 

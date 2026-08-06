@@ -201,7 +201,7 @@ every follow-up takes the real questions with it.
 flip — intention-to-treat, deliberately, because re-labelling a turn by what retrieval happened to find would
 sort turns by how searchable their question was, which is a property of the question and not of the treatment.
 The price of that correctness is a treatment arm the treatment did not reach: measured at four turns in five.
-So `UsageTurn.iqContextNote` records whether a note was actually prepended, and the report carries the rate as
+So `UsageTurn.iqContextOutcome` records what became of the retrieval, and the report carries the rate as
 `deliveredPct`, which is the difference between a mechanism worth little and one worth five times what the delta
 says. Every skip also names itself in the debug log (`ineligible` / `deadline` / `indexing` / `no-hits` /
 `failed`) — before that only a *thrown* retrieval was logged, which over a full day meant one line.
@@ -211,11 +211,30 @@ graperoot benchmark this borrows from measured its own MCP form **15.8% more exp
 while the pre-injection form came out **~45% cheaper**. Same retrieval; what differs is who pays to decide to run
 it.
 
-**`iqContextHoldout`** is its measurement control, the same shape as `terseHoldout` (`UsageTurn.iqContext`). The
-metric is **cost per turn**, not tokens: the injection spends input tokens on purpose to buy back search turns,
-so an output-token verdict would score the spending and miss the buying. `true` on the ledger means the turn was
-*assigned* the retrieval, not that a note was found for it — the arms have to be the coin flip's populations,
-and the control arm holds the same unsearchable questions in the same proportion.
+**`iqContextHoldout`** is its measurement control, the same shape as `terseHoldout` (`UsageTurn.iqContext`).
+`true` on the ledger means the turn was *assigned* the retrieval, not that a note was found for it — the arms
+have to be the coin flip's populations, and the control arm holds the same unsearchable questions in the same
+proportion.
+
+**It is judged on searches, not on cost** — the same correction, for the same reason, as the steer's move off
+output tokens. Cost per turn ran for nine days and reported +27.0% ± 29.9pp, an interval from −2.9% to +56.9%
+that never resolved; read against the transcripts, every raw per-turn outcome moved with it (reads +58%,
+duration +73%, cache-read tokens +28%) and every one was flat to within a point once turn size was divided out.
+It was the coin flip handing the treatment arm the bigger jobs. A turn's price is a whole turn's work and the
+retrieval moves one part of it, so the part sat inside the noise of the rest.
+
+Two readings, off one arm assignment, because they fail differently:
+
+- `UsageTurn.searchCalls` — every search the turn ran. The whole of what the mechanism displaces, and still
+  grows with the size of the job.
+- `UsageTurn.openingSearches` — the ones before the turn first opened or changed a file. The orientation burst
+  the retrieval is actually aimed at, and roughly the same act whatever the job turns out to be.
+
+An effect in the first and not the second is the arms drawing different-sized work again. Both count the CLI
+searches too (`isSearchCall` in `agent/tool-calls.ts`): `iq q "…"` arrives as Bash and categorizes as `execute`,
+so counting the `search` tool category alone would miss every search on a sandbox with iq switched on — which is
+the sandbox this is being measured against. A turn that searched nothing records a zero and stays in the
+population; filtering on "did it search" would filter by an outcome the treatment moves.
 
 ## What the report says — `/settings/savings`
 
@@ -223,13 +242,21 @@ and the control arm holds the same unsearchable questions in the same proportion
 
 - `input` — the cleaners, from `filter-stats.jsonl`. Exact, windowed by UTC day. `gaps` — the un-cleaned
   commands worth a handler — is **grouped by command line**, `commands` runs summing to `tokens`.
-- `output` — the terse A/B above (`metric: "outputTokens"`). Absent entirely when the experiment isn't running.
-- `context` — the pre-injection A/B (`metric: "costUsd"`). Same `TurnExperiment` shape, same Welch machinery,
-  same absence rule.
+- `output` — the terse A/B above. One reading, `metric: "proseChars"`. Absent entirely when the experiment isn't
+  running.
+- `context` — the pre-injection A/B. Two readings, `"searchCalls"` then `"openingSearches"`. Same
+  `TurnExperiment` shape, same Welch machinery, same absence rule.
+
+`TurnExperiment.metrics` is a head-and-tail tuple, not a plain list: one coin flip, one arm assignment, one
+delivery rate, and N readings over them — so the first is always the headline and a screen never has to check
+whether there is one. `deliveredPct`/`outcomes` sit on the experiment rather than inside a reading, because they
+qualify every reading equally.
 
 The web renders `input` as one stacked bar (mechanisms + what reached the assistant) on the Usage tab, where the
-range window lives, and both experiments through one arms chart (`SavingsArmsChart.vue`, metric-aware), with
-each mechanism's figure repeated next to its own switch on the Agent tab. Note the ledger
+range window lives, and each reading through one arms chart (`SavingsArmsChart.vue`, metric-aware) — the
+retrieval card leads with its headline chart and carries the narrower reading as a line beneath, since a second
+full-size pair of bars over the same turns reads as a second experiment agreeing with the first. Each
+mechanism's figure is repeated next to its own switch on the Agent tab. Note the ledger
 lives under `logsRoot` and is therefore pruned by `pruneLogFiles` (5 MB → newest 1 MB, 30-day idle): it is a
 window of recent commands, not a lifetime record like `usage.jsonl`.
 

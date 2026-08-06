@@ -11,6 +11,7 @@ import { useSandboxSettings } from "../../../composables/sandbox/useSandboxSetti
 import { useAsyncAction } from "../../../composables/useAsyncAction";
 import { useDraft } from "../../../composables/useDraft";
 import { asPercent, commitPercent } from "./numberInputs";
+import { verdictsOf } from "../savingsChart";
 import InstructionsInfo from "./InstructionsInfo.vue";
 
 /* WHAT THE ASSISTANT IS TOLD, before the user types anything: how much it writes back, and which prompt it IS.
@@ -90,6 +91,15 @@ const forkBuiltin = async (base: `intentic` | `claude`): Promise<void> => {
 // The terse steer's measurement control, at turn level: the % of eligible turns that run WITHOUT it so the two
 // arms can be compared.
 const terseHoldoutPercent = computed<number>(() => asPercent(settings.value?.terseHoldout));
+
+/* What the experiment says so far, worded exactly as the Savings card words it — same report, same sentence.
+ * The steer is judged on the PROSE it steers, not on the turn's output tokens, which are nine parts tool-call
+ * arguments and could never show it; this row used to name the tokens and was reporting the wrong quantity.
+ *
+ * The arms come along because this row has no chart to carry them, and a figure with no account of how much
+ * data is behind it is one a reader cannot weigh. */
+const terseVerdict = computed(() => verdictsOf(savings.value?.output).headline);
+const terseArms = computed(() => savings.value?.output?.metrics[0]);
 </script>
 
 <template>
@@ -144,19 +154,13 @@ const terseHoldoutPercent = computed<number>(() => asPercent(settings.value?.ter
                             <span class="text-xs text-muted">%</span>
                         </span>
                     </label>
-                    <p v-if="savings?.output !== undefined" class="mt-2 border-t border-line pt-2 text-2xs">
-                        <template v-if="savings.output.deltaPct !== undefined">
-                            <span class="tabular-nums" :class="savings.output.deltaPct < 0 ? `text-success` : `text-muted`">
-                                {{ savings.output.deltaPct < 0 ? `↓` : `↑` }}{{ Math.abs(savings.output.deltaPct) }}%
-                            </span>
-                            <span class="text-muted">
-                                output tokens per turn ± {{ savings.output.marginPct }}pp, over {{ savings.output.on.turns }} steered vs
-                                {{ savings.output.off.turns }} unsteered turns.
-                            </span>
-                        </template>
-                        <span v-else class="text-muted">
-                            Measuring — {{ savings.output.on.turns }} steered and {{ savings.output.off.turns }} unsteered turns so far, of
-                            {{ savings.output.minTurns }} needed per arm.
+                    <p v-if="terseArms !== undefined" class="mt-2 border-t border-line pt-2 text-2xs">
+                        <span class="tabular-nums" :class="terseVerdict.tone === `success` ? `text-success` : `text-muted`">{{
+                            terseVerdict.value
+                        }}</span>
+                        <span class="text-muted">
+                            {{ terseVerdict.unit }} — {{ terseVerdict.detail }}, over {{ terseArms.on.turns }} steered vs
+                            {{ terseArms.off.turns }} unsteered turns.
                         </span>
                     </p>
                 </template>
