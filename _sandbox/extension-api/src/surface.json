@@ -1,0 +1,36 @@
+{
+    "1.0.0": {
+        "manifest": ["category", "contributes", "engines", "entry", "icon", "logo", "name", "permissions", "publisher", "version"],
+        "contributes": [
+            "agent",
+            "bin",
+            "capabilities",
+            "commands",
+            "documents",
+            "environment",
+            "files",
+            "listener",
+            "processes",
+            "settings",
+            "viewers",
+            "views"
+        ],
+        "api": [
+            "apiVersion",
+            "chat",
+            "commands",
+            "documents",
+            "models",
+            "navigate",
+            "processes",
+            "route",
+            "sandbox",
+            "settings",
+            "terminal",
+            "theme",
+            "viewers",
+            "views",
+            "workspace"
+        ]
+    }
+}

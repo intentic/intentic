@@ -4,7 +4,7 @@
     "version": "1.0.0",
     "category": "work",
     "icon": "wave-pulse",
-    "engines": { "intentic": "^0.4.0" },
+    "engines": { "intentic": "^1.0.0" },
     "permissions": {
         "sandbox": ["GET /activity", "GET /activity/status"]
     },

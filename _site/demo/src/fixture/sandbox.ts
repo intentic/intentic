@@ -89,7 +89,7 @@ const CONNECTOR_EXTENSIONS: Omit<ExtensionSummary, "enabled">[] = [
             publisher: `intentic`,
             name: `connectors`,
             version: `1.0.0`,
-            engines: { intentic: `^0.4.0` },
+            engines: { intentic: `^1.0.0` },
             contributes: {
                 capabilities: [
                     {
@@ -181,7 +181,7 @@ const CONNECTOR_EXTENSIONS: Omit<ExtensionSummary, "enabled">[] = [
             publisher: `intentic`,
             name: `discord`,
             version: `1.0.0`,
-            engines: { intentic: `^0.4.0` },
+            engines: { intentic: `^1.0.0` },
             contributes: {
                 capabilities: [
                     {

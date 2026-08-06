@@ -3,7 +3,7 @@
     "name": "example",
     "version": "1.0.0",
     "icon": "sparkles",
-    "engines": { "intentic": "^0.4.0" },
+    "engines": { "intentic": "^1.0.0" },
     "entry": "dist/extension.js",
     "permissions": { "sandbox": ["GET /workspace/file"] },
     "contributes": {

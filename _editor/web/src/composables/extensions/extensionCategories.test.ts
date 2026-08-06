@@ -7,7 +7,7 @@ const entry = (name: string, category?: string): ExtensionEntry =>
     ({
         extension: {
             id: `intentic.${name}`,
-            manifest: { publisher: `intentic`, name, version: `1.0.0`, category, engines: { intentic: `^0.4.0` } } as ExtensionManifest,
+            manifest: { publisher: `intentic`, name, version: `1.0.0`, category, engines: { intentic: `^1.0.0` } } as ExtensionManifest,
         },
     }) as ExtensionEntry;
 

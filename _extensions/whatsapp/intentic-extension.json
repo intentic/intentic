@@ -5,7 +5,7 @@
     "category": "connections",
     "logo": "whatsapp",
     "engines": {
-        "intentic": "^0.4.0"
+        "intentic": "^1.0.0"
     },
     "contributes": {
         "listener": {

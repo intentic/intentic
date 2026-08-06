@@ -21,7 +21,7 @@ import { useRuns } from "./useRuns.js";
  * rejection and `reachable()` is false, keeping the queries disabled and the test free of network. */
 const stubHost = () =>
     ({
-        apiVersion: `0.4.0`,
+        apiVersion: `1.0.0`,
         views: { register: () => ({ dispose: () => {} }) },
         viewers: { register: () => ({ dispose: () => {} }) },
         commands: { register: () => ({ dispose: () => {} }), execute: async () => undefined },

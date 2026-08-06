@@ -6,7 +6,7 @@ const manifest = (contributes: ExtensionManifest["contributes"]): ExtensionManif
     publisher: `intentic`,
     name: `documentation`,
     version: `1.0.0`,
-    engines: { intentic: `^0.4.0` },
+    engines: { intentic: `^1.0.0` },
     contributes,
 });
 

@@ -12,8 +12,10 @@ With `@intentic/extension-ui`, one of only two packages an extension may depend 
 - **[manifest.ts](src/manifest.ts)** — the `intentic-extension.json` schema. The manifest is the **approval
   + gating surface**: the install dialog shows exactly the declared contribution points, and the host
   refuses any runtime registration (view, command, viewer, setting, process…) the approved manifest never
-  declared. Contribution points: `views`, `viewers`, `documents`, `commands`, `settings`, `processes`,
-  `agent`, `environment`, `connectors`, `listener`, `bin`, plus the `permissions.sandbox` route allowlist.
+  declared. Contribution points: `views`, `files`, `viewers`, `documents`, `commands`, `settings`,
+  `processes`, `agent`, `environment`, `capabilities`, `listener`, `bin`, plus the `permissions.sandbox` route
+  allowlist. That list is not prose to be kept in sync by hand — `surface-guard.test.ts` reads it back out of
+  this file and fails when it stops matching the schema.
   Identity is derived, never declared — `extensionIdOf(manifest) = ${publisher}.${name}`.
 - **[api.ts](src/api.ts)** — `IntenticApi`, the host surface delivered to `activate(api, context)`. There is
   no ambient global; everything an extension registers is a `Disposable` pushed onto
