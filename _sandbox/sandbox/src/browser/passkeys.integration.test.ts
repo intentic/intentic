@@ -62,7 +62,11 @@ test("a passkey enrolled in one browser asserts in the next, carried only by the
     const { chromium } = await import("playwright");
     const store = join(mkdtempSync(join(tmpdir(), "passkeys-")), "npmjs.passkeys.json");
     const site = await serve();
-    const browser = await chromium.launch({ headless: true, args: ["--no-sandbox"] });
+    // executablePath is not optional here: a bare headless launch asks for chromium-headless-shell, and the
+    // image deletes that browser right after installing it (Dockerfile, "THE HEADLESS SHELL IS DELETED AGAIN
+    // IMMEDIATELY") because every launch the daemon makes names the full browser. This one has to as well —
+    // it is also the binary the gate above checked for.
+    const browser = await chromium.launch({ headless: true, executablePath: chromium.executablePath(), args: ["--no-sandbox"] });
     try {
         // Browser one: enroll. The create() ceremony lands on the virtual authenticator with nobody clicking
         // anything (simulated presence/verification), and the credentialAdded event must persist it.
