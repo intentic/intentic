@@ -129,7 +129,8 @@
                             "Sign in on npmjs.com, click your avatar → `Access Tokens` → `Generate New Token` → `Granular Access Token` (classic tokens no longer exist).",
                             "Grant `Read and write` on just the packages or scopes the agent should manage, pick the expiry deliberately (write tokens live at most `90 days`, `7` by default), and paste the token here.",
                             "Publishing enforces 2FA: either enable `Bypass 2FA` on the token (npm is narrowing this to staging a publish you then approve on the site), or store your TOTP secret below so the agent can answer OTP prompts.",
-                            "The TOTP secret is the base32 key behind your authenticator's QR code (`Can't scan the QR code?` at enrollment). Only accounts already on TOTP have one — npm no longer offers new TOTP enrollments, and WebAuthn/passkey 2FA cannot be stored."
+                            "The TOTP secret is the base32 key behind your authenticator's QR code (`Can't scan the QR code?` at enrollment). Only accounts already on TOTP have one — npm no longer offers new TOTP enrollments.",
+                            "On WebAuthn instead of TOTP (npm's default now)? Add the `npmjs.com` browser card too: the sandbox enrolls its own passkey there and answers 2FA prompts and publish approvals itself."
                         ]
                     }
                 },
@@ -152,6 +153,20 @@
                     "NPM_TOKEN": "${token}"
                 },
                 "skill": "skills/npm/SKILL.md"
+            },
+            {
+                "id": "npmjs",
+                "kind": "browser",
+                "catalog": {
+                    "name": "npmjs.com",
+                    "logo": "npm",
+                    "description": "Your npm account in a real logged-in browser — approve staged publishes, answer WebAuthn 2FA with the sandbox's own passkey, manage tokens and packages.",
+                    "category": "code",
+                    "hint": "Use Log in to sign in once. A physical security key cannot reach this browser — sign in with a recovery code instead, then open npm's 2FA settings and `Add Security Key`: the sandbox enrolls its own passkey and answers every later 2FA prompt itself. Pairs with the npm connector — its publishes get their web approvals here."
+                },
+                "fields": [],
+                "loginUrl": "https://www.npmjs.com/login",
+                "skill": "skills/npmjs/SKILL.md"
             },
             {
                 "id": "sentry",

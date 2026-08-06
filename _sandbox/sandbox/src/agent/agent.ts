@@ -161,6 +161,10 @@ export interface AgentRequest {
     // register a watchable session for the Chromium that call is launching (browser/browser-sessions.ts).
     // Absent ⇒ the turn has no browser tools at all, and nothing is watched.
     readonly browserPorts?: Record<string, number>;
+    // Each logged-in browser server's passkey store path (server name → file), so the session observer arms
+    // every page with the platform's software security key (browser/passkeys.ts). Absent for turns whose
+    // browsers hold no identity.
+    readonly browserPasskeys?: Record<string, string>;
     // Built-in tool names to remove from the model's context this turn (SDK disallowedTools). Set by the
     // hashlineEdits toggle to disable native Edit/Write so file mutations route through the hashline MCP tools.
     readonly disallowedTools?: readonly string[];
@@ -1345,7 +1349,7 @@ const baseOptions = (
         // Browser, the other half: a browser tool call is the moment the agent's Chromium becomes real, so it
         // is where the watchable session is registered. The hook only names what already exists — the browser
         // is the MCP's to launch and to kill (browser/browser-sessions.ts).
-        request.browserPorts !== undefined ? browserSessionHooks(request.browserPorts) : {},
+        request.browserPorts !== undefined ? browserSessionHooks(request.browserPorts, request.browserPasskeys ?? {}) : {},
         // Subagents, the same way: the ids a child's transcript is READ with are only ever named to a hook, so
         // this pair is what makes the Subagents area's door open on anything (agent/subagents.ts). Pure
         // record-keeping — the card already learned the child exists from the task stream.

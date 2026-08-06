@@ -96,6 +96,21 @@ test("apply substitutes the core tools note into the contributed skill", async (
     expect(skill).toContain("REAL and public");
 });
 
+// npmjs is declared by `connectors`, not `social` — the first browser card outside the social pack, and the
+// proof that the handler is generic over WHICH extension contributes a platform rather than over that one.
+test("a browser platform contributed by another extension applies the same way", async () => {
+    const { ctx, root } = tempCtx();
+    const npmjs: Capability = { id: "npmjs", kind: "browser", config: { platform: "npmjs" } };
+    await drain(browserHandler.apply(ctx, "npmjs", npmjs.config));
+    const skill = await readWorkspaceFile(join(root, ".claude", "skills", "npmjs", "SKILL.md"));
+    expect(skill).toContain("name: npmjs");
+    expect(skill).toContain("https://www.npmjs.com");
+    // The passkey is the reason this card exists: the skill has to tell the agent the 2FA prompt self-answers,
+    // or it will stop and ask the user for a code that no longer exists.
+    expect(skill).toContain("passkey");
+    expect(skill).toContain("browser_snapshot");
+});
+
 test("echoConfig exposes only the platform; browser holds no manifest secret", () => {
     expect(echoConfig(reddit, new Map())).toEqual({ platform: "reddit" });
     expect(secretField(reddit, new Map())).toBeUndefined();

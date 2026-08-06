@@ -63,7 +63,10 @@ const describe = (effect: CapabilityEffect): EffectRow => {
                 warn: true,
             };
         case "profile":
-            return { icon: `globe`, label: `Keeps a logged-in ${effect.platform} browser profile in your sandbox` };
+            // Names the passkey as well as the profile, because a security key the sandbox holds is a stronger
+            // thing to store than a session cookie and the row is where the user decides. Both are torn down
+            // together when the connection is removed.
+            return { icon: `globe`, label: `Keeps a logged-in ${effect.platform} browser profile — and any passkey you enroll — in your sandbox` };
         case "machine":
             // The one effect that reaches OUTSIDE the sandbox, so it is warned and spelled out: the row names
             // the verbs the agent gets on a computer of the user's, not the mechanism that carries them.

@@ -614,7 +614,7 @@ on connected instances, and as grid badges for the consequential ones (image / r
 | `scaffold` | Repos created in the workspace: `devops` → the intent + desired-state repos; `monorepo` → an empty pnpm+turbo repo named after the instance. |
 | `deploy` | A managed `deploy.config.ts` entry; `service` also runs the shared infra-apply job now, `integration` applies on the next provision. |
 | `trusted-code` | Extension code runs inside the app with the owner's session — owner-only, full-sha-pinned install; the trust decision of the system. |
-| `profile` | A persisted logged-in Chromium profile under `.intentic/browser/<platform>`, established through the guided-login WebSocket (`/system/browser-login`) — the credential is a browser session, not a token. |
+| `profile` | A persisted logged-in Chromium profile under `.intentic/browser/<platform>`, established through the guided-login WebSocket (`/system/browser-login`) — the credential is a browser session, not a token. Beside it, `<platform>.passkeys.json` holds any WebAuthn credential enrolled in that browser: a CDP virtual authenticator is armed on every page of a logged-in browser, so the sandbox owns a software security key for that site and answers its 2FA ceremonies itself ([passkeys.ts](_sandbox/sandbox/src/browser/passkeys.ts)). Both die with the connection. |
 
 **Environment fragments have two trust tiers.** Core handler fragments (`vpn`/`browser`) are
 code-authored and may carry privileged `# intentic:runtime` directives; extension/connector checkout

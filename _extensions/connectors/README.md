@@ -14,8 +14,8 @@ a skill alongside the credential.
 
 ## Key files
 
-- [intentic-extension.json](intentic-extension.json) — the ten connectors, and what each one grants. This file
-  IS the package; there is no `src/`.
+- [intentic-extension.json](intentic-extension.json) — the eleven connectors, and what each one grants. This
+  file IS the package; there is no `src/`.
 - [skills/github](skills/github) — a worked example of the shipped-skill half.
 - [env/postgres.Dockerfile](env/postgres.Dockerfile) — a connector that needs a client installed in the sandbox,
   not just a credential.
@@ -33,3 +33,7 @@ here to every view that gates on them.
   connection rather than one per extension.
 - npm's `totpSecret` field is marked `totp`: the daemon mints one-time codes from it (the agent's `otp` command)
   and the seed never enters the agent's environment — a manifest whose `env` referenced it would fail to parse.
+- npm is two cards on purpose: the `npm` cli connector (token → the npm CLI) and the `npmjs` browser card, the
+  only connector of `browser` kind here. The browser half exists for what no token can do anymore — WebAuthn
+  2FA and publish approvals — which the sandbox answers with its own enrolled passkey (the daemon's browser
+  passkey store).

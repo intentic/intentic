@@ -8,7 +8,7 @@ import type { McpServerConfig } from "@anthropic-ai/claude-agent-sdk";
 import type { Capability } from "@intentic/sandbox-contract";
 import { browserOutputDir } from "./browser-artifacts.js";
 import { ensureXvfb } from "./display.js";
-import { hasSession, isLoginActive, sessionDir } from "./session-store.js";
+import { hasSession, isLoginActive, passkeyPath, sessionDir } from "./session-store.js";
 import { ensureStealthScript } from "./stealth.js";
 
 // The agent's browser tools come from Microsoft's official @playwright/mcp, spawned per turn as stdio MCP
@@ -227,12 +227,16 @@ const browserRuntime = async (): Promise<BrowserRuntime | undefined> => {
     }
 };
 
-// What one turn gets: the MCP servers themselves, and the debugging port each one's Chromium was told to open.
-// The ports travel with the servers because they are the same decision — a browser the agent can drive and a
-// browser the owner can watch have to be the same browser (browser-sessions.ts holds the other end).
+// What one turn gets: the MCP servers themselves, the debugging port each one's Chromium was told to open, and
+// each logged-in server's passkey store. The ports travel with the servers because they are the same decision —
+// a browser the agent can drive and a browser the owner can watch have to be the same browser
+// (browser-sessions.ts holds the other end); the passkey stores ride the same map because the observer that
+// watches those pages is also what plugs the platform's software security key into them (passkeys.ts).
 export interface BrowserTurnTools {
     readonly servers: Record<string, McpServerConfig>;
     readonly ports: Record<string, number>;
+    // Server id → the platform's passkey store path. Absent for `web` — the credential-free browser holds no identity.
+    readonly passkeys: Record<string, string>;
 }
 
 // Every browser server for this turn. The isolated one is unconditional; a capability's own server is added
@@ -241,11 +245,12 @@ export interface BrowserTurnTools {
 export const browserServersOf = async (capabilities: readonly Capability[], root: string): Promise<BrowserTurnTools> => {
     const runtime = await browserRuntime();
     if (runtime === undefined) {
-        return { servers: {}, ports: {} };
+        return { servers: {}, ports: {}, passkeys: {} };
     }
     await sweepConfigs(Date.now());
     const webPort = await freePort();
     const ports: Record<string, number> = { web: webPort };
+    const passkeys: Record<string, string> = {};
     const servers: Record<string, McpServerConfig> = {
         web: isolatedBrowserSpec(runtime.cli, runtime.executablePath, browserOutputDir(root), await writeBrowserConfig("web", webPort)),
     };
@@ -253,7 +258,7 @@ export const browserServersOf = async (capabilities: readonly Capability[], root
         (capability) => capability.kind === "browser" && hasSession(root, capability.config.platform) && !isLoginActive(capability.config.platform),
     );
     if (loggedIn.length === 0) {
-        return { servers, ports };
+        return { servers, ports, passkeys };
     }
     // Only the persisted-profile path pays for Xvfb and the stealth script — a turn that never logs in anywhere
     // must not start a virtual display just to have a browser available.
@@ -265,6 +270,7 @@ export const browserServersOf = async (capabilities: readonly Capability[], root
         }
         const port = await freePort();
         ports[capability.id] = port;
+        passkeys[capability.id] = passkeyPath(root, capability.config.platform);
         servers[capability.id] = browserServerSpec(
             runtime.cli,
             runtime.executablePath,
@@ -274,5 +280,5 @@ export const browserServersOf = async (capabilities: readonly Capability[], root
             await writeBrowserConfig(capability.id, port),
         );
     }
-    return { servers, ports };
+    return { servers, ports, passkeys };
 };

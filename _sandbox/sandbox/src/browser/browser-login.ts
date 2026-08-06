@@ -1,8 +1,9 @@
 import { upgradeWebSocket } from "@hono/node-server";
-import type { BrowserContext } from "playwright";
+import type { BrowserContext, Page } from "playwright";
 import { ensureXvfb } from "./display.js";
+import { armPasskeys } from "./passkeys.js";
 import { dispatchInput, startScreencast, VIEW_HEIGHT, VIEW_WIDTH, type Screencast, type ScreencastClientMessage } from "./screencast.js";
-import { acquireLoginLock, markConnected, releaseLoginLock, sessionDir } from "./session-store.js";
+import { acquireLoginLock, markConnected, passkeyPath, releaseLoginLock, sessionDir } from "./session-store.js";
 import { STEALTH_INIT } from "./stealth.js";
 import type { Services } from "../composition.js";
 import { redeemTicket } from "../auth/ws-tickets.js";
@@ -93,6 +94,16 @@ export const createBrowserLoginRoute = (services: Services) =>
                     // so the stream has something to bind to (it follows every later page — popups included —
                     // by itself; see screencast.ts).
                     const page = ctx.pages()[0] ?? (await ctx.newPage());
+                    // The sandbox's software security key, plugged in BEFORE the first navigation: this window
+                    // is where the owner enrolls it (a site's "Add security key" lands on the virtual
+                    // authenticator and persists) and where a stored one answers the login's own 2FA prompt.
+                    const storePath = passkeyPath(services.workspace.root, requested);
+                    const arm = (target: Page): void =>
+                        void armPasskeys(ctx, target, storePath).catch((err: unknown) =>
+                            services.logger.warn({ err }, "browser-login: passkey arm failed"),
+                        );
+                    ctx.on("page", arm);
+                    arm(page);
                     screencast = await startScreencast(ctx, (frame) => ws.send(JSON.stringify({ type: "frame", ...frame })));
                     // Don't hard-fail on a slow login page; the user can still interact once it paints.
                     await page.goto(loginUrl, { waitUntil: "domcontentloaded" }).catch((err: unknown) => {

@@ -21,12 +21,14 @@ When a write is refused with an OTP/one-time-password error, mint a code and ret
 `npm publish --otp "$(otp ${id})"`. Codes die within seconds — mint at the moment of use, never ahead, and
 never ask the user for a code before trying `otp ${id}`.
 
-If `otp ${id}` says no TOTP secret is stored, the account either uses WebAuthn/passkeys or the seed was never
-added — ask the user to approve the publish on npmjs.com, or to add the TOTP secret on the npm capability card.
+If `otp ${id}` says no TOTP secret is stored: the account is on WebAuthn. When the npmjs.com browser is
+connected (its skill exists beside this one), take the web path — navigate to the `https://www.npmjs.com/auth/...`
+URL the CLI prints (or the publish's approval link) in that browser; its passkey answers the 2FA step by
+itself. Only with neither the TOTP secret nor that browser connected do you stop and ask the user.
 
 ## Failure modes worth naming
 
 - A 401/403 from a token that worked before is almost always an EXPIRED token (npm caps write tokens at 90
   days): tell the user to paste a fresh one under Sandbox ▸ Secrets rather than retrying.
 - A Bypass-2FA token may STAGE a publish for the owner to approve on npmjs.com instead of completing it —
-  report the staged state and stop, don't retry the publish.
+  approve it in the connected npmjs.com browser, or report the staged state if that browser isn't connected.

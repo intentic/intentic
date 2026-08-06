@@ -3,6 +3,7 @@ import type { HookCallbackMatcher, HookEvent } from "@anthropic-ai/claude-agent-
 import type { BrowserPage, BrowserSession } from "@intentic/sandbox-contract";
 import { browserSessionName } from "@intentic/sandbox-contract/session-names";
 import type { Browser, BrowserContext, Page } from "playwright";
+import { armPasskeys } from "./passkeys.js";
 
 /* THE AGENT'S BROWSER, AS A THING THE DAEMON CAN NAME.
  *
@@ -63,6 +64,9 @@ interface BrowserSessionRecord {
     // Which MCP server drives it: `web` (the credential-free browser) or a logged-in capability's id.
     readonly server: string;
     readonly port: number;
+    // The platform's passkey store for a logged-in capability's browser — the observer arms every page with the
+    // sandbox's software security key from it (passkeys.ts). Undefined for `web`, which holds no identity.
+    readonly passkeyStore: string | undefined;
     readonly startedAt: number;
     activityAt: number;
     // Every page currently open, in the order they were opened — which is the order a browser shows its tabs.
@@ -126,6 +130,11 @@ const watchPage = (record: BrowserSessionRecord, page: Page): void => {
     const entry: PageRecord = { id: `p${record.nextPageId}`, page, url: page.url(), title: undefined, closed: false };
     record.nextPageId += 1;
     record.pages.set(entry.id, entry);
+    // A logged-in browser's page gets the platform's passkey plugged in the moment the observer sees it —
+    // best-effort, because a page that closed under the arm is a page nobody will run a ceremony on.
+    if (record.passkeyStore !== undefined && record.context !== undefined) {
+        void armPasskeys(record.context, page, record.passkeyStore).catch(() => undefined);
+    }
     void notePage(record, entry);
     page.on("framenavigated", (frame) => {
         if (frame.parentFrame() === null) {
@@ -191,7 +200,12 @@ const attach = async (record: BrowserSessionRecord): Promise<BrowserContext | un
 // Register (or refresh) the session behind a browser tool call, and start the attach on first sight. Called
 // from the PreToolUse hook — the moment the agent uses a browser tool is the moment a browser session becomes
 // a real thing, and the moment it should appear on the rail.
-export const openBrowserSession = (input: { readonly sessionId: string; readonly server: string; readonly port: number }): string | undefined => {
+export const openBrowserSession = (input: {
+    readonly sessionId: string;
+    readonly server: string;
+    readonly port: number;
+    readonly passkeyStore?: string | undefined;
+}): string | undefined => {
     const name = browserSessionName(input.sessionId);
     if (name === undefined) {
         return undefined;
@@ -208,6 +222,7 @@ export const openBrowserSession = (input: { readonly sessionId: string; readonly
         name,
         server: input.server,
         port: input.port,
+        passkeyStore: input.passkeyStore,
         startedAt: Date.now(),
         activityAt: Date.now(),
         pages: new Map(),
@@ -321,8 +336,13 @@ export const closeBrowserSession = async (name: string): Promise<void> => {
  * stamps the clock, which is what keeps a long browsing turn reading as active between attaches.
  *
  * `ports` is the per-turn map browser-tools.ts allocated: server name → the debugging port its Chromium was
- * told to listen on. A tool whose server isn't in it (there is no such call today) simply isn't watched. */
-export const browserSessionHooks = (ports: Record<string, number>): Partial<Record<HookEvent, HookCallbackMatcher[]>> => {
+ * told to listen on. A tool whose server isn't in it (there is no such call today) simply isn't watched.
+ * `passkeys` is its sibling from the same allocation: the logged-in servers' passkey store paths, which is what
+ * lets the observer arm the pages it watches. */
+export const browserSessionHooks = (
+    ports: Record<string, number>,
+    passkeys: Record<string, string> = {},
+): Partial<Record<HookEvent, HookCallbackMatcher[]>> => {
     const matcher = "mcp__.+__browser_.+";
     const touch = async (tool: string, sessionId: string): Promise<void> => {
         const server = browserServerOfTool(tool);
@@ -330,7 +350,7 @@ export const browserSessionHooks = (ports: Record<string, number>): Partial<Reco
         if (server === undefined || port === undefined) {
             return;
         }
-        openBrowserSession({ sessionId, server, port });
+        openBrowserSession({ sessionId, server, port, passkeyStore: passkeys[server] });
     };
     return {
         PreToolUse: [

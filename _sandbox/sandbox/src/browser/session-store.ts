@@ -16,6 +16,11 @@ export const sessionDir = (root: string, platform: string): string => statePath(
 // written only when the owner finishes the guided login, is the real "connected" probe.
 const markerPath = (root: string, platform: string): string => statePath(root, ".intentic/browser/", `${platform}.connected`);
 
+// The platform's WebAuthn passkey store (passkeys.ts) — beside the profile because it is part of the same
+// identity: the sandbox's own software security key for that site, exactly as sensitive as the profile's
+// cookies and torn down with them.
+export const passkeyPath = (root: string, platform: string): string => statePath(root, ".intentic/browser/", `${platform}.passkeys.json`);
+
 export const hasSession = (root: string, platform: string): boolean => existsSync(markerPath(root, platform));
 
 // Drop an empty marker beside the profile dir. Ensures the parent exists (it will after a real login, but this
@@ -29,6 +34,7 @@ export const markConnected = async (root: string, platform: string): Promise<voi
 export const clearSession = async (root: string, platform: string): Promise<void> => {
     await rm(sessionDir(root, platform), { recursive: true, force: true });
     await rm(markerPath(root, platform), { force: true });
+    await rm(passkeyPath(root, platform), { force: true });
 };
 
 // A persistent `--user-data-dir` can't be opened twice: while a guided login holds a platform's profile, the

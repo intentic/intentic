@@ -112,5 +112,5 @@ test("no Chromium on disk means no browser servers at all", async () => {
     }
     const root = tempRoot();
     await markConnected(root, "reddit");
-    expect(await browserServersOf([reddit], root)).toEqual({ servers: {}, ports: {} });
+    expect(await browserServersOf([reddit], root)).toEqual({ servers: {}, ports: {}, passkeys: {} });
 });

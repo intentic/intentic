@@ -496,6 +496,9 @@ export const planHarnessTurn = async (
             // The debugging ports those same servers' Chromiums will open, so the first browser tool call can
             // register a session the owner can watch (browser/browser-sessions.ts).
             ...(Object.keys(browser.ports).length > 0 ? { browserPorts: browser.ports } : {}),
+            // Each logged-in server's passkey store, so the observer that watches those pages also plugs the
+            // platform's software security key into them (browser/passkeys.ts).
+            ...(Object.keys(browser.passkeys).length > 0 ? { browserPasskeys: browser.passkeys } : {}),
             // hashlineEdits owns file mutation via the hashline MCP server above, so drop the native Edit/Write
             // from the model's context (native Read stays for viewing images/PDFs).
             ...(hashlineEdits ? { disallowedTools: ["Edit", "Write"] } : {}),
