@@ -9,14 +9,17 @@ import type { Workflow, WorkflowStep } from "@intentic/sandbox-contract";
  * in it, which you then edit and save. Never "create it silently and hope" — a workflow costs money to run and
  * the whole point of the designer is that you look at the graph before you press go.
  *
- * ONE TEMPLATE, because there is one thing a workflow does that nothing else in the product can. A chain, a
- * convergence loop, a checklist — you can get all of those by talking to a single agent for long enough. What
- * you cannot get that way is two DIFFERENT models building the same brief at the same time in separate
- * worktrees, a third model scoring both without provider labels, and a fresh synthesis session writing the
- * version worth keeping. By hand that is four chats, two branches, and evidence held across four transcripts.
+ * TWO CARDS, AND THE FIRST ONE IS THE FEATURE. There is one thing a workflow does that nothing else in the
+ * product can: two DIFFERENT models building the same request at the same time in separate worktrees, and a
+ * third session that reads both diffs and writes the version worth keeping. Three steps, no paperwork — by hand
+ * it is two chats, two branches and a comparison you hold in your head from transcripts you cannot read at once.
+ * That is the whole pitch and it must stay readable in one glance at the graph.
  *
- * AND IT TEACHES THE WHOLE SYNTHESIS SHAPE: identical fan-out, blind structured evaluation, and a pinned final
- * worker whose self-claim is checked by a separate model call. templates.test.ts holds those boundaries.
+ * THE SECOND CARD IS THE SAME RACE WITH THE MACHINERY TURNED ON — a blind scoring pass with a declared JSON
+ * output, and a merge whose own claim is checked by an independent judge. It exists because those controls are
+ * in the designer and something should demonstrate and exercise them end to end. It is deliberately NOT the
+ * default: it spends a fourth session and two more model calls before anything lands, and a person clicking
+ * their first workflow should not pay for a scoring rubric they have not asked for yet.
  */
 
 export interface WorkflowTemplate {
@@ -47,26 +50,56 @@ const step = (id: string, title: string, over: Partial<WorkflowStep> = {}): Work
     ...over,
 });
 
-/* THE ATTEMPTS USED TO DECLARE FOUR REQUIRED FIELDS — approach, files, tradeoffs, risk — and both the fields
- * and the check below them are gone. They were sold as the comparison's evidence and were, in fact, its two
- * most expensive failure modes.
+/* THE TWO ATTEMPTS, SHARED BY BOTH TEMPLATES, AND THEY ARE WHERE EITHER RUN STARTS. Your request reaches both
+ * of them directly, at the same moment, as the first thing either session is told — which is what makes this
+ * feel like starting one agent rather than commissioning a project. This used to open with a step that turned
+ * the request into a brief for them, and that was a preamble sold as rigour: it spent a session and a minute
+ * before any code was written, and it inserted one model's reading of the task between you and both attempts,
+ * which is precisely the variable this design exists to hold still.
  *
- * A DECLARED OUTPUT IS A COMPLETION GATE, not a report. The step is not finished until it writes a valid
- * `iteration-N.json`, so an attempt that built the thing correctly and then failed to describe it in the right
- * shape is a FAILED step — and everything downstream of it is skipped. It also drags the whole output contract
- * into the prompt, which is the page of scaffolding that used to sit on top of the request.
+ * NEITHER DECLARES A GOAL OR A PROMPT, and that is the second half of the same argument. What they used to
+ * declare was a paraphrase of "build what was asked" wrapped in five headings about the workflow — one model's
+ * reading of the task, re-inserted one layer down after being evicted from the step above. A step with neither
+ * is handed YOUR sentence, unwrapped, and is measured against it (workflow-brief.ts). The operational facts
+ * that prose used to carry — an isolated branch of your own whose commits the daemon records — are enforced by
+ * the scheduler, so no design has to spend prompt space restating them.
  *
- * AND NOTHING READ THEM. The merge step is told to read the diffs — "the diffs, not the summaries of them" —
- * and it is handed both branch names to do it with. Four fields of prose about a change, written by the session
- * that made it, is the summary the merge is explicitly instructed not to trust.
+ * NOR DOES EITHER DECLARE AN OUTPUT OR A CHECK. A declared output is a COMPLETION GATE: the step fails unless
+ * it writes a valid document, so an attempt that built the thing correctly and then described it in the wrong
+ * shape is a FAILED step that takes everything downstream with it. And nothing read those fields anyway — the
+ * merge is told to read the diffs, "not the summaries of them", and is handed both branch names to do it with.
  *
- * The comparison did not need them and the run is cheaper, shorter and more likely to finish without them. A
- * user who wants structured hand-off can still add it in the designer; it is no longer what you get by default.
- */
+ * Same words, same (empty) contract, different model, and neither is told the other exists — a session that
+ * knows it is being raced writes for the judge, and what you wanted to measure was how it writes code. Each
+ * gets its own worktree from the same immutable, per-repository run snapshot and its own branches, which is
+ * what everything downstream actually reads.
+ *
+ * THE MODEL IS PINNED HERE AND IS THE ONLY DIFFERENCE BETWEEN THEM. Change either one in the designer
+ * (Advanced ▸ Runs on) — Grok against Claude, or the same provider twice on two different models — and the rest
+ * of the graph runs unchanged. The model VERSION is left unset on purpose: each provider's own default is the
+ * one your subscription actually serves, and a pinned id here would go stale and refuse to run.
+ *
+ * THE TITLES ARE NEUTRAL BECAUSE TITLES TRAVEL. Every downstream step is handed its predecessors under
+ * `### From "<title>"`, so "Claude's attempt" would tell the session judging the diffs which family wrote which
+ * — the one thing this comparison cannot afford to leak. The pins stay visible to the owner on the graph. */
+const attempts = (): WorkflowStep[] => [step(`attempt-a`, `Attempt A`, { agent: `claude` }), step(`attempt-b`, `Attempt B`, { agent: `codex` })];
+
+// How the merge reads and writes, in both templates: start from the stronger branch rather than retyping it,
+// fix what it got wrong, fold in what the other did better, leave the project's own tests passing.
+const SYNTHESIS_PROMPT =
+    `Two sessions were given the request above and each built it, on the branches named above. Read both diffs in ` +
+    `full — the diffs, not the summaries of them — and judge them against what was asked and against the code they ` +
+    `had to live in, not against your own taste in style.\n\n` +
+    `Then write the version worth keeping, here in your own worktree. Start from the stronger of the two rather ` +
+    `than retyping it: in every repository where it changed files, bring its named branch in with \`git merge --squash\`, ` +
+    `then fix what it got wrong and fold in whatever the other one did better. Run whatever this project uses to test ` +
+    `itself and leave it passing. What lands must read as one change somebody made on purpose, not as two ` +
+    `stitched together — and say, in a sentence each, what you took from where.`;
+
 export const WORKFLOW_TEMPLATES: readonly WorkflowTemplate[] = [
     {
         icon: `clone`,
-        summary: `Claude and GPT build the same request on separate branches. A third model scores anonymous diffs, then synthesises the stronger result under an independent completion check.`,
+        summary: `What you type goes to Claude and to GPT at the same moment, each building it on a branch of its own. A third session then reads both diffs, keeps what each got right, and writes the merged version.`,
         workflow: {
             id: `two-models-one-task`,
             name: `Two models, one task`,
@@ -75,37 +108,51 @@ export const WORKFLOW_TEMPLATES: readonly WorkflowTemplate[] = [
             // start at once, so a 1 here would silently make this a race with a false start.
             maxParallel: 2,
             steps: [
-                /* THE TWO ATTEMPTS, AND THEY ARE WHERE THE RUN STARTS. Your request reaches both of them
-                 * directly, at the same moment, as the first thing either session is told — which is what makes
-                 * this feel like starting one agent rather than commissioning a project. It used to open with a
-                 * step that turned the request into a brief for them, and that was a preamble sold as rigour:
-                 * it spent a session and a minute before any code was written, and it inserted one model's
-                 * reading of the task between you and both attempts, which is precisely the variable this
-                 * design exists to hold still.
+                ...attempts(),
+                /* THE SYNTHESIS — one step, and it both reads and writes. There is no scoring pass in front of
+                 * it, and that is the design rather than an omission: a separate session that reads both diffs
+                 * and grades them spends a fourth model on producing an opinion this step is then told to
+                 * verify against the code anyway. Reading the two diffs IS the comparison, and the session
+                 * doing the merge is the one that has to be convinced.
                  *
-                 * NEITHER DECLARES A GOAL OR A PROMPT, and that is the second half of the same argument. What
-                 * they used to declare was a paraphrase of "build what was asked" wrapped in five headings
-                 * about the workflow — one model's reading of the task, re-inserted one layer down after being
-                 * evicted from the step above. A step with neither is handed YOUR sentence, unwrapped, and is
-                 * measured against it (workflow-brief.ts). The operational facts that prose used to carry — a
-                 * an isolated branch of your own whose commits the daemon records — are enforced by the
-                 * scheduler, so no design has to spend prompt space restating them.
+                 * FRESH, so it wrote neither attempt and has no stake in either — the same reason a reviewer is
+                 * a different session, and what makes this merge worth more than asking either author which one
+                 * won. It is handed both BRANCH NAMES (the run supplies those), so `git diff <base>...<branch>`
+                 * is the whole of its reading, and its own worktree is a clean checkout that is neither attempt
+                 * — exactly the tree a merge of the two wants to start from. What comes out is a third branch,
+                 * and that is the one you land.
                  *
-                 * Same words, same output contract, different model, and neither is told the other exists — a
-                 * session that knows it is being raced writes for the judge, and what you wanted to measure was
-                 * how it writes code. Each gets its own worktree from the same immutable, per-repository run
-                 * snapshot and its own branches, which is what the comparison below actually reads.
+                 * UNPINNED, so it runs on whatever you normally use. If you have a third provider connected,
+                 * pinning it here is the upgrade: a judge from neither family has no house style to reward.
                  *
-                 * THE MODEL IS PINNED HERE AND IS THE ONLY DIFFERENCE BETWEEN THEM. Change either one in the
-                 * designer (Advanced ▸ Runs on) — Grok against Claude, or the same provider twice on two
-                 * different models — and the rest of the graph runs unchanged. The model VERSION is left unset
-                 * on purpose: each provider's own default is the one your subscription actually serves, and a
-                 * pinned id here would go stale and refuse to run.
-                 */
-                // Neutral titles are part of the evaluation boundary. The provider pins remain visible to the
-                // owner on the graph, but downstream prompts see only Attempt A/B and anonymous branch ids.
-                step(`attempt-a`, `Attempt A`, { agent: `claude` }),
-                step(`attempt-b`, `Attempt B`, { agent: `codex` }),
+                 * AND IT DECLARES NO CHECK. The one it used to declare is why the rule is worth stating: it ran
+                 * `pnpm -w test`, this repo's own command, shipped to everybody. Anywhere that is not a pnpm
+                 * monorepo the check could never pass, so the step looped to its ceiling and failed a run that
+                 * had built the thing twice and merged it correctly. Telling the model to run the project's own
+                 * suite is the portable version of the same intent, and it is in the prompt. */
+                step(`synthesise`, `Take the best of both`, {
+                    needs: [`attempt-a`, `attempt-b`],
+                    goal: `One coherent implementation exists that keeps the best of both attempts, and the project's own tests pass.`,
+                    prompt: SYNTHESIS_PROMPT,
+                }),
+            ],
+        },
+    },
+    {
+        icon: `list-check`,
+        summary: `The same race, graded: a third model scores both diffs without knowing who wrote them, and the merge cannot finish until an independent judge accepts its verification.`,
+        workflow: {
+            id: `two-models-scored`,
+            name: `Two models, scored and merged`,
+            description: `One request built twice at once, then scored blind by a third model against the repository, and merged under a completion check that reads the score's requirements back.`,
+            maxParallel: 2,
+            steps: [
+                ...attempts(),
+                /* THE SCORING PASS, which is what this second card exists to show. It is a declared JSON output
+                 * — six required fields — so what reaches the merge is evidence in a fixed shape rather than
+                 * another essay, and it is pinned to a THIRD provider so neither family grades its own work.
+                 * The cost is honest and is the reason this is not the default: a whole session, a full read of
+                 * both diffs, and a completion gate that fails the step if the document comes out malformed. */
                 step(`evaluate`, `Score both attempts`, {
                     needs: [`attempt-a`, `attempt-b`],
                     agent: `grok`,
@@ -157,26 +204,19 @@ export const WORKFLOW_TEMPLATES: readonly WorkflowTemplate[] = [
                         ],
                     },
                 }),
-                /* THE SYNTHESIS is fresh, pinned to the third provider, and sees both anonymous candidates plus
-                 * an independent structured score. Its claim cannot end the step alone: a tool-less judge checks
-                 * that the report names concrete verification and satisfies the score's requirements. A fixed
-                 * shell command would guess a stranger's build system, so repository-specific verification is
-                 * discovered by the worker and must be evidenced to the judge instead. */
+                /* THE CHECKED SYNTHESIS. Same merge as the simple card, plus the two things this card is here
+                 * to demonstrate: it is handed the structured score as evidence (explicitly not as authority),
+                 * and its own claim cannot end the step — a tool-less judge reads the report and sends it back
+                 * unless the verification is named and run. A fixed shell command would guess a stranger's build
+                 * system, so the verification is discovered by the worker and evidenced to the judge instead. */
                 step(`synthesise`, `Take the best of both`, {
                     needs: [`attempt-a`, `attempt-b`, `evaluate`],
                     agent: `grok`,
                     goal: `One coherent implementation exists that keeps the best of both attempts, and the project's own tests pass.`,
                     prompt:
-                        `Two sessions were given the request above and each built it, on the branches named above. Read both diffs in ` +
-                        `full — the diffs, not the summaries of them — and judge them against what was asked and against the code they ` +
-                        `had to live in, not against your own taste in style.\n\n` +
-                        `Then write the version worth keeping, here in your own worktree. Start from the stronger of the two rather ` +
-                        `than retyping it: in every repository where it changed files, bring its named branch in with \`git merge --squash\`, ` +
-                        `then fix what it got wrong and fold in ` +
-                        `whatever the other one did better. Treat the independent score above as evidence, not authority: verify every recommendation against ` +
-                        `the code. Run whatever this project uses to test itself and leave it passing. ` +
-                        `What lands must read as one change somebody made on purpose, not as two ` +
-                        `stitched together — and say, in a sentence each, what you took from where.`,
+                        `${SYNTHESIS_PROMPT}\n\n` +
+                        `Treat the independent score above as evidence, not authority: verify every recommendation against the code before ` +
+                        `acting on it, and satisfy every synthesis requirement it lists.`,
                     output: { kind: `claim` },
                     checks: [
                         {

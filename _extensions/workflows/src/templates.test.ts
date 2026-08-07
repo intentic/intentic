@@ -20,10 +20,10 @@ test("template ids are unique — the gallery hides one already saved under its 
     expect(new Set(ids).size).toBe(ids.length);
 });
 
-/* THE GALLERY IS ONE CARD, so that card carries the whole teaching load — and this is the assertion that keeps
- * templates.ts honest about it. Five templates that were all straight chains would have looked like a full
- * gallery and taught nothing; one template that quietly loses its fan-in is the same failure with nowhere left
- * to hide, since there is no second card to make up for it. Nothing else in the build would notice.
+/* THE GALLERY IS TWO CARDS OF THE SAME SHAPE, and every one of them has to keep it — that is what this asserts.
+ * Five templates that were all straight chains would have looked like a full gallery and taught nothing; a
+ * template that quietly loses its fan-in is the same failure, and the second card is no excuse for it. Nothing
+ * else in the build would notice.
  *
  * The CONTINUED handoff is not among these any more: the template's last two steps were one session made to
  * stop and hand itself a summary, and collapsing them into a single synthesis took the only `continue` in the
@@ -53,27 +53,59 @@ test("the template teaches every shape", () => {
     }
 });
 
-/* Candidate authors stay unburdened by completion paperwork; the sessions that evaluate and synthesize do not.
- * Evaluation must be structured so synthesis receives evidence rather than another essay, and synthesis must
- * have an independent check so a clean turn or an unverified test claim cannot finish the graph by itself. */
-test("the template separates blind evaluation from checked synthesis", () => {
+/* Candidate authors carry no completion paperwork, in either template, and are named after nothing.
+ *
+ * A declared output is a COMPLETION GATE — the step fails unless it writes a valid document, so an attempt that
+ * built the thing and described it imperfectly takes the rest of the graph down with it — and it drags the whole
+ * output contract into a prompt that is meant to be the user's own sentence. The neutral titles are the other
+ * half: every downstream step is handed its predecessors under `### From "<title>"`, so "Claude's attempt" leaks
+ * the authorship the comparison exists to hold blind.
+ */
+test("the attempts are unburdened and anonymous in every template", () => {
     for (const { workflow } of WORKFLOW_TEMPLATES) {
         const attempts = workflow.steps.filter((step) => step.id.startsWith(`attempt-`));
-        expect(attempts.every((step) => step.output.kind === `none` && step.checks.length === 0)).toBe(true);
-        expect(new Set(attempts.map((step) => step.title))).toEqual(new Set([`Attempt A`, `Attempt B`]));
-
-        const evaluation = workflow.steps.find((step) => step.id === `evaluate`);
-        expect(evaluation?.output.kind).toBe(`json`);
-        expect(evaluation?.agent).toBeDefined();
-        expect(evaluation?.agent).not.toBe(attempts[0]?.agent);
-        expect(evaluation?.agent).not.toBe(attempts[1]?.agent);
-
-        const synthesis = workflow.steps.find((step) => step.id === `synthesise`);
-        expect(synthesis?.agent).toBeDefined();
-        expect(synthesis?.output.kind).not.toBe(`none`);
-        expect(synthesis?.checks.length).toBeGreaterThan(0);
-        expect(synthesis?.needs).toEqual(expect.arrayContaining([`attempt-a`, `attempt-b`, `evaluate`]));
+        expect(attempts.every((step) => step.output.kind === `none` && step.checks.length === 0), workflow.id).toBe(true);
+        expect(new Set(attempts.map((step) => step.title)), workflow.id).toEqual(new Set([`Attempt A`, `Attempt B`]));
     }
+});
+
+/* THE CARD PEOPLE CLICK FIRST SHIPS NO SCAFFOLDING AT ALL — the assertion that was deleted once already, and
+ * with it the default grew a fourth session, a six-field rubric and a judge.
+ *
+ * Both of those controls are real and both are demonstrated on the second card. Neither belongs in the thing a
+ * person opens before they understand what either does: a scoring pass costs a whole extra model call before
+ * anything lands, and a completion gate is a way for a run that built the thing correctly to report failure.
+ */
+test("the default template is three steps and no completion scaffolding", () => {
+    const simple = WORKFLOW_TEMPLATES[0]?.workflow;
+    expect(simple?.id).toBe(`two-models-one-task`);
+    expect(simple?.steps.map((step) => step.id)).toEqual([`attempt-a`, `attempt-b`, `synthesise`]);
+    for (const step of simple?.steps ?? []) {
+        expect(step.output.kind, `${step.id} declares an output, which gates its completion`).toBe(`none`);
+        expect(step.checks, `${step.id} declares a check against a tree the template cannot see`).toEqual([]);
+    }
+});
+
+/* THE SECOND CARD IS THE ONE THAT TEACHES THE MACHINERY, and it is the only reason those code paths are
+ * exercised by anything a user can click. Evaluation must be structured so synthesis receives evidence rather
+ * than another essay, blind to authorship on a provider that wrote neither attempt, and synthesis must have an
+ * independent check so a clean turn or an unverified test claim cannot finish the graph by itself. */
+test("the scored template separates blind evaluation from checked synthesis", () => {
+    const scored = WORKFLOW_TEMPLATES.find(({ workflow }) => workflow.id === `two-models-scored`)?.workflow;
+    expect(scored, `the gallery lost the template that demonstrates outputs and checks`).toBeDefined();
+    const attempts = scored?.steps.filter((step) => step.id.startsWith(`attempt-`)) ?? [];
+
+    const evaluation = scored?.steps.find((step) => step.id === `evaluate`);
+    expect(evaluation?.output.kind).toBe(`json`);
+    expect(evaluation?.agent).toBeDefined();
+    expect(evaluation?.agent).not.toBe(attempts[0]?.agent);
+    expect(evaluation?.agent).not.toBe(attempts[1]?.agent);
+
+    const synthesis = scored?.steps.find((step) => step.id === `synthesise`);
+    expect(synthesis?.agent).toBeDefined();
+    expect(synthesis?.output.kind).not.toBe(`none`);
+    expect(synthesis?.checks.length).toBeGreaterThan(0);
+    expect(synthesis?.needs).toEqual(expect.arrayContaining([`attempt-a`, `attempt-b`, `evaluate`]));
 });
 
 /* THE ROOTS ARE HANDED THE USER'S SENTENCE AND NOTHING ELSE — the property the whole default rests on, and the

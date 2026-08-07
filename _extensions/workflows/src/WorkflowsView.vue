@@ -351,8 +351,9 @@ const RUN_VARIANT: Record<WorkflowRun["state"], StatusVariant> = {
                  old block was a bare box under the words "Start from", which named neither what it held nor what
                  pressing it would do — and it sat under a list whose items looked nothing like it, so there was
                  no reading in which the two were the same kind of thing.
-                 One card wide on purpose (templates.ts says why): a lone card sized for a grid of three reads as
-                 a gallery that failed to load. -->
+                 Full width and stacked rather than a grid: there are two of these, they differ by how much
+                 machinery they carry, and that is a difference you read along the row — not one you spot in a
+                 column of thumbnails. The first is the plain one, and it is the one to click first. -->
             <section>
                 <div class="mb-2 flex flex-wrap items-center gap-x-2 gap-y-1 px-0.5">
                     <span :class="cmp.sectionLabel()">Start from a template</span>
