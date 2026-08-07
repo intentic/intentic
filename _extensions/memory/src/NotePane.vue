@@ -2,7 +2,7 @@
 import type { MemoryFileEntry } from "@intentic/sandbox-contract";
 import {
     Button,
-    Code,
+    CodeField,
     cmp,
     CopyButton,
     formatBytes,
@@ -24,7 +24,14 @@ import { useMemoryFile, useMemoryMutations } from "./useMemory";
  *
  * Reading is the default and gets the whole pane; the controls sit in one header row above it. The three
  * states (read / edit / confirm-forget) are mutually exclusive on purpose — an editor open over a note that is
- * half-deleted is a way to lose work, not a feature. */
+ * half-deleted is a way to lose work, not a feature.
+ *
+ * SOURCE AND EDIT ARE ONE SURFACE — <CodeField>, readonly or not. They used to be two: a coloured <Code> block
+ * to read the markdown in, and a bare grey <textarea> to change it in. So the file changed typeface, colour,
+ * leading and size at the moment you picked up the pen, and — because that textarea was `h-full min-h-64` in a
+ * panel with no height to be full OF — it also shrank to 256px, showing seven lines of a note and hiding the
+ * rest behind a scrollbar. One surface cannot drift from itself, and it is sized by the file rather than by a
+ * number, so the pane shows the whole note and this panel's own frame decides when to scroll. */
 
 const { project, name, entry } = defineProps<{
     project: string;
@@ -66,9 +73,22 @@ const confirming = ref(false);
 // the user's unsaved words.
 watch(selection, () => (confirming.value = false), { deep: true });
 
+/* What the source surface shows: the draft while one is open, the file otherwise. One binding for both, so
+ * reading the markdown and editing it cannot get out of step — the field is the same element either way, and
+ * `readonly` is the only thing that changes about it. */
+const source = computed<string>({
+    get: () => draft.value ?? raw.value,
+    set: (next) => {
+        draft.value = next;
+    },
+});
+
+// Editing lands on the SOURCE, because the source is what is being edited. It used to switch to Preview, which
+// was invisible only because the old textarea covered the whole pane; now that the two are one surface, the
+// same line would have taken the user off the thing they just clicked Edit on.
 const startEdit = (): void => {
     draft.value = raw.value;
-    view.value = `preview`;
+    view.value = `source`;
 };
 const cancelEdit = (): void => {
     draft.value = undefined;
@@ -176,28 +196,28 @@ const onProseClick = (event: MouseEvent): void => {
             </div>
         </template>
 
-        <!-- One textarea, holding the whole file: a memory note is short, hand-written markdown, and a
-             structured editor over it would only get in the way of the correction being made. -->
-        <textarea
-            v-if="draft !== undefined"
-            v-model="draft"
-            spellcheck="false"
-            aria-label="Note source"
-            class="scrollbar-thin h-full min-h-64 w-full resize-none bg-transparent px-4 py-3 font-mono text-xs leading-relaxed text-content focus:outline-none"
-            @keydown.ctrl.s.prevent="saveDraft"
-            @keydown.meta.s.prevent="saveDraft"
-            @keydown.esc="cancelEdit"
-        ></textarea>
-        <p v-else-if="isLoading" class="px-4 py-6 text-xs text-subtle">Loading…</p>
+        <p v-if="isLoading && draft === undefined" class="px-4 py-6 text-xs text-subtle">Loading…</p>
         <!-- Delegated click: the note links and the code blocks' copy buttons both live inside v-html. -->
         <Markdown
-            v-else-if="view === `preview`"
+            v-else-if="draft === undefined && view === `preview`"
             :source="parsed.body"
             :decorate="decorate"
             class="px-5 py-4"
             style="--prose-measure: 74ch"
             @click="onProseClick"
         />
-        <Code v-else :code="raw" lang="markdown" :wrap="true" :copyable="false" class="px-3 py-3" />
+        <!-- The whole file, frontmatter included, in markdown's own colours — read with `readonly`, written
+             without it. A memory note is short, hand-written markdown, and a structured editor over it would
+             only get in the way of the correction being made. -->
+        <CodeField
+            v-else
+            v-model="source"
+            lang="markdown"
+            :readonly="draft === undefined"
+            aria-label="Note source"
+            @keydown.ctrl.s.prevent="saveDraft"
+            @keydown.meta.s.prevent="saveDraft"
+            @keydown.esc="cancelEdit"
+        />
     </Panel>
 </template>

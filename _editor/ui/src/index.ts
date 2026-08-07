@@ -17,6 +17,10 @@ export { default as ChangeStatusMark } from "./components/ChangeStatusMark.vue";
 export { type ChangeStatus } from "./components/changeStatus.js";
 export { default as DiffStat } from "./components/DiffStat.vue";
 export { default as Code } from "./components/Code.vue";
+// The writing half of <Code> — the same colours, with a caret in them. Ships beside it for the reason <Row>
+// ships beside <RowGroup>: the read-only block on its own is what made every surface that also had to EDIT
+// the file fall back to a bare grey <textarea> next to it.
+export { default as CodeField } from "./components/CodeField.vue";
 export { default as ConfirmDialog } from "./components/ConfirmDialog.vue";
 export { default as ContextMenu } from "./components/ContextMenu.vue";
 export { default as CopyButton } from "./components/CopyButton.vue";

@@ -29,6 +29,10 @@ been remembered yet. No repo or capability evidence is needed for something the 
 
 - The notes are files, not a database. That is what makes them reviewable, greppable, and editable by the agent
   that wrote them without a write API in between.
+- **Reading the source and editing it are one surface** — `<CodeField readonly>` and `<CodeField>`. They were two
+  (a highlighted block to read, a bare `<textarea>` to write), so a note changed typeface and colour the moment
+  you picked up the pen, and the editor was pinned at 256px whatever the note's length. The pane is now sized by
+  the file; the panel's own frame is what scrolls.
 - **Which note is a picker, not an index column.** As a hub section this view sits beside the hub's own 16rem
   rail, so a rail of its own put two navigation columns in front of the content and left the note — the thing
   being read — the narrowest third of the width. The picker says the same thing on the row the section header

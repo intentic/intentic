@@ -36,9 +36,67 @@
         max-height: calc(var(--ui-code-clamp-lines) * 1lh + var(--spacing) * 2 + 2px);
         overflow-y: hidden;
     }
+
+    /* THE BOX <CodeField> STACKS ITS TWO HALVES IN. The coloured <pre> and the transparent <textarea> over it
+     * occupy the same grid cell, so every property that can move a glyph has to be identical in both — which
+     * is why this is one rule listing all of them rather than a class on each. Shiki's own <pre> is in the
+     * list because it arrives with a background, a border-radius and a type scale of its own (this file gives
+     * it those, three rules up) and has to be flattened back onto the same box. */
+    .ui-code-field-box,
+    .ui-code-field .shiki,
+    .ui-code-field .shiki code {
+        margin: 0;
+        border: 0;
+        background: transparent !important;
+        font-family: var(--font-mono);
+        font-feature-settings: var(--font-mono--font-feature-settings);
+        font-size: 0.75rem;
+        /* Roomier than a <Code> block's 1rem: this is text somebody puts a caret into, and the leading is what
+         * makes a wrapped line findable. prose.css's ~1.7 for the same reason it applies it to prose. */
+        line-height: 1.7;
+        letter-spacing: normal;
+        tab-size: 4;
+        white-space: pre-wrap;
+        overflow-wrap: break-word;
+        word-break: normal;
+    }
+    .ui-code-field .shiki code {
+        padding: 0;
+    }
+    .ui-code-field-box,
+    .ui-code-field .shiki {
+        padding: calc(var(--spacing) * 3) calc(var(--spacing) * 4);
+    }
+
+    /* The half that takes the keystrokes: its own text is invisible, and the caret and the selection are the
+     * only ink it contributes. The selection has to be TRANSLUCENT — an opaque highlight is painted over the
+     * colours underneath, so selecting a paragraph would blank it. */
+    .ui-code-field-input {
+        color: transparent;
+        caret-color: var(--color-content);
+    }
+    .ui-code-field-input::selection {
+        background-color: color-mix(in srgb, var(--color-primary-fill) 35%, transparent);
+        color: transparent;
+    }
+
+    /* An empty field shows its placeholder in the <pre> rather than through the textarea's own — one string,
+     * one element, and the box is sized by the words the reader can actually see. */
+    .ui-code-field-placeholder .ui-code-field-box,
+    .ui-code-field-placeholder .ui-code-field-html {
+        color: var(--color-subtle);
+    }
 }
 
-[data-mode="dark"] .ui-code .shiki,
-[data-mode="dark"] .ui-code .shiki span {
+[data-mode="dark"] :is(.ui-code, .ui-code-field) .shiki,
+[data-mode="dark"] :is(.ui-code, .ui-code-field) .shiki span {
     color: var(--shiki-dark) !important;
+}
+
+/* The placeholder is not code, so it does not take the grammar's colours in either mode. */
+[data-mode="dark"] .ui-code-field-placeholder .ui-code-field-html .shiki,
+[data-mode="dark"] .ui-code-field-placeholder .ui-code-field-html .shiki span,
+.ui-code-field-placeholder .ui-code-field-html .shiki,
+.ui-code-field-placeholder .ui-code-field-html .shiki span {
+    color: var(--color-subtle) !important;
 }

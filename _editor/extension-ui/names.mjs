@@ -10,6 +10,7 @@ export const extensionUiNames = [
     "ChangeStatusMark",
     "Checkbox",
     "Code",
+    "CodeField",
     "ConfirmDialog",
     "ContextMenu",
     "CopyButton",

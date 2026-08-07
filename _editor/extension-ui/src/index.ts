@@ -27,6 +27,10 @@ export {
     type ChangeStatus,
     cmp,
     Code,
+    /* <CodeField> ships beside <Code> because shipping the reader WITHOUT the writer is what made the memory
+     * extension put a bare grey <textarea> next to a coloured block of the very same file: the kit had no way
+     * to say "this text, in its own colours, with a caret in it". */
+    CodeField,
     ConfirmDialog,
     ContextMenu,
     CopyButton,
