@@ -25,8 +25,9 @@ that invalidated it.** There is no second place to remember: the repository-leve
   dependency graph cannot say — a request's path, a state machine, an ordering.
 - Nothing carries provenance. How far the code has run ahead of its page is the number of commits that touched
   the package since its README last changed, so updating them together is what keeps it at zero.
-- `intentic-docs validate` and `intentic-docs check --write` are on your PATH; the shipped `documenting` skill
-  has the house style.
+- `intentic-docs validate --from published` and `intentic-docs check --from published --write` are on your PATH;
+  the shipped `documenting` skill has the house style. The flag is not optional — without it the tool reads and
+  writes the draft tree a generation run stages, not the documents in the repository.
 
 What does *not* need a documentation edit: renaming a local, adding a test, fixing a bug the page never
 described, changing an implementation detail it deliberately does not mention.

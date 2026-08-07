@@ -59,6 +59,13 @@ path so N isolated agents can write into it at once and it can ride the daemon's
 is written. [src/paths.ts](src/paths.ts) holds the one function that decides a tail's destination, and it is the
 only place the two-destination layout is expressed.
 
+A staging directory counts as a **draft** only if it holds something an agent wrote — `index.json` alone does not,
+because that file is derived and `intentic-docs check --write` regenerates it for whichever tree it is pointed at,
+staged by default. One flagless run after editing a published README used to leave an index there, and the area
+then opened on a draft with no map and no pages while the repository's real documents sat behind the toggle. The
+rule is `holdsDraft` in [src/paths.ts](src/paths.ts); the tool now also refuses to create a staging tree that is
+not already there.
+
 ## Generation is map-first
 
 1. **Map phase** — one agent runs `intentic-docs facts`, then writes `repo.json` + `repo.md`: the logical

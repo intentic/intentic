@@ -4,6 +4,7 @@ import { describe, expect, it } from "vitest";
 import {
     conversationIdOf,
     DOCS_DIR,
+    holdsDraft,
     INDEX_TAIL,
     mapConversationId,
     packagePageTail,
@@ -82,6 +83,26 @@ describe(`the two document trees`, () => {
         for (const path of [stagingPath(`a/b`, INDEX_TAIL), stagingPath(``, REPO_DOC_TAIL), stagingPath(`x`, packagePageTail(`p/q`))]) {
             expect(path.startsWith(`${STAGING_ROOT}/`)).toBe(true);
         }
+    });
+});
+
+/* What makes a staging directory a DRAFT. This decides whether the area offers the Published/Draft toggle at all
+ * and whether it opens on the draft, so getting it wrong takes the whole reading experience with it. */
+describe(`holdsDraft`, () => {
+    it(`does not call a derived index a draft`, () => {
+        // The regression: `intentic-docs check --write` defaults to the staged tree, so updating a README that is
+        // already in the repository drops an index here — and every reader got an empty draft instead of the docs.
+        expect(holdsDraft([INDEX_TAIL])).toBe(false);
+        expect(holdsDraft([])).toBe(false);
+    });
+
+    it(`counts the map`, () => {
+        expect(holdsDraft([INDEX_TAIL, REPO_DOC_TAIL, REPO_PROSE_TAIL])).toBe(true);
+    });
+
+    it(`counts a run that is still writing`, () => {
+        // A draft mid-flight is exactly what the banner exists to explain, so one package directory is enough.
+        expect(holdsDraft([`_deploy`])).toBe(true);
     });
 });
 

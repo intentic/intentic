@@ -3,7 +3,7 @@ import { WorkspaceChildrenSchema } from "@intentic/sandbox-contract";
 import { computed, type Ref } from "vue";
 import { type DocIndex, type RepoDoc, parseDocIndex, parseRepoDoc } from "./docModel.js";
 import { host } from "./host.js";
-import { INDEX_TAIL, packagePageTail, publishedPath, REPO_DOC_TAIL, REPO_PROSE_TAIL, stagingDir, stagingPath } from "./paths.js";
+import { holdsDraft, INDEX_TAIL, packagePageTail, publishedPath, REPO_DOC_TAIL, REPO_PROSE_TAIL, stagingDir, stagingPath } from "./paths.js";
 
 /* Reading a document set. Both trees — published (in the repo) and staged (a draft awaiting the owner) — share
  * their tails, so ONE reader serves both and the view only chooses a source. That is the payoff of making
@@ -82,7 +82,8 @@ export function useDocs(repo: Ref<string>, source: Ref<DocSource>) {
 
     /* Whether a repo has a STAGED set waiting. Read as a directory listing rather than by parsing the set,
      * because the question the banner asks is only "is there something to review", and a half-written draft (a
-     * run still in flight) must answer yes.
+     * run still in flight) must answer yes. What a listing has to hold to count is `holdsDraft`'s business —
+     * a derived index alone is not a draft, and believing it was is what emptied this whole area.
      *
      * `has-staged` rather than `staged` in the key, and that is not cosmetic: `staged` is a value `source` takes,
      * so this query and the SET query above collided on ["documentation", "staged", <repo>] for exactly the
@@ -93,7 +94,7 @@ export function useDocs(repo: Ref<string>, source: Ref<DocSource>) {
         enabled: computed(() => api.sandbox.reachable()),
         queryFn: async (): Promise<boolean> => {
             const listing = await json<unknown>(`/workspace/children?path=${encodeURIComponent(stagingDir(repo.value))}`);
-            return listing !== undefined && WorkspaceChildrenSchema.parse(listing).entries.length > 0;
+            return listing !== undefined && holdsDraft(WorkspaceChildrenSchema.parse(listing).entries.map((entry) => entry.name));
         },
     });
 

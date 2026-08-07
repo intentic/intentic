@@ -561,8 +561,20 @@ const main = (argv) => {
         return 1;
     }
     if (verb === `check`) {
-        const index = checkDocs(root, repo, from, argv.includes(`--write`));
-        if (!argv.includes(`--write`)) {
+        const write = argv.includes(`--write`);
+        /* WRITING A STAGED INDEX FOR A DRAFT THAT DOES NOT EXIST IS HOW THE APP LOSES ITS DOCUMENTS. `--from`
+         * defaults to staging because generation is what usually runs this, but the other caller — someone who
+         * has just edited a README that is already in the repository — wants `--from published`, and forgetting
+         * it used to CREATE the staging directory. The app reads that directory to answer "is there a draft to
+         * review", so a lone index there announced a draft with no map and no pages, and the repository's real
+         * documents went behind a toggle. Refusing costs a re-run with the right flag; writing costs the reader
+         * the whole area. */
+        if (write && from === `staging` && !existsSync(mapBase(root, repo, from))) {
+            process.stderr.write(`no draft at ${mapBase(root, repo, from)} — nothing to index there.\nIf you edited a README in the repository, this is \`--from published\`.\n`);
+            return 1;
+        }
+        const index = checkDocs(root, repo, from, write);
+        if (!write) {
             process.stdout.write(canonical(index));
             return 0;
         }

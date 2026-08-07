@@ -32,6 +32,10 @@ intentic-docs validate --repo <dir> --from published           # every package h
 intentic-docs check    --repo <dir> --from published --write   # rewrite index.json (staleness, orphans, facts)
 ```
 
+**`--from published` is not optional.** Without it the tool reads and writes the *draft* tree instead — the one a
+generation run stages for the owner to review — and the app reads that tree to decide whether there is a draft
+waiting. Point it at the wrong one and you announce a draft nobody wrote.
+
 ## The rule that matters most
 
 **If your change alters what a package is for, how it relates to its neighbours, or which files a newcomer
@@ -48,7 +52,7 @@ a signal to cut it back, not to update it more diligently.
 
 There is nothing to bump when you edit one. Staleness is derived: `intentic-docs check` compares the last commit
 that touched the package against the last commit that touched its README, so editing the README in the same
-commit *is* the update. Run `intentic-docs check --write` afterwards so the index agrees.
+commit *is* the update. Run `intentic-docs check --from published --write` afterwards so the index agrees.
 
 ## The shape of a package README
 

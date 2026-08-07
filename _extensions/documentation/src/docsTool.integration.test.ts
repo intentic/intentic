@@ -1,5 +1,5 @@
 import { execFileSync } from "node:child_process";
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
@@ -130,5 +130,30 @@ describe(`intentic-docs against a real repository`, () => {
 
     it(`reports a package with no page as undocumented rather than dropping it`, () => {
         expect(check().undocumented).toContain(`_libs/quiet`);
+    });
+
+    /* `--from` defaults to staging, and `check --write` is what an agent runs after editing a README that is
+     * already in the repository — so the flagless form used to CREATE a staging directory holding nothing but an
+     * index. The app reads that directory to answer "is there a draft to review": a lone index there announced a
+     * draft with no map and no pages, and the repository's published documents went behind a toggle. */
+    it(`refuses to write a staged index for a draft that does not exist, and says which flag was meant`, () => {
+        const attempt = (): { status: number; output: string } => {
+            try {
+                return { status: 0, output: execFileSync(`node`, [BIN, `check`, `--root`, root, `--write`], { encoding: `utf8` }) };
+            } catch (error) {
+                const failure = error as { status: number; stderr: string };
+                return { status: failure.status, output: failure.stderr };
+            }
+        };
+        const result = attempt();
+        expect(result.status).toBe(1);
+        expect(result.output).toContain(`--from published`);
+        expect(existsSync(join(root, `.intentic/docs/root`))).toBe(false);
+    });
+
+    it(`writes the staged index once a draft is actually there`, () => {
+        write(`.intentic/docs/root/repo.json`, `{ "repo": "", "provenance": { "sourceRev": "x", "generatedAt": 1 } }\n`);
+        execFileSync(`node`, [BIN, `check`, `--root`, root, `--write`], { encoding: `utf8` });
+        expect(existsSync(join(root, `.intentic/docs/root/index.json`))).toBe(true);
     });
 });

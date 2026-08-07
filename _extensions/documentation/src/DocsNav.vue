@@ -179,8 +179,13 @@ watch(
             </Row>
         </template>
 
+        <!-- TWO DIFFERENT EMPTINESSES, and answering with the wrong one accuses the reader of mistyping a filter
+             they never touched. A column with nothing in it is ordinary — a run that has written the map but no
+             pages yet, a repository whose overview is the whole documentation — and it should say so. -->
         <template #empty>
-            <p class="px-2 py-6 text-center text-2xs text-subtle">Nothing matches “{{ query.trim() }}”.</p>
+            <p class="px-2 py-6 text-center text-2xs text-subtle">
+                {{ query.trim() === `` ? `No package pages here yet.` : `Nothing matches “${query.trim()}”.` }}
+            </p>
         </template>
 
         <template v-if="index !== undefined" #footer>

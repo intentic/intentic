@@ -57,6 +57,19 @@ const MAP_TAILS: ReadonlySet<string> = new Set([REPO_DOC_TAIL, REPO_PROSE_TAIL, 
  * publishing is still a copy per tail, it just has two possible parents instead of one. */
 export const publishedTail = (tail: string): string => (MAP_TAILS.has(tail) ? `${DOCS_DIR}/${tail}` : tail);
 
+/* WHETHER A LISTING OF A REPO'S STAGING DIRECTORY IS A DRAFT. Everything counts EXCEPT `index.json`, and that one
+ * exception is the whole reason this is a rule rather than "the directory is not empty".
+ *
+ * The index is derived, as the paragraph above says: `intentic-docs check --write` regenerates it for whichever
+ * tree it is pointed at, and its default is the staged one — so an agent updating a README that is already in the
+ * repository drops an index into a staging directory that holds no draft. Counting it emptied the whole area: the
+ * view switched to a draft with no map and no pages, said the repository had no documentation yet, and left the
+ * real published documents behind a toggle nobody had a reason to press.
+ *
+ * A HALF-WRITTEN DRAFT MUST STILL COUNT — a run in flight is exactly what the draft banner exists to explain —
+ * and it does: the map's `repo.json` and each package's directory are entries like any other. */
+export const holdsDraft = (names: readonly string[]): boolean => names.some((name) => name !== INDEX_TAIL);
+
 // A repo-relative path → workspace-root-relative. The workspace's own root repo is the empty string (the daemon
 // calls it "root" in git routes), and joining "" would produce a leading slash.
 export const underRepo = (repo: string, rest: string): string => (repo === `` ? rest : `${repo}/${rest}`);
