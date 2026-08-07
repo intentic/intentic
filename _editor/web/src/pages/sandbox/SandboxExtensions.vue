@@ -4,11 +4,14 @@ import { extensionIdOf } from "@intentic/extension-api";
 import type { ExtensionSummary } from "@intentic/sandbox-contract";
 import { cmp, FilterBar, RowGroup, Segmented, StatusBadge } from "@intentic/ui";
 import { computed, ref } from "vue";
+import { startAgent } from "../../composables/agents/agentActions";
 import { type ExtensionSection, sectionsOf } from "../../composables/extensions/extensionCategories";
 import { useExtensionList } from "../../composables/extensions/useExtensionList";
 import { errorMessage } from "../../composables/useAsyncAction";
 import { reloadExtensions } from "../../extension-host/useExtensionHost";
 import ExtensionRow from "./ExtensionRow.vue";
+import { extensionBrief } from "./extensionBrief";
+import NewExtensionDialog from "./NewExtensionDialog.vue";
 
 /* The Sandbox hub's "Extensions" tab: EVERY first-party and installed extension — the ones compiled into this
  * bundle, the ones baked into the sandbox image, the git-installed capabilities, and the workspace extensions
@@ -35,7 +38,7 @@ import ExtensionRow from "./ExtensionRow.vue";
  *     "the CI thing", "whatever talks to Discord". The filter and the switcher moved OUT of a group header
  *     and above the sections for it: they narrow the whole tab, and each section is now only a part of it. */
 
-const { entries, invalid, unlisted, setEnabled, isLoading, error } = useExtensionList();
+const { entries, invalid, unlisted, setEnabled, create, isLoading, error } = useExtensionList();
 
 // Below this many rows the list IS the overview: a filter box and a state switcher would be more chrome than
 // the thing they filter. The threshold is a display choice, so it lives here rather than in the row model.
@@ -130,6 +133,24 @@ const reload = async (): Promise<void> => {
         reloading.value = false;
     }
 };
+
+const creating = ref(false);
+/* The new extension's row exists the moment the daemon answers, but nothing is RUNNING until the host runs again
+ * — so creating it ends in the same reload the tab already offers, and the row opens on arrival, naming the
+ * directory its two files are in.
+ *
+ * If the author said what they wanted, that hands off to an agent as an ordinary chat: a new conversation with
+ * the brief enqueued as a user message, so it lands in the transcript to be read, corrected and continued.
+ * Deliberately not an isolated unattended run like the acceptance and maintenance surfaces start — those check
+ * something against a rubric and report, while this is the first minute of authoring, where the author's own
+ * "no, more like…" is the most valuable input there is and an isolated worktree would put it behind a landing. */
+const created = async (extension: { id: string; dir: string; wish: string }): Promise<void> => {
+    opened.value = extension.id;
+    await reload();
+    if (extension.wish !== ``) {
+        startAgent(extensionBrief(extension));
+    }
+};
 </script>
 
 <template>
@@ -157,10 +178,17 @@ const reload = async (): Promise<void> => {
                     />
                 </template>
             </FilterBar>
+            <!-- Authoring sits beside reloading rather than in a section header for the same reason the filter
+                 does: it acts on the tab, not on any one group. It is a labelled button and not a third icon
+                 because it is the only control here that CREATES something — the others narrow or refresh a list
+                 that already exists, and none of them leaves a directory behind. -->
+            <Button label="New extension" icon="pi pi-plus" size="small" outlined @click="creating = true" />
             <button type="button" :class="cmp.iconButton(`h-8 w-8`)" :disabled="reloading" v-tooltip.top="`Reload extensions`" @click="reload">
                 <Icon name="refresh" :spin="reloading" />
             </button>
         </div>
+
+        <NewExtensionDialog v-model="creating" :create="create" @created="created" />
 
         <!-- Each count is what its section HOLDS, not the total: rows leave for the pinned group above and for
              the filter, and a header that kept claiming 17 over 13 rows is a header nobody trusts again. -->

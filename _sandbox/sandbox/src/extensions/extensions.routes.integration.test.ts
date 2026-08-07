@@ -1,9 +1,10 @@
 import { mkdtempSync } from "node:fs";
-import { mkdir, writeFile } from "node:fs/promises";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
 
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
+import { extensionApiVersion } from "@intentic/extension-api";
 import { expect, test } from "vitest";
 
 import { createApp } from "../app.js";
@@ -113,4 +114,83 @@ test("the extension list carries every first-party extension, compiled-in UI one
         "intentic.whatsapp",
         "intentic.workflows",
     ]);
+});
+
+test("extensions.create writes a workspace extension that is listed, enabled and runnable with no build step", async () => {
+    const workspace = workspacePaths(mkdtempSync(join(tmpdir(), "ext-create-")));
+    const app = createApp(services({ workspace }));
+    const client = clientFor(app);
+
+    const created = await client.extensions.create({ publisher: "workspace", name: "release-notes" });
+    expect(created).toEqual({ id: "workspace.release-notes", dir: ".intentic/workspace-extensions/release-notes" });
+
+    // It is a real row on the same list the tab renders, on by default — not a draft awaiting an install step.
+    const listed = (await client.extensions.list()).extensions.find((extension) => extension.id === "workspace.release-notes");
+    expect(listed).toMatchObject({ source: "workspace", enabled: true });
+    expect(listed?.manifest.permissions).toBeUndefined();
+    expect(listed?.manifest.engines.intentic).toBe(`^${extensionApiVersion}`);
+    expect(listed?.manifest.contributes?.views).toEqual([{ id: "release-notes", label: "Release Notes", surface: "rail" }]);
+
+    /* THE POINT OF THE SCAFFOLD: the bundle route serves the entry as written, so what was created is already
+     * the thing that runs. A scaffold that emitted a vite project would answer 404 here until someone installed
+     * and built it — listed, switched on, and dead. */
+    const bundle = await app.request("/extensions/workspace.release-notes/bundle");
+    expect(bundle.status).toBe(200);
+    const source = await bundle.text();
+    expect(source).toContain(`export const activate`);
+    // Only bare specifiers the host's import map publishes, and no relative import — a blob-URL module cannot
+    // resolve one, so a second file would 404 at activation.
+    expect([...source.matchAll(/^import .* from "(.*)";$/gmu)].map((match) => match[1])).toEqual(["vue"]);
+});
+
+test("extensions.create refuses a name that is already taken, without touching what is there", async () => {
+    const workspace = workspacePaths(mkdtempSync(join(tmpdir(), "ext-create-clash-")));
+    const client = clientFor(createApp(services({ workspace })));
+
+    await client.extensions.create({ publisher: "workspace", name: "notes" });
+    const entry = join(workspaceExtensionsRoot(workspace.root), "notes", "extension.js");
+    await writeFile(entry, "export const activate = () => { /* edited */ };");
+
+    expect(await errorCode(client.extensions.create({ publisher: "workspace", name: "notes" }))).toBe("CONFLICT");
+    // The author's edit survived: creating over an existing directory would destroy work with no checkout to
+    // recover it from, which is why the directory is created non-recursively.
+    expect(await readFile(entry, "utf8")).toContain("edited");
+});
+
+test("usage is counted per declared route, accumulates across reports, and rides the list", async () => {
+    const workspace = workspacePaths(mkdtempSync(join(tmpdir(), "ext-usage-")));
+    const client = clientFor(createApp(services({ workspace })));
+    // A first-party extension with a real permissions list, so the manifest doing the filtering is a shipped one.
+    const id = "intentic.repo-apps";
+    const declared = (await client.extensions.list()).extensions.find((extension) => extension.id === id)?.manifest.permissions?.sandbox ?? [];
+    expect(declared.length).toBeGreaterThan(1);
+    const [first, second] = declared as [string, string];
+
+    // Nothing observed yet: `usage` is ABSENT rather than empty, which is what lets the row tell "never
+    // exercised" from "exercised and uses none of these" — the difference between evidence and a guess.
+    expect((await client.extensions.list()).extensions.find((extension) => extension.id === id)?.usage).toBeUndefined();
+
+    await client.extensions.recordUsage({ id, used: { [first]: 2 } });
+    await client.extensions.recordUsage({ id, used: { [first]: 3, [second]: 1 } });
+
+    const usage = (await client.extensions.list()).extensions.find((extension) => extension.id === id)?.usage;
+    expect(usage?.[first]?.calls).toBe(5);
+    expect(usage?.[second]?.calls).toBe(1);
+    expect(Date.parse(usage?.[first]?.last ?? "")).not.toBeNaN();
+});
+
+test("usage the manifest no longer declares is dropped, so a removed permission cannot keep answering", async () => {
+    const workspace = workspacePaths(mkdtempSync(join(tmpdir(), "ext-usage-stale-")));
+    const client = clientFor(createApp(services({ workspace })));
+    const id = "intentic.repo-apps";
+    const declared = (await client.extensions.list()).extensions.find((extension) => extension.id === id)?.manifest.permissions?.sandbox ?? [];
+    const [kept] = declared as [string];
+
+    // A browser still running a previous manifest reports a route this one never declared. Dropped rather than
+    // refused: it is not an error the owner can act on, and recording it would credit reach nobody approved.
+    await client.extensions.recordUsage({ id, used: { [kept]: 1, "DELETE /everything": 9 } });
+
+    const usage = (await client.extensions.list()).extensions.find((extension) => extension.id === id)?.usage;
+    expect(usage?.[kept]?.calls).toBe(1);
+    expect(usage?.["DELETE /everything"]).toBeUndefined();
 });

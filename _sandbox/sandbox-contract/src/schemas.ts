@@ -3023,6 +3023,12 @@ export const ExtensionSummarySchema = z.object({
     // what makes it switchable back on — but the daemon wires none of its contributions up and the web host
     // doesn't activate it.
     enabled: z.boolean(),
+    /* How much of the reach this extension asked for it has actually used, keyed by the DECLARED entry so a row
+     * joins straight onto `permissions.sandbox`. Absent for an extension that has never been observed calling
+     * anything, which is a different claim from "uses none of them" and has to stay tellable: a freshly installed
+     * extension has an empty ledger and an unexercised one does too, and reading either as "these permissions are
+     * unnecessary" would turn this from evidence into a guess with a number on it. */
+    usage: z.record(z.string(), z.object({ calls: z.number().int().nonnegative(), last: z.string() })).optional(),
 });
 export type ExtensionSummary = z.infer<typeof ExtensionSummarySchema>;
 // A workspace-extension directory that failed to enumerate, and why. Its only feedback channel: there is no
@@ -3047,6 +3053,21 @@ export const ExtensionSettingsInputSchema = z.object({
 // Flip one extension on or off. Persisted by publisher.name (like settings), so the choice outlives the
 // checkout; the daemon's immediate half of the flip — declared processes — converges in the same handler.
 export const ExtensionEnabledInputSchema = z.object({ id: z.string(), enabled: z.boolean() });
+/* Create a workspace extension: the identity, and deliberately nothing else. What gets written is the daemon's
+ * decision, not a form the author fills in — the point of the action is that a running extension exists a second
+ * after it is asked for, and shaping it happens by editing the files it wrote (or by asking an agent to). The two
+ * slugs are the same shape the manifest schema demands, checked again here because `name` becomes a directory. */
+export const WorkspaceExtensionCreateSchema = z.object({
+    publisher: z.string().regex(/^[a-z0-9][a-z0-9-]*$/),
+    name: z.string().regex(/^[a-z0-9][a-z0-9-]*$/),
+});
+// Where it landed. `dir` is workspace-root-relative so the caller can name the files it should open next.
+export const WorkspaceExtensionCreatedSchema = z.object({ id: z.string(), dir: z.string() });
+/* A batch of calls the host observed against this extension's declared routes — entry → how many since the last
+ * report. Counts rather than events, and declared entries rather than concrete paths, because the question the
+ * ledger answers is "is this permission earned?": a finer record would be a log of what the owner was doing,
+ * indexed by extension, which is not a thing this product should be accumulating to answer it. */
+export const ExtensionUsageInputSchema = z.object({ id: z.string(), used: z.record(z.string(), z.number().int().positive()) });
 // One declared background process (contributes.processes) — status/start/stop, addressed by the capability
 // entry id + the manifest's process name. Undeclared names are NOT_FOUND, the manifest-honesty rule again.
 export const ExtensionProcessParamSchema = z.object({ id: z.string(), name: z.string() });

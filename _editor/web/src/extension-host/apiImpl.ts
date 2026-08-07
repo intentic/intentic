@@ -28,6 +28,7 @@ import { registerView } from "../core-views/registry";
 import { registerViewer } from "../core-views/viewerRegistry";
 import { router } from "../router";
 import { registerFileBindings } from "./fileBindings";
+import { recordSandboxCall } from "./sandboxUsage";
 
 /* The host's fulfillment of IntenticApi, one instance per activated extension. Every registration is gated on
  * the APPROVED manifest's declarations (views/commands/settings/processes) — the manifest the owner saw at
@@ -140,6 +141,9 @@ export const createExtensionApi = (
                 `extension "${extensionId}" called undeclared sandbox route ${method.toUpperCase()} ${path} — declare it in permissions.sandbox in the manifest`,
             );
         }
+        // The gate has just decided which of the declared entries covers this call, and that answer is the only
+        // evidence anywhere about whether a permission is earned. Kept rather than discarded — see sandboxUsage.
+        recordSandboxCall(summary.id, sandboxPermissions, method, path);
     };
 
     const { scheme } = useTheme();
@@ -384,7 +388,8 @@ export const createExtensionApi = (
                 const model = pinned?.model ?? chat.model.value;
                 return named(provider, model);
             },
-            describe: (selection) => named(selection.provider as AgentProvider, selection.model, selection.account, selection.harness as AgentHarness),
+            describe: (selection) =>
+                named(selection.provider as AgentProvider, selection.model, selection.account, selection.harness as AgentHarness),
             pick: async (options) => {
                 const choice = await requestModelPick({
                     anchor: options.anchor,

@@ -41,6 +41,23 @@ const emit = defineEmits<{ toggle: [enabled: boolean]; "update:expanded": [expan
 const manifest = computed(() => entry.extension.manifest);
 const settings = computed(() => manifest.value.contributes?.settings ?? []);
 
+/* WHAT THE EXTENSION HAS ACTUALLY DONE WITH THE REACH IT ASKED FOR. The permission list below used to state a
+ * claim nobody could check; each route now carries how often it has been called, and the ones that never have
+ * are marked.
+ *
+ * ONLY ONCE THE EXTENSION HAS BEEN EXERCISED AT ALL, which is the whole honesty of this. An extension installed
+ * an hour ago has an empty ledger, and so does one whose view the owner has never opened — reading either as
+ * "these permissions are unnecessary" would turn a measurement into a guess with a number on it, and the guess
+ * would be pointing at the most consequential thing on the row. So with no observations the list renders exactly
+ * as it did before, saying nothing it cannot support. */
+const observed = computed(() => entry.extension.usage);
+const routes = computed(() =>
+    (manifest.value.permissions?.sandbox ?? []).map((route) => {
+        const calls = observed.value?.[route]?.calls ?? 0;
+        return { route, calls, unused: observed.value !== undefined && calls === 0 };
+    }),
+);
+
 // How many places fit on a line before the column starts eating words rather than items.
 const PLACES_SHOWN = 3;
 // The line's places, in the order facetsOf ranks them by visibility. The breakdown below the fold keeps the
@@ -166,17 +183,34 @@ const tone = computed(() => TONE[entry.state.variant] ?? `text-muted`);
                 </ul>
             </div>
 
-            <!-- The daemon reach the owner approved at install, and the only place it is visible afterwards. -->
+            <!-- The daemon reach the owner approved at install, the only place it is visible afterwards, and now
+                 also whether it was ever needed. A never-called route is drawn hollow rather than in a warning
+                 colour: it is a question for whoever maintains the extension, not a fault of the install. -->
             <div v-if="manifest.permissions !== undefined">
                 <p :class="cmp.sectionLabel(`mb-1.5 text-2xs`)">Daemon routes it may call</p>
                 <div class="flex flex-wrap gap-1">
                     <code
-                        v-for="route in manifest.permissions.sandbox"
-                        :key="route"
-                        class="rounded border border-line bg-canvas px-1.5 py-0.5 text-2xs text-muted"
-                        >{{ route }}</code
+                        v-for="route in routes"
+                        :key="route.route"
+                        class="rounded px-1.5 py-0.5 text-2xs"
+                        :class="route.unused ? `border border-dashed border-line text-subtle` : `border border-line bg-canvas text-muted`"
+                        v-tooltip.top="
+                            route.calls > 0
+                                ? `Called ${route.calls.toLocaleString()} times`
+                                : route.unused
+                                  ? `Never called since this was first observed`
+                                  : undefined
+                        "
+                        >{{ route.route }}</code
                     >
                 </div>
+                <p v-if="observed === undefined" class="mt-1.5 text-2xs text-subtle">
+                    Nothing observed yet — routes are counted as the extension uses them.
+                </p>
+                <p v-else-if="routes.some((route) => route.unused)" class="mt-1.5 text-2xs text-subtle">
+                    Dashed routes have never been called. That is worth raising with whoever maintains it, not acting on alone — a route used only by
+                    a screen you have not opened looks identical.
+                </p>
             </div>
 
             <!-- Identity, on its own hairline: the full id the collapsed row leaves off a baked-in extension,

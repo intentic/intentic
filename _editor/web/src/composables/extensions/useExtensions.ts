@@ -1,6 +1,6 @@
 import type { CapabilityContribution } from "@intentic/extension-api";
 import type { CapabilityKind, InvalidWorkspaceExtension } from "@intentic/sandbox-contract";
-import { type ExtensionSummary, ExtensionsListSchema } from "@intentic/sandbox-contract";
+import { type ExtensionSummary, ExtensionsListSchema, WorkspaceExtensionCreatedSchema } from "@intentic/sandbox-contract";
 import { computed } from "vue";
 import { sandboxJson } from "../sandbox/sandboxClient";
 import { jsonBody } from "../sandbox/jsonBody";
@@ -34,6 +34,14 @@ export function useExtensions() {
         await sandboxJson(`/extensions/${encodeURIComponent(id)}/enabled`, jsonBody(`POST`, { enabled }));
         await query.refetch();
     };
+    // Author a new extension in this workspace. The daemon writes a running one and this re-reads the list, so
+    // the row exists before the caller's reloadExtensions() makes it run — which is the order that lets a failed
+    // activation still have a row to report itself on.
+    const create = async (publisher: string, name: string): Promise<{ id: string; dir: string }> => {
+        const created = WorkspaceExtensionCreatedSchema.parse(await sandboxJson(`/extensions/workspace`, jsonBody(`POST`, { publisher, name })));
+        await query.refetch();
+        return created;
+    };
     // One card's contribution from the enabled extensions' contributes.capabilities — the data capabilityEffects
     // derives a card's secret/image effects from. Keyed by kind + id because an id is only unique within a kind.
     // Undefined until /extensions loads.
@@ -46,6 +54,7 @@ export function useExtensions() {
         invalid,
         enabled: enabledExtensions,
         setEnabled,
+        create,
         contributionOf,
         // The list has actually arrived (or definitively failed) — gates decisions that must not fire against
         // the empty pre-fetch state, like bouncing an unknown /capabilities/<card> slug back to the grid.

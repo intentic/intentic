@@ -178,6 +178,15 @@ const STATE_FILES = [
      * an extension and it is live for the daemon and every session at once, since .intentic is shared), so this
      * push is what makes one appearing or changing show up on the Extensions tab while the owner watches. */
     { path: ".intentic/workspace-extensions/", invalidates: ["extensions"], portability: "carry" },
+    /* Which of the routes each extension DECLARED it has actually called — the evidence behind the permissions
+     * list on its row. Invalidates nothing on purpose, and it is the one file here where that is a rate decision
+     * rather than an architectural one: every browser with the app open reports its batch on a timer, so wiring
+     * this to the extensions query would refetch the whole list every few seconds for a figure nobody is watching
+     * change. The tab reads it when it loads, which is when anyone is reading it.
+     *
+     * Carried, because the evidence is about the extension rather than about the machine: an export that dropped
+     * it would arrive claiming every permission was unused, which is worse than arriving with no figures at all. */
+    { path: ".intentic/extension-usage.json", invalidates: [], portability: "carry" },
     {
         path: ".intentic/members.json",
         invalidates: [],

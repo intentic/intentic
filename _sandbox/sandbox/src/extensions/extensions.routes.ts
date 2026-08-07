@@ -1,14 +1,17 @@
+import { join } from "node:path";
 import { extensionIdOf, type ProcessContribution } from "@intentic/extension-api";
 import { type ExtensionSummary, extensionsContract, previewUrl, zoneFromUrl } from "@intentic/sandbox-contract";
 import { sandboxIdFromToken } from "@intentic/sandbox-contract/tunnel-ids";
 import { implement, ORPCError } from "@orpc/server";
-import { extensionDir } from "../capabilities/extension-dirs.js";
+import { extensionDir, workspaceExtensionsRoot } from "../capabilities/extension-dirs.js";
 import type { Services } from "../composition.js";
 import type { OrpcContext } from "../context.js";
 import { writeExtensionEnablement } from "./extension-enablement.js";
 import { extensionProcessKey, reconcileListenerProcesses, startAutoStartProcesses, startExtensionProcess } from "./extension-processes.js";
 import { readAllExtensionSettings, writeExtensionSettings } from "./extension-settings.js";
+import { readExtensionUsage, recordExtensionUsage } from "./extension-usage.js";
 import { extensionInventory, type InstalledExtension, installedExtensions } from "./installed-extensions.js";
+import { writeWorkspaceExtension } from "./workspace-extension-scaffold.js";
 
 // Installed extensions (git-installed capabilities ∪ image-baked) resolved to their approved manifests +
 // per-extension settings values. The web extension host boots from `list`; the bundle bytes ride the plain
@@ -41,21 +44,54 @@ export const createExtensionsRoutes = (services: Services) => {
     return {
         list: i.list.handler(async () => {
             const inventory = await extensionInventory(services);
+            // One read for the whole list: the ledger is a single file keyed by extension id, and the tab wants
+            // every row's figures at once.
+            const usage = await readExtensionUsage(root);
             const extensions: ExtensionSummary[] = [];
             for (const extension of inventory.extensions) {
                 // Only a git-installed extension has a code identity to report — its pinned HEAD. A baked one's
                 // identity is the shipped image, and a workspace one's dir is live-edited (the bundle route
                 // hashes the bytes it serves), so both get their source as a sentinel.
                 const commit = extension.source === "installed" ? await services.git.head(extensionDir(root, extension.id)) : extension.source;
+                // Keyed by publisher.name like the settings and the switch, not by the routing id — the ledger
+                // has to survive a remove/re-add, which is what an update to a git-installed extension IS.
+                const observed = usage[extensionIdOf(extension.manifest)];
                 extensions.push({
                     id: extension.id,
                     manifest: extension.manifest,
                     commit,
                     source: extension.source,
                     enabled: extension.enabled,
+                    // Absent rather than empty when nothing has been observed: the row must be able to tell
+                    // "never exercised" from "exercised and uses none of these".
+                    ...(observed !== undefined && Object.keys(observed).length > 0 ? { usage: observed } : {}),
                 });
             }
             return { extensions, invalid: inventory.invalid };
+        }),
+        create: i.create.handler(async ({ input }) => {
+            const id = `${input.publisher}.${input.name}`;
+            /* Both halves of "already taken", because they fail differently. An id collision would make the new
+             * extension unenumerable — workspace extensions never shadow a baked or installed one, so it would be
+             * written, listed as invalid, and never run. A directory collision is somebody's existing work, which
+             * may be sitting in `invalid` precisely because they are mid-edit on it. */
+            const inventory = await extensionInventory(services);
+            if (inventory.extensions.some((extension) => extension.id === id)) {
+                throw new ORPCError("CONFLICT", { message: `${id} is already installed here` });
+            }
+            const dir = join(workspaceExtensionsRoot(root), input.name);
+            try {
+                await writeWorkspaceExtension(dir, input.publisher, input.name);
+            } catch (error) {
+                if ((error as NodeJS.ErrnoException).code !== "EEXIST") {
+                    throw error;
+                }
+                throw new ORPCError("CONFLICT", { message: `.intentic/workspace-extensions/${input.name} already exists` });
+            }
+            // The same ping a file the owner wrote through the workspace routes sends — this is their edit, made
+            // on their behalf, and the history/commit machinery should see it as one.
+            services.history.notifyUserWrite();
+            return { id, dir: `.intentic/workspace-extensions/${input.name}` };
         }),
         settings: i.settings.handler(async ({ input }) => {
             const { manifest } = await find(input.id);
@@ -99,6 +135,21 @@ export const createExtensionsRoutes = (services: Services) => {
                 }
             }
             await writeExtensionSettings(root, extensionIdOf(manifest), next);
+            return { ok: true } as const;
+        }),
+        recordUsage: i.recordUsage.handler(async ({ input }) => {
+            const extension = await find(input.id);
+            /* The manifest filters the batch, the same honesty rule settings follow. A report naming a route the
+             * manifest does not declare is not an error anyone can act on — it means the manifest changed while a
+             * browser was still running the previous one — so it is dropped rather than refused, and the sweep in
+             * the store drops what that browser had already recorded. */
+            await recordExtensionUsage(
+                root,
+                extensionIdOf(extension.manifest),
+                extension.manifest.permissions?.sandbox ?? [],
+                input.used,
+                new Date().toISOString(),
+            );
             return { ok: true } as const;
         }),
         setEnabled: i.setEnabled.handler(async ({ input }) => {
