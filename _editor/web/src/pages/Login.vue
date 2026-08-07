@@ -70,15 +70,17 @@ const signIn = async (): Promise<void> => {
                 <img src="/assets/intentic-full.png" alt="intentic platform" class="h-8 w-auto" />
             </div>
 
-            <div class="animate-fade-in-up relative max-w-xl" style="animation-delay: 60ms">
-                <!-- One sentence per line, as on the site: left to wrap on its own the headline breaks
-                     mid-phrase and reads as one run-on line. 48px only from 2xl up — below that
-                     "Workstation for your agents." is wider than this half-width panel and wraps anyway. -->
-                <h1 class="text-4xl font-semibold leading-tight tracking-tight 2xl:text-5xl">
-                    <span class="block">Workstation for your agents.</span>
-                    <span class="block">A window for you.</span>
+            <div class="animate-fade-in-up relative max-w-2xl" style="animation-delay: 60ms">
+                <!-- One sentence per line, as on the site, each in its own block with `text-balance`: a line
+                     narrow enough to wrap then splits evenly instead of dropping its last word alone under a
+                     full line. 44px from 2xl up rather than 48px — "Workstation for your agents." measures
+                     wider than this half-width panel at 48px and wrapped there. The panel is max-w-2xl for
+                     the headline's sake; the paragraph keeps its own measure below. -->
+                <h1 class="text-4xl font-semibold leading-tight tracking-tight 2xl:text-[2.75rem]">
+                    <span class="block text-balance">Workstation for your agents.</span>
+                    <span class="block text-balance">A window for you.</span>
                 </h1>
-                <p class="mt-5 text-base leading-relaxed text-pretty text-muted">
+                <p class="mt-5 max-w-xl text-base leading-relaxed text-pretty text-muted">
                     Your agents live on hardware you own and keep running when you look away. Every browser is a window onto the same fleet.
                 </p>
 

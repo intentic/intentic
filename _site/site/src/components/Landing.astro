@@ -93,8 +93,15 @@ const cubeGlyph = icon('<path d="M12 2.5 20.5 7v10L12 21.5 3.5 17V7z"/><path d="
 
             <div class="relative mx-auto grid max-w-7xl items-center gap-12 px-6 pt-32 pb-20 lg:grid-cols-2 lg:pt-40 lg:pb-28">
                 <div class="animate-fade-in-up">
-                    <h1 class="text-4xl leading-tight font-semibold tracking-tight xl:text-5xl">
-                        {content.hero.headlineLines.map((line, i) => (i === 0 ? line : <><br />{line}</>))}
+                    {/* One authored line per block, not one <br>-joined run: a line that has to wrap then
+                        wraps inside its own box, and `text-balance` splits it evenly instead of leaving the
+                        last word alone under a full line. The display step is 44px rather than 48px because
+                        the column is 592px at every width from xl up (max-w-7xl caps the container, so it
+                        never grows) and the longest line measures 629px at 48px — it wrapped on desktop. */}
+                    <h1 class="text-4xl leading-tight font-semibold tracking-tight xl:text-[2.75rem]">
+                        {content.hero.headlineLines.map((line) => (
+                            <span class="block text-balance">{line}</span>
+                        ))}
                     </h1>
                     <p class="mt-4 max-w-lg text-base leading-relaxed text-muted">
                         {content.hero.subhead}
@@ -177,7 +184,7 @@ const cubeGlyph = icon('<path d="M12 2.5 20.5 7v10L12 21.5 3.5 17V7z"/><path d="
         <section class="border-t border-line" id="loop">
             <div class="fade-in mx-auto max-w-7xl px-6 py-20 lg:py-24">
                 <div class="eyebrow">{content.loop.eyebrow}</div>
-                <h2 class="mt-3 max-w-2xl text-3xl font-semibold tracking-tight">{content.loop.heading}</h2>
+                <h2 class="mt-3 max-w-2xl text-3xl font-semibold tracking-tight text-balance">{content.loop.heading}</h2>
                 <p class="mt-3 max-w-2xl text-base leading-relaxed text-muted">{content.loop.sub}</p>
 
                 <div class="mt-14 space-y-14 lg:mt-16 lg:space-y-20">
@@ -197,7 +204,7 @@ const cubeGlyph = icon('<path d="M12 2.5 20.5 7v10L12 21.5 3.5 17V7z"/><path d="
                                     <div class="text-5xl font-semibold tracking-tight text-primary-500/25 select-none" aria-hidden="true">
                                         {beat.step}
                                     </div>
-                                    <h3 class="mt-3 text-xl font-semibold tracking-tight text-content">{beat.title}</h3>
+                                    <h3 class="mt-3 text-xl font-semibold tracking-tight text-balance text-content">{beat.title}</h3>
                                     <p class="mt-3 text-base leading-relaxed text-muted">{beat.body}</p>
                                 </>
                             );
@@ -341,7 +348,7 @@ const cubeGlyph = icon('<path d="M12 2.5 20.5 7v10L12 21.5 3.5 17V7z"/><path d="
         <section class="border-t border-line" id="ownership">
             <div class="fade-in mx-auto max-w-7xl px-6 py-20 lg:py-24">
                 <div class="eyebrow">{content.ownership.eyebrow}</div>
-                <h2 class="mt-3 max-w-xl text-3xl font-semibold tracking-tight">{content.ownership.heading}</h2>
+                <h2 class="mt-3 max-w-xl text-3xl font-semibold tracking-tight text-balance">{content.ownership.heading}</h2>
                 <p class="mt-3 max-w-xl text-base leading-relaxed text-muted">{content.ownership.sub}</p>
 
                 <!-- `items-start`, not stretch: each card ends where its own list ends, and the platform's
@@ -402,7 +409,7 @@ const cubeGlyph = icon('<path d="M12 2.5 20.5 7v10L12 21.5 3.5 17V7z"/><path d="
         <section class="border-t border-line" id="economics">
             <div class="fade-in mx-auto max-w-7xl px-6 py-20 lg:py-24">
                 <div class="eyebrow">{content.economics.eyebrow}</div>
-                <h2 class="mt-3 max-w-2xl text-3xl font-semibold tracking-tight">{content.economics.heading}</h2>
+                <h2 class="mt-3 max-w-2xl text-3xl font-semibold tracking-tight text-balance">{content.economics.heading}</h2>
                 <p class="mt-3 max-w-xl text-base leading-relaxed text-muted">{content.economics.sub}</p>
 
                 <div class="mt-12 grid items-start gap-6 lg:grid-cols-2">
@@ -453,7 +460,7 @@ const cubeGlyph = icon('<path d="M12 2.5 20.5 7v10L12 21.5 3.5 17V7z"/><path d="
         <section class="border-t border-line" id="extend">
             <div class="fade-in mx-auto max-w-7xl px-6 py-20 lg:py-24">
                 <div class="eyebrow">{content.extend.eyebrow}</div>
-                <h2 class="mt-3 max-w-2xl text-3xl font-semibold tracking-tight">{content.extend.heading}</h2>
+                <h2 class="mt-3 max-w-2xl text-3xl font-semibold tracking-tight text-balance">{content.extend.heading}</h2>
                 <p class="mt-3 max-w-2xl text-base leading-relaxed text-muted">{content.extend.sub}</p>
 
                 <!-- The bento: tile 0 takes a 2×2 cell, so the auto-flow fills the remaining column with
@@ -544,7 +551,7 @@ const cubeGlyph = icon('<path d="M12 2.5 20.5 7v10L12 21.5 3.5 17V7z"/><path d="
         <section class="border-t border-line" id="connect">
             <div class="fade-in mx-auto max-w-7xl px-6 py-20 lg:py-24">
                 <div class="eyebrow">{content.connect.eyebrow}</div>
-                <h2 class="mt-3 max-w-xl text-3xl font-semibold tracking-tight">{content.connect.heading}</h2>
+                <h2 class="mt-3 max-w-xl text-3xl font-semibold tracking-tight text-balance">{content.connect.heading}</h2>
                 <p class="mt-3 max-w-xl text-base leading-relaxed text-muted">{content.connect.sub}</p>
 
                 <div class="mt-12 grid gap-10 md:grid-cols-3 md:gap-8">
@@ -583,7 +590,7 @@ const cubeGlyph = icon('<path d="M12 2.5 20.5 7v10L12 21.5 3.5 17V7z"/><path d="
         <section class="border-t border-line" id="faq">
             <div class="fade-in mx-auto max-w-7xl px-6 py-20 lg:py-24">
                 <div class="eyebrow">FAQ</div>
-                <h2 class="mt-3 max-w-xl text-3xl font-semibold tracking-tight">Questions, answered plainly.</h2>
+                <h2 class="mt-3 max-w-xl text-3xl font-semibold tracking-tight text-balance">Questions, answered plainly.</h2>
                 <p class="mt-3 max-w-xl text-base leading-relaxed text-muted">Including the honest ones: what's free, what's stored where, what isn't ready yet.</p>
 
                 <div class="mt-10 max-w-3xl space-y-10">
@@ -636,7 +643,7 @@ const cubeGlyph = icon('<path d="M12 2.5 20.5 7v10L12 21.5 3.5 17V7z"/><path d="
             <div class="absolute inset-0 bg-linear-to-br from-primary-600/15 via-canvas to-canvas" aria-hidden="true"></div>
             <div class="fade-in relative mx-auto max-w-7xl px-6 py-20 text-center lg:py-28">
                 <div class="eyebrow">Ready</div>
-                <h2 class="mt-3 text-3xl font-semibold tracking-tight sm:text-4xl">{content.finalCta.heading}</h2>
+                <h2 class="mt-3 text-3xl font-semibold tracking-tight text-balance sm:text-4xl">{content.finalCta.heading}</h2>
                 <p class="mx-auto mt-3 max-w-md text-base leading-relaxed text-muted">{content.finalCta.sub}</p>
                 <div class="mt-8 flex justify-center gap-3">
                     <a class="btn btn-primary" href={APP_URL}>Get started free</a>
