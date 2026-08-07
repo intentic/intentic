@@ -30,6 +30,7 @@ import type { Services } from "./composition.js";
 import { createLogger } from "./logger.js";
 import type { ManagedProcesses } from "./processes/managed-processes.js";
 import { createPortForwards } from "./ports/port-forwards.js";
+import { createAnnouncer } from "./platform/announce.js";
 import { createBootTracker } from "./platform/boot.js";
 import { createPerfTracker } from "./platform/perf.js";
 
@@ -263,6 +264,9 @@ export const services = (overrides: ServiceOverrides = {}): Services => {
         // unref'd, and the request middleware records through it on EVERY route below — a stub would be more
         // code standing in for something that already costs nothing.
         perf: createPerfTracker(createLogger(testConfig)),
+        // Real too, and never started: creating one registers nothing and arms no timer, so /health reads the
+        // `off` it reports on a daemon that has no platform to announce to — the loopback/test shape.
+        announcer: createAnnouncer(testConfig, createLogger(testConfig)),
         workspace: workspacePaths("/work"),
         processes: fakeProcesses(),
         // The real slot table with a no-dial probe; `scanPorts` is empty so tests opt into listeners explicitly.
