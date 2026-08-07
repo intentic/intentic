@@ -2,10 +2,10 @@
 /* Both gates, made runnable everywhere the code is written.
  *
  * `pnpm typecheck` runs this and then `turbo run typecheck`; `pnpm test` runs this and then `turbo run test
- * --only`. Three invariants live here, and all three exist because the checks that catch drift used to run in
+ * --only`. Four invariants live here, and all of them exist because the checks that catch drift used to run in
  * exactly one place — CI, on main, after the merge.
  *
- * The first two need no node_modules and no network, which is what lets `--checks-only` run them from a
+ * All but invariant 2 need no node_modules and no network, which is what lets `--checks-only` run them from a
  * `pre-push` hook and from a CI job that has not installed anything yet (ci.yml, the `preflight` job).
  * Measured over 40 main pipelines, 10 of the 22 red ones died on invariant 1 or 3 — each after 0.6-2.0 min of
  * runner time, in four jobs at once, for a fact that is readable from the checkout in under a second.
@@ -53,7 +53,23 @@
  * (importer at 2 spaces, dependency block at 4, name at 6, `specifier:` at 8), and a shape it stops recognizing
  * is a shape this reports as drift rather than passing in silence.
  *
- * All three invariants are recognized by SHAPE rather than listed, because a list repeats the miss the first time
+ * 4. FORK BOUNDARY — no job of a fork-triggerable workflow reaches the self-hosted fleet from a fork.
+ *
+ * This repository is public and CI runs on runners that are not ephemeral, share one /ci-cache with `release`,
+ * and mount the host docker socket. A pull request from a fork therefore had a path to host root and, through a
+ * poisoned cache entry, into a published artifact — GitHub's own warning on the runner page. The boundary is
+ * that the fleet builds only branches pushed to this repository, and it takes BOTH this guard and the repo's
+ * approval-for-all-outside-contributors setting: approval alone still runs a hostile postinstall once someone
+ * clicks it, and this guard alone is editable by a fork, because a `pull_request` event runs the workflow file
+ * from the pull request's own merge ref. Neither covers the other's case (docs/ci-runner.md).
+ *
+ * It is asserted here rather than trusted because it is the kind of property that regresses in silence: the two
+ * guards sit on the DAG roots, thirteen other jobs inherit safety by descending from them, and a job added
+ * without a `needs` edge would simply be exposed with nothing going red. A skipped dependency skips its
+ * dependents — that inheritance is the whole mechanism, and `always()`/`!cancelled()` are the two ways to opt
+ * out of it, so a job using either has to read a safe parent's result or output to still see the skip.
+ *
+ * All four invariants are recognized by SHAPE rather than listed, because a list repeats the miss the first time
  * somebody adds the 43rd package (AGENTS.md — "guard invariants by discovery, not enumeration"). The
  * hand-written `tsconfig.libs.json` is the proof: it names 13 of the 23 packages that need building, and the
  * one it happens to omit — `@intentic/constants` — was on its own worth 3 phantom errors in the daemon.
@@ -379,10 +395,90 @@ for (const importer of recorded.keys()) {
     }
 }
 
-// Both reports before either exit, so one run says everything that is wrong rather than the first thing.
+/* Invariant 4. Every job of a fork-triggerable workflow that reaches the self-hosted fleet is unreachable from
+ * a fork's pull request. Read by SHAPE, like the other three: the safe set is grown to a fixpoint from the jobs
+ * that guard themselves, so adding a job costs nothing as long as it descends from one. */
+const GUARD = "head.repo.full_name == github.repository";
+const PUSH_ONLY = "github.event_name == 'push'";
+const WORKFLOWS = join(root, ".github/workflows");
+
+/* Same line scanner as the lockfile check, and for a milder version of the same reason: a YAML parser is not a
+ * dependency this script may take. Jobs sit at 2 spaces and their keys at 4 — a block scalar (`if: |`) or a
+ * block sequence (`needs:` over several lines) is folded back to one line, which is all either is read for. */
+const jobsOf = (text) => {
+    const lines = text.split("\n");
+    const jobs = new Map();
+    let job = null;
+    for (let i = lines.findIndex((line) => /^jobs:\s*$/.test(line)) + 1; i < lines.length; i++) {
+        const header = lines[i].match(/^ {2}([A-Za-z_][\w-]*):\s*$/);
+        if (header) {
+            jobs.set(header[1], (job = { name: header[1], if: "", needs: [], runsOn: "", uses: "" }));
+            continue;
+        }
+        const field = job && lines[i].match(/^ {4}(if|needs|runs-on|uses):[ \t]*(.*?)\s*$/);
+        if (!field) {
+            continue;
+        }
+        let value = field[2];
+        if (value === "" || value === "|" || value === ">") {
+            for (value = ""; /^ {6,}\S/.test(lines[i + 1] ?? "");) {
+                value += ` ${lines[++i].trim().replace(/^-\s*/, ",")}`;
+            }
+        }
+        if (field[1] === "needs") {
+            job.needs = value
+                .replaceAll(/[[\]]/g, "")
+                .split(",")
+                .map((name) => name.trim())
+                .filter(Boolean);
+        } else {
+            job[field[1] === "runs-on" ? "runsOn" : field[1]] = value;
+        }
+    }
+    return jobs;
+};
+
+const exposed = [];
+for (const file of readdirSync(WORKFLOWS).filter((name) => name.endsWith(".yml"))) {
+    const text = readFileSync(join(WORKFLOWS, file), "utf8");
+    // Only a workflow a fork can trigger at all. A `workflow_call` target runs under its caller's guard, and a
+    // schedule or a dispatch carries no fork's code.
+    if (!/^ {2}pull_request:\s*$/m.test(text)) {
+        continue;
+    }
+    const jobs = jobsOf(text);
+    const safe = new Set();
+    for (let pass = 0; pass <= jobs.size; pass++) {
+        for (const job of jobs.values()) {
+            if (safe.has(job.name) || job.if.includes(GUARD) || job.if.includes(PUSH_ONLY)) {
+                safe.add(job.name);
+                continue;
+            }
+            const parents = job.needs.filter((name) => safe.has(name));
+            // A skipped dependency skips the job — the rule that carries the two roots' guard across the DAG.
+            // `always()` and `!cancelled()` opt out of exactly that rule, so a job using either has to read a
+            // safe parent's own result or output to still notice the skip.
+            if (parents.length > 0 && (!/always\(\)|!\s*cancelled\(\)/.test(job.if) || parents.some((name) => job.if.includes(`needs.${name}.`)))) {
+                safe.add(job.name);
+            }
+        }
+    }
+    for (const job of jobs.values()) {
+        if (!safe.has(job.name) && (/self-hosted/.test(job.runsOn) || job.uses !== "")) {
+            exposed.push(
+                `.github/workflows/${file}: job \`${job.name}\` runs a fork's pull request on the self-hosted fleet — ` +
+                    `give it \`if: github.event_name != 'pull_request' || github.event.pull_request.${GUARD}\`, or a ` +
+                    `\`needs\` edge to a job that has one`,
+            );
+        }
+    }
+}
+
+// Every report before any exit, so one run says everything that is wrong rather than the first thing.
 const reports = [
     ["Test files outside the program or the budget they belong in", problems],
     ["pnpm-lock.yaml is out of date — run `pnpm install` and commit it (this is CI's ERR_PNPM_OUTDATED_LOCKFILE)", drift],
+    ["Self-hosted CI is reachable from a fork's pull request (docs/ci-runner.md, 'The fork boundary')", exposed],
 ];
 if (reports.some(([, lines]) => lines.length > 0)) {
     for (const [heading, lines] of reports.filter(([, some]) => some.length > 0)) {
@@ -392,6 +488,7 @@ if (reports.some(([, lines]) => lines.length > 0)) {
 }
 console.log(`typecheck coverage: every package with tests type-checks them, and every machine-touching suite is named as one`);
 console.log(`lockfile: ${importers.length} importers record the specifiers their package.json declares`);
+console.log(`fork boundary: no self-hosted job is reachable from a fork's pull request`);
 
 /* Everything below needs node_modules and writes to the tree; everything above reads the checkout and nothing
  * else. `--checks-only` is that line — it is what the pre-push hook and the CI preflight job run. */

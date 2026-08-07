@@ -12,6 +12,62 @@ content-addressed stores are thrown away between jobs, which is the same anywher
 
 ---
 
+## The fork boundary
+
+**The fleet builds only branches pushed to this repository. A pull request from a fork runs nothing.**
+
+`intentic/intentic` is public, and every property this file spends its length arguing for is also what makes a
+fork's pull request dangerous: the runners are **not ephemeral**, they share **one `/ci-cache`** with `release`,
+and each mounts the **host docker socket**. Building a pull request means running its code — install lifecycle
+scripts, tests, build scripts — so a fork's pull request had a path to host root, and from a poisoned turbo
+entry a path into a published artifact. The credentials that live on these hosts are the ones that matter:
+`TAURI_SIGNING_PRIVATE_KEY`, `KOMODO_API_*`, `CLOUDFLARE_API_TOKEN`.
+
+This is the warning GitHub puts on the runner page. **Two controls hold it, and neither is sufficient alone** —
+that pairing is the part worth understanding before reviewing an outside pull request.
+
+**1. Approval, for all outside contributors.** Settings → Actions → General, set to *require approval for all
+outside contributors* rather than the default *first-time contributors* — the default stops applying to anyone
+the moment one of their pull requests is merged, so it protects a project exactly until it has its first repeat
+contributor. This is the control that covers the case the `if` below cannot: on a `pull_request` event Actions
+runs the workflow file **from the pull request's own merge ref**, so a fork that edits `ci.yml` runs its edited
+copy, guard deleted. Nothing runs before the click, which is what makes that unreachable.
+
+**2. The `if` guard.** This is the control that covers the case approval cannot: a pull request that looks
+harmless and carries its payload in a `postinstall`, a test, or a build script. Clicking approve on one of those
+runs it on the release host as root — no amount of care at the button changes that, because the diff that
+matters is 1,800 packages deep. The guard means the click cannot start a build of fork code at all.
+
+**So when you review an outside pull request, read `.github/` first.** A diff that touches a workflow file is
+the one shape where approving is equivalent to running whatever it says.
+
+The guard is two `if` conditions, on `changes` and `preflight`, the DAG roots of `ci.yml`:
+
+```yaml
+if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+```
+
+Everything else is already out of reach and stays that way without repeating the line: a skipped dependency
+skips its dependents, `images`/`images-platform`/`release` additionally require
+`github.event_name == 'push' && github.ref == 'refs/heads/main'`, and the jobs that opt out of the skip rule
+with `!cancelled()` all read a root's own output or result. `e2e-hermetic` carries a third copy because it is
+the one job whose condition names no `needs` output.
+
+**That inheritance is the fragile part, so it is asserted rather than trusted.** `prepass.mjs --checks-only`
+(invariant 4, run by the `preflight` job and the pre-push hook) grows the safe set to a fixpoint from the jobs
+that guard themselves and fails on any self-hosted job left outside it — so a job added with no guard and no
+`needs` edge to one goes red instead of quietly reopening this.
+
+To run CI on an outside contribution, **read the diff**, then push its branch to this repository and open the
+pull request from there.
+
+> Still worth doing, and it needs an org owner: the Linux runners are registered at the **organisation** scope
+> (`--url https://github.com/intentic`, below), so they are offered to every repository in the org. Putting them
+> in a runner group with **"Allow public repositories" off** would make this a platform guarantee rather than a
+> property of one workflow file.
+
+---
+
 ## What the runners must provide
 
 **A persistent `/ci-cache`, shared by every concurrent job.** It holds the pnpm store, the turbo task cache,
