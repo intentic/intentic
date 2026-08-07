@@ -11,6 +11,7 @@ import { extensionIdOf } from "@intentic/extension-api";
 import { isIconName } from "@intentic/ui/icons";
 import * as activity from "@intentic/ext-activity";
 import * as logs from "@intentic/ext-logs";
+import * as memory from "@intentic/ext-memory";
 import { describe, expect, it, vi } from "vitest";
 
 /* Exercises each compiled-in extension package the way loadBuiltins does — activate() against a minimal fake
@@ -181,10 +182,22 @@ describe(`ext-logs`, () => {
 });
 
 describe(`ext-activity`, () => {
-    it(`activates its rail view only when a discord cli capability is connected`, () => {
+    it(`activates a sandbox-hub section only when a discord cli capability is connected`, () => {
         const view = activateAndCapture(activity);
         expect(view.id).toBe(`activity`);
+        // A hub section, not a rail tile: the feed never badges, so it could not earn a permanent icon seat.
+        expect(view.surface).toBe(`sandbox`);
         expect(view.detect(noRepos, [])).toEqual([]);
         expect(view.detect(noRepos, [discordCap])).toEqual([{ key: `activity`, title: `Activity`, icon: `wave-pulse` }]);
+    });
+});
+
+describe(`ext-memory`, () => {
+    it(`registers an always-present Memory section on the sandbox hub`, () => {
+        const view = activateAndCapture(memory);
+        expect(view.id).toBe(`memory`);
+        // Same reasoning as logs and activity — the agent's notebook has nothing to announce.
+        expect(view.surface).toBe(`sandbox`);
+        expect(view.detect(noRepos, [])).toEqual([{ key: `memory`, title: `Memory`, icon: `sparkles` }]);
     });
 });

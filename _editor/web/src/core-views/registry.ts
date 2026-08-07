@@ -40,7 +40,7 @@ export interface ActiveExtension {
 
 // The deep-link path to a sidebar element. The `:key` segment only disambiguates a view's multiple activations
 // (one per repo: /ext/preview/<repo>); a singleton view names its sole activation after itself (key === id), so
-// that segment would just repeat the view id — drop it. `/ext/activity`, not `/ext/activity/activity`. ExtensionHost
+// that segment would just repeat the view id — drop it. `/ext/documentation`, not `/ext/documentation/documentation`. ExtensionHost
 // resolves the missing segment back to the view id.
 export const extensionPath = (extension: ViewRegistration, activation: Activation): string =>
     activation.key === extension.id ? `/ext/${extension.id}` : `/ext/${extension.id}/${encodeURIComponent(activation.key)}`;
@@ -70,9 +70,17 @@ export const extensionPath = (extension: ViewRegistration, activation: Activatio
  *           is a trigger), but their relationship to the day is identical: authored once, then left alone, and
  *           neither ever lights up. That is what makes them a shelf rather than work — Workflows previously sat
  *           third, an unbadged permanent tile holding a seat the hand reaches for by reflex.
- *   Know    Memory, Documentation, Activity, Infrastructure, Live status — what you go and consult on your own
- *           initiative. Documentation badges too, but its badge is an invitation (docs nobody has read yet), not
- *           an alarm, so it stays here.
+ *   Know    Documentation, Infrastructure, Live status — what you go and consult on your own initiative.
+ *           Documentation badges, and its badge is well formed: generated docs waiting to be reviewed, which
+ *           clears by looking. It fires rarely, which is the standard — rarely and meaningfully, not often.
+ *
+ * WHAT A SEAT COSTS, AND WHO STOPPED PAYING IT. Memory and Activity were in Know and are gone from the rail
+ * entirely; they are sections of the sandbox hub now (their extension.ts files carry the argument). The rule they
+ * failed is the one logs failed before them: a tile earns a permanent seat by being somewhere you go constantly
+ * or by being able to tell you something happened, and neither of those two can ever badge — one is the agent's
+ * notebook, the other a feed that is always moving. The cost was never abstract. The rail can reach fourteen
+ * navigation tiles and roughly nine fit above a 945px viewport before the column scrolls (see the flex-shrink
+ * note in ShellDesktop), so every silent permanent tile is a badged one pushed under the fold on a laptop.
  *
  * The bands are DECLARED, not derived. `badge: true` in the manifest lands on the Judge extensions and nothing
  * else, which is good evidence the band is real — but deriving from it would reshuffle the whole rail the day
@@ -99,7 +107,7 @@ export const RAIL_GROUPS: readonly RailGroup[] = [
     { id: `work`, label: `Work`, ids: [`agents`, `workspace`] },
     { id: `judge`, label: `Judge`, ids: [`drafts`, `acceptance`, `pipelines`, `deployments`, `maintenance`] },
     { id: `setup`, label: `Set up`, ids: [`workflows`, `automations`] },
-    { id: `know`, label: `Know`, ids: [`memory`, `documentation`, `activity`, `infrastructure`, `live-status`] },
+    { id: `know`, label: `Know`, ids: [`documentation`, `infrastructure`, `live-status`] },
 ];
 
 const RAIL_ORDER: readonly string[] = RAIL_GROUPS.flatMap((group) => group.ids);

@@ -22,7 +22,9 @@ const days = computed(() => byDay(episodes, Date.now()));
 </script>
 
 <template>
-    <Panel grow>
+    <!-- NOT `grow`: this panel is sized by its own max-height in a page-scrolling hub section, not by the free
+         space of a bounded pane it no longer sits in. `flex-1` in an auto-height parent resolves to nothing. -->
+    <Panel>
         <template #title
             ><span :class="cmp.sectionLabel()">{{ source?.label ?? `All sources` }}</span></template
         >

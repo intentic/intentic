@@ -9,6 +9,6 @@
         "sandbox": ["GET /memory", "GET /memory/file", "PUT /memory/file", "DELETE /memory/file"]
     },
     "contributes": {
-        "views": [{ "id": "memory", "label": "Memory", "surface": "rail" }]
+        "views": [{ "id": "memory", "label": "Memory", "surface": "sandbox" }]
     }
 }

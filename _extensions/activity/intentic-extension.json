@@ -9,6 +9,6 @@
         "sandbox": ["GET /activity", "GET /activity/status"]
     },
     "contributes": {
-        "views": [{ "id": "activity", "label": "Activity", "surface": "rail" }]
+        "views": [{ "id": "activity", "label": "Activity", "surface": "sandbox" }]
     }
 }

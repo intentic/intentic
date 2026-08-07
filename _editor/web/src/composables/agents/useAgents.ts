@@ -358,13 +358,29 @@ const fleet = computed<FleetAgent[]>(() => {
     ].toSorted((a, b) => weight(a) - weight(b) || b.updatedAt - a.updatedAt);
 });
 
+/* The wakes HELD at the door — the daemon's approvals queue, projected onto the board so "waiting for you"
+ * sits beside "running" instead of in a page nobody opens. Separate state from the roster on purpose: the
+ * /events stream repaints `registry` and knows nothing of holds, so a stream frame must not clobber this.
+ * Pull-fed by refresh() (board mount, the reachable seam, pull-to-refresh) and by the approve/reject actions
+ * below — a hold appearing while the board sits open lands on the next pull.
+ *
+ * Declared up here rather than beside those actions because `attention` counts it: the rail's badge is the only
+ * thing that can tell an owner a wake is waiting while they are anywhere else in the app. */
+const heldWakes = shallowRef<AutomationApproval[]>([]);
+
 // The board's two headline counts, kept apart on purpose (the header renders both): agents BLOCKED on the
 // user, and agents merely unread.
 const blocking = computed(() => fleet.value.filter(blocked).length);
 const unread = computed(() => fleet.value.filter((agent) => agent.unread).length);
-// The single aggregate the rail tile and mobile tab badge render — "there is something for you on the board",
-// counted per AGENT so one that is both blocked and unread badges once.
-const attention = computed(() => fleet.value.filter((agent) => blocked(agent) || agent.unread).length);
+/* The single aggregate the rail tile and mobile tab badge render — "there is something for you on the board",
+ * counted per AGENT so one that is both blocked and unread badges once.
+ *
+ * HELD WAKES COUNT TOO, and they are the reason this is not just a filter over the fleet. An automation set to
+ * require approval fires at 3am and parks a wake in the queue; the board has always shown it in the Attention
+ * lane, but the rail stayed silent, so the one surface visible from every other area said nothing was owed. A
+ * hold is not an agent — it has no conversation, no transcript and no turn until it is approved — which is
+ * exactly why it needs the badge: nothing else about it is on screen. */
+const attention = computed(() => fleet.value.filter((agent) => blocked(agent) || agent.unread).length + heldWakes.value.length);
 
 // A turn that finishes while you are WATCHING its conversation is not news — the reply is already on your
 // screen, so the card must not flip to "New" under your cursor (and the rail must not badge it). Gated on a
@@ -490,13 +506,6 @@ const lanes = computed<Record<FleetLane, FleetAgent[]>>(() => {
     );
     return grouped;
 });
-
-/* The wakes HELD at the door — the daemon's approvals queue, projected onto the board so "waiting for you"
- * sits beside "running" instead of in a page nobody opens. Separate state from the roster on purpose: the
- * /events stream repaints `registry` and knows nothing of holds, so a stream frame must not clobber this.
- * Pull-fed by refresh() (board mount, the reachable seam, pull-to-refresh) and by the approve/reject actions
- * below — a hold appearing while the board sits open lands on the next pull. */
-const heldWakes = shallowRef<AutomationApproval[]>([]);
 
 // Explicit registry pull — the reachable seam and pull-to-refresh use it; steady-state updates ride /events.
 const refresh = async (): Promise<void> => {
