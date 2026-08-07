@@ -44,7 +44,9 @@ const logout = async (): Promise<void> => {
         <Icon name="user" v-else class="text-base" />
     </button>
 
-    <Popover ref="panel" append-to="body">
+    <!-- Same inset as the sandbox switcher above it in the rail: the theme's popover padding is a content
+         card's, and these are menu rows that carry their own. -->
+    <Popover ref="panel" append-to="body" :pt="{ content: { class: `!p-0` } }">
         <div class="flex w-60 flex-col p-1">
             <!-- Central account: email + name. -->
             <div class="flex items-center gap-2 px-2 py-1.5">

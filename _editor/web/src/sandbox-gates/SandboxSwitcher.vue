@@ -209,7 +209,10 @@ const confirmRemove = async (): Promise<void> => {
         ></span>
     </span>
 
-    <Popover ref="panel" append-to="body">
+    <!-- The panel's own inset is the menu's, not the theme's: PrimeVue's popover padding is sized for a content
+         card, and around rows that already carry px-2 py-1 it reads as a frame. Zeroed so this box insets like
+         every other menu in the app (ContextMenu's rootList) — 4px here, 12px from edge to label. -->
+    <Popover ref="panel" append-to="body" :pt="{ content: { class: `!p-0` } }">
         <div class="flex w-60 flex-col gap-0.5 p-1">
             <!-- The badge's detail: one row per pending item, each routing to the hub tab that resolves it.
                  First in the popover because the badge is what brought the reader here, and each row is the
