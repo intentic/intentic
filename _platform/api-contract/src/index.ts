@@ -1,3 +1,4 @@
+import { GrantedRoleSchema } from "@intentic/sandbox-contract";
 import { oc } from "@orpc/contract";
 import { z } from "zod";
 import {
@@ -75,17 +76,19 @@ export const sandboxContract = {
 };
 
 // Sharing a sandbox with teammates by email. Owner side (all take `sandboxId`, owner-only): `list` is the
-// access roster; `create` records a pending invite and emails the link; `resend` mints a fresh link + email;
-// `revoke` removes an email's access. Invitee
+// access roster; `create` records a pending invite with its granted role and emails the link; `resend` mints a
+// fresh link + email; `setRole` re-grades an existing invitee; `revoke` removes an email's access. Invitee
 // side (token-facing): `preview` is the public read the accept page renders while logged out; `accept` (session
 // required, email-locked) flips the caller's pending invite to an active member. The daemon's own authorized list
-// is still pushed by the owner's browser at invite time — the server can't reach the daemon.
+// is still pushed by the owner's browser at invite and re-grade time — the server can't reach the daemon.
 const sandboxEmailInput = z.object({ sandboxId: z.string(), email: z.email() });
+const sandboxGrantInput = z.object({ sandboxId: z.string(), email: z.email(), role: GrantedRoleSchema });
 const tokenInput = z.object({ token: z.string() });
 export const inviteContract = {
     list: oc.route({ method: "POST", path: "/invite/list" }).input(sandboxIdInput).output(InviteListSchema),
-    create: oc.route({ method: "POST", path: "/invite/create" }).input(sandboxEmailInput).output(InviteListSchema),
+    create: oc.route({ method: "POST", path: "/invite/create" }).input(sandboxGrantInput).output(InviteListSchema),
     resend: oc.route({ method: "POST", path: "/invite/resend" }).input(sandboxEmailInput).output(InviteListSchema),
+    setRole: oc.route({ method: "POST", path: "/invite/role" }).input(sandboxGrantInput).output(InviteListSchema),
     revoke: oc.route({ method: "POST", path: "/invite/revoke" }).input(sandboxEmailInput).output(InviteListSchema),
     preview: oc.route({ method: "POST", path: "/invite/preview" }).input(tokenInput).output(InvitePreviewSchema),
     accept: oc

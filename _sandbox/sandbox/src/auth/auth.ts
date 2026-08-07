@@ -1,6 +1,8 @@
 import { timingSafeEqual } from "node:crypto";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
+import type { GrantedRole, MemberRole } from "@intentic/sandbox-contract";
+import { GrantedRoleSchema } from "@intentic/sandbox-contract";
 import { createRemoteJWKSet, jwtVerify } from "jose";
 
 // The sandbox authenticates the END USER directly against Google — the platform never holds or signs this
@@ -68,38 +70,53 @@ export const fileOwnerStore = (path: string): OwnerStore => ({
     },
 });
 
-// The additional authorized emails (shared access beyond the owner), stored as { emails: [...] } in the same
-// .intentic/ dir. The owner is NOT listed here — ownership stays in the owner store. The daemon is the real
-// enforcer of shared access; the platform only mirrors these grants so a member's browser can find the sandbox.
+// The additional authorized identities (shared access beyond the owner) and the role each was granted, stored
+// as { members: [{ email, role }] } in the same .intentic/ dir. The owner is NOT listed here — ownership stays
+// in the owner store. The daemon is the real enforcer of shared access; the platform only mirrors these grants
+// so a member's browser can find the sandbox.
+export interface Member {
+    readonly email: string;
+    readonly role: GrantedRole;
+}
+
 export interface MembersStore {
-    list(): Promise<string[]>;
-    add(email: string): Promise<void>;
+    list(): Promise<Member[]>;
+    // Upsert: granting an email that already holds access re-grades its role.
+    add(email: string, role: GrantedRole): Promise<void>;
     remove(email: string): Promise<void>;
 }
 
-const readEmails = async (path: string): Promise<string[]> => {
+const readMembers = async (path: string): Promise<Member[]> => {
     try {
-        const parsed = JSON.parse(await readFile(path, "utf8")) as { emails?: unknown };
-        return Array.isArray(parsed.emails) ? parsed.emails.filter((email): email is string => typeof email === "string") : [];
+        const parsed = JSON.parse(await readFile(path, "utf8")) as { members?: unknown };
+        if (!Array.isArray(parsed.members)) {
+            return [];
+        }
+        return parsed.members.filter(
+            (member): member is Member =>
+                typeof member === "object" &&
+                member !== null &&
+                typeof (member as { email?: unknown }).email === "string" &&
+                GrantedRoleSchema.safeParse((member as { role?: unknown }).role).success,
+        );
     } catch {
         return [];
     }
 };
 
+const writeMembers = async (path: string, members: Member[]): Promise<void> => {
+    await mkdir(dirname(path), { recursive: true });
+    await writeFile(path, JSON.stringify({ members }), "utf8");
+};
+
 export const fileMembersStore = (path: string): MembersStore => ({
-    list: () => readEmails(path),
-    add: async (email) => {
-        const emails = await readEmails(path);
-        if (emails.includes(email)) {
-            return;
-        }
-        await mkdir(dirname(path), { recursive: true });
-        await writeFile(path, JSON.stringify({ emails: [...emails, email] }), "utf8");
+    list: () => readMembers(path),
+    add: async (email, role) => {
+        const members = await readMembers(path);
+        await writeMembers(path, [...members.filter((member) => member.email !== email), { email, role }]);
     },
     remove: async (email) => {
-        const emails = await readEmails(path);
-        await mkdir(dirname(path), { recursive: true });
-        await writeFile(path, JSON.stringify({ emails: emails.filter((member) => member !== email) }), "utf8");
+        await writeMembers(path, (await readMembers(path)).filter((member) => member.email !== email));
     },
 });
 
@@ -116,16 +133,23 @@ export const tokenEquals = (a: string, b: string): boolean => {
     return ab.length === bb.length && timingSafeEqual(ab, bb);
 };
 
+// A verified identity plus the trust tier it holds here — what every authorized request acts as. The role is
+// resolved fresh on each authorize (owner store + members list are re-read), so a re-grade applies on the
+// member's very next request, not at their next sign-in.
+export interface Caller extends VerifiedIdentity {
+    readonly role: MemberRole;
+}
+
 export interface Authorizer {
     // Verify a request's bearer — a daemon-minted session (auth/session.ts) or a Google ID token — and enforce
     // access. The FIRST authenticated request binds its email as the owner (TOFU) and must be a fresh Google
     // proof, never a session; when a connectToken is configured, that first request must also carry it (the
     // connection token only the operator holds — closes the first-bind race), and when an expectedOwner is
     // configured its email must match (pins ownership to the intentic account, not just the token holder). Every
-    // later request must be the owner OR a granted member. Returns the caller's verified identity (presence
-    // shows it to the other members). Throws on any failure; the daemon maps a ForbiddenError to 403, anything
-    // else to 401.
-    authorize(bearer: string, firstBind: string | undefined): Promise<VerifiedIdentity>;
+    // later request must be the owner OR a granted member. Returns the caller's verified identity and role
+    // (presence shows both to the other members; the route floors gate on the role). Throws on any failure; the
+    // daemon maps a ForbiddenError to 403, anything else to 401.
+    authorize(bearer: string, firstBind: string | undefined): Promise<Caller>;
     // Verify the bearer AND assert the caller is the bound owner (not merely a member) — the gate for the
     // owner-only member-management routes. Throws on any failure.
     authorizeOwner(bearer: string): Promise<void>;
@@ -150,14 +174,15 @@ export const createAuthorizer = (deps: {
         const session = deps.session === undefined ? undefined : await deps.session(bearer).catch(() => undefined);
         return session ?? deps.verify(bearer);
     };
-    const enforce = async (identity: VerifiedIdentity, owner: string): Promise<VerifiedIdentity> => {
+    const enforce = async (identity: VerifiedIdentity, owner: string): Promise<Caller> => {
         if (identity.email === owner) {
-            return identity;
+            return { ...identity, role: "owner" };
         }
-        if (!(await deps.members.list()).includes(identity.email)) {
+        const member = (await deps.members.list()).find(({ email }) => email === identity.email);
+        if (member === undefined) {
             throw new ForbiddenError("not authorized for this sandbox");
         }
-        return identity;
+        return { ...identity, role: member.role };
     };
     return {
         authorize: async (bearer, firstBind) => {
@@ -181,7 +206,7 @@ export const createAuthorizer = (deps: {
                 throw new ForbiddenError(`this sandbox is registered to ${deps.expectedOwner}`);
             }
             await deps.owner.write(identity.email);
-            return identity;
+            return { ...identity, role: "owner" };
         },
         authorizeOwner: async (bearer) => {
             if (bearer === "") {

@@ -13,6 +13,21 @@ import { OutputFieldsSchema } from "./output-fields.js";
 // a plan/question that no longer exists, or a missing repo/path, is an ORPCError thrown by the handler instead.
 export const OkSchema = z.object({ ok: z.literal(true) });
 
+// The trust tiers of everyone who can open this sandbox, ordered. `owner` is the one bound identity
+// (auth/auth.ts); the other three are granted per email on the daemon's /members list. viewer watches,
+// collaborator drives agents (outward actions become requests), maintainer ships and operates. The daemon
+// enforces these as route floors (auth/role-floor.ts); the platform's invite records mirror them.
+export const MemberRoleSchema = z.enum(["viewer", "collaborator", "maintainer", "owner"]);
+export type MemberRole = z.infer<typeof MemberRoleSchema>;
+// The roles an invite can grant — everything but `owner`, which is bound at first sign-in, never granted.
+export const GrantedRoleSchema = z.enum(["viewer", "collaborator", "maintainer"]);
+export type GrantedRole = z.infer<typeof GrantedRoleSchema>;
+
+// Shared by every surface that gates on a role (daemon route floors, web affordances) so the order lives in
+// exactly one place.
+const MEMBER_ROLE_RANK: Record<MemberRole, number> = { viewer: 0, collaborator: 1, maintainer: 2, owner: 3 };
+export const roleAtLeast = (role: MemberRole, floor: MemberRole): boolean => MEMBER_ROLE_RANK[role] >= MEMBER_ROLE_RANK[floor];
+
 // Which repo a git route targets: "root" (the /work workspace repo) or a repo id — the repo's root-relative
 // dir, which may be nested ("clients/foo"; URL-encoded in the path param). Kept as a bare string on the wire
 // (not an enum) so an unknown repo is a handler-thrown NOT_FOUND — matching the daemon's prior 404 — rather
@@ -563,6 +578,10 @@ export const AgentSummarySchema = z.object({
     // the global toggle meaningful: an agent that never expressed an opinion follows the sandbox wherever it
     // is pointed next. Written by `agents.autoLand`; the UI shows the EFFECTIVE value (this ?? the setting).
     autoLand: z.boolean().optional(),
+    // A collaborator asked for this agent's work to be landed (agents.requestLand) — collaborators may drive
+    // agents but not merge into the main tree, so the ask rides the summary where every maintainer's board
+    // sees it. Cleared by the land or discard that answers it. Absent ⇒ nobody is waiting.
+    landRequested: z.object({ email: z.string(), name: z.string().optional(), at: z.number() }).optional(),
     // Present when the conversation was opened by an outside message rather than by the user (see
     // AgentOriginSchema) — the card's provenance line. Absent ⇒ the user started it.
     origin: AgentOriginSchema.optional(),

@@ -1,7 +1,7 @@
 import { expect, test, vi } from "vitest";
 import { createWsTickets, redeemTicket } from "./ws-tickets.js";
 
-const IDENTITY = { email: "owner@x.com" };
+const IDENTITY = { email: "owner@x.com", role: "owner" as const };
 const urlWith = (ticket: string): URL => new URL(`ws://sandbox.example/system/terminal?ticket=${encodeURIComponent(ticket)}`);
 
 test("a ticket redeems once, for the identity it was minted for", () => {
@@ -50,12 +50,26 @@ test("tickets are distinct and unguessable-width, so one does not predict the ne
  * cannot forget to check — each call sits in a try that closes the socket 1008. */
 test("redeemTicket throws on a bad ticket and passes a good one", () => {
     const services = { auth: {}, wsTickets: createWsTickets() };
-    expect(() => redeemTicket(services, urlWith("nope"))).toThrow();
-    expect(() => redeemTicket(services, urlWith(services.wsTickets.mint(IDENTITY)))).not.toThrow();
+    expect(() => redeemTicket(services, urlWith("nope"), "maintainer")).toThrow();
+    expect(() => redeemTicket(services, urlWith(services.wsTickets.mint(IDENTITY)), "maintainer")).not.toThrow();
+});
+
+/* The role floor at redemption: a ticket carries the tier it was minted under, and each socket names the tier
+ * it demands — the terminal is a shell (maintainer), the sign-in browser adds credentials (owner). A ticket
+ * below the floor is spent AND refused: failing the floor must not leave a replayable credential behind. */
+test("redeemTicket holds the ticket to the socket's floor, and a refused ticket is still spent", () => {
+    const services = { auth: {}, wsTickets: createWsTickets() };
+    const collaborator = { email: "c@x.com", role: "collaborator" as const };
+    const ticket = services.wsTickets.mint(collaborator);
+    expect(() => redeemTicket(services, urlWith(ticket), "maintainer")).toThrow(/maintainer access required/);
+    expect(() => redeemTicket(services, urlWith(ticket), "viewer")).toThrow(/invalid or expired/);
+    const maintainer = { email: "m@x.com", role: "maintainer" as const };
+    expect(() => redeemTicket(services, urlWith(services.wsTickets.mint(maintainer)), "owner")).toThrow(/owner access required/);
+    expect(() => redeemTicket(services, urlWith(services.wsTickets.mint(maintainer)), "maintainer")).not.toThrow();
 });
 
 // Loopback mode (tests, the host-internal preview) gates none of these routes and never minted a ticket —
 // requiring one there would break the very compositions that have no auth to satisfy.
 test("redeemTicket is a no-op without an authorizer", () => {
-    expect(() => redeemTicket({ auth: undefined, wsTickets: createWsTickets() }, urlWith(""))).not.toThrow();
+    expect(() => redeemTicket({ auth: undefined, wsTickets: createWsTickets() }, urlWith(""), "owner")).not.toThrow();
 });

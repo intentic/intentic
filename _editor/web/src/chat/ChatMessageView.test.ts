@@ -44,8 +44,11 @@ vi.mock("@intentic/ui/markdown", () => ({ copyCodeFromEvent: vi.fn() }));
 // withoutResumeNote is the real behaviour, not a stub: the errand row depends on it to recognise an errand a
 // resumed turn re-sent (errands.ts), and a mock that returned the text unchanged would hide that.
 vi.mock("@intentic/sandbox-contract", async () => {
-    const { withoutResumeNote } = await vi.importActual<typeof import("@intentic/sandbox-contract")>("@intentic/sandbox-contract");
-    return { planParts: (text: string) => ({ body: text }), withoutResumeNote };
+    const { GrantedRoleSchema, MemberRoleSchema, roleAtLeast, withoutResumeNote } =
+        await vi.importActual<typeof import("@intentic/sandbox-contract")>("@intentic/sandbox-contract");
+    // The role vocabulary rides along real: api-contract's schemas evaluate MemberRoleSchema/GrantedRoleSchema
+    // at module load, so a mock without them kills every import graph that touches the platform contract.
+    return { planParts: (text: string) => ({ body: text }), GrantedRoleSchema, MemberRoleSchema, roleAtLeast, withoutResumeNote };
 });
 vi.mock("../composables/chat/attachmentPreviews", () => ({ attachmentPreview: () => undefined }));
 // formatElapsed is the real one — the loader's readout IS that format, so mocking it would test nothing.

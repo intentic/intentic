@@ -43,7 +43,9 @@ export const createBrowserLoginRoute = (services: Services) =>
             onOpen: async (_event, ws) => {
                 const url = new URL(c.req.url);
                 try {
-                    redeemTicket(services, url);
+                    // Signing a live Chromium into a service ADDS a credential — that is the owner's tier
+                    // alone, like everything else on the capabilities surface.
+                    redeemTicket(services, url, "owner");
                 } catch (err) {
                     services.logger.warn({ err }, "browser-login ticket rejected");
                     ws.close(1008, "unauthorized");

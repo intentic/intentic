@@ -3,6 +3,7 @@ import { computed } from "vue";
 import { effectiveAutoLand, landedAway } from "../composables/agents/agentStatus";
 import type { useAgentChanges } from "../composables/agents/useAgentChanges";
 import { useAgents } from "../composables/agents/useAgents";
+import { useRole } from "../composables/sandbox/useRole";
 import { useSandboxSettings } from "../composables/sandbox/useSandboxSettings";
 
 /* What you do to a SESSION, as opposed to what you do to its diff — refresh, land, hold, archive, discard.
@@ -57,6 +58,11 @@ const toggleAutoLand = (): void => {
     emit(`selected`);
 };
 
+// The ship-tier items (land, re-land, auto-land posture, discard) leave the menu below maintainer rather
+// than sit disabled in it: a collaborator's asking press lives on the card as "Request land", and a menu of
+// grey rows teaches people the menu is broken, not that a tier exists.
+const { canShip } = useRole();
+
 const run = (action: () => void): void => {
     action();
     emit(`selected`);
@@ -72,7 +78,7 @@ const ITEM = `flex w-full items-start gap-2 rounded-lg px-2.5 py-1.5 text-left t
 <template>
     <div class="flex flex-col p-1">
         <button
-            v-if="landInMenu && away === undefined"
+            v-if="landInMenu && away === undefined && canShip"
             type="button"
             :class="ITEM"
             :disabled="changes.actionBusy.value || streaming || changes.pending.value.length === 0"
@@ -97,7 +103,7 @@ const ITEM = `flex w-full items-start gap-2 rounded-lg px-2.5 py-1.5 text-left t
              plain land carries the remainder and leaves the missing part exactly as missing, which is the one
              outcome that looks like it worked. Quiet like everything else in this menu — the card is where the
              fact is announced; this is just the second place the press can be found. -->
-        <button v-if="away !== undefined" type="button" :class="ITEM" :disabled="changes.actionBusy.value || streaming" @click="relandNow">
+        <button v-if="away !== undefined && canShip" type="button" :class="ITEM" :disabled="changes.actionBusy.value || streaming" @click="relandNow">
             <Icon name="undo" class="mt-0.5 text-xs text-warning" />
             <span class="flex min-w-0 flex-col">
                 <span class="text-sm text-content md:text-xs">Land again</span>
@@ -108,7 +114,7 @@ const ITEM = `flex w-full items-start gap-2 rounded-lg px-2.5 py-1.5 text-left t
             <Icon name="refresh" class="mt-0.5 text-xs text-subtle" :spin="changes.loading.value" />
             <span class="text-sm text-content md:text-xs">Refresh</span>
         </button>
-        <button type="button" :class="ITEM" :disabled="changes.actionBusy.value || archived" @click="toggleAutoLand">
+        <button v-if="canShip" type="button" :class="ITEM" :disabled="changes.actionBusy.value || archived" @click="toggleAutoLand">
             <Icon :name="autoLandOn ? 'lock' : 'unlock'" class="mt-0.5 text-xs" :class="autoLandOn ? 'text-subtle' : 'text-link'" />
             <span class="flex min-w-0 flex-col">
                 <span class="text-sm text-content md:text-xs">{{ autoLandOn ? `Hold work on the branch` : `Land automatically` }}</span>
@@ -145,7 +151,7 @@ const ITEM = `flex w-full items-start gap-2 rounded-lg px-2.5 py-1.5 text-left t
                 <span class="text-2xs text-subtle">Puts it back on the board</span>
             </span>
         </button>
-        <button type="button" :class="ITEM" :disabled="changes.actionBusy.value || streaming" @click="run(() => emit(`discard`))">
+        <button v-if="canShip" type="button" :class="ITEM" :disabled="changes.actionBusy.value || streaming" @click="run(() => emit(`discard`))">
             <Icon name="trash" class="mt-0.5 text-xs text-danger" />
             <span class="flex min-w-0 flex-col">
                 <span class="text-sm text-danger md:text-xs">Discard</span>

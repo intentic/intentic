@@ -8,8 +8,10 @@ import { useRoute, useRouter } from "vue-router";
 import ChatPanel from "../chat/ChatPanel.vue";
 import { agentStatusMeta, unregistered } from "../composables/agents/agentStatus";
 import { createTitleEdit } from "../composables/agents/titleEdit";
+import { requestLandAgent } from "../composables/agents/agentActions";
 import { useAgentChanges } from "../composables/agents/useAgentChanges";
 import { useAgents } from "../composables/agents/useAgents";
+import { useRole } from "../composables/sandbox/useRole";
 import { useChat } from "../composables/chat/useChat";
 import AgentReviewPanel from "./AgentReviewPanel.vue";
 import AgentSessionMenu from "./AgentSessionMenu.vue";
@@ -137,6 +139,23 @@ const streaming = computed(() => conversation.value?.streaming.value === true);
 // disabled up front when this browser is the one streaming.
 const canLand = computed(() => !changes.actionBusy.value && !streaming.value && changes.pending.value.length > 0);
 
+// The role split on the toolbar's primary action: maintainers land, collaborators ask (the daemon floors the
+// land itself — see AgentCard for the same split on the board).
+const { canDrive, canShip } = useRole();
+const requestingLand = ref(false);
+const requestLand = async (): Promise<void> => {
+    if (requestingLand.value) {
+        return;
+    }
+    requestingLand.value = true;
+    try {
+        await requestLandAgent(agentId.value);
+        await refresh();
+    } finally {
+        requestingLand.value = false;
+    }
+};
+
 const menu = ref<InstanceType<typeof Popover> | null>(null);
 const menuSheet = ref(false);
 const openMenu = (event: MouseEvent): void => {
@@ -212,7 +231,7 @@ const confirmDiscard = (): void => {
                      It appears only when there is something to apply, so the button's presence IS the "not
                      landed" signal the toolbar below used to spend a pill on. -->
                 <Button
-                    v-if="!mobile && changes.pending.value.length > 0"
+                    v-if="!mobile && changes.pending.value.length > 0 && canShip"
                     size="small"
                     severity="success"
                     class="shrink-0 gap-0 whitespace-nowrap px-2.5 py-1 text-2xs"
@@ -223,6 +242,26 @@ const confirmDiscard = (): void => {
                     "
                 >
                     <Icon name="check" class="mr-1 text-2xs" />Land now
+                </Button>
+                <!-- The collaborator's copy of the press above: same spot, quieter chrome, and once asked it
+                     becomes the fact instead of the button (the daemon floors the land itself at maintainer). -->
+                <span
+                    v-else-if="!mobile && changes.pending.value.length > 0 && canDrive && fleetAgent?.landRequested !== undefined"
+                    class="inline-flex shrink-0 items-center gap-1 text-2xs text-muted"
+                >
+                    <Icon name="clock" class="text-2xs" />Land requested
+                </span>
+                <Button
+                    v-else-if="!mobile && changes.pending.value.length > 0 && canDrive"
+                    size="small"
+                    severity="secondary"
+                    :outlined="true"
+                    class="shrink-0 gap-0 whitespace-nowrap px-2.5 py-1 text-2xs"
+                    :disabled="requestingLand"
+                    @click="requestLand"
+                    v-tooltip.bottom="'Landing needs a maintainer — this puts the ask on their board'"
+                >
+                    <Icon :name="requestingLand ? 'spinner' : 'send'" :spin="requestingLand" class="mr-1 text-2xs" />Request land
                 </Button>
                 <button
                     type="button"

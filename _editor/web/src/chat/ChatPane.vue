@@ -18,6 +18,7 @@ import { withShortcut } from "../composables/commands/useCommands";
 import { errorMessage } from "../composables/useAsyncAction";
 import { useLoadingReveal } from "../composables/loadingReveal";
 import { conversationView, hydrateOnce, PANE_VIEW, useChat } from "../composables/chat/useChat";
+import { useRole } from "../composables/sandbox/useRole";
 import { useSandboxSettings } from "../composables/sandbox/useSandboxSettings";
 import { useChatPopout } from "../composables/chat/useChatPopout";
 import { useSpeechInput } from "../composables/chat/useSpeechInput";
@@ -613,7 +614,15 @@ const stopHint = computed(() =>
 );
 // While a plan awaits a decision, typing revises it (reject-with-feedback); while a turn runs, typing either
 // steers it or queues behind it — the placeholder says which.
+// A viewer's composer is present but inert: the transcript is theirs to read, the send is not theirs to make
+// (the daemon floors every turn route at collaborator). Disabled-with-a-reason over hidden — an input that
+// vanished would read as broken, and the placeholder is where a composer explains itself.
+const { canDrive } = useRole();
+
 const composerPlaceholder = computed(() => {
+    if (!canDrive.value) {
+        return `You're viewing — ask the owner for a collaborator role to drive agents`;
+    }
     if (pendingPlanMessage.value) {
         return `Reply to revise the plan…`;
     }
@@ -1385,6 +1394,7 @@ watch(
                                     rows="1"
                                     v-model="draft"
                                     name="draft"
+                                    :disabled="!canDrive"
                                     :placeholder="composerPlaceholder"
                                     class="scrollbar-thin block max-h-48 w-full resize-none overflow-y-auto bg-transparent px-4 py-3 text-base leading-relaxed text-content placeholder:text-subtle focus:outline-none md:text-xs"
                                     @input="onInput"

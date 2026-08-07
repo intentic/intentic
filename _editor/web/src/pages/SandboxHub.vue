@@ -3,6 +3,7 @@ import type { NavGroup } from "@intentic/ui";
 import { computed } from "vue";
 import { useCapabilities } from "../composables/extensions/useCapabilities";
 import { usePanels } from "../composables/extensions/usePanels";
+import { useRole } from "../composables/sandbox/useRole";
 import { useRunning } from "../composables/sandbox/useRunning";
 import { useSandbox } from "../composables/sandbox/useSandbox";
 import { type ActiveExtension, activationBadge, detectActivations } from "../core-views/registry";
@@ -62,6 +63,11 @@ const BUILT_IN = new Set([...boxRows(0), ...CONFIGURATION, ...REACH].map((tab) =
 const DEFAULT = `overview`;
 
 const sandbox = useSandbox();
+/* The credentials tier is the owner's alone, and it is ABSENT for everyone else rather than locked: a lock on
+ * a secrets tab is an invitation to ask for the values; absence is a boundary. Environment and Extensions stay
+ * — members see state there and the owner-only writes are gated in place. Usage joins the ship tier (spend is
+ * the operator's reading). The daemon floors all of it regardless; this only keeps the index honest. */
+const { canShip, isOwner } = useRole();
 const { runningCount } = useRunning();
 const { panels, isLoading } = usePanels();
 const { capabilities } = useCapabilities();
@@ -86,9 +92,13 @@ const contributedRow = (active: ActiveExtension): HubTab => ({
 });
 
 const groups = computed<readonly NavGroup<HubTab>[]>(() => [
-    { key: `box`, label: `This box`, items: boxRows(runningCount.value) },
-    { key: `configuration`, label: `Configuration`, items: CONFIGURATION },
-    { key: `reach`, label: `Reach`, items: REACH },
+    { key: `box`, label: `This box`, items: boxRows(runningCount.value).filter((tab) => tab.slug !== `usage` || canShip.value) },
+    {
+        key: `configuration`,
+        label: `Configuration`,
+        items: CONFIGURATION.filter((tab) => (tab.slug !== `secrets` && tab.slug !== `agent`) || isOwner.value),
+    },
+    { key: `reach`, label: `Reach`, items: REACH.filter((tab) => tab.slug !== `computers` || isOwner.value) },
     ...(contributed.value.length === 0 ? [] : [{ key: `contributed`, label: `Added by extensions`, items: contributed.value.map(contributedRow) }]),
 ]);
 </script>

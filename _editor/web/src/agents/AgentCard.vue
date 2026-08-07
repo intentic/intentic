@@ -1,8 +1,11 @@
 <script setup lang="ts">
 import Button from "primevue/button";
 import { formatTokens, ProgressRing, useDevice } from "@intentic/ui";
-import { computed } from "vue";
+import { computed, ref } from "vue";
 import { useRouter } from "vue-router";
+import { requestLandAgent } from "../composables/agents/agentActions";
+import { useRole } from "../composables/sandbox/useRole";
+import { errorMessage } from "../composables/useAsyncAction";
 import OriginMark from "../components/OriginMark.vue";
 import WorkflowMark from "../components/WorkflowMark.vue";
 import { dropActionFor, type PendingAction } from "../composables/agents/laneDrop";
@@ -27,7 +30,7 @@ import { sessionCategory } from "../composables/sessionCategory";
 import IdentityTile from "../components/IdentityTile.vue";
 import { createTitleEdit } from "../composables/agents/titleEdit";
 import { markSegments } from "../composables/agents/useAgentFilter";
-import { canArchive, type FleetAgent } from "../composables/agents/useAgents";
+import { canArchive, useAgents, type FleetAgent } from "../composables/agents/useAgents";
 import { relativeTime } from "../composables/chat/catalog";
 import { modelLabelFor } from "../composables/chat/providerCatalog";
 
@@ -150,6 +153,34 @@ const landable = computed(() => props.agent.archivedAt === undefined && props.ag
  * action precisely so archiving a `ready` card doesn't leave its Land button spinning over work nobody asked
  * to land. What ENDS the state is the daemon's next roster frame — for a land, a card with no button left. */
 const landing = computed(() => props.pending === `land`);
+/* THE ROLE SPLIT ON THE READY CARD. A maintainer (and the owner) gets "Land now"; a collaborator gets
+ * "Request land" — the same press redirected at the people who may answer it, because the daemon floors the
+ * land itself at maintainer. The request is performed HERE rather than emitted: the board is only one of this
+ * card's hosts, and an ask that three parents each had to wire would be an ask two of them forgot. A viewer
+ * gets neither — watching is the whole grant. */
+const { canDrive, canShip } = useRole();
+const { refresh: refreshAgents, notice: agentsNotice } = useAgents();
+const requesting = ref(false);
+const requestLand = async (): Promise<void> => {
+    if (requesting.value) {
+        return;
+    }
+    requesting.value = true;
+    try {
+        await requestLandAgent(props.agent.id);
+        await refreshAgents();
+    } catch (caught) {
+        agentsNotice.value = errorMessage(caught, `Couldn't send the land request.`);
+    } finally {
+        requesting.value = false;
+    }
+};
+// The standing ask, worn by the card for everyone: the collaborator sees their ask took, and a maintainer
+// reads it as the call to press the button beside it.
+const landAsk = computed(() => {
+    const request = props.agent.landRequested;
+    return request === undefined ? undefined : `${request.name ?? request.email} asked to land this`;
+});
 // Its own flag rather than a widened `landing`: the two buttons can never both be on a card (see `away`), but
 // each has to name back the action that was actually pressed, which is the whole reason `pending` carries one.
 const relanding = computed(() => props.pending === `reland`);
@@ -551,11 +582,39 @@ const grab = (event: PointerEvent): void => {
                  `landable`). Success-styled with the check glyph exactly like the review panel's "Land now":
                  the two are the same action on the same work, and must read as such. What landing DOES follows
                  it in prose rather than on hover, like the resolve button above. -->
-            <div v-if="landable" class="flex min-w-0 flex-col gap-0.5">
+            <div v-if="landable && canShip" class="flex min-w-0 flex-col gap-0.5">
+                <!-- The standing ask leads the button it is about: a maintainer reading top-to-bottom meets the
+                     reason before the press. -->
+                <p v-if="landAsk" class="flex min-w-0 items-start gap-1.5 text-2xs leading-snug text-warning">
+                    <Icon name="clock" class="mt-0.5 shrink-0 text-2xs" /><span class="min-w-0">{{ landAsk }}</span>
+                </p>
                 <Button size="small" severity="success" class="gap-0 self-start whitespace-nowrap px-2 py-0.5 text-2xs" @click.stop="emit('land')">
                     <Icon :name="landing ? 'spinner' : 'check'" :spin="landing" class="mr-1 text-2xs" />{{ landing ? "Landing…" : "Land now" }}
                 </Button>
                 <span class="text-2xs leading-snug text-subtle">Arrives as uncommitted changes — your own commit stays the review step.</span>
+            </div>
+
+            <!-- The same ready card in a collaborator's hands: the land is a maintainer's press, so the card
+                 offers the ask instead — same spot, same size, quieter chrome. Once asked, the card says so
+                 and stands down (re-asking only re-stamps the same fact). A viewer gets neither. -->
+            <div v-else-if="landable && canDrive" class="flex min-w-0 flex-col gap-0.5">
+                <p v-if="landAsk" class="flex min-w-0 items-start gap-1.5 text-2xs leading-snug text-muted">
+                    <Icon name="clock" class="mt-0.5 shrink-0 text-2xs" /><span class="min-w-0">{{ landAsk }} — waiting for a maintainer</span>
+                </p>
+                <template v-else>
+                    <Button
+                        size="small"
+                        severity="secondary"
+                        :outlined="true"
+                        class="gap-0 self-start whitespace-nowrap px-2 py-0.5 text-2xs"
+                        @click.stop="requestLand"
+                    >
+                        <Icon :name="requesting ? 'spinner' : 'send'" :spin="requesting" class="mr-1 text-2xs" />{{
+                            requesting ? "Asking…" : "Request land"
+                        }}
+                    </Button>
+                    <span class="text-2xs leading-snug text-subtle">Landing needs a maintainer — this puts the ask on their board.</span>
+                </template>
             </div>
 
             <div class="flex min-w-0 items-center gap-2 text-2xs text-subtle" :class="dense ? 'min-w-32 flex-1' : ''">

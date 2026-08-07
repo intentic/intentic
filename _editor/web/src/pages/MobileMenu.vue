@@ -8,6 +8,7 @@ import { useCapabilities } from "../composables/extensions/useCapabilities";
 import { type ActiveExtension, activationBadge, detectActivations, extensionPath, railBands } from "../core-views/registry";
 import { badgeClass } from "../core-views/viewBadge";
 import { usePanels } from "../composables/extensions/usePanels";
+import { useRole } from "../composables/sandbox/useRole";
 import { useSandboxAttention } from "../composables/sandbox/sandboxAttention";
 import { identityHue } from "../composables/identityHue";
 import { presenceActivity, presenceOthers } from "../composables/usePresence";
@@ -74,13 +75,16 @@ const areaBands = computed(() =>
     ),
 );
 // The box rather than the work — the same things the desktop rail keeps below its last divider, next to the
-// terminal and the "+". Not banded: none of them is an area a rail tile ever stood for.
-const sandboxRows: readonly AreaRow[] = [
+// terminal and the "+". Not banded: none of them is an area a rail tile ever stood for. The terminal row is
+// the ship tier's, like the desktop rail's tile — a PTY is the whole sandbox, and the daemon refuses the
+// socket below maintainer anyway.
+const { canShip } = useRole();
+const sandboxRows = computed<readonly AreaRow[]>(() => [
     { id: `capabilities`, to: `/capabilities`, label: `Add a capability`, icon: `plus` },
-    { id: `terminal`, to: `/terminal`, label: `Terminal`, icon: `code` },
+    ...(canShip.value ? [{ id: `terminal`, to: `/terminal`, label: `Terminal`, icon: `code` } as const] : []),
     { id: `sandbox`, to: `/sandbox`, label: `Sandbox`, icon: `box` },
     { id: `settings`, to: `/settings`, label: `Settings`, icon: `cog` },
-];
+]);
 
 const addSandbox = (): void => {
     void router.push(`/setup`);
@@ -130,7 +134,7 @@ const logout = async (): Promise<void> => {
                 <span class="min-w-0 flex-1 truncate" :class="option.id === sandbox.activeSandboxId.value ? 'text-link' : 'text-content'">{{
                     option.name
                 }}</span>
-                <span v-if="option.role === 'member'" class="shrink-0 rounded-full bg-content/10 px-1.5 py-0.5 text-2xs font-medium text-subtle"
+                <span v-if="option.role !== 'owner'" class="shrink-0 rounded-full bg-content/10 px-1.5 py-0.5 text-2xs font-medium text-subtle"
                     >Shared</span
                 >
                 <span

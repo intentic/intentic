@@ -64,6 +64,10 @@ export const agentsContract = {
     diff: oc.route({ method: "GET", path: "/agents/{id}/diff" }).input(AgentIdSchema).output(AgentChangesSchema),
     fileDiff: oc.route({ method: "GET", path: "/agents/{id}/{repo}/file-diff" }).input(AgentFileDiffQuerySchema).output(FileDiffSchema),
     land: oc.route({ method: "POST", path: "/agents/{id}/land" }).input(AgentLandSchema).output(LandResultSchema),
+    // A collaborator's ask for the land they may not perform themselves (role floors put `land`/`discard` at
+    // maintainer). Stamps AgentSummarySchema.landRequested with the caller's identity and re-frames the fleet,
+    // so every maintainer's board carries the request; the land or discard that answers it clears the stamp.
+    requestLand: oc.route({ method: "POST", path: "/agents/{id}/request-land" }).input(AgentIdSchema).output(AgentSummarySchema),
     discard: oc.route({ method: "POST", path: "/agents/{id}/discard" }).input(AgentIdSchema).output(OkSchema),
     archive: oc.route({ method: "POST", path: "/agents/archive" }).input(AgentArchiveSchema).output(AgentsMovedSchema),
     unarchive: oc.route({ method: "POST", path: "/agents/unarchive" }).input(AgentIdsSchema).output(AgentsMovedSchema),

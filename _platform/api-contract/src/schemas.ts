@@ -20,6 +20,7 @@ import {
     DraftSummarySchema,
     EnvironmentSchema,
     BundleExportSchema,
+    GrantedRoleSchema,
     HostTunnelSchema,
     ImportReportSchema,
     InventoryEntrySchema,
@@ -27,6 +28,7 @@ import {
     LogFileEntrySchema,
     LogReadSchema,
     MarketplaceSchema,
+    MemberRoleSchema,
     PanelSummarySchema,
     PushConfigSchema,
     RepoAppSchema,
@@ -330,7 +332,10 @@ export const SandboxSummarySchema = z.object({
     lastSeenAt: z.string().nullable(),
     setupCodeClaimedAt: z.string().nullable(),
     token: z.string(),
-    role: z.enum(["owner", "member"]),
+    // The caller's trust tier on this sandbox: `owner` for their own, the invite's granted role for a shared
+    // one. What the web gates its affordances on; the daemon independently enforces the same tier as route
+    // floors, so this is a rendering fact, never the security boundary.
+    role: MemberRoleSchema,
     providedTunnel: z.boolean(),
 });
 export type SandboxSummary = z.infer<typeof SandboxSummarySchema>;
@@ -361,6 +366,9 @@ export const InviteStatusSchema = z.enum(["pending", "accepted", "expired"]);
 export type InviteStatus = z.infer<typeof InviteStatusSchema>;
 export const InviteRecordSchema = z.object({
     email: z.string(),
+    // The trust tier this invite grants (viewer/collaborator/maintainer — never owner). The daemon's members
+    // list is the enforced copy; this row is what the roster renders and re-grades from.
+    role: GrantedRoleSchema,
     status: InviteStatusSchema,
     invitedAt: z.string(),
     expiresAt: z.string().optional(),

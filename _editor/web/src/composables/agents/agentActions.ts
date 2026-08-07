@@ -1,5 +1,5 @@
 import type { AgentChangesResponse } from "@intentic-app/api-contract";
-import type { AgentSpan, LandMode, LandResult } from "@intentic/sandbox-contract";
+import type { AgentSpan, AgentSummary, LandMode, LandResult } from "@intentic/sandbox-contract";
 import { useDevice } from "@intentic/ui";
 import type { Conversation } from "../chat/conversation";
 import { focusComposer, useChat } from "../chat/useChat";
@@ -73,6 +73,12 @@ export const revealConversation = (conversation: Conversation): void => {
 // cumulative land applies the missing part and re-applies nothing (AgentSpanSchema).
 export const landAgent = (id: string, mode: LandMode = `check`, span: AgentSpan = `outstanding`): Promise<LandResult> =>
     sandboxJson<LandResult>(`/agents/${encodeURIComponent(id)}/land`, jsonBody(`POST`, { mode, span }));
+
+// A collaborator's stand-in for the land they may not perform (the daemon floors `land` at maintainer): stamp
+// the ask on the agent so every maintainer's board wears it. The daemon's roster frame carries the result —
+// same delivery as every other card fact.
+export const requestLandAgent = (id: string): Promise<AgentSummary> =>
+    sandboxJson<AgentSummary>(`/agents/${encodeURIComponent(id)}/request-land`, jsonBody(`POST`, {}));
 
 /* THE MAIN ROAD OUT OF A LAND CONFLICT: hand it back to the agent that wrote the work.
  *

@@ -53,7 +53,7 @@ import { fileVerifyStore, type VerifyStore } from "./workspace/verify-store.js";
 import { type CiHookReconciler, createCiHookReconciler } from "./ci/hooks.js";
 import { createRunsCache, type RunsCache } from "./ci/runs-cache.js";
 import { fileKomodoStore, type KomodoStore } from "./komodo/komodo-store.js";
-import { createAuthorizer, createGoogleVerifier, fileMembersStore, fileOwnerStore, type MembersStore, type VerifiedIdentity } from "./auth/auth.js";
+import { type Caller, createAuthorizer, createGoogleVerifier, fileMembersStore, fileOwnerStore, type MembersStore, type VerifiedIdentity } from "./auth/auth.js";
 import { createSessions, type MintedSession } from "./auth/session.js";
 import { type ClaudeCatalog, createClaudeCatalog } from "./claude/claude-models.js";
 import { type ClaudeStore, fileClaudeStore } from "./claude/claude-credentials.js";
@@ -551,7 +551,7 @@ export interface Services {
     // backs system.session — the Google-verified exchange that makes sessions the steady-state credential.
     readonly auth:
         | {
-              readonly authorize: (bearer: string, firstBind: string | undefined) => Promise<VerifiedIdentity>;
+              readonly authorize: (bearer: string, firstBind: string | undefined) => Promise<Caller>;
               readonly authorizeOwner: (bearer: string) => Promise<void>;
               readonly mintSession: (identity: VerifiedIdentity) => Promise<MintedSession>;
               // Re-key the session signer: every browser holding a session for this sandbox is signed out at

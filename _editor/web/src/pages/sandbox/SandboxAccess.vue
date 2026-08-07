@@ -1,7 +1,9 @@
 <script setup lang="ts">
 import type { InviteRecord } from "@intentic-app/api-contract";
-import { Avatar, cmp, RowGroup } from "@intentic/ui";
+import type { GrantedRole, MemberRole } from "@intentic/sandbox-contract";
+import { Avatar, cmp, RowGroup, Segmented } from "@intentic/ui";
 import Button from "primevue/button";
+import Select from "primevue/select";
 import { computed, onMounted, ref } from "vue";
 import { sandboxJson } from "../../composables/sandbox/sandboxClient";
 import { jsonBody } from "../../composables/sandbox/jsonBody";
@@ -16,7 +18,12 @@ import { presenceActivity, presenceOthers } from "../../composables/usePresence"
  * daemon's ENFORCED /members list (pushed first from the owner's browser, since the server can't reach the
  * daemon) then the platform invite record + email. sandboxJson throws on any non-2xx, so a grant the enforcer
  * never got is never recorded (fail closed). Members see a read-only view. "Here now" (live presence) shows for
- * everyone. */
+ * everyone.
+ *
+ * EVERY GRANT IS A ROLE. The invite form asks which tier it is handing out (collaborator preselected — safe to
+ * give without thinking, useful enough that nobody feels locked out), and each roster row re-grades in place
+ * through the same two-write, daemon-first order as the grant itself. The words are deliberately "can…"
+ * sentences: the tier model is taught here or nowhere. */
 
 const { user } = useAuth();
 const sandbox = useSandbox();
@@ -25,6 +32,20 @@ const isOwner = computed(() => sandbox.active.value?.role === `owner`);
 
 const members = ref<InviteRecord[]>([]);
 const email = ref(``);
+
+// The three tiers an invite can grant, in the order they nest, each with the sentence that IS the model.
+const ROLE_OPTIONS: readonly { label: string; value: GrantedRole }[] = [
+    { label: `Viewer`, value: `viewer` },
+    { label: `Collaborator`, value: `collaborator` },
+    { label: `Maintainer`, value: `maintainer` },
+];
+const ROLE_BLURB: Record<GrantedRole, string> = {
+    viewer: `Can watch everything — agents, chats, files. Can't change anything.`,
+    collaborator: `Can drive agents and review work. Landing and publishing become requests.`,
+    maintainer: `Can ship and operate: land work, approve drafts, use the terminal.`,
+};
+const roleLabel = (role: MemberRole): string => role.charAt(0).toUpperCase() + role.slice(1);
+const inviteRole = ref<GrantedRole>(`collaborator`);
 const busy = ref(false);
 const error = ref<string>();
 const emailTouched = ref(false);
@@ -72,8 +93,8 @@ const invite = async (): Promise<void> => {
     try {
         // Push to the daemon first (owner-gated, enforced), then record the invite + send the email. sandboxJson
         // throws on a non-2xx daemon reply (403/401/offline), so an unenforced grant is never recorded as sent.
-        await sandboxJson<{ emails: string[] }>(`/members`, jsonBody(`POST`, { email: value }));
-        members.value = (await apiClient.invite.create({ sandboxId: id, email: value })).members;
+        await sandboxJson<{ members: { email: string; role: GrantedRole }[] }>(`/members`, jsonBody(`POST`, { email: value, role: inviteRole.value }));
+        members.value = (await apiClient.invite.create({ sandboxId: id, email: value, role: inviteRole.value })).members;
         email.value = ``;
         emailTouched.value = false;
     } catch (err) {
@@ -127,6 +148,26 @@ const revokeSessions = async (): Promise<void> => {
     }
 };
 
+// Re-grade a member: the same two-write, daemon-first order as the grant, because it IS one — the daemon's
+// list is what a role change must reach to mean anything, and it applies on the member's next request.
+const setRole = async (target: string, role: GrantedRole): Promise<void> => {
+    const id = sandbox.activeSandboxId.value;
+    if (id === undefined || busy.value) {
+        return;
+    }
+    busy.value = true;
+    error.value = undefined;
+    try {
+        await sandboxJson<{ members: { email: string; role: GrantedRole }[] }>(`/members`, jsonBody(`POST`, { email: target, role }));
+        members.value = (await apiClient.invite.setRole({ sandboxId: id, email: target, role })).members;
+    } catch (err) {
+        void load();
+        error.value = errorMessage(err, `Couldn't change the role — is the sandbox online?`);
+    } finally {
+        busy.value = false;
+    }
+};
+
 const revoke = async (target: string): Promise<void> => {
     const id = sandbox.activeSandboxId.value;
     if (id === undefined || busy.value) {
@@ -137,7 +178,7 @@ const revoke = async (target: string): Promise<void> => {
     try {
         // sandboxJson throws on a non-2xx daemon reply, so revoke reaches the enforcer before the platform row is
         // dropped — a daemon that rejects/is offline surfaces an error instead of a member who still has access.
-        await sandboxJson<{ emails: string[] }>(`/members`, jsonBody(`DELETE`, { email: target }));
+        await sandboxJson<{ members: { email: string; role: GrantedRole }[] }>(`/members`, jsonBody(`DELETE`, { email: target }));
         members.value = (await apiClient.invite.revoke({ sandboxId: id, email: target })).members;
     } catch (err) {
         error.value = errorMessage(err, `Couldn't revoke access — is the sandbox online?`);
@@ -160,6 +201,19 @@ const revoke = async (target: string): Promise<void> => {
                 <div v-for="member in members" :key="member.email" class="flex items-center gap-2.5 px-4 py-3">
                     <Icon name="user" class="text-muted" />
                     <span class="min-w-0 flex-1 truncate text-sm text-content">{{ member.email }}</span>
+                    <!-- The row's role, changeable in place: a re-grade is routine (that is the whole point of
+                         tiers), so it must not cost a revoke + re-invite. -->
+                    <Select
+                        :model-value="member.role"
+                        :options="[...ROLE_OPTIONS]"
+                        option-label="label"
+                        option-value="value"
+                        size="small"
+                        class="shrink-0 text-xs"
+                        :disabled="busy"
+                        :aria-label="`Role for ${member.email}`"
+                        @update:model-value="(role: GrantedRole) => setRole(member.email, role)"
+                    />
                     <span class="shrink-0 rounded-full px-1.5 py-0.5 text-2xs font-semibold" :class="badge(member.status).class">{{
                         badge(member.status).label
                     }}</span>
@@ -193,6 +247,10 @@ const revoke = async (target: string): Promise<void> => {
                     </p>
                     <div v-if="error" :class="cmp.alertDanger()">{{ error }}</div>
                     <form class="flex flex-col gap-2" @submit.prevent="invite">
+                        <!-- The tier goes with the address: an invite IS a role decision, and the sentence
+                             under the picker is where the model is taught. Collaborator preselected. -->
+                        <Segmented v-model="inviteRole" :options="[...ROLE_OPTIONS]" />
+                        <span class="text-xs text-muted">{{ ROLE_BLURB[inviteRole] }}</span>
                         <div class="flex items-center gap-2">
                             <input
                                 v-model="email"
@@ -221,9 +279,12 @@ const revoke = async (target: string): Promise<void> => {
                 <div class="flex items-center gap-2.5 px-4 py-3">
                     <Icon name="user" class="text-muted" />
                     <span class="min-w-0 flex-1 truncate text-sm text-content">{{ user?.email }}</span>
+                    <span class="shrink-0 rounded-full bg-primary-600/15 px-1.5 py-0.5 text-2xs font-semibold text-link">{{
+                        roleLabel(sandbox.active.value?.role ?? `viewer`)
+                    }}</span>
                     <span class="shrink-0 rounded-full bg-content/10 px-1.5 py-0.5 text-2xs font-semibold text-subtle">You</span>
                 </div>
-                <div class="px-4 py-3 text-xs text-muted">Only the sandbox owner can invite or remove people.</div>
+                <div class="px-4 py-3 text-xs text-muted">Only the sandbox owner can invite people or change roles.</div>
             </template>
         </RowGroup>
 
@@ -268,6 +329,8 @@ const revoke = async (target: string): Promise<void> => {
                         <div class="truncate text-sm font-medium text-content">{{ member.name ?? member.email }}</div>
                         <div class="truncate text-xs text-muted">{{ presenceActivity(member) }}</div>
                     </div>
+                    <!-- The role rides presence: who may do what is a fact every member gets to see. -->
+                    <span class="shrink-0 rounded-full bg-content/10 px-1.5 py-0.5 text-2xs font-medium text-subtle">{{ roleLabel(member.role) }}</span>
                     <span v-if="member.idle" class="shrink-0 text-2xs text-subtle">idle</span>
                 </div>
             </template>

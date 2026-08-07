@@ -45,7 +45,7 @@ const verifierFor = (clientId: string): IdTokenVerifier => {
 const authorizedEmails = async (services: Pick<Services, "workspace" | "members">): Promise<Set<string>> => {
     const owner = await fileOwnerStore(statePath(services.workspace.root, ".intentic/owner.json")).read();
     const members = await services.members.list();
-    return new Set([...(owner === undefined ? [] : [owner]), ...members].map((email) => email.toLowerCase()));
+    return new Set([...(owner === undefined ? [] : [owner]), ...members.map(({ email }) => email)].map((email) => email.toLowerCase()));
 };
 
 /* Resolve one message's sender. Throws SignInRequired when the Doorbell is sign-in-only and the token is

@@ -106,6 +106,9 @@ export const PersistedAgentSchema = z.object({
     // Per-agent override of the sandbox-wide autoLand setting, absent ⇒ inherit — see AgentSummarySchema.
     // Persisted because it must govern turns that finish with no browser attached (automations included).
     autoLand: z.boolean().optional(),
+    // A collaborator's standing ask for this work to be landed (see AgentSummarySchema.landRequested).
+    // Persisted so the ask survives a daemon restart — the maintainer it waits for may arrive tomorrow.
+    landRequested: z.object({ email: z.string(), name: z.string().optional(), at: z.number() }).optional(),
     // Why the last land refused — the EVIDENCE behind a conflicted card, which is a different thing from the
     // card's state: standing.ts reads this only to explain an outstanding delta, never to create one, so a
     // report whose delta has since gone stops being rendered without needing to be rewritten. Written and

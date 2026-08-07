@@ -260,7 +260,7 @@ const confirmRemove = async (): Promise<void> => {
                 <span v-if="option.lastSeenAt === null" class="shrink-0 rounded-full bg-content/10 px-1.5 py-0.5 text-2xs font-medium text-subtle"
                     >Setup</span
                 >
-                <span v-else-if="option.role === 'member'" class="shrink-0 rounded-full bg-content/10 px-1.5 py-0.5 text-2xs font-medium text-subtle"
+                <span v-else-if="option.role !== 'owner'" class="shrink-0 rounded-full bg-content/10 px-1.5 py-0.5 text-2xs font-medium text-subtle"
                     >Shared</span
                 >
                 <!-- WHICH DIGIT THIS ROW IS. A positional shortcut nobody can see the positions of is not a

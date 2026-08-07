@@ -5,6 +5,7 @@ import {
     AgentSummarySchema,
     FastModeStateSchema,
     LandConflictSchema,
+    MemberRoleSchema,
     PermissionModeSchema,
     RateLimitInfoSchema,
     SubagentKindSchema,
@@ -678,6 +679,9 @@ export const PresenceUserSchema = z.object({
     email: z.string(),
     name: z.string().optional(),
     picture: z.string().optional(),
+    // The caller's trust tier, resolved by the authorizer at connection time. On the roster so every member
+    // can see who may do what — and so a tab knows its OWN role without an owner-only lookup.
+    role: MemberRoleSchema,
     idle: z.boolean(),
     // Route/view name the tab is on ("workspace", "automations", "ext:<id>/<key>", …).
     view: z.string().optional(),

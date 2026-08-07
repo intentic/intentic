@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import { createAuthorizer, ForbiddenError, type IdTokenVerifier, type MembersStore, type OwnerStore } from "./auth.js";
+import { createAuthorizer, ForbiddenError, type IdTokenVerifier, type Member, type MembersStore, type OwnerStore } from "./auth.js";
 
 // In-memory owner store so the TOFU branching is exercised without touching disk.
 const memOwner = (initial?: string): OwnerStore => {
@@ -12,21 +12,22 @@ const memOwner = (initial?: string): OwnerStore => {
     };
 };
 
-// In-memory shared-access list (the emails allowed besides the owner).
-const memMembers = (initial: string[] = []): MembersStore => {
-    let emails = [...initial];
+// In-memory shared-access list (the identities allowed besides the owner, each with its granted role).
+const memMembers = (initial: Member[] = []): MembersStore => {
+    let members = [...initial];
     return {
-        list: async () => emails,
-        add: async (email) => {
-            if (!emails.includes(email)) {
-                emails = [...emails, email];
-            }
+        list: async () => members,
+        add: async (email, role) => {
+            members = [...members.filter((member) => member.email !== email), { email, role }];
         },
         remove: async (email) => {
-            emails = emails.filter((member) => member !== email);
+            members = members.filter((member) => member.email !== email);
         },
     };
 };
+
+// Most tests only care that an email is on the list; the role rides along.
+const granted = (...emails: string[]): Member[] => emails.map((email) => ({ email, role: "collaborator" as const }));
 
 // A fake verifier mapping a token straight to an email; an unknown token throws, standing in for a failed
 // JWKS/issuer/audience verification.
@@ -44,9 +45,9 @@ describe("createAuthorizer (owner TOFU + shared access)", () => {
     test("binds the first authenticated email as owner, then accepts only that owner", async () => {
         const owner = memOwner();
         const authz = createAuthorizer({ verify: verifierFor({ "tok-a": "a@x.com", "tok-b": "b@x.com" }), owner, members: memMembers() });
-        await expect(authz.authorize("tok-a", undefined)).resolves.toEqual({ email: "a@x.com" });
+        await expect(authz.authorize("tok-a", undefined)).resolves.toEqual({ email: "a@x.com", role: "owner" });
         expect(await owner.read()).toBe("a@x.com");
-        await expect(authz.authorize("tok-a", undefined)).resolves.toEqual({ email: "a@x.com" });
+        await expect(authz.authorize("tok-a", undefined)).resolves.toEqual({ email: "a@x.com", role: "owner" });
         await expect(authz.authorize("tok-b", undefined)).rejects.toBeInstanceOf(ForbiddenError);
     });
 
@@ -54,9 +55,9 @@ describe("createAuthorizer (owner TOFU + shared access)", () => {
         const authz = createAuthorizer({
             verify: verifierFor({ "tok-m": "m@x.com", "tok-x": "x@x.com" }),
             owner: memOwner("a@x.com"),
-            members: memMembers(["m@x.com"]),
+            members: memMembers(granted("m@x.com")),
         });
-        await expect(authz.authorize("tok-m", undefined)).resolves.toEqual({ email: "m@x.com" });
+        await expect(authz.authorize("tok-m", undefined)).resolves.toEqual({ email: "m@x.com", role: "collaborator" });
         await expect(authz.authorize("tok-x", undefined)).rejects.toBeInstanceOf(ForbiddenError);
     });
 
@@ -66,7 +67,7 @@ describe("createAuthorizer (owner TOFU + shared access)", () => {
             owner: memOwner("a@x.com"),
             members: memMembers(),
         });
-        await expect(authz.authorize("tok-a", undefined)).resolves.toEqual({ email: "a@x.com", name: "Ada", picture: "https://p/a.png" });
+        await expect(authz.authorize("tok-a", undefined)).resolves.toEqual({ email: "a@x.com", name: "Ada", picture: "https://p/a.png", role: "owner" });
     });
 
     test("rejects a missing bearer as an authentication failure, not Forbidden", async () => {
@@ -91,7 +92,7 @@ describe("createAuthorizer (owner TOFU + shared access)", () => {
         expect(await owner.read()).toBeUndefined();
         await authz.authorize("tok-a", "secret");
         expect(await owner.read()).toBe("a@x.com");
-        await expect(authz.authorize("tok-a", undefined)).resolves.toEqual({ email: "a@x.com" });
+        await expect(authz.authorize("tok-a", undefined)).resolves.toEqual({ email: "a@x.com", role: "owner" });
     });
 
     test("with an expectedOwner, only that identity may first-bind (mismatch is Forbidden, case-insensitive)", async () => {
@@ -132,7 +133,7 @@ describe("createAuthorizer (owner TOFU + shared access)", () => {
         const authz = createAuthorizer({
             verify: verifierFor({ "tok-a": "a@x.com", "tok-m": "m@x.com" }),
             owner: memOwner("a@x.com"),
-            members: memMembers(["m@x.com"]),
+            members: memMembers(granted("m@x.com")),
         });
         await expect(authz.authorizeOwner("tok-a")).resolves.toBeUndefined();
         await expect(authz.authorizeOwner("tok-m")).rejects.toBeInstanceOf(ForbiddenError);
@@ -150,10 +151,10 @@ describe("createAuthorizer (daemon-minted sessions)", () => {
             },
             session: verifierFor({ "sess-a": "a@x.com", "sess-m": "m@x.com", "sess-x": "x@x.com" }),
             owner: memOwner("a@x.com"),
-            members: memMembers(["m@x.com"]),
+            members: memMembers(granted("m@x.com")),
         });
-        await expect(authz.authorize("sess-a", undefined)).resolves.toEqual({ email: "a@x.com" });
-        await expect(authz.authorize("sess-m", undefined)).resolves.toEqual({ email: "m@x.com" });
+        await expect(authz.authorize("sess-a", undefined)).resolves.toEqual({ email: "a@x.com", role: "owner" });
+        await expect(authz.authorize("sess-m", undefined)).resolves.toEqual({ email: "m@x.com", role: "collaborator" });
         // A verified session is still subject to per-request membership — revoking a member kills live sessions.
         await expect(authz.authorize("sess-x", undefined)).rejects.toBeInstanceOf(ForbiddenError);
         await expect(authz.authorizeOwner("sess-a")).resolves.toBeUndefined();
@@ -167,7 +168,7 @@ describe("createAuthorizer (daemon-minted sessions)", () => {
             owner: memOwner("a@x.com"),
             members: memMembers(),
         });
-        await expect(authz.authorize("tok-a", undefined)).resolves.toEqual({ email: "a@x.com" });
+        await expect(authz.authorize("tok-a", undefined)).resolves.toEqual({ email: "a@x.com", role: "owner" });
         await expect(authz.authorize("bogus", undefined)).rejects.toThrow(/invalid token/);
     });
 
@@ -181,7 +182,7 @@ describe("createAuthorizer (daemon-minted sessions)", () => {
         });
         await expect(authz.authorize("sess-a", undefined)).rejects.toThrow(/invalid token/);
         expect(await owner.read()).toBeUndefined();
-        await expect(authz.authorize("tok-a", undefined)).resolves.toEqual({ email: "a@x.com" });
+        await expect(authz.authorize("tok-a", undefined)).resolves.toEqual({ email: "a@x.com", role: "owner" });
         expect(await owner.read()).toBe("a@x.com");
     });
 });

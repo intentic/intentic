@@ -1,5 +1,7 @@
 import { randomBytes } from "node:crypto";
 import { apiContract } from "@intentic-app/api-contract";
+import type { MemberRole } from "@intentic/sandbox-contract";
+import { GrantedRoleSchema } from "@intentic/sandbox-contract";
 import { implement, ORPCError } from "@orpc/server";
 import type { OrpcContext } from "../context.js";
 import { sha256Hex } from "@intentic/sandbox-contract/tunnel-ids";
@@ -39,7 +41,7 @@ const toSummary = (
         setupCodeClaimedAt: Date | null;
         token: string;
     },
-    role: "owner" | "member",
+    role: MemberRole,
     context: OrpcContext,
 ) => {
     const zone = intenticZoneOf(context);
@@ -61,19 +63,22 @@ export const sandboxRoutes = {
     // browser needs — token + daemonUrl included so it can reach each daemon directly.
     list: os.sandbox.list.handler(async ({ context }) => {
         const user = requireUser(context);
-        const [owned, shared] = await Promise.all([
+        const [owned, memberships] = await Promise.all([
             context.prisma.sandbox.findMany({ where: { ownerId: user.id }, orderBy: { createdAt: `asc` } }),
             // Only ACCEPTED memberships surface a shared sandbox — a pending invite must not reveal it before
             // the invitee accepts. Lowercased to match how invites are stored (and how the daemon verifies).
-            context.prisma.sandbox.findMany({
-                where: { members: { some: { email: user.email.toLowerCase(), acceptedAt: { not: null } } } },
-                orderBy: { createdAt: `asc` },
+            // Queried through the membership row (not `some`) because the row carries the caller's ROLE.
+            context.prisma.sandboxMember.findMany({
+                where: { email: user.email.toLowerCase(), acceptedAt: { not: null } },
+                include: { sandbox: true },
+                orderBy: { sandbox: { createdAt: `asc` } },
             }),
         ]);
         return {
             sandboxes: [
                 ...owned.map((sandbox) => toSummary(sandbox, `owner`, context)),
-                ...shared.map((sandbox) => toSummary(sandbox, `member`, context)),
+                // Same safety net as toInviteRecord: an unknown stored word degrades to the safest tier.
+                ...memberships.map((membership) => toSummary(membership.sandbox, GrantedRoleSchema.catch(`viewer`).parse(membership.role), context)),
             ],
         };
     }),

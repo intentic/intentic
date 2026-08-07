@@ -3,6 +3,7 @@ import type { DraftSummary } from "@intentic-app/api-contract";
 import { BrandMark, cmp, ConfirmDialog, formatTimestamp, InfoHint, Page, PageHeader, Row, RowGroup, StatusBadge, timeAgo } from "@intentic/ui";
 import Button from "primevue/button";
 import { computed, ref } from "vue";
+import { useRole } from "../composables/sandbox/useRole";
 import { attachmentPreview } from "../composables/chat/attachmentPreviews";
 import { useAsyncAction } from "../composables/useAsyncAction";
 import { useDrafts } from "../composables/extensions/useDrafts";
@@ -36,6 +37,10 @@ import ScheduleControl from "./drafts/ScheduleControl.vue";
  * do. */
 
 const { drafts, invalid, error: listError, save, remove } = useDrafts();
+// Publishing is the ship tier: below maintainer the queue is a read — the posts, their schedule, their
+// status — with every approve/reject/reschedule affordance absent (the daemon floors the draft mutations
+// the same way). Watching what is about to go out is exactly what a viewer is for.
+const { canShip } = useRole();
 const { enabled: enabledExtensions } = useExtensions();
 const { error: actionError, run } = useAsyncAction();
 
@@ -148,6 +153,7 @@ const fileName = (path: string): string => path.split(`/`).at(-1) ?? path;
                     <template #description><DraftMeta :name="platformName(draft)" :target="draft.target" /></template>
                     <template #control>
                         <Button
+                            v-if="canShip"
                             label="Retry"
                             size="small"
                             severity="secondary"
@@ -157,6 +163,7 @@ const fileName = (path: string): string => path.split(`/`).at(-1) ?? path;
                             <template #icon><Icon name="refresh" /></template>
                         </Button>
                         <button
+                            v-if="canShip"
                             type="button"
                             :class="cmp.iconButton(`h-8 w-8 hover:bg-danger/10 hover:text-danger`)"
                             :aria-label="`Reject ${headline(draft)}`"
@@ -178,7 +185,7 @@ const fileName = (path: string): string => path.split(`/`).at(-1) ?? path;
 
             <RowGroup v-if="needsReview.length > 0" label="Needs your review" :count="needsReview.length">
                 <template v-if="needsReview.length > 1" #actions>
-                    <button type="button" :class="cmp.linkButton()" :disabled="save.isPending.value" @click="approvingAll = true">
+                    <button v-if="canShip" type="button" :class="cmp.linkButton()" :disabled="save.isPending.value" @click="approvingAll = true">
                         Approve all {{ needsReview.length }}
                     </button>
                 </template>
@@ -193,6 +200,7 @@ const fileName = (path: string): string => path.split(`/`).at(-1) ?? path;
                     </template>
                     <template #control>
                         <button
+                            v-if="canShip"
                             type="button"
                             :class="cmp.iconButton(`h-8 w-8 hover:bg-danger/10 hover:text-danger`)"
                             :aria-label="`Reject ${headline(draft)}`"
@@ -201,7 +209,7 @@ const fileName = (path: string): string => path.split(`/`).at(-1) ?? path;
                         >
                             <Icon name="trash" />
                         </button>
-                        <Button label="Approve" size="small" :disabled="save.isPending.value" @click="patch(draft, { status: `approved` })">
+                        <Button v-if="canShip" label="Approve" size="small" :disabled="save.isPending.value" @click="patch(draft, { status: `approved` })">
                             <template #icon><Icon name="check" /></template>
                         </Button>
                     </template>
@@ -251,10 +259,11 @@ const fileName = (path: string): string => path.split(`/`).at(-1) ?? path;
                         <StatusBadge v-if="draft.status === `posting`" variant="info" label="posting" size="xs" :dot="true" />
                     </template>
                     <template v-if="draft.status === `approved`" #control>
-                        <div class="text-2xs text-subtle">
+                        <div v-if="canShip" class="text-2xs text-subtle">
                             <ScheduleControl :at="draft.scheduledAt" :label="headline(draft)" @change="patch(draft, { scheduledAt: $event })" />
                         </div>
                         <button
+                            v-if="canShip"
                             type="button"
                             :class="cmp.iconButton()"
                             :aria-label="`Put ${headline(draft)} back in review`"
@@ -264,6 +273,7 @@ const fileName = (path: string): string => path.split(`/`).at(-1) ?? path;
                             <Icon name="undo" />
                         </button>
                         <button
+                            v-if="canShip"
                             type="button"
                             :class="cmp.iconButton(`hover:bg-danger/10 hover:text-danger`)"
                             :aria-label="`Reject ${headline(draft)}`"
@@ -290,6 +300,7 @@ const fileName = (path: string): string => path.split(`/`).at(-1) ?? path;
                     </template>
                     <template #control>
                         <button
+                            v-if="canShip"
                             type="button"
                             :class="cmp.iconButton()"
                             :aria-label="`Remove ${headline(draft)} from the list`"

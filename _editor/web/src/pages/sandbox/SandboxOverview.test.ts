@@ -127,7 +127,7 @@ it(`says the tile does two things once a logo is set, and one thing before that`
 // A member sees the identity block but cannot change it, and the tile has to say so by being unreachable rather
 // than by failing on press — including for a keyboard, which is what `disabled` buys that a no-op handler does not.
 it(`keeps a member out of the tile entirely`, () => {
-    const tile = anyLogoTile(mount(sandboxRow({ role: `member` })));
+    const tile = anyLogoTile(mount(sandboxRow({ role: `collaborator` })));
     expect(tile.disabled).toBe(true);
     expect(tile.getAttribute(`aria-label`)).toBeNull();
 });

@@ -10,6 +10,7 @@ import { useBrowsersQuery } from "../composables/browser/browsersQuery";
 import { useSubagentsQuery } from "../composables/subagents/subagentsQuery";
 import { useCapabilities } from "../composables/extensions/useCapabilities";
 import { useDrafts } from "../composables/extensions/useDrafts";
+import { useRole } from "../composables/sandbox/useRole";
 import { useTerminalPanel } from "../composables/terminal/useTerminalPanel";
 import { useTerminalActivity } from "../composables/terminal/useTerminalActivity";
 import { commandShortcut, registerCommand } from "../composables/commands/useCommands";
@@ -362,6 +363,9 @@ const gridStyle = computed(() => {
 // anywhere in the shell). The panel itself docks into the slot below the workspace — tmux sessions are
 // sandbox-global facts, so shells and dev servers stay visible while navigating.
 const terminal = useTerminalPanel();
+// The ship-and-operate tier's tile: a PTY is a shell over the whole sandbox, so viewers and collaborators
+// don't get the affordance (the daemon refuses the WebSocket below maintainer regardless).
+const { canShip } = useRole();
 // The rail's terminal entry: the ONLY visible affordance for the panel (the Workspace view no longer carries a
 // toggle — terminals are sandbox-global, so their control belongs on the sandbox-global surface). It doubles as
 // an indicator: the badge counts live sessions and the tooltip names them, so the shells and dev servers the
@@ -500,8 +504,10 @@ useKeybindings();
             <!-- The terminal: toggles the one global panel from any view, highlighted while it is open, badged
                  with the number of live sessions (shells, dev servers, agent shells, jobs — background
                  processes are excluded, they never idle). Inert while the daemon is unreachable, like the view
-                 tiles: every session lives on that machine, so there is nothing to open without it. -->
+                 tiles: every session lives on that machine, so there is nothing to open without it. Absent
+                 below maintainer — a PTY is the whole sandbox, and the daemon refuses the socket anyway. -->
             <button
+                v-if="canShip"
                 type="button"
                 class="icon-rail-tile relative flex items-center justify-center rounded-lg text-muted transition-colors hover:bg-overlay hover:text-content"
                 :class="{ 'pointer-events-none opacity-40': !reachable, 'bg-primary-600/15 text-link': terminal.open.value }"

@@ -178,6 +178,12 @@ export interface AgentsRegistry {
     // it leaves updatedAt alone (configuring is not activity) and needs no running guard — the value is read
     // at turn COMPLETION, so flipping it mid-turn is exactly "hold THIS turn's work". Undefined ⇒ unknown id.
     readonly setAutoLand: (id: string, autoLand: boolean | null) => Promise<AgentSummary | undefined>;
+    // Stamp a collaborator's ask for this work to be landed (AgentSummarySchema.landRequested). Like setTitle
+    // it leaves updatedAt alone (asking is not the agent's activity) and needs no running guard — the ask is
+    // about whatever the branch holds when a maintainer answers it. Re-asking re-stamps (latest asker wins;
+    // the board shows one ask, not a queue). Cleared by the land or discard that answers it. Undefined ⇒
+    // unknown id.
+    readonly requestLand: (id: string, by: { email: string; name?: string }, at: number) => Promise<AgentSummary | undefined>;
     /* Forget which provider session this conversation was resuming — what a rewind does after restoring the
      * files, so the next turn opens a fresh thread instead of resuming one whose context describes edits that
      * are no longer on disk. That mismatch is the whole reason rewind drops messages rather than only
@@ -342,6 +348,7 @@ export const createAgentsRegistry = (store: AgentsStore, standings: LandStanding
             ...(entry.fast !== undefined ? { fast: entry.fast } : {}),
             ...(entry.account !== undefined ? { account: entry.account } : {}),
             ...(entry.autoLand !== undefined ? { autoLand: entry.autoLand } : {}),
+            ...(entry.landRequested !== undefined ? { landRequested: entry.landRequested } : {}),
             ...(base !== undefined ? { base } : {}),
             ...(costUsd > 0 ? { costUsd } : {}),
             ...(inputTokens > 0 ? { inputTokens } : {}),
@@ -665,6 +672,17 @@ export const createAgentsRegistry = (store: AgentsStore, standings: LandStanding
             broadcast();
             return summaryOf(next);
         },
+        requestLand: async (id, by, at) => {
+            const entry = entryOf(id);
+            if (entry === undefined) {
+                return undefined;
+            }
+            const next = { ...entry, landRequested: { email: by.email, ...(by.name !== undefined ? { name: by.name } : {}), at } };
+            replace(next);
+            await persist();
+            broadcast();
+            return summaryOf(next);
+        },
         clearSession: async (id) => {
             const entry = entryOf(id);
             if (entry === undefined) {
@@ -888,7 +906,9 @@ export const createAgentsRegistry = (store: AgentsStore, standings: LandStanding
             if (entry === undefined) {
                 return;
             }
-            const { conflicts: _cleared, ...carried } = entry;
+            // The land answers a pending ask along with clearing the old conflict report — a request chip that
+            // outlived the land it asked for would read as a second, phantom ask.
+            const { conflicts: _cleared, landRequested: _answered, ...carried } = entry;
             replace({
                 ...carried,
                 repos: [...outcome.repos],

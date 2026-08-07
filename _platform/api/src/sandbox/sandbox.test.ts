@@ -434,7 +434,10 @@ describe(`sandbox routes`, () => {
             intenticCloudflare: { apiToken: `cf-api`, zone: `intentic.dev` },
             secrets: { key: `` },
         } as OrpcContext[`config`];
-        const prisma = fakePrisma({ sandbox: { findMany: vi.fn().mockResolvedValueOnce(rows).mockResolvedValueOnce([]) } });
+        const prisma = fakePrisma({
+            sandbox: { findMany: vi.fn().mockResolvedValueOnce(rows) },
+            sandboxMember: { findMany: vi.fn().mockResolvedValue([]) },
+        });
 
         const { sandboxes } = await call(sandboxRoutes.list, undefined, { context: context({ prisma, config }) });
         expect(sandboxes.map((sandbox) => sandbox.providedTunnel)).toEqual([true, false, false]);
@@ -444,7 +447,10 @@ describe(`sandbox routes`, () => {
             intenticCloudflare: { apiToken: ``, zone: `intentic.dev` },
             secrets: { key: `` },
         } as OrpcContext[`config`];
-        const prismaAgain = fakePrisma({ sandbox: { findMany: vi.fn().mockResolvedValueOnce(rows).mockResolvedValueOnce([]) } });
+        const prismaAgain = fakePrisma({
+            sandbox: { findMany: vi.fn().mockResolvedValueOnce(rows) },
+            sandboxMember: { findMany: vi.fn().mockResolvedValue([]) },
+        });
         const { sandboxes: unflagged } = await call(sandboxRoutes.list, undefined, { context: context({ prisma: prismaAgain, config: tokenless }) });
         expect(unflagged.every((sandbox) => !sandbox.providedTunnel)).toBe(true);
     });

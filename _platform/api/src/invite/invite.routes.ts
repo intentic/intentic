@@ -23,10 +23,11 @@ export const inviteRoutes = {
         const sandbox = await requireOwnedSandbox(context, input.sandboxId);
         return listInvites(context, sandbox.id);
     }),
-    // Invite an email: record a PENDING grant with a one-shot token and email the accept link. Idempotent for a
-    // still-pending/expired invitee (re-mints the link); rejects if they already accepted. The row is written
-    // before the email so a send failure leaves a resendable pending invite. The owner's browser separately
-    // pushes this email to the daemon so an accepted invitee has access immediately.
+    // Invite an email: record a PENDING grant with its role and a one-shot token, and email the accept link.
+    // Idempotent for a still-pending/expired invitee (re-mints the link, re-grades the role); rejects if they
+    // already accepted (setRole is the re-grade for an active member). The row is written before the email so a
+    // send failure leaves a resendable pending invite. The owner's browser separately pushes this grant to the
+    // daemon so an accepted invitee has access immediately.
     create: os.invite.create.handler(async ({ context, input }) => {
         const user = requireUser(context);
         const sandbox = await requireOwnedSandbox(context, input.sandboxId);
@@ -39,8 +40,8 @@ export const inviteRoutes = {
         const inviteExpiresAt = new Date(Date.now() + INVITE_TTL_MS);
         await context.prisma.sandboxMember.upsert({
             where: { sandboxId_email: { sandboxId: sandbox.id, email } },
-            create: { sandboxId: sandbox.id, email, inviteToken: token, inviteExpiresAt },
-            update: { inviteToken: token, inviteExpiresAt },
+            create: { sandboxId: sandbox.id, email, role: input.role, inviteToken: token, inviteExpiresAt },
+            update: { role: input.role, inviteToken: token, inviteExpiresAt },
         });
         await sendInviteEmail(context.config, context.logger, { to: email, sandboxName: sandbox.name, inviterName: user.name, token });
         return listInvites(context, sandbox.id);
@@ -61,6 +62,19 @@ export const inviteRoutes = {
         const inviteExpiresAt = new Date(Date.now() + INVITE_TTL_MS);
         await context.prisma.sandboxMember.update({ where: { id: existing.id }, data: { inviteToken: token, inviteExpiresAt } });
         await sendInviteEmail(context.config, context.logger, { to: email, sandboxName: sandbox.name, inviterName: user.name, token });
+        return listInvites(context, sandbox.id);
+    }),
+    // Re-grade an existing invitee (pending or accepted) to a different role. The owner's browser separately
+    // pushes the same grant to the daemon — whose list is the enforced one, applied on the member's next
+    // request. Mirror-only here, like every other grant write.
+    setRole: os.invite.setRole.handler(async ({ context, input }) => {
+        const sandbox = await requireOwnedSandbox(context, input.sandboxId);
+        const email = input.email.toLowerCase();
+        const existing = await context.prisma.sandboxMember.findUnique({ where: { sandboxId_email: { sandboxId: sandbox.id, email } } });
+        if (!existing) {
+            throw new ORPCError(`NOT_FOUND`, { message: `No invite for ${email}.` });
+        }
+        await context.prisma.sandboxMember.update({ where: { id: existing.id }, data: { role: input.role } });
         return listInvites(context, sandbox.id);
     }),
     // Revoke access (pending or accepted). The owner's browser then removes the email from the daemon's

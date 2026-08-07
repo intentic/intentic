@@ -1,5 +1,7 @@
 import { randomBytes } from "node:crypto";
-import type { VerifiedIdentity } from "./auth.js";
+import type { MemberRole } from "@intentic/sandbox-contract";
+import { roleAtLeast } from "@intentic/sandbox-contract";
+import type { Caller } from "./auth.js";
 
 /* One-shot tickets for the WebSocket upgrades (/system/terminal, /system/browser-login, /system/browser-view).
  *
@@ -22,30 +24,38 @@ const TICKET_TTL_MS = 30_000;
 
 export interface WsTickets {
     // The raw ticket, handed to the browser once. Nothing else can reproduce it.
-    readonly mint: (identity: VerifiedIdentity) => string;
-    // The identity this ticket was minted for, consuming it; undefined when unknown, spent, or expired.
-    readonly redeem: (ticket: string) => VerifiedIdentity | undefined;
+    readonly mint: (caller: Caller) => string;
+    // The caller this ticket was minted for, consuming it; undefined when unknown, spent, or expired.
+    readonly redeem: (ticket: string) => Caller | undefined;
 }
 
-/* The gate the three upgrade handlers share: redeem the `?ticket=` on this URL or throw.
+/* The gate the three upgrade handlers share: redeem the `?ticket=` on this URL — and hold it to this socket's
+ * role floor — or throw.
  *
  * Throwing rather than returning a verdict is what keeps the call sites honest — each is inside a try that
  * closes the socket with 1008, so a handler cannot forget to check the answer. Loopback mode (no `auth`) has no
  * gate on these routes at all and passes straight through, exactly as it did when they verified bearers.
  *
- * The identity is redeemed and dropped: these sockets are owner/member-equivalent by nature (a PTY is a shell),
- * and none of the three shows presence or attributes anything to a caller. Redemption is the authorization. */
-export const redeemTicket = (services: { readonly auth: unknown; readonly wsTickets: WsTickets }, url: URL): void => {
+ * The floor lives at REDEMPTION, not at the mint: minting rides the ordinary bearer middleware where every
+ * member passes, and the three sockets it opens demand different tiers — the PTY is a shell (maintainer), the
+ * sign-in browser adds credentials (owner). A ticket carries the role it was minted under, so the check here is
+ * against the same resolved tier every HTTP route sees. The identity is then dropped: none of the three shows
+ * presence or attributes anything to a caller — redemption is the authorization. */
+export const redeemTicket = (services: { readonly auth: unknown; readonly wsTickets: WsTickets }, url: URL, floor: MemberRole): void => {
     if (services.auth === undefined) {
         return;
     }
-    if (services.wsTickets.redeem(url.searchParams.get("ticket") ?? "") === undefined) {
+    const caller = services.wsTickets.redeem(url.searchParams.get("ticket") ?? "");
+    if (caller === undefined) {
         throw new Error("invalid or expired websocket ticket");
+    }
+    if (!roleAtLeast(caller.role, floor)) {
+        throw new Error(`${floor} access required`);
     }
 };
 
 export const createWsTickets = (): WsTickets => {
-    const tickets = new Map<string, { identity: VerifiedIdentity; expiresAt: number }>();
+    const tickets = new Map<string, { identity: Caller; expiresAt: number }>();
     return {
         mint: (identity) => {
             const ticket = randomBytes(32).toString("base64url");

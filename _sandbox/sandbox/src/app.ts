@@ -1,5 +1,5 @@
 import { join } from "node:path";
-import { type EnrollHostInput, EnrollHostInputSchema, MachineReportSchema } from "@intentic/sandbox-contract";
+import { type EnrollHostInput, EnrollHostInputSchema, type GrantedRole, GrantedRoleSchema, MachineReportSchema, roleAtLeast } from "@intentic/sandbox-contract";
 import { sandboxIdFromToken } from "@intentic/sandbox-contract/tunnel-ids";
 import { OpenAPIHandler } from "@orpc/openapi/fetch";
 import { ORPCError } from "@orpc/server";
@@ -8,6 +8,7 @@ import { cors } from "hono/cors";
 import { secureHeaders } from "hono/secure-headers";
 import { bearerFrom, ForbiddenError, tokenEquals } from "./auth/auth.js";
 import { CONTROL_SCOPES } from "./auth/control-tokens.js";
+import { routeFloor } from "./auth/role-floor.js";
 import { grantsOf } from "./auth/grants.js";
 import { streamAgent } from "./agent/agent.routes.js";
 import { fireAutomation, PAYLOAD_MAX } from "./automations/scheduler.js";
@@ -110,6 +111,17 @@ const hostMcpPath = /^\/mcp\/hosts\/[^/]+$/;
 const memberEmail = async (c: Context): Promise<string | undefined> => {
     const body = (await c.req.json().catch(() => undefined)) as { email?: unknown } | undefined;
     return typeof body?.email === "string" ? body.email.toLowerCase() : undefined;
+};
+
+// A grant request's email + role, or undefined when either is absent/malformed. The role is required — a
+// grant IS a role decision, and a default picked here would be a policy nobody chose.
+const memberGrant = async (c: Context): Promise<{ email: string; role: GrantedRole } | undefined> => {
+    const body = (await c.req.json().catch(() => undefined)) as { email?: unknown; role?: unknown } | undefined;
+    const role = GrantedRoleSchema.safeParse(body?.role);
+    if (typeof body?.email !== "string" || !role.success) {
+        return undefined;
+    }
+    return { email: body.email.toLowerCase(), role: role.data };
 };
 
 /* The routes that answer BEFORE the boot chain converges (services.boot, driven by main.ts).
@@ -310,7 +322,16 @@ export const createApp = (services: Services): Hono<AppEnv> => {
                     : c.json({ error: "unauthorized" }, 401);
             }
             try {
-                c.set("identity", await authorize(bearerFrom(c.req.header("authorization")), c.req.header("x-intentic-connect") ?? undefined));
+                const caller = await authorize(bearerFrom(c.req.header("authorization")), c.req.header("x-intentic-connect") ?? undefined);
+                c.set("identity", caller);
+                /* The role floor (auth/role-floor.ts), after authentication and in one place: a member below a
+                 * route's tier gets a 403 that NAMES the tier, so the browser can render "ask a maintainer"
+                 * instead of a bare refusal. The owner-only routes keep their in-route gates besides — this
+                 * floor is what keeps a viewer read-only and a collaborator off the ship controls. */
+                const floor = routeFloor(c.req.method, c.req.path);
+                if (!roleAtLeast(caller.role, floor)) {
+                    return c.json({ error: `${floor} access required`, floor }, 403);
+                }
             } catch (error) {
                 // 403 = verified identity that isn't the owner/a member — the browser renders "no access" for it,
                 // distinct from 401 (missing/invalid token), which it treats like any other unreachable daemon.
@@ -669,19 +690,19 @@ export const createApp = (services: Services): Hono<AppEnv> => {
         if (denied !== undefined) {
             return denied;
         }
-        return c.json({ emails: await services.members.list() });
+        return c.json({ members: await services.members.list() });
     });
     app.post("/members", async (c) => {
         const denied = await ownerDenied(c);
         if (denied !== undefined) {
             return denied;
         }
-        const email = await memberEmail(c);
-        if (email === undefined) {
-            return c.json({ error: "email required" }, 400);
+        const grant = await memberGrant(c);
+        if (grant === undefined) {
+            return c.json({ error: "email and role required" }, 400);
         }
-        await services.members.add(email);
-        return c.json({ emails: await services.members.list() });
+        await services.members.add(grant.email, grant.role);
+        return c.json({ members: await services.members.list() });
     });
     app.delete("/members", async (c) => {
         const denied = await ownerDenied(c);
@@ -693,7 +714,7 @@ export const createApp = (services: Services): Hono<AppEnv> => {
             return c.json({ error: "email required" }, 400);
         }
         await services.members.remove(email);
-        return c.json({ emails: await services.members.list() });
+        return c.json({ members: await services.members.list() });
     });
 
     // The agent-proposed overlay Dockerfile (.intentic/environment.Dockerfile). Members see the state; only the

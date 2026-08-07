@@ -10,7 +10,7 @@ import {
 } from "@intentic/sandbox-contract";
 import { AGENT_SESSION_PREFIX, agentSessionName, JOB_SESSION_PREFIX, WEB_SESSION_PREFIX } from "@intentic/sandbox-contract/session-names";
 import { implement, ORPCError } from "@orpc/server";
-import { type VerifiedIdentity, bearerFrom } from "../auth/auth.js";
+import { type Caller, bearerFrom } from "../auth/auth.js";
 import { listSubagentSessions } from "../agent/subagents.js";
 import { manageMachineSandbox } from "../hosts/machine-reports.js";
 import { closeBrowserSession, listBrowserSessions } from "../browser/browser-sessions.js";
@@ -79,7 +79,7 @@ export const paneStates = (stdout: string): Map<string, PaneState> => {
 async function* systemEvents(
     services: Services,
     signal: AbortSignal | undefined,
-    member: { clientId: string; identity: VerifiedIdentity } | undefined,
+    member: { clientId: string; identity: Caller } | undefined,
 ): AsyncGenerator<SystemEvent> {
     const abort = signal ?? new AbortController().signal;
     if (abort.aborted) {

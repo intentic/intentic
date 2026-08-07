@@ -109,8 +109,8 @@ const patchAgent = (id: string, patch: Partial<AgentSummary>): AgentSummary | un
 
 // Who is in the workspace. The second one is the whole sharing story told in one frame — and the first thing a
 // minimal recording drops, because an avatar nobody asked for is furniture.
-const OWNER: PresenceUser = { clientId: `demo-owner`, email: `ada@acme.dev`, name: `Ada Lovelace`, idle: false, view: `workspace` };
-const TEAMMATE: PresenceUser = { clientId: `demo-mate`, email: `grace@acme.dev`, name: `Grace Hopper`, idle: true, view: `agents` };
+const OWNER: PresenceUser = { clientId: `demo-owner`, email: `ada@acme.dev`, name: `Ada Lovelace`, role: `owner`, idle: false, view: `workspace` };
+const TEAMMATE: PresenceUser = { clientId: `demo-mate`, email: `grace@acme.dev`, name: `Grace Hopper`, role: `collaborator`, idle: true, view: `agents` };
 
 /* The /events stream: the hello identity frame, then a heartbeat inside the browser's 10s watchdog, plus the
  * roster and the presence of whoever this mode has in the workspace.

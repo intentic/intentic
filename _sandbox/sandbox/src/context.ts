@@ -1,11 +1,11 @@
 import type { Context } from "hono";
-import type { VerifiedIdentity } from "./auth/auth.js";
+import type { Caller } from "./auth/auth.js";
 
 // The Hono env: the bearer middleware stashes the caller's verified identity so the oRPC context below can
 // carry it to handlers (presence needs to know WHO is connected). Middleware-exempt paths, panel-token
 // callers, and loopback mode leave it unset — those callers have no member identity to show.
 export interface AppEnv {
-    Variables: { identity?: VerifiedIdentity };
+    Variables: { identity?: Caller };
 }
 
 // Per-request context handed to every oRPC handler. Auth + CORS run as Hono middleware ahead of the oRPC
@@ -16,7 +16,7 @@ export interface OrpcContext {
     headers: Headers;
     method: string;
     url: string;
-    identity?: VerifiedIdentity;
+    identity?: Caller;
 }
 
 export const buildOrpcContext = (c: Context<AppEnv>): OrpcContext => {

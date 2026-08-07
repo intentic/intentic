@@ -147,6 +147,26 @@ export const createAgentsRoutes = (services: Services) => {
             }
             return summary;
         }),
+        /* A collaborator's ask for a land they may not perform (role floors put land/discard at maintainer).
+         * Isolated agents only — a workspace conversation has no land for anyone to perform. Legal mid-turn
+         * (no notRunning): the ask is about whatever the branch holds when a maintainer answers it, exactly
+         * like flipping autoLand. Loopback mode has no identity to attribute the ask to — and no collaborators
+         * to make one. */
+        requestLand: i.requestLand.handler(async ({ input, context }) => {
+            isolatedEntryOf(input.id);
+            if (context.identity === undefined) {
+                throw new ORPCError("UNAUTHORIZED", { message: "no verified identity to attribute the request to" });
+            }
+            const summary = await services.agents.requestLand(
+                input.id,
+                { email: context.identity.email, ...(context.identity.name !== undefined ? { name: context.identity.name } : {}) },
+                Date.now(),
+            );
+            if (summary === undefined) {
+                throw new ORPCError("NOT_FOUND", { message: "unknown agent" });
+            }
+            return summary;
+        }),
         // The read marker behind the card's unread badge. Daemon-side, so the badge stays cleared after a
         // browser cache wipe and clears on the other devices the moment one of them opens the agent.
         seen: i.seen.handler(async ({ input }) => {

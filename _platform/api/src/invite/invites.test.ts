@@ -36,7 +36,7 @@ describe(`inviteAcceptDecision`, () => {
 
 describe(`toInviteRecord`, () => {
     it(`shapes the row for the wire, dropping expiry to undefined when absent`, () => {
-        const record = toInviteRecord({ email: `a@b.com`, acceptedAt: past, inviteExpiresAt: null, createdAt: past }, now);
-        expect(record).toEqual({ email: `a@b.com`, status: `accepted`, invitedAt: past.toISOString(), expiresAt: undefined });
+        const record = toInviteRecord({ email: `a@b.com`, role: `maintainer`, acceptedAt: past, inviteExpiresAt: null, createdAt: past }, now);
+        expect(record).toEqual({ email: `a@b.com`, role: `maintainer`, status: `accepted`, invitedAt: past.toISOString(), expiresAt: undefined });
     });
 });

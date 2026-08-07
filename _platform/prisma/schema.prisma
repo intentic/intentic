@@ -193,6 +193,11 @@ model SandboxMember {
     sandboxId       String
     sandbox         Sandbox   @relation(fields: [sandboxId], references: [id], onDelete: Cascade)
     email           String
+    // The granted trust tier (GrantedRoleSchema: viewer/collaborator/maintainer — never owner). The daemon's
+    // members list is the enforced copy; this column is what the roster renders and what sandbox.list reports
+    // as the member's own role. A bare string (not an enum) so re-grading vocabulary is a contract change, not
+    // a database migration.
+    role            String    @default("collaborator")
     inviteToken     String?   @unique
     inviteExpiresAt DateTime?
     acceptedAt      DateTime?

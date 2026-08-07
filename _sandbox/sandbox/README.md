@@ -36,6 +36,7 @@ The **per-project AI-agent dev daemon** — a Docker image that runs as the proj
   slowest of those actions pulls an image for minutes; the scope behind it is checked on the machine and never
   here.
 - [src/guard/guard.ts](src/guard/guard.ts) — the one gate every gated action consults (fail-closed); [src/guard/actions.ts](src/guard/actions.ts) is the catalog of decisions, and [src/guard/command-gate.ts](src/guard/command-gate.ts) is the one that can park a running turn on a card.
+- [src/auth/role-floor.ts](src/auth/role-floor.ts) — the minimum trust tier per route, in one table. [src/auth/auth.ts](src/auth/auth.ts) resolves who a caller is (owner TOFU, members with granted roles); the floor decides what that tier reaches.
 - [src/workflows](src/workflows) — workflow scheduling, immutable run snapshots, restart recovery, run-ledger
   retention, and complete handoff artifacts; [src/loops](src/loops) drives each individual step.
 
@@ -46,7 +47,7 @@ The agent half of the dev plane. The browser talks to this daemon **directly** o
 ## Conventions & gotchas
 
 - The Claude credential lives in the sandbox's own store (connected via the daemon's `/claude/*` flow), resolved + injected into the SDK per turn — never held by the platform.
-- The daemon authenticates every request itself (the owner's Google ID token, verified via Google's JWKS), since it is reached directly over its public tunnel — it owns its own auth.
+- The daemon authenticates every request itself (a Google ID token or a daemon-minted session, verified per request), since it is reached directly over its public tunnel — it owns its own auth. Access is tiered: the owner binds on first sign-in, and every invited member holds a granted role (viewer / collaborator / maintainer) stored in `.intentic/members.json`. The bearer middleware holds each request to its route's floor (`src/auth/role-floor.ts`): viewers read, collaborators drive agents (their lands become requests on the agent card), maintainers ship and get the terminal, and credentials-adjacent surfaces stay owner-only. The platform only mirrors the grants; this daemon is the enforcer.
 - Built on Hono + the Claude Agent SDK + zod; `runAgent`'s `QueryFn` is injectable so co-located `*.test.ts` run without the SDK or network.
 - A land's product is **uncommitted** — it patches the main working tree and moves no commit. So every reading taken between two shas (`standing.ts`) is blind to the user discarding it afterwards; `landed-presence.ts` is the one that asks the working tree, and it is what keeps a card from claiming work is in a workspace that no longer holds it.
 - Workflow run artifacts are shared state under `.intentic/workflow-runs/`. The JSON ledger retains every active

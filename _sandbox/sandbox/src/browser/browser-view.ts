@@ -40,7 +40,9 @@ export const createBrowserViewRoute = (services: Services) =>
             onOpen: async (_event, ws) => {
                 const url = new URL(c.req.url);
                 try {
-                    redeemTicket(services, url);
+                    // The agent's browser may sit signed in as the owner — taking its wheel is operating,
+                    // not watching (a collaborator still sees the agent's own screenshots in the chat).
+                    redeemTicket(services, url, "maintainer");
                 } catch (err) {
                     services.logger.warn({ err }, "browser-view ticket rejected");
                     ws.close(1008, "unauthorized");

@@ -129,7 +129,7 @@ test("system.session in loopback mode (no auth, no identity) answers 401 — the
  * URL gets a ticket. This route is the reason no bearer appears in a query string any more, which means it has
  * to be gated exactly like every other authenticated route — by the middleware, on a header. */
 test("POST /system/ws-ticket mints a one-shot ticket for the verified caller, and 401s an unauthenticated one", async () => {
-    const app = createApp(services({ auth: { authorize: async () => ({ email: "o@x.com" }), authorizeOwner: rejectForbidden } }));
+    const app = createApp(services({ auth: { authorize: async () => ({ email: "o@x.com", role: "owner" as const }), authorizeOwner: rejectForbidden } }));
     const response = await postJson(app, "/system/ws-ticket");
     expect(response.status).toBe(200);
     const { ticket } = (await response.json()) as { ticket: string };
@@ -150,7 +150,7 @@ test("/system/ws-ticket 404s in loopback mode — no identity to bind, and the u
 test("POST /system/sessions/revoke re-keys the session signer, and only the owner may ask", async () => {
     let rotations = 0;
     const auth = {
-        authorize: async () => ({ email: "member@x.com" }),
+        authorize: async () => ({ email: "member@x.com", role: "maintainer" as const }),
         authorizeOwner: rejectForbidden,
         rotateSessions: async () => void (rotations += 1),
     };
@@ -233,7 +233,7 @@ test("system.hostTunnel returns the platform's tunnel and translates its failure
 test("POST /enroll rejects a wrong connect token and 412s until DevOps (when auth is enforced)", async () => {
     const app = createApp(
         services({
-            auth: { authorize: async () => ({ email: "a@x.com" }), authorizeOwner: async () => {} },
+            auth: { authorize: async () => ({ email: "a@x.com", role: "owner" as const }), authorizeOwner: async () => {} },
             config: { ...testConfig, connectToken: "ct" },
         }),
     );
@@ -972,7 +972,7 @@ test("environment: members read the state, approve/reject are owner-gated, appro
     // A member (bearer passes, owner check refuses as Forbidden) sees the state but can't approve or reject —
     // a verified non-owner is 403, not 401.
     const memberApp = createApp(
-        services({ files: memoryFiles, auth: { authorize: async () => ({ email: "member@example.com" }), authorizeOwner: rejectForbidden } }),
+        services({ files: memoryFiles, auth: { authorize: async () => ({ email: "member@example.com", role: "maintainer" as const }), authorizeOwner: rejectForbidden } }),
     );
     const seen = await memberApp.request("/environment");
     expect(seen.status).toBe(200);

@@ -1,5 +1,5 @@
 import type { PresenceReport, PresenceUser } from "@intentic/sandbox-contract";
-import type { VerifiedIdentity } from "../auth/auth.js";
+import type { Caller, VerifiedIdentity } from "../auth/auth.js";
 
 // Who's connected right now, keyed by per-connection clientId. Ephemeral by design: an entry lives exactly as
 // long as its /events connection — registered when the stream starts, removed in its finally — so the roster
@@ -19,10 +19,11 @@ const broadcast = (): void => {
     }
 };
 
-export const registerPresence = (clientId: string, identity: VerifiedIdentity): (() => void) => {
+export const registerPresence = (clientId: string, identity: Caller): (() => void) => {
     entries.set(clientId, {
         clientId,
         email: identity.email,
+        role: identity.role,
         idle: false,
         ...(identity.name !== undefined ? { name: identity.name } : {}),
         ...(identity.picture !== undefined ? { picture: identity.picture } : {}),
@@ -45,6 +46,7 @@ export const updatePresence = (identity: VerifiedIdentity, report: PresenceRepor
     entries.set(report.clientId, {
         clientId: entry.clientId,
         email: entry.email,
+        role: entry.role,
         idle: report.idle,
         ...(entry.name !== undefined ? { name: entry.name } : {}),
         ...(entry.picture !== undefined ? { picture: entry.picture } : {}),

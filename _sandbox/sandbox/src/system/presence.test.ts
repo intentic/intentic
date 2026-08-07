@@ -11,9 +11,9 @@ describe("presence registry", () => {
         const unsubscribe = subscribePresence((users) => frames.push(users));
         expect(frames).toHaveLength(1);
 
-        const unregister = registerPresence("c1", { email: "a@x.com", name: "Ada", picture: "https://p/a.png" });
+        const unregister = registerPresence("c1", { email: "a@x.com", name: "Ada", picture: "https://p/a.png", role: "owner" });
         const joined = frames.at(-1)?.find((user) => user.clientId === "c1");
-        expect(joined).toEqual({ clientId: "c1", email: "a@x.com", name: "Ada", picture: "https://p/a.png", idle: false });
+        expect(joined).toEqual({ clientId: "c1", email: "a@x.com", name: "Ada", picture: "https://p/a.png", role: "owner", idle: false });
 
         unregister();
         expect(frames.at(-1)?.some((user) => user.clientId === "c1")).toBe(false);
@@ -21,7 +21,7 @@ describe("presence registry", () => {
     });
 
     test("update full-replaces the activity fields and broadcasts", () => {
-        const unregister = registerPresence("c2", { email: "a@x.com" });
+        const unregister = registerPresence("c2", { email: "a@x.com", role: "collaborator" });
         const frames: PresenceUser[][] = [];
         const unsubscribe = subscribePresence((users) => frames.push(users));
 
@@ -33,6 +33,7 @@ describe("presence registry", () => {
         expect(frames.at(-1)?.find((user) => user.clientId === "c2")).toEqual({
             clientId: "c2",
             email: "a@x.com",
+            role: "collaborator",
             idle: true,
             view: "automations",
         });
@@ -41,7 +42,7 @@ describe("presence registry", () => {
     });
 
     test("ignores an update for an unknown clientId or from a different member", () => {
-        const unregister = registerPresence("c3", { email: "a@x.com" });
+        const unregister = registerPresence("c3", { email: "a@x.com", role: "collaborator" });
         const frames: PresenceUser[][] = [];
         const unsubscribe = subscribePresence((users) => frames.push(users));
 

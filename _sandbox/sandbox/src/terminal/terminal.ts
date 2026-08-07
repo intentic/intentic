@@ -103,7 +103,8 @@ export const createTerminalRoute = (services: Services) =>
             onOpen: async (_event, ws) => {
                 const url = new URL(c.req.url);
                 try {
-                    redeemTicket(services, url);
+                    // A PTY is a shell over the whole sandbox — the ship-and-operate tier, not the driving one.
+                    redeemTicket(services, url, "maintainer");
                 } catch (err) {
                     // The close frame only says "unauthorized"; whether the ticket was unknown, already spent or
                     // expired is only visible here.

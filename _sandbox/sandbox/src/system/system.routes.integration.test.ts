@@ -112,7 +112,7 @@ test("system.session exchanges the verified bearer for a daemon-minted session",
         createApp(
             services({
                 auth: {
-                    authorize: async () => ({ email: "o@x.com" }),
+                    authorize: async () => ({ email: "o@x.com", role: "owner" as const }),
                     authorizeOwner: rejectForbidden,
                     mintSession: async (identity: { email: string }) => ({ token: `sess-${identity.email}`, expiresAt: 42 }),
                 },
@@ -126,7 +126,7 @@ test("control-token mint/list/revoke are owner-gated plain routes; mint returns 
     const minted: { label: string; scope: string }[] = [];
     const app = createApp(
         services({
-            auth: { authorize: async () => ({ email: "o@x.com" }), authorizeOwner: async () => {} },
+            auth: { authorize: async () => ({ email: "o@x.com", role: "owner" as const }), authorizeOwner: async () => {} },
             controlTokens: {
                 mint: async (label, scope) => {
                     minted.push({ label, scope });
@@ -157,7 +157,7 @@ test("control-token mint/list/revoke are owner-gated plain routes; mint returns 
 });
 
 test("minting without a usable scope is refused rather than defaulted", async () => {
-    const app = createApp(services({ auth: { authorize: async () => ({ email: "o@x.com" }), authorizeOwner: async () => {} } }));
+    const app = createApp(services({ auth: { authorize: async () => ({ email: "o@x.com", role: "owner" as const }), authorizeOwner: async () => {} } }));
     const mintWith = (body: unknown) =>
         app.request("/system/control/tokens", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
     // Absent, misspelled, and not-a-string all land the same way: a 400 naming the scopes that exist. No
@@ -184,7 +184,7 @@ test("presence: an /events connection joins the roster and a /system/presence re
     // registry → stream.
     const app = createApp(
         services({
-            auth: { authorize: async () => ({ email: "a@x.com", name: "Ada", picture: "https://p/a.png" }), authorizeOwner: rejectForbidden },
+            auth: { authorize: async () => ({ email: "a@x.com", name: "Ada", picture: "https://p/a.png", role: "maintainer" as const }), authorizeOwner: rejectForbidden },
         }),
     );
     const client = clientFor(app);
@@ -204,10 +204,10 @@ test("presence: an /events connection joins the roster and a /system/presence re
         }
     };
     // The subscribe-time snapshot: this connection's own entry, identity from the verified token.
-    expect(await nextPresence()).toEqual([{ clientId: "seam-1", email: "a@x.com", name: "Ada", picture: "https://p/a.png", idle: false }]);
+    expect(await nextPresence()).toEqual([{ clientId: "seam-1", email: "a@x.com", name: "Ada", picture: "https://p/a.png", role: "maintainer", idle: false }]);
     await client.system.presence({ clientId: "seam-1", idle: true, view: "workspace", path: "src/app.ts" });
     expect(await nextPresence()).toEqual([
-        { clientId: "seam-1", email: "a@x.com", name: "Ada", picture: "https://p/a.png", idle: true, view: "workspace", path: "src/app.ts" },
+        { clientId: "seam-1", email: "a@x.com", name: "Ada", picture: "https://p/a.png", role: "maintainer", idle: true, view: "workspace", path: "src/app.ts" },
     ]);
     controller.abort();
 });
@@ -370,7 +370,7 @@ test("POST /system/sync/pair: the owner may mint a sync pairing, a member is cap
     expect(await (await owner.request("/system/sync/pair", { method: "POST" })).json()).toMatchObject({ mode: "sync" });
     expect(await (await owner.request("/system/sync/pair?mode=mirror", { method: "POST" })).json()).toMatchObject({ mode: "mirror" });
     // Member (authorized but not owner): forced to mirror even when asking for sync.
-    const member = createApp(services({ auth: { authorize: async () => ({ email: "m@x.com" }), authorizeOwner: rejectForbidden } }));
+    const member = createApp(services({ auth: { authorize: async () => ({ email: "m@x.com", role: "maintainer" as const }), authorizeOwner: rejectForbidden } }));
     const asMember = (query = "") => member.request(`/system/sync/pair${query}`, { method: "POST", headers: { authorization: "Bearer m" } });
     expect(await (await asMember()).json()).toMatchObject({ mode: "mirror" });
     expect(await (await asMember("?mode=sync")).json()).toMatchObject({ mode: "mirror" });

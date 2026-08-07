@@ -1,4 +1,4 @@
-import type { PresenceUser } from "@intentic/sandbox-contract";
+import type { MemberRole, PresenceUser } from "@intentic/sandbox-contract";
 import { computed, ref } from "vue";
 import { sandboxRequest } from "./sandbox/sandboxClient";
 import { useAuth } from "./useAuth";
@@ -21,6 +21,9 @@ export interface PresenceMember {
     readonly email: string;
     readonly name?: string;
     readonly picture?: string;
+    // The member's trust tier, resolved by the daemon at connection time — every tab of a member carries the
+    // same one, so the first tab's answer is the member's.
+    readonly role: MemberRole;
     // Idle only when EVERY tab is hidden — one visible tab means they're here.
     readonly idle: boolean;
     readonly tabs: readonly PresenceUser[];
@@ -49,6 +52,7 @@ export const presenceOthers = computed<readonly PresenceMember[]>(() => {
             email: first.email,
             ...(first.name !== undefined ? { name: first.name } : {}),
             ...(first.picture !== undefined ? { picture: first.picture } : {}),
+            role: first.role,
             idle: tabs.every((tab) => tab.idle),
             tabs,
         });

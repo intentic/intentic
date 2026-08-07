@@ -33,7 +33,7 @@ export function useDesktopSync() {
     // Whether the signed-in user owns the active sandbox. Members get the mirror-only experience (the daemon
     // enforces it; this just keeps the card honest up front). Defaults to the owner rendering until the list
     // loads — the same assumption the card always made, and the daemon corrects a wrong guess at mint time.
-    const isOwner = computed(() => active.value?.role !== `member`);
+    const isOwner = computed(() => (active.value?.role ?? `owner`) === `owner`);
 
     const enrolled = ref(false);
     // The machine currently holding sync (the enrolled key's comment), or undefined when none — for the
