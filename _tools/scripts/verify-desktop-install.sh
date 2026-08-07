@@ -9,7 +9,8 @@
 #
 # It needs a Docker daemon and nothing else — no display, no privileges, no secrets. Every artifact present is
 # checked; the Windows installer is not among them, because running it needs Windows (the NSIS package's
-# contents are covered by verify-desktop-bundle.sh, and its install is the Windows runner's tier).
+# contents are covered by verify-desktop-bundle.sh, and its install by @intentic/desktop-smoke-windows on the
+# Windows runner).
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"

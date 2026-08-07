@@ -61,7 +61,10 @@ resolve a quoted `Exec=` — which is what the deep-link plugin writes when it r
 ## Not covered here
 
 The Windows NSIS installer — running it needs Windows. Its *contents* are checked by
-`verify-desktop-bundle.sh` (7z reads the NSIS archive), and its install belongs to the Windows runner tier.
+`verify-desktop-bundle.sh` (7z reads the NSIS archive), and its install, launch, deep link and uninstall are
+[`@intentic/desktop-smoke-windows`](../desktop-smoke-windows), which asserts this same journey on a real
+Windows session. The two files are deliberately the same shape; the day they disagree about what the setup
+screen is called, one of them is silently testing nothing.
 
 The hosted SPA does not load here either: `INTENTIC_APP_URL` points at a stub baked into the image, which keeps
 this tier hermetic. Whether the real app renders in WebKitGTK is the nightly tier's job

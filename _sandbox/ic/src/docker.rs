@@ -31,15 +31,51 @@ pub fn daemon_reachable() -> bool {
     ok(&["version", "--format", "{{.Server.Version}}"])
 }
 
-/// The connect preflight: docker must be present AND reachable, with the one diagnosis worth making — a
-/// running daemon this user may not TALK to is indistinguishable from a stopped one at the CLI, except that
-/// the socket is there to be seen. Docker installs it root-owned with a `docker` group, so naming the group
-/// is the actual fix; "start Docker" would send the user to restart a daemon that is already up.
+/// Which kind of container this daemon runs, lowercased — `linux`, or `windows` on a Docker Desktop switched
+/// to Windows containers. `docker version` rather than `docker info` for the reason [`daemon_reachable`]
+/// gives: same fast round-trip, no CLI-plugin aggregation to hang on.
+pub fn server_os() -> Option<String> {
+    try_capture(&["version", "--format", "{{.Server.Os}}"])
+        .map(|value| value.trim().to_lowercase())
+        .filter(|value| !value.is_empty())
+}
+
+/* A REACHABLE DAEMON THAT CANNOT RUN OUR CONTAINERS.
+ *
+ * A sandbox is a Linux container, and until now nothing on any path asked whether the daemon could run one.
+ * Every probe this file makes — the CLI is present, the daemon answers — succeeds against a Docker Desktop in
+ * WINDOWS-container mode, and the run then dies several minutes later on an image pull, with a manifest error
+ * that names no remedy and reads as a broken release.
+ *
+ * That is not a corner case: Windows-container mode is the DEFAULT of the docker preinstalled on Windows CI
+ * images, and it is one tray-menu click away on any developer's machine. The check is a string comparison; the
+ * value it adds is the sentence.
+ *
+ * An unknown platform is NOT a refusal. A daemon too old to report `Server.Os`, or a context that answers
+ * something unexpected, is a daemon that has done nothing wrong — and a preflight that refuses what it cannot
+ * identify would turn "we could not tell" into "you are misconfigured", which is the failure mode this whole
+ * function exists to avoid. Only an explicit non-linux answer refuses. */
+pub fn wrong_container_platform(server_os: Option<&str>) -> Option<String> {
+    match server_os {
+        Some(os) if os != "linux" => Some(format!(
+            "the docker daemon is running, but it runs {os} containers — a sandbox is a Linux container.\n       on Windows: switch Docker Desktop to Linux containers (right-click the tray icon → \"Switch to Linux containers\"), then re-run."
+        )),
+        _ => None,
+    }
+}
+
+/// The connect preflight: docker must be present AND reachable AND able to run our containers, with the
+/// diagnoses worth making — a running daemon this user may not TALK to is indistinguishable from a stopped one
+/// at the CLI, except that the socket is there to be seen. Docker installs it root-owned with a `docker` group,
+/// so naming the group is the actual fix; "start Docker" would send the user to restart a daemon already up.
 pub fn require_daemon() -> Result<()> {
     if !cli_present() {
         bail!("docker is not installed. Install Docker (https://docs.docker.com/get-docker/), then re-run — or run the connect one-liner, which offers to install it.");
     }
     if daemon_reachable() {
+        if let Some(problem) = wrong_container_platform(server_os().as_deref()) {
+            bail!("{}", problem);
+        }
         return Ok(());
     }
     #[cfg(unix)]
@@ -327,4 +363,39 @@ pub fn pull(image: &str, log: &Log) -> Result<()> {
     bail!(
         "{image} could not be pulled without a login. An \"unauthorized\" or \"denied\" above means the image's registry package is not public — that is a packaging fault on our side, not a problem with your machine. Report it, or if this org is yours make the package public at https://github.com/orgs/intentic/packages, then re-run."
     );
+}
+
+#[cfg(test)]
+mod tests {
+    use super::wrong_container_platform;
+
+    /* The one decision in this file that is pure, and the one whose absence let a whole class of Windows
+     * install failure through: the daemon answers, so every existing probe passes, and the run dies minutes
+     * later on an image pull. */
+
+    #[test]
+    fn a_linux_daemon_is_what_we_want() {
+        assert!(wrong_container_platform(Some("linux")).is_none());
+    }
+
+    #[test]
+    fn a_windows_daemon_is_refused_with_the_click_that_fixes_it() {
+        let refusal =
+            wrong_container_platform(Some("windows")).expect("windows containers must be refused");
+        assert!(
+            refusal.contains("windows containers"),
+            "names what it found: {refusal}"
+        );
+        assert!(
+            refusal.contains("Switch to Linux containers"),
+            "names the remedy: {refusal}"
+        );
+    }
+
+    #[test]
+    fn an_unidentifiable_daemon_is_not_a_misconfigured_one() {
+        // A daemon too old to report Server.Os has done nothing wrong. Refusing what we cannot identify would
+        // turn "we could not tell" into "you are misconfigured" — the exact failure this preflight avoids.
+        assert!(wrong_container_platform(None).is_none());
+    }
 }

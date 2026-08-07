@@ -163,7 +163,7 @@ jobs:
           # desktop-check's whole input closure — `turbo run build test --filter=@intentic/desktop-app... --dry`
           # names it (desktop-app, desktop-smoke, ui, tsconfig) and each entry is one of them. _tools/ci-desktop
           # is here because the job's IMAGE is an input like any other.
-          echo "desktop=$(match '^(_editor/desktop-app/|_site/site/public/scripts/|_editor/ui/|_tools/ci-desktop/|_tools/desktop-smoke/|_tools/tsconfig/|pnpm-lock\.yaml)')" >> "$GITHUB_OUTPUT"
+          echo "desktop=$(match '^(_editor/desktop-app/|_site/site/public/scripts/|_editor/ui/|_tools/ci-desktop/|_tools/desktop-smoke/|_tools/desktop-smoke-windows/|_tools/tsconfig/|pnpm-lock\.yaml)')" >> "$GITHUB_OUTPUT"
           # The ic host-side CLI (Rust) — its own crate, checked by ic-check with the same cargo gate the
           # desktop crate gets. The scripts dir is an input too: the shims and the binary are one flow.
           echo "ic=$(match '^(_sandbox/ic/|_site/site/public/scripts/)')" >> "$GITHUB_OUTPUT"
@@ -432,8 +432,8 @@ jobs:
   # NOT on pull requests: this is a release-profile Tauri build, and desktop-check's debug build + clippy +
   # tests is the fast gate. Tier 3 (verify-desktop-setup.sh, a real sandbox boot) is in nightly.yml.
   #
-  # WINDOWS: no runner here can execute Intentic-setup.exe, so the NSIS installer is verified only as an
-  # archive (tier 1 reads it with 7z). When a Windows runner exists, its job belongs beside this one.
+  # WINDOWS: the NSIS installer is also verified as an archive here (tier 1 reads it with 7z) — and EXECUTED by
+  # the two jobs below, which is a thing no Linux runner can do.
   desktop-verify:
     needs: [changes, preflight, ci-base, ci-desktop]
     if: ${{ !cancelled() && github.ref == 'refs/heads/main' && needs.changes.outputs.desktop == 'true' && needs.preflight.result == 'success' && needs.ci-base.result != 'failure' && needs.ci-desktop.result != 'failure' }}
@@ -463,6 +463,99 @@ jobs:
       # A fixed 0.0.0: nothing here is published, and the version only names the bundle files.
       - run: bash _tools/scripts/build-desktop.sh 0.0.0 --linux-only
       - run: bash _tools/scripts/verify-desktop-install.sh
+
+  # What the Windows runner is handed. Built HERE, on Linux, because that is where the Windows installer has
+  # always been built — cargo-xwin cross-compiles it, and this job is deliberately the same script the release
+  # runs, so the bytes the Windows tier meets are produced by exactly the path that produces the released ones.
+  #
+  # Two artifacts, and the second is not optional. `connect.ps1` is a bootstrap SHIM: the setup flow lives in
+  # the `ic` CLI, which the shim downloads from the LATEST GitHub Release. A Windows tier that let it do that
+  # would be verifying the last release's flow against this commit's installer — so ic is cross-built from this
+  # same checkout and handed to the shim through IC_BIN, its own local-dev override. The Linux setup tier does
+  # exactly this, for exactly this reason.
+  desktop-windows-build:
+    needs: [changes, preflight, ci-base, ci-desktop]
+    if: ${{ !cancelled() && github.ref == 'refs/heads/main' && needs.changes.outputs.desktop == 'true' && needs.preflight.result == 'success' && needs.ci-base.result != 'failure' && needs.ci-desktop.result != 'failure' }}
+    runs-on: [self-hosted, intentic, desktop]
+    container:
+      image: ghcr.io/intentic/ci-desktop:latest
+      volumes:
+        - /ci-cache:/ci-cache
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+    timeout-minutes: 90
+    env:
+      CARGO_HOME: /ci-cache/cargo
+      # Its own target dir, for the same lock-and-fingerprint reasons desktop-verify and ic-check have theirs.
+      CARGO_TARGET_DIR: /ci-cache/desktop-windows-target
+      # The MSVC CRT + Windows SDK cargo-xwin splats (~1.1 GB) — on the shared volume because its default lives
+      # under $HOME/.cache, which dies with the container.
+      XWIN_CACHE_DIR: /ci-cache/xwin
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          clean: false
+      - uses: ./.github/actions/pnpm-setup
+      - run: bash _tools/scripts/build-desktop.sh 0.0.0 --windows-only
+      - run: bash _tools/scripts/build-ic.sh windows-x64
+      - uses: actions/upload-artifact@v7
+        with:
+          name: windows-desktop-artifacts
+          path: |
+            _editor/desktop-app/dist-bin/Intentic-setup.exe
+            _sandbox/ic/dist-bin/ic-windows-amd64.exe
+          if-no-files-found: error
+          retention-days: 7
+
+  # THE TIER NO OTHER JOB IN THIS REPO CAN RUN: the shipped Windows installer, executed on Windows.
+  #
+  # Everything else this pipeline knows about Intentic-setup.exe comes from reading it as an archive. This
+  # installs it unattended on a clean machine, asserts what landed on disk, fires a real intentic:// link at a
+  # machine where the app has never run — the state a first-time user is in, and the half that was broken on
+  # Linux for months while every after-launch assertion passed — launches it, fires the link again at the
+  # running instance, and uninstalls it with the app still running (its tray is where it lives, so that is the
+  # ordinary state at uninstall time).
+  #
+  # NO DOCKER, NO CREDENTIALS, NO NETWORK beyond the installer's own. That is what lets it gate main rather than
+  # sit in the nightly: everything it asserts is a property of the package and the OS. The tiers that DO need a
+  # Docker daemon and a connected account are in nightly.yml.
+  #
+  # `runs-on` names a label the Linux fleet does not carry, and that is load-bearing: `[self-hosted, intentic]`
+  # is an AND over labels, so a Windows box carrying `intentic` would be handed container jobs it cannot run.
+  # See docs/ci-runner-windows.md — including why this runner must be started from a logged-in session rather
+  # than installed as a service (a service session has no desktop, and every assertion here reads a window).
+  desktop-verify-windows:
+    needs: [desktop-windows-build]
+    if: ${{ !cancelled() && needs.desktop-windows-build.result == 'success' }}
+    runs-on: [self-hosted, windows-desktop]
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/download-artifact@v7
+        with:
+          name: windows-desktop-artifacts
+          path: windows-artifacts
+      # No pnpm-setup here: that composite action is written for the Linux container jobs (it points the store
+      # and turbo cache at /ci-cache, which does not exist on this box). A plain install is what this needs.
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v6
+        with:
+          node-version-file: package.json
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      # The tier reads window titles through @intentic/desktop, so both packages are built rather than run from
+      # source — the export condition that resolves a workspace package to its TypeScript is a vitest/tsgo
+      # arrangement, not something plain node applies.
+      - run: pnpm turbo run build --filter=@intentic/desktop-smoke-windows...
+      # First and separately: the machine, not the product. A runner in the wrong state fails every assertion
+      # below for reasons that have nothing to do with the build, and this is the step that says so.
+      - run: node _tools/desktop-smoke-windows/dist/main.js doctor
+      - run: node _tools/desktop-smoke-windows/dist/main.js install --installer windows-artifacts/Intentic-setup.exe
+      # Always, so a run that failed mid-tier does not leave the next one meeting a machine that is already
+      # installed — the state whose message is only correct on a runner that resets from a snapshot.
+      - run: node _tools/desktop-smoke-windows/dist/main.js teardown
+        if: always()
 
   # Hermetic infra e2e on pull requests — a NON-BLOCKING sidecar. Boots a Docker-in-Docker host via
   # testcontainers and drives the real CLI (resolve -> targeted apply -> adopt -> readiness diagnostics), no

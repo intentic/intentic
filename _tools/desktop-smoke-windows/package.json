@@ -1,0 +1,29 @@
+{
+    "name": "@intentic/desktop-smoke-windows",
+    "version": "0.0.0",
+    "private": true,
+    "type": "module",
+    "description": "The Windows counterpart of @intentic/desktop-smoke — installs the shipped NSIS installer on a real Windows machine, runs the setup it ships, and drives one /agents session",
+    "scripts": {
+        "build": "tsgo",
+        "typecheck": "tsgo --noEmit -p tsconfig.test.json",
+        "test": "vitest run",
+        "test:watch": "vitest",
+        "doctor": "node dist/main.js doctor",
+        "smoke:install": "node dist/main.js install",
+        "smoke:setup": "node dist/main.js setup",
+        "smoke:agents": "node dist/main.js agents"
+    },
+    "dependencies": {
+        "@intentic/desktop": "workspace:*",
+        "@intentic/sandbox-contract": "workspace:*",
+        "@intentic/sandbox-run": "workspace:*",
+        "tslib": "catalog:"
+    },
+    "devDependencies": {
+        "@intentic/tsconfig": "workspace:*",
+        "@types/node": "catalog:",
+        "@typescript/native-preview": "catalog:",
+        "vitest": "catalog:"
+    }
+}

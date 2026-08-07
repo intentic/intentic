@@ -1,5 +1,8 @@
 # The CI runners
 
+> The **Linux** fleet. The one Windows machine — the only runner that can execute `Intentic-setup.exe` — is
+> [`ci-runner-windows.md`](ci-runner-windows.md), and shares none of the setup below.
+
 CI assumes one thing no runner provides by default: **a persistent host directory at `/ci-cache`**. Without it
 the pipeline still passes — every job just runs cold. This file is the config that makes it warm, the runner
 setup, and the evidence for why it is shaped this way.

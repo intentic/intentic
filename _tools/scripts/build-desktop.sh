@@ -17,15 +17,29 @@
 # Release — the download surface the site and the updater both point at.
 set -euo pipefail
 
-VERSION="${1:?usage: build-desktop.sh <version> [--linux-only]}"
-# --linux-only skips the Windows cross-build (and the cargo-xwin toolchain it needs). For the pre-release
-# verification job, which exercises the Linux bundles on a real host and has no use for an installer it cannot
-# run — the release itself always builds everything. One build script either way, so the artifacts a CI job
-# verifies are produced by exactly the path that produces the released ones.
+VERSION="${1:?usage: build-desktop.sh <version> [--linux-only|--windows-only]}"
+# Two verification jobs each want ONE side of this build, and the release wants both. One build script either
+# way, so the artifacts a CI job verifies are produced by exactly the path that produces the released ones.
+#
+#   --linux-only    skips the Windows cross-build and the cargo-xwin toolchain it needs. For desktop-verify,
+#                   which exercises the Linux bundles on a real host and has no use for an installer it cannot
+#                   run.
+#   --windows-only  skips the Linux bundles. For the job that hands `Intentic-setup.exe` to the Windows runner:
+#                   a deb/rpm/AppImage build costs it several minutes of artifacts nothing downstream opens.
+#
+# Neither writes latest.json — a manifest naming a platform whose installer the run did not produce would
+# advertise an update that 404s, and that is true in both directions.
 LINUX_ONLY=0
-if [ "${2:-}" = "--linux-only" ]; then
-    LINUX_ONLY=1
-fi
+WINDOWS_ONLY=0
+case "${2:-}" in
+    --linux-only) LINUX_ONLY=1 ;;
+    --windows-only) WINDOWS_ONLY=1 ;;
+    "") ;;
+    *)
+        echo "error: unknown flag '${2}' (expected --linux-only or --windows-only)" >&2
+        exit 2
+        ;;
+esac
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 APP="$ROOT/_editor/desktop-app"
 TAURI_DIR="$APP/src-tauri"
@@ -120,8 +134,10 @@ LINUX_BUNDLES="$TARGET_DIR/release/bundle"
 WIN_BUNDLES="$TARGET_DIR/x86_64-pc-windows-msvc/release/bundle"
 rm -rf "$LINUX_BUNDLES" "$WIN_BUNDLES"
 
-echo "==> building Linux bundles (deb, rpm, appimage)"
-pnpm exec tauri build --config "$CONFIG" --bundles deb,rpm,appimage
+if [ "$WINDOWS_ONLY" -eq 0 ]; then
+    echo "==> building Linux bundles (deb, rpm, appimage)"
+    pnpm exec tauri build --config "$CONFIG" --bundles deb,rpm,appimage
+fi
 
 if [ "$LINUX_ONLY" -eq 0 ]; then
     echo "==> building Windows NSIS installer (cargo-xwin)"
@@ -129,17 +145,19 @@ if [ "$LINUX_ONLY" -eq 0 ]; then
 fi
 
 # --- collect with stable (un-versioned) names, so the site's vanity URLs and latest.json never need a bump ---
-cp "$LINUX_BUNDLES"/appimage/*.AppImage "$OUT/Intentic.AppImage"
-cp "$LINUX_BUNDLES"/deb/*.deb "$OUT/Intentic.deb"
-cp "$LINUX_BUNDLES"/rpm/*.rpm "$OUT/Intentic.rpm"
+if [ "$WINDOWS_ONLY" -eq 0 ]; then
+    cp "$LINUX_BUNDLES"/appimage/*.AppImage "$OUT/Intentic.AppImage"
+    cp "$LINUX_BUNDLES"/deb/*.deb "$OUT/Intentic.deb"
+    cp "$LINUX_BUNDLES"/rpm/*.rpm "$OUT/Intentic.rpm"
+fi
 if [ "$LINUX_ONLY" -eq 0 ]; then
     cp "$WIN_BUNDLES"/nsis/*-setup.exe "$OUT/Intentic-setup.exe"
 fi
 
 # --- updater manifest (only when the artifacts were signed) ---
-# Never on a --linux-only build: a manifest naming a windows-x86_64 platform whose installer this run did not
-# produce would advertise an update that 404s.
-if [ -n "${TAURI_SIGNING_PRIVATE_KEY:-}" ] && [ "$LINUX_ONLY" -eq 0 ]; then
+# Never on a one-sided build, in EITHER direction: the manifest names both platforms, so a run that produced
+# only one of them would advertise an update that 404s for everyone on the other.
+if [ -n "${TAURI_SIGNING_PRIVATE_KEY:-}" ] && [ "$LINUX_ONLY" -eq 0 ] && [ "$WINDOWS_ONLY" -eq 0 ]; then
     echo "==> writing latest.json"
     appimage_sig="$(cat "$LINUX_BUNDLES"/appimage/*.AppImage.sig)"
     nsis_sig="$(cat "$WIN_BUNDLES"/nsis/*-setup.exe.sig)"

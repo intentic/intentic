@@ -180,7 +180,8 @@ check_nsis() {
     7z x -o"$out" -y "$exe" >/dev/null
     compare_scripts "nsis" "$out"
     # No .desktop file on Windows — the scheme is a registry key the installer writes at install time, which is
-    # only observable by installing. That assertion belongs to the Windows runner tier.
+    # only observable by installing. That assertion lives in @intentic/desktop-smoke-windows, which installs
+    # this same artifact on a real Windows session and reads the key back before the app has ever run.
     checked=$((checked + 1))
 }
 

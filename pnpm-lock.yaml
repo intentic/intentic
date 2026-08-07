@@ -2589,6 +2589,34 @@ importers:
 
   _tools/desktop-smoke: {}
 
+  _tools/desktop-smoke-windows:
+    dependencies:
+      '@intentic/desktop':
+        specifier: workspace:*
+        version: link:../../_computers/desktop
+      '@intentic/sandbox-contract':
+        specifier: workspace:*
+        version: link:../../_sandbox/sandbox-contract
+      '@intentic/sandbox-run':
+        specifier: workspace:*
+        version: link:../../_sandbox/sandbox-run
+      tslib:
+        specifier: 'catalog:'
+        version: 2.8.1
+    devDependencies:
+      '@intentic/tsconfig':
+        specifier: workspace:*
+        version: link:../tsconfig
+      '@types/node':
+        specifier: 'catalog:'
+        version: 24.13.2
+      '@typescript/native-preview':
+        specifier: 'catalog:'
+        version: 7.0.0-dev.20260707.2
+      vitest:
+        specifier: 'catalog:'
+        version: 4.1.10(@opentelemetry/api@1.9.1)(@types/node@24.13.2)(jsdom@30.0.1(@noble/hashes@2.2.0))(vite@8.2.0(@types/node@24.13.2)(esbuild@0.28.1)(jiti@2.7.0)(tsx@4.23.1)(yaml@2.9.0))
+
   _tools/dind-host: {}
 
   _tools/e2e:

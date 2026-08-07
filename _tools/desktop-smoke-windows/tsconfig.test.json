@@ -1,0 +1,15 @@
+/* Type-checks this package's TESTS along with its source — the build config excludes *.test.ts to keep test
+ * code out of the tree the Windows runner executes. Run by `pnpm typecheck`; noEmit, so it never writes
+ * anything. See AGENTS.md, "Tests". */
+{
+    "extends": "./tsconfig.json",
+    "compilerOptions": {
+        "noEmit": true,
+        "composite": false,
+        "declaration": false,
+        "declarationMap": false,
+        "tsBuildInfoFile": "./.cache/tsbuildinfo-typecheck"
+    },
+    "include": ["./src/**/*"],
+    "exclude": []
+}
