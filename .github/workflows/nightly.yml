@@ -144,12 +144,15 @@ jobs:
       - uses: ./.github/actions/pnpm-setup
       - run: bash _tools/scripts/build-desktop.sh 0.0.0 --windows-only
       - run: bash _tools/scripts/build-ic.sh windows-x64
+      # Staged flat for the reason ci.yml's desktop-windows-build spells out: a multi-path upload is rooted at
+      # the paths' common ancestor, and the tiers below ask for these two by name.
+      - run: |
+          rm -rf windows-artifacts && mkdir -p windows-artifacts
+          cp _editor/desktop-app/dist-bin/Intentic-setup.exe _sandbox/ic/dist-bin/ic-windows-amd64.exe windows-artifacts/
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: windows-desktop-artifacts-nightly
-          path: |
-            _editor/desktop-app/dist-bin/Intentic-setup.exe
-            _sandbox/ic/dist-bin/ic-windows-amd64.exe
+          path: windows-artifacts
           if-no-files-found: error
           retention-days: 7
 

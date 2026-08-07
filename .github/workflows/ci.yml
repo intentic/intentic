@@ -523,12 +523,19 @@ jobs:
       - uses: ./.github/actions/pnpm-setup
       - run: bash _tools/scripts/build-desktop.sh 0.0.0 --windows-only
       - run: bash _tools/scripts/build-ic.sh windows-x64
+      # Staged into one directory rather than uploaded as two paths, because an upload of several paths is
+      # rooted at their COMMON ANCESTOR — for two different dist-bin directories that is the repo root, and the
+      # installer arrives as `_editor/desktop-app/dist-bin/Intentic-setup.exe` instead of at the name the
+      # Windows tier is handed. A directory upload is rooted at the directory, so the names survive.
+      # Emptied first: this job checks out with `clean: false`, so the directory can survive from a run whose
+      # build failed after it was staged.
+      - run: |
+          rm -rf windows-artifacts && mkdir -p windows-artifacts
+          cp _editor/desktop-app/dist-bin/Intentic-setup.exe _sandbox/ic/dist-bin/ic-windows-amd64.exe windows-artifacts/
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: windows-desktop-artifacts
-          path: |
-            _editor/desktop-app/dist-bin/Intentic-setup.exe
-            _sandbox/ic/dist-bin/ic-windows-amd64.exe
+          path: windows-artifacts
           if-no-files-found: error
           retention-days: 7
 
@@ -577,6 +584,8 @@ jobs:
       # source — the export condition that resolves a workspace package to its TypeScript is a vitest/tsgo
       # arrangement, not something plain node applies.
       - run: pnpm turbo run build --filter=@intentic/desktop-smoke-windows...
+      # First and separately: the machine, not the product. A runner in the wrong state fails every assertion
+      # below for reasons that have nothing to do with the build, and this is the step that says so.
       # RECONCILE, THEN ASSERT. The teardown below runs after every tier, but "after" is exactly what a
       # cancelled job, a lost runner or a reboot mid-install does not get — and what it leaves behind is an
       # installed app, which the doctor is right to refuse and which then needs a person. Reconciling first
@@ -586,8 +595,6 @@ jobs:
       # human. Nothing here can heal a runner registered as a SERVICE — that is the one machine property a job
       # cannot fix from inside itself, and the doctor names it with its remedy.
       - run: node _tools/desktop-smoke-windows/dist/main.js teardown
-      # The machine, not the product. A runner in the wrong state fails every assertion below for reasons that
-      # have nothing to do with the build, and this is the step that says so.
       - run: node _tools/desktop-smoke-windows/dist/main.js doctor
       - run: node _tools/desktop-smoke-windows/dist/main.js install --installer windows-artifacts/Intentic-setup.exe
       # Always, so a run that failed mid-tier hands the next one a clean machine rather than relying on the
@@ -826,7 +833,11 @@ jobs:
       cancel-in-progress: false
     uses: ./.github/workflows/release.yml
     secrets: inherit
+    # A called workflow can never hold more than the caller grants, so this set is the CEILING for every job in
+    # release.yml — a permission the publish job names and this list omits fails the whole pipeline before a
+    # single job starts, as an invalid-workflow error that names neither.
     permissions:
       contents: write
       packages: write
       id-token: write
+      attestations: write
