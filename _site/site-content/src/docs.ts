@@ -18,8 +18,14 @@ export interface DocsSection {
     items: DocsPage[];
 }
 
-// The whole docs tree, in reading order. The sidebar renders it by section; nav/footer and the
-// prev/next footer flatten it via docsPages below — one source of truth for slugs and titles.
+/* The whole docs tree, in reading order. The sidebar renders it by section; nav/footer and the
+ * prev/next footer flatten it via docsPages below — one source of truth for slugs and titles.
+ *
+ * FOUR SECTIONS, deliberately the four every docs reader arrives expecting: install it, use it, extend it,
+ * look something up. The tree once grew to six ("Understand" holding one page, guides split across two
+ * shelves by which week they were written), and the nav menu — whose column count IS the section count —
+ * read like an operating system's site. A section here costs a column there, so a new page joins one of
+ * these four; a new section is a decision about the whole nav, not a default. */
 export const docsSections: DocsSection[] = [
     {
         label: "Get started",
@@ -57,11 +63,6 @@ export const docsSections: DocsSection[] = [
                     datePublished: "2026-07-23",
                 },
             },
-        ],
-    },
-    {
-        label: "Understand",
-        items: [
             {
                 id: "architecture",
                 title: "Architecture",
@@ -76,7 +77,7 @@ export const docsSections: DocsSection[] = [
         ],
     },
     {
-        label: "Work with it",
+        label: "Guides",
         items: [
             {
                 id: "parallel-agents",
@@ -144,6 +145,39 @@ export const docsSections: DocsSection[] = [
                     datePublished: "2026-08-07",
                 },
             },
+            {
+                id: "doorbell",
+                title: "Doorbell",
+                blurb: "Put a chat on your website, answered by your agent",
+                meta: {
+                    title: "Doorbell · put your agent on your website · intentic docs",
+                    description:
+                        "Embed a chat widget on your site with one script tag. Visitors talk to your sandbox agent; you watch and take over from the fleet board.",
+                    datePublished: "2026-08-01",
+                },
+            },
+            {
+                id: "autonomous-employees",
+                title: "Autonomous employees",
+                blurb: "Specialize a sandbox until it does a job alone",
+                meta: {
+                    title: "Turn sandboxes into autonomous employees · intentic docs",
+                    description:
+                        "Specialize a sandbox into an agent: its tools, systems and context. Give it work, make it event-driven, then scale to a team.",
+                    datePublished: "2026-07-23",
+                },
+            },
+            {
+                id: "reference-architecture",
+                title: "Reference architecture",
+                blurb: "A whole company assembled from sandboxes",
+                meta: {
+                    title: "Reference architecture · intentic docs",
+                    description:
+                        "An entire company assembled from intentic sandboxes: one agent per role and team, connected to the services they share.",
+                    datePublished: "2026-07-24",
+                },
+            },
         ],
     },
     {
@@ -196,7 +230,7 @@ export const docsSections: DocsSection[] = [
         ],
     },
     {
-        label: "Sandbox API",
+        label: "API reference",
         items: [
             {
                 id: "sandbox-api",
@@ -218,44 +252,6 @@ export const docsSections: DocsSection[] = [
                     description:
                         "Every member of the IntenticApi object: the typed daemon client, workspace facts and files, views, documents, commands, models and routing.",
                     datePublished: "2026-08-07",
-                },
-            },
-        ],
-    },
-    {
-        label: "Guides",
-        items: [
-            {
-                id: "doorbell",
-                title: "Doorbell",
-                blurb: "Put a chat on your website, answered by your agent",
-                meta: {
-                    title: "Doorbell · put your agent on your website · intentic docs",
-                    description:
-                        "Embed a chat widget on your site with one script tag. Visitors talk to your sandbox agent; you watch and take over from the fleet board.",
-                    datePublished: "2026-08-01",
-                },
-            },
-            {
-                id: "autonomous-employees",
-                title: "Autonomous employees",
-                blurb: "Specialize a sandbox until it does a job alone",
-                meta: {
-                    title: "Turn sandboxes into autonomous employees · intentic docs",
-                    description:
-                        "Specialize a sandbox into an agent: its tools, systems and context. Give it work, make it event-driven, then scale to a team.",
-                    datePublished: "2026-07-23",
-                },
-            },
-            {
-                id: "reference-architecture",
-                title: "Reference architecture",
-                blurb: "A whole company assembled from sandboxes",
-                meta: {
-                    title: "Reference architecture · intentic docs",
-                    description:
-                        "An entire company assembled from intentic sandboxes: one agent per role and team, connected to the services they share.",
-                    datePublished: "2026-07-24",
                 },
             },
         ],
