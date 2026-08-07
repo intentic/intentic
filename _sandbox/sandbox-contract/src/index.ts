@@ -91,6 +91,7 @@ export * from "./model-order.js";
 export * from "./path-refs.js";
 export * from "./quick-model.js";
 export * from "./output-fields.js";
+export * from "./publish-drafts.js";
 export * from "./schemas.js";
 export * from "./search-globs.js";
 export * from "./terminal-protocol.js";

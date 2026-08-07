@@ -1,10 +1,11 @@
 import type { Automation } from "@intentic/sandbox-contract";
+import { PUBLISH_DRAFTS_AUTOMATION } from "@intentic/sandbox-contract";
 import { FIX_DEPS_AUTOMATION } from "@intentic/sandbox-contract/chores";
 import { z } from "zod";
 import { jsonFile } from "../store/json-file.js";
 import type { AutomationsStore } from "./automations-store.js";
 
-/* SEEDING — the one automation a workspace starts with, and the ledger that makes it a one-time offer.
+/* SEEDING — the automations a workspace starts with, and the ledger that makes each a one-time offer.
  *
  * The chore book's rule is that nothing agentic runs enabled-and-hidden. The fix chore bends the first half
  * on purpose — it arrives enabled, because a broken tree costs every conversation that builds on it and the
@@ -13,7 +14,11 @@ import type { AutomationsStore } from "./automations-store.js";
  * made, and every fire is HELD with a visible countdown before it starts (holdForSeconds), which is the
  * per-run consent that replaces the arm-first click.
  *
- * THE LEDGER IS WHAT MAKES DELETION FINAL. "Seed when absent" alone would resurrect the automation on every
+ * The drafts publisher arrives enabled without bending the rule at all: everything it may ever act on is a
+ * draft the owner has ALREADY approved — the approval is the per-run consent — and without it the Drafts
+ * page's approve button would be a button wired to nothing until someone discovered a recipe gallery.
+ *
+ * THE LEDGER IS WHAT MAKES DELETION FINAL. "Seed when absent" alone would resurrect an automation on every
  * boot after the owner deleted it — an offer that cannot be refused. So each seed's id is written down once,
  * beside the automations manifest, and a recorded id is never seeded again: absence-plus-record reads as the
  * owner's decision, absence alone as a workspace that has not been offered it yet. The record travels with
@@ -29,6 +34,13 @@ const DEFAULT_AUTOMATIONS: readonly Automation[] = [
         guard: FIX_DEPS_AUTOMATION.guard,
         holdForSeconds: FIX_DEPS_AUTOMATION.holdForSeconds,
         chore: true,
+        enabled: true,
+    },
+    {
+        id: PUBLISH_DRAFTS_AUTOMATION.id,
+        trigger: { kind: "schedule", cron: PUBLISH_DRAFTS_AUTOMATION.cron },
+        prompt: PUBLISH_DRAFTS_AUTOMATION.prompt,
+        guard: PUBLISH_DRAFTS_AUTOMATION.guard,
         enabled: true,
     },
 ];

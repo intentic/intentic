@@ -12,6 +12,9 @@ The **per-project AI-agent dev daemon** — a Docker image that runs as the proj
 - Keep the tree true after lands: reinstall drifted dependencies, run the project's own checks, and announce the
   edges (`deps.broken`/`deps.fixed`) that wake the seeded fix chore — every step in a visible terminal panel and
   the activity feed (src/workspace/reconcile-deps.ts → verify-deps.ts → src/automations).
+- Hold outbound posts as an approval queue: the agent proposes drafts as files (`.intentic/drafts/`, src/drafts),
+  the owner approves them on the Drafts page, and the daemon fires the seeded publisher automation the moment a
+  draft is approved and due — a future-dated approval waits for the publisher's sweep instead.
 - Gate what runs without the owner, in two layers that share one decision seam (src/guard). Before a session
   starts: every outside-driven wake (automations, listeners, the Doorbell, the workflow release gate) is
   allowed, held for approval, or refused. Inside a session already running: classified outbound provider calls

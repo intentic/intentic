@@ -37,6 +37,7 @@ unconditionally and the rail tile is permanent.
   approval wins.
 - Enablement is a narrow mutation, while an edit starts from the complete stored record. Switching or editing a
   row therefore preserves webhook identity, disabled state, provider-owned settings and security restrictions.
-- One automation arrives seeded: the dependency fix chore ("Fix what a dependency change broke"), enabled with a
-  60-second hold, defined once in the contract's chore book and offered again as a recipe only after the owner
-  deletes it.
+- Two automations arrive seeded, each defined once in the contract and offered again as a recipe only after the
+  owner deletes it: the dependency fix chore ("Fix what a dependency change broke"), enabled with a 60-second
+  hold, and the drafts publisher ("Publish approved drafts"), which the daemon also fires by id the instant a
+  draft is approved and due — its cron is only the sweep for future-dated drafts and dropped fires.

@@ -1,5 +1,5 @@
 import { CHORES, choreAutomationPrompt, FIX_DEPS_AUTOMATION } from "@intentic/sandbox-contract/chores";
-import type { WorkspaceEventKind } from "@intentic/sandbox-contract";
+import { PUBLISH_DRAFTS_AUTOMATION, type WorkspaceEventKind } from "@intentic/sandbox-contract";
 import type { IconName } from "@intentic/extension-ui";
 
 /* "Start from" suggestions in the new-automation dialog, shown only when the matching capability provider is
@@ -233,18 +233,16 @@ export const AUTOMATION_RECIPES: readonly AutomationRecipe[] = [
     },
     {
         // No provider — posting uses whatever platform skills the sandbox has (X/Reddit/YouTube browser, Discord
-        // CLI). The guard reads the drafts the agent proposed and wakes only when one is approved and due.
-        title: "Publish approved drafts",
-        id: "publish-drafts",
-        trigger: { kind: "schedule", cron: "*/15 * * * *" },
-        guard: `jq -es --argjson now "$(date +%s%3N)" 'any(.[]; .status=="approved" and ((.scheduledAt // $now) <= $now))' .intentic/drafts/*.json`,
-        prompt:
-            `Publish due post drafts. Read every JSON file in .intentic/drafts/ — a draft is due when its status is "approved" and it either has no ` +
-            `scheduledAt or its scheduledAt <= now (epoch ms; get now with: date +%s%3N). For each due draft, one at a time: (1) edit its file to set ` +
-            `"status":"posting"; (2) post exactly its content (with its title/target/media) on its platform using that platform's skill; (3) edit the ` +
-            `file to "status":"posted" plus "postedAt" (epoch ms), or "status":"failed" plus an "error" string describing what went wrong. Never rewrite ` +
-            `the content; never touch drafts that are not approved and due.`,
-        note: "checks every 15 min",
+        // CLI). Seeded like the fix chore (the daemon's default-automations.ts), so this recipe exists for the
+        // owner who deleted it and wants it back. The definition lives in the contract because THREE surfaces
+        // must agree on it: the seeder, this gallery, and the drafts routes, which fire it by id the moment a
+        // draft is approved and due — the cron is only the sweep for future-dated drafts and dropped fires.
+        title: PUBLISH_DRAFTS_AUTOMATION.title,
+        id: PUBLISH_DRAFTS_AUTOMATION.id,
+        trigger: { kind: "schedule", cron: PUBLISH_DRAFTS_AUTOMATION.cron },
+        guard: PUBLISH_DRAFTS_AUTOMATION.guard,
+        prompt: PUBLISH_DRAFTS_AUTOMATION.prompt,
+        note: "posts the moment you approve",
     },
     ...CHORE_RECIPES,
 ];

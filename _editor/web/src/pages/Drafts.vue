@@ -13,9 +13,10 @@ import ScheduleControl from "./drafts/ScheduleControl.vue";
 
 /* Drafts: the approval inbox for posts the agent proposed during its scheduled work. The agent writes one JSON
  * file per draft into .intentic/drafts/ (taught by the daemon's drafts skill); this page is the owner's
- * approve / reschedule / reject side. Approving hands the draft to the "Publish approved drafts" automation,
- * which posts it through the platform skills once its scheduledAt is due. There is no create dialog here —
- * drafts originate with the agent, never the UI.
+ * approve / reschedule / reject side. Approving fires the "Publish approved drafts" automation immediately
+ * (the daemon's drafts routes own that moment); a draft approved for a future scheduledAt is picked up by the
+ * same automation's sweep when its time comes. There is no create dialog here — drafts originate with the
+ * agent, never the UI.
  *
  * THE POST IS THE SUBJECT OF THE ROW. This page had it the other way round: the platform, the target and the
  * status were three filled chips across the header line and the text being approved was the smallest, faintest
@@ -123,9 +124,8 @@ const fileName = (path: string): string => path.split(`/`).at(-1) ?? path;
                 <InfoHint label="How drafts are published">
                     <span class="block text-xs font-semibold text-content">From proposal to post</span>
                     <span class="mt-2 block text-xs text-muted">
-                        Your agent writes drafts while it works and never posts one by itself. Approve one and the "Publish approved drafts"
-                        automation sends it through that platform's connector when its date comes up — a draft with no date goes out as soon as it is
-                        picked up. Rejecting deletes the draft file.
+                        Your agent writes drafts while it works and never posts one by itself. Approve one and it posts right away through that
+                        platform's connector — or, if you gave it a date, when that date comes up. Rejecting deletes the draft file.
                     </span>
                 </InfoHint>
             </template>
@@ -209,7 +209,13 @@ const fileName = (path: string): string => path.split(`/`).at(-1) ?? path;
                         >
                             <Icon name="trash" />
                         </button>
-                        <Button v-if="canShip" label="Approve" size="small" :disabled="save.isPending.value" @click="patch(draft, { status: `approved` })">
+                        <Button
+                            v-if="canShip"
+                            label="Approve"
+                            size="small"
+                            :disabled="save.isPending.value"
+                            @click="patch(draft, { status: `approved` })"
+                        >
                             <template #icon><Icon name="check" /></template>
                         </Button>
                     </template>

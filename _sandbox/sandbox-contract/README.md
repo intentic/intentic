@@ -23,6 +23,8 @@ mismatch is a type error rather than a runtime surprise.
 - [src/events.ts](src/events.ts) — what the daemon pushes, and when.
 - [src/chores](src/chores) — the chore book: definitions, applicability gates and verdicts, shared because the
   daemon computes the signals and the browser renders the judgement.
+- [src/publish-drafts.ts](src/publish-drafts.ts) — the drafts publisher automation, shared for the chore book's
+  reason by its three consumers: the daemon's seeder, the recipe gallery, and the drafts routes' instant fire.
 - [src/workflow-faults.ts](src/workflow-faults.ts) and [src/output-fields.ts](src/output-fields.ts) — graph and
   structured-output invariants shared by the designer and daemon, including duplicate field-name rejection.
 - [src/index.ts](src/index.ts) — the public surface.
