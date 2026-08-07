@@ -1,0 +1,55 @@
+# OpenSSF Scorecard: eighteen automated checks over this repository's security posture — is the main branch
+# protected, are the actions pinned, is there a security policy, are releases signed, is there a SAST tool —
+# scored 0-10 and published where anyone can read the breakdown without being asked to trust a summary.
+#
+# `publish_results: true` is the whole point. It puts the score on the public API behind the README badge, so
+# the number a visitor sees is the one this run computed rather than one we typed. That is the same rule the
+# site's trust cards follow: measured, never authored. It also means a regression is visible to everyone
+# before it is visible to us, which is the correct direction for this particular number.
+#
+# ON GITHUB'S RUNNERS, for the reason codeql.yml gives at greater length: an audit of the release pipeline
+# should not run on the machines the release pipeline owns.
+name: Scorecard
+
+on:
+  branch_protection_rule:
+  push:
+    branches: [main]
+  schedule:
+    # Mondays, 05:41 UTC — before the CodeQL cron, both off the hour.
+    - cron: "41 5 * * 1"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: scorecard
+  cancel-in-progress: false
+
+jobs:
+  analysis:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      # Uploads the SARIF, so a failed check also lands as a code-scanning alert rather than only as a lower
+      # number on the badge.
+      security-events: write
+      # Signs the results before they are published: the score on the API is attested to this run, so a
+      # scraped badge cannot be forged into a better one.
+      id-token: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: ossf/scorecard-action@2d1146689b8cda280b9bc96326124645441f03bc # v2.4.4
+        id: scorecard
+        with:
+          results_file: results.sarif
+          results_format: sarif
+          publish_results: true
+
+      - uses: github/codeql-action/upload-sarif@5595ccaf912efad79be6eef63a5619ff05969be3 # v4.37.6
+        with:
+          sarif_file: results.sarif

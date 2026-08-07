@@ -1,0 +1,67 @@
+# Static analysis over everything that ships, published as code-scanning alerts on the repository's Security
+# tab — the "somebody actually looks at this" half of the claim the README makes about reading what executes
+# on your hardware. Free on public repositories; the results are public too, which is the point.
+#
+# ON GITHUB'S RUNNERS, NOT THE FLEET. Every other workflow here runs on `[self-hosted, intentic]` because it
+# needs the warm caches. This one deliberately does not: a scan whose job is to say "nothing malicious got
+# in" is worth more when it does not execute on the same machines that hold the release credentials, and it
+# would otherwise sit in the queue behind the six runner processes CI already contends for. Public
+# repositories get GitHub-hosted minutes for free, so the independence costs nothing.
+#
+# THE WEEKLY SCHEDULE IS NOT PADDING. CodeQL ships new queries continuously, and most of what a scan finds in
+# a mature tree is old code meeting a new query. Without the cron this only ever sees code on the day it was
+# written.
+name: CodeQL
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  schedule:
+    # Mondays, 06:17 UTC — off the hour, where the whole world's crons pile up.
+    - cron: "17 6 * * 1"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: codeql-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  analyze:
+    name: analyze (${{ matrix.language }})
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    permissions:
+      contents: read
+      # What lets the run write its findings back to the Security tab; without it the analysis completes and
+      # is discarded.
+      security-events: write
+    strategy:
+      # One language failing must not cancel the others' results — a red Rust leg still leaves a complete
+      # TypeScript analysis worth having.
+      fail-fast: false
+      matrix:
+        # `actions` is the third one and the least obvious: it analyses the workflow files in this directory
+        # for the injection and untrusted-checkout patterns that turn a CI run into a credential leak. The
+        # workflows are the part of this repository with the most privilege and the least review.
+        language: [javascript-typescript, rust, actions]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: github/codeql-action/init@5595ccaf912efad79be6eef63a5619ff05969be3 # v4.37.6
+        with:
+          languages: ${{ matrix.language }}
+          # No compilation for any of the three: the TypeScript and Actions extractors read source directly,
+          # and the Rust extractor is rust-analyzer-shaped rather than rustc-shaped, so none of them need the
+          # build graph. This is what keeps the scan independent of the toolchain the fleet carries.
+          build-mode: none
+          # security-extended over the default suite: the default is tuned for a low false-positive rate in a
+          # PR gate, and this is not a gate — it is the standing answer to "has anyone looked".
+          queries: security-extended
+
+      - uses: github/codeql-action/analyze@5595ccaf912efad79be6eef63a5619ff05969be3 # v4.37.6
+        with:
+          category: /language:${{ matrix.language }}

@@ -34,3 +34,22 @@ export interface GitStats {
 
 /** Commit counts from git at build time, or null when the clone is shallow or git is unavailable. */
 export function gitStats(): GitStats | null;
+
+export interface ScorecardCheck {
+    name: string;
+    /** 0-10, or -1 where the check did not apply. */
+    score: number;
+}
+
+export interface Scorecard {
+    /** Overall score, 0-10, one decimal. */
+    score: number;
+    checks: ScorecardCheck[];
+    /** The date the published scan ran, YYYY-MM-DD. */
+    date: string;
+    /** The public report card behind the number. */
+    url: string;
+}
+
+/** The published OpenSSF Scorecard for this repository, or null when the API cannot be read at build time. */
+export function scorecard(): Promise<Scorecard | null>;

@@ -13,6 +13,10 @@ Run ten in parallel, reopen from any device, read every diff before it lands. Fr
   <a href="https://www.npmjs.com/org/intentic"><img alt="npm" src="https://img.shields.io/badge/npm-%40intentic%2F*-FE6A00?logo=npm&logoColor=white&labelColor=1a1614"></a>
   <a href="LICENSE"><img alt="License: MIT" src="https://img.shields.io/github/license/intentic/intentic?label=license&labelColor=1a1614&color=FE6A00"></a>
   <br>
+  <a href="https://scorecard.dev/viewer/?uri=github.com/intentic/intentic"><img alt="OpenSSF Scorecard" src="https://img.shields.io/ossf-scorecard/github.com/intentic/intentic?label=scorecard&labelColor=1a1614&color=FE6A00"></a>
+  <a href="https://github.com/intentic/intentic/actions/workflows/codeql.yml"><img alt="CodeQL" src="https://img.shields.io/github/actions/workflow/status/intentic/intentic/codeql.yml?branch=main&label=CodeQL&labelColor=1a1614&color=FE6A00"></a>
+  <a href="SECURITY.md#verifying-a-download"><img alt="Signed releases" src="https://img.shields.io/badge/releases-attested-FE6A00?logo=github&logoColor=white&labelColor=1a1614"></a>
+  <br>
   <img alt="Node 24" src="https://img.shields.io/badge/node-24-FE6A00?logo=nodedotjs&logoColor=white&labelColor=1a1614">
   <img alt="TypeScript" src="https://img.shields.io/badge/TypeScript-strict-FE6A00?logo=typescript&logoColor=white&labelColor=1a1614">
   <img alt="pnpm workspace" src="https://img.shields.io/badge/pnpm-workspace-FE6A00?logo=pnpm&logoColor=white&labelColor=1a1614">

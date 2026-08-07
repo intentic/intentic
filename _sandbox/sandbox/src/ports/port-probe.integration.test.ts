@@ -1,3 +1,4 @@
+import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import http from "node:http";
 import https from "node:https";
@@ -8,9 +9,14 @@ import { answers, detectScheme } from "./port-probe.js";
 
 /* Against real sockets, because the bug this replaced was entirely about what a real socket does: the old probe
  * was `fetch("http://127.0.0.1:<port>/")`, which a TLS listener refuses at the socket and which rejects a
- * self-signed cert even when asked in https — so a Vite dev server serving the repo's own committed cert read as
- * DOWN and its panel span "Starting…" for as long as it ran. The cert below is that same one. */
+ * self-signed cert even when asked in https — so a Vite dev server serving the repo's own dev cert read as
+ * DOWN and its panel span "Starting…" for as long as it ran. The cert below is that same one.
+ *
+ * Minted rather than read straight off disk: the dev certificate is per machine and git-ignored, so a fresh
+ * worktree has none until something asks for one. The generator is idempotent and returns immediately when
+ * the pair is already there. */
 const CERT_DIR = join(import.meta.dirname, "..", "..", "..", "..", "_tools", "localhost-https");
+execFileSync("node", [join(CERT_DIR, "generate.mjs")], { stdio: "ignore" });
 const tls = { cert: readFileSync(join(CERT_DIR, "localhost.crt")), key: readFileSync(join(CERT_DIR, "localhost.key")) };
 
 // Listen on an OS-assigned port and hand it back, closing the server when the test ends.

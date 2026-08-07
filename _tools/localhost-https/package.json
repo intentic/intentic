@@ -2,10 +2,10 @@
     "name": "@intentic-app/localhost-https",
     "version": "0.0.0",
     "private": true,
+    "scripts": {
+        "prepare": "node generate.mjs"
+    },
     "files": [
-        "localhost-com-ca.crt",
-        "localhost-com-ca.key",
-        "localhost.crt",
-        "localhost.key"
+        "generate.mjs"
     ]
 }

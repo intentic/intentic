@@ -1,6 +1,10 @@
 {
     $schema: "https://docs.renovatebot.com/renovate-schema.json",
-    extends: ["config:recommended"],
+    // pinGitHubActionDigests is the supply-chain half: a workflow that says `@v7` re-resolves that tag on every
+    // run, so whoever can move the tag can run code on the runner that holds the release credentials. Pinned to
+    // a commit sha the step is immutable, and the `# v7.0.1` comment beside it is what Renovate reads to keep
+    // the pin current — the readable version stays visible without being what Actions resolves.
+    extends: ["config:recommended", "helpers:pinGitHubActionDigests"],
     // Strict locking: every THIRD-PARTY docker image in the IMAGES map is pinned to a tag + sha256 digest. Keep
     // digests maintained so a pin is always immutable. The first-party `sandbox` is intentionally unpinned (it
     // tracks the moving `stable` release tag the release publishes), so no manager below covers it.

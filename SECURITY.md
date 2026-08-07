@@ -1,5 +1,32 @@
 # Security policy
 
+## Verifying a download
+
+Everything this project publishes is built by GitHub Actions from a tagged commit in this repository, and each
+artifact carries a signed statement saying so. The signature goes to a public transparency log, so the check
+below runs on your machine, against public infrastructure, without involving us — which is the point. If it
+passes, the bytes you have are the bytes this repository's source produced. If it fails, do not run them.
+
+You need the [GitHub CLI](https://cli.github.com). Nothing else, and no account.
+
+```sh
+# The desktop installer, or any binary attached to a release
+gh attestation verify Intentic-setup.exe --repo intentic/intentic
+
+# The sandbox image your machine runs
+gh attestation verify oci://ghcr.io/intentic/sandbox:stable --repo intentic/intentic
+
+# The npm packages, checked against npm's own provenance attestations
+npm audit signatures
+```
+
+Each answers with the workflow, the commit and the repository that produced the artifact. What it cannot tell
+you is whether that source is trustworthy — that part is the reading, and it is why the source is public.
+
+The [OpenSSF Scorecard report](https://scorecard.dev/viewer/?uri=github.com/intentic/intentic) is the other
+half: eighteen automated checks over this repository's security posture, scored and published continuously,
+including whether the releases you just verified are actually being signed.
+
 ## Reporting a vulnerability
 
 **Do not open a public issue for a security problem.** Use GitHub's private reporting instead:
@@ -34,8 +61,10 @@ worktree. On the platform side: anything that would let it reach a user's code o
   the operator's agent on the operator's hardware; that agent is trusted by construction.
 - Vulnerabilities in third-party dependencies with no exploitable path through this code. Report those
   upstream; Renovate carries the bump here.
-- The self-signed `DNS:localhost` certificate committed at `_tools/localhost-https`. It exists so local dev can
-  serve HTTPS (Google FedCM refuses `http://localhost`) and grants nothing off the machine that holds it.
+- The development certificate at `_tools/localhost-https`. It is minted per machine at install time, name-
+  constrained to `localhost` and the loopback addresses, and its private half never leaves the machine that
+  generated it. (Until August 2026 that CA was committed here, unconstrained and valid to 2035 — if you ever
+  added it to a trust store, remove it.)
 
 ## Supported versions
 

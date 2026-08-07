@@ -31,7 +31,7 @@ jobs:
     outputs:
       version: ${{ steps.release.outputs.version }}
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
           clean: false
@@ -64,14 +64,14 @@ jobs:
       XWIN_CACHE_DIR: /ci-cache/xwin
       TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           clean: false
       - uses: ./.github/actions/pnpm-setup
       # Match release-prepare's transient package state before the UI is compiled into the candidate.
       - run: bash _tools/scripts/set-versions.sh "${{ needs.plan.outputs.version }}"
       - run: bash _tools/scripts/build-desktop.sh "${{ needs.plan.outputs.version }}" --windows-only
-      - uses: actions/upload-artifact@v7
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: windows-release-candidate
           path: _editor/desktop-app/dist-bin/Intentic-setup.exe*
@@ -94,19 +94,19 @@ jobs:
       contents: read
       packages: write
     steps:
-      - uses: actions/checkout@v7
-      - uses: pnpm/action-setup@v4
-      - uses: actions/setup-node@v6
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: pnpm/action-setup@fc06bc1257f339d1d5d8b3a19a8cae5388b55320 # v4.4.0
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
         with:
           node-version-file: package.json
           cache: pnpm
-      - uses: docker/login-action@v4
+      - uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
       # The same iq-models cache the images + publish jobs share — the models are arch-neutral bytes.
-      - uses: actions/cache@v6
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: |
             .image-out/iq-models
@@ -129,13 +129,13 @@ jobs:
     env:
       RELEASE_VERSION: ${{ needs.plan.outputs.version }}
     steps:
-      - uses: actions/checkout@v7
-      - uses: actions/download-artifact@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7.0.0
         with:
           name: windows-release-candidate
           path: windows-release-candidate
-      - uses: pnpm/action-setup@v4
-      - uses: actions/setup-node@v6
+      - uses: pnpm/action-setup@fc06bc1257f339d1d5d8b3a19a8cae5388b55320 # v4.4.0
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
         with:
           node-version-file: package.json
           cache: pnpm
@@ -169,6 +169,9 @@ jobs:
       contents: write
       packages: write
       id-token: write
+      # Writes the build provenance for the assets and the images below. Without it the attest steps fail at
+      # the upload rather than at a permissions check, which is a confusing way to learn this is missing.
+      attestations: write
     env:
       CARGO_HOME: /ci-cache/cargo
       CARGO_TARGET_DIR: /ci-cache/desktop-target
@@ -178,24 +181,77 @@ jobs:
       PLANNED_RELEASE_VERSION: ${{ needs.plan.outputs.version }}
       PREBUILT_WINDOWS_DESKTOP_DIR: ${{ github.workspace }}/windows-release-candidate
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
           clean: false
       - uses: ./.github/actions/pnpm-setup
-      - uses: actions/download-artifact@v7
+      - uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7.0.0
         with:
           name: windows-release-candidate
           path: windows-release-candidate
-      - uses: docker/login-action@v4
+      - uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
-      - uses: actions/cache@v6
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: |
             .image-out/iq-models
             .image-out/.iq-models-complete
           key: iq-models-${{ hashFiles('_search/iq-engine/scripts/fetch-model.mjs') }}
       - run: pnpm exec semantic-release
+
+      # --- provenance -------------------------------------------------------------------------------------
+      # Everything below binds what we just published to the commit it was built from, in a public
+      # transparency log. It is the only claim on this project that does not ask anyone to trust us: the
+      # installer someone downloads either matches this repository at this commit or it does not, and
+      # `gh attestation verify` answers that on their machine, offline, without our involvement.
+      #
+      # AFTER semantic-release, not before — the assets do not exist until it has run. A failure here turns
+      # the release red with everything already published, which is the correct order of the two bad
+      # outcomes: an attested release that reports failure can be re-attested, an unattested release that
+      # reports success is a promise the README makes and the pipeline does not keep. Same reasoning as
+      # npm-publish.yml's refusal to fall back when the provenance exchange fails.
+      - name: Attest the release assets
+        uses: actions/attest-build-provenance@96278af6caaf10aea03fd8d33a09a777ca52d62f # v3.2.0
+        with:
+          # The same four directories publish-github.sh attaches to the Release: the desktop installers and
+          # the cross-compiled machine-agent binaries behind the two `curl ... | sh` one-liners. Those
+          # one-liners are the single most trust-hungry thing this project asks anyone to run.
+          subject-path: |
+            _sandbox/sync/dist-bin/*
+            _computers/host/dist-bin/*
+            _sandbox/ic/dist-bin/*
+            _editor/desktop-app/dist-bin/*
+
+      # The images are named by digest rather than by tag because a tag is a pointer and provenance about a
+      # pointer proves nothing — `stable` moves on the next release. imagetools reads the digest the merge
+      # just published.
+      - name: Resolve the published image digests
+        id: digests
+        shell: bash
+        run: |
+          version="${{ needs.plan.outputs.version }}"
+          for image in sandbox dind-host; do
+            digest="$(docker buildx imagetools inspect "ghcr.io/intentic/$image:$version" --format '{{json .Manifest.Digest}}' | tr -d '"')"
+            echo "==> ghcr.io/intentic/$image@$digest"
+            echo "${image//-/_}=$digest" >> "$GITHUB_OUTPUT"
+          done
+
+      - name: Attest the sandbox image
+        uses: actions/attest-build-provenance@96278af6caaf10aea03fd8d33a09a777ca52d62f # v3.2.0
+        with:
+          subject-name: ghcr.io/intentic/sandbox
+          subject-digest: ${{ steps.digests.outputs.sandbox }}
+          # Pushed to GHCR as an OCI referrer as well as to GitHub's own store, so the attestation travels
+          # with the image: someone who pulls it can verify without knowing which repository built it.
+          push-to-registry: true
+
+      - name: Attest the dind-host image
+        uses: actions/attest-build-provenance@96278af6caaf10aea03fd8d33a09a777ca52d62f # v3.2.0
+        with:
+          subject-name: ghcr.io/intentic/dind-host
+          subject-digest: ${{ steps.digests.outputs.dind_host }}
+          push-to-registry: true
