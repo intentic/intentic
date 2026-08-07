@@ -824,7 +824,11 @@ jobs:
       cancel-in-progress: false
     uses: ./.github/workflows/release.yml
     secrets: inherit
+    # A called workflow can never hold more than the caller grants, so this set is the CEILING for every job in
+    # release.yml — a permission the publish job names and this list omits fails the whole pipeline before a
+    # single job starts, as an invalid-workflow error that names neither.
     permissions:
       contents: write
       packages: write
       id-token: write
+      attestations: write
