@@ -55,11 +55,18 @@ foreground loop would park a black console window on the desktop from login unti
 desktop session, which supervise what they start, get the **foreground** one. `launchAgent` is optional — an
 agent that has not been exercised on macOS says so and gets a note, rather than a file macOS never reads.
 
-**`detached.ts`** — `spawnDetached`, `livePid`, `isProcessAlive`, and the flag that is the opposite on each
-platform: POSIX wants `detached` (its own session), Windows wants `windowsHide` (a console with no window, which
-every descendant inherits). The two cannot be combined — `CREATE_NO_WINDOW` is ignored alongside
-`DETACHED_PROCESS` — so passing both is exactly passing neither, which is how three black windows came to pop up
-every five seconds on an idle machine.
+**`detached.ts`** — `spawnDetached`, `livePid`, `isProcessAlive`. The loop is spawned `detached` on **every**
+platform: on POSIX for its own session, on Windows because without it the loop is torn down the moment its
+parent exits — measured on the compiled binary, and the reason "connected in the background (pid N)" was a lie
+there for every release that passed `windowsHide` instead. The two cannot be combined to get both properties
+(`CREATE_NO_WINDOW` is ignored alongside `DETACHED_PROCESS`), so a detached loop on Windows has no console at
+all, and Windows hands a console child of a console-less process a new console *with a window*. That is why
+every spawn inside a loop — git and ssh in sync's bridge, docker and PowerShell in host's tools — passes
+`windowsHide` itself; the flag applies whether or not the parent has a console, where inheritance did not.
+
+`spawnDetached` also answers only once the loop has **survived** a short settle window, and throws naming its log
+otherwise. A pid proves the OS created a process; every caller turns it straight into a sentence promising the
+user their machine is now doing something.
 
 ## What this package is not
 

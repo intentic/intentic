@@ -39,7 +39,16 @@ const EXEC_TIMEOUT_MS = 120_000;
 
 export const realBridgeExec: BridgeExec = {
     run: (command, args, cwd) => {
-        const result = spawnSync(command, [...args], { cwd, encoding: "utf8", timeout: EXEC_TIMEOUT_MS, stdio: ["ignore", "pipe", "pipe"] });
+        /* `windowsHide` because the watcher runs detached and therefore console-less on Windows, and Windows
+         * gives a console child of a console-less process a new console WITH a window — which for a bridge that
+         * runs git → ssh every tick is a black window popping up on an idle desktop, forever. */
+        const result = spawnSync(command, [...args], {
+            cwd,
+            encoding: "utf8",
+            timeout: EXEC_TIMEOUT_MS,
+            stdio: ["ignore", "pipe", "pipe"],
+            windowsHide: true,
+        });
         return result.status === 0 ? result.stdout : undefined;
     },
     exists: existsSync,

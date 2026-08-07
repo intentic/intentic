@@ -59,7 +59,7 @@ const startDetached = async (log: Log): Promise<void> => {
         log(`already connected (pid ${existing}).`);
         return;
     }
-    const pid = spawnDetached(runLogPath, cliLauncher("intentic-host"), HOST_AUTOSTART.foregroundArgs);
+    const pid = await spawnDetached(runLogPath, cliLauncher("intentic-host"), HOST_AUTOSTART.foregroundArgs);
     log(`connected in the background (pid ${pid}). Details: ${runLogPath}`);
 };
 

@@ -26,4 +26,4 @@ export {
     type AutostartSpec,
     type LaunchAgentSpec,
 } from "./autostart.js";
-export { detachedSpawnOptions, isProcessAlive, livePid, spawnDetached } from "./detached.js";
+export { isProcessAlive, livePid, spawnDetached } from "./detached.js";

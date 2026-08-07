@@ -69,7 +69,7 @@ export const parseOrphanSyncNames = (listed: string, keep: readonly string[]): s
 // The raw name listing for one kind of session. A daemon that isn't running (or a list that fails) has nothing
 // of ours to report — and nothing to tear down either.
 const listSessionNames = (mutagen: string, kind: "forward" | "sync"): string => {
-    const result = spawnSync(mutagen, [kind, "list", "--template", "{{range .}}{{.Name}} {{end}}"], { encoding: "utf8" });
+    const result = spawnSync(mutagen, [kind, "list", "--template", "{{range .}}{{.Name}} {{end}}"], { encoding: "utf8", windowsHide: true });
     return result.status === 0 ? result.stdout : "";
 };
 
@@ -160,7 +160,7 @@ interface LiveSession {
 // "specification did not match any sessions" — or its daemon being unreachable, in which case the create that
 // follows fails loudly with the real reason, which is what we want anyway.
 const readSession = (mutagen: string, name: string): LiveSession | undefined => {
-    const result = spawnSync(mutagen, ["sync", "list", "--template", "{{json .}}", name], { encoding: "utf8" });
+    const result = spawnSync(mutagen, ["sync", "list", "--template", "{{json .}}", name], { encoding: "utf8", windowsHide: true });
     if (result.status !== 0) {
         return undefined;
     }
@@ -216,7 +216,7 @@ export const ensureSyncSession = (mutagen: string, pairing: Pairing, log: Log): 
         log(
             "the running sync session was created by an older agent — recreating it so this version's rules apply (no .git file-syncs anymore; commits arrive via the git bridge instead).",
         );
-        spawnSync(mutagen, ["sync", "terminate", spec.name], { stdio: "ignore" });
+        spawnSync(mutagen, ["sync", "terminate", spec.name], { stdio: "ignore", windowsHide: true });
     }
     runMutagen(mutagen, mutagenCreateArgs(spec, live?.paused === true));
 };
@@ -231,12 +231,12 @@ export const retireOrphanSessions = (mutagen: string, pairings: readonly Pairing
         pairings.map((pairing) => sessionName(pairing.sandboxId)),
     );
     if (sessions.length > 0) {
-        spawnSync(mutagen, ["sync", "terminate", ...sessions], { stdio: "ignore" });
+        spawnSync(mutagen, ["sync", "terminate", ...sessions], { stdio: "ignore", windowsHide: true });
         log(`retired ${sessions.length} file-sync session(s) belonging to sandboxes this machine no longer pairs.`);
     }
     const forwards = orphanForwardSessions(mutagen, ids);
     if (forwards.length > 0) {
-        spawnSync(mutagen, ["forward", "terminate", ...forwards], { stdio: "ignore" });
+        spawnSync(mutagen, ["forward", "terminate", ...forwards], { stdio: "ignore", windowsHide: true });
         log(`released ${forwards.length} port forward(s) left holding localhost for sandboxes this machine no longer pairs.`);
     }
 };
@@ -271,7 +271,7 @@ const archToken = (): "amd64" | "arm64" => {
 // overwritten ("mutagen.exe: Can't unlink already-existing object: Permission denied"), so once the first setup
 // had started the daemon, every later command that needed Mutagen — status, pause, a second setup — died there.
 const installedVersion = (binary: string, versionArgs: string[]): string | undefined => {
-    const result = spawnSync(binary, versionArgs, { encoding: "utf8" });
+    const result = spawnSync(binary, versionArgs, { encoding: "utf8", windowsHide: true });
     if (result.error !== undefined || result.status !== 0) {
         return undefined;
     }
@@ -304,7 +304,7 @@ const replaceBinary = async (binary: string, write: () => Promise<void> | void):
 
 // Extract a gzipped tarball into ~/.intentic/sync/bin using the system `tar` (bsdtar on macOS/Windows 10+).
 const extractTarball = (tarball: string): void => {
-    const extract = spawnSync("tar", ["-xzf", tarball, "-C", binDir], { stdio: "inherit" });
+    const extract = spawnSync("tar", ["-xzf", tarball, "-C", binDir], { stdio: "inherit", windowsHide: true });
     if (extract.status !== 0) {
         throw new Error(`failed to extract ${tarball} — tar's own reason is above (no \`tar\` on PATH, or a file it must replace is in use)`);
     }
@@ -356,7 +356,7 @@ export const ensureMutagen = async (): Promise<string> => {
     }
     // Replacing our copy retires the daemon running FROM it — a daemon of another version never serves this
     // CLI anyway, and on Windows it is precisely what holds the file open. Best-effort: usually there is none.
-    spawnSync(dest, ["daemon", "stop"], { stdio: "ignore" });
+    spawnSync(dest, ["daemon", "stop"], { stdio: "ignore", windowsHide: true });
     const tarball = join(binDir, "mutagen.tar.gz");
     await download(
         `https://github.com/mutagen-io/mutagen/releases/download/v${MUTAGEN_VERSION}/mutagen_${osToken()}_${archToken()}_v${MUTAGEN_VERSION}.tar.gz`,
@@ -368,7 +368,7 @@ export const ensureMutagen = async (): Promise<string> => {
 
 // Run a mutagen subcommand, inheriting stdio; throw on failure so the CLI surfaces it.
 export const runMutagen = (mutagen: string, args: string[]): SpawnSyncReturns<Buffer> => {
-    const result = spawnSync(mutagen, args, { stdio: "inherit" });
+    const result = spawnSync(mutagen, args, { stdio: "inherit", windowsHide: true });
     if (result.error !== undefined) {
         throw result.error;
     }

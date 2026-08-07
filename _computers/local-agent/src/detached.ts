@@ -1,6 +1,7 @@
 import { spawn } from "node:child_process";
 import { openSync } from "node:fs";
 import { readFile } from "node:fs/promises";
+import { setTimeout } from "node:timers/promises";
 import type { CliLauncher } from "./launcher.js";
 
 /* THE RESIDENT BACKGROUND LOOP — one per machine, outliving the terminal that started it, found again across
@@ -32,34 +33,58 @@ export const livePid = async (pidPath: string): Promise<number | undefined> => {
     return isProcessAlive(pid) ? pid : undefined;
 };
 
-/* How the loop outlives the command that started it — and the two platforms want OPPOSITE flags.
+/* How the loop outlives the command that started it — `detached` on every platform, for two different reasons.
  *
- * POSIX: `detached` gives it its own session, so the terminal that launched it can't take it down.
+ * POSIX: it gives the loop its own session, so the terminal that launched it can't take it down.
  *
- * Windows: `detached` is DETACHED_PROCESS, which leaves the child with NO CONSOLE. Windows then gives every
- * console child of a console-less process a console of its own, and "creating a new console results in a new
- * console window" — so the git → ssh → cloudflared that the sync agent's bridge runs on EVERY tick became three
- * black windows popping up and closing every five seconds, forever, on a machine that was otherwise idle. The
- * host agent hits the same rule with every command its tools run. Windows keeps a child alive after its parent
- * exits by itself, so what is needed here is not detachment but a console with no WINDOW: CREATE_NO_WINDOW,
- * which every descendant inherits and stays invisible in.
+ * Windows: WITHOUT it the loop is torn down the instant its parent exits. Measured on the compiled binary, from
+ * a native PowerShell parent: the same child that lives on with `detached` is gone within a second without it.
+ * That is not a Windows rule — a plain `Start-Process` child survives its parent just fine — it is what our
+ * runtime does to a child it still considers its own, and `detached` (DETACHED_PROCESS) is what disowns it.
  *
- * The two cannot be combined — CREATE_NO_WINDOW "is ignored ... if it is used with either CREATE_NEW_CONSOLE or
- * DETACHED_PROCESS" — so passing both, as this once did, is exactly passing neither. Mutagen meets the same rule
- * from the other side: its daemon IS detached, so it has to spawn every ssh with CREATE_NEW_CONSOLE plus a
- * hidden window (pkg/agent/transport/process_windows.go) to keep them off the screen. */
-export const detachedSpawnOptions = (platform: NodeJS.Platform): { readonly detached: true } | { readonly windowsHide: true } =>
-    platform === "win32" ? { windowsHide: true } : { detached: true };
+ * This file used to pass `windowsHide` INSTEAD, and the cost was total: every "connected in the background
+ * (pid N)" the host agent ever printed on Windows was a process that no longer existed by the time the user read
+ * it, with an empty log beside it and nothing in the sandbox; the sync watcher never ran there at all. The two
+ * cannot be combined to get both properties — CREATE_NO_WINDOW "is ignored ... if it is used with either
+ * CREATE_NEW_CONSOLE or DETACHED_PROCESS" — so passing both is exactly passing `detached` alone.
+ *
+ * WHAT THAT COSTS, AND WHO PAYS IT. A detached process has no console, and Windows gives every console child of
+ * a console-less process a console of its own — "creating a new console results in a new console window". So the
+ * git → ssh → cloudflared the sync bridge runs on every tick, and every command the host agent's tools run,
+ * would each pop a black window on an idle desktop. The fix is per-spawn rather than inherited: CREATE_NO_WINDOW
+ * applies whether or not the PARENT has a console, so every child spawned from inside a loop passes
+ * `windowsHide` itself. Interactive commands are the exception and keep the user's console, because that is
+ * where their output is meant to land. Mutagen meets the same rule from the other side: its daemon is detached
+ * too, so it spawns every ssh with CREATE_NEW_CONSOLE plus a hidden window
+ * (pkg/agent/transport/process_windows.go). */
 
-// Start the loop detached, its stdout and stderr appended to `logPath` — the only place its output can go once
-// no terminal owns it. Answers the child's pid so the caller can say so in its own words.
-export const spawnDetached = (logPath: string, launcher: CliLauncher, args: readonly string[]): number | undefined => {
+/* How long the loop is given to prove it is really up. The failure this catches is instant — a child that is
+ * torn down with its parent is gone within a second — so the window is short enough to sit inside a setup
+ * command and long enough that process creation on a busy machine is not mistaken for a crash. */
+const SETTLE_MS = 2_000;
+const SETTLE_POLL_MS = 100;
+
+/* Start the loop detached, its stdout and stderr appended to `logPath` — the only place its output can go once no
+ * terminal owns it. Answers the pid once the loop has SURVIVED the settle window, and throws naming the log when
+ * it hasn't.
+ *
+ * The wait is the whole point. A pid proves only that the OS created a process, and every caller here turns that
+ * pid straight into a sentence telling the user their machine is now doing something — which is how a loop that
+ * died on startup got reported as a success for as long as it did, on the one platform where it always died. */
+export const spawnDetached = async (logPath: string, launcher: CliLauncher, args: readonly string[]): Promise<number> => {
     const logFd = openSync(logPath, "a");
     const [command, ...leading] = launcher;
-    const child = spawn(command, [...leading, ...args], {
-        ...detachedSpawnOptions(process.platform),
-        stdio: ["ignore", logFd, logFd],
-    });
+    const child = spawn(command, [...leading, ...args], { detached: true, stdio: ["ignore", logFd, logFd] });
     child.unref();
-    return child.pid;
+    const pid = child.pid;
+    if (pid === undefined) {
+        throw new Error(`could not start ${command} in the background. Details: ${logPath}`);
+    }
+    for (let waited = 0; waited < SETTLE_MS; waited += SETTLE_POLL_MS) {
+        await setTimeout(SETTLE_POLL_MS);
+        if (!isProcessAlive(pid)) {
+            throw new Error(`the background loop started and stopped immediately (pid ${pid}). Details: ${logPath}`);
+        }
+    }
+    return pid;
 };

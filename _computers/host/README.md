@@ -95,8 +95,10 @@ scopes), `audit.jsonl` (every call, kept even across an uninstall — it is the 
 
 ## Gotchas worth knowing before editing
 
-- **Windows spawns need `windowsHide`, not `detached`.** `DETACHED_PROCESS` leaves the process without a
-  console, and Windows then gives every console grandchild one of its own — a black window per command.
+- **Every spawn in this package passes `windowsHide`.** The connection loop runs `detached` (without it, Windows
+  tears it down with the command that started it), which leaves it with no console — and Windows gives a console
+  child of a console-less process one of its own, window included. The flag is per-spawn for that reason: it
+  applies whether or not the parent has a console.
 - **The enrollment token rides the hello FRAME, never the URL.** A durable credential in a query string ends up
   in edge logs, connector logs and every proxy between here and the sandbox.
 - **A refusal is a value, not an exception.** Scope errors come back as ordinary tool results so the model tells

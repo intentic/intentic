@@ -75,8 +75,12 @@ export const sandboxesFrom = (rows: readonly DockerRow[]): MachineSandbox[] => {
         });
 };
 
+/* `windowsHide` here and on every other spawn in this agent: the connection loop runs detached, which on Windows
+ * means it has no console of its own — and a console child of a console-less process is handed a BRAND-NEW
+ * console, window and all. Without the flag, every `docker ps` behind a sandbox listing would flash a black
+ * window on the user's desktop. */
 const docker = async (args: readonly string[]): Promise<string> => {
-    const { stdout } = await exec("docker", [...args], { timeout: DOCKER_TIMEOUT_MS }).catch((error: NodeJS.ErrnoException) => {
+    const { stdout } = await exec("docker", [...args], { timeout: DOCKER_TIMEOUT_MS, windowsHide: true }).catch((error: NodeJS.ErrnoException) => {
         if (error.code === "ENOENT") {
             throw new Error("This computer has no docker command, so no Intentic sandboxes can run here.");
         }
@@ -277,6 +281,7 @@ export const sandboxLogs = async (slug: string, lines: number, scopes: HostScope
     const { stdout, stderr } = await exec("docker", ["logs", "--tail", String(lines), `${PREFIX}${slug}`], {
         timeout: DOCKER_TIMEOUT_MS,
         maxBuffer: 8 * 1024 * 1024,
+        windowsHide: true,
     });
     const text = [stdout, stderr].filter((part) => part !== "").join("\n");
     return text === "" ? `Sandbox "${slug}" has logged nothing yet.` : text;

@@ -128,7 +128,8 @@ export interface ForwardExecutor {
 // The real executor: Mutagen forward sessions named per sandbox+port (so reconcile targets them without listing,
 // and one pairing's teardown can never reach another's).
 export const mutagenExecutor = (mutagen: string, pairing: Pairing): ForwardExecutor => ({
-    terminate: (port) => void spawnSync(mutagen, ["forward", "terminate", forwardSessionName(pairing.sandboxId, port)], { stdio: "ignore" }),
+    terminate: (port) =>
+        void spawnSync(mutagen, ["forward", "terminate", forwardSessionName(pairing.sandboxId, port)], { stdio: "ignore", windowsHide: true }),
     create: (summary) =>
         runMutagen(
             mutagen,
@@ -453,7 +454,7 @@ export const startMirrorWatcher = async (launcher: CliLauncher, log: Log): Promi
         log(`port mirroring is already running (pid ${existing}).`);
         return;
     }
-    const pid = spawnDetached(mirrorLogPath, launcher, MIRROR_AUTOSTART.foregroundArgs);
+    const pid = await spawnDetached(mirrorLogPath, launcher, MIRROR_AUTOSTART.foregroundArgs);
     log(`mirroring every paired sandbox's workspace ports onto localhost (pid ${pid}). Details: ${mirrorLogPath}`);
 };
 
@@ -464,7 +465,7 @@ export const startMirrorWatcher = async (launcher: CliLauncher, log: Log): Promi
 const teardownForwards = async (mutagen: string, sandboxId?: string): Promise<number> => {
     const names = ourForwardSessions(mutagen, sandboxId);
     if (names.length > 0) {
-        spawnSync(mutagen, ["forward", "terminate", ...names], { stdio: "ignore" });
+        spawnSync(mutagen, ["forward", "terminate", ...names], { stdio: "ignore", windowsHide: true });
     }
     // A baseline naming forwards that no longer exist would make the next reconcile treat those ports as already
     // mirrored and never recreate them. The skip set goes with it: mirroring being off is not the same fact as a

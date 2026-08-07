@@ -20,12 +20,13 @@ const exec = promisify(execFile);
 
 const osName = async (): Promise<string> => {
     if (platform() === "win32") {
-        const { stdout } = await exec("powershell.exe", [
-            "-NoProfile",
-            "-NonInteractive",
-            "-Command",
-            "(Get-CimInstance Win32_OperatingSystem).Caption",
-        ]).catch(() => ({ stdout: "" }));
+        const { stdout } = await exec(
+            "powershell.exe",
+            ["-NoProfile", "-NonInteractive", "-Command", "(Get-CimInstance Win32_OperatingSystem).Caption"],
+            // The loop that calls this has no console (tools/sandboxes.ts says why), so this asks for its own
+            // windowless one rather than being given a visible console by Windows.
+            { windowsHide: true },
+        ).catch(() => ({ stdout: "" }));
         const caption = stdout.trim();
         return caption === "" ? `Windows (${release()})` : `${caption} (build ${release()})`;
     }

@@ -1,21 +1,40 @@
+import { mkdtempSync, readFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { detachedSpawnOptions } from "./detached.js";
+import { isProcessAlive, spawnDetached } from "./detached.js";
 
-/* A local agent's background loop spawns child processes for its whole life — the sync watcher runs
- * git → ssh → cloudflared on every tick, the host agent runs whatever the sandbox's agent asked for. On Windows,
- * `detached` (DETACHED_PROCESS) leaves the loop with no console, and Windows then gives each of those children a
- * console of its own — a new console window, popping up and closing every five seconds on an idle machine.
- * windowsHide (CREATE_NO_WINDOW) gives the loop a console WITHOUT a window for them to inherit instead.
- *
- * Passing both is passing neither: CREATE_NO_WINDOW is ignored with DETACHED_PROCESS, which is how the popping
- * shipped. */
-describe("detachedSpawnOptions", () => {
-    it("gives Windows a windowless console and never detaches", () => {
-        expect(detachedSpawnOptions("win32")).toEqual({ windowsHide: true });
+/* The contract these cover is the one a user reads as a sentence: "connected in the background (pid N)". It was
+ * false on Windows for every release that spawned the loop without `detached` — the pid was real, the process
+ * was already gone, and the caller had no way to tell. So the test is not "which flags does it pass" (the flags
+ * are the runtime's business and the reason they are right is measured, not asserted) but "does it hand back a
+ * pid only when something is still running under it". */
+const logFile = (): string => join(mkdtempSync(join(tmpdir(), "detached-")), "loop.log");
+
+// A child that outlives the settle window without holding the test open any longer than it must.
+const stayAlive = ["-e", "setTimeout(() => {}, 10_000)"];
+
+describe("spawnDetached", () => {
+    it("answers the pid of a loop that is still running, and writes its output to the log", async () => {
+        const log = logFile();
+        const pid = await spawnDetached(log, [process.execPath], ["-e", "console.log('up'); setTimeout(() => {}, 10_000)"]);
+
+        expect(isProcessAlive(pid)).toBe(true);
+        expect(readFileSync(log, "utf8")).toContain("up");
+        process.kill(pid);
     });
 
-    it("detaches on POSIX, where a session — not a console — is what outlives the terminal", () => {
-        expect(detachedSpawnOptions("linux")).toEqual({ detached: true });
-        expect(detachedSpawnOptions("darwin")).toEqual({ detached: true });
+    it("refuses to report a loop that died on startup, and names the log that says why", async () => {
+        const log = logFile();
+
+        await expect(spawnDetached(log, [process.execPath], ["-e", "console.error('boom'); process.exit(1)"])).rejects.toThrow(log);
+        expect(readFileSync(log, "utf8")).toContain("boom");
+    });
+
+    it("detaches the loop from the caller, so it is still there once the caller is done with it", async () => {
+        const pid = await spawnDetached(logFile(), [process.execPath], stayAlive);
+
+        expect(isProcessAlive(pid)).toBe(true);
+        process.kill(pid);
     });
 });
