@@ -1,12 +1,14 @@
 <script setup lang="ts">
-import type { Computer, MachineSandbox } from "@intentic/sandbox-contract";
+import type { Computer, MachineSandbox, MachineSandboxOp } from "@intentic/sandbox-contract";
 import { Card, cmp, MachineDetail, RowGroup, StatusBadge, type StatusVariant, timeAgo } from "@intentic/ui";
 import Button from "primevue/button";
 import { computed, onMounted, ref } from "vue";
 import { useRoute } from "vue-router";
 import BridgeTokensCard from "./BridgeTokensCard.vue";
 import DesktopSyncCard from "./DesktopSyncCard.vue";
-import { manageMachineSandbox, reportStale, type SandboxOp, useComputers } from "../../composables/sandbox/useComputers";
+import MachineRunLog from "./MachineRunLog.vue";
+import { manageMachineSandbox, reportStale, useComputers } from "../../composables/sandbox/useComputers";
+import { useSandbox } from "../../composables/sandbox/useSandbox";
 import { useNow } from "../../composables/useNow";
 
 /* The Sandbox hub's "Computers" tab — what is on the other end of this sandbox.
@@ -80,21 +82,60 @@ const manageable = (computer: Computer): boolean => computer.hostId !== undefine
 const rowKey = (computer: Computer, box: MachineSandbox): string => `${computer.key}:${box.slug}`;
 const busy = ref<string | undefined>();
 const actionError = ref<{ key: string; message: string } | undefined>();
+const actionDone = ref<{ key: string; message: string } | undefined>();
+// The running operation's output, keyed by row so leaving a log on screen while reading another row's is fine.
+const runLines = ref<Record<string, string[]>>({});
 
-const act = async (computer: Computer, box: MachineSandbox, op: SandboxOp): Promise<void> => {
+/* WHICH ROW IS THE SANDBOX YOU ARE LOOKING AT. The container's slug on its machine is the leading label of the
+ * daemon's own hostname — the same derivation the sandbox switcher uses for its teardown command, and the same
+ * one the setup CLI applies when it names the container.
+ *
+ * It matters because this view can stop and delete the very sandbox serving it. That is a legitimate thing to
+ * want and a terrible thing to do by accident, so the row says so and the confirmation names it. */
+const { daemonUrl } = useSandbox();
+const ownSlug = computed(() => (daemonUrl.value === undefined ? undefined : new URL(daemonUrl.value).hostname.split(`.`)[0]));
+const isSelf = (computer: Computer, box: MachineSandbox): boolean => computer.hostId !== undefined && box.slug === ownSlug.value;
+
+// The ops that end this browser's own connection when they are aimed at the sandbox serving it. Everything but
+// `start`, which is the one that can only ever help.
+const SEVERING = new Set<MachineSandboxOp>([`stop`, `restart`, `update`, `rebuild`, `rollback`, `remove`]);
+
+const CONFIRM: Partial<Record<MachineSandboxOp, (name: string) => string>> = {
+    remove: (name) =>
+        `Remove ${name}?\n\nThis deletes it and everything in it — its files and its history — from that computer. This cannot be undone.`,
+    update: (name) => `Update ${name}?\n\nIt restarts onto the newest image and is unavailable for a few minutes. Its files are kept.`,
+    rollback: (name) => `Roll ${name} back?\n\nIt returns to the image it ran before its last update. Its files are kept.`,
+};
+
+const act = async (computer: Computer, box: MachineSandbox, op: MachineSandboxOp): Promise<void> => {
     if (computer.hostId === undefined || busy.value !== undefined) {
+        return;
+    }
+    const name = box.name ?? box.slug;
+    const asked = CONFIRM[op]?.(name);
+    // The self-warning rides the confirmation rather than replacing it: "this deletes everything" and "this also
+    // closes the page you are on" are two different things to know, and the second never cancels the first.
+    const severing = isSelf(computer, box) && SEVERING.has(op) ? `\n\nThis is the sandbox you are using right now — this page will lose it.` : ``;
+    if ((asked !== undefined || severing !== ``) && !globalThis.confirm(`${asked ?? `${name}: ${op}?`}${severing}`)) {
         return;
     }
     const key = rowKey(computer, box);
     busy.value = `${key}:${op}`;
     actionError.value = undefined;
+    actionDone.value = undefined;
+    runLines.value = { ...runLines.value, [key]: [] };
     try {
-        await manageMachineSandbox(computer.hostId, box.slug, op);
-        refetch();
+        const message = await manageMachineSandbox(computer.hostId, box.slug, op, {
+            onLine: (line) => (runLines.value = { ...runLines.value, [key]: [...(runLines.value[key] ?? []), line] }),
+        });
+        actionDone.value = { key, message };
     } catch (failure) {
         actionError.value = { key, message: failure instanceof Error ? failure.message : String(failure) };
     } finally {
         busy.value = undefined;
+        // Always, including after a failure: a flow that stopped halfway still changed the machine, and the row
+        // must describe what is there now rather than what was there when it started.
+        refetch();
     }
 };
 </script>
@@ -134,10 +175,13 @@ const act = async (computer: Computer, box: MachineSandbox, op: SandboxOp): Prom
                      deliberately not mounted). So this section is absent rather than empty for most machines. -->
                 <div v-if="computer.report && computer.report.sandboxes.length > 0" class="flex flex-col gap-1.5">
                     <span class="text-2xs font-medium text-muted">Sandboxes on this computer</span>
-                    <div v-for="box in computer.report.sandboxes" :key="box.container" class="flex flex-col gap-0.5">
+                    <div v-for="box in computer.report.sandboxes" :key="box.container" class="flex flex-col gap-1">
                         <div class="flex flex-wrap items-center gap-x-2 text-2xs">
                             <StatusBadge :variant="box.running ? `success` : `neutral`" size="xs" :label="box.running ? `running` : `stopped`" />
                             <span class="truncate font-mono text-content">{{ box.name ?? box.slug }}</span>
+                            <!-- The one row on this page that can close the page. Said before the buttons rather
+                                 than in the confirmation alone, so it is known before anything is clicked. -->
+                            <span v-if="isSelf(computer, box)" class="text-subtle">· the one you're using</span>
                             <!-- Absent tunnel and stopped tunnel are different facts; only the second is a warning. -->
                             <span v-if="box.tunnelRunning === false" class="text-warning">· tunnel off</span>
                             <span v-if="manageable(computer)" class="ml-auto flex items-center gap-1">
@@ -169,9 +213,36 @@ const act = async (computer: Computer, box: MachineSandbox, op: SandboxOp): Prom
                                         @click="act(computer, box, `stop`)"
                                     />
                                 </template>
+                                <!-- Update is offered whether or not it is running: a stopped sandbox is exactly
+                                     the one somebody wants on a newer image before starting it again. -->
+                                <Button
+                                    label="Update"
+                                    size="small"
+                                    :text="true"
+                                    :loading="busy === `${rowKey(computer, box)}:update`"
+                                    :disabled="busy !== undefined"
+                                    @click="act(computer, box, `update`)"
+                                />
+                                <Button
+                                    label="Remove"
+                                    size="small"
+                                    severity="danger"
+                                    :text="true"
+                                    :loading="busy === `${rowKey(computer, box)}:remove`"
+                                    :disabled="busy !== undefined"
+                                    @click="act(computer, box, `remove`)"
+                                />
                             </span>
                         </div>
+                        <!-- The machine's own output while it works, and only while this row is the one working:
+                             an operation that finished has said everything it had to say in its result line. -->
+                        <MachineRunLog
+                            v-if="busy?.startsWith(`${rowKey(computer, box)}:`)"
+                            :lines="runLines[rowKey(computer, box)] ?? []"
+                            :running="true"
+                        />
                         <p v-if="actionError?.key === rowKey(computer, box)" :class="cmp.alertDanger(`text-2xs`)">{{ actionError.message }}</p>
+                        <p v-else-if="actionDone?.key === rowKey(computer, box)" class="text-2xs text-muted">{{ actionDone.message }}</p>
                     </div>
                 </div>
             </div>

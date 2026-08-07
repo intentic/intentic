@@ -41,6 +41,9 @@ you live and where the repository is; this is their own machine, reached over a 
 | \`mcp__\${id}__computer\` | Use the mouse and keyboard: click, type, press a chord, scroll, drag. |
 | \`mcp__\${id}__list_sandboxes\` | The Intentic sandboxes on this machine: which are running, which are stopped, tunnel state. |
 | \`mcp__\${id}__manage_sandbox\` | Start, stop or restart one of them by slug. Requires the 'Manage sandboxes on this computer' permission — and stopping the sandbox you are running in severs your own connection. |
+| \`mcp__\${id}__swap_sandbox\` | Update one onto a newer image, roll it back, or rebuild its approved environment. Keeps files and history; takes minutes, and the sandbox is down for them. Same permission as \`manage_sandbox\`. |
+| \`mcp__\${id}__remove_sandbox\` | Delete one, with its files and its history. Irreversible, and takes its own 'Remove sandboxes from this computer' permission. Ask before calling it, every time. |
+| \`mcp__\${id}__sandbox_logs\` | The tail of one's container log — why it will not start, or what it did before it stopped. |
 
 ## Rules that are not negotiable
 

@@ -39,7 +39,7 @@ const host: ExtensionHost = {
 const laptop: Capability = {
     id: "my-laptop",
     kind: "host",
-    config: { platform: "windows", shell: "on", write: "off", screen: "on", control: "off", sandboxes: "off" },
+    config: { platform: "windows", shell: "on", write: "off", screen: "on", control: "off", sandboxes: "off", sandboxRemove: "off" },
 };
 const skillPath = (root: string): string => join(root, ".claude", "skills", "my-laptop", "SKILL.md");
 
@@ -85,6 +85,6 @@ test("every contributed OS pack carries both halves' placeholders", async () => 
 test("echoConfig renders the grant back and host holds no manifest secret", () => {
     // Every field is a permission and none is a credential: the enrollment token lives on /history, so rotating
     // it is re-running the installer, not an edit in /secrets.
-    expect(echoConfig(laptop, new Map())).toEqual({ platform: "windows", shell: "on", write: "off", screen: "on", control: "off", sandboxes: "off" });
+    expect(echoConfig(laptop, new Map())).toEqual({ platform: "windows", shell: "on", write: "off", screen: "on", control: "off", sandboxes: "off", sandboxRemove: "off" });
     expect(secretField(laptop, new Map())).toBeUndefined();
 });

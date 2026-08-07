@@ -206,7 +206,17 @@ const HOST_SCOPE_FIELDS: readonly CapabilityField[] = [
             { value: "off", label: "Blocked" },
             { value: "on", label: "Allowed" },
         ],
-        hint: "Start, stop and restart the Intentic sandboxes running on this machine — narrower than Run commands, and enough to delegate the machine's sandbox fleet to this one.",
+        hint: "Start, stop, restart and update the Intentic sandboxes running on this machine — narrower than Run commands, and enough to delegate the machine's sandbox fleet to this one.",
+    },
+    {
+        key: "sandboxRemove",
+        label: "Remove sandboxes from this computer",
+        default: "off",
+        options: [
+            { value: "off", label: "Blocked" },
+            { value: "on", label: "Allowed" },
+        ],
+        hint: "Delete a sandbox on this machine along with its files and its history. Separate from managing them because nothing undoes it.",
     },
     {
         key: "roots",

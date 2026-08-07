@@ -195,6 +195,12 @@ export const createApp = (config: Config, prisma: PrismaClient, logger: Logger):
         // The daemon arms it at boot; the connect script only runs the sync agent when SYNC_DIR was passed on the
         // command (the user's opt-in), so returning it unconditionally is harmless when sync is off.
         lines.push(`SYNC_PAIR_TOKEN=${randomBytes(32).toString(`base64url`)}`);
+        // The same, for the CONNECTED-COMPUTER agent the flow installs beside it — so the machine running this
+        // sandbox can be seen and managed from the browser instead of from a terminal on that machine. Minted
+        // here for the same reason as the one above: nothing is running yet to mint it. Unconditional and inert
+        // when unused — the daemon arms it once and burns it on redemption, and a flow that installs no agent
+        // simply never spends it.
+        lines.push(`HOST_PAIR_TOKEN=${randomBytes(32).toString(`base64url`)}`);
         lines.push(...Object.entries(payload).map(([key, value]) => `${key}=${value}`));
         // The one moment the platform learns the pasted command reached a machine. Everything after this point
         // happens inside the user's Docker and is invisible until the daemon announces minutes later — so the

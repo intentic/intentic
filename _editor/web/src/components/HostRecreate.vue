@@ -1,21 +1,29 @@
 <script setup lang="ts">
-import { Code, commandLang, Segmented, useOsPreference } from "@intentic/ui";
+import type { MachineSandboxOp } from "@intentic/sandbox-contract";
+import { Code, cmp, commandLang, Segmented, useOsPreference } from "@intentic/ui";
 import Button from "primevue/button";
-import { computed } from "vue";
+import { computed, ref } from "vue";
+import MachineRunLog from "../pages/sandbox/MachineRunLog.vue";
+import { manageMachineSandbox, useHostRunning } from "../composables/sandbox/useComputers";
 import { DESKTOP_DOWNLOADS, desktopRecreateLink, desktopVersion, openDesktopLink } from "../environments/desktop";
 import { bashCommand, psCommand } from "../environments/scriptCommand";
 
-/* RECREATING THE SANDBOX — the one thing the browser genuinely cannot do for you.
+/* RECREATING THE SANDBOX — which the browser cannot do itself, but no longer has to hand to a terminal.
  *
  * The daemon holds no HOST Docker socket (its own engine is nested), so it can never recreate its own
  * container. Both moments that need one — an update to a newer image, and building an owner-approved
  * environment overlay — therefore end here, on the machine the container runs on. Two cards used to state
  * that separately and hand out a bash-only one-liner each; this is the one place that says it.
  *
- * Three renderings of the same operation, in the order of how little work they ask for:
+ * Four renderings of the same operation, in the order of how little work they ask for:
+ *   • the machine is a CONNECTED COMPUTER — a button, from any browser on any device, with the machine's own
+ *     output streaming in beneath it. Nothing about this needs the user to be at that computer.
  *   • inside the desktop app — a button, because the app IS a process on that machine (intentic://recreate)
  *   • in a browser on Windows/Linux/macOS — the command, for the shell that machine actually has
  *   • in a browser with no app — the same command, plus where to get the app so the next one is a button
+ *
+ * The first is preferred over the second even inside the app: the deep link hands the window over to the
+ * launcher face, and staying on the page you were reading is worth more than that handoff.
  *
  * The mode rides the ARGUMENT SHAPE, not a flag, exactly as recreate.sh has always read it: a hash means
  * "build the approved overlay pinned to this digest", no hash means "pull the fresh :stable base". */
@@ -32,6 +40,42 @@ const props = defineProps<{
 
 const { cmdOs } = useOsPreference();
 const desktop = computed(() => desktopVersion() !== undefined);
+
+// The machine, when it is one this sandbox can ask directly.
+const hostId = useHostRunning(() => props.slug);
+const OP: Record<`Update` | `Rebuild` | `Roll back`, MachineSandboxOp> = { Update: `update`, Rebuild: `rebuild`, "Roll back": `rollback` };
+
+const running = ref(false);
+const lines = ref<string[]>([]);
+const failure = ref<string | undefined>(undefined);
+const done = ref<string | undefined>(undefined);
+
+/* Recreating THIS sandbox ends this page's connection to it, every time — that is what recreating means, and it
+ * is why the command this replaces was always run somewhere else. Said before it starts rather than discovered
+ * when the page goes quiet. */
+const runOnMachine = async (): Promise<void> => {
+    const id = hostId.value;
+    if (id === undefined || running.value) {
+        return;
+    }
+    if (!globalThis.confirm(`${props.action} this sandbox?\n\nIt restarts on that computer and this page loses it for a few minutes. Your files are kept.`)) {
+        return;
+    }
+    running.value = true;
+    failure.value = undefined;
+    done.value = undefined;
+    lines.value = [];
+    try {
+        done.value = await manageMachineSandbox(id, props.slug, OP[props.action], {
+            ...(props.hash === undefined ? {} : { hash: props.hash }),
+            onLine: (line) => lines.value.push(line),
+        });
+    } catch (error) {
+        failure.value = error instanceof Error ? error.message : String(error);
+    } finally {
+        running.value = false;
+    }
+};
 
 const command = computed(() => {
     const key = props.hash === undefined ? `update` : `rebuild`;
@@ -50,9 +94,25 @@ const command = computed(() => {
 
 <template>
     <div class="flex flex-col gap-2">
+        <!-- The machine is reachable from here, so this is a button wherever you are reading it — a phone on
+             another continent included. All three modes work: unlike the desktop deep link, a rollback has a
+             verb on this path. -->
+        <template v-if="hostId">
+            <Button :label="running ? `${action} running…` : `${action} now`" class="self-start" :loading="running" @click="runOnMachine">
+                <template #icon><Icon name="bolt" /></template>
+            </Button>
+            <p class="text-2xs text-subtle">
+                Runs on the computer hosting this sandbox. It takes a few minutes and this page loses the sandbox while it restarts; your files (in
+                /work) are kept.
+            </p>
+            <MachineRunLog v-if="running || lines.length > 0" :lines="lines" :running="running" />
+            <div v-if="failure" :class="cmp.alertDanger(`text-2xs`)">{{ failure }}</div>
+            <p v-else-if="done" class="text-2xs text-muted">{{ done }}</p>
+        </template>
+
         <!-- The desktop deep link carries update and rebuild only; a rollback has no verb there, so it falls
              through to the command block rather than being wired to a link that would run the wrong swap. -->
-        <template v-if="desktop && action !== `Roll back`">
+        <template v-else-if="desktop && action !== `Roll back`">
             <Button :label="`${action} now`" class="self-start" @click="openDesktopLink(desktopRecreateLink(slug, hash))">
                 <template #icon><Icon name="bolt" /></template>
             </Button>

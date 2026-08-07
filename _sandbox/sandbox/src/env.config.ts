@@ -41,6 +41,16 @@ const configSchema = z.object({
     // as a normal single-use pairing so the connect script's sync agent can enroll without the browser minting
     // one. Same trust class as connectToken (both live in the container env); empty ⇒ no seed.
     syncPairToken: z.string().default("").meta({ secret: true }),
+    /* Setup-time CONNECTED-COMPUTER pairing, and what to call the machine it enrolls. Same trust class and same
+     * one-shot rule as syncPairToken above: the connect flow passes the claim's HOST_PAIR_TOKEN here, the daemon
+     * arms it once, and the machine agent the same flow installed redeems it. Empty ⇒ no computer is connected,
+     * which is every sandbox set up before this existed and every headless one.
+     *
+     * The platform and hostname come from the flow because the daemon cannot see either: it is in a container
+     * whose hostname is its own, on an OS that is always Linux however the machine outside is spelled. */
+    hostPairToken: z.string().default("").meta({ secret: true }),
+    hostPlatform: z.string().default(""),
+    hostLabel: z.string().default(""),
     /* The browser origin(s) the daemon emits CORS for — comma-separated, defaulting to the hosted app.
      *
      * Defaulted rather than left open because CORS is the only thing guarding the routes that have no bearer to

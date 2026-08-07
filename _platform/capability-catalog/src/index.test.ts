@@ -87,7 +87,7 @@ describe("contributionCard", () => {
             skill: "skills/windows/SKILL.md",
         };
         const keys = contributionCard(pack).fields.map((field) => field.key);
-        expect(keys).toEqual(["platform", "shell", "write", "screen", "control", "sandboxes", "roots"]);
+        expect(keys).toEqual(["platform", "shell", "write", "screen", "control", "sandboxes", "sandboxRemove", "roots"]);
     });
 
     it("pins no discriminator for a preset kind, whose cards differ only in their defaults", () => {

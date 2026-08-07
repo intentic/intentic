@@ -49,8 +49,38 @@ the machine answers.
 | `write_file` / `trash_file` | Also need the write switch, which is **off** unless the user turned it on. There is no delete tool — `trash_file` moves the file somewhere recoverable. |
 | `screenshot` | Windows via .NET; Linux via grim/spectacle/import/scrot, picked by session type. |
 | `list_sandboxes` / `manage_sandbox` | The Intentic sandboxes running on this machine: list them, start/stop/restart one (tunnel sidecar included). Managing takes its own switch, **off** by default — narrower than `run_command`, so the machine's fleet can be delegated to a sandbox without handing it a shell. Listing is subsumed by either switch. |
+| `swap_sandbox` / `sandbox_logs` | Update one onto a newer image, roll it back, rebuild its approved overlay — and read its container log. The swap runs `ic`, takes minutes, and keeps /work and /history; it rides the same `sandboxes` switch, and logs ride the same rule as listing. |
+| `remove_sandbox` | Delete one, with its files and its history. Its **own** switch, off by default: everything under `sandboxes` is undone by doing it again, and this is undone by nothing. |
+
+## The sandbox flows are not reimplemented here
+
+`swap_sandbox` and `remove_sandbox` spawn the [`ic`](../../_sandbox/ic) CLI that the setup one-liner already put
+on this machine — the same binary the pasted command, the desktop app's buttons and a hand-typed `ic` run. This
+package is the fourth caller of one implementation, not a second copy of it, which is the argument the desktop
+app makes for spawning the scripts instead of porting them into Rust.
+
+`ic` is looked for where the installers put it (`~/.intentic/ic/bin`, then `/usr/local/bin`) before PATH, and
+the path is built for the TARGET platform rather than by `node:path` — this agent's Windows spelling is asserted
+from a Linux runner, so a function that answers in the running host's dialect could not be checked.
+
+## Watching a flow, rather than being told about it afterwards
+
+An update pulls an image and recreates a container: minutes in which an MCP tool result can say nothing at all.
+So `hostContract` carries one **typed, streaming** procedure beside the opaque `mcp` one — `runSandboxFlow` —
+which the browser's Computers view reads live. Both doors call the same functions in `src/tools/sandboxes.ts`,
+so what a person watches and what the agent is told can never describe one run differently.
+
+Typed, unlike `mcp`, because the reader is different: a model gains nothing from a line as it arrives and
+everything from this machine learning tools without a daemon release, while a person watching a progress log
+needs exactly the opposite.
 
 ## Commands
+
+Most machines never run that one-liner by hand any more: `ic sandbox connect` installs this agent as part of
+setting a sandbox up, redeeming a pairing the platform minted with the setup code. A computer connected that way
+arrives with **`sandboxes` on and every other switch off** — no shell, no files, no screen — because installing a
+sandbox is consent to running a sandbox, not to handing the agent inside it a laptop. Widening it is a click on
+the card. See `_sandbox/sandbox/src/hosts/host-seed.ts`.
 
 ```sh
 intentic-host setup --url https://sandbox-… --pair <token>   # what the card's one-liner runs

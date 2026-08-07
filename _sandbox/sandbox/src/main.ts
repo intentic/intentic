@@ -55,6 +55,7 @@ import { startLoopWatchdog } from "./platform/loop-watchdog.js";
 import { startWorkloadPriorityGovernor } from "./platform/workload-priority.js";
 import { readLocalCertificate, startLocalCertificateRenewal } from "./platform/local-cert.js";
 import { restoreAuthorizedKeys, seedPairing } from "./platform/sync.js";
+import { seedSetupHost } from "./hosts/host-seed.js";
 import { reapFinishedSessions } from "./terminal/terminal-session.js";
 import { startVersionCheck } from "./platform/version-check.js";
 import { startRuntimeHealth } from "./agent/adapter-health.js";
@@ -200,6 +201,25 @@ const main = async (): Promise<void> => {
         void seedPairing(config.historyRoot, config.syncPairToken).catch((error: unknown) =>
             logger.warn({ err: error }, "setup pairing not armed — enable desktop sync from the browser instead"),
         );
+    }
+
+    /* Setup-time CONNECTED COMPUTER: create the card for the machine that ran the installer and arm its pairing,
+     * so the agent that same flow installed can enroll. A no-op on every boot after the first — the token is
+     * burned on /history when it is redeemed — and on every sandbox that was set up before this existed.
+     *
+     * Detached like the sync seed above: the machine agent retries its enroll on its own backoff, so nothing here
+     * needs to hold the boot. A failure leaves the computer unconnected and the Computers view saying so, which
+     * is exactly what it said before this existed. */
+    if (config.hostPairToken !== "") {
+        void seedSetupHost(services, { token: config.hostPairToken, platform: config.hostPlatform, label: config.hostLabel })
+            .then(({ armed, id }) => {
+                if (armed) {
+                    logger.info({ host: id }, "setup computer armed — it may manage this machine's sandboxes; widen or revoke on its capability card");
+                }
+            })
+            .catch((error: unknown) =>
+                logger.warn({ err: error }, "setup computer not connected — add it from Capabilities to manage this machine's sandboxes"),
+            );
     }
 
     // Close the readiness gate the data routes await (app.ts) and name what it is waiting for. A request that

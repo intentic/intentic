@@ -8,6 +8,8 @@ import {
     HostTunnelInputSchema,
     HostTunnelSchema,
     InfoSchema,
+    MachineFlowLineSchema,
+    MachineSandboxFlowInputSchema,
     OkSchema,
     PresenceReportSchema,
     SubagentIdParamSchema,
@@ -70,4 +72,15 @@ export const systemContract = {
         .route({ method: "GET", path: "/system/subagents/{id}/transcript" })
         .input(SubagentIdParamSchema)
         .output(SessionTranscriptSchema),
+    /* Start, stop, restart, update, rebuild, roll back or remove a sandbox on one of the user's own computers —
+     * the Computers view's buttons, relayed to the machine over the socket it holds open to us.
+     *
+     * Streamed because the slowest of these takes minutes, and it is the same stream whatever the op: one door
+     * for one decision, so the view has one shape to render rather than one per duration. The daemon adds no
+     * judgement — the machine enforces its own switches and its refusal arrives as the terminal `error` line,
+     * in its own words, naming the control to flip. */
+    manageMachineSandbox: oc
+        .route({ method: "POST", path: "/system/computers/{id}/sandboxes/{slug}" })
+        .input(MachineSandboxFlowInputSchema)
+        .output(eventIterator(MachineFlowLineSchema)),
 };

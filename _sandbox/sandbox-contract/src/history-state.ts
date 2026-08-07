@@ -105,5 +105,8 @@ export const HISTORY_STATE_FILES: readonly StateFile[] = [
     { path: "sync-enrollments.json", portability: "identity", note: "Re-pair desktop sync from the Sync tab." },
     { path: "sync-pair-consumed.json", portability: "identity" },
     { path: "host-enrollments.json", portability: "identity" },
+    // The burn list for setup-time computer pairings. Identity, like sync's beside it, and for a sharper reason:
+    // carrying it into another sandbox would mark that sandbox's own fresh pairing as already spent.
+    { path: "host-pair-consumed.json", portability: "identity" },
     { path: "local-cert/", portability: "identity" },
 ];

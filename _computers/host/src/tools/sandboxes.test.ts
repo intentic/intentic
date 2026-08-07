@@ -1,7 +1,21 @@
 import type { HostScopes } from "@intentic/sandbox-contract";
 import { expect, test } from "vitest";
 import { ScopeError } from "../policy.js";
-import { asSandboxOp, listSandboxes, manageSandbox, rowsFrom, sandboxesFrom } from "./sandboxes.js";
+import {
+    asLogLines,
+    asSandboxOp,
+    asSandboxSwap,
+    icCandidates,
+    icRemoveArgs,
+    icSwapArgs,
+    listSandboxes,
+    manageSandbox,
+    removeSandbox,
+    rowsFrom,
+    sandboxesFrom,
+    sandboxLogs,
+    swapSandbox,
+} from "./sandboxes.js";
 
 const scopes = (overrides: Partial<HostScopes> = {}): HostScopes => ({
     shell: "on",
@@ -9,6 +23,7 @@ const scopes = (overrides: Partial<HostScopes> = {}): HostScopes => ({
     screen: "on",
     control: "on",
     sandboxes: "on",
+    sandboxRemove: "on",
     ...overrides,
 });
 
@@ -57,4 +72,68 @@ test("managing is refused by the sandboxes switch alone — a full shell does no
 test("an op outside start/stop/restart is rejected before anything is looked at", () => {
     expect(() => asSandboxOp("kill")).toThrow(/start.*stop.*restart/);
     expect(asSandboxOp("restart")).toBe("restart");
+});
+
+/* ---- the flows that run `ic` ---- */
+
+test("a swap outside update/rebuild/rollback is rejected before anything is looked at", () => {
+    expect(() => asSandboxSwap("remove")).toThrow(/update.*rebuild.*rollback/);
+    expect(asSandboxSwap("rollback")).toBe("rollback");
+});
+
+/* The argv, both platforms' worth of risk in one place: an argument that regresses to a different position binds
+ * to a different parameter and fails silently, much later, as something else. */
+test("each swap builds the argv ic actually takes", () => {
+    expect(icSwapArgs("update", "work", undefined)).toEqual(["sandbox", "update", "work"]);
+    expect(icSwapArgs("rollback", "work", undefined)).toEqual(["sandbox", "rollback", "work"]);
+    expect(icSwapArgs("rebuild", "work", "deadbeef")).toEqual(["sandbox", "rebuild", "work", "deadbeef"]);
+});
+
+test("a rebuild without the approved digest is refused rather than built against nothing", () => {
+    // The hash is the trust anchor: only content that still hashes to what the owner reviewed is ever built, so
+    // a missing one has to stop the flow rather than fall through to an unpinned rebuild.
+    expect(() => icSwapArgs("rebuild", "work", undefined)).toThrow(/hash.*required/i);
+    expect(() => icSwapArgs("rebuild", "work", "")).toThrow(/approved/);
+});
+
+test("removal confirms itself, because there is no terminal on this end to answer ic's prompt", () => {
+    expect(icRemoveArgs("work")).toEqual(["sandbox", "remove", "work", "-y"]);
+});
+
+/* The agent's own install is preferred over whatever is on PATH, per platform — the same rule the desktop app
+ * applies to the sync agent, and for the same reason: a developer's global copy answers on the machine where this
+ * was written and nothing answers on a real user's. */
+test("ic is looked for where the installers put it before PATH is tried", () => {
+    expect(icCandidates("linux", "/home/ada")).toEqual(["/home/ada/.intentic/ic/bin/ic", "/usr/local/bin/ic", "ic"]);
+    expect(icCandidates("win32", "C:\\Users\\Ada")).toEqual(["C:\\Users\\Ada\\.intentic\\ic\\bin\\ic.exe", "ic.exe"]);
+});
+
+test("a machine with no home still tries the rest", () => {
+    expect(icCandidates("linux", undefined)).toEqual(["/usr/local/bin/ic", "ic"]);
+    expect(icCandidates("win32", undefined)).toEqual(["ic.exe"]);
+});
+
+test("swapping is refused by the sandboxes switch, like managing", async () => {
+    await expect(swapSandbox("update", "work", undefined, scopes({ sandboxes: "off" }), () => {})).rejects.toThrow(
+        /Manage sandboxes on this computer/,
+    );
+});
+
+/* The point of the separate switch, asserted: a user who delegated the fleet did not thereby agree to lose one
+ * of it. Granting `sandboxes` must not be enough to remove. */
+test("removal takes its own switch — managing sandboxes does not imply destroying one", async () => {
+    await expect(removeSandbox("work", scopes({ sandboxRemove: "off" }), () => {})).rejects.toThrow(/Remove sandboxes from this computer/);
+    await expect(removeSandbox("work", scopes({ sandboxes: "on", sandboxRemove: "off" }), () => {})).rejects.toThrow(ScopeError);
+});
+
+test("reading a log is covered by either grant, like listing", async () => {
+    await expect(sandboxLogs("work", 50, scopes({ shell: "off", sandboxes: "off" }))).rejects.toThrow(/Manage sandboxes on this computer/);
+});
+
+test("a log tail is clamped to something that can cross the socket, and defaults when unusable", () => {
+    expect(asLogLines(50)).toBe(50);
+    expect(asLogLines(undefined)).toBe(200);
+    expect(asLogLines("lots")).toBe(200);
+    expect(asLogLines(-5)).toBe(200);
+    expect(asLogLines(9_000)).toBe(2_000);
 });

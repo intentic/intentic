@@ -8,7 +8,7 @@ import { listDirectory, readTextFile, trashFile, writeTextFile } from "./tools/f
 import { focusWindow, listWindows, openTarget, readClipboard, writeClipboard } from "./tools/apps.js";
 import { clickElement, fillElement, listTabs, openPage, pressKey, readPage, selectTab, snapshotPage } from "./tools/browser.js";
 import { act, describeAction, settle, type ComputerInput } from "./tools/computer.js";
-import { asSandboxOp, listSandboxes, manageSandbox } from "./tools/sandboxes.js";
+import { asLogLines, asSandboxOp, asSandboxSwap, listSandboxes, manageSandbox, removeSandbox, sandboxLogs, swapSandbox } from "./tools/sandboxes.js";
 import { describeResult, runCommand } from "./tools/shell.js";
 import { HOST_VERSION } from "./version.js";
 
@@ -237,6 +237,43 @@ const TOOLS: readonly ToolDefinition[] = [
             required: ["op", "slug"],
         },
     },
+    {
+        name: "swap_sandbox",
+        description:
+            "Move one Intentic sandbox on this computer onto a different image: 'update' pulls the newest image of its release channel, 'rollback' returns it to the image it ran before its last update, and 'rebuild' rebuilds the owner-approved environment overlay. Files (/work) and history are kept in all three. Takes MINUTES — it pulls an image and recreates the container, and the sandbox is down while it happens. Requires the 'Manage sandboxes on this computer' permission.",
+        inputSchema: {
+            type: "object",
+            properties: {
+                op: { type: "string", enum: ["update", "rebuild", "rollback"] },
+                slug: { type: "string", description: "The sandbox's slug, from list_sandboxes." },
+                hash: { type: "string", description: "sha256 of the approved overlay — required for 'rebuild', ignored otherwise." },
+            },
+            required: ["op", "slug"],
+        },
+    },
+    {
+        name: "remove_sandbox",
+        description:
+            "Delete one Intentic sandbox from this computer: its container, its network, and the volumes holding its files and its history. THIS CANNOT BE UNDONE and is not what stopping it does — confirm with the user before calling it. Requires the 'Remove sandboxes from this computer' permission, which is separate from managing them and OFF unless the user turned it on.",
+        inputSchema: {
+            type: "object",
+            properties: { slug: { type: "string", description: "The sandbox's slug, from list_sandboxes." } },
+            required: ["slug"],
+        },
+    },
+    {
+        name: "sandbox_logs",
+        description:
+            "The tail of one Intentic sandbox's container log on this computer — how you find out why it will not start or what it did before it stopped. Requires 'Run commands' or 'Manage sandboxes on this computer'.",
+        inputSchema: {
+            type: "object",
+            properties: {
+                slug: { type: "string", description: "The sandbox's slug, from list_sandboxes." },
+                lines: { type: "number", description: "How many trailing lines to answer with. Default 200, maximum 2000." },
+            },
+            required: ["slug"],
+        },
+    },
 ];
 
 const textResult = (text: string, isError = false): Record<string, unknown> => ({ content: [{ type: "text", text }], isError });
@@ -343,6 +380,24 @@ const callTool = async (name: string, args: Record<string, unknown>, scopes: Hos
             return textResult(await listSandboxes(scopes));
         case "manage_sandbox":
             return textResult(await manageSandbox(asSandboxOp(args["op"]), asString(args["slug"], "slug"), scopes));
+        /* The three flows that run `ic`. As an MCP call they answer once, at the end, with everything the flow
+         * printed — a model has nothing to do with a line as it arrives. The BROWSER does, which is why the same
+         * functions take a line callback and the streaming route (host.contract's `runSandboxFlow`) passes one
+         * that forwards each line as it happens. One implementation, two ways of watching it. */
+        case "swap_sandbox":
+            return textResult(
+                await swapSandbox(
+                    asSandboxSwap(args["op"]),
+                    asString(args["slug"], "slug"),
+                    typeof args["hash"] === "string" ? args["hash"] : undefined,
+                    scopes,
+                    () => {},
+                ),
+            );
+        case "remove_sandbox":
+            return textResult(await removeSandbox(asString(args["slug"], "slug"), scopes, () => {}));
+        case "sandbox_logs":
+            return textResult(await sandboxLogs(asString(args["slug"], "slug"), asLogLines(args["lines"]), scopes));
         case "computer": {
             const input = args as unknown as ComputerInput;
             await act(desktop(), input, scopes);

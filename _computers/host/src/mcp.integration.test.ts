@@ -6,7 +6,7 @@ import type { HostScopes } from "@intentic/sandbox-contract";
 import { afterEach, expect, test, vi } from "vitest";
 import { handleMcpMessage } from "./mcp.js";
 
-const scopes = (overrides: Partial<HostScopes> = {}): HostScopes => ({ shell: "on", write: "on", screen: "on", control: "on", sandboxes: "on", ...overrides });
+const scopes = (overrides: Partial<HostScopes> = {}): HostScopes => ({ shell: "on", write: "on", screen: "on", control: "on", sandboxes: "on", sandboxRemove: "on", ...overrides });
 
 // Without a vitest config there is no unstubEnvs, so a stub outlives its test and the home leaks down the file.
 afterEach(() => vi.unstubAllEnvs());
@@ -51,8 +51,14 @@ test("tools/list is the machine's whole surface — and there is no delete", asy
         "screenshot",
         "list_sandboxes",
         "manage_sandbox",
+        "swap_sandbox",
+        "remove_sandbox",
+        "sandbox_logs",
     ]);
     expect(names).not.toContain("delete_file");
+    // remove_sandbox is the one exception to "there is no delete", and it is deliberately not a file tool: it
+    // deletes a SANDBOX, behind a switch of its own, which is a different grant from anything under the roots.
+    expect(names).not.toContain("remove_file");
 });
 
 // A notification expects no answer; replying to one is a protocol violation the client reports as noise.

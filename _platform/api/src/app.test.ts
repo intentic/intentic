@@ -65,6 +65,10 @@ describe(`POST /setup/claim`, () => {
         expect(values[`TUNNEL_TOKEN`]).toBe(`cached-token`);
         expect(values[`SANDBOX_HOSTNAME`]).toBe(HOSTNAME);
         expect(values[`SYNC_PAIR_TOKEN`]).toMatch(/^[\w-]{20,}$/);
+        expect(values[`HOST_PAIR_TOKEN`]).toMatch(/^[\w-]{20,}$/);
+        // Two independent one-shot credentials, never the same bytes: one enrolls a file-sync agent, the other a
+        // machine agent that can restart this sandbox, and a shared token would make redeeming either spend both.
+        expect(values[`HOST_PAIR_TOKEN`]).not.toBe(values[`SYNC_PAIR_TOKEN`]);
         // The claim's ONE write: the stamp that tells the setup wizard the pasted command reached a machine.
         // Nothing else about the row moves here — the tunnel was provisioned and cached at mint.
         expect(update).toHaveBeenCalledExactlyOnceWith({ where: { id: `s1` }, data: { setupCodeClaimedAt: expect.any(Date) } });

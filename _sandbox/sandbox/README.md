@@ -30,6 +30,11 @@ The **per-project AI-agent dev daemon** — a Docker image that runs as the proj
 - [src/agents](src/agents) — **plural**: the fleet. The registry, `worktrees.ts`, `isolation.ts`, `land.ts`, `origins.ts`, `landed-presence.ts`.
 - [src/git/git.routes.ts](src/git/git.routes.ts) — status/commit/push over the wire; [src/workspace](src/workspace) — the repo layout the daemon serves.
 - [src/composition.ts](src/composition.ts) — what is wired to what; [src/main.ts](src/main.ts) — the entrypoint that builds it and serves.
+- [src/hosts](src/hosts) — the user's own computers: the socket each one holds open, the Computers view's data
+  (`machine-reports.ts`), and `host-seed.ts` — the card the setup flow creates for the machine that installed
+  this sandbox, granted its sandboxes and nothing else. Acting on one of those sandboxes STREAMS, because the
+  slowest of those actions pulls an image for minutes; the scope behind it is checked on the machine and never
+  here.
 - [src/guard/guard.ts](src/guard/guard.ts) — the one gate every gated action consults (fail-closed); [src/guard/actions.ts](src/guard/actions.ts) is the catalog of decisions, and [src/guard/command-gate.ts](src/guard/command-gate.ts) is the one that can park a running turn on a card.
 - [src/workflows](src/workflows) — workflow scheduling, immutable run snapshots, restart recovery, run-ledger
   retention, and complete handoff artifacts; [src/loops](src/loops) drives each individual step.

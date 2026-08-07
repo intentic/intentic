@@ -12,7 +12,8 @@ once, here, in Rust — a single static binary with no runtime to ship.
 ## Responsibilities
 
 - `ic sandbox connect` — the setup one-liner's flow: claim the setup code, validate the Cloudflare token,
-  mint the tunnels, launch the sandbox + cloudflared sidecar, bootstrap desktop sync.
+  mint the tunnels, launch the sandbox + cloudflared sidecar, bootstrap desktop sync, and connect this machine
+  as a **computer** so its sandboxes are manageable from the browser.
 - `ic sandbox update / rebuild / rollback / dev` — swap the container onto a different image, preserving
   /work, /history, the tunnel and every setting; the channel + rollback record makes a bad update reversible.
 - `ic sandbox list / remove` — what is on this machine, and its careful removal (named volumes included).
@@ -42,6 +43,12 @@ a stale ic still runs a new image correctly.
 
 - Every flag doubles as the env var the shims forward (`SETUP_CODE`, `CF_TOKEN`, `SANDBOX_IMAGE`,
   `INTENTIC_SET_ENV`, …) — the one-liners the platform ever handed out keep working.
+- **Two agents are bootstrapped after health, not one.** Desktop sync is gated on `SYNC_DIR` (there is no
+  sensible default for which folder to mirror); the computer agent is not, because it asks nothing of the user
+  and arrives permitted to touch only this machine's sandboxes. Both go through one code path, run as the
+  invoking user under sudo, and neither can fail the setup. `HOST_PAIR_TOKEN` rides the claim like
+  `SYNC_PAIR_TOKEN`; `HOST_PLATFORM` and `HOST_LABEL` ride the container's env because the daemon cannot read
+  either for itself — it is in a container with its own hostname, on Linux however this machine is spelled.
 - `cleanup.sh` and `cleanup-host.sh` stay full scripts on purpose: removal is the flow you reach for when
   things are broken, and it must not depend on a binary that might itself be what is broken. `ic sandbox
   remove` / `ic machine remove` are their CLI twins — change one, change both.

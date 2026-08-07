@@ -1,11 +1,14 @@
 import {
     type Computer,
     type ComputerGap,
+    type MachineFlowLine,
     type MachineReport,
     MachineReportSchema,
     type MachineSandbox,
+    type MachineSandboxFlow,
     MachineSandboxSchema,
 } from "@intentic/sandbox-contract";
+import { ORPCError } from "@orpc/server";
 import { z } from "zod";
 import type { Services } from "../composition.js";
 import { enrolledMachines, machineReports } from "../platform/sync.js";
@@ -35,6 +38,12 @@ const PULL_TTL_MS = 10_000;
 // Reading a machine's own state is a fast local command. Anything slower is a machine in trouble, and the tab is
 // better off saying so than holding the request open.
 const PULL_TIMEOUT_MS = 15_000;
+
+// The ceiling on one management flow. Far above what any of them should take — an update on a slow connection
+// pulls a multi-gigabyte image — because the machine bounds its own work and this only ever catches a socket that
+// died without closing. A flow cut off here has still happened; it is the WATCHING that ends, which is why the
+// view re-reads the fleet afterwards rather than trusting what it last saw.
+const FLOW_TIMEOUT_MS = 60 * 60 * 1000;
 
 const pulled = new Map<string, { readonly at: number; readonly result: PullResult }>();
 
@@ -212,17 +221,32 @@ export const computers = async (services: Services): Promise<Computer[]> => {
     return mergeComputers(await enrolledMachines(services.config.historyRoot), await machineReports(services.config.historyRoot), answered);
 };
 
-/* One management action on one machine's sandbox — the Computers tab's buttons. The machine enforces the
- * "Manage sandboxes" switch and answers a refusal as a value naming it, which travels to the tab verbatim; this
- * side only drops the machine's cached pull, so the very next poll shows the fleet as the action left it rather
- * than as the TTL remembers it. */
-export const manageMachineSandbox = async (
-    services: Services,
-    id: string,
-    op: "start" | "stop" | "restart",
-    slug: string,
-): Promise<{ message: string; refused: boolean }> => {
-    const { text, refused } = await callTool(services, id, "manage_sandbox", { op, slug });
-    pulled.delete(id);
-    return { message: text, refused };
-};
+/* One management action on one machine's sandbox — the Computers view's buttons — relayed to the machine and
+ * narrated back as it happens.
+ *
+ * Streamed rather than awaited because the slowest of these takes MINUTES: an update pulls an image and recreates
+ * a container, and a button that spins in silence for that long is indistinguishable from one that is broken.
+ * The lines are the machine's own, verbatim — this side adds no progress model of its own, exactly as the desktop
+ * app promotes `ic`'s output rather than inventing steps beside it.
+ *
+ * The daemon adds no judgement either. The machine enforces its own switches ("Manage sandboxes" for six of
+ * these, a separate one for removal) and a refusal arrives as the terminal `error` line in the machine's own
+ * words, naming the control to flip. What this side does is drop the cached pull, so the very next poll shows the
+ * fleet as the action left it rather than as the TTL remembers it. */
+export async function* manageMachineSandbox(services: Services, id: string, input: MachineSandboxFlow): AsyncGenerator<MachineFlowLine> {
+    const client = services.hostHub.client(id);
+    if (client === undefined) {
+        throw new ORPCError("CONFLICT", {
+            message: `"${id}" is not connected right now — the computer is asleep, offline, or its agent isn't running.`,
+        });
+    }
+    try {
+        // The machine bounds its own work; this ceiling only ever catches a socket that is gone but not closed.
+        yield* await client.runSandboxFlow(input, { signal: AbortSignal.timeout(FLOW_TIMEOUT_MS) });
+    } finally {
+        /* In `finally` rather than after the loop, because the interesting cases are the ones that do not reach
+         * it: a removal that failed halfway still changed the machine, and a reader who navigated away mid-update
+         * must not come back to a cache that predates it. */
+        pulled.delete(id);
+    }
+}

@@ -16,6 +16,10 @@ pub struct Claim {
     pub zone: Option<String>,
     pub subdomain: Option<String>,
     pub sync_pair_token: Option<String>,
+    /// The one-shot pairing the CONNECTED-COMPUTER agent redeems, so this machine's sandboxes can be managed
+    /// from the browser instead of from a terminal here. Minted per claim like the sync one beside it, and inert
+    /// when the flow installs no agent.
+    pub host_pair_token: Option<String>,
     pub owner_email: Option<String>,
 }
 
@@ -76,6 +80,7 @@ pub fn claim(platform_url: &str, code: &str) -> Result<Claim> {
         zone: lookup("ZONE"),
         subdomain: lookup("SUBDOMAIN"),
         sync_pair_token: lookup("SYNC_PAIR_TOKEN"),
+        host_pair_token: lookup("HOST_PAIR_TOKEN"),
         owner_email: lookup("OWNER_EMAIL"),
     })
 }

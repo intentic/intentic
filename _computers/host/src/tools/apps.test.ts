@@ -11,7 +11,7 @@ import { describeWindows, focusWindow, listWindows, openTarget, readClipboard, w
  * an application starts a process (shell). Somebody will eventually be tempted to collapse these; these tests are
  * why they should not. */
 
-const scopes = (overrides: Partial<HostScopes> = {}): HostScopes => ({ shell: "on", write: "on", screen: "on", control: "on", sandboxes: "on", ...overrides });
+const scopes = (overrides: Partial<HostScopes> = {}): HostScopes => ({ shell: "on", write: "on", screen: "on", control: "on", sandboxes: "on", sandboxRemove: "on", ...overrides });
 
 test("listing windows is looking, so it needs the screen grant", async () => {
     const fake = fakeDesktop();

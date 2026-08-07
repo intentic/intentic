@@ -43,7 +43,7 @@ import { createCiWebhookRoute } from "./ci/webhook.routes.js";
 import { createListenerRoutes } from "./extensions/listener.routes.js";
 import { createBrowserLoginRoute } from "./browser/browser-login.js";
 import { createHostConnectRoute, createHostMcpRoute, hostSummaries } from "./hosts/host.routes.js";
-import { computers, manageMachineSandbox } from "./hosts/machine-reports.js";
+import { computers } from "./hosts/machine-reports.js";
 import { createBrowserViewRoute } from "./browser/browser-view.js";
 import { createTerminalRoute } from "./terminal/terminal.js";
 import { createWebchatRoutes } from "./webchat/webchat.routes.js";
@@ -1064,27 +1064,9 @@ export const createApp = (services: Services): Hono<AppEnv> => {
      * host capability, merged (hosts/machine-reports.ts). Readable by any collaborator, like /system/sync beside
      * it: the bearer middleware already blocked a non-member, and a member's own mirroring machine appears here. */
     app.get("/system/computers", async (c) => c.json({ computers: await computers(services) }));
-    /* Start, stop or restart a sandbox ON one of those computers. Owner-only, like minting a host pairing: hands
-     * on the owner's machines are not a collaboration feature. The daemon adds no judgement of its own — the
-     * machine enforces its "Manage sandboxes" switch and its refusal text names it, so a 409 here is a sentence
-     * the tab can show as-is. */
-    app.post("/system/computers/:id/sandboxes/:slug", async (c) => {
-        const denied = await ownerDenied(c);
-        if (denied !== undefined) {
-            return denied;
-        }
-        const body = (await c.req.json().catch(() => undefined)) as { op?: unknown } | undefined;
-        const op = (["start", "stop", "restart"] as const).find((candidate) => candidate === body?.op);
-        if (op === undefined) {
-            return c.json({ error: "op must be start, stop or restart" }, 400);
-        }
-        const id = c.req.param("id");
-        if (!services.hostHub.online(id)) {
-            return c.json({ error: "this computer is offline — nothing can be started or stopped on it right now" }, 409);
-        }
-        const result = await manageMachineSandbox(services, id, op, c.req.param("slug"));
-        return result.refused ? c.json({ error: result.message }, 409) : c.json({ ok: true, message: result.message });
-    });
+    // Acting on one of those computers' sandboxes is `system.manageMachineSandbox` (system.routes.ts) rather than
+    // a plain route here: every op streams, because the slowest of them takes minutes, and a hand-rolled SSE
+    // response beside the oRPC surface would be a second shape for the browser to parse.
     /* The machine's own report, filed on the same credential its ports poll uses (grants.ts scopes the sync token
      * to exactly this route and that read). The agent posts on its watch tick, so the sandbox learns the folder,
      * the ports and the watcher's liveness without ever asking for anything new from the computer. */

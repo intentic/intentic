@@ -11,7 +11,7 @@ import { act, describeAction } from "./computer.js";
  * "was the click refused", "did the coordinate get checked against the frame" and "did the right method get
  * called" are the parts that decide whether someone's machine does the wrong thing — and they are all here. */
 
-const scopes = (overrides: Partial<HostScopes> = {}): HostScopes => ({ shell: "on", write: "on", screen: "on", control: "on", sandboxes: "on", ...overrides });
+const scopes = (overrides: Partial<HostScopes> = {}): HostScopes => ({ shell: "on", write: "on", screen: "on", control: "on", sandboxes: "on", sandboxRemove: "on", ...overrides });
 
 test("every action is refused when the machine may not be driven", async () => {
     const { desktop, calls } = fakeDesktop();

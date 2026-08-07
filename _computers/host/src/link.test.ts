@@ -46,7 +46,7 @@ class FakeSocket {
     }
 }
 
-const scopes = (overrides: Partial<HostScopes> = {}): HostScopes => ({ shell: "on", write: "on", screen: "on", control: "on", sandboxes: "on", ...overrides });
+const scopes = (overrides: Partial<HostScopes> = {}): HostScopes => ({ shell: "on", write: "on", screen: "on", control: "on", sandboxes: "on", sandboxRemove: "on", ...overrides });
 
 // The whole wiring: machine hosts the contract, "daemon" holds the client — over one socket, as in production.
 const connectedPair = (initial: HostScopes = scopes()) => {
@@ -84,7 +84,7 @@ test("the daemon can ask a machine what it is", async () => {
 test("a pushed grant takes effect on the machine", async () => {
     const { client, scopesNow } = connectedPair();
     expect(await client.setScopes({ shell: "off", write: "off", screen: "on", control: "off" })).toEqual({ ok: true });
-    expect(scopesNow()).toEqual({ shell: "off", write: "off", screen: "on", control: "off", sandboxes: "off" });
+    expect(scopesNow()).toEqual({ shell: "off", write: "off", screen: "on", control: "off", sandboxes: "off", sandboxRemove: "off" });
 });
 
 test("a grant that does not satisfy the contract is refused before it reaches the machine", async () => {

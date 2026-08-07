@@ -11,7 +11,7 @@ import { clickElement, fillElement, listTabs, openPage, readPage, snapshotPage }
  * (shell). The other half worth pinning is that every action answers with the page AFTER it — which is what
  * makes a sequence of calls one step each instead of three. */
 
-const scopes = (overrides: Partial<HostScopes> = {}): HostScopes => ({ shell: "on", write: "on", screen: "on", control: "on", sandboxes: "on", ...overrides });
+const scopes = (overrides: Partial<HostScopes> = {}): HostScopes => ({ shell: "on", write: "on", screen: "on", control: "on", sandboxes: "on", sandboxRemove: "on", ...overrides });
 
 const page = (overrides: Partial<PageState> = {}): PageState => ({
     url: "https://example.com/",

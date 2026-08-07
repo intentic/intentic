@@ -60,6 +60,7 @@ pub fn run(args: Args) -> Result<()> {
     let mut zone = env("ZONE").unwrap_or_default();
     let mut subdomain = env("SUBDOMAIN").unwrap_or_default();
     let mut sync_pair_token = env("SYNC_PAIR_TOKEN").unwrap_or_default();
+    let mut host_pair_token = env("HOST_PAIR_TOKEN").unwrap_or_default();
     let mut owner_email = env("OWNER_EMAIL").unwrap_or_default();
     let cf_token = env("CF_TOKEN").unwrap_or_default();
 
@@ -74,6 +75,7 @@ pub fn run(args: Args) -> Result<()> {
         zone = claim.zone.unwrap_or(zone);
         subdomain = claim.subdomain.unwrap_or(subdomain);
         sync_pair_token = claim.sync_pair_token.unwrap_or(sync_pair_token);
+        host_pair_token = claim.host_pair_token.unwrap_or(host_pair_token);
         owner_email = claim.owner_email.unwrap_or(owner_email);
     }
     // The platform can PRE-PROVISION the tunnel (the path for users with no Cloudflare of their own): both
@@ -310,6 +312,12 @@ pub fn run(args: Args) -> Result<()> {
         ("SANDBOX_PUBLIC_URL", &sandbox_public_url),
         ("PLATFORM_URL", &platform_url_container),
         ("SYNC_PAIR_TOKEN", &sync_pair_token),
+        // The connected-computer seed: the pairing the machine agent below redeems, plus what to call this
+        // machine and which OS card it gets. The daemon cannot learn either for itself — it is in a container
+        // with its own hostname, on a Linux however this machine is spelled.
+        ("HOST_PAIR_TOKEN", &host_pair_token),
+        ("HOST_PLATFORM", host_platform()),
+        ("HOST_LABEL", &machine_label()),
         ("CLOUDFLARE_API_TOKEN", &cf_token),
         ("HOST_SSH_KEY", &host_ssh_key),
         ("SELF_HOST_USER", &self_host_user),
@@ -402,6 +410,19 @@ pub fn run(args: Args) -> Result<()> {
         }
     }
 
+    /* Connect this machine as a computer — not gated on an opt-in, unlike sync above, because it needs no
+     * decision from the user: sync asks which FOLDER to mirror and there is no sensible default for that, while
+     * this asks for nothing and grants only what the machine already does for this sandbox. The permission it
+     * arrives with covers this machine's sandboxes and nothing else, and it is stated on the card.
+     *
+     * Never fails the setup. A machine that does not finish this is a machine whose Computers view says its
+     * sandboxes are not visible — exactly what every sandbox said before this existed. */
+    if !host_pair_token.is_empty()
+        && !run_host_agent(&container, &sandbox_public_url, &host_pair_token)
+    {
+        eprintln!("intentic: warning — this computer wasn't connected, so its sandboxes won't be manageable from your browser. Add it any time from Capabilities.");
+    }
+
     if !self_host {
         println!("Reachable only — no deploy target. To deploy an app onto this machine later, re-run with SELF_HOST=1 (needs sudo).");
     }
@@ -450,23 +471,91 @@ fn ensure_image(image: &str, log: &Log) -> Result<()> {
 /// itself, so this local gate need not wait for the tunnel.
 fn run_desktop_sync(container: &str, public_url: &str, pair_token: &str, sync_dir: &str) -> bool {
     println!("intentic: waiting for your sandbox to come online to set up desktop sync…");
-    let mut answered = false;
+    if !wait_local_health(container) {
+        return false;
+    }
+    run_agent_bootstrap(
+        AgentBootstrap {
+            what: "desktop sync",
+            url_var: "SYNC_SCRIPT_URL",
+            unix_url: "https://intentic.dev/sync",
+            windows_url: "https://intentic.dev/sync.ps1",
+        },
+        &[
+            ("SANDBOX_URL", public_url),
+            ("PAIR_TOKEN", pair_token),
+            ("SYNC_DIR", sync_dir),
+        ],
+    )
+}
+
+/// Connect this machine as a COMPUTER, so its sandboxes can be seen and managed from the browser.
+///
+/// The same bootstrap as desktop sync above and deliberately so — it is the second half of the same promise.
+/// Sync makes the machine's FOLDERS reachable from the sandbox; this makes the machine's own fleet reachable,
+/// which is the half that used to require a terminal on this exact machine even to restart the sandbox that
+/// had wedged.
+///
+/// What the sandbox may then do here is decided in the sandbox and enforced by the agent this installs: it
+/// arrives allowed to start, stop and update this machine's sandboxes and nothing else — no shell, no files,
+/// no screen. Widening it is a switch on the computer's own card.
+fn run_host_agent(container: &str, public_url: &str, pair_token: &str) -> bool {
+    println!("intentic: connecting this computer so you can manage its sandboxes from your browser…");
+    if !wait_local_health(container) {
+        return false;
+    }
+    run_agent_bootstrap(
+        AgentBootstrap {
+            what: "this computer",
+            url_var: "HOST_SCRIPT_URL",
+            unix_url: "https://intentic.dev/computer",
+            windows_url: "https://intentic.dev/computer.ps1",
+        },
+        &[("SANDBOX_URL", public_url), ("PAIR_TOKEN", pair_token)],
+    )
+}
+
+/// Wait for the daemon INSIDE the container — no tunnel and no DNS in the loop. Both agents connect over the
+/// PUBLIC url and retry transient tunnel errors themselves, so this local gate only has to know that the daemon
+/// is up at all.
+fn wait_local_health(container: &str) -> bool {
     for _ in 0..60 {
         if docker::exec_ok(
             container,
             &["curl", "-fsS", "--max-time", "5", "localhost:8787/health"],
         ) {
-            answered = true;
-            break;
+            return true;
         }
         std::thread::sleep(std::time::Duration::from_secs(3));
     }
-    if !answered {
-        return false;
-    }
+    false
+}
+
+/// Which served installer to run, and what to call it when it does not finish.
+struct AgentBootstrap {
+    what: &'static str,
+    url_var: &'static str,
+    unix_url: &'static str,
+    windows_url: &'static str,
+}
+
+/// Run one of the served agent installers, as the INVOKING user when this is running under sudo: both agents are
+/// per-user state (~/.intentic, the user's own login entry, the user's Mutagen daemon), and one installed for
+/// root is one that never starts again for the person who ran setup.
+fn run_agent_bootstrap(agent: AgentBootstrap, vars: &[(&str, &str)]) -> bool {
+    // Chosen with `cfg!` rather than a `#[cfg]` block, so BOTH spellings are compiled on either host — this
+    // binary is cross-built, and a Windows url that only exists on a Windows build is one no Linux runner can
+    // ever check. Only the process mechanics below genuinely differ per platform.
+    let url = env_or(
+        agent.url_var,
+        if cfg!(windows) {
+            agent.windows_url
+        } else {
+            agent.unix_url
+        },
+    );
     #[cfg(unix)]
     {
-        let url = env_or("SYNC_SCRIPT_URL", "https://intentic.dev/sync");
         // Fetch before piping — a failed fetch must fail the bootstrap, not feed sh half a script.
         let Ok(mut response) = ureq::get(&url).call() else {
             return false;
@@ -486,14 +575,17 @@ fn run_desktop_sync(container: &str, public_url: &str, pair_token: &str, sync_di
                 sudo
             }
             (true, None) => {
-                eprintln!("intentic: skipping desktop sync — running as root with no invoking user to sync for.");
+                eprintln!(
+                    "intentic: skipping {} — running as root with no invoking user to install it for.",
+                    agent.what
+                );
                 return false;
             }
             _ => std::process::Command::new("sh"),
         };
-        cmd.env("SANDBOX_URL", public_url)
-            .env("PAIR_TOKEN", pair_token)
-            .env("SYNC_DIR", sync_dir);
+        for (key, value) in vars {
+            cmd.env(key, value);
+        }
         cmd.stdin(std::process::Stdio::piped());
         let Ok(mut child) = cmd.spawn() else {
             return false;
@@ -511,16 +603,48 @@ fn run_desktop_sync(container: &str, public_url: &str, pair_token: &str, sync_di
     }
     #[cfg(windows)]
     {
-        let url = env_or("SYNC_SCRIPT_URL", "https://intentic.dev/sync.ps1");
-        std::process::Command::new("powershell")
-            .args(["-NoProfile", "-Command", &format!("irm {url} | iex")])
-            .env("SANDBOX_URL", public_url)
-            .env("PAIR_TOKEN", pair_token)
-            .env("SYNC_DIR", sync_dir)
-            .status()
-            .map(|status| status.success())
-            .unwrap_or(false)
+        let mut cmd = std::process::Command::new("powershell");
+        cmd.args(["-NoProfile", "-Command", &format!("irm {url} | iex")]);
+        for (key, value) in vars {
+            cmd.env(key, value);
+        }
+        cmd.status().map(|status| status.success()).unwrap_or(false)
     }
+}
+
+/// The card this machine gets in the sandbox — one of the OS slugs the bundled computers extension declares.
+fn host_platform() -> &'static str {
+    if cfg!(windows) {
+        "windows"
+    } else {
+        "linux"
+    }
+}
+
+/// What to call this machine in the sandbox's UI, and how the agent will address it ("run the tests on
+/// ada-laptop"). The hostname is what a person recognises; the daemon cannot read it for itself, since inside
+/// the container the hostname is the container's own.
+///
+/// Read without a crate for it, because every source here is already one line and a dependency in this binary is
+/// a dependency in every setup that runs it. `COMPUTERNAME` is always set on Windows, `/etc/hostname` is the
+/// standard file everywhere else, and the command is the fallback for a system that has neither.
+fn machine_label() -> String {
+    let named = |value: String| Some(value).filter(|name| !name.trim().is_empty());
+    std::env::var("HOST_LABEL")
+        .ok()
+        .and_then(named)
+        .or_else(|| std::env::var("COMPUTERNAME").ok().and_then(named))
+        .or_else(|| std::fs::read_to_string("/etc/hostname").ok().and_then(named))
+        .or_else(|| {
+            std::process::Command::new("hostname")
+                .output()
+                .ok()
+                .filter(|out| out.status.success())
+                .and_then(|out| String::from_utf8(out.stdout).ok())
+                .and_then(named)
+        })
+        .map(|name| name.trim().to_string())
+        .unwrap_or_else(|| "this-computer".to_string())
 }
 
 /// The Windows deploy target: a privileged dind-host container on the shared network. Returns the private

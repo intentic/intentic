@@ -2723,6 +2723,11 @@ export const HostScopesSchema = z.object({
      * hand an agent the sandbox fleet without handing it a shell, and the fleet operations are named rather than
      * whatever a model improvises with docker. Default off, like every switch that changes the machine. */
     sandboxes: hostScope.default("off"),
+    /* Remove a sandbox from this machine — its container, its network, and the named volumes holding its /work
+     * and /history. Its own switch rather than part of `sandboxes` because the two differ in the only way that
+     * matters here: everything `sandboxes` grants is undone by doing it again, and this is undone by nothing.
+     * A user who delegated "restart my sandboxes when they wedge" did not thereby agree to lose one. */
+    sandboxRemove: hostScope.default("off"),
     // One directory per line. Empty ⇒ the machine's home directory, which is what the agent reports at connect.
     roots: z.string().optional(),
 });
@@ -4269,6 +4274,43 @@ export const MachineSandboxSchema = z.object({
     tunnelRunning: z.boolean().optional(),
 });
 export type MachineSandbox = z.infer<typeof MachineSandboxSchema>;
+
+/* ONE OPERATION ON ONE SANDBOX ON ONE MACHINE — the Computers view's buttons, and the only thing that changes a
+ * machine's fleet from a browser.
+ *
+ * All seven ops travel one route because they are one decision to the person clicking, however differently they
+ * behave underneath: three are a docker call that returns in a second, three run the `ic` flow for minutes, and
+ * one deletes. Splitting them by duration would put the same button on two doors and give the view two shapes to
+ * render. So every op answers as a STREAM of lines ending in a result — the fast ones simply have little to say.
+ *
+ * The machine enforces which of them it will do: `sandboxes` covers the first six, removal takes its own switch,
+ * and a refusal comes back as the machine's own sentence naming the control to flip. */
+export const MachineSandboxOpSchema = z.enum(["start", "stop", "restart", "update", "rebuild", "rollback", "remove"]);
+export type MachineSandboxOp = z.infer<typeof MachineSandboxOpSchema>;
+
+export const MachineSandboxFlowSchema = z.object({
+    op: MachineSandboxOpSchema,
+    slug: z.string().min(1),
+    // The approved overlay's sha256 — required by `rebuild` and meaningless to the rest. It is the trust anchor:
+    // only content that still hashes to what the owner reviewed is ever built.
+    hash: z.string().optional(),
+});
+export type MachineSandboxFlow = z.infer<typeof MachineSandboxFlowSchema>;
+
+// The same input plus which machine it is for — the browser's half, since the daemon reaches the machine by id.
+export const MachineSandboxFlowInputSchema = MachineSandboxFlowSchema.extend({ id: z.string().min(1) });
+export type MachineSandboxFlowInput = z.infer<typeof MachineSandboxFlowInputSchema>;
+
+/* What a running operation says, in the one line shape every streamed flow in this product already uses
+ * (IntenticLineSchema, which the browser's reader parses): `line` as the machine prints it, then exactly one
+ * terminal frame — `result` when it worked, `error` when it did not, carrying the machine's own words either
+ * way rather than a code this side invented. */
+export const MachineFlowLineSchema = z.discriminatedUnion("kind", [
+    z.object({ kind: z.literal("line"), text: z.string() }),
+    z.object({ kind: z.literal("result"), message: z.string() }),
+    z.object({ kind: z.literal("error"), message: z.string() }),
+]);
+export type MachineFlowLine = z.infer<typeof MachineFlowLineSchema>;
 
 // One paired sandbox as the local agent holds it. `localDir` is the answer to the question the Desktop sync card
 // has never been able to answer: which folder on that computer this sandbox's /work actually is.

@@ -1,6 +1,6 @@
-import { oc } from "@orpc/contract";
+import { eventIterator, oc } from "@orpc/contract";
 import { z } from "zod";
-import { HostFactsSchema, HostScopesSchema, OkSchema } from "../schemas.js";
+import { HostFactsSchema, HostScopesSchema, MachineFlowLineSchema, MachineSandboxFlowSchema, OkSchema } from "../schemas.js";
 
 /* What a connected computer can be ASKED, over the socket it opened to this sandbox.
  *
@@ -30,4 +30,15 @@ export const hostContract = {
     ping: oc.output(OkSchema),
     // One MCP JSON-RPC message in, its answer out — forwarded verbatim in both directions. See above.
     mcp: oc.input(z.unknown()).output(z.unknown()),
+    /* One operation on one of this machine's sandboxes, narrated as it happens.
+     *
+     * TYPED, unlike `mcp`, and the difference is who is on the other end. `mcp`'s reader is a model, which has
+     * nothing to do with a line as it arrives and everything to gain from the machine learning tools without a
+     * daemon release. This reader is a PERSON watching a progress log: an update pulls an image and recreates a
+     * container, which is minutes of silence unless the lines travel while they are produced. A stream is what
+     * the browser needs, and a stream is the one thing an MCP tool result cannot be.
+     *
+     * The scope is still checked here, on the machine, by the same functions the MCP tools call — this adds a
+     * way of WATCHING an operation, never a way of skipping the switch that permits it. */
+    runSandboxFlow: oc.input(MachineSandboxFlowSchema).output(eventIterator(MachineFlowLineSchema)),
 };

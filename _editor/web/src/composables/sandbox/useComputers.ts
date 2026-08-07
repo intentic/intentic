@@ -1,6 +1,7 @@
-import { type Computer, ComputersListSchema, SyncStatusSchema } from "@intentic/sandbox-contract";
+import { type Computer, type MachineSandboxOp, ComputersListSchema, SyncStatusSchema } from "@intentic/sandbox-contract";
 import { computed, type ComputedRef } from "vue";
-import { sandboxJson } from "./sandboxClient";
+import { sandboxError, sandboxJson, sandboxRequest } from "./sandboxClient";
+import { readIntenticLines } from "../intenticStream";
 import { sandboxKey } from "./useSandbox";
 import { useSandboxQuery } from "./useSandboxQuery";
 
@@ -30,17 +31,71 @@ export function useComputers(): { computers: ComputedRef<Computer[]>; error: Com
     };
 }
 
-export type SandboxOp = `start` | `stop` | `restart`;
-
-// One action on one machine's sandbox. The machine itself enforces the "Manage sandboxes" switch; a refusal
-// arrives as this promise's rejection, carrying the machine's own sentence naming the switch to flip.
-export async function manageMachineSandbox(hostId: string, slug: string, op: SandboxOp): Promise<string> {
-    const result = await sandboxJson<{ message: string }>(`/system/computers/${encodeURIComponent(hostId)}/sandboxes/${encodeURIComponent(slug)}`, {
+/* One action on one machine's sandbox, and every one of them takes this door.
+ *
+ * They differ enormously underneath — three are a docker call that returns in a second, three run a flow that
+ * pulls an image for minutes, one deletes — and not at all to the person clicking. So there is one call, and it
+ * STREAMS: `onLine` is handed each line the machine prints while it prints it, which is the difference between a
+ * button that shows an update happening and one that spins in silence for four minutes.
+ *
+ * The machine enforces which of these it will do ("Manage sandboxes" for six, a separate switch for removal), and
+ * a refusal arrives as this promise's rejection carrying the machine's own sentence naming the switch to flip. */
+export async function manageMachineSandbox(
+    hostId: string,
+    slug: string,
+    op: MachineSandboxOp,
+    { hash, onLine }: { hash?: string; onLine?: (line: string) => void } = {},
+): Promise<string> {
+    const response = await sandboxRequest(`/system/computers/${encodeURIComponent(hostId)}/sandboxes/${encodeURIComponent(slug)}`, {
         method: `POST`,
         headers: { "content-type": `application/json` },
-        body: JSON.stringify({ op }),
+        body: JSON.stringify({ id: hostId, slug, op, ...(hash === undefined ? {} : { hash }) }),
     });
-    return result.message;
+    if (!response.ok || !response.body) {
+        throw await sandboxError(response, { method: `POST`, path: `/system/computers/{id}/sandboxes/{slug}` });
+    }
+    // The terminal frame is the answer. A stream that ends without one means the connection dropped mid-flight —
+    // which does NOT mean the operation stopped: it is running on the machine, and the fleet re-read that follows
+    // is what tells the truth about it.
+    let outcome: string | undefined;
+    for await (const line of readIntenticLines(response.body)) {
+        if (line[`kind`] === `line` && typeof line[`text`] === `string`) {
+            onLine?.(line[`text`]);
+            continue;
+        }
+        if (line[`kind`] === `error`) {
+            throw new Error(typeof line[`message`] === `string` ? line[`message`] : `That operation failed on the computer.`);
+        }
+        if (line[`kind`] === `result` && typeof line[`message`] === `string`) {
+            outcome = line[`message`];
+        }
+    }
+    if (outcome === undefined) {
+        throw new Error(`Lost contact with that computer while this was running — it may still have finished. Refresh to see where it got to.`);
+    }
+    return outcome;
+}
+
+/* THE CONNECTED COMPUTER THAT RUNS A GIVEN SANDBOX, when there is one — the fact that turns "paste this command
+ * on the machine that runs your sandbox" into a button.
+ *
+ * Only a connected computer qualifies, and only while it is online: the sync agent never reports containers, so a
+ * machine reachable through that door alone cannot be asked to recreate one. Offered rather than assumed — a
+ * button that fails when taken is worse than the command it replaced, and this one would fail at the moment
+ * somebody's sandbox is already unhappy.
+ *
+ * Shares the Computers query, so a hub with both this card and that view open asks the machine once. */
+export function useHostRunning(slug: () => string | undefined): ComputedRef<string | undefined> {
+    const { computers } = useComputers();
+    return computed(() => {
+        const target = slug();
+        if (target === undefined || target === ``) {
+            return undefined;
+        }
+        return computers.value.find(
+            (computer) => computer.hostId !== undefined && computer.online === true && (computer.report?.sandboxes ?? []).some((box) => box.slug === target),
+        )?.hostId;
+    });
 }
 
 /* How stale a machine's own reading may be before the view stops presenting it as now. The sync agent reports
