@@ -20,6 +20,9 @@ export const DEMO_SANDBOX: SandboxSummary = {
     daemonUrl: DEMO_DAEMON_ORIGIN,
     lastSeenAt: new Date().toISOString(),
     setupCodeClaimedAt: null,
+    // Null for the same reason `setupCodeClaimedAt` is: the demo's sandbox is already up, so no wizard run
+    // ever reported on it.
+    setupReport: null,
     token: `demo-connect-token`,
     role: `owner`,
     providedTunnel: false,
