@@ -1,11 +1,12 @@
 # intentic.dev — Landing page blueprint
 
 The page that converts, section by section — selling **intentic-app** (app.intentic.dev). The one
-thing sold (co-piloted **specialized agents** — autonomous employees on hardware you own), the voice
-rules, the glossary, and the objection bank live in [messaging.md](messaging.md); personas and pains
-(P1–P7) in [positioning.md](positioning.md).
+thing sold (a persistent **workstation** for co-piloted specialized agents on hardware you own, with
+any browser as a **window** onto it), the voice rules, the glossary, and the objection bank live in
+[messaging.md](messaging.md); personas and pains (P1–P7) in [positioning.md](positioning.md).
 
-**Core thesis (the spine):** you run a fleet of coding agents in parallel, on hardware you own, and
+**Core thesis (the spine):** you run a fleet of coding agents in parallel on hardware you own; the
+runs keep going when you look away, and any browser — or a phone — reopens onto the same fleet; and
 nothing reaches your tree until you have read the diff. Every section is a proof of that one sentence
 or an objection to it. It is a **single page**: one continuous scroll, no variants.
 
@@ -24,10 +25,16 @@ near the bottom instead of demonstrated nine times. That band is also the honest
 automations, Discord, Slack, IMAP, memory, pipelines and the Doorbell webchat really are things you
 bolt on. Result: **9,592 px, five arguments and one index** — 10,298 px once `#trust` joined it.
 
-**The environment argument did not die — it was demoted.** It rides in the hero subhead ("the job's
-dev-tools really installed, wired to your systems"), in loop beat 02's sandbox figure, in the FAQ's
-"How is this different from a custom GPT", on `/product/sandbox/` (the `prompt-vs-environment` figure),
-and across `/compare/`. What it no longer gets is four bands of the landing page.
+**The environment argument did not die — it was demoted.** It rides in loop beat 02's sandbox
+figure, in the FAQ's "How is this different from a custom GPT", on `/product/sandbox/` (the
+`prompt-vs-environment` figure), and across `/compare/`. What it no longer gets is four bands of the
+landing page.
+
+**Re-centered 2026-08-07 (recorded decision).** The headline claim now leads with what the
+infrastructure buys — persistence and reach — instead of the IDE frame: the brand line is
+`Workstation for your agents. / A window for you.` (messaging.md's retired-framing list has
+the old first line and the reason), and the loop gained beat ③, the continuity beat. Nothing else moved:
+same bands, same order, same quiet `#extend` index — this was a re-center, not a re-cut.
 
 **Deliberately not on this page (all of it has a home).** The seven-card product-tour grid (the nav
 mega-menu and `/product/` already list every surface), the prompt-vs-environment argument
@@ -84,17 +91,21 @@ One page, one continuous scroll — **five arguments, one index and one trust ba
 Section ids in parens; copy per section in `landing.ts`, except `#trust`, whose copy is in `about.ts`
 because `/about/` shares it.
 
-1. **Hero (`#hero`)** — the brand line, kept verbatim ("An IDE for your agents. A window for you.") +
-   a subhead that carries the whole claim: a sandbox of its own on hardware you own, the job's
-   dev-tools really installed, its own git branch, one or ten in parallel, and the window — you watch
-   the board, answer the ones that stop, read every diff before it lands. CTAs, chips, the real fleet
-   board cropped to two lanes, and the play button into the live demo. (P1, P2)
-2. **The loop (`#loop`)** — the spine, in three beats, and **the section that earns the headline's
-   second half**: the window is the board you watch, the agent you answer, and the diff you read.
+1. **Hero (`#hero`)** — the brand line, kept verbatim ("Workstation for your agents. A window
+   for you.") + a subhead that carries the whole claim: agents that live on hardware you own
+   and keep running when you look away, every browser a window onto the same fleet — steer,
+   approve, interrupt, land. CTAs, chips, the real fleet board cropped to two lanes, and the play
+   button into the live demo. (P1, P2, P6)
+2. **The loop (`#loop`)** — the spine, in four beats, and **the section that earns the headline's
+   second half**: the window is the board you watch, from whatever device you have, and the diff
+   you read.
    ① *Give the work to as many agents as it needs* — the whole fleet board, full column width.
    ② *Each works in a sandbox of its own* — the container figure, because there is no honest screen of
    "its tools are really installed" and a mockup of one would be the first lie on the page.
-   ③ *Nothing lands until you have read the diff* — the review panel, cropped. (P2, P4, P6)
+   ③ *Walk away — the run doesn't stop* — the continuity beat, and the phone shot (`mobile-fleet`),
+   phone-framed: the honest proof that the runs live on the machine and not in the browser is the
+   same board on a different device.
+   ④ *Nothing lands until you have read the diff* — the review panel, cropped. (P2, P4, P6)
    Layout follows the shot, as on the product pages: a capture wider than 3:2 takes the full column,
    anything squarer keeps the cropped side-by-side. The threshold is 3:2 and not merely landscape
    because `agent-review.png` is 2144×1800 — a tall panel a hair wider than high, which given the whole

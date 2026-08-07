@@ -2,9 +2,10 @@
 
 What we say, in which words, everywhere. Pairs with [positioning.md](positioning.md) (personas +
 pains, P1–P7) and [landing-blueprint.md](landing-blueprint.md) (section placement). The product
-being sold is **intentic-app** (app.intentic.dev): co-piloted **specialized agents** — autonomous
-employees, each a sandbox on hardware you own. The sandbox and CLI that run on your machine are MIT
-open source on GitHub — the trust layer you can read and run yourself.
+being sold is **intentic-app** (app.intentic.dev): a **persistent workstation for your agents** —
+co-piloted agents living in sandboxes on hardware you own, still running when you look away, reached
+from any browser. The sandbox and CLI that run on your machine are MIT open source on GitHub — the
+trust layer you can read and run yourself.
 
 ## Rules of voice
 
@@ -19,21 +20,33 @@ open source on GitHub — the trust layer you can read and run yourself.
   providers as plural examples for credibility, never as the headline or the brand hook — the
   subject is always the **specialized agent** (the autonomous employee), never one provider.
 - Honesty is a feature: that it is free and MIT is stated plainly; the app is new and says so.
+- **Hide setup complexity, expose operational state.** The machinery that makes the workstation
+  reachable — the tunnel, Docker, daemon auth — is sold as its absence ("one command", "no ports to
+  open", "a private tunnel"), never explained or itemized. What the copy shows off is the state of
+  the runs: the board, who needs you, what each agent changed and spent, the diff. Plumbing is a
+  cost the reader shouldn't feel; state is the product.
 
 ## Message hierarchy
 
-**The one thing the page sells:** **a shared IDE for you and your agents — one workspace, two kinds
-of operator.** Everywhere else the prompt is the only layer of an agent you can change; here every
-layer is visible and yours to edit: the image its dev-tools are really installed in, the systems it's
-allowed to reach (capabilities), the context it loads every turn. The agents that workspace is built
-for are **co-piloted specialized agents** — autonomous employees, each a purpose-built sandbox on
-hardware you own, running on your own Claude/Codex/Grok subscription. Run one, or ten in parallel.
+**The one thing the page sells:** **a persistent workstation for your agents — it runs on hardware
+you own, and every browser is a window onto it.** The agents live on your machine, not in a tab:
+close the laptop and the runs keep going; open any browser — or a phone — and the same fleet is
+there, sorted by who needs you. The agents that workstation is built for are **co-piloted
+specialized agents** — autonomous employees, each a purpose-built sandbox on hardware you own,
+running on your own Claude/Codex/Grok subscription. Run one, or ten in parallel.
 
-The claim is literal, not a metaphor, and that is what makes it defensible: you and the agent drive
-the *same* surfaces. One implementation of what connecting a VPN means (`/vpn` for the browser,
-`/usr/local/bin/vpn` for the agent); one shared `tmux` server behind your terminals and its shell
-commands; one `iq` index behind `/workspace/search` and its Bash calls; one tree, where each agent
-works on its own git worktree and lands its delta into your Changes panel for review.
+**The golden path is the story spine**, and every band ladders onto one of its steps: connect a
+machine with one command → give the work to agents, each in its own sandbox and git worktree → walk
+away, the runs continue → reopen from any browser or phone onto the same runs → steer, answer,
+interrupt → read every diff before it lands.
+
+The claim is literal, not a metaphor, and that is what makes it defensible: the sandbox is a real
+daemon on the user's machine and the browser holds nothing a run depends on — closing every window
+loses nothing. The shared-surfaces construction is the supporting mechanism: you and the agent drive
+the *same* surfaces (one `tmux` server behind your terminals and its shell commands; one `iq` index
+behind `/workspace/search` and its Bash calls; one tree, where each agent works on its own git
+worktree and lands its delta into your Changes panel for review), so a window opened anywhere shows
+the run as it actually is, not a replay of it.
 
 An autonomous agent is not fire-and-forget. AI still needs (a) its context configured, (b) its work
 supervised, and (c) a human in the loop for the decisions that matter. So every agent is
@@ -59,24 +72,28 @@ Change copy there, not in the `.astro` files.
 
 Retired framing (do not bring back): "Your coding agent. Out of the terminal.", "Build software with
 intent." as the definition, "An AI-native workspace for infra, data, apps, and code…", "Specialized
-agents that own their workspace", and **"A specialized agent is more than a prompt."** as the
+agents that own their workspace", **"A specialized agent is more than a prompt."** as the
 headline — it argued against a strawman nobody's pain matches, restated the contrast band 1500px
-early, and filed us with prompt-builders instead of Cursor/Codespaces/Devin, and **"The IDE you
-share with your agents."** / "A shared IDE for you and your agents" as the tagline. "specialized
-agent" survives as *mechanism* vocabulary (see the glossary); it is no longer the headline claim.
-The brand tagline is now "An IDE for your agents. A window for you." (org metadata,
-`_site/site-content/src/site.ts`), rendered as the hero `An IDE for your agents. / A window for you.`
+early, and filed us with prompt-builders instead of Cursor/Codespaces/Devin, **"The IDE you
+share with your agents."** / "A shared IDE for you and your agents" as the tagline, and
+**"An IDE for your agents."** as the tagline's first line (retired 2026-08-07) — "IDE" named the
+surfaces instead of the capability: it filed us with editors, and nothing in it said the run
+survives you leaving, which is the one thing the infrastructure buys that a reader can picture. Its
+second line, "A window for you.", survives in the current tagline.
+"specialized agent" survives as *mechanism* vocabulary (see the glossary); it is no longer the
+headline claim. The brand tagline is now "Workstation for your agents. A window for you."
+(org metadata, `_site/site-content/src/site.ts`), rendered as the hero
+`Workstation for your agents. / A window for you.`
 
 ## Section order
 
 The page is a single continuous scroll; the full section-by-section blueprint (ids, jobs, accuracy
-rules) lives in [landing-blueprint.md](landing-blueprint.md). At the message level the order tells
-one story: **state the thesis** (Hero) → **show it's real** (the product tour of screenshots) →
-**the prompt is the only layer anyone else opens** (contrast) → **break one agent down** (anatomy,
-inside a sandbox) → **wire it to your systems** (integrations hub) → **scale to a team** (workforce,
-Discord teammate) → **carry the trust** (ownership, shared safely) → **zoom out to a company**
-(the whole picture) → **the deal** (economics) → **get connected** → **final CTA**. Each pain from
-positioning.md (P1–P7) surfaces where its band lands.
+rules) lives in [landing-blueprint.md](landing-blueprint.md). At the message level the order walks
+the golden path: **state the claim** (Hero) → **prove the loop** (give the work to several → each
+isolated in a sandbox of its own → walk away and come back on any device, same runs → nothing lands
+unread) → **carry the trust** (ownership) → **the deal** (economics) → **everything else it can be**
+(extend, one quiet index) → **who is behind it** (trust) → **get connected** → **objections** (FAQ)
+→ **final CTA**. Each pain from positioning.md (P1–P7) surfaces where its band lands.
 
 **Free, no pricing section (principle, not a section).** There is deliberately no on-page pricing
 block and no "Pricing" nav/footer link — there is nothing to price. The whole product is free and
@@ -86,12 +103,18 @@ section.
 
 ## Glossary (use these words, exactly)
 
+- **workstation** — the machine side of the product: the sandboxes and runs that live on hardware
+  the user owns and keep going when every browser is closed. The headline noun. Never "server",
+  never "cloud", never "instance" — the word has to keep saying *a real machine of yours*.
+- **window** — any signed-in browser on any device: a view onto the same running workstation,
+  holding nothing a run depends on. Close it, open another anywhere, nothing is lost. The headline's
+  second noun; "the window" in copy always means this, never a desktop app window.
 - **specialized agent** (a.k.a. **autonomous employee**) — a coding agent given its own sandbox for
   one job: dev-tools really installed, wired to your systems, context curated for that role. A
-  *mechanism* word — what you build in the shared IDE — never the headline claim.
+  *mechanism* word — what lives on the workstation — never the headline claim.
 - **the environment** — the sum of the layers a prompt can't reach: the image the tools are installed
-  in, the capabilities the agent may use, the context it loads each turn. The page's real subject,
-  because intentic's differentiator is that all of it is **visible and editable**, not that it exists.
+  in, the capabilities the agent may use, the context it loads each turn. The deep differentiator
+  under the workstation claim: all of it is **visible and editable**, not merely existent.
 - **co-piloted** — the working stance: the agent runs autonomously, but you configure its context,
   supervise its work, and stay in the loop for the decisions that matter. Never "fire-and-forget",
   never "fully autonomous" without this qualifier.
@@ -126,40 +149,44 @@ section.
 1. **Where does my code live?** — On your machine. The sandbox runs where you start it; your
    browser reaches it over a private Cloudflare tunnel. The platform stores your identity and the
    sandbox's URL — it never relays your files or sits between you and your sandbox.
-2. **Can intentic read my secrets?** — No. Credentials live inside your sandbox; the platform has
+2. **What happens when I close the browser?** — Nothing, to the runs. The agents live on your
+   machine, not in the tab; the browser is a window. Terminals survive the disconnect, turns finish
+   without you, and reopening from any device — including a phone — lands you on the same fleet,
+   sorted by who now needs you.
+3. **Can intentic read my secrets?** — No. Credentials live inside your sandbox; the platform has
    no path to them. What little the platform does store (OAuth tokens, connect tokens) is
    AES-256-GCM encrypted with no decrypt path in the product. Secret files are denylisted from the
    workspace file relay.
-3. **Which AI models does it use?** — Your choice per conversation: Claude Code (Opus, Sonnet,
+4. **Which AI models does it use?** — Your choice per conversation: Claude Code (Opus, Sonnet,
    Haiku), Codex, or Grok, with adjustable reasoning effort. Your provider, your account, your usage.
-4. **Do I need a Cloudflare account?** — No. By default intentic provisions the tunnel under its
+5. **Do I need a Cloudflare account?** — No. By default intentic provisions the tunnel under its
    own domain. Bring your own zone if you prefer — your token is used once to list zones and is
    never stored.
-5. **What do I need to run a sandbox?** — A machine with Docker (installed automatically if
+6. **What do I need to run a sandbox?** — A machine with Docker (installed automatically if
    missing, with your confirmation) and a Google account. No open inbound ports, nothing deployed.
-6. **Can the agent break my stuff?** — No, because it's co-piloted, not fire-and-forget. It starts
+7. **Can the agent break my stuff?** — No, because it's co-piloted, not fire-and-forget. It starts
    in plan mode: it proposes, you approve. Every file change is reviewable as a diff you can discard
    or commit; environment (Dockerfile) changes require your explicit approval; stricter and looser
    modes are one click away.
-7. **Is any of it paid?** — No. Every sandbox, every capability, the agent, automations and team
+8. **Is any of it paid?** — No. Every sandbox, every capability, the agent, automations and team
    sharing are free, with no tiers and no card. The whole product is MIT on GitHub. You pay only
    your own model provider, directly.
-8. **What are automations?** — Scheduled or event-driven agent wake-ups: GitHub/GitLab pushes,
+9. **What are automations?** — Scheduled or event-driven agent wake-ups: GitHub/GitLab pushes,
    Sentry alerts, Stripe payments, new email, Discord messages, or plain cron — each run a fresh
    agent session with a transcript, optionally gated by a guard command you define.
-9. **Is it open source? Can I run it without the app?** — Yes. The sandbox and CLI that execute on
+10. **Is it open source? Can I run it without the app?** — Yes. The sandbox and CLI that execute on
    your machine are MIT on GitHub (github.com/intentic/intentic) — read exactly what runs on your
    hardware, and drive a sandbox from the CLI without ever signing in. The hosted app adds the
    browser workspace, the fleet board, capabilities, automations, and teams.
-10. **What about my data — export, deletion?** — Settings → Export downloads everything the
+11. **What about my data — export, deletion?** — Settings → Export downloads everything the
     platform stores about your account as JSON (deliberately excluding credentials). Account
     deletion cascades sandboxes, sessions, and grants.
-11. **Is it production-ready?** — The app is new and says so. Because the sandbox and CLI are MIT on
+12. **Is it production-ready?** — The app is new and says so. Because the sandbox and CLI are MIT on
     GitHub, you can read exactly what runs on your machine before you trust it with anything you
     care about — and because the agent is co-piloted (plan mode, reviewable diffs, owner-approved
     environment changes), you stay in control of every change. Verify test counts and prices at
     build time — never hardcode stale numbers.
-12. **How does this compare to Conductor, Cursor, OpenCode or Nimbalyst?** — For most of that list it
+13. **How does this compare to Conductor, Cursor, OpenCode or Nimbalyst?** — For most of that list it
     doesn't compete. Claude Code, Codex and OpenCode are agent harnesses and intentic runs all of
     them; any ACP agent is one capability away. Cursor and the other AI editors put you at the
     keyboard while intentic puts the agent there, and desktop sync mirrors the sandbox into a folder
@@ -170,17 +197,18 @@ section.
 
 ## SEO strings
 
-- The landing is a single page — its title/description are **not** per-variant. Fallback
-  (`_site/site-content/src/page-meta.ts`): `intentic — Specialized agents that own their workspace`.
+- The landing is a single page — its title/description are **not** per-variant; they live in
+  `_site/site-content/src/landing.ts` (`meta`). Title:
+  `intentic · Workstation for your agents. A window for you.`
 - Org description (`_site/site-content/src/site.ts`, JSON-LD) — the canonical product sentence; keep
-  the site and these docs in sync with it verbatim: `An IDE for your agents. A window for you. intentic
-  gives each coding agent — Claude Code, Codex, or Grok — its own sandbox on hardware you own: the
-  dev-tools its job needs really installed, wired to your systems, its context curated for one job —
-  and every layer of that environment visible and yours to change. Run one, or ten in parallel. Free
-  to start.`
-- Keywords to carry naturally: AI IDE, agent IDE, shared workspace, specialized agent, autonomous
-  agent, AI employee, agent workforce, coding agent, Claude Code, Codex, Grok, agent sandbox, AI
-  workspace in the browser, self-hosted AI agent, Devin alternative, own your code.
+  the site and these docs in sync with it verbatim: `Workstation for your agents. A window for you.
+  Every coding agent gets its own sandbox and git worktree on hardware you own — and keeps running
+  when you close the browser. Reopen from any device, steer the same fleet, and read every diff
+  before it lands. Free.`
+- Keywords to carry naturally: agent workstation, persistent coding agent, self-hosted AI agent,
+  run agents on your own hardware, control agents from anywhere, remote agent control, coding
+  agent, agent sandbox, specialized agent, autonomous agent, AI employee, agent workforce, Claude
+  Code, Codex, Grok, AI IDE, Devin alternative, own your code.
 - The **`intentic vs X` / `X alternative`** queries are served by the comparison shelf (`/compare/`),
   one URL per competitor — that is the whole reason it isn't a single page with anchors. Each page
   owns its own title, description, OG card and breadcrumb; the hub owns the category query. Adding a

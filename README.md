@@ -2,10 +2,10 @@
 
 <img src="_site/site/src/assets/intentic-full.png" alt="intentic" width="340">
 
-### An IDE for your agents. A window for you.
+### Workstation for your agents. A window for you.
 
-Each agent gets its own sandbox and git worktree on hardware **you** own.<br>
-Run ten in parallel. Read every diff before it lands. Free.
+Each agent gets its own sandbox and git worktree on hardware **you** own — and keeps running when you look away.<br>
+Run ten in parallel, reopen from any device, read every diff before it lands. Free.
 
 <p>
   <a href="https://github.com/intentic/intentic/actions/workflows/ci.yml"><img alt="CI" src="https://img.shields.io/github/actions/workflow/status/intentic/intentic/ci.yml?branch=main&label=CI&labelColor=1a1614&color=FE6A00"></a>
@@ -31,11 +31,12 @@ Run ten in parallel. Read every diff before it lands. Free.
 
 ## What this is
 
-intentic turns a generic coding assistant into a **specialized agent** — an autonomous employee with its own
-sandbox on hardware you own: its dev-tools really installed, wired to the systems it operates, its context
-curated for one job. Everywhere else the prompt is the only layer you can change; here every layer of that
-environment is visible and yours to edit. Run one, or ten in parallel, from any browser. Works with **Claude
-Code, Codex, Grok, Kimi Code and Gemini**, on your own subscription.
+intentic is a **persistent workstation for your agents** — it runs on hardware you own, and every browser is
+a window onto it. What lives there are **specialized agents** — autonomous employees, each with a sandbox of
+its own: dev-tools really installed, wired to the systems it operates, context curated for one job. The runs
+live on your machine, not in a tab: close the laptop and they keep going; reopen from any browser — or your
+phone — onto the same fleet. Works with **Claude Code, Codex, Grok, Kimi Code and Gemini**, on your own
+subscription.
 
 ## Quick start
 
@@ -64,6 +65,16 @@ full transcripts) exist so you can configure an agent, watch it work, drive it w
 lands. Autonomy with the wheel in your hands.
 
 ## What you get
+
+### Walk away — the runs don't stop
+
+The agents live on your machine, not in the tab. Terminals survive disconnects, turns finish without you,
+and any browser — or your phone — reopens onto the same fleet, sorted by who needs you.
+
+|  |  |
+| :---: | :---: |
+| <img src="_site/site/src/assets/product/mobile-fleet.png" alt="The fleet board on a phone"> | <img src="_site/site/src/assets/product/mobile-chat.png" alt="A conversation on a phone"> |
+| **The whole fleet, on a phone** | **Drive a run from anywhere** |
 
 ### A real workspace, not a chat box
 
@@ -105,13 +116,8 @@ workspace and never shown in the file tree.
   intentic charges nothing and never meters your model usage.
 
 <details>
-<summary><b>More screenshots</b> — mobile, plan mode, spend, automations</summary>
+<summary><b>More screenshots</b> — plan mode, spend, automations</summary>
 <br>
-
-|  |  |
-| :---: | :---: |
-| <img src="_site/site/src/assets/product/mobile-fleet.png" alt="The fleet board on a phone"> | <img src="_site/site/src/assets/product/mobile-chat.png" alt="A conversation on a phone"> |
-| **The whole fleet, on a phone** | **Drive a run from anywhere** |
 
 <img src="_site/site/src/assets/product/chat-plan.png" alt="Plan mode: the agent's proposed plan in the conversation, awaiting approval">
 

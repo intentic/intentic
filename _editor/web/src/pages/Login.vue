@@ -15,8 +15,9 @@ const desktop = computed(() => desktopVersion() !== undefined);
 
 const year = new Date().getFullYear();
 
-// The site's four "anatomy" pillars, one line each: a sign-in page is read in a glance, so every body is
-// short enough to hold a single line at this panel's measure and never wrap mid-thought.
+// Four pillars laddering to the headline — workstation, persistence, reach, environment — one line each:
+// a sign-in page is read in a glance, so every body is short enough to hold a single line at this panel's
+// measure and never wrap mid-thought.
 const features: readonly { icon: IconName; title: string; description: string }[] = [
     {
         icon: `box`,
@@ -24,19 +25,19 @@ const features: readonly { icon: IconName; title: string; description: string }[
         description: `A container on hardware you control, one per agent.`,
     },
     {
+        icon: `wave-pulse`,
+        title: `Runs while you're away`,
+        description: `Close the laptop — turns finish and terminals survive.`,
+    },
+    {
+        icon: `globe`,
+        title: `A window from any device`,
+        description: `Reopen from any browser, or your phone, mid-run.`,
+    },
+    {
         icon: `sliders-h`,
         title: `A curated environment`,
-        description: `The dev-tools the job needs, really installed.`,
-    },
-    {
-        icon: `sitemap`,
-        title: `Access to your systems`,
-        description: `GitHub, databases, Sentry, SSH, MCP — a click each.`,
-    },
-    {
-        icon: `list-check`,
-        title: `Curated context`,
-        description: `Skills, runbooks and house style, loaded every turn.`,
+        description: `Dev-tools installed, systems wired, context loaded.`,
     },
 ];
 
@@ -71,14 +72,14 @@ const signIn = async (): Promise<void> => {
 
             <div class="animate-fade-in-up relative max-w-xl" style="animation-delay: 60ms">
                 <!-- One sentence per line, as on the site: left to wrap on its own the headline breaks
-                     between "your" and "agents" and reads as one run-on line. 48px only from 2xl up — below
-                     that "An IDE for your agents." is wider than this half-width panel and wraps anyway. -->
+                     mid-phrase and reads as one run-on line. 48px only from 2xl up — below that
+                     "Workstation for your agents." is wider than this half-width panel and wraps anyway. -->
                 <h1 class="text-4xl font-semibold leading-tight tracking-tight 2xl:text-5xl">
-                    <span class="block">An IDE for your agents.</span>
+                    <span class="block">Workstation for your agents.</span>
                     <span class="block">A window for you.</span>
                 </h1>
                 <p class="mt-5 text-base leading-relaxed text-pretty text-muted">
-                    Everyone else lets you edit the prompt. intentic lets you see and change the whole environment your agents work in.
+                    Your agents live on hardware you own and keep running when you look away. Every browser is a window onto the same fleet.
                 </p>
 
                 <ul class="mt-10 flex max-w-lg flex-col gap-4">

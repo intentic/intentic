@@ -191,7 +191,7 @@ const cubeGlyph = icon('<path d="M12 2.5 20.5 7v10L12 21.5 3.5 17V7z"/><path d="
                                tall panel that happens to be a hair wider than high, and given the whole column it is
                                mostly the empty canvas under its own diff. That one keeps the cropped side-by-side. */
                             const shot = beat.shot === undefined ? undefined : { ...beat.shot, image: shotAsset(beat.shot.name) };
-                            const wideShot = shot !== undefined && shot.image.width >= shot.image.height * 1.5 ? shot : undefined;
+                            const wideShot = shot !== undefined && shot.frame === "browser" && shot.image.width >= shot.image.height * 1.5 ? shot : undefined;
                             const words = (
                                 <>
                                     <div class="text-5xl font-semibold tracking-tight text-primary-500/25 select-none" aria-hidden="true">
@@ -234,7 +234,23 @@ const cubeGlyph = icon('<path d="M12 2.5 20.5 7v10L12 21.5 3.5 17V7z"/><path d="
                                     <div class={i % 2 === 1 ? "lg:order-2" : ""}>{words}</div>
 
                                     <div class={i % 2 === 1 ? "lg:order-1" : ""}>
-                                        {shot && (
+                                        {/* The continuity beat's proof is the same board on a different device, so its
+                                            shot gets the phone shell (the product pages' frame, `ProductShotFigure`):
+                                            a 430px-wide capture in the browser chrome reads as a cropped desktop. */}
+                                        {shot && shot.frame === "phone" && (
+                                            <figure class="m-0 mx-auto w-full max-w-[20rem] overflow-hidden rounded-[2rem] border border-line-strong bg-card p-2 shadow-2xl shadow-black/50">
+                                                <Image
+                                                    src={shot.image}
+                                                    alt={shot.alt}
+                                                    widths={SHOT_WIDTHS}
+                                                    sizes="(min-width: 22rem) 304px, calc(100vw - 4rem)"
+                                                    loading="lazy"
+                                                    decoding="async"
+                                                    class="w-full rounded-[1.5rem]"
+                                                />
+                                            </figure>
+                                        )}
+                                        {shot && shot.frame === "browser" && (
                                             <figure class="m-0 overflow-hidden rounded-xl border border-line bg-card shadow-2xl shadow-black/50">
                                                 <div class="flex items-center gap-2 border-b border-line bg-overlay/40 px-4 py-2.5">
                                                     <span class="h-2.5 w-2.5 rounded-full bg-line-strong" />

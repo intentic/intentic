@@ -1,8 +1,9 @@
 # intentic — Positioning
 
 Who intentic is for, the pains it removes, and why it wins. **The product being sold is
-intentic-app** — the hosted workspace at app.intentic.dev, where you run co-piloted **specialized
-agents** on hardware you own. The sandbox and CLI those agents run on are MIT open source on GitHub
+intentic-app** — the hosted workspace at app.intentic.dev: a persistent workstation for co-piloted
+**specialized agents** on hardware you own, with any browser as a window onto it. The sandbox and
+CLI those agents run on are MIT open source on GitHub
 (`github.com/intentic/intentic`) — the trust layer you can read and run yourself. Every claim traces
 to a file in the repo; if a claim has no path, it doesn't go on the site.
 
@@ -10,19 +11,22 @@ Companion docs: [messaging.md](messaging.md) (what we say), [landing-blueprint.m
 
 ## What it is
 
-**intentic is a shared IDE for you and your agents — one workspace, two kinds of operator.**
-Everywhere else the prompt is the only layer of an agent you can change. Here every layer is visible
-and yours to edit: the image its dev-tools are really installed in, the systems it may reach
-(**capabilities**), the context it loads every turn. What you build in that workspace is a
-**specialized agent** — an autonomous employee in a purpose-built **sandbox** on hardware *you* own,
-running on your own Claude/Codex/Grok subscription. Run one, or ten in parallel.
+**intentic is a persistent workstation for your agents — it runs on hardware you own, and every
+browser is a window onto it.** The agents live on your machine, not in a tab: close the laptop and
+the runs keep going; open any browser — or a phone — and the same fleet is there, sorted by who
+needs you. What lives on that workstation is a **specialized agent** — an autonomous employee in a
+purpose-built **sandbox** on hardware *you* own: its dev-tools really installed, wired to the
+systems it may reach (**capabilities**), its context curated for one job, running on your own
+Claude/Codex/Grok subscription. Run one, or ten in parallel.
 
-"Shared" is literal. You and the agent drive the same surfaces, by construction: one implementation of
+"Window" is literal. The browser holds nothing a run depends on — closing every window loses
+nothing — and you and the agent drive the same surfaces, by construction: one implementation of
 what connecting a VPN means (the browser on `/vpn`, the agent on `/usr/local/bin/vpn` — the tunnel it
 dials appears in your UI with nothing syncing the two), one `tmux` server behind your terminals and
 its shell commands, one `iq` index behind `/workspace/search` and its Bash calls, and one tree — each
 agent on its own git worktree, landing its delta into your Changes panel as the review boundary
-(`_sandbox/sandbox/src/agents/worktrees.ts`, `land.ts`).
+(`_sandbox/sandbox/src/agents/worktrees.ts`, `land.ts`). A window opened anywhere shows the run as
+it actually is, not a replay of it.
 
 But an autonomous agent is not fire-and-forget. AI still needs its context configured, its work
 supervised, and a human in the loop for the decisions that matter. So every agent is **co-piloted**
@@ -41,7 +45,7 @@ it with capabilities (GitHub, databases, Discord, Stripe, SSH, MCP servers…), 
 **automations**, and run a whole team of agents. The platform is architecturally a
 thin identity store that *cannot* touch your code, secrets, or systems (`README.md`, `ARCHITECTURE.md`).
 
-**Category**: specialized coding agents you own — cloud-grade agent UX and observability with
+**Category**: the persistent agent workstation you own — cloud-grade reach and observability with
 local-grade ownership.
 
 **Business model**: bring your own model subscription + your own hardware, and nothing to pay us —
@@ -80,23 +84,27 @@ payment event, a GitHub push, a new email — with a guard command deciding whet
 | P3 | Setting up a private agent environment is an evening of DevOps | Minutes to a live sandbox: Google sign-in → one copy-paste command. No Cloudflare account required; Docker auto-installed; no open inbound ports | `_editor/web/src/pages/Setup.vue` |
 | P4 | Agent autonomy is scary on real systems — you can't just fire-and-forget | Co-piloting: every agent works in its own branch and lands nothing until you accept it — a changes-review panel (diff → discard or commit), per-edit permission modes (plan / accept edits / ask before edits, the default on the shared tree), owner-approved environment changes, a transcript per run | `_editor/web/src/composables/chat/catalog.ts`, `_editor/web/src/pages/workspace/ReviewPanel.vue`, `_editor/web/src/pages/sandbox/EnvironmentCard.vue` |
 | P5 | Wiring the agent to your tools (repos, DBs, chat, monitoring) is N one-off integrations | A capabilities catalog: GitHub/GitLab/Redmine, SQL databases, Sentry/SigNoz, Discord/IMAP, Stripe, SSH/VPN, custom MCP servers, Claude plugins — credentials stay inside the sandbox | `_platform/capability-catalog/src/index.ts` (CAPABILITY_CATALOG), `_editor/web/src/pages/Capabilities.vue` |
-| P6 | The agent only works when you're at the keyboard | Automations: wake it on a schedule, a webhook, or live events (GitHub/GitLab push, Sentry alert, Stripe payments, new email, Discord), each run a fresh session with a transcript, optionally gated by a guard command | `_platform/api-contract/src/schemas.ts` (Automation schemas) |
+| P6 | The agent only works while you sit there — close the laptop and the session dies with the tab | The runs live on your machine, not in the browser: close every window and the agents keep working; reopen from any device onto the same board. Automations go further and start them without you — a schedule, a webhook, or live events (GitHub/GitLab push, Sentry alert, Stripe payments, new email, Discord), each run a fresh session with a transcript, optionally gated by a guard command | `_sandbox/sandbox/src/agent/`, `_platform/api-contract/src/schemas.ts` (Automation schemas) |
 | P7 | AI SaaS lock-in — models, data, exit | BYO agent (Claude Code, Codex, or Grok), your repos are plain git on your machine, GDPR export + account deletion, MIT sandbox + CLI on GitHub if you leave the app entirely | `_editor/web/src/composables/chat/conversation.ts`, `_platform/api/src/router.ts` (me.export), `LICENSE` |
 
 ## Selling points, ranked
 
 Ranked for the **landing page**, which gets one claim and about five arguments. The order changed on
 2026-08-02: #1 and #3 used to lead, and the site spent four bands on them. They are reasons to believe
-— true, and only legible to a reader already inside the agent-tooling debate. What is both unique and
-picturable in one read is #1 below, so that is what the page now claims and proves; the rest support it
-or live on `/product/*`, `/docs/*` and `/compare/`. See
+— true, and only legible to a reader already inside the agent-tooling debate. Re-centered 2026-08-07:
+#1 now carries persistence and reach — the workstation claim — after the brand line moved off the IDE
+frame (see messaging.md's retired-framing list). What is both unique and picturable in one read is #1
+below, so that is what the page now claims and proves; the rest support it or live on `/product/*`,
+`/docs/*` and `/compare/`. See
 [landing-blueprint.md](landing-blueprint.md#core-thesis-the-spine) for the whole rationale.
 
-1. **A fleet in parallel, on hardware you own, nothing landing unread** — one sandbox and one git
-   worktree per agent, run ten at once, and the review boundary is a real branch: land it into your
-   tree or discard it (`_sandbox/sandbox/src/agents/worktrees.ts`, `land.ts`,
-   `_editor/web/src/pages/Agents.vue`). Local orchestrators share the instinct; none of them pair it with
-   the environment, the credentials and the reach below. (P1, P2, P4)
+1. **A persistent fleet on hardware you own — still running when you look away, nothing landing
+   unread** — one sandbox and one git worktree per agent, run ten at once; the runs live on your
+   machine, not in the tab, so any browser or phone reopens onto the same board; and the review
+   boundary is a real branch: land it into your tree or discard it
+   (`_sandbox/sandbox/src/agents/worktrees.ts`, `land.ts`, `_editor/web/src/pages/Agents.vue`).
+   Local orchestrators share the ownership instinct; none of them pair it with the persistence, the
+   reach and the environment below. (P1, P2, P4, P6)
 2. **Ownership without giving up the cloud UX** — the moat: the only agent workspace where the
    vendor is architecturally *unable* to read your code or drive your sandbox (identity-only hub,
    off the command path; secrets AES-256-GCM at rest with no decrypt path, `_platform/api/src/crypto.ts`). (P1)

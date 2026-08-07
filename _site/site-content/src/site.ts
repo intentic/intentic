@@ -6,9 +6,9 @@ export const APP_URL = "https://app.intentic.dev";
 // into localStorage before the app boots. Relative, so a preview deploy embeds its own copy rather than prod's.
 export const DEMO_PATH = "/demo/";
 export const ORG_NAME = "intentic";
-export const ORG_TAGLINE = "An IDE for your agents. A window for you.";
+export const ORG_TAGLINE = "Workstation for your agents. A window for you.";
 export const ORG_DESCRIPTION =
-    "An IDE for your agents. A window for you. Every coding agent gets a sandbox of its own on hardware you own, with the job's dev-tools really installed and its own git worktree. Run ten at once, and read every diff before it lands. Free to start.";
+    "Workstation for your agents. A window for you. Every coding agent gets its own sandbox and git worktree on hardware you own — and keeps running when you close the browser. Reopen from any device, steer the same fleet, and read every diff before it lands. Free.";
 export const LOGO_URL = `${SITE_URL}/assets/intentic-logo-sized.png`;
 export const FOUNDER_NAME = "Artur Kurowski";
 

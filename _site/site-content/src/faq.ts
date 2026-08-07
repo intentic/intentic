@@ -37,6 +37,14 @@ export const faqGroups: FaqGroup[] = [
         blurb: "The product, how it differs, and what it runs alongside.",
         items: [
             {
+                id: "close-the-browser",
+                question: "What happens when I close the browser?",
+                answer: [
+                    "Nothing, to the runs. The agents live on your machine, not in the tab — terminals survive the disconnect, and turns finish without you.",
+                    "Reopen from any device, including a phone, and the same fleet is there, sorted by who now needs you.",
+                ],
+            },
+            {
                 id: "how-is-this-different",
                 question: "How is this different from a custom GPT or a .md instructions file?",
                 answer: [
@@ -65,7 +73,9 @@ export const faqGroups: FaqGroup[] = [
             {
                 id: "which-models",
                 question: "Which AI models does it use?",
-                answer: ["Claude Code (Opus, Sonnet, Haiku), Codex, Grok, Kimi Code or Google, picked per conversation. Your provider, your account, your usage."],
+                answer: [
+                    "Claude Code (Opus, Sonnet, Haiku), Codex, Grok, Kimi Code or Google, picked per conversation. Your provider, your account, your usage.",
+                ],
             },
         ],
     },
@@ -77,12 +87,16 @@ export const faqGroups: FaqGroup[] = [
             {
                 id: "what-do-i-need",
                 question: "What do I need to run a sandbox?",
-                answer: ["A machine with Docker and a Google account. No open inbound ports, nothing deployed. Docker installs itself if missing, with your confirmation."],
+                answer: [
+                    "A machine with Docker and a Google account. No open inbound ports, nothing deployed. Docker installs itself if missing, with your confirmation.",
+                ],
             },
             {
                 id: "do-i-need-cloudflare",
                 question: "Do I need a Cloudflare account?",
-                answer: ["No. The tunnel is provisioned under intentic's own domain by default. Bring your own zone if you prefer; the token is used once and never stored."],
+                answer: [
+                    "No. The tunnel is provisioned under intentic's own domain by default. Bring your own zone if you prefer; the token is used once and never stored.",
+                ],
             },
             {
                 id: "is-any-of-it-paid",

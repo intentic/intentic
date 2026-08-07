@@ -48,13 +48,15 @@ export interface HeroDemo {
 /**
  * One beat of the loop. Same shape as a `ProductBlock`: the proof beside the words is a real captured
  * surface, or — where no single screen shows the thing — a figure drawn in markup. Never a mockup.
+ * A browser-framed shot carries the title-bar pill; a phone-framed one fills the phone shell whole,
+ * because a 430px-wide capture in a browser frame reads as a cropped desktop.
  */
 export interface LoopBeat {
     /** The ghost numeral beside it. Authored, so the copy owns its own ordering. */
     step: string;
     title: string;
     body: string;
-    shot?: ShotImage & { frameLabel: string };
+    shot?: ShotImage & ({ frame: "browser"; frameLabel: string } | { frame: "phone" });
     figure?: "sandbox";
 }
 
@@ -121,24 +123,26 @@ export interface LandingContent {
     finalCta: { heading: string; sub: string };
 }
 
-// One claim, proven once: you run a fleet of coding agents in parallel on hardware you own, and nothing
-// reaches your tree until you have read the diff. Every section below is a proof of that sentence or an
-// objection to it. What the product can ALSO do — Doorbell, Discord, automations, sharing, a whole
-// company of agents — is real, has pages of its own, and lives in one quiet band near the bottom.
+// One claim, proven once: your agents run on hardware you own, keep running when you look away, and
+// any browser — or a phone — reopens onto the same fleet, with nothing reaching your tree until you
+// have read the diff. Every section below is a proof of that sentence or an objection to it. What the
+// product can ALSO do — Doorbell, Discord, automations, sharing, a whole company of agents — is real,
+// has pages of its own, and lives in one quiet band near the bottom.
 export const landingContent: LandingContent = {
     meta: {
         // Under 160 characters: a search result truncates past that, and this one has to survive
         // the cut with the claim and the price still in it.
-        title: "intentic · An IDE for your agents. A window for you.",
+        title: "intentic · Workstation for your agents. A window for you.",
         description:
-            "An IDE for your agents. Each gets its own sandbox and git worktree on hardware you own. Run ten in parallel, read every diff before it lands. Free.",
+            "Agents on hardware you own that keep running when you close the browser. Reopen from any device, steer the fleet, read every diff before it lands. Free.",
     },
     hero: {
-        headlineLines: ["An IDE for your agents.", "A window for you."],
+        headlineLines: ["Workstation for your agents.", "A window for you."],
         // Short on purpose: the hero states the claim, and #loop is where each half of it gets proved.
-        // "Worktree", not "branch" — a branch is a name, and what keeps ten agents off each other is that
-        // each has a checkout of its own (`_sandbox/sandbox/src/agents/worktrees.ts`).
-        subhead: "Every agent gets its own sandbox and git worktree, on hardware you own. Run ten at once. Nothing lands until you have read the diff.",
+        // "Look away", not "log off" — nothing has to be ended for the runs to continue; the browser
+        // simply holds nothing they depend on.
+        subhead:
+            "Your agents live on hardware you own and keep running when you look away. Every browser is a window onto the same fleet — steer, approve, interrupt, land.",
         chips: ["Free and open source", "Bring your own agent", "Runs on your hardware"],
         shot: {
             name: "fleet-board",
@@ -163,6 +167,7 @@ export const landingContent: LandingContent = {
                 shot: {
                     name: "fleet-board",
                     alt: "The intentic fleet board: an Attention lane with an agent asking a question and one blocked on a land conflict, an Active lane with three agents running, and a Finished lane offering Land now. Every card shows model, branch, tokens, cost and diff stats.",
+                    frame: "browser",
                     frameLabel: "acme-shop · /agents",
                 },
             },
@@ -174,11 +179,22 @@ export const landingContent: LandingContent = {
             },
             {
                 step: "03",
+                title: "Walk away — the runs don't stop",
+                body: "The agents live on your machine, not in this tab. Close the laptop, open your phone on the train: the same board, the same runs, the one that needs an answer on top.",
+                shot: {
+                    name: "mobile-fleet",
+                    alt: "The same fleet board on a phone: the Attention lane on top with the agent that needs an answer, the Active lane below it, every card with the same model, branch, cost and diff stats.",
+                    frame: "phone",
+                },
+            },
+            {
+                step: "04",
                 title: "Nothing lands until you have read the diff",
                 body: "Finished work arrives as a branch: every changed file, every hunk, the tests it ran. Land it as ordinary git changes, or discard it and the worktree goes too.",
                 shot: {
                     name: "agent-review",
                     alt: "The isolated review panel: four changed files with per-file line counts, a split diff of a database schema adding a deletedAt column, and a Land now button beside the agent's branch name.",
+                    frame: "browser",
                     frameLabel: "acme-shop · agent/soft-deletes",
                 },
             },
@@ -218,7 +234,8 @@ export const landingContent: LandingContent = {
                 holds: ["Your email address", "Your sandbox's URL"],
                 never: "No code, no keys, and no way to command your agents.",
             },
-            footnote: "Your browser holds the token that drives the sandbox; the platform never does. All of intentic is MIT on GitHub, platform included, so you can check.",
+            footnote:
+                "Your browser holds the token that drives the sandbox; the platform never does. All of intentic is MIT on GitHub, platform included, so you can check.",
         },
     },
     economics: {
@@ -232,7 +249,11 @@ export const landingContent: LandingContent = {
             { name: "Kimi Code", detail: "on your Kimi Membership" },
             { name: "Google", detail: "Gemini, Claude and GPT-OSS, free on a Google sign-in" },
         ],
-        points: ["No per-token metering. No markup on your model usage.", "No rented cloud compute. Agents run where you run them.", "Free, whole: every sandbox, capability and shared workspace included."],
+        points: [
+            "No per-token metering. No markup on your model usage.",
+            "No rented cloud compute. Agents run where you run them.",
+            "Free, whole: every sandbox, capability and shared workspace included.",
+        ],
     },
     extend: {
         eyebrow: "Extend it",
@@ -244,7 +265,10 @@ export const landingContent: LandingContent = {
             {
                 name: "Automations",
                 body: "Agents that start themselves, so nobody has to be at a keyboard. Each run is a fresh session with its own transcript, gated by a guard command you write, and one agent's run can wake the next.",
-                triggers: { label: "Wakes on", items: ["a push", "a Sentry alert", "a Stripe payment", "inbound email", "a chat message", "plain cron"] },
+                triggers: {
+                    label: "Wakes on",
+                    items: ["a push", "a Sentry alert", "a Stripe payment", "inbound email", "a chat message", "plain cron"],
+                },
                 href: docsHref("autonomous-employees"),
             },
             {
@@ -303,7 +327,7 @@ export const landingContent: LandingContent = {
         commandNote: "Nothing deployed, nothing exposed. Just a workspace your agents can call home.",
     },
     finalCta: {
-        heading: "Put ten agents to work. Read every diff.",
-        sub: "One command to a live sandbox. Free to start, on your hardware.",
+        heading: "Put ten agents to work. Come back whenever.",
+        sub: "One command to a live workstation on your hardware. Free — and nothing lands until you have read the diff.",
     },
 };
