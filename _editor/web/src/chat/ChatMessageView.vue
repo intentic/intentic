@@ -490,6 +490,12 @@ const errandOpen = ref(false);
 const notesOpen = ref(false);
 const noteTitles = computed(() => (props.message.notes ?? []).map((note) => note.title).join(`, `));
 
+/* Verbatim, minus the markdown heading most of these notes open with. That heading is addressed to a model
+ * reading markdown; drawn here it is two literal hashes above a row that already names the note, so it reads as
+ * a formatting failure and says nothing the label did not. Only a heading, and only the FIRST line — everything
+ * below it is the note's prose and stays exactly as the agent got it. */
+const noteBody = (text: string): string => text.replace(/^#{1,6} .*(\n|$)/, ``).trim();
+
 /* THE PINNED PROMPT'S TRAILER: things have happened to this turn since it was asked, and the pin must not
  * pretend otherwise. One line, so it names the LAST of them and counts how many said the same thing — in the
  * user's own words for a nudge (the lexicon keeps those short) and by label for an errand. In flow whenever
@@ -1182,7 +1188,7 @@ const onEditKeydown = (event: KeyboardEvent): void => {
             <div v-if="notesOpen" class="scrollbar-thin flex max-h-80 w-full flex-col gap-3 overflow-auto rounded-lg bg-overlay/60 px-3 py-2">
                 <div v-for="note in message.notes" :key="note.title" class="flex flex-col gap-1">
                     <span class="text-2xs font-medium uppercase tracking-wide text-subtle">{{ note.title }}</span>
-                    <span class="whitespace-pre-wrap text-xs leading-relaxed text-muted">{{ note.text }}</span>
+                    <span class="whitespace-pre-wrap text-xs leading-relaxed text-muted">{{ noteBody(note.text) }}</span>
                 </div>
             </div>
         </template>

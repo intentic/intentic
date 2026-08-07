@@ -313,6 +313,10 @@ describe(`ChatMessageView added-notes row`, () => {
         await nextTick();
         expect(element.textContent).toContain(`Re-read src/auth/session.ts.`);
         expect(element.textContent).toContain(`Some dependencies declared under /work are not installed.`);
+        // The note's own `##` heading is written for a model reading markdown. Under a row that already names
+        // the note it is raw syntax and a duplicate title, so it is the one line not drawn.
+        expect(element.textContent).not.toContain(`##`);
+        expect(element.textContent).not.toContain(`Your branch moved onto newer main`);
     });
 
     // The mid-turn note rides a notice with nothing of its own to say. The empty line must not draw.
