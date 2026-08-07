@@ -37,7 +37,10 @@ export const runDoctor = async (harness: Harness, options: DoctorOptions): Promi
         harness.fail(
             `no interactive desktop (session 0)`,
             `The app has a window and a tray icon, and every assertion reads window titles — none of which exist in a service session.\n` +
-                `Run the Actions runner from a logged-in user session (run.cmd in a console, or autologon + a startup task), not as a Windows service.`,
+                `The runner is installed as a Windows service. It has to run in a logged-in user session instead, which is a\n` +
+                `property of how it was REGISTERED — the one thing about this machine a job cannot repair from inside itself,\n` +
+                `since the job IS the runner. From an elevated PowerShell on the runner:\n` +
+                `  _tools/scripts/setup-windows-runner.ps1 -Repair`,
         );
     }
 
