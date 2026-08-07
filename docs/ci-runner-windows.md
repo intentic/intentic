@@ -93,7 +93,9 @@ fails as an unexplained 404 that reads like an expired token.
 - **Git** for Windows, for `actions/checkout`.
 
 Nothing else. No Rust, no Tauri toolchain: the installer arrives as a build artifact from the Linux runner that
-cross-built it.
+cross-built it. No C or Python toolchain either, which is why every job here installs the smoke tier's subtree
+rather than the workspace: packages elsewhere in the tree compile from source on Windows when npm carries no
+prebuild for them, and there is nothing on this machine to compile them with.
 
 ---
 
@@ -122,7 +124,7 @@ Use an account you are comfortable having on a CI box. The turn it spends is one
 All four live in `@intentic/desktop-smoke-windows`. Build once, then run whichever you want:
 
 ```powershell
-pnpm install --frozen-lockfile
+pnpm install --frozen-lockfile --filter=@intentic/desktop-smoke-windows...
 pnpm turbo run build --filter=@intentic/desktop-smoke-windows...
 
 node _tools/desktop-smoke-windows/dist/main.js doctor --needs-docker

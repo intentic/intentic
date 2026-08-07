@@ -100,7 +100,9 @@ jobs:
         with:
           node-version-file: package.json
           cache: pnpm
-      - run: pnpm install --frozen-lockfile
+      # Subtree only, for the reason ci.yml's desktop-verify-windows spells out: a whole-workspace install
+      # compiles native packages this machine has no toolchain for.
+      - run: pnpm install --frozen-lockfile --filter=@intentic/desktop-smoke-windows...
       - run: pnpm turbo run build --filter=@intentic/desktop-smoke-windows...
       - run: node _tools/desktop-smoke-windows/dist/main.js doctor
       - run: node _tools/desktop-smoke-windows/dist/main.js install --installer windows-release-candidate/Intentic-setup.exe --expected-version $env:RELEASE_VERSION

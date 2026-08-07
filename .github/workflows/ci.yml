@@ -567,7 +567,12 @@ jobs:
         with:
           node-version-file: package.json
           cache: pnpm
-      - run: pnpm install --frozen-lockfile
+      # Scoped to the smoke tier's own subtree rather than the whole workspace, and the filter is the build's:
+      # this box carries Node, pnpm and Git and nothing else (docs/ci-runner-windows.md), while the workspace at
+      # large pulls native packages that fall back to compiling on Windows — @discordjs/opus publishes no
+      # prebuild for the Node ABI we pin, so a full install ends in node-gyp hunting for a Python and an MSVC
+      # toolchain this machine is deliberately without. Nothing the tier loads lives outside the subtree.
+      - run: pnpm install --frozen-lockfile --filter=@intentic/desktop-smoke-windows...
       # The tier reads window titles through @intentic/desktop, so both packages are built rather than run from
       # source — the export condition that resolves a workspace package to its TypeScript is a vitest/tsgo
       # arrangement, not something plain node applies.
