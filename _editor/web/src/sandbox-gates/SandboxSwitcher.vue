@@ -210,7 +210,7 @@ const confirmRemove = async (): Promise<void> => {
     </span>
 
     <Popover ref="panel" append-to="body">
-        <div class="flex w-64 flex-col gap-0.5 p-1">
+        <div class="flex w-60 flex-col gap-0.5 p-1">
             <!-- The badge's detail: one row per pending item, each routing to the hub tab that resolves it.
                  First in the popover because the badge is what brought the reader here, and each row is the
                  whole sentence its bar used to shout — said once, where it was asked for. -->
@@ -220,14 +220,14 @@ const confirmRemove = async (): Promise<void> => {
                     v-for="item in attention"
                     :key="item.message"
                     type="button"
-                    class="flex items-center gap-2.5 rounded-md px-2 py-1 text-left text-sm transition-colors hover:bg-content/5"
+                    class="flex items-center gap-2 rounded-md px-2 py-1 text-left text-xs transition-colors hover:bg-content/5"
                     @click="openTab(item.to)"
                 >
-                    <span class="flex h-6 w-6 shrink-0 items-center justify-center" :class="ROW_TONE[item.tone]">
-                        <Icon :name="item.icon" class="text-sm" />
+                    <span class="flex h-5 w-5 shrink-0 items-center justify-center" :class="ROW_TONE[item.tone]">
+                        <Icon :name="item.icon" class="text-xs" />
                     </span>
-                    <span class="min-w-0 flex-1 text-xs text-content">{{ item.message }}</span>
-                    <Icon name="chevron-right" class="shrink-0 text-xs text-subtle" />
+                    <span class="min-w-0 flex-1 text-content">{{ item.message }}</span>
+                    <Icon name="chevron-right" class="shrink-0 text-2xs text-subtle" />
                 </button>
                 <div class="my-1 border-t border-line"></div>
             </template>
@@ -238,13 +238,13 @@ const confirmRemove = async (): Promise<void> => {
                 v-for="(option, at) in sandbox.sandboxes.value"
                 :key="option.id"
                 type="button"
-                class="group flex items-center gap-2.5 rounded-md px-2 py-1 text-left text-sm transition-colors"
+                class="group flex items-center gap-2 rounded-md px-2 py-1 text-left text-xs transition-colors"
                 :class="option.id === sandbox.activeSandboxId.value ? 'bg-primary-600/15' : 'hover:bg-content/5'"
                 @click="pick(option)"
             >
-                <span class="flex h-6 w-6 shrink-0 items-center justify-center overflow-hidden rounded-md border border-line bg-card text-muted">
+                <span class="flex h-5 w-5 shrink-0 items-center justify-center overflow-hidden rounded-md border border-line bg-card text-muted">
                     <img v-if="option.image" :src="option.image" alt="" class="h-full w-full object-cover" />
-                    <Icon name="server" v-else class="text-sm" />
+                    <Icon name="server" v-else class="text-xs" />
                 </span>
                 <span class="min-w-0 flex-1 truncate" :class="option.id === sandbox.activeSandboxId.value ? 'text-link' : 'text-content'">{{
                     option.name
@@ -283,11 +283,11 @@ const confirmRemove = async (): Promise<void> => {
 
             <button
                 type="button"
-                class="flex w-full items-center gap-2.5 rounded-md px-2 py-1 text-sm text-content transition-colors hover:bg-content/5"
+                class="flex w-full items-center gap-2 rounded-md px-2 py-1 text-xs text-content transition-colors hover:bg-content/5"
                 @click="addSandbox"
             >
-                <span class="flex h-6 w-6 shrink-0 items-center justify-center">
-                    <Icon name="plus" class="text-base text-muted" />
+                <span class="flex h-5 w-5 shrink-0 items-center justify-center">
+                    <Icon name="plus" class="text-xs text-muted" />
                 </span>
                 Add sandbox
             </button>
@@ -296,11 +296,11 @@ const confirmRemove = async (): Promise<void> => {
 
             <button
                 type="button"
-                class="flex w-full items-center gap-2.5 rounded-md px-2 py-1 text-sm text-content transition-colors hover:bg-content/5"
+                class="flex w-full items-center gap-2 rounded-md px-2 py-1 text-xs text-content transition-colors hover:bg-content/5"
                 @click="openTab('/sandbox')"
             >
-                <span class="flex h-6 w-6 shrink-0 items-center justify-center">
-                    <Icon name="cog" class="text-base text-muted" />
+                <span class="flex h-5 w-5 shrink-0 items-center justify-center">
+                    <Icon name="cog" class="text-xs text-muted" />
                 </span>
                 Sandbox settings
             </button>

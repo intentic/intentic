@@ -45,13 +45,13 @@ const logout = async (): Promise<void> => {
     </button>
 
     <Popover ref="panel" append-to="body">
-        <div class="flex w-72 flex-col p-1">
+        <div class="flex w-60 flex-col p-1">
             <!-- Central account: email + name. -->
-            <div class="flex items-center gap-3 px-2 py-2">
-                <Avatar :size="40" :src="avatarImage" />
+            <div class="flex items-center gap-2 px-2 py-1.5">
+                <Avatar :size="28" :src="avatarImage" />
                 <div class="min-w-0 flex-1">
-                    <span class="truncate text-sm font-medium text-content">{{ user?.email }}</span>
-                    <div v-if="user?.name" class="truncate text-xs text-muted">{{ user.name }}</div>
+                    <span class="truncate text-xs font-medium text-content">{{ user?.email }}</span>
+                    <div v-if="user?.name" class="truncate text-2xs text-muted">{{ user.name }}</div>
                 </div>
             </div>
 
@@ -59,18 +59,18 @@ const logout = async (): Promise<void> => {
 
             <button
                 type="button"
-                class="flex w-full items-center gap-2.5 rounded-md px-2 py-1.5 text-sm text-content transition-colors hover:bg-content/5"
+                class="flex w-full items-center gap-2 rounded-md px-2 py-1 text-xs text-content transition-colors hover:bg-content/5"
                 @click="openSettings"
             >
-                <Icon name="cog" class="text-base text-muted" />
+                <span class="flex h-5 w-5 shrink-0 items-center justify-center"><Icon name="cog" class="text-xs text-muted" /></span>
                 Settings
             </button>
             <button
                 type="button"
-                class="flex w-full items-center gap-2.5 rounded-md px-2 py-1.5 text-sm text-content transition-colors hover:bg-content/5"
+                class="flex w-full items-center gap-2 rounded-md px-2 py-1 text-xs text-content transition-colors hover:bg-content/5"
                 @click="logout"
             >
-                <Icon name="sign-out" class="text-base text-muted" />
+                <span class="flex h-5 w-5 shrink-0 items-center justify-center"><Icon name="sign-out" class="text-xs text-muted" /></span>
                 Sign out
             </button>
         </div>
