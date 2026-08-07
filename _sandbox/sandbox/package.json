@@ -31,6 +31,7 @@
         "@intentic/extension-api": "workspace:*",
         "@intentic/extension-manifest": "workspace:*",
         "@intentic/graph": "workspace:*",
+        "@intentic/iq": "workspace:*",
         "@intentic/iq-engine": "workspace:*",
         "@intentic/lsp": "workspace:*",
         "@intentic/registry": "workspace:*",

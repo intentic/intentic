@@ -4,19 +4,20 @@
 // varies. These two do not: one install serves every platform, and the tools are the same wherever they point.
 
 // One shared Dockerfile fragment for every browser platform — composeEnvironment dedupes identical fragment
-// strings, so N browser capabilities bake Chromium exactly once. Chromium is heavy, so (like whisper/psql) it
-// rides the environment overlay applied on an owner rebuild, not the base image. `--with-deps` pulls the apt
-// libraries Chromium needs; PLAYWRIGHT_BROWSERS_PATH pins one location the daemon's `playwright` (guided login)
-// AND the agent's `@playwright/mcp` both resolve. Chromium launches with `--no-sandbox` (an app-level flag), so
-// no `# intentic:runtime` directive / container privilege is required.
-// xvfb is added so Chromium can run HEADED on a virtual display — the headless shell is fingerprinted and blocked
-// by anti-bot WAFs (e.g. Reddit's "network security"), whereas headed full Chromium under Xvfb looks like a real
-// browser. Chromium's own libraries come from `playwright install --with-deps`.
-export const BROWSER_FRAGMENT = `# browser automation: Chromium (+ OS libraries) and Xvfb for a virtual display, so the browser runs HEADED and
-# isn't flagged as a headless bot. Drives both the guided login and the agent's @playwright/mcp.
-ENV PLAYWRIGHT_BROWSERS_PATH=/ms-playwright
+// strings, so N browser capabilities add it exactly once. Chromium is NOT installed here: the base image bakes
+// it, with the OS libraries `install --with-deps` pulls, at playwright's default cache path (see the
+// Dockerfile's Chromium layer) — which is exactly what the daemon's `playwright` (guided login) and the agent's
+// `@playwright/mcp` resolve via chromium.executablePath(). This fragment used to install a SECOND Chromium into
+// PLAYWRIGHT_BROWSERS_PATH=/ms-playwright — including re-downloading the headless shell the base image deletes —
+// so a browser-enabled sandbox carried ~650 MiB of duplicate browser and the rebuild spent minutes downloading
+// what the image already had. Chromium launches with `--no-sandbox` (an app-level flag), so no
+// `# intentic:runtime` directive / container privilege is required.
+// xvfb is what actually rides the rebuild: Chromium must run HEADED on a virtual display — the headless shell is
+// fingerprinted and blocked by anti-bot WAFs (e.g. Reddit's "network security"), whereas headed full Chromium
+// under Xvfb looks like a real browser.
+export const BROWSER_FRAGMENT = `# browser automation: Xvfb, the virtual display Chromium runs HEADED on so it isn't flagged as a headless bot.
+# Chromium itself (+ its OS libraries) is already baked in the base image; only the display server rides the rebuild.
 RUN apt-get update && apt-get install -y --no-install-recommends xvfb \\
-    && cd /opt/sandbox && node node_modules/playwright/cli.js install --with-deps chromium \\
     && rm -rf /var/lib/apt/lists/*`;
 
 // Substituted for a platform skill's `${tools}` — how to use the browser tools well and safely. Core, not

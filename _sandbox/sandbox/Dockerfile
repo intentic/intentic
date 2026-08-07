@@ -1,5 +1,5 @@
 # The per-project AI-agent sandbox image (published as ghcr.io/intentic/sandbox). The
-# monorepo is compiled OUTSIDE Docker: _tools/scripts/prepare-image-trees.sh builds the eight baked packages
+# monorepo is compiled OUTSIDE Docker: _tools/scripts/prepare-image-trees.sh builds the seven baked packages
 # (turbo, warm cache) and prunes their production trees + the iq models into .image-out/, which enters this
 # build as the named context `trees`. Every layer here is a pinned tool install (registry-cache-stable) or a
 # cheap tree COPY, so a source change rebuilds in seconds — no pnpm install / turbo run inside a cacheless
@@ -284,11 +284,6 @@ RUN npx --yes playwright@"$(cat /opt/playwright-version)" install --with-deps ch
 COPY --from=trees cli /opt/intentic-cli
 RUN chmod +x /opt/intentic-cli/dist/cli.js \
     && ln -s /opt/intentic-cli/dist/cli.js /usr/local/bin/intentic
-# The iq search CLI on PATH — the agent's primary code-search tool (every backend's Bash tool inherits PATH)
-# and the daemon's /workspace/search backend (execFile `iq --json`). Same chmod rationale as intentic above.
-COPY --from=trees iq /opt/iq
-RUN chmod +x /opt/iq/dist/cli.js \
-    && ln -s /opt/iq/dist/cli.js /usr/local/bin/iq
 # `tsx` as a shim over node's own type stripping. Agents reach for tsx to run a one-off .ts script because that
 # is what the ecosystem taught them, and a project that lists it in devDependencies resolves its own — but a
 # scratch script outside any package hit `tsx: not found` and the agent went looking for workarounds. Node 24
@@ -301,7 +296,7 @@ COPY --from=trees iq-models /opt/iq-models
 # The iq Claude Code plugin (skill + SessionStart nudge) — the single source that teaches every agent to prefer
 # iq over grep/find/Glob. Baked here and always loaded via IQ_PLUGIN_DIR (agent.routes.ts prepends it to the SDK
 # `plugins` option), so iq is the default in the sandbox exactly as external users get it from the marketplace.
-# Copied from the build context (not /out/iq — the npm package ships only dist/, the plugin lives beside it).
+# Copied from the build context (the npm package ships only dist/ — the plugin lives beside it in the source tree).
 COPY _search/iq/plugin /opt/iq-plugin
 # The sandbox daemon.
 COPY --from=trees sandbox /opt/sandbox
@@ -329,10 +324,17 @@ RUN cd /opt/sandbox/node_modules/.pnpm/node-pty@*/node_modules/node-pty \
 # @intentic/sandbox, so /opt/sandbox already contains this exact package (and its bundled typescript) — a second
 # `pnpm deploy` root shipped a 54 MiB duplicate of it, 14.6 MiB of the pull. Node resolves the CLI's imports from
 # the target's realpath inside /opt/sandbox/node_modules, the pane-log-clean precedent below. The chmod is the
-# iq/intentic rationale — and it doubles as this layer's existence check: a tree that stopped carrying the
+# intentic rationale — and it doubles as this layer's existence check: a tree that stopped carrying the
 # package fails the build here instead of leaving `lsp` off PATH.
 RUN chmod +x /opt/sandbox/node_modules/@intentic/lsp/dist/cli.js \
     && ln -s /opt/sandbox/node_modules/@intentic/lsp/dist/cli.js /usr/local/bin/lsp
+# The iq search CLI on PATH — the agent's primary code-search tool (every backend's Bash tool inherits PATH)
+# and the daemon's /workspace/search backend (execFile `iq --json`). Symlinked out of the daemon's tree exactly
+# like lsp above: @intentic/iq is a dependency of @intentic/sandbox, so /opt/sandbox already carries it — a
+# second `pnpm deploy` root shipped a ~450 MiB duplicate of the engine's node_modules (onnxruntime,
+# transformers, ast-grep) for a CLI whose own code is under 1 MiB. Same chmod-as-existence-check rationale.
+RUN chmod +x /opt/sandbox/node_modules/@intentic/iq/dist/cli.js \
+    && ln -s /opt/sandbox/node_modules/@intentic/iq/dist/cli.js /usr/local/bin/iq
 # The `codex` CLI on PATH — the agent's shell delegates tasks to the user's connected Codex account
 # (`codex exec`, agent/delegation.ts), authenticated via the CODEX_HOME injected per turn.
 #

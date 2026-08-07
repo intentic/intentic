@@ -53,13 +53,15 @@ test("apply writes the platform SKILL.md; status is pending until logged in / re
     expect(skill).toContain("name: reddit");
     expect(skill).toContain("https://www.reddit.com");
     expect(skill).toContain("browser_snapshot");
-    // Not yet usable: Chromium isn't installed in the test env and there's no session — either way, pending.
+    // Not yet usable: whether or not the test env has Xvfb, there's no session — either way, pending.
     expect((await browserHandler.status(ctx, "reddit", reddit.config)).state).toBe("pending");
 });
 
-test("the fragment installs Chromium via Playwright; no runtime directive needed", () => {
-    expect(browserHandler.fragment!(reddit.config)).toContain("playwright/cli.js install");
-    expect(browserHandler.fragment!(reddit.config)).toContain("chromium");
+test("the fragment adds only Xvfb — Chromium is baked in the base image; no runtime directive needed", () => {
+    expect(browserHandler.fragment!(reddit.config)).toContain("xvfb");
+    // Installing Chromium here again would bake a ~650 MiB duplicate of the baked browser into the overlay.
+    expect(browserHandler.fragment!(reddit.config)).not.toContain("install --with-deps");
+    expect(browserHandler.fragment!(reddit.config)).not.toContain("PLAYWRIGHT_BROWSERS_PATH");
     // App-level --no-sandbox, not a container privilege — the fragment carries no intentic:runtime line.
     expect(browserHandler.fragment!(reddit.config)).not.toContain("intentic:runtime");
 });

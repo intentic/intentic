@@ -2053,6 +2053,9 @@ importers:
       '@intentic/graph':
         specifier: workspace:*
         version: link:../../_deploy/graph
+      '@intentic/iq':
+        specifier: workspace:*
+        version: link:../../_search/iq
       '@intentic/iq-engine':
         specifier: workspace:*
         version: link:../../_search/iq-engine
