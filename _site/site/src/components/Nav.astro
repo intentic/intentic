@@ -67,19 +67,14 @@ const isCurrentPage = (href: string): boolean => bare(href) === bare(currentPath
                                     </svg>
                                 </button>
 
-                                {/* The panel. Its column count follows the section count, so Docs reads as its
-                                    four shelves and Product as two — and the preview rail exists only where
-                                    there are screenshots to preview. A long shelf (Guides) takes two columns
-                                    under its one label rather than towering over its neighbours: the section
-                                    count stays the top-level story, and the panel stays roughly square. */}
+                                {/* The panel. Its column count follows the section count, so Product reads as
+                                    its three shelves and Docs as one narrow column of destinations — and the
+                                    preview rail exists only where there are screenshots to preview. */}
                                 <div class:list={["menu-panel", { "has-preview": preview.length > 0 }]}>
-                                    <div
-                                        class="menu-sections"
-                                        style={`--menu-columns:${entry.sections.reduce((n, s) => n + (s.items.length > 6 ? 2 : 1), 0)}`}
-                                    >
+                                    <div class="menu-sections" style={`--menu-columns:${entry.sections.length}`}>
                                         {entry.sections.map((section) => (
-                                            <div class:list={["menu-section", { wide: section.items.length > 6 }]}>
-                                                <div class="menu-section-label">{section.label}</div>
+                                            <div class="menu-section">
+                                                {section.label && <div class="menu-section-label">{section.label}</div>}
                                                 <ul>
                                                     {section.items.map((item) => (
                                                         <li>
@@ -314,19 +309,6 @@ const isCurrentPage = (href: string): boolean => bare(href) === bare(currentPath
         list-style: none;
         margin: 0;
         padding: 0;
-    }
-
-    /* A shelf past six rows spreads its list over two of the grid's columns — CSS columns balance the halves,
-       and break-inside keeps a label from parting company with its blurb at the fold. */
-    .menu-section.wide {
-        grid-column: span 2;
-    }
-    .menu-section.wide > ul {
-        columns: 2;
-        column-gap: 10px;
-    }
-    .menu-section.wide > ul > li {
-        break-inside: avoid;
     }
 
     .menu-section-label {

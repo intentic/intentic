@@ -1,5 +1,5 @@
 import { compareHref } from "./compare";
-import { docsHref, docsSections } from "./docs";
+import { docsDestinations } from "./docs";
 import type { ShotImage } from "./landing";
 import type { ProductPage } from "./product";
 import { productHref, productPages } from "./product";
@@ -29,7 +29,8 @@ export interface MenuItem {
 }
 
 export interface MenuSection {
-    label: string;
+    /** Absent for a single-shelf menu, where the rows are the grouping and a header would just repeat the trigger. */
+    label?: string;
     items: MenuItem[];
 }
 
@@ -81,10 +82,8 @@ export const navEntries: NavEntry[] = [
         type: "menu",
         label: "Docs",
         prefix: "/docs",
-        sections: docsSections.map((section) => ({
-            label: section.label,
-            items: section.items.map((page) => ({ label: page.title, href: docsHref(page.id), description: page.blurb })),
-        })),
+        // One unlabelled column of four destinations — see docsDestinations for why this is not the tree.
+        sections: [{ items: [...docsDestinations] }],
         // Release notes as the panel's action rather than a seventh link in the bar. It is the same question
         // the docs answer — what does this thing do — asked about the last two weeks of it, and it was the
         // one row of the bar a visitor reads once a release.

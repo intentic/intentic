@@ -18,14 +18,17 @@ export interface DocsSection {
     items: DocsPage[];
 }
 
-/* The whole docs tree, in reading order. The sidebar renders it by section; nav/footer and the
- * prev/next footer flatten it via docsPages below — one source of truth for slugs and titles.
+/* The whole docs tree, in reading order — the SIDEBAR's list, read by someone already inside the docs.
+ * nav/footer and the prev/next footer flatten it via docsPages below: one source of truth for slugs and titles.
  *
  * FOUR SECTIONS, deliberately the four every docs reader arrives expecting: install it, use it, extend it,
- * look something up. The tree once grew to six ("Understand" holding one page, guides split across two
- * shelves by which week they were written), and the nav menu — whose column count IS the section count —
- * read like an operating system's site. A section here costs a column there, so a new page joins one of
- * these four; a new section is a decision about the whole nav, not a default. */
+ * look something up. The tree once grew to six ("Understand" holding one page, guides split across two shelves
+ * by which week they were written), and it read like an operating system's site map.
+ *
+ * WHAT THIS IS NOT is the top-bar menu. That is `docsDestinations` below, and the split is the whole point:
+ * the menu used to be `docsSections.map(...)`, so every page written landed another labelled row in a hover
+ * panel, and nineteen of them arrived before anyone said stop. A tree is what you read when you are already
+ * here; a front door is four places to go. */
 export const docsSections: DocsSection[] = [
     {
         label: "Get started",
@@ -79,6 +82,17 @@ export const docsSections: DocsSection[] = [
     {
         label: "Guides",
         items: [
+            {
+                id: "guides",
+                title: "All guides",
+                blurb: "Every guide, grouped by what you're doing",
+                meta: {
+                    title: "Guides · intentic docs",
+                    description:
+                        "Every intentic guide in one place: running agents, connecting systems, sharing a sandbox, and the worked examples built on top of them.",
+                    datePublished: "2026-08-07",
+                },
+            },
             {
                 id: "parallel-agents",
                 title: "Parallel agents",
@@ -259,6 +273,21 @@ export const docsSections: DocsSection[] = [
 ];
 
 export const docsPages: DocsPage[] = docsSections.flatMap((section) => section.items);
+
+/* THE TOP BAR'S DOCS MENU — four places to go, not a table of contents.
+ *
+ * Authored rather than derived, and that is deliberate after the derived version: a menu built from the tree
+ * grows a row per page written, which is how a hover panel ended up holding nineteen labelled links with
+ * blurbs. Landing a new page must cost nothing here. Changing where the front door points is a decision, and
+ * it should read as one — so it is four lines of prose someone chose, kept next to the tree they summarise.
+ *
+ * Each `href` is that area's real entry page, so no row is a dead heading. */
+export const docsDestinations: readonly { label: string; href: string; description: string }[] = [
+    { label: "Get started", href: docsHref(""), description: "Install a sandbox, and how the pieces fit" },
+    { label: "Guides", href: docsHref("guides"), description: "Run agents, connect systems, share a sandbox" },
+    { label: "Extend", href: docsHref("extensions"), description: "Build and publish extensions" },
+    { label: "API reference", href: docsHref("sandbox-api"), description: "The daemon's HTTP API and the host API" },
+];
 
 export function docsHref(id: string): string {
     return id ? `/docs/${id}/` : "/docs/";

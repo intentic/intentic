@@ -1,6 +1,6 @@
 ---
 import { compareHref, comparePages } from "@intentic-dev/site-content/compare";
-import { docsHref, docsPages } from "@intentic-dev/site-content/docs";
+import { docsDestinations } from "@intentic-dev/site-content/docs";
 import { productHref, productPages } from "@intentic-dev/site-content/product";
 import { APP_URL, githubIssuesUrl, githubReleasesUrl, githubUrl, ORG_NAME, ORG_TAGLINE } from "@intentic-dev/site-content/site";
 import { Image } from "astro:assets";
@@ -19,9 +19,12 @@ const columns: { label: string; links: { href: string; label: string; external?:
         links: productPages.map((page) => ({ href: productHref(page.slug), label: page.navLabel })),
     },
     {
+        // The four destinations, not the tree — the same list the top bar carries, and for the same reason:
+        // this column was every docs page, so it grew a row per page written and stood three times the height
+        // of its neighbours. A footer column is a shortcut, and nineteen shortcuts is a table of contents.
         label: "Docs",
         links: [
-            ...docsPages.map((page) => ({ href: docsHref(page.id), label: page.title })),
+            ...docsDestinations.map((destination) => ({ href: destination.href, label: destination.label })),
             { href: githubReleasesUrl, label: "Release notes", external: true },
         ],
     },

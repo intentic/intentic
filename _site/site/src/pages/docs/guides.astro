@@ -1,0 +1,73 @@
+---
+import { type DocsPage, docsHref, docsPage, docsSections } from "@intentic-dev/site-content/docs";
+import DocsLayout from "../../components/DocsLayout.astro";
+
+/* The Guides shelf's own front door — what the top bar's "Guides" points at, and the reason that menu can be
+ * four rows instead of nineteen. Grouped by the question being asked rather than listed flat: nine cards in one
+ * undifferentiated grid is the same wall the menu was, moved one click deeper.
+ *
+ * The ids are written out rather than sliced off docsSections, because the grouping is EDITORIAL — "doing the
+ * work" vs "setting it up around you" is not a distinction the tree makes, and deriving it would mean either a
+ * third shelf in the sidebar or a mapping that silently drops a page nobody assigned. So the cost of writing
+ * them out is paid by the assertion below instead: a guide that lands in the tree and not in a group fails the
+ * build, which is the only thing that keeps this page honest as the shelf grows. */
+
+const groups = [
+    {
+        title: "Doing the work",
+        lead: "The everyday mechanics — what you'll touch in the first week.",
+        ids: ["parallel-agents", "capabilities", "automations"],
+    },
+    {
+        title: "Setting it up around you",
+        lead: "The sandbox as something you own, share and pay for.",
+        ids: ["models", "access", "your-machine"],
+    },
+    {
+        title: "Worked examples",
+        lead: "Whole things built out of the pieces above.",
+        ids: ["doorbell", "autonomous-employees", "reference-architecture"],
+    },
+];
+
+const grouped = new Set(groups.flatMap((group) => group.ids));
+const shelf = docsSections.find((section) => section.label === `Guides`)?.items ?? [];
+// Both directions: a guide nobody grouped would vanish from this page, and a group naming a page that has been
+// renamed or moved would render a hole. Neither is visible in a screenshot, so both are build failures.
+const ungrouped = shelf.filter((page) => page.id !== `guides` && !grouped.has(page.id)).map((page) => page.id);
+if (ungrouped.length > 0) {
+    throw new Error(`docs/guides.astro: guides missing from a group — ${ungrouped.join(`, `)}`);
+}
+const resolve = (id: string): DocsPage => {
+    const page = docsPage(id);
+    if (page === undefined) {
+        throw new Error(`docs/guides.astro: no docs page with id "${id}"`);
+    }
+    return page;
+};
+---
+
+<DocsLayout
+    pageId="guides"
+    heading="Guides"
+    lead="How to actually use a sandbox: run agents in parallel, give them tools and systems, let them start themselves, and share the result with other people."
+>
+    {
+        groups.map((group) => (
+            <section class="mt-10 first:mt-0">
+                <h2>{group.title}</h2>
+                <p>{group.lead}</p>
+                <div class="docs-embed">
+                    <div class="grid gap-4 sm:grid-cols-2">
+                        {group.ids.map((id) => resolve(id)).map((page) => (
+                            <a href={docsHref(page.id)} class="card p-5 no-underline transition-colors hover:border-primary-600/40">
+                                <h3 class="text-sm font-medium text-content">{page.title}</h3>
+                                <p class="mt-2 text-sm leading-relaxed text-muted">{page.meta.description}</p>
+                            </a>
+                        ))}
+                    </div>
+                </div>
+            </section>
+        ))
+    }
+</DocsLayout>
