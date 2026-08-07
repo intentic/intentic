@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import type { AgentProvider, RestoredMessage, SubagentSession } from "@intentic/sandbox-contract";
-import { formatTokens, Icon, type IconName } from "@intentic/ui";
+import { type AgentProvider, NATIVE_PROVIDERS, type RestoredMessage, type SubagentSession } from "@intentic/sandbox-contract";
+import { formatTokens, Icon, type IconName, useDevice } from "@intentic/ui";
 import { useQuery } from "@tanstack/vue-query";
 import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
@@ -12,6 +12,7 @@ import { sandboxKey } from "../composables/sandbox/useSandbox";
 import { subagentLive, useSubagentsQuery } from "../composables/subagents/subagentsQuery";
 import { openWorkTerminal } from "../composables/terminal/useWorkTerminals";
 import ChatToolCard from "../chat/ChatToolCard.vue";
+import ProviderLogo from "../chat/ProviderLogo.vue";
 import IdentityTile from "../components/IdentityTile.vue";
 import RailCard from "../components/RailCard.vue";
 import RailLane from "../components/RailLane.vue";
@@ -47,8 +48,9 @@ const TRANSCRIPT_POLL_MS = 4000;
 
 const route = useRoute();
 const router = useRouter();
+const { mobile } = useDevice();
 const { sessions } = useSubagentsQuery(LIST_POLL_MS);
-const { agentById } = useAgents();
+const { agentById, open: openAgent } = useAgents();
 
 /* ONE AGENT'S CHILDREN, when the card's chip is what opened this. The chip is a fact about ONE agent — "this
  * one started five" — and following it into a list of everything every agent in the sandbox has spawned makes
@@ -91,12 +93,39 @@ const titleOf = (session: SubagentSession): string =>
 // Which agent's turn started it — the way back to the conversation this all came out of.
 const parentOf = (session: SubagentSession): string | undefined => agentById(session.conversationId)?.title ?? undefined;
 
+/* THE WAY BACK, AND WHERE "BACK" IS. A conversation lives on exactly one surface per form factor: the docked
+ * chat on desktop, the drill-in page on a phone, which has none. This used to be a plain link to /agents/:id
+ * for both — and on desktop that route is the REVIEW page, so asking for the parent CONVERSATION swapped this
+ * whole area for a diff nobody had asked to see. Now it points the dock at the parent and leaves the child's
+ * transcript on screen, which is the pairing the press is for: the delegation beside the turn that made it.
+ * Falls back to the route when the roster has never heard of the parent — that page knows how to go and ask. */
+const openParent = (session: SubagentSession): void => {
+    const parent = agentById(session.conversationId);
+    if (parent !== undefined && !mobile.value) {
+        openAgent(parent);
+        return;
+    }
+    void router.push(`/agents/${encodeURIComponent(session.conversationId)}`);
+};
+
 /* WHO IS ACTUALLY RUNNING IT, for the identity tile's fallback mark — and for a delegation that is the row's
  * whole point: a `codex exec` the agent drove from its shell is another vendor's agent working in this sandbox,
  * and a row that doesn't say so reads as one of ours. An SDK subagent runs inside its parent's own turn, so it
  * wears the parent's provider, falling back to Claude once the roster no longer holds the parent. */
 const providerOf = (session: SubagentSession): AgentProvider =>
     session.kind === `subagent` ? (agentById(session.conversationId)?.provider ?? `claude`) : session.kind;
+
+/* THE BRAND MARK FOR AN AGENT TYPE THAT NAMES A RUNTIME. `claude` set as a lowercase word among the header's
+ * other grey facts reads as a stray label rather than as the vendor it is; the same fact as a glyph is read in
+ * one pass and costs a fifth of the width. Only the native runtimes have a mark — an `Explore` or a
+ * `general-purpose` is a WORD, and a word is what says it. */
+const typeMark = (session: SubagentSession): AgentProvider | undefined =>
+    session.agentType !== undefined && (NATIVE_PROVIDERS as readonly string[]).includes(session.agentType) ? session.agentType : undefined;
+
+/* The header's two actions, drawn the way the rail's cards are: no box until you are on them. A hairline
+ * button on a surface whose whole structure is card-and-lane is a third kind of edge, and two of them in the
+ * corner of an otherwise borderless header is what made this bar read as a toolbar bolted to the top. */
+const HEADER_ACTION = `flex shrink-0 items-center gap-1 rounded-md px-1.5 py-1 transition-colors hover:bg-overlay hover:text-content`;
 
 // The SDK's own task vocabulary, ready to `v-bind` onto the Icon — the shape agentStatusMeta returns for a
 // fleet agent, so the rail's glyph slot is fed the same way here as it is there.
@@ -228,7 +257,7 @@ watch(messages, () => {
                     <RouterLink
                         v-if="focus !== undefined"
                         :to="{ name: `subagents` }"
-                        class="flex shrink-0 items-center gap-1.5 rounded-md border border-line px-2 py-1 text-2xs text-muted transition-colors hover:border-line-strong hover:text-content"
+                        class="flex shrink-0 items-center gap-1.5 rounded-md px-2 py-1 text-2xs text-muted transition-colors hover:bg-overlay hover:text-content"
                     >
                         <Icon name="comments" class="shrink-0 text-2xs" />
                         <span class="min-w-0 flex-1 truncate">{{ focusTitle }}</span>
@@ -310,35 +339,49 @@ watch(messages, () => {
                      you pressed and the header you land on read as one agent — and the two ways out of this
                      pane: back to the conversation that started it, and, for a delegation (which unlike a
                      subagent has a process of its own), into the shell it runs in. -->
-                <div v-if="current" class="flex shrink-0 items-center gap-2 border-b border-line px-2.5 py-1.5 text-2xs text-muted">
+                <!-- NO RULE UNDER IT. The rail beside it is lane slabs on a card ground and draws not one
+                     hairline; a line across the top of the pane put the only border on the surface exactly
+                     where the eye lands first, and cut the header off from the transcript it names. Height and
+                     the title's weight are what separate them now — the same way the lanes separate the rail. -->
+                <div v-if="current" class="flex shrink-0 items-center gap-2 px-3 py-2 text-2xs text-muted">
                     <IdentityTile :title="titleOf(current)" :provider="providerOf(current)" class="h-5 w-5 text-2xs" />
                     <span class="min-w-0 flex-1 truncate text-xs font-semibold text-content">{{ titleOf(current) }}</span>
-                    <span v-if="current.agentType !== undefined" class="shrink-0">{{ current.agentType }}</span>
+                    <!-- Wrapped rather than tooltipped directly: the mark is a component, and the note is what
+                         keeps the glyph from being a fact only the people who already know it can read. -->
+                    <span
+                        v-if="typeMark(current) !== undefined"
+                        v-tooltip.bottom="`Runs as ${current.agentType}`"
+                        class="flex shrink-0 items-center text-sm text-subtle"
+                    >
+                        <ProviderLogo :provider="typeMark(current)!" />
+                    </span>
+                    <span v-else-if="current.agentType !== undefined" class="shrink-0">{{ current.agentType }}</span>
                     <span v-if="current.model !== undefined" class="shrink-0">{{ current.model }}</span>
                     <Icon v-bind="STATUS[current.status]" class="shrink-0" />
-                    <span class="flex shrink-0 items-center gap-2">
-                        <button
-                            v-if="current.terminal"
-                            type="button"
-                            class="rounded border border-line px-1.5 py-0.5 transition-colors hover:text-content"
-                            v-tooltip.bottom="`Watch the shell this agent runs in`"
-                            @click="openWorkTerminal(current.terminal)"
-                        >
-                            Terminal
-                        </button>
-                        <RouterLink
-                            :to="`/agents/${current.conversationId}`"
-                            class="rounded border border-line px-1.5 py-0.5 transition-colors hover:text-content"
-                            title="Open the conversation that started this agent"
-                        >
-                            Parent
-                        </RouterLink>
-                    </span>
+                    <button
+                        v-if="current.terminal"
+                        type="button"
+                        :class="HEADER_ACTION"
+                        v-tooltip.bottom="`Watch the shell this agent runs in`"
+                        @click="openWorkTerminal(current.terminal)"
+                    >
+                        <Icon name="terminal" class="text-2xs" />Terminal
+                    </button>
+                    <button
+                        type="button"
+                        :class="HEADER_ACTION"
+                        v-tooltip.bottom="`Open the conversation that started this agent`"
+                        @click="openParent(current)"
+                    >
+                        <Icon name="comments" class="text-2xs" />Parent
+                    </button>
                 </div>
                 <!-- HOW IT ENDED, when that was badly. Plain text, because an error string is a string and
                      not a document — and separate from the report below, which for a delegation is the same
-                     tail of the same output and must not be said twice. -->
-                <p v-if="current?.error" class="shrink-0 whitespace-pre-wrap border-b border-line px-3 py-1.5 text-2xs text-danger">
+                     tail of the same output and must not be said twice. Held apart from the transcript by its
+                     own tinted panel rather than by rules above and below it: the colour already says this
+                     block is not the conversation, and a hairline is the app's least specific way to repeat it. -->
+                <p v-if="current?.error" class="mx-3 shrink-0 whitespace-pre-wrap rounded-md bg-danger/10 px-2 py-1.5 text-2xs text-danger">
                     {{ current.error }}
                 </p>
 
@@ -354,7 +397,7 @@ watch(messages, () => {
                      page of body text in danger red is the least readable way to repeat it. -->
                 <div
                     v-if="current?.summary !== undefined && current.summary !== current.error"
-                    class="scrollbar-thin max-h-56 shrink-0 overflow-y-auto border-b border-line py-2"
+                    class="scrollbar-thin max-h-56 shrink-0 overflow-y-auto py-2"
                 >
                     <!-- eslint-disable-next-line vue/no-v-html -- same sanitized renderer the chat's own prose goes through -->
                     <div class="chat-turns md-prose chat-markdown chat-markdown-compact" v-html="renderMarkdown(current.summary)"></div>
