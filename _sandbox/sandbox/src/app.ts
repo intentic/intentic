@@ -357,7 +357,17 @@ export const createApp = (services: Services): Hono<AppEnv> => {
      * `boot` rides along for the callers that poll this before a stream exists — the launch scripts' readiness
      * loop and /setup's attach check — so "not answering yet" and "answering, still converging" stop looking
      * alike from the outside. Purely additive: `ok` and `sandboxId` are unchanged. */
-    app.get("/health", (c) => c.json({ ok: true, sandboxId: sandboxIdFromToken(services.config.connectToken), boot: services.boot.progress() }));
+    /* `announce` rides along for the one probe that can see it: the browser and the platform each know their
+     * own half of the setup chain, but whether THIS DAEMON reached the platform is knowable only in here —
+     * ic's postflight and doctor read it via docker exec, and name that link when it is the broken one. */
+    app.get("/health", (c) =>
+        c.json({
+            ok: true,
+            sandboxId: sandboxIdFromToken(services.config.connectToken),
+            boot: services.boot.progress(),
+            announce: services.announcer.status(),
+        }),
+    );
 
     // The same bytes, for one side of a diff rather than a file in the tree — an image the review surfaces can
     // only flag as `binary` over the JSON contract. Mounted here beside /workspace/raw for the same reason it

@@ -11,9 +11,15 @@ once, here, in Rust — a single static binary with no runtime to ship.
 
 ## Responsibilities
 
-- `ic sandbox connect` — the setup one-liner's flow: claim the setup code, validate the Cloudflare token,
-  mint the tunnels, launch the sandbox + cloudflared sidecar, bootstrap desktop sync, and connect this machine
-  as a **computer** so its sandboxes are manageable from the browser.
+- `ic sandbox connect` — the setup one-liner's flow: preflight the machine (every prerequisite checked
+  read-only, every failure reported at once with its fix), claim the setup code, mint the tunnels, launch the
+  sandbox + cloudflared sidecar, verify the whole reachability chain end to end, bootstrap desktop sync, and
+  connect this machine as a **computer** so its sandboxes are manageable from the browser. Each stage — and
+  any failure, with its fix — is also POSTed to the platform's `/setup/report` (authenticated by the setup
+  code), so the browser's setup wizard names why a setup failed instead of guessing from elapsed time.
+- `ic sandbox doctor` — the same reachability chain as a read-only diagnosis of an existing sandbox:
+  container → daemon → platform registration → tunnel connector → DNS → public URL, every broken link named
+  with its fix, exit 1 when anything is broken.
 - `ic sandbox update / rebuild / rollback / dev` — swap the container onto a different image, preserving
   /work, /history, the tunnel and every setting; the channel + rollback record makes a bad update reversible.
 - `ic sandbox list / remove` — what is on this machine, and its careful removal (named volumes included).
@@ -25,6 +31,11 @@ once, here, in Rust — a single static binary with no runtime to ship.
 - [src/main.rs](src/main.rs) — the command tree, and the map from every env var the shell flows honored.
 - [src/contract.rs](src/contract.rs) — the boundary that matters: ic never states the container's run shape,
   it executes what the image's own `intentic sandbox run-command` answers.
+- [src/checks.rs](src/checks.rs) — the check engine: checks run to outcomes instead of bailing, the summary
+  names every failure with its fix, and `docker::require_daemon` reads the same classification so the
+  all-at-once preflight and the hard gates can never drift apart.
+- [src/sandbox/doctor.rs](src/sandbox/doctor.rs) — the reachability chain (postflight + `doctor`): patient
+  during connect (fresh DNS propagating is ordinary), instant as a diagnosis.
 - [src/sandbox/connect.rs](src/sandbox/connect.rs) — the setup flow.
 - [src/sandbox/recreate.rs](src/sandbox/recreate.rs) — the four swap modes and the rollback record.
 - [src/sandbox/remove.rs](src/sandbox/remove.rs) — removal; keep in lockstep with cleanup.sh (below).

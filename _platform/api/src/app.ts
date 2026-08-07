@@ -1,5 +1,5 @@
 import { randomBytes, randomUUID } from "node:crypto";
-import { API_BASE_PATH } from "@intentic-app/api-contract";
+import { API_BASE_PATH, SetupReportSchema } from "@intentic-app/api-contract";
 import { OpenAPIHandler } from "@orpc/openapi/fetch";
 import { ORPCError } from "@orpc/server";
 import { type Context, Hono } from "hono";
@@ -16,7 +16,7 @@ import { decryptSecret } from "./crypto.js";
 import type { Logger } from "pino";
 import { router } from "./router.js";
 import { createTracingHttpMiddleware } from "./tracing.js";
-import type { PrismaClient } from "@intentic-app/prisma";
+import { Prisma, type PrismaClient } from "@intentic-app/prisma";
 
 type AppEnv = { Variables: { logger: Logger } };
 
@@ -205,9 +205,35 @@ export const createApp = (config: Config, prisma: PrismaClient, logger: Logger):
         // The one moment the platform learns the pasted command reached a machine. Everything after this point
         // happens inside the user's Docker and is invisible until the daemon announces minutes later — so the
         // setup wizard leans on this stamp to stop telling someone who has not opened a terminal that we are
-        // waiting on their sandbox. Re-claimable, so this overwrites: the stamp marks the LATEST attempt.
-        await prisma.sandbox.update({ where: { id: sandbox.id }, data: { setupCodeClaimedAt: new Date() } });
+        // waiting on their sandbox. Re-claimable, so this overwrites: the stamp marks the LATEST attempt —
+        // and the previous attempt's setup report is cleared with it, so a fixed-and-re-run machine never
+        // shows last time's failure over this run's progress.
+        await prisma.sandbox.update({ where: { id: sandbox.id }, data: { setupCodeClaimedAt: new Date(), setupReport: Prisma.DbNull } });
         return c.text(lines.join(`\n`));
+    });
+
+    /* The machine-side setup narrator (issue: the wizard could only guess by elapsed time). ic POSTs each
+     * stage transition and any terminal failure here — with each broken check's problem AND its fix — so the
+     * browser names why a setup died even when the terminal that knew is long closed. Possession of a live
+     * setup code is the auth, exactly the claim's trust; the code stays valid until expiry, so a failure
+     * BEFORE the claim (Docker not running) reaches the wizard too. `at` is stamped here — the reporting
+     * machine's clock is never trusted. */
+    app.post(`/setup/report`, async (c) => {
+        const body = (await c.req.json().catch(() => undefined)) as { code?: unknown; stage?: unknown; failed?: unknown } | undefined;
+        const code = body?.code;
+        if (typeof code !== `string` || code === ``) {
+            return c.text(`error: missing code`, 400);
+        }
+        const report = SetupReportSchema.safeParse({ stage: body?.stage, failed: body?.failed ?? [], at: new Date().toISOString() });
+        if (!report.success) {
+            return c.text(`error: malformed report`, 400);
+        }
+        const sandbox = await prisma.sandbox.findUnique({ where: { setupCode: code } });
+        if (!sandbox || !sandbox.setupCodeExpiresAt || sandbox.setupCodeExpiresAt < new Date()) {
+            return c.text(`error: setup code invalid or expired`, 404);
+        }
+        await prisma.sandbox.update({ where: { id: sandbox.id }, data: { setupReport: report.data } });
+        return c.text(`ok`);
     });
 
     // The daemon's phone-home: on boot + periodically it announces its public URL, authenticated by possession

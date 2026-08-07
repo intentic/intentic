@@ -1,5 +1,6 @@
 import { randomBytes } from "node:crypto";
-import { apiContract } from "@intentic-app/api-contract";
+import { apiContract, SetupReportSchema } from "@intentic-app/api-contract";
+import { Prisma } from "@intentic-app/prisma";
 import type { MemberRole } from "@intentic/sandbox-contract";
 import { GrantedRoleSchema } from "@intentic/sandbox-contract";
 import { implement, ORPCError } from "@orpc/server";
@@ -39,12 +40,16 @@ const toSummary = (
         daemonUrl: string | null;
         lastSeenAt: Date | null;
         setupCodeClaimedAt: Date | null;
+        setupReport: unknown;
         token: string;
     },
     role: MemberRole,
     context: OrpcContext,
 ) => {
     const zone = intenticZoneOf(context);
+    // The stored report was validated on write (/setup/report); the parse here only shields the summary from
+    // rows written before this schema existed — anything unrecognizable reads as "no report".
+    const report = SetupReportSchema.safeParse(sandbox.setupReport);
     return {
         id: sandbox.id,
         name: sandbox.name,
@@ -52,6 +57,7 @@ const toSummary = (
         daemonUrl: sandbox.daemonUrl,
         lastSeenAt: sandbox.lastSeenAt === null ? null : sandbox.lastSeenAt.toISOString(),
         setupCodeClaimedAt: sandbox.setupCodeClaimedAt === null ? null : sandbox.setupCodeClaimedAt.toISOString(),
+        setupReport: report.success ? report.data : null,
         token: decryptSecret(context.config, sandbox.token),
         role,
         providedTunnel: sandbox.daemonUrl !== null && zone !== undefined && new URL(sandbox.daemonUrl).hostname.endsWith(`.${zone}`),
@@ -227,6 +233,8 @@ export const sandboxRoutes = {
                 setupCode: code,
                 setupCodeExpiresAt: expiresAt,
                 setupCodeClaimedAt: null,
+                // A fresh code describes a fresh run — last run's setup report would narrate the wrong one.
+                setupReport: Prisma.DbNull,
                 setupPayload: encryptSecret(context.config, JSON.stringify(payload)),
             },
         });

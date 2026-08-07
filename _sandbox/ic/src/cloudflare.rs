@@ -35,7 +35,6 @@ struct VerifyResult {
 /// Token verify — the same Bearer/api.cloudflare.com auth intentic itself uses. A network failure is
 /// reported as such, never conflated with a bad token; an auth status IS the bad-token answer.
 pub fn validate_token(token: &str) -> Result<()> {
-    println!("intentic: validating Cloudflare API token…");
     let invalid = || {
         crate::util::Fail(
             "the Cloudflare API token is invalid or inactive (token verify failed). Re-check the token and its scopes (Zone:Read, DNS:Edit, Cloudflare Tunnel:Edit) at https://dash.cloudflare.com/profile/api-tokens.".to_string(),

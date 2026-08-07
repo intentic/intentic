@@ -65,6 +65,7 @@ pub fn run() -> Result<()> {
         bail!("SANDBOX_URL and CONNECT_TOKEN (plus CF_TOKEN, unless the tunnel is pre-provisioned) are required — copy the one-liner from the Infra screen.");
     }
     if !provided_tunnel {
+        println!("intentic: validating Cloudflare API token…");
         cloudflare::validate_token(&cf_token)?;
         if zone.is_empty() {
             zone = cloudflare::resolve_zone(&cf_token, "this host's tunnel")?;

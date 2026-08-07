@@ -55,37 +55,24 @@ pub fn server_os() -> Option<String> {
  * something unexpected, is a daemon that has done nothing wrong — and a preflight that refuses what it cannot
  * identify would turn "we could not tell" into "you are misconfigured", which is the failure mode this whole
  * function exists to avoid. Only an explicit non-linux answer refuses. */
-pub fn wrong_container_platform(server_os: Option<&str>) -> Option<String> {
+pub fn wrong_container_platform(server_os: Option<&str>) -> Option<(String, String)> {
     match server_os {
-        Some(os) if os != "linux" => Some(format!(
-            "the docker daemon is running, but it runs {os} containers — a sandbox is a Linux container.\n       on Windows: switch Docker Desktop to Linux containers (right-click the tray icon → \"Switch to Linux containers\"), then re-run."
+        Some(os) if os != "linux" => Some((
+            format!("the docker daemon is running, but it runs {os} containers — a sandbox is a Linux container."),
+            "on Windows: switch Docker Desktop to Linux containers (right-click the tray icon → \"Switch to Linux containers\"), then re-run.".to_string(),
         )),
         _ => None,
     }
 }
 
-/// The connect preflight: docker must be present AND reachable AND able to run our containers, with the
-/// diagnoses worth making — a running daemon this user may not TALK to is indistinguishable from a stopped one
-/// at the CLI, except that the socket is there to be seen. Docker installs it root-owned with a `docker` group,
-/// so naming the group is the actual fix; "start Docker" would send the user to restart a daemon already up.
+/// The docker gate every flow shares: present AND reachable AND able to run our containers. The diagnoses —
+/// and their prose — live in checks::docker_outcome, so the all-at-once preflight and this hard gate can
+/// never drift apart; this joins problem and fix back into the one terminal sentence a bailing flow prints.
 pub fn require_daemon() -> Result<()> {
-    if !cli_present() {
-        bail!("docker is not installed. Install Docker (https://docs.docker.com/get-docker/), then re-run — or run the connect one-liner, which offers to install it.");
+    match crate::checks::check_docker() {
+        crate::checks::Outcome::Fail { problem, remedy } => bail!("{problem}\n       {remedy}"),
+        _ => Ok(()),
     }
-    if daemon_reachable() {
-        if let Some(problem) = wrong_container_platform(server_os().as_deref()) {
-            bail!("{}", problem);
-        }
-        return Ok(());
-    }
-    #[cfg(unix)]
-    if std::path::Path::new("/var/run/docker.sock").exists() && !is_root() {
-        let user = std::env::var("USER").unwrap_or_else(|_| "$USER".to_string());
-        bail!(
-            "the docker daemon is running, but this user can't talk to it.\n       add yourself to the docker group (then log out and back in):\n           sudo usermod -aG docker {user} && newgrp docker\n       or re-run this command with sudo."
-        );
-    }
-    bail!("the docker daemon is not running or not reachable. Start Docker, then re-run.");
 }
 
 #[cfg(unix)]
@@ -341,6 +328,18 @@ pub fn logs_into(container: &str, tail: &str, log: &Log) {
     }
 }
 
+/// The container's log tail as text, both streams merged — cloudflared writes to stderr, and the doctor's
+/// connector check classifies whatever the process actually said. None when the container is gone.
+pub fn logs_tail(container: &str, tail: &str) -> Option<String> {
+    let out = docker(&["logs", "--tail", tail, container]).output().ok()?;
+    if !out.status.success() {
+        return None;
+    }
+    let mut text = String::from_utf8_lossy(&out.stdout).into_owned();
+    text.push_str(&String::from_utf8_lossy(&out.stderr));
+    Some(text)
+}
+
 /// Pull a published image, with the two recoveries the scripts learned: an existing local copy beats a
 /// failed pull, and a stale `docker login ghcr.io` (Docker Desktop's credential store) makes docker present
 /// a dead token instead of pulling anonymously — clear it and retry once. After that, "denied" means the
@@ -380,15 +379,15 @@ mod tests {
 
     #[test]
     fn a_windows_daemon_is_refused_with_the_click_that_fixes_it() {
-        let refusal =
+        let (problem, remedy) =
             wrong_container_platform(Some("windows")).expect("windows containers must be refused");
         assert!(
-            refusal.contains("windows containers"),
-            "names what it found: {refusal}"
+            problem.contains("windows containers"),
+            "names what it found: {problem}"
         );
         assert!(
-            refusal.contains("Switch to Linux containers"),
-            "names the remedy: {refusal}"
+            remedy.contains("Switch to Linux containers"),
+            "names the remedy: {remedy}"
         );
     }
 

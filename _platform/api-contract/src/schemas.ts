@@ -324,6 +324,35 @@ export interface PlanStreamEvent {
 // sandbox's CURRENT setup code — the setup wizard's only evidence that the pasted command actually ran, which
 // is what lets it stop showing a spinner at someone who has not opened a terminal yet. sandbox.list returns
 // owned ∪ shared.
+// One broken check of a machine-side setup run, as the machine reported it: the check's name, what it
+// found, and what to do about it — prose written for the person at the wizard and rendered verbatim.
+// `remedy` may be empty: the flow's own failure messages carry their fix inline.
+export const SetupReportFailureSchema = z.object({
+    check: z.string().max(120),
+    problem: z.string().max(2000),
+    remedy: z.string().max(2000),
+});
+// Where the machine-side setup run stands — ic POSTs this to /setup/report on every stage transition and on
+// any terminal failure, authenticated by possession of the live setup code (the claim's own trust). The
+// stages are the connect flow's real phases, so the wizard can narrate honest progress during the minutes of
+// invisible Docker work; a non-empty `failed` is a verdict, not progress. `at` (ISO) is stamped by the
+// platform on receipt — the reporting machine's clock is never trusted.
+export const SetupReportSchema = z.object({
+    stage: z.enum([
+        "preflight",
+        "pulling-image",
+        "creating-tunnel",
+        "starting-sandbox",
+        "starting-connector",
+        "waiting-health",
+        "verifying",
+        "done",
+    ]),
+    failed: z.array(SetupReportFailureSchema).max(12),
+    at: z.string(),
+});
+export type SetupReport = z.infer<typeof SetupReportSchema>;
+
 export const SandboxSummarySchema = z.object({
     id: z.string(),
     name: z.string(),
@@ -331,6 +360,9 @@ export const SandboxSummarySchema = z.object({
     daemonUrl: z.string().nullable(),
     lastSeenAt: z.string().nullable(),
     setupCodeClaimedAt: z.string().nullable(),
+    // The machine-side setup run's last word (see SetupReportSchema) — null until a report lands, cleared on
+    // every mint like the claim stamp.
+    setupReport: SetupReportSchema.nullable(),
     token: z.string(),
     // The caller's trust tier on this sandbox: `owner` for their own, the invite's granted role for a shared
     // one. What the web gates its affordances on; the daemon independently enforces the same tier as route

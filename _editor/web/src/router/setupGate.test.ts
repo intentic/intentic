@@ -8,6 +8,7 @@ const sandbox = (overrides: Partial<SandboxSummary> & Pick<SandboxSummary, "id">
     daemonUrl: null,
     lastSeenAt: null,
     setupCodeClaimedAt: null,
+    setupReport: null,
     token: `token-${overrides.id}`,
     role: `owner`,
     providedTunnel: false,

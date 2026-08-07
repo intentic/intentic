@@ -118,6 +118,11 @@ model Sandbox {
     // from "it's running and pulling the image", which is the difference between a spinner and an instruction.
     // Cleared on every mint: a fresh code describes a fresh run, and a stale stamp would report the old one.
     setupCodeClaimedAt DateTime?
+    // Where the machine-side setup run stands (SetupReportSchema): the connect flow POSTs each stage
+    // transition and any failure — with its fix — to /setup/report, authenticated by possession of the live
+    // code. The wizard renders it so "why did setup fail" has an answer in the browser, not just in a
+    // terminal that may be closed. Cleared on every mint, same lifecycle as the claim stamp above.
+    setupReport        Json?
     // The KEY=value map /setup/claim returns alongside CONNECT_TOKEN (= token above): intentic mode
     // {TUNNEL_TOKEN, SANDBOX_HOSTNAME}; own-Cloudflare mode {ZONE, SUBDOMAIN} — never the user's CF token.
     setupPayload       Json?

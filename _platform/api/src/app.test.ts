@@ -3,7 +3,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { createApp } from "./app.js";
 import type { Config } from "./config.js";
 import type { Logger } from "pino";
-import type { PrismaClient } from "@intentic-app/prisma";
+import { Prisma, type PrismaClient } from "@intentic-app/prisma";
 
 // Full config with the intentic-provided path enabled; secrets.key empty so encrypt/decrypt pass through as
 // plaintext (the stored payload is plain JSON, tokens are plain strings).
@@ -69,9 +69,13 @@ describe(`POST /setup/claim`, () => {
         // Two independent one-shot credentials, never the same bytes: one enrolls a file-sync agent, the other a
         // machine agent that can restart this sandbox, and a shared token would make redeeming either spend both.
         expect(values[`HOST_PAIR_TOKEN`]).not.toBe(values[`SYNC_PAIR_TOKEN`]);
-        // The claim's ONE write: the stamp that tells the setup wizard the pasted command reached a machine.
-        // Nothing else about the row moves here — the tunnel was provisioned and cached at mint.
-        expect(update).toHaveBeenCalledExactlyOnceWith({ where: { id: `s1` }, data: { setupCodeClaimedAt: expect.any(Date) } });
+        // The claim's ONE write: the stamp that tells the setup wizard the pasted command reached a machine —
+        // and the previous run's setup report cleared with it, so a fixed-and-re-run machine never shows last
+        // time's failure over this run's progress. Nothing else about the row moves here.
+        expect(update).toHaveBeenCalledExactlyOnceWith({
+            where: { id: `s1` },
+            data: { setupCodeClaimedAt: expect.any(Date), setupReport: Prisma.DbNull },
+        });
     });
 
     it(`404s an expired code with no oracle`, async () => {
@@ -80,6 +84,56 @@ describe(`POST /setup/claim`, () => {
         });
         const res = await claim(prisma);
         expect(res.status).toBe(404);
+    });
+});
+
+const report = (prisma: PrismaClient, body: unknown) =>
+    createApp(config, prisma, logger).app.request(`/setup/report`, {
+        method: `POST`,
+        headers: { "content-type": `application/json` },
+        body: JSON.stringify(body),
+    });
+
+describe(`POST /setup/report`, () => {
+    it(`stores the stage and failures against the sandbox, stamping 'at' server-side`, async () => {
+        const update = vi.fn();
+        const prisma = fakePrisma({ sandbox: { findUnique: vi.fn().mockResolvedValue(intenticRow()), update } });
+
+        const failed = [{ check: `Docker`, problem: `the docker daemon is not running.`, remedy: `start Docker, then re-run.` }];
+        const res = await report(prisma, { code: `abc`, stage: `preflight`, failed });
+        expect(res.status).toBe(200);
+        expect(update).toHaveBeenCalledExactlyOnceWith({
+            where: { id: `s1` },
+            // `at` is the platform's own clock — a machine with a wrong clock must not narrate from the past.
+            data: { setupReport: { stage: `preflight`, failed, at: expect.stringMatching(/^\d{4}-\d{2}-\d{2}T/) } },
+        });
+    });
+
+    it(`accepts a bare stage transition as progress`, async () => {
+        const update = vi.fn();
+        const prisma = fakePrisma({ sandbox: { findUnique: vi.fn().mockResolvedValue(intenticRow()), update } });
+
+        const res = await report(prisma, { code: `abc`, stage: `pulling-image` });
+        expect(res.status).toBe(200);
+        expect(update.mock.calls[0]?.[0].data.setupReport.failed).toEqual([]);
+    });
+
+    it(`404s an expired code and writes nothing — possession of a live code is the auth`, async () => {
+        const update = vi.fn();
+        const prisma = fakePrisma({
+            sandbox: { findUnique: vi.fn().mockResolvedValue({ ...intenticRow(), setupCodeExpiresAt: new Date(Date.now() - 1) }), update },
+        });
+        const res = await report(prisma, { code: `abc`, stage: `preflight` });
+        expect(res.status).toBe(404);
+        expect(update).not.toHaveBeenCalled();
+    });
+
+    it(`400s a malformed report before touching the database`, async () => {
+        const findUnique = vi.fn();
+        const prisma = fakePrisma({ sandbox: { findUnique } });
+        expect((await report(prisma, { code: `abc`, stage: `not-a-stage` })).status).toBe(400);
+        expect((await report(prisma, { stage: `preflight` })).status).toBe(400);
+        expect(findUnique).not.toHaveBeenCalled();
     });
 });
 

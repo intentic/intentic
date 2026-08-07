@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { Prisma } from "@intentic-app/prisma";
 import { call, ORPCError } from "@orpc/server";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { OrpcContext } from "../context.js";
@@ -262,9 +263,10 @@ describe(`sandbox routes`, () => {
             data: {
                 setupCode: result.code,
                 setupCodeExpiresAt: expect.any(Date),
-                // The claim stamp belongs to the code: a fresh command starts unclaimed, so the setup wizard
-                // never reports the previous one as picked up.
+                // The claim stamp and the setup report belong to the code: a fresh command starts unclaimed
+                // and unreported, so the setup wizard never narrates the previous run as this one.
                 setupCodeClaimedAt: null,
+                setupReport: Prisma.DbNull,
                 // Stored as the (encryptable) JSON string; with no SECRETS_KEY it stays plaintext JSON. OWNER_EMAIL
                 // is seeded (lowercased) so the daemon binds only the creator's Google identity as owner.
                 setupPayload: JSON.stringify({ ZONE: `example.com`, SUBDOMAIN: `sandbox-abc`, OWNER_EMAIL: `owner@example.com` }),

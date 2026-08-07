@@ -141,6 +141,7 @@ import {
 } from "./sessions/agent-transcript.js";
 import { fileTranscriptRecord } from "./sessions/transcript-record.js";
 import { type SandboxSettingsStore, fileSandboxSettingsStore } from "./settings/settings-store.js";
+import { type Announcer, createAnnouncer } from "./platform/announce.js";
 import { type BootTracker, createBootTracker } from "./platform/boot.js";
 import { createPerfTracker, type PerfTracker } from "./platform/perf.js";
 import { postToPlatform, type PlatformResponse } from "./platform/platform-client.js";
@@ -194,6 +195,9 @@ export interface Services {
     // `converged` promise, and /events streams its progress so the browser can WAIT VISIBLY instead of firing
     // a workspace's worth of reads at a daemon that will only park them (see platform/boot.ts).
     readonly boot: BootTracker;
+    // The platform registration, same split as `boot`: main starts/stops it, /health reports its state — the
+    // one setup link nothing outside the container can probe (see platform/announce.ts).
+    readonly announcer: Announcer;
     readonly workspace: WorkspacePaths;
     // Per-repository operator panels: the in-memory process manager the /panels routes and the preview proxy
     // drive (discovery of which repo has a panel is convention-only — see panels/panels.ts).
@@ -701,6 +705,7 @@ export const createServices = (config: Config, logger: Logger): Services => {
         // Born converged — main() declares the chain and closes the gate behind it, so a services object built
         // for a test or the host-internal preview has nothing to wait for.
         boot: createBootTracker(logger),
+        announcer: createAnnouncer(config, logger),
         workspace,
         processes: createManagedProcesses(),
         // Slot names are salted with the connect token, so a forwarded port's public hostname can't be guessed

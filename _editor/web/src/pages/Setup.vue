@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import type { SandboxSummary, SetupCode, SetupCodeTarget } from "@intentic-app/api-contract";
+import type { SandboxSummary, SetupCode, SetupCodeTarget, SetupReport } from "@intentic-app/api-contract";
 import { PLATFORM_WEB_ORIGIN } from "@intentic/constants";
 import { sandboxSubdomain, syncFolder } from "@intentic/sandbox-contract";
 import { cmp, Code, commandLang, CopyButton, InfoHint, Segmented, StepSection, useDevice, useOsPreference } from "@intentic/ui";
@@ -26,6 +26,7 @@ import SetupRunDetails from "./SetupRunDetails.vue";
 import type { ComposeArgs } from "./setupCompose";
 import { type AttachOutcome, daemonUrlProblem, normalizeDaemonUrl, probeDaemon } from "./setupAttach";
 import { autoSandboxName } from "./setupName";
+import { setupReportView } from "./setupReport";
 
 /* The setup gate's destination (outside the workspace shell). Step 1 asks for NOTHING: the sandbox is created on
  * arrival under a name this page picks (autoCreate + setupName.ts), so the step opens already done and carries a
@@ -350,6 +351,16 @@ const emailed = ref(false);
 // Server-side proof the command ran somewhere: when a machine last redeemed THIS code. Minting clears the
 // stamp server-side, so a value here always describes the command currently on screen.
 const claimedAt = ref<string | null>(null);
+/* The machine's own account of the run (SetupReport): the connect flow posts each stage while it works, and
+ * on failure every broken check with its fix. This is the answer to the one question the old card could not
+ * answer — a machine that claimed the code and then died left the browser guessing by elapsed time, with the
+ * real reason scrolling away in a terminal that may already be closed. Cleared server-side on every mint,
+ * like the claim stamp, so a value here always narrates the command currently on screen. */
+const report = ref<SetupReport | null>(null);
+// Diagnosis or narration, decided in setupReport.ts: `failures` is the card's verbatim what-broke list,
+// `stage` the healthy run's live footer line.
+const reportFailures = computed(() => setupReportView(report.value).failures);
+const buildStage = computed(() => setupReportView(report.value).stage);
 
 // There is a command out there and we're watching the registry — drives the card's footer. Gated on
 // `commandReady` rather than a bare mint, so a re-mint's stale command never narrates a wait of its own.
@@ -358,7 +369,10 @@ const handoff = computed<Handoff>(() => {
     if (!commandReady.value) {
         return `locked`;
     }
-    if (claimedAt.value !== null) {
+    // A setup report is the same proof as the claim stamp — it can only come from a machine that ran the
+    // command — and it can arrive FIRST: the preflight reports "Docker is not running" before anything is
+    // redeemed. Without this, that card would say "waiting for you to run the command" beside the failure.
+    if (claimedAt.value !== null || report.value !== null) {
         return `claimed`;
     }
     return copied.value || launched.value ? `handed` : `yours`;
@@ -391,10 +405,18 @@ const STALLED_MS = 3 * 60_000;
 const SLOW_BUILD_MS = 6 * 60_000;
 
 const waitedMs = computed(() => (armedAt.value === undefined ? 0 : now.value - armedAt.value));
+// Every fuse below is a GUESS from elapsed time, and a machine report makes guessing obsolete: a failure
+// card names the real problem (nudging beside it would say "you haven't run it" about a command that
+// demonstrably ran and died), and live stage narration IS the answer slowBuild's "check that terminal" was
+// groping for. The fuses stay for machines running an ic too old to report.
 const nudging = computed(() => handoff.value !== `claimed` && waitedMs.value > nudgeAfterMs.value);
 const stalled = computed(() => handoff.value !== `claimed` && waitedMs.value > STALLED_MS);
 const slowBuild = computed(
-    () => claimedAt.value !== null && handoff.value === `claimed` && now.value - new Date(claimedAt.value).getTime() > SLOW_BUILD_MS,
+    () =>
+        report.value === null &&
+        claimedAt.value !== null &&
+        handoff.value === `claimed` &&
+        now.value - new Date(claimedAt.value).getTime() > SLOW_BUILD_MS,
 );
 
 // Copying is the last thing this browser can observe before the user leaves for a terminal, so it is also the
@@ -512,6 +534,13 @@ const check = async (): Promise<void> => {
                 track(`sandbox_command_claimed`, { resuming: resuming.value });
             }
             claimedAt.value = claim;
+            const reported = row?.setupReport ?? null;
+            if (reported !== null && reported.failed.length > 0 && reportFailures.value === null) {
+                // The counterpart of `sandbox_connected` that never existed: setup failed WITH a named cause.
+                // Every one of these used to be an invisible drop-off between claim and connect.
+                track(`sandbox_setup_failed`, { stage: reported.stage, checks: reported.failed.map((failure) => failure.check).join(`,`) });
+            }
+            report.value = reported;
         }
         const seen = row?.lastSeenAt ?? null;
         if (seen !== null && seen !== baseline.value) {
@@ -1582,7 +1611,9 @@ watch(commandReady, (ready) => {
                      and because the poll shares `checking`, it spent every third second flipping itself to
                      "Checking…" and back, which is a card that looks broken while it works perfectly. -->
                         <div v-if="waiting" class="flex flex-col gap-2 border-t border-line pt-3">
-                            <p class="flex items-start gap-2 text-xs" :class="handoff === `claimed` ? `text-content` : `text-muted`">
+                            <!-- The spinner is a promise that something is moving, so it does not survive a failure
+                                 report: a spinner beside "here is what broke" is the page contradicting itself. -->
+                            <p v-if="reportFailures === null" class="flex items-start gap-2 text-xs" :class="handoff === `claimed` ? `text-content` : `text-muted`">
                                 <Icon
                                     name="spinner"
                                     spin
@@ -1590,7 +1621,12 @@ watch(commandReady, (ready) => {
                                     :class="handoff === `claimed` ? `text-success` : handoff === `handed` ? `text-info` : `text-subtle`"
                                 />
                                 <span class="min-w-0">
-                                    <template v-if="handoff === `claimed`">
+                                    <!-- The machine narrating its own stage beats the canned guess — "Starting
+                                         Docker" was written when this page knew nothing after the claim. -->
+                                    <template v-if="handoff === `claimed` && buildStage !== undefined">
+                                        <span class="font-medium text-success">Your machine picked it up.</span> Right now: {{ buildStage }}.
+                                    </template>
+                                    <template v-else-if="handoff === `claimed`">
                                         <span class="font-medium text-success">Your machine picked it up.</span> Starting Docker — the first run takes
                                         a few minutes.
                                     </template>
@@ -1617,6 +1653,23 @@ watch(commandReady, (ready) => {
                                     </template>
                                 </span>
                             </p>
+
+                            <!-- The machine said exactly what broke — render it verbatim, problem and fix per check,
+                                 and the one instruction that is always true. This is the card the whole report
+                                 channel exists for: the answer used to live in a terminal nobody was watching. -->
+                            <div v-if="reportFailures !== null" :class="cmp.alertDanger(`flex flex-col gap-2`)">
+                                <p class="flex items-start gap-2">
+                                    <Icon name="exclamation-circle" class="mt-0.5 shrink-0" />
+                                    <span class="min-w-0 font-medium">Setup failed on your machine — here is what it found:</span>
+                                </p>
+                                <ul class="flex flex-col gap-1.5 pl-6">
+                                    <li v-for="failure in reportFailures" :key="failure.check" class="min-w-0">
+                                        <span class="font-medium">{{ failure.check }}:</span> {{ failure.problem }}
+                                        <span v-if="failure.remedy !== ``" class="opacity-90"> Fix: {{ failure.remedy }}</span>
+                                    </li>
+                                </ul>
+                                <p class="pl-6 text-2xs opacity-90">Fix the above, then run the same command again — it stays valid.</p>
+                            </div>
 
                             <!-- The correction, on a timer, because the mistake this card exists to prevent is SILENT:
                          somebody who has not understood that the command runs elsewhere never does anything the

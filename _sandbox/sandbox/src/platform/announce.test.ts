@@ -68,4 +68,45 @@ describe("createAnnouncer", () => {
         vi.advanceTimersByTime(20 * 60_000);
         expect(requestMock).toHaveBeenCalledTimes(settled);
     });
+
+    /* status() is what /health serves and what ic's postflight/doctor read — the container→platform link is
+     * observable nowhere else, so each verdict below is a sentence a user actually sees. */
+    describe("status", () => {
+        it("is off until started — a headless run has nothing to register with", () => {
+            expect(createAnnouncer(config, logger).status()).toEqual({ state: "off" });
+        });
+
+        it("reports registered after the ack", () => {
+            outcomes.push({ status: 200 });
+            const announcer = createAnnouncer(config, logger);
+            announcer.start();
+            expect(announcer.status().state).toBe("registered");
+        });
+
+        it("names a rejection with the platform's answer, still retrying", () => {
+            outcomes.push({ status: 409 }, { status: 200 });
+            const announcer = createAnnouncer(config, logger);
+            announcer.start();
+            const rejected = announcer.status();
+            expect(rejected.state).toBe("rejected");
+            expect(rejected.detail).toContain("HTTP 409");
+            expect(rejected.retrying).toBe(true);
+            // The retry acks and the verdict moves on.
+            vi.advanceTimersByTime(2_000);
+            expect(announcer.status().state).toBe("registered");
+        });
+
+        it("keeps the last failure's why after giving up, marked no-longer-retrying", () => {
+            for (let i = 0; i < 200; i++) {
+                outcomes.push({ err: true });
+            }
+            const announcer = createAnnouncer(config, logger);
+            announcer.start();
+            vi.advanceTimersByTime(20 * 60_000);
+            const settled = announcer.status();
+            expect(settled.state).toBe("unreachable");
+            expect(settled.detail).toContain("boom");
+            expect(settled.retrying).toBe(false);
+        });
+    });
 });

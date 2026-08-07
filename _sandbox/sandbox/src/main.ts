@@ -47,7 +47,6 @@ import { ensureAllPreviewRoutes } from "./panels/preview-route.js";
 import { publicRoot } from "./public/public-files.js";
 import { createPublicHandler } from "./public/public-serve.js";
 import { linkClaudeState } from "./sessions/session-store.js";
-import { createAnnouncer } from "./platform/announce.js";
 import type { BootTracker } from "./platform/boot.js";
 import { claimBootMarker } from "./platform/boot-marker.js";
 import { claimContainerHome } from "./platform/home-owner.js";
@@ -310,14 +309,13 @@ const main = async (): Promise<void> => {
     });
     previewProxy.listen(config.preview.port, config.sandbox.host);
 
-    // Phone home: announce this sandbox's URL + liveness to the platform registry (boot + every 30s), so the
-    // setup wizard sees it come online without any browser→sandbox probing. Needs all three env values —
-    // headless/test runs without them just don't announce. Started with the listeners, not after the boot
-    // chain: the announcement is how a waiting browser learns the daemon is back, and it must not queue behind
-    // the very sweeps it would be reporting through.
-    const announcer = createAnnouncer(config, logger);
+    // Phone home: announce this sandbox's URL to the platform registry (once per boot, retried until acked —
+    // see platform/announce.ts), so the setup wizard sees it come online without any browser→sandbox probing.
+    // Needs all three env values — headless/test runs without them just don't announce. Started with the
+    // listeners, not after the boot chain: the announcement is how a waiting browser learns the daemon is
+    // back, and it must not queue behind the very sweeps it would be reporting through.
     if (config.platform.url !== "" && config.sandbox.publicUrl !== "" && config.connectToken !== "") {
-        announcer.start();
+        services.announcer.start();
     }
 
     // Every awaited step below runs through the tracker: it stamps the step's state and elapsed time, logs the
@@ -703,7 +701,7 @@ const main = async (): Promise<void> => {
         ciPoller.stop();
         turnResume.stop();
         versionCheck.stop();
-        announcer.stop();
+        services.announcer.stop();
         localCertRenewal.stop();
         services.history.stop();
         // Stops the extension gateway processes too (tmux kill-session ⇒ SIGHUP) — each flushes its own

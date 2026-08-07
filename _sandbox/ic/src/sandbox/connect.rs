@@ -1,10 +1,11 @@
+use crate::checks;
 use crate::cloudflare;
 use crate::contract::{self, RunRequest};
 use crate::docker;
 use crate::health;
 use crate::logfile::Log;
 use crate::platform;
-use crate::sandbox::{container_status, list_slugs, remove, CONTAINER_PREFIX, TUNNEL_PREFIX};
+use crate::sandbox::{container_status, doctor, list_slugs, remove, CONTAINER_PREFIX, TUNNEL_PREFIX};
 use crate::tty;
 use crate::util::{bail, kv_lines, slug_from_token, Result};
 
@@ -34,13 +35,30 @@ fn env_or(name: &str, fallback: &str) -> String {
 }
 
 pub fn run(args: Args) -> Result<()> {
-    println!("intentic: checking Docker…");
-    docker::require_daemon()?;
-
     // Platform statics, overridden only for local dev against a non-prod platform. PLATFORM_URL is the API
     // origin the setup code is redeemed against — NOT the web-app origin (app.*), which serves only static
     // files and would 405 a POST.
     let platform_url = env_or("PLATFORM_URL", "https://api.intentic.dev");
+    let setup_code = args.setup_code.clone().or_else(|| env("SETUP_CODE"));
+
+    /* The one seam every setup failure passes through. The wizard in the browser cannot see this terminal,
+     * so whatever `connect` bails with is ALSO handed to the reporter — the wizard then names the real
+     * reason instead of guessing from elapsed time. Threaded as a parameter rather than created inside,
+     * because the failure report must outlive the flow that failed. */
+    let reporter = platform::Reporter::new(&platform_url, setup_code.clone());
+    let result = connect(args, &platform_url, setup_code, &reporter);
+    if let Err(fail) = &result {
+        reporter.failure(&fail.0);
+    }
+    result
+}
+
+fn connect(
+    args: Args,
+    platform_url: &str,
+    setup_code: Option<String>,
+    reporter: &platform::Reporter,
+) -> Result<()> {
     let google_client_id = env_or(
         "GOOGLE_CLIENT_ID",
         "481795963975-cq9msl6higcd91joidrfp8mjlkuq5fk3.apps.googleusercontent.com",
@@ -64,11 +82,36 @@ pub fn run(args: Args) -> Result<()> {
     let mut owner_email = env("OWNER_EMAIL").unwrap_or_default();
     let cf_token = env("CF_TOKEN").unwrap_or_default();
 
+    /* PREFLIGHT — every prerequisite verified read-only, every failure reported at once, before anything is
+     * mutated and before the claim burns time against the setup code's TTL. This used to answer one problem
+     * per run (Docker, fix, re-run, token, fix, re-run…); now one run is one complete diagnosis, and the
+     * findings reach the setup wizard too — possession of the code authenticates the report exactly as it
+     * authenticates the claim, so even "Docker is not running" appears in the browser. */
+    let mut list = vec![
+        checks::Check::new("Docker", checks::check_docker),
+        checks::Check::new("Disk space", checks::check_disk),
+    ];
+    let for_probe = platform_url.to_string();
+    list.push(checks::Check::new("Platform reachable", move || {
+        checks::check_platform(&for_probe)
+    }));
+    if !cf_token.is_empty() {
+        let token = cf_token.clone();
+        list.push(checks::Check::new("Cloudflare token", move || {
+            checks::check_cloudflare(&token)
+        }));
+    }
+    let findings = checks::run("preflight — checking this machine…", list);
+    if let Some(summary) = checks::failure_summary(&findings) {
+        reporter.findings_failed("preflight", checks::wire_failures(&findings));
+        bail!("{summary}");
+    }
+
     // Redeem the setup code for the per-sandbox values. Env vars still work without a code
-    // (headless/scripted installs). Redeemed after the Docker check so a docker-missing failure never burns
+    // (headless/scripted installs). Redeemed after the preflight so a broken machine never burns
     // time against the code's TTL.
-    if let Some(code) = args.setup_code.clone().or_else(|| env("SETUP_CODE")) {
-        let claim = platform::claim(&platform_url, &code)?;
+    if let Some(code) = &setup_code {
+        let claim = platform::claim(platform_url, code)?;
         connect_token = claim.connect_token.unwrap_or(connect_token);
         tunnel_token = claim.tunnel_token.unwrap_or(tunnel_token);
         sandbox_hostname = claim.sandbox_hostname.unwrap_or(sandbox_hostname);
@@ -146,14 +189,11 @@ pub fn run(args: Args) -> Result<()> {
     if provided_tunnel && self_host {
         bail!("SELF_HOST needs your own Cloudflare API token (CF_TOKEN). On an intentic-provided sandbox,\n       connect this machine from the workspace's Infra screen instead — its one-liner needs no\n       Cloudflare token.");
     }
-    // Cloudflare is intentic's reachability fabric, so the token is required and validated up front rather
-    // than failing later at `intentic deploy apply`. It never reaches the platform — it rides into the
-    // sandbox below as the Cloudflare-standard CLOUDFLARE_API_TOKEN.
+    // Cloudflare is intentic's reachability fabric, so the token is required up front rather than failing
+    // later at `intentic deploy apply` — a provided one was already validated by the preflight. It never
+    // reaches the platform: it rides into the sandbox below as the Cloudflare-standard CLOUDFLARE_API_TOKEN.
     if !provided_tunnel && cf_token.is_empty() {
         bail!("CF_TOKEN is required — Cloudflare is intentic's reachability fabric (the tunnel that\n       connects your services and exposes them). Create a token at\n       https://dash.cloudflare.com/profile/api-tokens with: Zone:Read, DNS:Edit, Cloudflare Tunnel:Edit.");
-    }
-    if !cf_token.is_empty() {
-        cloudflare::validate_token(&cf_token)?;
     }
     if !provided_tunnel && zone.is_empty() {
         zone = cloudflare::resolve_zone(&cf_token, "your sandbox")?;
@@ -187,6 +227,7 @@ pub fn run(args: Args) -> Result<()> {
 
     // Resolve the image up front (a slow first pull shouldn't look like a hang) — and the tunnel step below,
     // which runs this same image via `--entrypoint intentic`, must never execute a stale locally-cached tag.
+    reporter.stage("pulling-image");
     ensure_image(&sandbox_image, &log)?;
 
     // The sandbox tunnel: platform-provisioned (nothing to do but record the URL), or minted with the
@@ -196,6 +237,7 @@ pub fn run(args: Args) -> Result<()> {
         sandbox_public_url = format!("https://{sandbox_hostname}");
     } else {
         println!("intentic: creating the sandbox tunnel…");
+        reporter.stage("creating-tunnel");
         let mut tunnel_args: Vec<String> = vec![
             "run".into(),
             "--rm".into(),
@@ -279,6 +321,7 @@ pub fn run(args: Args) -> Result<()> {
     }
 
     println!("intentic: starting sandbox…");
+    reporter.stage("starting-sandbox");
     // cloudflared (the sidecar below) reaches the sandbox by name on this shared network; create it first.
     if !docker::ok(&["network", "inspect", &network]) {
         docker::capture(&["network", "create", &network])?;
@@ -367,6 +410,7 @@ pub fn run(args: Args) -> Result<()> {
     // The tunnel connector: cloudflared on the shared network routes sandbox-<id>.<zone> → the daemon and
     // the preview hostnames → the preview proxy. It retries until the sandbox is up, so ordering is loose.
     println!("intentic: starting the sandbox tunnel connector…");
+    reporter.stage("starting-connector");
     docker::quiet(&["rm", "-f", &tunnel_container]);
     let sidecar = [
         "run",
@@ -393,9 +437,29 @@ pub fn run(args: Args) -> Result<()> {
     }
 
     println!("intentic: waiting for the sandbox daemon to come up…");
+    reporter.stage("waiting-health");
     health::wait_answering(&container, &log, "")?;
 
+    /* POSTFLIGHT — a daemon answering INSIDE the container proves only half the chain. The other half is
+     * exactly where a setup used to die invisibly: a connector whose token Cloudflare rejects, a DNS record
+     * that never lands, a daemon that cannot register with the platform — the terminal said started, the
+     * browser showed a dead workspace, and nothing anywhere named the broken link. Verify end to end, with
+     * patience (a fresh record propagating and a connector still dialing are ordinary states of a new
+     * setup), and fail NAMING the link rather than let it look set up when it is not. */
+    println!("intentic: verifying the sandbox is reachable end to end…");
+    reporter.stage("verifying");
+    let findings = doctor::verify_chain(
+        &slug,
+        Some(&sandbox_public_url),
+        std::time::Duration::from_secs(120),
+    );
+    if let Some(summary) = checks::failure_summary(&findings) {
+        reporter.findings_failed("verifying", checks::wire_failures(&findings));
+        bail!("{summary}\nThe sandbox itself is running on this machine — fix the above, then re-check with: ic sandbox doctor {slug}");
+    }
+
     println!("intentic sandbox started.");
+    reporter.stage("done");
     println!("Your sandbox will be reachable at {sandbox_public_url} (DNS may take a few seconds to propagate).");
     println!(
         "Return to the platform — your sandbox announces itself and setup continues automatically."

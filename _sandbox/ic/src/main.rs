@@ -1,3 +1,4 @@
+mod checks;
 mod cloudflare;
 mod contract;
 mod docker;
@@ -82,6 +83,11 @@ enum SandboxCommand {
         /// The sandbox to swap (omit when this machine runs exactly one)
         slug: Option<String>,
     },
+    /// Check every link of a sandbox's reachability chain and name what is broken, with its fix (read-only)
+    Doctor {
+        /// The sandbox to diagnose (omit when this machine runs exactly one)
+        slug: Option<String>,
+    },
     /// List the sandboxes on this machine
     List,
     /// Remove sandbox(es): containers, named /work volumes, networks — asks which, confirms, deletes data
@@ -134,6 +140,7 @@ fn main() {
             SandboxCommand::Dev { slug } => {
                 sandbox::recreate::run(sandbox::recreate::Mode::Dev, slug)
             }
+            SandboxCommand::Doctor { slug } => sandbox::doctor::run(slug),
             SandboxCommand::List => sandbox::list(),
             SandboxCommand::Remove {
                 slugs,

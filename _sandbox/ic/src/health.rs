@@ -60,8 +60,8 @@ pub fn wait_ready(container: &str) {
 
 /// The label of any object in the health document with `"state":"running"` — a tree walk rather than a
 /// schema, matching what the shell's grep did: the boot chain's shape belongs to the daemon, and this reader
-/// must keep working as it grows.
-fn running_step(value: &serde_json::Value) -> Option<String> {
+/// must keep working as it grows. The doctor's daemon check names the same step.
+pub fn running_step(value: &serde_json::Value) -> Option<String> {
     match value {
         serde_json::Value::Object(map) => {
             if map.get("state").and_then(|state| state.as_str()) == Some("running") {
