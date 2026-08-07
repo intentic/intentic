@@ -28,11 +28,40 @@ const FILE_REF_ALL = new RegExp(FILE_REF.source, `g`);
 // else is a path, and so a candidate file reference.
 const EXTERNAL = /^(?:[a-z][a-z0-9+.-]*:|\/\/)/i;
 
-// The workspace route for a file (`/workspace/src/foo.ts` — see router/index.ts). A real, shareable URL rather
-// than a dead `href="#"`, so the link keeps every gesture an anchor normally has: middle-click and ⌘-click open
-// the file in a new browser tab, "Copy link address" yields something that works, and the status bar shows
-// where the click leads.
-const workspaceHref = (path: string): string => `/workspace/${path.split(`/`).map(encodeURIComponent).join(`/`)}`;
+/* A LINK THAT POINTS BACK AT US, written out in full — `https://localhost:47145/workspace/docs/plan.md`.
+ *
+ * Models write these. Given any glimpse of the app's own address they will reach for the complete URL rather
+ * than the path, and read literally it is an EXTERNAL link: it opened a second browser tab, reloaded the whole
+ * app in it, dropped the line number the fragment carried, and — because a full URL carries no conversation —
+ * landed on the shared tree's version of a file that may only exist in the agent's own. Every one of this
+ * module's rules was skipped, for a link that was pointing at this very view.
+ *
+ * So a same-origin `/workspace/…` address is unwrapped back into the reference it is. Same-origin only, and
+ * only that one route: any other host is genuinely somebody else's, and guessing more broadly would hijack
+ * links this app has no business intercepting. */
+const WORKSPACE_ROUTE = `/workspace/`;
+const ownWorkspaceRef = (href: string): string | undefined => {
+    const url = URL.parse(href, window.location.href);
+    if (url === null || url.origin !== window.location.origin || !url.pathname.startsWith(WORKSPACE_ROUTE)) {
+        return undefined;
+    }
+    // The route's own splat is percent-encoded per segment (workspaceHref), and a line can ride as `#L12`.
+    const path = decodeURIComponent(url.pathname.slice(WORKSPACE_ROUTE.length));
+    return path === `` ? undefined : `${path}${url.hash}`;
+};
+
+/* The workspace route for a file (`/workspace/src/foo.ts` — see router/index.ts). A real, shareable URL rather
+ * than a dead `href="#"`, so the link keeps every gesture an anchor normally has: middle-click and ⌘-click open
+ * the file in a new browser tab, "Copy link address" yields something that works, and the status bar shows
+ * where the click leads.
+ *
+ * `?agent=` rides along when the prose belongs to an isolated conversation, because a path alone is only half
+ * an address (see workspaceScope): opened in a new tab without it, the link would quietly show the shared
+ * tree's file instead of the one the agent was describing. */
+const workspaceHref = (path: string, agent: string | undefined): string => {
+    const route = `/workspace/${path.split(`/`).map(encodeURIComponent).join(`/`)}`;
+    return agent === undefined ? route : `${route}?agent=${encodeURIComponent(agent)}`;
+};
 
 /* Resolve a relative reference against the directory the document lives in — markdown's own rule, and the one
  * a doc tree depends on (`docs/a.md` linking `./b.md` means `docs/b.md`, not `b.md`). `dir` is empty for a
@@ -88,13 +117,18 @@ const linkLabel = (rawPath: string, line: number | undefined): string => {
 };
 
 // Turn an anchor into a workspace file link. The line rides in a data attribute rather than the URL because the
-// route has nowhere to put it; a plain click reads it back, a new-tab click loses it and lands on line 1.
-const markFileLink = (anchor: HTMLAnchorElement, path: string, line: number | undefined): void => {
+// route has nowhere to put it; a plain click reads it back, a new-tab click loses it and lands on line 1. The
+// scope does NOT ride a data attribute — it is in the href, which is what makes a new-tab click land in the
+// right tree instead of on the shared one's namesake.
+const markFileLink = (anchor: HTMLAnchorElement, path: string, line: number | undefined, agent: string | undefined): void => {
     anchor.classList.add(`md-file-link`);
-    anchor.setAttribute(`href`, workspaceHref(path));
+    anchor.setAttribute(`href`, workspaceHref(path, agent));
     anchor.dataset[`file`] = path;
     if (line !== undefined) {
         anchor.dataset[`line`] = String(line);
+    }
+    if (agent !== undefined) {
+        anchor.dataset[`agent`] = agent;
     }
     // The link text can be prose (`[the config](src/foo.ts)`), so name the destination on hover.
     anchor.title = line === undefined ? path : `${path}:${line}`;
@@ -104,27 +138,30 @@ const markFileLink = (anchor: HTMLAnchorElement, path: string, line: number | un
  * `[label](path#L42)` form IDE surfaces ask for lands here — and left alone it would be a browser navigation
  * to a URL this app has no route for. An outbound one is sent to its own tab: the chat's state IS the
  * conversation, and following a link in place tears the running session's view down. */
-const linkifyAnchor = (anchor: HTMLAnchorElement, dir: string | undefined): void => {
+const linkifyAnchor = (anchor: HTMLAnchorElement, dir: string | undefined, agent: string | undefined): void => {
     const href = anchor.getAttribute(`href`);
     if (href === null || href === `` || href.startsWith(`#`)) {
         return;
     }
-    if (EXTERNAL.test(href)) {
+    // Our own address written out in full is a file reference, not an outbound link — checked BEFORE the
+    // external test, which is what used to claim it (see ownWorkspaceRef).
+    const own = EXTERNAL.test(href) ? ownWorkspaceRef(href) : undefined;
+    if (own === undefined && EXTERNAL.test(href)) {
         anchor.setAttribute(`target`, `_blank`);
         anchor.setAttribute(`rel`, `noopener noreferrer`);
         return;
     }
-    const { path, line } = parseRef(href);
+    const { path, line } = parseRef(own ?? href);
     const target = linkTarget(path, dir);
     if (target === undefined) {
         return;
     }
-    markFileLink(anchor, target, line);
+    markFileLink(anchor, target, line, agent);
 };
 
 // Split one text node around every file reference in it. Untouched — and so left as the single original node —
 // when it holds no reference that maps into the workspace.
-const linkifyText = (node: Text, dir: string | undefined): void => {
+const linkifyText = (node: Text, dir: string | undefined, agent: string | undefined): void => {
     const text = node.data;
     FILE_REF_ALL.lastIndex = 0;
     const parts = document.createDocumentFragment();
@@ -140,7 +177,7 @@ const linkifyText = (node: Text, dir: string | undefined): void => {
         parts.append(text.slice(taken, match.index));
         const anchor = document.createElement(`a`);
         anchor.textContent = linkLabel(path, line);
-        markFileLink(anchor, target, line);
+        markFileLink(anchor, target, line, agent);
         parts.append(anchor);
         taken = match.index + match[0].length;
     }
@@ -153,13 +190,14 @@ const linkifyText = (node: Text, dir: string | undefined): void => {
 
 /* Linkify every file reference in a sanitized markdown fragment, in place. `dir` is the directory a relative
  * reference is resolved against — the previewed document's own, or undefined for agent and tool output, which
- * names files from the workspace root.
+ * names files from the workspace root. `agent` is whose copy of the workspace the prose is about
+ * (workspaceScope), undefined for the shared tree.
  *
  * Text inside an <a> is skipped — that anchor already owns its target — and so is text inside a <pre>, which at
  * this point is the empty placeholder markdown/code.ts substitutes a real, separately-styled code block into later.
  * Inline <code> IS scanned: `src/foo.ts` in backticks is the form agents reach for most. */
-export const linkifyFileRefs = (fragment: DocumentFragment, dir: string | undefined): void => {
-    fragment.querySelectorAll(`a`).forEach((anchor) => linkifyAnchor(anchor, dir));
+export const linkifyFileRefs = (fragment: DocumentFragment, dir: string | undefined, agent: string | undefined): void => {
+    fragment.querySelectorAll(`a`).forEach((anchor) => linkifyAnchor(anchor, dir, agent));
     // Collected before any rewriting: replacing a node mid-walk invalidates the walker's position.
     const walker = document.createTreeWalker(fragment, NodeFilter.SHOW_TEXT);
     const texts: Text[] = [];
@@ -170,5 +208,5 @@ export const linkifyFileRefs = (fragment: DocumentFragment, dir: string | undefi
             texts.push(node as Text);
         }
     }
-    texts.forEach((text) => linkifyText(text, dir));
+    texts.forEach((text) => linkifyText(text, dir, agent));
 };

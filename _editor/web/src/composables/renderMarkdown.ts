@@ -27,14 +27,23 @@ export type { RenderedMarkdown, StreamingMarkdown };
  *
  * `dir` is the directory a relative file reference resolves against — a previewed document's own, so its links
  * to its neighbours land on the right files. Agent prose omits it: an agent names files from the workspace
- * root, and the streaming path below never takes one for the same reason. */
+ * root, and the streaming path below never takes one for the same reason.
+ *
+ * `agent` is WHOSE copy of the workspace the prose is about (workspaceScope). An isolated conversation writes
+ * files into its own checkout, so the file it names in its answer is the one in THAT tree — the same path in
+ * the shared tree is a different file, or no file at all. Decided where the prose is rendered, because that is
+ * the only place that knows which conversation is speaking. */
 export const fileLinkDecorator =
-    (dir?: string): MarkdownDecorator =>
+    (options?: { readonly dir?: string; readonly agent?: string }): MarkdownDecorator =>
     (fragment) =>
-        linkifyFileRefs(fragment, dir);
+        linkifyFileRefs(fragment, options?.dir, options?.agent);
 
-export const renderMarkdown = (source: string): string => renderEngine(source, fileLinkDecorator());
+export const renderMarkdown = (source: string, agent?: string): string => renderEngine(source, fileLinkDecorator({ agent }));
 
 // One renderer per streaming message (the caller holds it for the message's lifetime) — see the engine for
-// why a live turn is split into a settled prefix and a re-parsed tail.
-export const createStreamingMarkdown = (): StreamingMarkdown => createEngineStream(fileLinkDecorator());
+// why a live turn is split into a settled prefix and a re-parsed tail. The scope arrives as a GETTER precisely
+// because the renderer outlives any one frame: a conversation can still be switched between isolated and
+// shared before its first turn, and a decorator holding the value it had at construction would keep minting
+// links into the tree that conversation no longer works in.
+export const createStreamingMarkdown = (agent: () => string | undefined): StreamingMarkdown =>
+    createEngineStream((fragment) => linkifyFileRefs(fragment, undefined, agent()));

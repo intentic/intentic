@@ -1,6 +1,7 @@
 import { router } from "../../router";
 import { resolveWorkspaceRef } from "./resolveFileRef";
 import { useWorkspaceTabs } from "./useWorkspaceTabs";
+import { workspaceAgent } from "./workspaceScope";
 
 /* Going to a file reference — the one navigation every clickable path in the app funnels through: a terminal
  * link, a file mention in the assistant's prose, a tool card's location chip.
@@ -14,7 +15,25 @@ import { useWorkspaceTabs } from "./useWorkspaceTabs";
  * in prose is routinely a suffix of the real one — `pages/workspace/Foo.vue` for a file that lives under
  * `_editor/web/src`. A reference nothing matches is opened as written, which lands on the file viewer's
  * not-found state naming exactly what was clicked. */
-export const openWorkspaceRef = async (path: string, line?: number): Promise<void> => {
+export const openWorkspaceRef = async (path: string, line?: number, scope?: { readonly agent: string | undefined }): Promise<void> => {
+    /* WHOSE COPY, and the difference between "the shared tree" and "whichever one we are already in".
+     *
+     * A caller that KNOWS — a link in a conversation's prose, a tool card — passes the scope, and passing
+     * `{ agent: undefined }` is a real answer meaning the shared tree: a link in a shared conversation must
+     * take the reader out of an agent's copy, not silently open that agent's version of the file.
+     *
+     * A caller that does NOT know omits it, and the current scope stands. Terminal output is the case: the
+     * pane has no conversation to ask, and clearing the scope from under a reader who is browsing an agent's
+     * copy would answer a question nobody asked.
+     *
+     * Set BEFORE the reference is resolved, because resolution asks the daemon which file the reference means
+     * — and a file an isolated conversation has not landed exists in no other tree, so asked against the
+     * shared one it comes back unresolved and the link lands on a not-found page for a file that is right
+     * there.
+     */
+    if (scope !== undefined) {
+        workspaceAgent.value = scope.agent;
+    }
     const target = (await resolveWorkspaceRef(path)) ?? path;
     const { openFile, openAtLine } = useWorkspaceTabs();
     if (line !== undefined) {
@@ -22,8 +41,10 @@ export const openWorkspaceRef = async (path: string, line?: number): Promise<voi
     } else {
         openFile(target);
     }
-    // Surface the editor (no-op when already on the workspace route — its watchers' equality guards hold).
-    void router.push({ name: `workspace`, params: { path: target.split(`/`) } });
+    // Surface the editor (no-op when already on the workspace route — its watchers' equality guards hold). The
+    // scope rides the query so the route and the singleton agree even on the first navigation into the view.
+    const agent = workspaceAgent.value;
+    void router.push({ name: `workspace`, params: { path: target.split(`/`) }, query: agent === undefined ? {} : { agent } });
 };
 
 /* Click handler for the file links inside rendered markdown. Delegated, like the code blocks' copy buttons:
@@ -44,5 +65,7 @@ export const openFileRefFromEvent = (event: MouseEvent): void => {
     }
     event.preventDefault();
     const line = Number(link.dataset[`line`]);
-    void openWorkspaceRef(path, Number.isInteger(line) && line > 0 ? line : undefined);
+    // Every markdown link knows its scope, including "the shared tree" — a shared conversation's link carries
+    // no `data-agent`, and that absence is the answer, not a missing one.
+    void openWorkspaceRef(path, Number.isInteger(line) && line > 0 ? line : undefined, { agent: link.dataset[`agent`] });
 };

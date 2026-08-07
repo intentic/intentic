@@ -4,6 +4,7 @@ import type { Ref } from "vue";
 import { computed, onScopeDispose, ref, watch } from "vue";
 import { sandboxJson } from "../sandbox/sandboxClient";
 import { useSearchOptions } from "./useSearchOptions";
+import { workspaceAgent } from "./workspaceScope";
 import { sandboxKey, useSandbox } from "../sandbox/useSandbox";
 
 /* Search over /work, read directly from the sandbox daemon (GET /workspace/search).
@@ -119,9 +120,20 @@ export function useWorkspaceSearch(filter: Ref<string>, scope: Ref<SearchScope>,
         // The header spinner is about the SEARCH; a page append has its own control to report on.
         searching: computed(() => enabled.value && query.isFetching.value && !query.isFetchingNextPage.value),
         error: computed(() => (enabled.value && query.error.value ? query.error.value.message : undefined)),
-        // What the engine did with the pattern that the pattern didn't ask for (an unparseable regex rerun as
-        // literal text, grep-style escapes rewritten) — the panel shows it the way the CLI prints it.
-        note: computed(() => head.value?.note),
+        /* What the engine did with the pattern that the pattern didn't ask for (an unparseable regex rerun as
+         * literal text, grep-style escapes rewritten) — the panel shows it the way the CLI prints it.
+         *
+         * And the ONE limit of the workspace scope, said out loud rather than left to be discovered. While the
+         * view is showing a conversation's own copy (workspaceScope), search still answers from the shared
+         * tree: the engine's index is built over /work, and standing up a second index per conversation is a
+         * different and far larger thing than reading one file. A panel that quietly returned shared results
+         * while the tree beside it listed another workspace would be the same silent wrong answer the scope
+         * exists to end, so it says which tree it searched. */
+        note: computed(() =>
+            workspaceAgent.value === undefined
+                ? head.value?.note
+                : [head.value?.note, `Searching the shared workspace — an agent's own copy isn't indexed.`].filter(Boolean).join(` `),
+        ),
         // True while what is typed hasn't produced a searchable query yet (too short, or debounce pending) —
         // either field, since editing the glob filter re-searches exactly as editing the query does.
         pending: computed(

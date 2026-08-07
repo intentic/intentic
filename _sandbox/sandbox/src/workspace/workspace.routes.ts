@@ -18,6 +18,7 @@ import { INSTALLABLE, missingCount, startInstall, workspaceSetup } from "./works
 import { syncWorkspaceRepos } from "./sync-repos.js";
 import { listTemplates, loadManifest, readTemplatesConfig } from "../scaffold/templates-config.js";
 import { isControlPlanePath, resolveWithin } from "./workspace-files.js";
+import { containedIn, scopedTarget, workspaceRootFor } from "./workspace-scope.js";
 
 /* What one page of /workspace/search costs, in the unit the caller actually pays: rows in a scrollable list.
  * The engine's other page shape sizes itself by what rendering the results as TEXT would spend — an agent's
@@ -36,21 +37,13 @@ const GUI_SEARCH_BUDGET = 2_000;
 // (a streamed binary body doesn't fit oRPC). External MCP tools moved to the unified capabilities manifest.
 export const createWorkspaceRoutes = (services: Services) => {
     const i = implement(workspaceContract).$context<OrpcContext>();
-    // Resolve a root-relative path to an absolute one inside /work, applying the read routes' escape guard: a
-    // `../`/absolute path that climbs out of /work is BAD_REQUEST.
-    const contained = (relPath: string): string => {
-        const target = resolveWithin(services.workspace.root, relPath);
-        if (target === undefined) {
-            throw new ORPCError("BAD_REQUEST", { message: "invalid path" });
-        }
-        // The daemon's credential + auth state is not reachable through the generic file API — read, write, move
-        // or delete (see isControlPlanePath). NOT_FOUND rather than FORBIDDEN: the file API simply has nothing
-        // there, and a distinct code would confirm what it holds.
-        if (isControlPlanePath(services.workspace.root, target)) {
-            throw new ORPCError("NOT_FOUND", { message: "not found" });
-        }
-        return target;
-    };
+    // A write's target: always the shared tree, guarded (see workspace-scope for why no write route can name a
+    // conversation's checkout in the first place).
+    const contained = (relPath: string): string => containedIn(services.workspace.root, relPath);
+    // Whose copy a READ means — composed once (see Services.workspaceScope), because the byte routes in app.ts
+    // answer the same question and two resolvers that disagreed would make a file's contents depend on which
+    // route the browser happened to use for it.
+    const scope = services.workspaceScope;
     // The zone + sandbox id the preview proxy fronts panels under (preview-<panel>-<id>.<zone>), for building
     // per-app preview URLs.
     const zone = services.config.zone !== "" ? services.config.zone : zoneFromUrl(services.config.sandbox.publicUrl);
@@ -67,41 +60,54 @@ export const createWorkspaceRoutes = (services: Services) => {
         return repo;
     };
     return {
-        tree: i.tree.handler(() => services.workspaceTree(services.workspace.root)),
+        // `input.agent` names whose copy to walk — the tree is the one read with no fallback, because a tree is
+        // a place rather than a lookup: half of it silently coming from the other checkout is not a view of
+        // anything. A file the walk therefore misses still opens, through `file` below.
+        tree: i.tree.handler(async ({ input }) => services.workspaceTree(await workspaceRootFor(scope, input.agent))),
         // Lazy-load the children of an ignored dir (node_modules, .git, …) the tree didn't descend into.
-        children: i.children.handler(({ input }) => services.workspaceChildren(services.workspace.root, input.path)),
+        children: i.children.handler(async ({ input }) => services.workspaceChildren(await workspaceRootFor(scope, input.agent), input.path)),
         // A window, not the file (see readWorkspaceFileWindow). The response carries the file's total size, so
         // the viewer decides how to render from the daemon's number rather than from a tree entry it may not
         // have — the gate can't be skipped by opening a file the tree never listed.
         file: i.file.handler(async ({ input }) => {
-            const window = await services.files.readWindow(contained(input.path), input.offset, input.limit);
+            const { target, shared } = await scopedTarget(scope, input.agent, input.path);
+            const window = await services.files.readWindow(target, input.offset, input.limit);
             if (window === undefined) {
                 throw new ORPCError("NOT_FOUND", { message: "not found" });
             }
-            return { path: input.path, ...window };
+            return { path: input.path, shared, ...window };
         }),
         /* Mint the ticket a media element will present to GET /workspace/media. Guarded exactly like a read —
-         * escape, control plane, existence — so a ticket can only ever name a path this caller could already
-         * have read, and a mint for a missing file fails HERE rather than as an opaque playback error later. */
+         * escape, control plane, existence — so a ticket can only ever name a file this caller could already
+         * have read, and a mint for a missing file fails HERE rather than as an opaque playback error later.
+         * The ticket binds the RESOLVED file, so one minted against a conversation's checkout buys that file
+         * and not its shared-tree namesake. */
         mediaTicket: i.mediaTicket.handler(async ({ input }) => {
-            if ((await services.files.size(contained(input.path))) === undefined) {
+            const { target } = await scopedTarget(scope, input.agent, input.path);
+            if ((await services.files.size(target)) === undefined) {
                 throw new ORPCError("NOT_FOUND", { message: "not found" });
             }
-            return services.mediaTickets.mint(input.path);
+            return services.mediaTickets.mint(target);
         }),
         /* Which workspace file a NAMED reference means — the lookup behind every clickable path in the UI (chat
          * prose, terminal output, a tool card's chip). The search itself is resolveReference; this wires it to
          * the workspace (through the same escape + control-plane guards as every other read) and to the iq
          * engine's path glob, an in-memory regex pass over the sweep it already holds, which is why trying a
          * handful of tails costs nothing worth optimizing. */
-        resolve: i.resolve.handler(({ input, signal }) =>
-            resolveReference(
+        resolve: i.resolve.handler(async ({ input, signal }) => {
+            // Existence is asked of the conversation's checkout FIRST — a file it created and has not landed
+            // exists nowhere else, and answering "no such reference" for the very file the agent just wrote
+            // about is the failure this scope exists to end. The glob below stays shared: the iq index is built
+            // over /work, and a path it returns is root-relative, so it means the same file in either tree.
+            const roots = [...new Set([await workspaceRootFor(scope, input.agent), services.workspace.root])];
+            return resolveReference(
                 input.path,
                 services.workspace.root,
-                (relPath) => {
-                    const abs = resolveWithin(services.workspace.root, relPath);
-                    return abs !== undefined && !isControlPlanePath(services.workspace.root, abs) && existsSync(abs);
-                },
+                (relPath) =>
+                    roots.some((dir) => {
+                        const abs = resolveWithin(dir, relPath);
+                        return abs !== undefined && !isControlPlanePath(dir, abs) && existsSync(abs);
+                    }),
                 async (glob) => {
                     const outcome = await services.iq.run(
                         {
@@ -116,8 +122,8 @@ export const createWorkspaceRoutes = (services: Services) => {
                     );
                     return outcome.result.groups.map((group) => group.path);
                 },
-            ),
-        ),
+            );
+        }),
         /* Runs the resident iq engine in-process (services.iq) — same engine the agent's Bash `iq` calls use,
          * minus the per-query process spawn, workspace sweep, and inline revalidation those pay. The request's
          * abort signal kills the engine's rg child when the browser supersedes a search mid-flight.

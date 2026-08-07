@@ -63,6 +63,7 @@ import {
     sha256Text,
     UploadTooLargeError,
 } from "./workspace/workspace-files.js";
+import { scopedTarget } from "./workspace/workspace-scope.js";
 
 // Only genuine server faults (5xx) are logged; expected ORPCErrors (NOT_FOUND/BAD_REQUEST/…) are the routes'
 // normal control flow and would be noise.
@@ -374,20 +375,43 @@ export const createApp = (services: Services): Hono<AppEnv> => {
     // is not an oRPC route: the body is a streamed binary, not JSON.
     app.route("/", createDiffRawRoute(services));
 
+    /* The scoped read, in the shape these two byte routes can answer in. `scopedTarget` is the one resolver
+     * (workspace/workspace-scope.ts) and it signals through ORPCError, because every other caller is an oRPC
+     * handler; here the throw is translated once rather than at each of the two call sites, and an unexpected
+     * error still propagates as an error rather than being flattened into a 404. */
+    const scopedFileTarget = async (path: string, agent: string | undefined): Promise<{ target: string } | { error: string; status: 400 | 404 | 412 }> => {
+        try {
+            return { target: (await scopedTarget(services.workspaceScope, agent, path)).target };
+        } catch (error) {
+            if (!(error instanceof ORPCError)) {
+                throw error;
+            }
+            if (error.code === "BAD_REQUEST") {
+                return { error: error.message, status: 400 };
+            }
+            if (error.code === "PRECONDITION_FAILED") {
+                return { error: error.message, status: 412 };
+            }
+            return { error: error.message, status: 404 };
+        }
+    };
+
     // Raw bytes for any file under /work, with a Content-Type by extension — the browser previews images/PDF
     // here (the text route utf8-decodes and would corrupt them). Same guards/order as workspace.file: 400 on
     // escape, 404 on missing, 413 on oversize.
     app.get("/workspace/raw", async (c) => {
         const path = c.req.query("path");
-        const target = path === undefined ? undefined : resolveWithin(services.workspace.root, path);
-        if (target === undefined) {
+        if (path === undefined) {
             return c.json({ error: "invalid path" }, 400);
         }
-        // The daemon's credential + auth state answers as if it weren't there — no oracle, and no reading the
-        // owner's provider token out through the generic file API.
-        if (isControlPlanePath(services.workspace.root, target)) {
-            return c.json({ error: "not found" }, 404);
+        // Whose copy, and the escape + control-plane guards with it (scopedTarget → containedIn). Shared with
+        // the oRPC file route so an image in a conversation's checkout previews from the same tree its text
+        // reads from; the guards throw ORPCError, which these byte routes translate to their own JSON shape.
+        const scoped = await scopedFileTarget(path, c.req.query("agent"));
+        if ("error" in scoped) {
+            return c.json({ error: scoped.error }, scoped.status);
         }
+        const target = scoped.target;
         const size = await services.files.size(target);
         if (size === undefined) {
             return c.json({ error: "not found" }, 404);
@@ -423,15 +447,18 @@ export const createApp = (services: Services): Hono<AppEnv> => {
      * Loopback mode has no `auth` and therefore no ticket to check, exactly like the WebSocket upgrades. */
     app.get("/workspace/media", async (c) => {
         const path = c.req.query("path");
-        const target = path === undefined ? undefined : resolveWithin(services.workspace.root, path);
-        if (path === undefined || target === undefined) {
+        if (path === undefined) {
             return c.json({ error: "invalid path" }, 400);
         }
-        if (services.auth !== undefined && !services.mediaTickets.valid(c.req.query("ticket") ?? "", path)) {
-            return c.json({ error: "unauthorized" }, 401);
+        const scoped = await scopedFileTarget(path, c.req.query("agent"));
+        if ("error" in scoped) {
+            return c.json({ error: scoped.error }, scoped.status);
         }
-        if (isControlPlanePath(services.workspace.root, target)) {
-            return c.json({ error: "not found" }, 404);
+        const target = scoped.target;
+        // The ticket is checked against the RESOLVED file, which is what makes the binding hold under a scope:
+        // one minted for a conversation's copy of `demo.mp4` cannot be replayed for the shared tree's.
+        if (services.auth !== undefined && !services.mediaTickets.valid(c.req.query("ticket") ?? "", target)) {
+            return c.json({ error: "unauthorized" }, 401);
         }
         const size = await services.files.size(target);
         if (size === undefined) {

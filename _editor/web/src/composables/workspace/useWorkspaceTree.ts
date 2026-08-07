@@ -9,6 +9,7 @@ import { useSandboxQuery } from "../sandbox/useSandboxQuery";
 import { errorMessage, useAsyncAction } from "../useAsyncAction";
 import { resetUploadQueue } from "./useUploadQueue";
 import { readExpandedDirs, writeExpandedDirs } from "./workspaceSnapshot";
+import { scopeQuery, workspaceAgent } from "./workspaceScope";
 import { basename, parentDir } from "@intentic/ui/path";
 
 // Shared, module-level feedback for user file actions (rename, delete, save, move…) so the explorer, the tree
@@ -75,6 +76,16 @@ export const resetWorkspaceTreeState = (): void => {
     resetUploadQueue();
 };
 
+// The lazy subtrees are keyed by path alone, so they mean a different directory in a different scope
+// (workspaceScope) — `intentic/docs` in a conversation's checkout is not the one in the shared tree. The tree
+// query re-keys itself; these have to be dropped by hand, or an expanded folder would keep showing the
+// listing it had before the switch. The open folders are kept: the same paths are the right ones to be at.
+watch(workspaceAgent, () => {
+    lazyChildren.value = new Map();
+    lazyHidden.value = new Map();
+    lazyLoading.value = new Set();
+});
+
 /* The read-only "what the LLM sees" tree: the full /work filesystem the agent operates on, read DIRECTLY from
  * the sandbox daemon (GET /workspace/tree + /file — no platform-held state). The sandbox owns the ignore rules
  * and the secret denylist. Backed by vue-query so the tree is cached and refetchable; file reads stay
@@ -116,14 +127,17 @@ const removeRaw = (path: string): Promise<unknown> => sandboxJson(`/workspace/en
 const readFile = async (path: string): Promise<string> => (await readFileWindow(path)).content;
 
 // Raw bytes for binary preview (images / PDF), where the text route's utf8 decode would corrupt the file.
-const readBlob = (path: string): Promise<Blob> => sandboxBlob(`/workspace/raw?path=${encodeURIComponent(path)}`);
+const readBlob = (path: string): Promise<Blob> => sandboxBlob(`/workspace/raw?${scopeQuery(new URLSearchParams({ path })).toString()}`);
 
 export function useWorkspaceTree() {
     const queryClient = useQueryClient();
 
     const { query, error } = useSandboxQuery({
-        queryKey: computed(() => sandboxKey(`workspace`, `tree`)),
-        queryFn: () => sandboxJson<WorkspaceTreeResponse>(`/workspace/tree`),
+        // The scope is part of the KEY, not just the request: two trees genuinely differ, and one cached under
+        // the other's key is a file explorer listing a workspace nobody is looking at. Switching scope is
+        // therefore an ordinary query switch — cached, instant on the way back, refetched when stale.
+        queryKey: computed(() => sandboxKey(`workspace`, `tree`, workspaceAgent.value ?? `shared`)),
+        queryFn: () => sandboxJson<WorkspaceTreeResponse>(`/workspace/tree?${scopeQuery(new URLSearchParams()).toString()}`),
         // Fallback only: live freshness is pushed (the daemon's file watcher → /events SSE → markWorkspaceChanged
         // invalidates this query), so this poll is a backstop for a broken push chain, not the freshness path — a
         // slow 2min cap keeps steady-state traffic low while still self-healing if any link ever breaks.
@@ -222,7 +236,7 @@ export function useWorkspaceTree() {
     const fetchChildren = async (path: string): Promise<void> => {
         lazyLoading.value.add(path);
         try {
-            const body = await sandboxJson<WorkspaceChildrenResponse>(`/workspace/children?path=${encodeURIComponent(path)}`);
+            const body = await sandboxJson<WorkspaceChildrenResponse>(`/workspace/children?${scopeQuery(new URLSearchParams({ path })).toString()}`);
             lazyChildren.value.set(path, body.entries);
             if (body.hidden > 0) {
                 lazyHidden.value.set(path, body.hidden);

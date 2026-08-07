@@ -122,12 +122,19 @@ const LOADER_WORDS = [
 // Both prose surfaces go through the one composable (see useMarkdown), which splits a live turn into settled
 // + still-writing halves and renders anything finished in one pass. One renderer per message view, held for
 // the component's life — the list is keyed by message id, so an instance tracks one message throughout.
+/* Whose copy of the workspace this conversation's prose is about (workspaceScope). An isolated conversation
+ * works in its own checkout, so a file it names in an answer is the one in THAT tree — the shared tree's file
+ * of the same path is a different file, or none at all, and linking there is how "I wrote docs/plan.md" led to
+ * a not-found page. A shared-workspace conversation is undefined: /work IS its tree. */
+const linkAgent = computed(() => (conversation.value.isolated.value ? conversation.value.conversationId : undefined));
+
 const body = useMarkdown(
     () => props.message.text,
     () => props.streaming,
+    linkAgent,
 );
 // A plan card's body arrives whole with the card, so it never streams.
-const plan = useMarkdown(() => (props.message.plan ? planParts(props.message.plan.text).body : ``), false);
+const plan = useMarkdown(() => (props.message.plan ? planParts(props.message.plan.text).body : ``), false, linkAgent);
 
 const planTitle = (request: PlanRequest): string => planParts(request.text).title ?? `Proposed plan`;
 

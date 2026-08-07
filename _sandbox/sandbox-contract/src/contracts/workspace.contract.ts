@@ -24,11 +24,13 @@ import {
     WorkspaceHealthSchema,
     WorkspaceInstallResultSchema,
     WorkspaceInstallSchema,
+    WorkspaceMediaTicketQuerySchema,
     WorkspaceMediaTicketSchema,
     WorkspaceModulesSchema,
     WorkspaceMoveSchema,
     WorkspaceResolveQuerySchema,
     WorkspaceResolveSchema,
+    WorkspaceScopeSchema,
     WorkspaceSetupSchema,
     WorkspaceSyncSchema,
     WorkspaceTreeSchema,
@@ -38,7 +40,10 @@ import {
 // stays a plain Hono route serving raw bytes with a Content-Type header (oRPC's request/response shape doesn't
 // fit a streamed binary body). External MCP tools moved to the unified capabilities manifest (mcp kind).
 export const workspaceContract = {
-    tree: oc.route({ method: "GET", path: "/workspace/tree" }).output(WorkspaceTreeSchema),
+    // `agent` names whose copy of the workspace to read (WorkspaceScopeSchema); omitted is the shared /work
+    // tree. Every read route below takes it, so a link into a conversation's own checkout browses as one tree
+    // rather than as one openable file surrounded by the shared one.
+    tree: oc.route({ method: "GET", path: "/workspace/tree" }).input(WorkspaceScopeSchema).output(WorkspaceTreeSchema),
     // Lazy-load one directory's children — the tree returns ignored dirs (node_modules, .git, …) without children,
     // and the client fetches them here on expand so a giant node_modules can't blow the tree walk's entry budget.
     children: oc.route({ method: "GET", path: "/workspace/children" }).input(WorkspaceChildrenQuerySchema).output(WorkspaceChildrenSchema),
@@ -49,7 +54,7 @@ export const workspaceContract = {
      * it answers a streamed byte RANGE, which oRPC has no shape for). Minting is here rather than beside it so
      * it rides the bearer middleware and the contract's route advertisement: a browser can tell whether the
      * sandbox in front of it can stream video at all, instead of learning it from a 404 mid-playback. */
-    mediaTicket: oc.route({ method: "POST", path: "/workspace/media-ticket" }).input(WorkspaceFileQuerySchema).output(WorkspaceMediaTicketSchema),
+    mediaTicket: oc.route({ method: "POST", path: "/workspace/media-ticket" }).input(WorkspaceMediaTicketQuerySchema).output(WorkspaceMediaTicketSchema),
     // Which file a NAMED reference means — the lookup behind every clickable path in the UI. A path an agent
     // wrote in prose is often only a suffix of the real one, so it is matched against the workspace tree rather
     // than trusted as root-relative.

@@ -33,6 +33,7 @@ import FileViewer from "./viewers/FileViewer.vue";
 import HistoryPanel from "./HistoryPanel.vue";
 import ReviewPanel from "./ReviewPanel.vue";
 import UploadProgress from "./UploadProgress.vue";
+import WorkspaceScopeBanner from "./WorkspaceScopeBanner.vue";
 import WorkspaceSearchResults from "./WorkspaceSearchResults.vue";
 import { parentDir } from "@intentic/ui/path";
 
@@ -257,6 +258,9 @@ const onPick = (event: Event): void => {
 
 <template>
     <div class="relative flex h-full min-h-0 flex-col bg-canvas text-content">
+        <!-- Whose copy of the workspace this is, whenever it isn't the shared one (see WorkspaceScopeBanner).
+             Above the viewer as well as the list: a phone shows one at a time, and both need the answer. -->
+        <WorkspaceScopeBanner />
         <!-- Full-screen viewer: `?file=` (any kind) or `?diff=` (from Changes/History). Back = OS gesture. -->
         <template v-if="openPath !== undefined || diffTab !== undefined">
             <!-- A diff gets the SAME bar the desktop tab and the agent review get, with the phone's back arrow

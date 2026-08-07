@@ -17,7 +17,7 @@ const { renderMarkdown: renderEngine } = await import("@intentic/ui/markdown");
 
 // A previewed FILE renders through the kit's <Markdown> with the app's decorator (see MarkdownViewer), which is
 // the only surface that knows a directory to resolve against — so the document cases below go in the same way.
-const renderIn = (dir: string, source: string): string => renderEngine(source, fileLinkDecorator(dir));
+const renderIn = (dir: string, source: string): string => renderEngine(source, fileLinkDecorator({ dir }));
 
 beforeEach(() => {
     queryData = [];
@@ -165,5 +165,48 @@ describe(`references inside a previewed document`, () => {
     it(`does not re-root an absolute container path against the document`, () => {
         queryData = [{ root: `/work`, tree: [] }];
         expect(linkTo(renderIn(`docs/`, `/work/src/foo.ts`), `src/foo.ts`)).toBeDefined();
+    });
+});
+
+/* The three ways a link to an agent's own file used to go wrong. Each of these is a real report: the file the
+ * agent had just written opened a not-found page, the file it had edited opened the shared tree's different
+ * text under the same name, and the whole address it wrote opened a second browser tab on both. */
+describe(`links into a conversation's own copy of the workspace`, () => {
+    const renderAs = (agent: string, source: string): string => renderEngine(source, fileLinkDecorator({ agent }));
+
+    it(`carries the conversation in the href, so a new tab lands in the same tree`, () => {
+        const link = linkTo(renderAs(`c-1`, `Fixed it in src/foo.ts:42 today.`), `src/foo.ts`);
+        expect(link?.getAttribute(`href`)).toBe(`/workspace/src/foo.ts?agent=c-1`);
+        // The click path reads it back from here — the href is for the gestures the browser owns.
+        expect(link?.dataset[`agent`]).toBe(`c-1`);
+        expect(link?.dataset[`line`]).toBe(`42`);
+    });
+
+    it(`leaves a shared conversation's links unscoped, so nothing changes for them`, () => {
+        const link = linkTo(renderMarkdown(`Fixed it in src/foo.ts today.`), `src/foo.ts`);
+        expect(link?.getAttribute(`href`)).toBe(`/workspace/src/foo.ts`);
+        expect(link?.dataset[`agent`]).toBeUndefined();
+    });
+
+    it(`unwraps our OWN address written out in full, instead of treating it as another website`, () => {
+        // What a model writes once it has seen the app's address anywhere. Read as external it opened a second
+        // tab, reloaded the app, dropped the line, and landed on the shared tree.
+        const link = linkTo(renderMarkdown(`[the plan](${window.location.origin}/workspace/docs/plan.md#L12)`), `docs/plan.md`);
+        expect(link?.getAttribute(`href`)).toBe(`/workspace/docs/plan.md`);
+        expect(link?.getAttribute(`target`)).toBeNull();
+        expect(link?.dataset[`line`]).toBe(`12`);
+    });
+
+    it(`scopes an unwrapped full address the same way a bare path is scoped`, () => {
+        const link = linkTo(renderAs(`c-1`, `[the plan](${window.location.origin}/workspace/docs/plan.md)`), `docs/plan.md`);
+        expect(link?.getAttribute(`href`)).toBe(`/workspace/docs/plan.md?agent=c-1`);
+    });
+
+    it(`still sends a genuinely external address to its own tab`, () => {
+        const holder = document.createElement(`div`);
+        holder.innerHTML = renderMarkdown(`see [elsewhere](https://example.com/workspace/docs/plan.md)`);
+        const link = holder.querySelector(`a`);
+        expect(link?.getAttribute(`target`)).toBe(`_blank`);
+        expect(link?.classList.contains(`md-file-link`)).toBe(false);
     });
 });

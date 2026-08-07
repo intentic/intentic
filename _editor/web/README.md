@@ -70,7 +70,7 @@ core surface: a composable exposing a module-level `ref`.
 ## Key files
 
 - [src/pages](src/pages) — one file per route; the map of the whole app.
-- [src/composables](src/composables) — where the state actually lives: `chat/`, `agents/`, `terminal/`, `workspace/`, `sandbox/`.
+- [src/composables](src/composables) — where the state actually lives: `chat/`, `agents/`, `terminal/`, `workspace/`, `sandbox/`. `workspace/workspaceScope.ts` holds the one that is easy to miss: WHOSE copy of the workspace the view is showing. An isolated conversation works in its own checkout, so a file link written in its chat carries that conversation (`/workspace/…?agent=`), the tree and every file read follow it, and a banner names it — otherwise the same path quietly opens the shared tree's different file. Scoped files are read-only.
 - [src/chat](src/chat) — the conversation panel, its tabs and tool cards.
 - [src/agents](src/agents) — the fleet board: cards, detail, review.
 - [src/extension-host](src/extension-host) — how an extension's views reach the app.

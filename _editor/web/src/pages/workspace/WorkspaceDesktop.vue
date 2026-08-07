@@ -40,6 +40,7 @@ import MarkdownViewer from "./viewers/MarkdownViewer.vue";
 import ReviewPanel from "./ReviewPanel.vue";
 import UploadProgress from "./UploadProgress.vue";
 import WorkspaceEmptyState from "./WorkspaceEmptyState.vue";
+import WorkspaceScopeBanner from "./WorkspaceScopeBanner.vue";
 import WorkspaceSearchResults from "./WorkspaceSearchResults.vue";
 import WorkspaceTree from "./WorkspaceTree.vue";
 import ExtensionDocument from "../../core-views/ExtensionDocument.vue";
@@ -651,6 +652,10 @@ const endResize = (event: PointerEvent): void => {
         @dragover.prevent
         @drop.prevent
     >
+        <!-- Whose copy of the workspace this is, whenever it isn't the shared one. Above the split rather than
+             inside the viewer: the tree is scoped too, and a reader browsing folders needs the answer as much
+             as one reading a file. -->
+        <WorkspaceScopeBanner />
         <!-- Body: sidebar + viewer; only the leaf panes scroll. The whole body is the root drop target (sidebar
              background, viewer, and empty state all upload to /work root); a folder row captures its own drop
              (stopPropagation) so hovering a folder targets that folder instead. -->

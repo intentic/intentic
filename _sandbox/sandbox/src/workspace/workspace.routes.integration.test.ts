@@ -192,6 +192,8 @@ test("workspace.file reads any contained file (former-secret paths included), NO
         size: 15,
         offset: 0,
         bytes: 15,
+        // No conversation named ⇒ the shared tree answered, which is what `shared` reports (workspace-scope.ts).
+        shared: true,
     });
     // No security floor: a former-secret file reads through like any other contained file.
     expect(await client.workspace.file({ path: "desired-state/.env" })).toEqual({
@@ -200,6 +202,7 @@ test("workspace.file reads any contained file (former-secret paths included), NO
         size: 8,
         offset: 0,
         bytes: 8,
+        shared: true,
     });
     expect(await errorCode(client.workspace.file({ path: "app/nope.ts" }))).toBe("NOT_FOUND");
     expect(await errorCode(client.workspace.file({ path: "../../etc/passwd" }))).toBe("BAD_REQUEST");
@@ -227,6 +230,7 @@ test("workspace.file passes the requested window through and reports the range i
         size: 4096,
         offset: 4091,
         bytes: 5,
+        shared: true,
     });
     expect(asked).toEqual([{ offset: -8, limit: 64 }]);
 });

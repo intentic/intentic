@@ -166,6 +166,7 @@ import {
     writeWorkspaceFileStream,
 } from "./workspace/workspace-files.js";
 import { listWorkspaceChildren, walkWorkspaceTree } from "./workspace/workspace-tree.js";
+import type { WorkspaceScopeDeps } from "./workspace/workspace-scope.js";
 import { statePath } from "./workspace/state-paths.js";
 
 /* The daemon's collaborators, wired once at boot and handed to the route factories — the injection seam the
@@ -479,6 +480,10 @@ export interface Services {
     readonly agents: AgentsRegistry;
     // The per-conversation worktree compositions on /history/worktrees (create/repair/remove/prune).
     readonly agentWorktrees: AgentWorktrees;
+    // Which copy of the workspace a file read means — the shared tree, or one conversation's checkout (see
+    // workspace/workspace-scope.ts). Composed once here because the two surfaces that serve files ask the same
+    // question: the oRPC workspace routes, and the raw/media byte routes in app.ts.
+    readonly workspaceScope: WorkspaceScopeDeps;
     // Builds an isolated turn's mount namespace, where the conversation's worktree stands in for the
     // workspace root. Probes the container's capability once and reports "unavailable" forever after when it
     // has none, so a sandbox launched without CAP_SYS_ADMIN keeps running turns the old way.
@@ -831,6 +836,11 @@ export const createServices = (config: Config, logger: Logger): Services => {
         },
         agents,
         agentWorktrees,
+        workspaceScope: {
+            main: workspace.root,
+            entry: (id) => agents.entry(id),
+            worktreeDir: (id) => agentWorktrees.conversationDir(id),
+        },
         turnIsolation,
         agentOrigins: createAgentOrigins({ agents, logger }),
         files: {

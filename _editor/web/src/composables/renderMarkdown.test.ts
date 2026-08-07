@@ -131,7 +131,7 @@ describe(`markup that would render invisibly`, () => {
     });
 
     it(`recovers the same way on a streaming tail frame`, () => {
-        expect(createStreamingMarkdown().render(`4.`).tail).toContain(`4.`);
+        expect(createStreamingMarkdown(() => undefined).render(`4.`).tail).toContain(`4.`);
     });
 
     it(`leaves markup that is visible without text alone`, () => {
@@ -177,7 +177,7 @@ describe(`streaming split`, () => {
     });
 
     it(`renders the settled part byte-identically across frames and only grows the tail`, () => {
-        const stream = createStreamingMarkdown();
+        const stream = createStreamingMarkdown(() => undefined);
         const first = stream.render(`Done paragraph.\n\nStill wri`);
         const second = stream.render(`Done paragraph.\n\nStill writing here`);
         expect(first.settled).toBe(second.settled);
@@ -188,7 +188,7 @@ describe(`streaming split`, () => {
 
     it(`concatenates to the same visible text as a whole-message render`, () => {
         const text = `# Title\n\nSome prose with \`code\`.\n\n- a\n- b\n\nTail sentence.`;
-        const stream = createStreamingMarkdown();
+        const stream = createStreamingMarkdown(() => undefined);
         const { settled, tail } = stream.render(text);
         const strip = (html: string): string =>
             html
@@ -206,7 +206,7 @@ describe(`streaming split`, () => {
      * frames + 3 to frames * 2 and fails loudly instead of quietly getting slower. */
     it(`re-parses the settled prefix once per completed block, not once per frame`, () => {
         const text = `Alpha paragraph.\n\nBeta paragraph.\n\nGamma paragraph.\n\nDelta tail`;
-        const stream = createStreamingMarkdown();
+        const stream = createStreamingMarkdown(() => undefined);
         const before = markdownParseCount();
         for (let end = 1; end <= text.length; end += 1) {
             stream.render(text.slice(0, end));
@@ -217,7 +217,7 @@ describe(`streaming split`, () => {
     });
 
     it(`starts over when the source is rewritten rather than appended`, () => {
-        const stream = createStreamingMarkdown();
+        const stream = createStreamingMarkdown(() => undefined);
         stream.render(`First version.\n\nMore text`);
         const rewritten = stream.render(`Different entirely.\n\nOther`);
         expect(rewritten.settled).toContain(`Different entirely.`);

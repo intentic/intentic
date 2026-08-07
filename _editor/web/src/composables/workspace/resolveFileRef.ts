@@ -1,6 +1,7 @@
 import type { WorkspaceResolveResponse } from "@intentic-app/api-contract";
 import { sandboxJson } from "../sandbox/sandboxClient";
 import { resolveInTree } from "./fileRefs";
+import { scopeQuery } from "./workspaceScope";
 
 /* The last word on where a named file reference points, for the moment a user actually clicks one.
  *
@@ -20,6 +21,9 @@ export const resolveWorkspaceRef = async (path: string): Promise<string | undefi
     if (local !== undefined) {
         return local;
     }
-    const resolved = await sandboxJson<WorkspaceResolveResponse>(`/workspace/resolve?path=${encodeURIComponent(path)}`).catch(() => undefined);
+    // Scoped, so a file that exists ONLY in a conversation's checkout resolves at all — which is the whole
+    // point of a link written inside that conversation (see workspaceScope).
+    const query = scopeQuery(new URLSearchParams({ path }));
+    const resolved = await sandboxJson<WorkspaceResolveResponse>(`/workspace/resolve?${query.toString()}`).catch(() => undefined);
     return resolved?.path;
 };

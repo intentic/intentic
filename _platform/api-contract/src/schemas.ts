@@ -210,6 +210,10 @@ export interface WorkspaceFileResponse {
     readonly size: number;
     readonly offset: number;
     readonly bytes: number;
+    // Which tree answered — the shared /work one, or the conversation's own checkout the request named
+    // (`?agent=`). True despite a scope when that checkout doesn't carry the path, which is legitimate: a
+    // checkout is not a superset of /work. The one thing the reader must not have to guess.
+    readonly shared: boolean;
 }
 // What a NAMED file reference (agent prose, terminal output) resolves to: the workspace path it means, absent
 // when nothing in the workspace ends in that reference.

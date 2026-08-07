@@ -85,6 +85,9 @@ const agentTerminal = computed(() => (view.value.body?.kind === `command` ? conv
  * already selected. Every browser tool gets the button, not just the ones that returned a picture — a click or
  * a form fill is precisely when watching is worth more than reading. */
 const agentBrowser = computed(() => (props.tool.name.toLowerCase().startsWith(`browser `) ? conversation.value.agentBrowser.value : undefined));
+// Whose copy of the workspace this card's paths name (workspaceScope) — the same answer the pane's prose
+// gives, because a tool ran in the conversation's own checkout exactly as the prose describing it did.
+const linkScope = computed(() => ({ agent: conversation.value.isolated.value ? conversation.value.conversationId : undefined }));
 const router = useRouter();
 const watchBrowser = (session: string): void => void router.push(`/browsers/${session}`);
 
@@ -151,7 +154,7 @@ const subagentFacts = computed<string[]>(() => {
                 type="button"
                 class="min-w-0 truncate font-mono transition-colors hover:text-content hover:underline"
                 v-tooltip.top="'Open in workspace'"
-                @click="openWorkspaceRef(location.path, location.line)"
+                @click="openWorkspaceRef(location.path, location.line, linkScope)"
             >
                 {{ tool.target ?? location.path }}
             </button>
@@ -247,7 +250,7 @@ const subagentFacts = computed<string[]>(() => {
                 type="button"
                 class="ml-4 overflow-hidden rounded border border-line bg-canvas text-left"
                 v-tooltip.top="'Open in workspace'"
-                @click="openWorkspaceRef(image.path)"
+                @click="openWorkspaceRef(image.path, undefined, linkScope)"
             >
                 <img
                     v-if="attachmentPreview(image.path)"
@@ -264,7 +267,7 @@ const subagentFacts = computed<string[]>(() => {
                 :old-text="diff.oldText"
                 :new-text="diff.newText"
                 :truncated="diff.truncated"
-                @open="openWorkspaceRef(diff.path)"
+                @open="openWorkspaceRef(diff.path, undefined, linkScope)"
             />
             <!-- Three body shapes, chosen by the registry. `command` renders the invocation above its output
                  so a Bash card reads like a terminal; `files` turns a path listing into rows that navigate. -->
@@ -289,7 +292,7 @@ const subagentFacts = computed<string[]>(() => {
                     type="button"
                     class="flex items-baseline gap-1.5 rounded px-1 py-0.5 text-left font-mono text-2xs text-muted transition-colors hover:bg-overlay hover:text-content"
                     v-tooltip.top="'Open in workspace'"
-                    @click="openWorkspaceRef(entry.path, entry.line)"
+                    @click="openWorkspaceRef(entry.path, entry.line, linkScope)"
                 >
                     <span class="truncate">{{ entry.path }}</span>
                     <span v-if="entry.line" class="shrink-0 text-subtle">:{{ entry.line }}</span>

@@ -1,5 +1,6 @@
 import { sandboxRpc } from "../sandbox/sandboxRpc";
 import { useEndpoint } from "../sandbox/useEndpoint";
+import { scopeQuery, workspaceAgent } from "./workspaceScope";
 
 /* THE ONE DAEMON URL THE BROWSER HANDS TO AN ELEMENT — /workspace/media, for a <video>/<audio> that fetches
  * its own byte ranges.
@@ -11,7 +12,7 @@ import { useEndpoint } from "../sandbox/useEndpoint";
  * Authorization header on any of them.
  *
  * So the credential moves into the URL, and is made small enough to survive being there: POST
- * /workspace/media-ticket authenticates normally and returns a ticket good only for THIS path, so the worst a
+ * /workspace/media-ticket authenticates normally and returns a ticket good only for THIS file, so the worst a
  * leaked one buys is the file its holder was already watching (auth/media-tickets.ts). One mint per open —
  * the ticket outlives any plausible sitting, and re-minting mid-playback would mean swapping the element's
  * src, which resets the picture and the position.
@@ -20,12 +21,15 @@ import { useEndpoint } from "../sandbox/useEndpoint";
  * provide 'workspace.mediaTicket'" rather than a mystery — which is exactly what the viewer should show.
  */
 export const mediaUrl = async (path: string, options: { readonly download?: true } = {}): Promise<string> => {
-    const { ticket } = await sandboxRpc.workspace.mediaTicket({ path });
+    // Both halves carry the view's scope (workspaceScope): the mint binds the file it resolves to, and the
+    // playback URL has to resolve to that same file or the ticket it carries is refused.
+    const agent = workspaceAgent.value;
+    const { ticket } = await sandboxRpc.workspace.mediaTicket({ path, agent });
     const base = useEndpoint().daemonBase.value;
     if (base === undefined || base === ``) {
         throw new Error(`Your sandbox isn't reachable yet — finish setup so it registers its address.`);
     }
-    const query = new URLSearchParams({ path, ticket });
+    const query = scopeQuery(new URLSearchParams({ path, ticket }));
     // Asks the daemon for Content-Disposition: attachment. The `download` ATTRIBUTE cannot do this job — the
     // daemon is a different origin, and a browser ignores the attribute cross-origin and navigates instead.
     if (options.download === true) {

@@ -73,6 +73,10 @@ export const TURN_SETTLES = { timeout: 30_000 } as const;
  */
 export const ABSENT_MAIN = join(tmpdir(), "intentic-absent-main");
 
+// Where a conversation's checkout lives, in the layout the daemon uses. Shared by the worktree fake and by the
+// workspace scope composed from it, so the two cannot name different directories for the same conversation.
+const conversationDir = (id: string): string => `/history/worktrees/${id}`;
+
 // An in-memory capabilities store so the capability routes + turn merge are testable without the fs.
 export const memoryCapabilitiesStore = (initial: Capability[] = []): CapabilitiesStore => {
     let capabilities = [...initial];
@@ -249,6 +253,21 @@ export type ServiceOverrides = Partial<Omit<Services, keyof WideSeamOverrides>> 
 
 export const services = (overrides: ServiceOverrides = {}): Services => {
     const { auth, git, usage, claudeStore, cliProxy, sandboxSettings, ...rest } = overrides;
+    /* A real registry over a memory store (cheap, and /events' roster subscription needs the real seam);
+     * worktree git mechanics are stubbed — the worktree suites cover them against real git. Neither derived
+     * half is computed here: these suites drive the routes, and where a card's work stands — plus how much of
+     * it is still in the tree — belongs to the integration suites that have real git. Every agent this harness
+     * makes therefore reads at its turn lifecycle, with nothing landed missing.
+     *
+     * Hoisted out of the literal below because the workspace SCOPE is composed from it: whose copy of the
+     * workspace a read means is answered by the registry plus the worktree layout, and a second registry
+     * standing in for it there would let the two disagree. */
+    const agents = createAgentsRegistry(
+        { load: async () => [], save: async () => {} },
+        { of: () => "idle", refresh: async () => false, forget: () => {} },
+        { of: () => undefined, refresh: async () => false, forget: () => {} },
+    );
+    const workspace = workspacePaths("/work");
     /* Completed by `unstubbed`, not spelled out. What follows is only what these suites RELY on; every other
      * member of Services answers with its own name if a route reaches it. That is what takes this file off the
      * blast radius of the daemon growing a service: it used to enumerate all seventy members, so every feature
@@ -267,7 +286,7 @@ export const services = (overrides: ServiceOverrides = {}): Services => {
         // Real too, and never started: creating one registers nothing and arms no timer, so /health reads the
         // `off` it reports on a daemon that has no platform to announce to — the loopback/test shape.
         announcer: createAnnouncer(testConfig, createLogger(testConfig)),
-        workspace: workspacePaths("/work"),
+        workspace,
         processes: fakeProcesses(),
         // The real slot table with a no-dial probe; `scanPorts` is empty so tests opt into listeners explicitly.
         portForwards: createPortForwards(portSlotsFromToken("tok"), async () => "http"),
@@ -425,18 +444,9 @@ export const services = (overrides: ServiceOverrides = {}): Services => {
             fileDiff: async () => ({}),
             ...git,
         }),
-        // A real registry over a memory store (cheap, and /events' roster subscription needs the real seam);
-        // worktree git mechanics are stubbed — the worktree suites cover them against real git.
-        // Neither derived half is computed here: these suites drive the routes, and where a card's work stands
-        // — plus how much of it is still in the tree — belongs to the integration suites that have real git.
-        // Every agent this harness makes therefore reads at its turn lifecycle, with nothing landed missing.
-        agents: createAgentsRegistry(
-            { load: async () => [], save: async () => {} },
-            { of: () => "idle", refresh: async () => false, forget: () => {} },
-            { of: () => undefined, refresh: async () => false, forget: () => {} },
-        ),
+        agents,
         agentWorktrees: {
-            conversationDir: (id) => `/history/worktrees/${id}`,
+            conversationDir,
             worktreeDir: (id, repo) => (repo === "root" ? `/history/worktrees/${id}` : `/history/worktrees/${id}/${repo}`),
             mainDir: (repo) => (repo === "root" ? ABSENT_MAIN : join(ABSENT_MAIN, repo)),
             exists: async () => false,
@@ -448,6 +458,21 @@ export const services = (overrides: ServiceOverrides = {}): Services => {
             retire: async () => {},
             prune: async () => {},
             withRepoLock: (_repo, task) => task(),
+        },
+        /* Whose copy of the workspace a read means (workspace/workspace-scope.ts). Composed from the same two
+         * lookups the daemon uses — an unscoped read is the shared tree, exactly as in production, and a scoped
+         * one resolves against a worktree dir that does not exist here, which is the archived-checkout case the
+         * resolver's own suite covers on real disk.
+         *
+         * Read through `merged` rather than off the locals, like the session reader below, because a suite that
+         * points `workspace` at a temp dir must move the file routes with it — a scope frozen at /work would
+         * have every read answer from a tree that suite never wrote to. */
+        workspaceScope: {
+            get main() {
+                return merged.workspace.root;
+            },
+            entry: (id) => merged.agents.entry(id),
+            worktreeDir: conversationDir,
         },
         // Namespace isolation off, which is what a test runner (and any container without CAP_SYS_ADMIN) really
         // gets: turns then run straight in the worktree path, the behaviour every route assertion below expects.

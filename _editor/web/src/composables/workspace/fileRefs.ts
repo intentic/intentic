@@ -1,6 +1,7 @@
 import type { WorkspaceTreeEntry, WorkspaceTreeResponse } from "@intentic-app/api-contract";
 import { rankRefCandidates, referenceTails } from "@intentic/sandbox-contract";
 import { queryClient } from "../queryPersistence";
+import { workspaceAgent } from "./workspaceScope";
 
 /* What a file reference looks like in agent and tool output — `src/foo.ts`, `./src/foo.ts:12:3`,
  * `/work/src/foo.ts(12,4)` — and how one maps onto the workspace-relative path the editor opens.
@@ -26,9 +27,12 @@ export const FILE_REF = /(?<![\w./:@-])(?:[~.]{0,2}\/)?(?:[\w.@+-]+\/)+[\w.@+-]+
 
 // The workspace tree the file explorer has already fetched — the client's own copy of what exists, and what
 // both the container root and the reference matcher below read. Undefined until the first fetch lands.
-// getQueriesData prefix-matches, so the sandbox-id suffix on the key doesn't matter.
+// getQueriesData prefix-matches, so the sandbox-id suffix on the key doesn't matter — but the SCOPE does: with
+// more than one tree cached (the shared one and a conversation's own, see workspaceScope), taking whichever
+// came back first would match references against a workspace nobody is looking at.
 const cachedTree = (): WorkspaceTreeResponse | undefined => {
-    for (const [, data] of queryClient.getQueriesData<WorkspaceTreeResponse>({ queryKey: [`workspace`, `tree`] })) {
+    const prefix = [`workspace`, `tree`, workspaceAgent.value ?? `shared`];
+    for (const [, data] of queryClient.getQueriesData<WorkspaceTreeResponse>({ queryKey: prefix })) {
         if (data?.root !== undefined && data.root !== ``) {
             return data;
         }

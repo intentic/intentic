@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, ref } from "vue";
 import type { ChatTool } from "../composables/chat/transcript";
+import { usePaneView } from "../composables/chat/useChat";
 import { openWorkspaceRef } from "../composables/workspace/openFileRef";
 import ChatToolCard from "./ChatToolCard.vue";
 import { type ToolGroup, groupDiffSummary } from "./toolGrouping";
@@ -14,6 +15,11 @@ const props = defineProps<{
     group: ToolGroup;
     live: boolean;
 }>();
+
+// Whose copy of the workspace the header's target chip names — the pane's conversation, exactly as the cards
+// underneath it answer (see ChatToolCard).
+const { conversation } = usePaneView();
+const linkScope = computed(() => ({ agent: conversation.value.isolated.value ? conversation.value.conversationId : undefined }));
 
 const expanded = ref(false);
 const toggle = (): void => {
@@ -54,7 +60,7 @@ const location = computed(() => props.group.tools[0]?.locations?.[0]);
                 type="button"
                 class="min-w-0 truncate font-mono transition-colors hover:text-content hover:underline"
                 v-tooltip.top="'Open in workspace'"
-                @click="openWorkspaceRef(location.path, location.line)"
+                @click="openWorkspaceRef(location.path, location.line, linkScope)"
             >
                 {{ group.target ?? location.path }}
             </button>

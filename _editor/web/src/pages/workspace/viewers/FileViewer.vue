@@ -12,6 +12,7 @@ import { useLayout } from "../../../composables/useLayout";
 import { useMonaco } from "../../../composables/workspace/useMonaco";
 import { changeEpochOf } from "../../../composables/workspace/useWorkspaceLive";
 import { useWorkspaceTree } from "../../../composables/workspace/useWorkspaceTree";
+import { scopeQuery, workspaceAgent } from "../../../composables/workspace/workspaceScope";
 import BigTextView from "./BigTextView.vue";
 import CodeView from "./CodeView.vue";
 import FileBreadcrumb from "../FileBreadcrumb.vue";
@@ -82,7 +83,7 @@ const edit = useEditBuffers();
 // instant CodeView mounts — no plain-text-then-color flash.
 const { ensureMonaco, ensureLanguage } = useMonaco();
 
-const readBlob = (target: string): Promise<Blob> => sandboxBlob(`/workspace/raw?path=${encodeURIComponent(target)}`);
+const readBlob = (target: string): Promise<Blob> => sandboxBlob(`/workspace/raw?${scopeQuery(new URLSearchParams({ path: target })).toString()}`);
 
 let seq = 0;
 /* The current text read. Aborted whenever another one supersedes it — a file switch, or the next change-epoch
@@ -92,6 +93,14 @@ let seq = 0;
 let reading: AbortController | undefined;
 // The window a big text file opened with, handed to BigTextView so it doesn't re-read what we already have.
 const firstWindow = ref<WorkspaceFileResponse | undefined>(undefined);
+/* This file came from the SHARED tree even though the view is scoped to a conversation's copy — which is
+ * legitimate and common: a checkout mirrors the /work layout but is not a superset of it (the shared state
+ * dir, the reference shelf, anything under /work no repo tracks). The banner says "showing X's copy", so the
+ * exceptions have to say so themselves or that sentence quietly becomes false one file at a time.
+ *
+ * Text reads only, because only they carry the daemon's answer (WorkspaceFileSchema.shared) — a binary
+ * preview is bytes with no room for it. So the chip appearing is a fact; its absence is not a claim. */
+const fromShared = ref(false);
 
 const readText = (target: string): Promise<WorkspaceFileResponse> => {
     reading?.abort();
@@ -157,11 +166,19 @@ watch(
     // changeEpochOf(path) is the complete external-change signal — every write to /work echoes over the SSE and
     // bumps it, so the open file re-reads even when its byte length (the tree entry's size) is unchanged. Size is
     // deliberately NOT a trigger: it would also fire mid-save from the post-save tree refetch, racing markSaved.
-    () => [path, changeEpochOf(path)] as const,
+    // The SCOPE is a trigger for the same reason the path is: the same path in another copy of the workspace is
+    // another file, and leaving the old text on screen would be the silent wrong answer in miniature.
+    () => [path, changeEpochOf(path), workspaceAgent.value] as const,
     ([currentPath], previous, onCleanup) => {
         // A same-path re-fire in an editable text view reconciles by content (no flicker, no false warning);
-        // everything else (a new file, or a non-text mode) takes the destructive reset + fetch below.
-        if (previous !== undefined && currentPath === previous[0] && (open.value.kind === `code` || open.value.kind === `markdown`)) {
+        // everything else (a new file, a scope switch, or a non-text mode) takes the destructive reset + fetch
+        // below.
+        if (
+            previous !== undefined &&
+            currentPath === previous[0] &&
+            workspaceAgent.value === previous[2] &&
+            (open.value.kind === `code` || open.value.kind === `markdown`)
+        ) {
             reconcileOpenFile(currentPath);
             return;
         }
@@ -173,6 +190,7 @@ watch(
         viewerContent.value = undefined;
         viewerComponent.value = undefined;
         firstWindow.value = undefined;
+        fromShared.value = false;
         error.value = null;
         loading.value = false;
         open.value = resolution;
@@ -208,6 +226,7 @@ watch(
                     return;
                 }
                 loading.value = false;
+                fromShared.value = window.shared;
                 // An unknown-extension file that is actually binary: NUL bytes => download fallback, not mojibake.
                 if (textKind === `code` && content.includes("\u0000")) {
                     open.value = { kind: `binary` };
@@ -226,8 +245,13 @@ watch(
                 // `text` so CodeView mounts already colored.
                 lang.value = highlightLangFor(currentPath, window.size, content);
                 text.value = content;
-                // Record the on-disk text so the editor can diff it for the dirty state (never clobbers live edits).
-                edit.setBaseline(currentPath, content);
+                // Record the on-disk text so the editor can diff it for the dirty state (never clobbers live
+                // edits). Skipped in a scope: buffers are keyed by path alone, so seeding one from a
+                // conversation's copy would leave that text standing in for the shared file the moment the
+                // reader switches back — and nothing scoped is editable anyway.
+                if (workspaceAgent.value === undefined) {
+                    edit.setBaseline(currentPath, content);
+                }
             }, fail);
             return;
         }
@@ -307,15 +331,25 @@ const editorView = ref<InstanceType<typeof CodeView>>();
 // global edit mode is ignored and the Edit affordance hidden below 768px.
 const { mobile } = useDevice();
 
-const canEdit = computed(() => (open.value.kind === `code` || open.value.kind === `markdown`) && text.value !== null);
+/* Editing is off while the view is showing a conversation's own copy (workspaceScope). The daemon refuses a
+ * write into a checkout by construction — no write route can even name one — so a Save here would silently go
+ * to the SHARED tree's file of the same path, which is the exact confusion this scope exists to end. And the
+ * agent may be writing to that file right now: two writers on one worktree file lose each other's work with
+ * nothing to notice it. Read-only is stated in the banner above, so the missing Edit button is explained
+ * rather than merely absent. */
+const canEdit = computed(
+    () => workspaceAgent.value === undefined && (open.value.kind === `code` || open.value.kind === `markdown`) && text.value !== null,
+);
 // Global edit mode (useLayout), gated per file by canEdit so a viewer's file (and every binary) stays in its
 // viewer — including one whose file is text, like an .svg: an extension viewer renders, it does not edit.
 const editingThis = computed(() => !mobile.value && editMode.value && canEdit.value);
 // Reading the code alone is offered where there is code to isolate: a text file on the editor surface, being
 // READ. Editing shows the file whole — the buffer that gets saved is never the stripped one.
 const canHideComments = computed(() => open.value.kind === `code` && text.value !== null && !editingThis.value);
-const dirtyThis = computed(() => edit.isDirty(path));
-const editorSeed = computed(() => edit.bufferOf(path) ?? text.value ?? ``);
+// In a scope the file on screen is disk, not a buffer: an unsaved edit to the SHARED file of the same path is
+// somebody else's text, and showing it here (or its dirty dot) would misattribute it to this agent's copy.
+const dirtyThis = computed(() => workspaceAgent.value === undefined && edit.isDirty(path));
+const editorSeed = computed(() => (workspaceAgent.value === undefined ? (edit.bufferOf(path) ?? text.value ?? ``) : (text.value ?? ``)));
 
 const onEditorChange = (value: string): void => edit.setBuffer(path, value);
 // markSaved only runs if the write succeeded (run swallows the throw and shows the error instead). The save is
@@ -358,6 +392,16 @@ const onEditorSave = (value: string): void =>
                 <Icon :name="hideFileComments ? 'eye-slash' : 'eye'" class="text-[0.7rem]" />
                 <span class="max-md:hidden">Comments</span>
             </button>
+            <!-- The banner above says the view is showing an agent's copy; this file is one that copy doesn't
+                 carry, so it comes from the shared workspace. Said here rather than there because it is a fact
+                 about this file, not about the view. -->
+            <span
+                v-if="workspaceAgent !== undefined && fromShared"
+                class="inline-flex shrink-0 items-center gap-1 rounded-md bg-overlay px-1.5 py-0.5 text-2xs text-muted"
+                v-tooltip.bottom="'This agent’s copy doesn’t have this file, so you’re seeing the shared workspace’s.'"
+            >
+                <Icon name="folder" class="text-[0.65rem]" /> Shared
+            </span>
             <CopyButton v-if="text !== null" :text="editorSeed" aria-label="Copy file content" v-tooltip.bottom="'Copy content'" />
             <template v-if="!mobile && (canEdit || editingThis)">
                 <span v-if="dirtyThis" class="inline-flex shrink-0 items-center text-warning" v-tooltip.bottom="'Unsaved changes — Ctrl+S to save'">

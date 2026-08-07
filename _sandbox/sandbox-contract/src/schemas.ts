@@ -73,8 +73,9 @@ export const EditorContextSchema = z.object({
 export type EditorContext = z.infer<typeof EditorContextSchema>;
 
 // The client-minted stable conversation identity. Constrained because isolated conversations also use it in
-// branch names (agent/<id>) and filesystem paths — the regex is the injection guard. Shared by turn + attach.
-const ConversationIdSchema = z.string().regex(/^[a-zA-Z0-9][a-zA-Z0-9_-]{0,63}$/);
+// branch names (agent/<id>) and filesystem paths — the regex is the injection guard. Shared by turn + attach,
+// and by the workspace scope (WorkspaceScopeSchema), which names a conversation to read a file tree AS.
+export const ConversationIdSchema = z.string().regex(/^[a-zA-Z0-9][a-zA-Z0-9_-]{0,63}$/);
 
 // Where a conversation came from when nobody typed it into the browser: an automation wake carrying a message
 // from OUTSIDE the sandbox (a Discord mention, a web-chat visitor, a webhook). Such a wake runs as an ordinary
@@ -2016,6 +2017,26 @@ export type FileDiff = z.infer<typeof FileDiffSchema>;
 
 // ---- workspace tree + files ----
 
+/* WHOSE COPY OF THE WORKSPACE A READ MEANS — the half of a file address that used to be implicit, and wrong.
+ *
+ * There is not one workspace. There is the shared /work tree, and there is one private checkout per isolated
+ * conversation, each holding files that conversation created and versions of files it edited. Every workspace
+ * read route named a PATH and nothing else, so it could only ever answer from the shared tree — and an agent
+ * that had just written `docs/plan.md` in its own checkout described a file the viewer could not open, while
+ * an agent that had EDITED a file got something worse: the shared version, same path, different text, with
+ * nothing to say so.
+ *
+ * So the conversation rides the request. Absent ⇒ the shared tree, which is what every existing caller means
+ * and why the field is optional rather than a second set of routes. Present ⇒ that conversation's own
+ * checkout, resolved daemon-side in ONE place (workspaceRootFor) so the escape guard, the control-plane
+ * denylist and the ignore rules apply to it exactly as they do to /work.
+ *
+ * A conversation that is not isolated resolves BACK to the shared tree rather than failing: the shared tree
+ * genuinely is its tree, and a caller should not have to know which mode a conversation runs in to link to a
+ * file in it. */
+export const WorkspaceScopeSchema = z.object({ agent: ConversationIdSchema.optional() });
+export type WorkspaceScope = z.infer<typeof WorkspaceScopeSchema>;
+
 /* One node of the full /work filesystem tree the agent sees (untracked + generated files included), distinct
  * from the git-tracked listing. `path` is root-relative with forward slashes so it feeds straight back to the
  * file route.
@@ -2057,23 +2078,27 @@ export type WorkspaceTree = z.infer<typeof WorkspaceTreeSchema>;
 // Lazy-load one directory's children — for a dir the tree walk listed but didn't descend into. Child dirs again
 // carry no `children`, so they lazy-load on their own expand. `hidden` = how many entries the cap cut (0 = all
 // listed).
-export const WorkspaceChildrenQuerySchema = z.object({ path: z.string().min(1) });
+export const WorkspaceChildrenQuerySchema = WorkspaceScopeSchema.extend({ path: z.string().min(1) });
 export const WorkspaceChildrenSchema = z.object({
     entries: z.array(WorkspaceTreeEntrySchema),
     hidden: z.number(),
 });
 export type WorkspaceChildren = z.infer<typeof WorkspaceChildrenSchema>;
+// Write routes (delete) and the read they mirror. No scope: a conversation's own checkout is READ-ONLY through
+// the file API — see workspaceRootFor for why the refusal lives daemon-side rather than in each screen.
 export const WorkspaceFileQuerySchema = z.object({ path: z.string().min(1) });
+export const WorkspaceMediaTicketQuerySchema = WorkspaceScopeSchema.extend({ path: z.string().min(1) });
 /* The credential a <video>/<audio> element carries to GET /workspace/media, which is the one workspace route a
  * browser cannot put a header on. Minted here, over the ordinary bearer-authenticated contract, and scoped to
- * the single path it was asked for — see auth/media-tickets.ts for why scope rather than single-use is what
- * bounds it. `expiresAt` is epoch ms so a player can tell a dead ticket from a dead file. */
+ * the single FILE it was asked for — the resolved one, so a ticket minted against a conversation's checkout
+ * buys that file and not its shared-tree namesake (see auth/media-tickets.ts for why scope rather than
+ * single-use is what bounds it). `expiresAt` is epoch ms so a player can tell a dead ticket from a dead file. */
 export const WorkspaceMediaTicketSchema = z.object({ ticket: z.string(), expiresAt: z.number() });
 /* A text read is a read of a WINDOW: `offset` is the byte to start at (negative reads that many bytes from the
  * END, which is what following a growing log means — the tail's offset isn't knowable until the size is), and
  * `limit` how many bytes to serve. The daemon clamps `limit` to its own cap, so an omitted or oversized one is
  * the cap rather than the file. Coerced: these arrive as query strings. */
-export const WorkspaceFileReadQuerySchema = z.object({
+export const WorkspaceFileReadQuerySchema = WorkspaceScopeSchema.extend({
     path: z.string().min(1),
     offset: z.coerce.number().int().optional(),
     limit: z.coerce.number().int().min(1).optional(),
@@ -2086,12 +2111,16 @@ export const WorkspaceFileSchema = z.object({
     size: z.number(),
     offset: z.number(),
     bytes: z.number(),
+    // Which tree answered. Always true when no `agent` was asked for; true DESPITE one when that conversation's
+    // checkout doesn't carry the path (see scopedTarget — its checkout is not a superset of /work), which is
+    // the one case the reader has to be told about rather than left to assume.
+    shared: z.boolean(),
 });
 // Resolve a file reference an agent (or a compiler, or a terminal) NAMED to the workspace path it means. Prose
 // paths are routinely partial — a model that has been discussing `_editor/web/src` writes
 // `pages/workspace/Foo.vue` — so a clickable mention has to be matched as a path SUFFIX against the real tree,
 // not read as root-relative. `path` is absent when nothing in the workspace ends in that reference.
-export const WorkspaceResolveQuerySchema = z.object({ path: z.string().min(1).max(512) });
+export const WorkspaceResolveQuerySchema = WorkspaceScopeSchema.extend({ path: z.string().min(1).max(512) });
 export const WorkspaceResolveSchema = z.object({ path: z.string().optional() });
 // Direct file management over the /work tree (delete / new folder / rename+move / copy). Byte writes + the
 // editor's text save go through the plain POST /workspace/upload route (a body doesn't fit oRPC), not here.

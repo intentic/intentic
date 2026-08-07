@@ -3,6 +3,7 @@ import { Markdown, Segmented } from "@intentic/ui";
 import { computed, ref, watch } from "vue";
 import { fileLinkDecorator } from "../../../composables/renderMarkdown";
 import { openFileRefFromEvent } from "../../../composables/workspace/openFileRef";
+import { workspaceAgent } from "../../../composables/workspace/workspaceScope";
 import type { LineJump } from "../workspaceTabs";
 import CodeView from "./CodeView.vue";
 
@@ -46,8 +47,12 @@ watch(
 
 // Held as a computed so the prop keeps its identity for as long as the file does — the component re-parses the
 // document when its decorator changes. A doc that cross-references its neighbours (README → ARCHITECTURE.md)
-// navigates like one.
-const decorate = computed(() => fileLinkDecorator(path === undefined ? undefined : path.slice(0, path.lastIndexOf(`/`) + 1)));
+// navigates like one, and it stays in the copy of the workspace the reader is already in (workspaceScope):
+// following a link out of an agent's README into the shared tree's ARCHITECTURE.md would be the same
+// same-path-different-file confusion one level down.
+const decorate = computed(() =>
+    fileLinkDecorator({ dir: path === undefined ? undefined : path.slice(0, path.lastIndexOf(`/`) + 1), agent: workspaceAgent.value }),
+);
 </script>
 
 <template>
