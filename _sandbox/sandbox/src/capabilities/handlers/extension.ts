@@ -1,5 +1,5 @@
 import { join } from "node:path";
-import { ExtensionManifestSchema } from "@intentic/extension-api";
+import { ExtensionManifestSchema } from "@intentic/extension-manifest";
 import type { ExtensionConfig } from "@intentic/sandbox-contract";
 import { invalidExtensionFragment } from "../../environment/fragment-sources.js";
 import { extensionProcessKey } from "../../extensions/extension-processes.js";

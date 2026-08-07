@@ -2,7 +2,7 @@ import { existsSync, mkdtempSync, readFileSync, statSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { CapabilityContributionSchema } from "@intentic/extension-api";
+import { CapabilityContributionSchema } from "@intentic/extension-manifest";
 import { exec } from "@intentic/scaffold";
 import type { Capability, CliConfig } from "@intentic/sandbox-contract";
 import { expect, test } from "vitest";

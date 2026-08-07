@@ -1,6 +1,6 @@
 import { readdir, readFile } from "node:fs/promises";
 import { join } from "node:path";
-import { ExtensionManifestSchema, type FileContribution } from "@intentic/extension-api";
+import { ExtensionManifestSchema, type FileContribution } from "@intentic/extension-manifest";
 import { WORKSPACE_STATE_FILES } from "@intentic/sandbox-contract";
 import { expect, test } from "vitest";
 import { isWatchIgnored } from "./workspace-watch.js";

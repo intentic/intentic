@@ -1,4 +1,4 @@
-import type { CapabilityContribution, ExtensionManifest } from "@intentic/extension-api";
+import type { CapabilityContribution, ExtensionManifest } from "@intentic/extension-manifest";
 import type { CapabilityKind } from "@intentic/sandbox-contract";
 
 /* What adding a capability DOES to the sandbox, as data — the structured counterpart of the handlers' side

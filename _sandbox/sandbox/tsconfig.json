@@ -13,6 +13,7 @@
         { "path": "../../_sandbox/workspace-ignore" },
         { "path": "../../_sandbox/workspace-setup" },
         { "path": "../../_sandbox/extension-api" },
+        { "path": "../../_sandbox/extension-manifest" },
         { "path": "../../_deploy/graph" },
         { "path": "../../_search/iq-engine" },
         { "path": "../../_sandbox/registry" },

@@ -1,12 +1,26 @@
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { ExtensionManifestSchema, sandboxRouteAllowed } from "@intentic/extension-api";
+import { ExtensionManifestSchema, sandboxRouteAllowed } from "@intentic/extension-manifest";
+import { SANDBOX_ROUTES } from "@intentic/sandbox-contract";
 import { describe, expect, test } from "vitest";
 
-/* Conformance: every daemon route a first-party extension calls through api.sandbox.request/json must be declared
- * in its manifest's permissions.sandbox — otherwise the host (apiImpl.ts) would throw at runtime. This scans each
- * first-party extension's source and fails if a call isn't covered, so a newly-added route can't ship undeclared. */
+/* Conformance: every daemon route a first-party extension calls must be declared in its manifest's
+ * permissions.sandbox — otherwise the host (apiImpl.ts) would throw at runtime. This scans each first-party
+ * extension's source and fails if a call isn't covered, so a newly-added route can't ship undeclared.
+ *
+ * THERE ARE TWO DOORS, and the difference between scanning them is the whole argument for the typed one.
+ *
+ * `api.sandbox.rpc.git.stashApply(...)` names its route as a SYMBOL. Recovering what it calls is a lookup in the
+ * contract's own route table: exact, and incapable of being wrong about the method or the path.
+ *
+ * `api.sandbox.json(\`/git/${repo}/${action}\`, jsonPost(...))` hides the same fact inside a formatted string, so
+ * recovering it means re-implementing a slice of the language — resolving helpers that produce methods, helpers
+ * that produce path segments, and interpolations that resolve to neither. That is what the machinery below the
+ * typed scan is, and it is worth reading once as the cost of a string-shaped API: it can only ever approximate,
+ * and when it silently stopped matching, this file reported 97 passes while three extensions were dead.
+ *
+ * The string scanner stays until the last extension is converted, and shrinks with each one that is. */
 
 const extensionsRoot = resolve(dirname(fileURLToPath(import.meta.url)), "../../../../_extensions");
 
@@ -93,6 +107,23 @@ const expandSegments = (raw: string, segments: Map<string, readonly string[]>): 
     return literals.flatMap((literal) => expandSegments(raw.replace(hit[0], literal), segments));
 };
 
+/* Every TYPED call in a source file, resolved through the contract's own route table.
+ *
+ * The whole scan is these four lines, and there is nothing approximate left in it: `sandbox.rpc.git.stashApply`
+ * is the contract's name for a route, so the method and path come back from the table rather than from a guess
+ * about what a template literal would have formatted to. The path keeps its `{param}` braces — a manifest's
+ * glob segment matches them, which is right, because a typed caller cannot choose which repo the route is for
+ * any more than a string caller could.
+ *
+ * A procedure the contract does not declare is reported as an unmatchable route rather than skipped: the host
+ * refuses that call at runtime, so a test that ignored it would pass on a feature that cannot work. */
+const scanTypedCalls = (text: string): Call[] =>
+    [...text.matchAll(/sandbox\.rpc\.(\w+)\.(\w+)\s*\(/g)].map((match) => {
+        const name = `${match[1]}.${match[2]}`;
+        const route = SANDBOX_ROUTES.find((candidate) => candidate.name === name);
+        return route === undefined ? { method: "UNKNOWN", path: `<no contract route named ${name}>` } : { method: route.method, path: route.path };
+    });
+
 // Every api.sandbox.request/json (or host().sandbox.*) call in a source file: its first string/template-literal
 // path arg (normalized — query stripped, `${…}` → `*`) and its method — a literal `method:` in the options
 // object, else a method-producing helper passed as the options, else GET. A call whose path interpolates a
@@ -143,7 +174,7 @@ const callsOf = (name: string): Call[] => {
     }
     return sourceFiles(dir).flatMap((file) => {
         const text = readFileSync(file, "utf8");
-        return scanCalls(text, scanMethodHelpers(text), scanRouteSegments(text));
+        return scanTypedCalls(text).concat(scanCalls(text, scanMethodHelpers(text), scanRouteSegments(text)));
     });
 };
 

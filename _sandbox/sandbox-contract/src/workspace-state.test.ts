@@ -1,4 +1,4 @@
-import type { FileContribution } from "@intentic/extension-api";
+import type { FileContribution } from "@intentic/extension-manifest";
 import { describe, expect, it } from "vitest";
 import { staleQueryKeys, WORKSPACE_STATE_FILES } from "./workspace-state.js";
 

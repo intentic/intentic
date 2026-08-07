@@ -1,6 +1,6 @@
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
-import { type ExtensionManifest, ExtensionManifestSchema } from "@intentic/extension-api";
+import { type ExtensionManifest, ExtensionManifestSchema } from "@intentic/extension-manifest";
 import { statePath } from "../workspace/state-paths.js";
 
 // Where GIT-INSTALLED extension checkouts live: .intentic/extensions/<id> — daemon-owned state beside

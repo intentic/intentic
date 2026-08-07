@@ -1,4 +1,4 @@
-import { type GitBranch, GitBranchesSchema, GitActionResultSchema, type GitRemoteBranch } from "@intentic/sandbox-contract";
+import type { GitBranch, GitRemoteBranch } from "@intentic/sandbox-contract";
 import { useQuery, useQueryClient } from "@tanstack/vue-query";
 import { computed, type Ref } from "vue";
 import { host } from "./host.js";
@@ -15,8 +15,6 @@ import { useRefRefresh } from "./useRefRefresh.js";
  * offers Reload, so the swap is already safe. What the reset bought was quiet — no "changed on disk" notice per
  * file — and that belongs on the ref push, where it also covers an agent switching branches in a terminal. */
 
-const encode = (value: string): string => encodeURIComponent(value);
-
 export function useBranches(repo: Ref<string>) {
     const api = host();
     const queryClient = useQueryClient();
@@ -24,7 +22,7 @@ export function useBranches(repo: Ref<string>) {
     const branchesKey = computed(() => api.sandbox.key(`git-history`, `branches`, repo.value));
     const query = useQuery({
         queryKey: branchesKey,
-        queryFn: async () => GitBranchesSchema.parse(await api.sandbox.json(`/git/${encode(repo.value)}/branches`)),
+        queryFn: () => api.sandbox.rpc.git.branches({ repo: repo.value }),
         enabled: computed(() => api.sandbox.reachable()),
     });
     // Ahead/behind and the checked-out branch both move with the refs, and most of those moves are the
@@ -40,13 +38,6 @@ export function useBranches(repo: Ref<string>) {
 
     const { busy, error: actionError, run } = useAsyncAction();
 
-    const post = (action: string, body: Record<string, unknown>): Promise<unknown> =>
-        api.sandbox.json(`/git/${encode(repo.value)}/${action}`, {
-            method: `POST`,
-            headers: { "content-type": `application/json` },
-            body: JSON.stringify(body),
-        });
-
     // The branch list and the graph's decorations — two disjoint caches, no ordering between them.
     const invalidateRefs = (): Promise<unknown> =>
         Promise.all([
@@ -56,7 +47,7 @@ export function useBranches(repo: Ref<string>) {
 
     const checkout = (name: string): Promise<void> =>
         run(async () => {
-            await post(`checkout`, { ref: name });
+            await api.sandbox.rpc.git.checkout({ repo: repo.value, ref: name });
             await invalidateRefs();
         }, `Checkout failed. Commit, stage or discard your changes first.`);
 
@@ -64,7 +55,7 @@ export function useBranches(repo: Ref<string>) {
     // primary gesture; without it the branch is created and HEAD stays put.
     const create = (name: string, options: { start?: string; checkout?: boolean } = {}): Promise<void> =>
         run(async () => {
-            await post(`branches`, { name, ...options });
+            await api.sandbox.rpc.git.createBranchAt({ repo: repo.value, name, ...options });
             await invalidateRefs();
         }, `Could not create that branch.`);
 
@@ -76,7 +67,7 @@ export function useBranches(repo: Ref<string>) {
      * are all ordinary answers a pill should report rather than blow up on. */
     const push = (name: string): Promise<void> =>
         run(async () => {
-            const result = GitActionResultSchema.parse(await post(`push`, { branch: name }));
+            const result = await api.sandbox.rpc.git.push({ repo: repo.value, branch: name });
             if (!result.ok) {
                 throw new Error(result.reason === undefined ? `Push was rejected.` : `Push was rejected: ${result.reason}`);
             }
@@ -88,7 +79,7 @@ export function useBranches(repo: Ref<string>) {
     const remove = (name: string, force = false): Promise<void> =>
         run(
             async () => {
-                await post(`branches/delete`, { name, force });
+                await api.sandbox.rpc.git.deleteBranch({ repo: repo.value, name, force });
                 await invalidateRefs();
             },
             force ? `Could not delete that branch.` : `Branch has unmerged commits — deleting it would lose them.`,

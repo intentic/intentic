@@ -1001,6 +1001,9 @@ importers:
       '@intentic/extension-api':
         specifier: workspace:*
         version: link:../../_sandbox/extension-api
+      '@intentic/extension-manifest':
+        specifier: workspace:*
+        version: link:../../_sandbox/extension-manifest
       '@intentic/extension-ui':
         specifier: workspace:*
         version: link:../extension-ui
@@ -1137,6 +1140,9 @@ importers:
       '@intentic/extension-api':
         specifier: workspace:*
         version: link:../../_sandbox/extension-api
+      '@intentic/extension-manifest':
+        specifier: workspace:*
+        version: link:../../_sandbox/extension-manifest
       '@intentic/extension-ui':
         specifier: workspace:*
         version: link:../../_editor/extension-ui
@@ -1170,6 +1176,9 @@ importers:
       '@intentic/extension-api':
         specifier: workspace:*
         version: link:../../_sandbox/extension-api
+      '@intentic/extension-manifest':
+        specifier: workspace:*
+        version: link:../../_sandbox/extension-manifest
       '@intentic/extension-ui':
         specifier: workspace:*
         version: link:../../_editor/extension-ui
@@ -1201,6 +1210,9 @@ importers:
       '@intentic/extension-api':
         specifier: workspace:*
         version: link:../../_sandbox/extension-api
+      '@intentic/extension-manifest':
+        specifier: workspace:*
+        version: link:../../_sandbox/extension-manifest
       '@intentic/extension-ui':
         specifier: workspace:*
         version: link:../../_editor/extension-ui
@@ -1239,6 +1251,9 @@ importers:
       '@intentic/extension-api':
         specifier: workspace:*
         version: link:../../_sandbox/extension-api
+      '@intentic/extension-manifest':
+        specifier: workspace:*
+        version: link:../../_sandbox/extension-manifest
       '@intentic/extension-ui':
         specifier: workspace:*
         version: link:../../_editor/extension-ui
@@ -1298,6 +1313,9 @@ importers:
       '@intentic/extension-api':
         specifier: workspace:*
         version: link:../../_sandbox/extension-api
+      '@intentic/extension-manifest':
+        specifier: workspace:*
+        version: link:../../_sandbox/extension-manifest
       '@intentic/extension-ui':
         specifier: workspace:*
         version: link:../../_editor/extension-ui
@@ -1332,6 +1350,9 @@ importers:
       '@intentic/extension-api':
         specifier: workspace:*
         version: link:../../_sandbox/extension-api
+      '@intentic/extension-manifest':
+        specifier: workspace:*
+        version: link:../../_sandbox/extension-manifest
       '@intentic/extension-ui':
         specifier: workspace:*
         version: link:../../_editor/extension-ui
@@ -1393,13 +1414,16 @@ importers:
     dependencies:
       '@intentic/extension-api':
         specifier: workspace:*
-        version: link:../../_sandbox/extension-api
+        version: file:_sandbox/extension-api(@opentelemetry/api@1.9.1)(vue@3.5.40(typescript@5.9.3))
+      '@intentic/extension-manifest':
+        specifier: workspace:*
+        version: link:../../_sandbox/extension-manifest
       '@intentic/extension-ui':
         specifier: workspace:*
         version: link:../../_editor/extension-ui
       '@intentic/sandbox-contract':
         specifier: workspace:*
-        version: file:_sandbox/sandbox-contract(vue@3.5.40(typescript@5.9.3))
+        version: file:_sandbox/sandbox-contract(@opentelemetry/api@1.9.1)
       '@tanstack/vue-query':
         specifier: 'catalog:'
         version: 5.101.4(vue@3.5.40(typescript@5.9.3))
@@ -1422,6 +1446,9 @@ importers:
       '@intentic/extension-api':
         specifier: workspace:*
         version: link:../../_sandbox/extension-api
+      '@intentic/extension-manifest':
+        specifier: workspace:*
+        version: link:../../_sandbox/extension-manifest
       '@intentic/extension-ui':
         specifier: workspace:*
         version: link:../../_editor/extension-ui
@@ -1456,6 +1483,9 @@ importers:
       '@intentic/extension-api':
         specifier: workspace:*
         version: link:../../_sandbox/extension-api
+      '@intentic/extension-manifest':
+        specifier: workspace:*
+        version: link:../../_sandbox/extension-manifest
       '@intentic/extension-ui':
         specifier: workspace:*
         version: link:../../_editor/extension-ui
@@ -1490,6 +1520,9 @@ importers:
       '@intentic/extension-api':
         specifier: workspace:*
         version: link:../../_sandbox/extension-api
+      '@intentic/extension-manifest':
+        specifier: workspace:*
+        version: link:../../_sandbox/extension-manifest
       '@intentic/extension-ui':
         specifier: workspace:*
         version: link:../../_editor/extension-ui
@@ -1520,13 +1553,16 @@ importers:
     dependencies:
       '@intentic/extension-api':
         specifier: workspace:*
-        version: link:../../_sandbox/extension-api
+        version: file:_sandbox/extension-api(@opentelemetry/api@1.9.1)(vue@3.5.40(typescript@5.9.3))
+      '@intentic/extension-manifest':
+        specifier: workspace:*
+        version: link:../../_sandbox/extension-manifest
       '@intentic/extension-ui':
         specifier: workspace:*
         version: link:../../_editor/extension-ui
       '@intentic/sandbox-contract':
         specifier: workspace:*
-        version: file:_sandbox/sandbox-contract(vue@3.5.40(typescript@5.9.3))
+        version: file:_sandbox/sandbox-contract(@opentelemetry/api@1.9.1)
       '@tanstack/vue-query':
         specifier: 'catalog:'
         version: 5.101.4(vue@3.5.40(typescript@5.9.3))
@@ -1549,6 +1585,9 @@ importers:
       '@intentic/extension-api':
         specifier: workspace:*
         version: link:../../_sandbox/extension-api
+      '@intentic/extension-manifest':
+        specifier: workspace:*
+        version: link:../../_sandbox/extension-manifest
       '@intentic/extension-ui':
         specifier: workspace:*
         version: link:../../_editor/extension-ui
@@ -1619,6 +1658,9 @@ importers:
       '@intentic/extension-api':
         specifier: workspace:*
         version: link:../../_sandbox/extension-api
+      '@intentic/extension-manifest':
+        specifier: workspace:*
+        version: link:../../_sandbox/extension-manifest
       '@intentic/extension-ui':
         specifier: workspace:*
         version: link:../../_editor/extension-ui
@@ -1672,6 +1714,9 @@ importers:
       '@intentic/extension-api':
         specifier: workspace:*
         version: link:../../_sandbox/extension-api
+      '@intentic/extension-manifest':
+        specifier: workspace:*
+        version: link:../../_sandbox/extension-manifest
       '@intentic/extension-ui':
         specifier: workspace:*
         version: link:../../_editor/extension-ui
@@ -1834,6 +1879,9 @@ importers:
       '@intentic/extension-api':
         specifier: workspace:*
         version: link:../../_sandbox/extension-api
+      '@intentic/extension-manifest':
+        specifier: workspace:*
+        version: link:../../_sandbox/extension-manifest
       '@intentic/sandbox-contract':
         specifier: workspace:*
         version: link:../../_sandbox/sandbox-contract
@@ -1912,6 +1960,12 @@ importers:
 
   _sandbox/extension-api:
     dependencies:
+      '@intentic/sandbox-contract':
+        specifier: workspace:*
+        version: link:../sandbox-contract
+      '@orpc/contract':
+        specifier: 'catalog:'
+        version: 1.14.13(@opentelemetry/api@1.9.1)
       tslib:
         specifier: 'catalog:'
         version: 2.8.1
@@ -1931,6 +1985,25 @@ importers:
       vue:
         specifier: 'catalog:'
         version: 3.5.40(typescript@5.9.3)
+
+  _sandbox/extension-manifest:
+    dependencies:
+      tslib:
+        specifier: 'catalog:'
+        version: 2.8.1
+      zod:
+        specifier: 4.4.3
+        version: 4.4.3
+    devDependencies:
+      '@intentic/tsconfig':
+        specifier: workspace:*
+        version: link:../../_tools/tsconfig
+      '@types/node':
+        specifier: 'catalog:'
+        version: 24.13.2
+      '@typescript/native-preview':
+        specifier: 'catalog:'
+        version: 7.0.0-dev.20260707.2
 
   _sandbox/registry:
     dependencies:
@@ -1974,6 +2047,9 @@ importers:
       '@intentic/extension-api':
         specifier: workspace:*
         version: link:../extension-api
+      '@intentic/extension-manifest':
+        specifier: workspace:*
+        version: link:../extension-manifest
       '@intentic/graph':
         specifier: workspace:*
         version: link:../../_deploy/graph
@@ -2128,9 +2204,9 @@ importers:
 
   _sandbox/sandbox-contract:
     dependencies:
-      '@intentic/extension-api':
+      '@intentic/extension-manifest':
         specifier: workspace:*
-        version: link:../extension-api
+        version: link:../extension-manifest
       '@intentic/registry':
         specifier: workspace:*
         version: link:../registry
@@ -2623,7 +2699,7 @@ importers:
     devDependencies:
       '@intentic-app/api-contract':
         specifier: workspace:*
-        version: file:_platform/api-contract(vue@3.5.40(typescript@5.9.3))
+        version: file:_platform/api-contract(@opentelemetry/api@1.9.1)
       '@intentic-app/prisma':
         specifier: workspace:*
         version: link:../../_platform/prisma
@@ -2666,6 +2742,9 @@ importers:
       '@intentic/extension-api':
         specifier: workspace:*
         version: link:../../_sandbox/extension-api
+      '@intentic/extension-manifest':
+        specifier: workspace:*
+        version: link:../../_sandbox/extension-manifest
       '@intentic/registry':
         specifier: workspace:*
         version: link:../../_sandbox/registry
@@ -4029,6 +4108,9 @@ packages:
     resolution: {directory: _sandbox/extension-api, type: directory}
     peerDependencies:
       vue: '3'
+
+  '@intentic/extension-manifest@file:_sandbox/extension-manifest':
+    resolution: {directory: _sandbox/extension-manifest, type: directory}
 
   '@intentic/extension-ui@file:_editor/extension-ui':
     resolution: {directory: _editor/extension-ui, type: directory}
@@ -12130,41 +12212,21 @@ snapshots:
   '@img/sharp-win32-x64@0.35.3':
     optional: true
 
-  '@intentic-app/api-contract@file:_platform/api-contract(@opentelemetry/api@1.9.1)(vue@3.5.40(typescript@5.9.3))':
+  '@intentic-app/api-contract@file:_platform/api-contract(@opentelemetry/api@1.9.1)':
     dependencies:
       '@intentic/resources': file:_deploy/resources
-      '@intentic/sandbox-contract': file:_sandbox/sandbox-contract(@opentelemetry/api@1.9.1)(vue@3.5.40(typescript@5.9.3))
+      '@intentic/sandbox-contract': file:_sandbox/sandbox-contract(@opentelemetry/api@1.9.1)
       '@orpc/contract': 1.14.13(@opentelemetry/api@1.9.1)
       tslib: 2.8.1
       zod: 4.4.3
     transitivePeerDependencies:
       - '@opentelemetry/api'
-      - vue
-
-  '@intentic-app/api-contract@file:_platform/api-contract(vue@3.5.40(typescript@5.9.3))':
-    dependencies:
-      '@intentic/resources': file:_deploy/resources
-      '@intentic/sandbox-contract': file:_sandbox/sandbox-contract(vue@3.5.40(typescript@5.9.3))
-      '@orpc/contract': 1.14.13(@opentelemetry/api@1.9.1)
-      tslib: 2.8.1
-      zod: 4.4.3
-    transitivePeerDependencies:
-      - '@opentelemetry/api'
-      - vue
 
   '@intentic-app/capability-catalog@file:_platform/capability-catalog(@opentelemetry/api@1.9.1)(vue@3.5.40(typescript@5.9.3))':
     dependencies:
-      '@intentic/extension-api': file:_sandbox/extension-api(vue@3.5.40(typescript@5.9.3))
-      '@intentic/sandbox-contract': file:_sandbox/sandbox-contract(@opentelemetry/api@1.9.1)(vue@3.5.40(typescript@5.9.3))
-      tslib: 2.8.1
-    transitivePeerDependencies:
-      - '@opentelemetry/api'
-      - vue
-
-  '@intentic-app/capability-catalog@file:_platform/capability-catalog(vue@3.5.40(typescript@5.9.3))':
-    dependencies:
-      '@intentic/extension-api': file:_sandbox/extension-api(vue@3.5.40(typescript@5.9.3))
-      '@intentic/sandbox-contract': file:_sandbox/sandbox-contract(vue@3.5.40(typescript@5.9.3))
+      '@intentic/extension-api': file:_sandbox/extension-api(@opentelemetry/api@1.9.1)(vue@3.5.40(typescript@5.9.3))
+      '@intentic/extension-manifest': file:_sandbox/extension-manifest
+      '@intentic/sandbox-contract': file:_sandbox/sandbox-contract(@opentelemetry/api@1.9.1)
       tslib: 2.8.1
     transitivePeerDependencies:
       - '@opentelemetry/api'
@@ -12174,7 +12236,7 @@ snapshots:
 
   '@intentic-app/web@file:_editor/web(@opentelemetry/api@1.9.1)(@prisma/client@7.9.1(prisma@7.9.1(@types/react@19.2.18)(magicast@0.5.4)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(typescript@5.9.3))(typescript@5.9.3))(@vue/compiler-sfc@3.5.40)(esbuild@0.28.1)(mysql2@3.15.3)(pg@8.22.0)(prisma@7.9.1(@types/react@19.2.18)(magicast@0.5.4)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(typescript@5.9.3))(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(typescript@5.9.3)(vite@8.2.0(@types/node@26.1.2)(esbuild@0.28.1)(jiti@2.7.0)(tsx@4.23.1)(yaml@2.9.0))(vitest@4.1.10(@opentelemetry/api@1.9.1)(@types/node@26.1.2)(jsdom@30.0.1(@noble/hashes@2.2.0))(vite@8.2.0(@types/node@26.1.2)(esbuild@0.28.1)(jiti@2.7.0)(tsx@4.23.1)(yaml@2.9.0)))':
     dependencies:
-      '@intentic-app/api-contract': file:_platform/api-contract(@opentelemetry/api@1.9.1)(vue@3.5.40(typescript@5.9.3))
+      '@intentic-app/api-contract': file:_platform/api-contract(@opentelemetry/api@1.9.1)
       '@intentic-app/capability-catalog': file:_platform/capability-catalog(@opentelemetry/api@1.9.1)(vue@3.5.40(typescript@5.9.3))
       '@intentic-app/localhost-https': file:_tools/localhost-https
       '@intentic/constants': file:_tools/constants
@@ -12190,12 +12252,13 @@ snapshots:
       '@intentic/ext-pipelines': file:_extensions/pipelines(@opentelemetry/api@1.9.1)(typescript@5.9.3)(vue@3.5.40(typescript@5.9.3))
       '@intentic/ext-preview': file:_extensions/preview(@opentelemetry/api@1.9.1)(typescript@5.9.3)(vue@3.5.40(typescript@5.9.3))
       '@intentic/ext-repo-apps': file:_extensions/repo-apps(@opentelemetry/api@1.9.1)(typescript@5.9.3)(vue@3.5.40(typescript@5.9.3))
-      '@intentic/ext-viewers': file:_extensions/viewers(typescript@5.9.3)(vue@3.5.40(typescript@5.9.3))
+      '@intentic/ext-viewers': file:_extensions/viewers(@opentelemetry/api@1.9.1)(typescript@5.9.3)(vue@3.5.40(typescript@5.9.3))
       '@intentic/ext-workflows': file:_extensions/workflows(@opentelemetry/api@1.9.1)(typescript@5.9.3)(vue@3.5.40(typescript@5.9.3))
-      '@intentic/extension-api': file:_sandbox/extension-api(vue@3.5.40(typescript@5.9.3))
+      '@intentic/extension-api': file:_sandbox/extension-api(@opentelemetry/api@1.9.1)(vue@3.5.40(typescript@5.9.3))
+      '@intentic/extension-manifest': file:_sandbox/extension-manifest
       '@intentic/extension-ui': file:_editor/extension-ui(typescript@5.9.3)(vue@3.5.40(typescript@5.9.3))
       '@intentic/registry': file:_sandbox/registry
-      '@intentic/sandbox-contract': file:_sandbox/sandbox-contract(@opentelemetry/api@1.9.1)(vue@3.5.40(typescript@5.9.3))
+      '@intentic/sandbox-contract': file:_sandbox/sandbox-contract(@opentelemetry/api@1.9.1)
       '@intentic/sandbox-run': file:_sandbox/sandbox-run
       '@intentic/ui': file:_editor/ui(typescript@5.9.3)
       '@intentic/workspace-ignore': file:_sandbox/workspace-ignore
@@ -12263,28 +12326,29 @@ snapshots:
 
   '@intentic-app/web@file:_editor/web(rollup@4.62.4)(typescript@5.9.3)(vite@7.3.5(@types/node@26.1.2)(jiti@2.7.0)(lightningcss@1.33.0)(tsx@4.23.1)(yaml@2.9.0))':
     dependencies:
-      '@intentic-app/api-contract': file:_platform/api-contract(vue@3.5.40(typescript@5.9.3))
-      '@intentic-app/capability-catalog': file:_platform/capability-catalog(vue@3.5.40(typescript@5.9.3))
+      '@intentic-app/api-contract': file:_platform/api-contract(@opentelemetry/api@1.9.1)
+      '@intentic-app/capability-catalog': file:_platform/capability-catalog(@opentelemetry/api@1.9.1)(vue@3.5.40(typescript@5.9.3))
       '@intentic-app/localhost-https': file:_tools/localhost-https
       '@intentic/constants': file:_tools/constants
-      '@intentic/ext-acceptance': file:_extensions/acceptance(typescript@5.9.3)(vue@3.5.40(typescript@5.9.3))
-      '@intentic/ext-activity': file:_extensions/activity(typescript@5.9.3)(vue@3.5.40(typescript@5.9.3))
-      '@intentic/ext-automations': file:_extensions/automations(typescript@5.9.3)(vue@3.5.40(typescript@5.9.3))
-      '@intentic/ext-deployments': file:_extensions/deployments(typescript@5.9.3)(vue@3.5.40(typescript@5.9.3))
-      '@intentic/ext-documentation': file:_extensions/documentation(typescript@5.9.3)(vue@3.5.40(typescript@5.9.3))
-      '@intentic/ext-git-history': file:_extensions/git-history(typescript@5.9.3)(vue@3.5.40(typescript@5.9.3))
-      '@intentic/ext-logs': file:_extensions/logs(typescript@5.9.3)(vue@3.5.40(typescript@5.9.3))
-      '@intentic/ext-maintenance': file:_extensions/maintenance(typescript@5.9.3)(vue@3.5.40(typescript@5.9.3))
-      '@intentic/ext-memory': file:_extensions/memory(typescript@5.9.3)(vue@3.5.40(typescript@5.9.3))
-      '@intentic/ext-pipelines': file:_extensions/pipelines(typescript@5.9.3)(vue@3.5.40(typescript@5.9.3))
-      '@intentic/ext-preview': file:_extensions/preview(typescript@5.9.3)(vue@3.5.40(typescript@5.9.3))
-      '@intentic/ext-repo-apps': file:_extensions/repo-apps(typescript@5.9.3)(vue@3.5.40(typescript@5.9.3))
-      '@intentic/ext-viewers': file:_extensions/viewers(typescript@5.9.3)(vue@3.5.40(typescript@5.9.3))
-      '@intentic/ext-workflows': file:_extensions/workflows(typescript@5.9.3)(vue@3.5.40(typescript@5.9.3))
-      '@intentic/extension-api': file:_sandbox/extension-api(vue@3.5.40(typescript@5.9.3))
+      '@intentic/ext-acceptance': file:_extensions/acceptance(@opentelemetry/api@1.9.1)(typescript@5.9.3)(vue@3.5.40(typescript@5.9.3))
+      '@intentic/ext-activity': file:_extensions/activity(@opentelemetry/api@1.9.1)(typescript@5.9.3)(vue@3.5.40(typescript@5.9.3))
+      '@intentic/ext-automations': file:_extensions/automations(@opentelemetry/api@1.9.1)(typescript@5.9.3)(vue@3.5.40(typescript@5.9.3))
+      '@intentic/ext-deployments': file:_extensions/deployments(@opentelemetry/api@1.9.1)(typescript@5.9.3)(vue@3.5.40(typescript@5.9.3))
+      '@intentic/ext-documentation': file:_extensions/documentation(@opentelemetry/api@1.9.1)(typescript@5.9.3)(vue@3.5.40(typescript@5.9.3))
+      '@intentic/ext-git-history': file:_extensions/git-history(@opentelemetry/api@1.9.1)(typescript@5.9.3)(vue@3.5.40(typescript@5.9.3))
+      '@intentic/ext-logs': file:_extensions/logs(@opentelemetry/api@1.9.1)(typescript@5.9.3)(vue@3.5.40(typescript@5.9.3))
+      '@intentic/ext-maintenance': file:_extensions/maintenance(@opentelemetry/api@1.9.1)(typescript@5.9.3)(vue@3.5.40(typescript@5.9.3))
+      '@intentic/ext-memory': file:_extensions/memory(@opentelemetry/api@1.9.1)(typescript@5.9.3)(vue@3.5.40(typescript@5.9.3))
+      '@intentic/ext-pipelines': file:_extensions/pipelines(@opentelemetry/api@1.9.1)(typescript@5.9.3)(vue@3.5.40(typescript@5.9.3))
+      '@intentic/ext-preview': file:_extensions/preview(@opentelemetry/api@1.9.1)(typescript@5.9.3)(vue@3.5.40(typescript@5.9.3))
+      '@intentic/ext-repo-apps': file:_extensions/repo-apps(@opentelemetry/api@1.9.1)(typescript@5.9.3)(vue@3.5.40(typescript@5.9.3))
+      '@intentic/ext-viewers': file:_extensions/viewers(@opentelemetry/api@1.9.1)(typescript@5.9.3)(vue@3.5.40(typescript@5.9.3))
+      '@intentic/ext-workflows': file:_extensions/workflows(@opentelemetry/api@1.9.1)(typescript@5.9.3)(vue@3.5.40(typescript@5.9.3))
+      '@intentic/extension-api': file:_sandbox/extension-api(@opentelemetry/api@1.9.1)(vue@3.5.40(typescript@5.9.3))
+      '@intentic/extension-manifest': file:_sandbox/extension-manifest
       '@intentic/extension-ui': file:_editor/extension-ui(typescript@5.9.3)(vue@3.5.40(typescript@5.9.3))
       '@intentic/registry': file:_sandbox/registry
-      '@intentic/sandbox-contract': file:_sandbox/sandbox-contract(vue@3.5.40(typescript@5.9.3))
+      '@intentic/sandbox-contract': file:_sandbox/sandbox-contract(@opentelemetry/api@1.9.1)
       '@intentic/sandbox-run': file:_sandbox/sandbox-run
       '@intentic/ui': file:_editor/ui(typescript@5.9.3)
       '@intentic/workspace-ignore': file:_sandbox/workspace-ignore
@@ -12352,9 +12416,9 @@ snapshots:
 
   '@intentic-dev/demo@file:_site/demo(rollup@4.62.4)(typescript@5.9.3)(vite@7.3.5(@types/node@26.1.2)(jiti@2.7.0)(lightningcss@1.33.0)(tsx@4.23.1)(yaml@2.9.0))':
     dependencies:
-      '@intentic-app/api-contract': file:_platform/api-contract(vue@3.5.40(typescript@5.9.3))
+      '@intentic-app/api-contract': file:_platform/api-contract(@opentelemetry/api@1.9.1)
       '@intentic-app/web': file:_editor/web(rollup@4.62.4)(typescript@5.9.3)(vite@7.3.5(@types/node@26.1.2)(jiti@2.7.0)(lightningcss@1.33.0)(tsx@4.23.1)(yaml@2.9.0))
-      '@intentic/sandbox-contract': file:_sandbox/sandbox-contract(vue@3.5.40(typescript@5.9.3))
+      '@intentic/sandbox-contract': file:_sandbox/sandbox-contract(@opentelemetry/api@1.9.1)
     transitivePeerDependencies:
       - '@cloudflare/workers-types'
       - '@farmfe/core'
@@ -12390,28 +12454,16 @@ snapshots:
       - unloader
       - vite
       - vitest
-      - vue
       - webpack
 
   '@intentic/constants@file:_tools/constants': {}
 
   '@intentic/ext-acceptance@file:_extensions/acceptance(@opentelemetry/api@1.9.1)(typescript@5.9.3)(vue@3.5.40(typescript@5.9.3))':
     dependencies:
-      '@intentic/extension-api': file:_sandbox/extension-api(vue@3.5.40(typescript@5.9.3))
+      '@intentic/extension-api': file:_sandbox/extension-api(@opentelemetry/api@1.9.1)(vue@3.5.40(typescript@5.9.3))
+      '@intentic/extension-manifest': file:_sandbox/extension-manifest
       '@intentic/extension-ui': file:_editor/extension-ui(typescript@5.9.3)(vue@3.5.40(typescript@5.9.3))
-      '@intentic/sandbox-contract': file:_sandbox/sandbox-contract(@opentelemetry/api@1.9.1)(vue@3.5.40(typescript@5.9.3))
-      '@tanstack/vue-query': 5.101.4(vue@3.5.40(typescript@5.9.3))
-      vue: 3.5.40(typescript@5.9.3)
-    transitivePeerDependencies:
-      - '@opentelemetry/api'
-      - '@vue/composition-api'
-      - typescript
-
-  '@intentic/ext-acceptance@file:_extensions/acceptance(typescript@5.9.3)(vue@3.5.40(typescript@5.9.3))':
-    dependencies:
-      '@intentic/extension-api': file:_sandbox/extension-api(vue@3.5.40(typescript@5.9.3))
-      '@intentic/extension-ui': file:_editor/extension-ui(typescript@5.9.3)(vue@3.5.40(typescript@5.9.3))
-      '@intentic/sandbox-contract': file:_sandbox/sandbox-contract(vue@3.5.40(typescript@5.9.3))
+      '@intentic/sandbox-contract': file:_sandbox/sandbox-contract(@opentelemetry/api@1.9.1)
       '@tanstack/vue-query': 5.101.4(vue@3.5.40(typescript@5.9.3))
       vue: 3.5.40(typescript@5.9.3)
     transitivePeerDependencies:
@@ -12421,21 +12473,10 @@ snapshots:
 
   '@intentic/ext-activity@file:_extensions/activity(@opentelemetry/api@1.9.1)(typescript@5.9.3)(vue@3.5.40(typescript@5.9.3))':
     dependencies:
-      '@intentic/extension-api': file:_sandbox/extension-api(vue@3.5.40(typescript@5.9.3))
+      '@intentic/extension-api': file:_sandbox/extension-api(@opentelemetry/api@1.9.1)(vue@3.5.40(typescript@5.9.3))
+      '@intentic/extension-manifest': file:_sandbox/extension-manifest
       '@intentic/extension-ui': file:_editor/extension-ui(typescript@5.9.3)(vue@3.5.40(typescript@5.9.3))
-      '@intentic/sandbox-contract': file:_sandbox/sandbox-contract(@opentelemetry/api@1.9.1)(vue@3.5.40(typescript@5.9.3))
-      '@tanstack/vue-query': 5.101.4(vue@3.5.40(typescript@5.9.3))
-      vue: 3.5.40(typescript@5.9.3)
-    transitivePeerDependencies:
-      - '@opentelemetry/api'
-      - '@vue/composition-api'
-      - typescript
-
-  '@intentic/ext-activity@file:_extensions/activity(typescript@5.9.3)(vue@3.5.40(typescript@5.9.3))':
-    dependencies:
-      '@intentic/extension-api': file:_sandbox/extension-api(vue@3.5.40(typescript@5.9.3))
-      '@intentic/extension-ui': file:_editor/extension-ui(typescript@5.9.3)(vue@3.5.40(typescript@5.9.3))
-      '@intentic/sandbox-contract': file:_sandbox/sandbox-contract(vue@3.5.40(typescript@5.9.3))
+      '@intentic/sandbox-contract': file:_sandbox/sandbox-contract(@opentelemetry/api@1.9.1)
       '@tanstack/vue-query': 5.101.4(vue@3.5.40(typescript@5.9.3))
       vue: 3.5.40(typescript@5.9.3)
     transitivePeerDependencies:
@@ -12445,22 +12486,10 @@ snapshots:
 
   '@intentic/ext-automations@file:_extensions/automations(@opentelemetry/api@1.9.1)(typescript@5.9.3)(vue@3.5.40(typescript@5.9.3))':
     dependencies:
-      '@intentic/extension-api': file:_sandbox/extension-api(vue@3.5.40(typescript@5.9.3))
+      '@intentic/extension-api': file:_sandbox/extension-api(@opentelemetry/api@1.9.1)(vue@3.5.40(typescript@5.9.3))
+      '@intentic/extension-manifest': file:_sandbox/extension-manifest
       '@intentic/extension-ui': file:_editor/extension-ui(typescript@5.9.3)(vue@3.5.40(typescript@5.9.3))
-      '@intentic/sandbox-contract': file:_sandbox/sandbox-contract(@opentelemetry/api@1.9.1)(vue@3.5.40(typescript@5.9.3))
-      '@tanstack/vue-query': 5.101.4(vue@3.5.40(typescript@5.9.3))
-      croner: 10.0.1
-      vue: 3.5.40(typescript@5.9.3)
-    transitivePeerDependencies:
-      - '@opentelemetry/api'
-      - '@vue/composition-api'
-      - typescript
-
-  '@intentic/ext-automations@file:_extensions/automations(typescript@5.9.3)(vue@3.5.40(typescript@5.9.3))':
-    dependencies:
-      '@intentic/extension-api': file:_sandbox/extension-api(vue@3.5.40(typescript@5.9.3))
-      '@intentic/extension-ui': file:_editor/extension-ui(typescript@5.9.3)(vue@3.5.40(typescript@5.9.3))
-      '@intentic/sandbox-contract': file:_sandbox/sandbox-contract(vue@3.5.40(typescript@5.9.3))
+      '@intentic/sandbox-contract': file:_sandbox/sandbox-contract(@opentelemetry/api@1.9.1)
       '@tanstack/vue-query': 5.101.4(vue@3.5.40(typescript@5.9.3))
       croner: 10.0.1
       vue: 3.5.40(typescript@5.9.3)
@@ -12471,21 +12500,10 @@ snapshots:
 
   '@intentic/ext-deployments@file:_extensions/deployments(@opentelemetry/api@1.9.1)(typescript@5.9.3)(vue@3.5.40(typescript@5.9.3))':
     dependencies:
-      '@intentic/extension-api': file:_sandbox/extension-api(vue@3.5.40(typescript@5.9.3))
+      '@intentic/extension-api': file:_sandbox/extension-api(@opentelemetry/api@1.9.1)(vue@3.5.40(typescript@5.9.3))
+      '@intentic/extension-manifest': file:_sandbox/extension-manifest
       '@intentic/extension-ui': file:_editor/extension-ui(typescript@5.9.3)(vue@3.5.40(typescript@5.9.3))
-      '@intentic/sandbox-contract': file:_sandbox/sandbox-contract(@opentelemetry/api@1.9.1)(vue@3.5.40(typescript@5.9.3))
-      '@tanstack/vue-query': 5.101.4(vue@3.5.40(typescript@5.9.3))
-      vue: 3.5.40(typescript@5.9.3)
-    transitivePeerDependencies:
-      - '@opentelemetry/api'
-      - '@vue/composition-api'
-      - typescript
-
-  '@intentic/ext-deployments@file:_extensions/deployments(typescript@5.9.3)(vue@3.5.40(typescript@5.9.3))':
-    dependencies:
-      '@intentic/extension-api': file:_sandbox/extension-api(vue@3.5.40(typescript@5.9.3))
-      '@intentic/extension-ui': file:_editor/extension-ui(typescript@5.9.3)(vue@3.5.40(typescript@5.9.3))
-      '@intentic/sandbox-contract': file:_sandbox/sandbox-contract(vue@3.5.40(typescript@5.9.3))
+      '@intentic/sandbox-contract': file:_sandbox/sandbox-contract(@opentelemetry/api@1.9.1)
       '@tanstack/vue-query': 5.101.4(vue@3.5.40(typescript@5.9.3))
       vue: 3.5.40(typescript@5.9.3)
     transitivePeerDependencies:
@@ -12495,21 +12513,10 @@ snapshots:
 
   '@intentic/ext-documentation@file:_extensions/documentation(@opentelemetry/api@1.9.1)(typescript@5.9.3)(vue@3.5.40(typescript@5.9.3))':
     dependencies:
-      '@intentic/extension-api': file:_sandbox/extension-api(vue@3.5.40(typescript@5.9.3))
+      '@intentic/extension-api': file:_sandbox/extension-api(@opentelemetry/api@1.9.1)(vue@3.5.40(typescript@5.9.3))
+      '@intentic/extension-manifest': file:_sandbox/extension-manifest
       '@intentic/extension-ui': file:_editor/extension-ui(typescript@5.9.3)(vue@3.5.40(typescript@5.9.3))
-      '@intentic/sandbox-contract': file:_sandbox/sandbox-contract(@opentelemetry/api@1.9.1)(vue@3.5.40(typescript@5.9.3))
-      '@tanstack/vue-query': 5.101.4(vue@3.5.40(typescript@5.9.3))
-      vue: 3.5.40(typescript@5.9.3)
-    transitivePeerDependencies:
-      - '@opentelemetry/api'
-      - '@vue/composition-api'
-      - typescript
-
-  '@intentic/ext-documentation@file:_extensions/documentation(typescript@5.9.3)(vue@3.5.40(typescript@5.9.3))':
-    dependencies:
-      '@intentic/extension-api': file:_sandbox/extension-api(vue@3.5.40(typescript@5.9.3))
-      '@intentic/extension-ui': file:_editor/extension-ui(typescript@5.9.3)(vue@3.5.40(typescript@5.9.3))
-      '@intentic/sandbox-contract': file:_sandbox/sandbox-contract(vue@3.5.40(typescript@5.9.3))
+      '@intentic/sandbox-contract': file:_sandbox/sandbox-contract(@opentelemetry/api@1.9.1)
       '@tanstack/vue-query': 5.101.4(vue@3.5.40(typescript@5.9.3))
       vue: 3.5.40(typescript@5.9.3)
     transitivePeerDependencies:
@@ -12519,21 +12526,10 @@ snapshots:
 
   '@intentic/ext-git-history@file:_extensions/git-history(@opentelemetry/api@1.9.1)(typescript@5.9.3)(vue@3.5.40(typescript@5.9.3))':
     dependencies:
-      '@intentic/extension-api': file:_sandbox/extension-api(vue@3.5.40(typescript@5.9.3))
+      '@intentic/extension-api': file:_sandbox/extension-api(@opentelemetry/api@1.9.1)(vue@3.5.40(typescript@5.9.3))
+      '@intentic/extension-manifest': file:_sandbox/extension-manifest
       '@intentic/extension-ui': file:_editor/extension-ui(typescript@5.9.3)(vue@3.5.40(typescript@5.9.3))
-      '@intentic/sandbox-contract': file:_sandbox/sandbox-contract(@opentelemetry/api@1.9.1)(vue@3.5.40(typescript@5.9.3))
-      '@tanstack/vue-query': 5.101.4(vue@3.5.40(typescript@5.9.3))
-      vue: 3.5.40(typescript@5.9.3)
-    transitivePeerDependencies:
-      - '@opentelemetry/api'
-      - '@vue/composition-api'
-      - typescript
-
-  '@intentic/ext-git-history@file:_extensions/git-history(typescript@5.9.3)(vue@3.5.40(typescript@5.9.3))':
-    dependencies:
-      '@intentic/extension-api': file:_sandbox/extension-api(vue@3.5.40(typescript@5.9.3))
-      '@intentic/extension-ui': file:_editor/extension-ui(typescript@5.9.3)(vue@3.5.40(typescript@5.9.3))
-      '@intentic/sandbox-contract': file:_sandbox/sandbox-contract(vue@3.5.40(typescript@5.9.3))
+      '@intentic/sandbox-contract': file:_sandbox/sandbox-contract(@opentelemetry/api@1.9.1)
       '@tanstack/vue-query': 5.101.4(vue@3.5.40(typescript@5.9.3))
       vue: 3.5.40(typescript@5.9.3)
     transitivePeerDependencies:
@@ -12543,21 +12539,10 @@ snapshots:
 
   '@intentic/ext-logs@file:_extensions/logs(@opentelemetry/api@1.9.1)(typescript@5.9.3)(vue@3.5.40(typescript@5.9.3))':
     dependencies:
-      '@intentic/extension-api': file:_sandbox/extension-api(vue@3.5.40(typescript@5.9.3))
+      '@intentic/extension-api': file:_sandbox/extension-api(@opentelemetry/api@1.9.1)(vue@3.5.40(typescript@5.9.3))
+      '@intentic/extension-manifest': file:_sandbox/extension-manifest
       '@intentic/extension-ui': file:_editor/extension-ui(typescript@5.9.3)(vue@3.5.40(typescript@5.9.3))
-      '@intentic/sandbox-contract': file:_sandbox/sandbox-contract(@opentelemetry/api@1.9.1)(vue@3.5.40(typescript@5.9.3))
-      '@tanstack/vue-query': 5.101.4(vue@3.5.40(typescript@5.9.3))
-      vue: 3.5.40(typescript@5.9.3)
-    transitivePeerDependencies:
-      - '@opentelemetry/api'
-      - '@vue/composition-api'
-      - typescript
-
-  '@intentic/ext-logs@file:_extensions/logs(typescript@5.9.3)(vue@3.5.40(typescript@5.9.3))':
-    dependencies:
-      '@intentic/extension-api': file:_sandbox/extension-api(vue@3.5.40(typescript@5.9.3))
-      '@intentic/extension-ui': file:_editor/extension-ui(typescript@5.9.3)(vue@3.5.40(typescript@5.9.3))
-      '@intentic/sandbox-contract': file:_sandbox/sandbox-contract(vue@3.5.40(typescript@5.9.3))
+      '@intentic/sandbox-contract': file:_sandbox/sandbox-contract(@opentelemetry/api@1.9.1)
       '@tanstack/vue-query': 5.101.4(vue@3.5.40(typescript@5.9.3))
       vue: 3.5.40(typescript@5.9.3)
     transitivePeerDependencies:
@@ -12567,21 +12552,10 @@ snapshots:
 
   '@intentic/ext-maintenance@file:_extensions/maintenance(@opentelemetry/api@1.9.1)(typescript@5.9.3)(vue@3.5.40(typescript@5.9.3))':
     dependencies:
-      '@intentic/extension-api': file:_sandbox/extension-api(vue@3.5.40(typescript@5.9.3))
+      '@intentic/extension-api': file:_sandbox/extension-api(@opentelemetry/api@1.9.1)(vue@3.5.40(typescript@5.9.3))
+      '@intentic/extension-manifest': file:_sandbox/extension-manifest
       '@intentic/extension-ui': file:_editor/extension-ui(typescript@5.9.3)(vue@3.5.40(typescript@5.9.3))
-      '@intentic/sandbox-contract': file:_sandbox/sandbox-contract(@opentelemetry/api@1.9.1)(vue@3.5.40(typescript@5.9.3))
-      '@tanstack/vue-query': 5.101.4(vue@3.5.40(typescript@5.9.3))
-      vue: 3.5.40(typescript@5.9.3)
-    transitivePeerDependencies:
-      - '@opentelemetry/api'
-      - '@vue/composition-api'
-      - typescript
-
-  '@intentic/ext-maintenance@file:_extensions/maintenance(typescript@5.9.3)(vue@3.5.40(typescript@5.9.3))':
-    dependencies:
-      '@intentic/extension-api': file:_sandbox/extension-api(vue@3.5.40(typescript@5.9.3))
-      '@intentic/extension-ui': file:_editor/extension-ui(typescript@5.9.3)(vue@3.5.40(typescript@5.9.3))
-      '@intentic/sandbox-contract': file:_sandbox/sandbox-contract(vue@3.5.40(typescript@5.9.3))
+      '@intentic/sandbox-contract': file:_sandbox/sandbox-contract(@opentelemetry/api@1.9.1)
       '@tanstack/vue-query': 5.101.4(vue@3.5.40(typescript@5.9.3))
       vue: 3.5.40(typescript@5.9.3)
     transitivePeerDependencies:
@@ -12591,21 +12565,10 @@ snapshots:
 
   '@intentic/ext-memory@file:_extensions/memory(@opentelemetry/api@1.9.1)(typescript@5.9.3)(vue@3.5.40(typescript@5.9.3))':
     dependencies:
-      '@intentic/extension-api': file:_sandbox/extension-api(vue@3.5.40(typescript@5.9.3))
+      '@intentic/extension-api': file:_sandbox/extension-api(@opentelemetry/api@1.9.1)(vue@3.5.40(typescript@5.9.3))
+      '@intentic/extension-manifest': file:_sandbox/extension-manifest
       '@intentic/extension-ui': file:_editor/extension-ui(typescript@5.9.3)(vue@3.5.40(typescript@5.9.3))
-      '@intentic/sandbox-contract': file:_sandbox/sandbox-contract(@opentelemetry/api@1.9.1)(vue@3.5.40(typescript@5.9.3))
-      '@tanstack/vue-query': 5.101.4(vue@3.5.40(typescript@5.9.3))
-      vue: 3.5.40(typescript@5.9.3)
-    transitivePeerDependencies:
-      - '@opentelemetry/api'
-      - '@vue/composition-api'
-      - typescript
-
-  '@intentic/ext-memory@file:_extensions/memory(typescript@5.9.3)(vue@3.5.40(typescript@5.9.3))':
-    dependencies:
-      '@intentic/extension-api': file:_sandbox/extension-api(vue@3.5.40(typescript@5.9.3))
-      '@intentic/extension-ui': file:_editor/extension-ui(typescript@5.9.3)(vue@3.5.40(typescript@5.9.3))
-      '@intentic/sandbox-contract': file:_sandbox/sandbox-contract(vue@3.5.40(typescript@5.9.3))
+      '@intentic/sandbox-contract': file:_sandbox/sandbox-contract(@opentelemetry/api@1.9.1)
       '@tanstack/vue-query': 5.101.4(vue@3.5.40(typescript@5.9.3))
       vue: 3.5.40(typescript@5.9.3)
     transitivePeerDependencies:
@@ -12615,21 +12578,10 @@ snapshots:
 
   '@intentic/ext-pipelines@file:_extensions/pipelines(@opentelemetry/api@1.9.1)(typescript@5.9.3)(vue@3.5.40(typescript@5.9.3))':
     dependencies:
-      '@intentic/extension-api': file:_sandbox/extension-api(vue@3.5.40(typescript@5.9.3))
+      '@intentic/extension-api': file:_sandbox/extension-api(@opentelemetry/api@1.9.1)(vue@3.5.40(typescript@5.9.3))
+      '@intentic/extension-manifest': file:_sandbox/extension-manifest
       '@intentic/extension-ui': file:_editor/extension-ui(typescript@5.9.3)(vue@3.5.40(typescript@5.9.3))
-      '@intentic/sandbox-contract': file:_sandbox/sandbox-contract(@opentelemetry/api@1.9.1)(vue@3.5.40(typescript@5.9.3))
-      '@tanstack/vue-query': 5.101.4(vue@3.5.40(typescript@5.9.3))
-      vue: 3.5.40(typescript@5.9.3)
-    transitivePeerDependencies:
-      - '@opentelemetry/api'
-      - '@vue/composition-api'
-      - typescript
-
-  '@intentic/ext-pipelines@file:_extensions/pipelines(typescript@5.9.3)(vue@3.5.40(typescript@5.9.3))':
-    dependencies:
-      '@intentic/extension-api': file:_sandbox/extension-api(vue@3.5.40(typescript@5.9.3))
-      '@intentic/extension-ui': file:_editor/extension-ui(typescript@5.9.3)(vue@3.5.40(typescript@5.9.3))
-      '@intentic/sandbox-contract': file:_sandbox/sandbox-contract(vue@3.5.40(typescript@5.9.3))
+      '@intentic/sandbox-contract': file:_sandbox/sandbox-contract(@opentelemetry/api@1.9.1)
       '@tanstack/vue-query': 5.101.4(vue@3.5.40(typescript@5.9.3))
       vue: 3.5.40(typescript@5.9.3)
     transitivePeerDependencies:
@@ -12639,21 +12591,10 @@ snapshots:
 
   '@intentic/ext-preview@file:_extensions/preview(@opentelemetry/api@1.9.1)(typescript@5.9.3)(vue@3.5.40(typescript@5.9.3))':
     dependencies:
-      '@intentic/extension-api': file:_sandbox/extension-api(vue@3.5.40(typescript@5.9.3))
+      '@intentic/extension-api': file:_sandbox/extension-api(@opentelemetry/api@1.9.1)(vue@3.5.40(typescript@5.9.3))
+      '@intentic/extension-manifest': file:_sandbox/extension-manifest
       '@intentic/extension-ui': file:_editor/extension-ui(typescript@5.9.3)(vue@3.5.40(typescript@5.9.3))
-      '@intentic/sandbox-contract': file:_sandbox/sandbox-contract(@opentelemetry/api@1.9.1)(vue@3.5.40(typescript@5.9.3))
-      '@tanstack/vue-query': 5.101.4(vue@3.5.40(typescript@5.9.3))
-      vue: 3.5.40(typescript@5.9.3)
-    transitivePeerDependencies:
-      - '@opentelemetry/api'
-      - '@vue/composition-api'
-      - typescript
-
-  '@intentic/ext-preview@file:_extensions/preview(typescript@5.9.3)(vue@3.5.40(typescript@5.9.3))':
-    dependencies:
-      '@intentic/extension-api': file:_sandbox/extension-api(vue@3.5.40(typescript@5.9.3))
-      '@intentic/extension-ui': file:_editor/extension-ui(typescript@5.9.3)(vue@3.5.40(typescript@5.9.3))
-      '@intentic/sandbox-contract': file:_sandbox/sandbox-contract(vue@3.5.40(typescript@5.9.3))
+      '@intentic/sandbox-contract': file:_sandbox/sandbox-contract(@opentelemetry/api@1.9.1)
       '@tanstack/vue-query': 5.101.4(vue@3.5.40(typescript@5.9.3))
       vue: 3.5.40(typescript@5.9.3)
     transitivePeerDependencies:
@@ -12663,9 +12604,10 @@ snapshots:
 
   '@intentic/ext-repo-apps@file:_extensions/repo-apps(@opentelemetry/api@1.9.1)(typescript@5.9.3)(vue@3.5.40(typescript@5.9.3))':
     dependencies:
-      '@intentic/extension-api': file:_sandbox/extension-api(vue@3.5.40(typescript@5.9.3))
+      '@intentic/extension-api': file:_sandbox/extension-api(@opentelemetry/api@1.9.1)(vue@3.5.40(typescript@5.9.3))
+      '@intentic/extension-manifest': file:_sandbox/extension-manifest
       '@intentic/extension-ui': file:_editor/extension-ui(typescript@5.9.3)(vue@3.5.40(typescript@5.9.3))
-      '@intentic/sandbox-contract': file:_sandbox/sandbox-contract(@opentelemetry/api@1.9.1)(vue@3.5.40(typescript@5.9.3))
+      '@intentic/sandbox-contract': file:_sandbox/sandbox-contract(@opentelemetry/api@1.9.1)
       '@tanstack/vue-query': 5.101.4(vue@3.5.40(typescript@5.9.3))
       vue: 3.5.40(typescript@5.9.3)
     transitivePeerDependencies:
@@ -12673,35 +12615,26 @@ snapshots:
       - '@vue/composition-api'
       - typescript
 
-  '@intentic/ext-repo-apps@file:_extensions/repo-apps(typescript@5.9.3)(vue@3.5.40(typescript@5.9.3))':
+  '@intentic/ext-viewers@file:_extensions/viewers(@opentelemetry/api@1.9.1)(typescript@5.9.3)(vue@3.5.40(typescript@5.9.3))':
     dependencies:
-      '@intentic/extension-api': file:_sandbox/extension-api(vue@3.5.40(typescript@5.9.3))
-      '@intentic/extension-ui': file:_editor/extension-ui(typescript@5.9.3)(vue@3.5.40(typescript@5.9.3))
-      '@intentic/sandbox-contract': file:_sandbox/sandbox-contract(vue@3.5.40(typescript@5.9.3))
-      '@tanstack/vue-query': 5.101.4(vue@3.5.40(typescript@5.9.3))
-      vue: 3.5.40(typescript@5.9.3)
-    transitivePeerDependencies:
-      - '@opentelemetry/api'
-      - '@vue/composition-api'
-      - typescript
-
-  '@intentic/ext-viewers@file:_extensions/viewers(typescript@5.9.3)(vue@3.5.40(typescript@5.9.3))':
-    dependencies:
-      '@intentic/extension-api': file:_sandbox/extension-api(vue@3.5.40(typescript@5.9.3))
+      '@intentic/extension-api': file:_sandbox/extension-api(@opentelemetry/api@1.9.1)(vue@3.5.40(typescript@5.9.3))
+      '@intentic/extension-manifest': file:_sandbox/extension-manifest
       '@intentic/extension-ui': file:_editor/extension-ui(typescript@5.9.3)(vue@3.5.40(typescript@5.9.3))
       docx-preview: 0.3.7
       dompurify: 3.4.12
       vue: 3.5.40(typescript@5.9.3)
       xlsx: 0.18.5
     transitivePeerDependencies:
+      - '@opentelemetry/api'
       - '@vue/composition-api'
       - typescript
 
   '@intentic/ext-workflows@file:_extensions/workflows(@opentelemetry/api@1.9.1)(typescript@5.9.3)(vue@3.5.40(typescript@5.9.3))':
     dependencies:
-      '@intentic/extension-api': file:_sandbox/extension-api(vue@3.5.40(typescript@5.9.3))
+      '@intentic/extension-api': file:_sandbox/extension-api(@opentelemetry/api@1.9.1)(vue@3.5.40(typescript@5.9.3))
+      '@intentic/extension-manifest': file:_sandbox/extension-manifest
       '@intentic/extension-ui': file:_editor/extension-ui(typescript@5.9.3)(vue@3.5.40(typescript@5.9.3))
-      '@intentic/sandbox-contract': file:_sandbox/sandbox-contract(@opentelemetry/api@1.9.1)(vue@3.5.40(typescript@5.9.3))
+      '@intentic/sandbox-contract': file:_sandbox/sandbox-contract(@opentelemetry/api@1.9.1)
       '@tanstack/vue-query': 5.101.4(vue@3.5.40(typescript@5.9.3))
       vue: 3.5.40(typescript@5.9.3)
     transitivePeerDependencies:
@@ -12709,22 +12642,19 @@ snapshots:
       - '@vue/composition-api'
       - typescript
 
-  '@intentic/ext-workflows@file:_extensions/workflows(typescript@5.9.3)(vue@3.5.40(typescript@5.9.3))':
+  '@intentic/extension-api@file:_sandbox/extension-api(@opentelemetry/api@1.9.1)(vue@3.5.40(typescript@5.9.3))':
     dependencies:
-      '@intentic/extension-api': file:_sandbox/extension-api(vue@3.5.40(typescript@5.9.3))
-      '@intentic/extension-ui': file:_editor/extension-ui(typescript@5.9.3)(vue@3.5.40(typescript@5.9.3))
-      '@intentic/sandbox-contract': file:_sandbox/sandbox-contract(vue@3.5.40(typescript@5.9.3))
-      '@tanstack/vue-query': 5.101.4(vue@3.5.40(typescript@5.9.3))
-      vue: 3.5.40(typescript@5.9.3)
-    transitivePeerDependencies:
-      - '@opentelemetry/api'
-      - '@vue/composition-api'
-      - typescript
-
-  '@intentic/extension-api@file:_sandbox/extension-api(vue@3.5.40(typescript@5.9.3))':
-    dependencies:
+      '@intentic/sandbox-contract': file:_sandbox/sandbox-contract(@opentelemetry/api@1.9.1)
+      '@orpc/contract': 1.14.13(@opentelemetry/api@1.9.1)
       tslib: 2.8.1
       vue: 3.5.40(typescript@5.9.3)
+      zod: 4.4.3
+    transitivePeerDependencies:
+      - '@opentelemetry/api'
+
+  '@intentic/extension-manifest@file:_sandbox/extension-manifest':
+    dependencies:
+      tslib: 2.8.1
       zod: 4.4.3
 
   '@intentic/extension-ui@file:_editor/extension-ui(typescript@5.9.3)(vue@3.5.40(typescript@5.9.3))':
@@ -12750,27 +12680,15 @@ snapshots:
       '@intentic/graph': file:_deploy/graph
       tslib: 2.8.1
 
-  '@intentic/sandbox-contract@file:_sandbox/sandbox-contract(@opentelemetry/api@1.9.1)(vue@3.5.40(typescript@5.9.3))':
+  '@intentic/sandbox-contract@file:_sandbox/sandbox-contract(@opentelemetry/api@1.9.1)':
     dependencies:
-      '@intentic/extension-api': file:_sandbox/extension-api(vue@3.5.40(typescript@5.9.3))
+      '@intentic/extension-manifest': file:_sandbox/extension-manifest
       '@intentic/registry': file:_sandbox/registry
       '@orpc/contract': 1.14.13(@opentelemetry/api@1.9.1)
       tslib: 2.8.1
       zod: 4.4.3
     transitivePeerDependencies:
       - '@opentelemetry/api'
-      - vue
-
-  '@intentic/sandbox-contract@file:_sandbox/sandbox-contract(vue@3.5.40(typescript@5.9.3))':
-    dependencies:
-      '@intentic/extension-api': file:_sandbox/extension-api(vue@3.5.40(typescript@5.9.3))
-      '@intentic/registry': file:_sandbox/registry
-      '@orpc/contract': 1.14.13(@opentelemetry/api@1.9.1)
-      tslib: 2.8.1
-      zod: 4.4.3
-    transitivePeerDependencies:
-      - '@opentelemetry/api'
-      - vue
 
   '@intentic/sandbox-run@file:_sandbox/sandbox-run':
     dependencies:
@@ -14093,7 +14011,7 @@ snapshots:
 
   '@slack/logger@5.0.0':
     dependencies:
-      '@types/node': 24.13.2
+      '@types/node': 26.1.2
 
   '@slack/socket-mode@3.0.0(undici@7.29.0)':
     dependencies:
@@ -14423,13 +14341,13 @@ snapshots:
 
   '@types/docker-modem@3.0.6':
     dependencies:
-      '@types/node': 24.13.2
+      '@types/node': 26.1.2
       '@types/ssh2': 1.15.5
 
   '@types/dockerode@4.0.1':
     dependencies:
       '@types/docker-modem': 3.0.6
-      '@types/node': 24.13.2
+      '@types/node': 26.1.2
       '@types/ssh2': 1.15.5
 
   '@types/estree@1.0.9': {}
@@ -14491,15 +14409,15 @@ snapshots:
 
   '@types/sax@1.2.7':
     dependencies:
-      '@types/node': 24.13.3
+      '@types/node': 26.1.2
 
   '@types/ssh2-streams@0.1.13':
     dependencies:
-      '@types/node': 24.13.2
+      '@types/node': 26.1.2
 
   '@types/ssh2@0.5.52':
     dependencies:
-      '@types/node': 24.13.2
+      '@types/node': 26.1.2
       '@types/ssh2-streams': 0.1.13
 
   '@types/ssh2@1.15.5':
@@ -14508,7 +14426,7 @@ snapshots:
 
   '@types/tar-stream@3.1.4':
     dependencies:
-      '@types/node': 24.13.2
+      '@types/node': 26.1.2
 
   '@types/trusted-types@2.0.7':
     optional: true
@@ -14519,11 +14437,11 @@ snapshots:
 
   '@types/web-push@3.6.4':
     dependencies:
-      '@types/node': 24.13.2
+      '@types/node': 26.1.2
 
   '@types/ws@8.18.1':
     dependencies:
-      '@types/node': 24.13.2
+      '@types/node': 26.1.2
 
   '@typescript/native-preview-darwin-arm64@7.0.0-dev.20260707.2':
     optional: true
@@ -18387,7 +18305,7 @@ snapshots:
       '@protobufjs/path': 1.1.2
       '@protobufjs/pool': 1.1.0
       '@protobufjs/utf8': 1.1.2
-      '@types/node': 24.13.2
+      '@types/node': 26.1.2
       long: 5.3.2
 
   proxy-addr@2.0.7:

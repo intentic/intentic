@@ -29,6 +29,7 @@
         "@hono/node-server": "catalog:",
         "@intentic/constants": "workspace:*",
         "@intentic/extension-api": "workspace:*",
+        "@intentic/extension-manifest": "workspace:*",
         "@intentic/graph": "workspace:*",
         "@intentic/iq-engine": "workspace:*",
         "@intentic/lsp": "workspace:*",

@@ -1,4 +1,5 @@
 import * as extensionApi from "@intentic/extension-api";
+import * as extensionManifest from "@intentic/extension-manifest";
 import * as extensionUi from "@intentic/extension-ui";
 import { extensionUiNames } from "@intentic/extension-ui/names";
 import * as vueQuery from "@tanstack/vue-query";
@@ -22,6 +23,7 @@ globalThis.__intenticHost = {
     modules: {
         vue,
         "@intentic/extension-api": extensionApi,
+        "@intentic/extension-manifest": extensionManifest,
         "@intentic/extension-ui": extensionUi,
         "@tanstack/vue-query": vueQuery,
     },

@@ -1,6 +1,6 @@
 // Platform UI/product catalogs: the add-form descriptors + card data the web renders. NOT wire contract —
 // moved out of @intentic-app/api-contract so the contract holds only schemas. Daemon enums are imported.
-import { type CapabilityContribution, type CapabilityField, contributionDiscriminator } from "@intentic/extension-api";
+import { type CapabilityContribution, type CapabilityField, contributionDiscriminator } from "@intentic/extension-manifest";
 import type { CapabilityKind, ServiceKind } from "@intentic/sandbox-contract";
 
 // Catalog the web uses to render the add forms. Only the user-provided, non-secret fields appear here.

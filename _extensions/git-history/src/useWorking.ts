@@ -1,4 +1,4 @@
-import { type GitChange, GitChangesSchema, type GitDiffSide } from "@intentic/sandbox-contract";
+import type { GitChange, GitDiffSide } from "@intentic/sandbox-contract";
 import { useQuery } from "@tanstack/vue-query";
 import { computed, type Ref } from "vue";
 import { host } from "./host.js";
@@ -21,7 +21,7 @@ export function useWorking(repo: Ref<string>) {
         // Not keyed by repo: the response covers the whole workspace, so keying per repo would fetch the same
         // scan once per open graph.
         queryKey: api.sandbox.key(`git-history`, `working`),
-        queryFn: async () => GitChangesSchema.parse(await api.sandbox.json(`/git/changes`)),
+        queryFn: () => api.sandbox.rpc.git.changes({}),
         enabled: computed(() => api.sandbox.reachable()),
     });
 

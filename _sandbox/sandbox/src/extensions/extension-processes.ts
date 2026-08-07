@@ -1,5 +1,5 @@
 import { join } from "node:path";
-import type { ProcessContribution } from "@intentic/extension-api";
+import type { ProcessContribution } from "@intentic/extension-manifest";
 import { previewLabel } from "@intentic/sandbox-contract";
 import type { Services } from "../composition.js";
 import { enabledExtensions, type ExtensionHost, type InstalledExtension, installedExtensions } from "./installed-extensions.js";

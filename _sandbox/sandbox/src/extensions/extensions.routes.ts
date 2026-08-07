@@ -1,5 +1,6 @@
 import { join } from "node:path";
-import { extensionApiVersion, extensionIdOf, type ProcessContribution, satisfiesEngines } from "@intentic/extension-api";
+import { extensionApiVersion, satisfiesEngines } from "@intentic/extension-api";
+import { extensionIdOf, type ProcessContribution } from "@intentic/extension-manifest";
 import { type ExtensionSummary, extensionsContract, previewUrl, zoneFromUrl } from "@intentic/sandbox-contract";
 import { sandboxIdFromToken } from "@intentic/sandbox-contract/tunnel-ids";
 import { implement, ORPCError } from "@orpc/server";

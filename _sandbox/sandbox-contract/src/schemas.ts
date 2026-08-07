@@ -1,4 +1,4 @@
-import { ExtensionManifestSchema } from "@intentic/extension-api";
+import { ExtensionManifestSchema } from "@intentic/extension-manifest";
 import { RegistryEntrySchema } from "@intentic/registry";
 import { z } from "zod";
 import { OutputFieldsSchema } from "./output-fields.js";

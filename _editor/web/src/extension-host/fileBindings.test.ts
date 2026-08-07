@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import type { FileContribution } from "@intentic/extension-api";
+import type { FileContribution } from "@intentic/extension-manifest";
 import { staleQueryKeys } from "@intentic/sandbox-contract";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { contributedFileBindings, registerFileBindings } from "./fileBindings";

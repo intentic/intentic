@@ -1,4 +1,4 @@
-import { ExtensionManifestSchema, ListenerContributionSchema } from "@intentic/extension-api";
+import { ExtensionManifestSchema, ListenerContributionSchema } from "@intentic/extension-manifest";
 import type { ExtensionSummary } from "@intentic/sandbox-contract";
 import { describe, expect, it } from "vitest";
 import { listenerSourceOf, listenerSourcesOf } from "./listenerSources";

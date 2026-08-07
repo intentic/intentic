@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { extensionIdOf } from "@intentic/extension-api";
+import { extensionIdOf } from "@intentic/extension-manifest";
 import { ExtensionReadinessSchema } from "@intentic/sandbox-contract";
 import { BrandMark, cmp, StatusBadge } from "@intentic/ui";
 import ToggleSwitch from "primevue/toggleswitch";

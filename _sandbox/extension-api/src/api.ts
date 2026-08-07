@@ -1,3 +1,5 @@
+import type { sandboxContract } from "@intentic/sandbox-contract";
+import type { ContractRouterClient } from "@orpc/contract";
 import type { Component } from "vue";
 import type { DiffPayload } from "./diff.js";
 import type { CapabilityFacts, RepoFacts } from "./facts.js";
@@ -212,9 +214,23 @@ export interface IntenticApi {
         onDidChange(listener: (key: string) => void): Disposable;
     };
     // The authenticated transport to the sandbox daemon's routes — auth is injected host-side; an extension
-    // never sees tokens. Reach is scoped: request/json are gated by the manifest's `permissions.sandbox`
+    // never sees tokens. Reach is scoped: every door here is gated by the manifest's `permissions.sandbox`
     // allowlist, so a call to an undeclared method+path throws rather than reaching the whole daemon.
     readonly sandbox: {
+        /* THE DAEMON, TYPED — the same contract the daemon implements, so a call names a procedure instead of
+         * building a URL. `rpc.git.stashApply({ repo, ref, pop })` carries the declared input shape and answers
+         * the declared output shape, both checked at build time.
+         *
+         * This is the door to reach for. `request`/`json` below take a path string, which means every caller
+         * re-derives what this already knows: the method, the escaping, the query encoding, and the shape of the
+         * answer — the last of those as an unchecked assertion that keeps compiling long after the daemon's reply
+         * has changed underneath it. Thirteen extensions between them hand-wrote a hundred such calls and
+         * re-validated half the responses against the very schemas the contract had already declared.
+         *
+         * Gated identically, and on the same evidence: the host resolves the procedure to its method and concrete
+         * path and checks THAT against `permissions.sandbox`, so a manifest neither gains nor loses reach by an
+         * extension switching doors, and the usage record stays comparable across both. */
+        readonly rpc: ContractRouterClient<typeof sandboxContract>;
         request(path: string, init?: RequestInit): Promise<Response>;
         json<T>(path: string, init?: RequestInit): Promise<T>;
         // Whether the active sandbox is currently reachable — reactive when read inside a computed, so it

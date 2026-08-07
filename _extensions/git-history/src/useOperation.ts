@@ -1,4 +1,4 @@
-import { type GitActionResult, GitActionResultSchema, type GitOperation, GitOperationStateSchema } from "@intentic/sandbox-contract";
+import type { GitOperation } from "@intentic/sandbox-contract";
 import { useQuery, useQueryClient } from "@tanstack/vue-query";
 import { computed, type Ref } from "vue";
 import { host } from "./host.js";
@@ -16,7 +16,6 @@ import { useRefRefresh } from "./useRefRefresh.js";
  * or aborting an operation moves refs (or the in-progress markers the watcher also watches) and the frame
  * arrives on its own. */
 
-const encode = (value: string): string => encodeURIComponent(value);
 
 export function useOperation(repo: Ref<string>) {
     const api = host();
@@ -25,7 +24,7 @@ export function useOperation(repo: Ref<string>) {
     const key = computed(() => api.sandbox.key(`git-history`, `operation`, repo.value));
     const query = useQuery({
         queryKey: key,
-        queryFn: async () => GitOperationStateSchema.parse(await api.sandbox.json(`/git/${encode(repo.value)}/operation`)),
+        queryFn: () => api.sandbox.rpc.git.operation({ repo: repo.value }),
         enabled: computed(() => api.sandbox.reachable()),
     });
     useRefRefresh(repo, [`operation`]);
@@ -36,9 +35,7 @@ export function useOperation(repo: Ref<string>) {
     // browser, but this one should not wait a round trip to see its own click land.
     const abort = (): Promise<void> =>
         run(async () => {
-            const result: GitActionResult = GitActionResultSchema.parse(
-                await api.sandbox.json(`/git/${encode(repo.value)}/abort`, { method: `POST`, headers: { "content-type": `application/json` }, body: `{}` }),
-            );
+            const result = await api.sandbox.rpc.git.abort({ repo: repo.value });
             if (!result.ok) {
                 // Someone else finished or aborted it between the render and the click. Nothing to report as a
                 // failure — refreshing below simply drops the banner.

@@ -1,13 +1,13 @@
 {
-    "name": "@intentic/extension-api",
+    "name": "@intentic/extension-manifest",
     "version": "0.0.0",
-    "description": "The versioned public API intentic extensions compile against — manifest schema, detection facts and the host API",
+    "description": "What an intentic extension DECLARES — the intentic-extension.json schema and the sandbox-route allowlist rule",
     "license": "MIT",
     "type": "module",
     "repository": {
         "type": "git",
         "url": "git+https://github.com/intentic/intentic.git",
-        "directory": "_sandbox/extension-api"
+        "directory": "_sandbox/extension-manifest"
     },
     "files": [
         "dist",
@@ -35,18 +35,12 @@
         "watch": "tsgo --build --watch"
     },
     "dependencies": {
-        "@intentic/sandbox-contract": "workspace:*",
-        "@orpc/contract": "catalog:",
         "tslib": "catalog:",
         "zod": "catalog:"
-    },
-    "peerDependencies": {
-        "vue": "3"
     },
     "devDependencies": {
         "@intentic/tsconfig": "workspace:*",
         "@types/node": "catalog:",
-        "@typescript/native-preview": "catalog:",
-        "vue": "catalog:"
+        "@typescript/native-preview": "catalog:"
     }
 }

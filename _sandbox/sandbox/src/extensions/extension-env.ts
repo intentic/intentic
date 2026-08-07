@@ -1,4 +1,4 @@
-import { extensionIdOf } from "@intentic/extension-api";
+import { extensionIdOf } from "@intentic/extension-manifest";
 import type { Services } from "../composition.js";
 import { readAllExtensionSettings } from "./extension-settings.js";
 import { enabledExtensions } from "./installed-extensions.js";

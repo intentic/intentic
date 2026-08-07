@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import Button from "primevue/button";
-import { extensionIdOf } from "@intentic/extension-api";
+import { extensionIdOf } from "@intentic/extension-manifest";
 import type { ExtensionSummary } from "@intentic/sandbox-contract";
 import { cmp, FilterBar, RowGroup, Segmented, StatusBadge } from "@intentic/ui";
 import { computed, ref } from "vue";

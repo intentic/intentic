@@ -1,4 +1,5 @@
-import type { Disposable, FileContribution } from "@intentic/extension-api";
+import type { Disposable } from "@intentic/extension-api";
+import type { FileContribution } from "@intentic/extension-manifest";
 
 /* WHICH WORKSPACE FILES THE LIVE EXTENSIONS DERIVE FROM — the browser-side half of the file→view table whose
  * core half is WORKSPACE_STATE_FILES (@intentic/sandbox-contract).

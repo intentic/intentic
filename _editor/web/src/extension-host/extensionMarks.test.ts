@@ -1,7 +1,7 @@
 import { readdirSync, readFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { ExtensionManifestSchema } from "@intentic/extension-api";
+import { ExtensionManifestSchema } from "@intentic/extension-manifest";
 import { isIconName } from "@intentic/ui/icons";
 import { describe, expect, it } from "vitest";
 

@@ -1,4 +1,4 @@
-import type { CapabilityContribution } from "@intentic/extension-api";
+import type { CapabilityContribution } from "@intentic/extension-manifest";
 import type { CapabilityKind, InvalidWorkspaceExtension } from "@intentic/sandbox-contract";
 import { type ExtensionSummary, ExtensionsListSchema, WorkspaceExtensionCreatedSchema } from "@intentic/sandbox-contract";
 import { computed } from "vue";

@@ -19,6 +19,7 @@
     },
     "dependencies": {
         "@intentic/extension-api": "workspace:*",
+        "@intentic/extension-manifest": "workspace:*",
         "@intentic/extension-ui": "workspace:*",
         "docx-preview": "catalog:",
         "dompurify": "catalog:",

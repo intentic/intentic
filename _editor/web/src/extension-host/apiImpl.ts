@@ -1,5 +1,6 @@
 import type { CapabilityFacts, Disposable, ExtensionContext, IntenticApi, PickedModel, ProcessStatus, RepoFacts } from "@intentic/extension-api";
-import { extensionApiVersion, extensionIdOf, flattenQuery, mergeQuery, sandboxRouteAllowed } from "@intentic/extension-api";
+import { extensionApiVersion, flattenQuery, mergeQuery } from "@intentic/extension-api";
+import { extensionIdOf, sandboxRouteAllowed } from "@intentic/extension-manifest";
 import { useDevice, useTheme } from "@intentic/ui";
 import {
     type AgentHarness,
@@ -7,6 +8,7 @@ import {
     type ExtensionSummary,
     parsePinned,
     providerLabel,
+    sandboxRequestFor,
     WorkspaceFileSchema,
 } from "@intentic/sandbox-contract";
 import { watch } from "vue";
@@ -18,6 +20,7 @@ import { startAgent } from "../composables/agents/agentActions";
 import { registerCommand, executeCommand } from "../composables/commands/useCommands";
 import { extensionSettingsStore } from "../composables/extensions/useExtensionSettings";
 import { sandboxJson, sandboxRequest } from "../composables/sandbox/sandboxClient";
+import { gatedSandboxRpc } from "../composables/sandbox/sandboxRpc";
 import { useTerminalPanel } from "../composables/terminal/useTerminalPanel";
 import { sandboxKey, useSandbox } from "../composables/sandbox/useSandbox";
 import { useWorkspaceTabs } from "../composables/workspace/useWorkspaceTabs";
@@ -131,8 +134,9 @@ export const createExtensionApi = (
         return `/extensions/${encodeURIComponent(summary.id)}/processes/${encodeURIComponent(name)}`;
     };
 
-    // The manifest's declared sandbox-route allowlist gates api.sandbox.request/json: an undeclared method+path
-    // throws, so a bundle can only reach the daemon routes the owner approved at install — not the whole daemon.
+    // The manifest's declared sandbox-route allowlist gates every door in api.sandbox: an undeclared
+    // method+path throws, so a bundle can only reach the daemon routes the owner approved at install — not the
+    // whole daemon.
     const sandboxPermissions = summary.manifest.permissions?.sandbox ?? [];
     const guardSandbox = (path: string, init?: RequestInit): void => {
         const method = init?.method ?? `GET`;
@@ -145,6 +149,21 @@ export const createExtensionApi = (
         // evidence anywhere about whether a permission is earned. Kept rather than discarded — see sandboxUsage.
         recordSandboxCall(summary.id, sandboxPermissions, method, path);
     };
+
+    /* The same gate for a TYPED call. The contract turns the procedure the extension named into the method and
+     * concrete path it is about to request, and from there this is the check above, verbatim — one allowlist,
+     * one usage record, whichever door the extension used.
+     *
+     * A procedure this build's contract does not declare is refused rather than waved through. It cannot happen
+     * through the typed client (there would be nothing to call), so reaching it means the client was handed a
+     * hand-built path array — which is precisely the case that must not bypass the manifest. */
+    const rpc = gatedSandboxRpc((procedure, input) => {
+        const request = sandboxRequestFor(procedure, input);
+        if (request === undefined) {
+            throw new Error(`extension "${extensionId}" called sandbox procedure ${procedure.join(`.`)}, which this build's contract does not declare`);
+        }
+        guardSandbox(request.path, { method: request.method });
+    });
 
     const { scheme } = useTheme();
 
@@ -263,6 +282,7 @@ export const createExtensionApi = (
             },
         },
         sandbox: {
+            rpc,
             request: (path, init) => {
                 guardSandbox(path, init);
                 return sandboxRequest(path, init);

@@ -7,7 +7,7 @@ import type {
     RepoFacts,
     ViewRegistration,
 } from "@intentic/extension-api";
-import { extensionIdOf } from "@intentic/extension-api";
+import { extensionIdOf } from "@intentic/extension-manifest";
 import { isIconName } from "@intentic/ui/icons";
 import * as activity from "@intentic/ext-activity";
 import * as logs from "@intentic/ext-logs";

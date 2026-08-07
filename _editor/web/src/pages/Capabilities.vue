@@ -11,7 +11,7 @@ import {
 } from "@intentic-app/capability-catalog";
 import { type CapabilitySummary, type Marketplace } from "@intentic-app/api-contract";
 import { BrandMark, cmp, ConfirmDialog, FilterBar, type IconName, RowGroup, Segmented, SplitView, StatusBadge } from "@intentic/ui";
-import { type CapabilityField, contributionDiscriminator } from "@intentic/extension-api";
+import { type CapabilityField, contributionDiscriminator } from "@intentic/extension-manifest";
 import { isShaPinned, OFFICIAL_REGISTRY_URL, type RegistryEntry } from "@intentic/registry";
 import { type CapabilityKind, type ForticlientConnection, isForticlientCiphertext } from "@intentic/sandbox-contract";
 import Button from "primevue/button";

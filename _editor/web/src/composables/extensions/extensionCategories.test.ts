@@ -1,4 +1,4 @@
-import type { ExtensionManifest } from "@intentic/extension-api";
+import type { ExtensionManifest } from "@intentic/extension-manifest";
 import { describe, expect, it } from "vitest";
 import { type ExtensionSection, sectionsOf } from "./extensionCategories";
 import type { ExtensionEntry } from "./useExtensionList";

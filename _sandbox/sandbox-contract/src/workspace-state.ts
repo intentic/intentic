@@ -1,4 +1,4 @@
-import type { FileContribution } from "@intentic/extension-api";
+import type { FileContribution } from "@intentic/extension-manifest";
 import type { StateFile } from "./state-portability.js";
 
 /* WHICH WORKSPACE FILE BACKS WHICH CORE VIEW — one declaration, read by both sides of the wire.

@@ -1,5 +1,5 @@
 import { join } from "node:path";
-import { type CapabilityContribution, contributionDiscriminator } from "@intentic/extension-api";
+import { type CapabilityContribution, contributionDiscriminator } from "@intentic/extension-manifest";
 import type { CapabilityKind } from "@intentic/sandbox-contract";
 import { enabledExtensions, type ExtensionHost } from "../extensions/installed-extensions.js";
 import type { CapabilityCtx } from "./capability.js";

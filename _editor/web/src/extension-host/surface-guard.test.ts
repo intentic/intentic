@@ -1,7 +1,8 @@
 import { readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { extensionApiVersion, ExtensionManifestSchema } from "@intentic/extension-api";
+import { extensionApiVersion } from "@intentic/extension-api";
+import { ExtensionManifestSchema } from "@intentic/extension-manifest";
 import { expect, test } from "vitest";
 
 /* THE SDK'S SURFACE, BOUND TO THE VERSION IT PROMISES.

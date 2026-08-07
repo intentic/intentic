@@ -71,7 +71,7 @@
         "test:watch": "vitest"
     },
     "dependencies": {
-        "@intentic/extension-api": "workspace:*",
+        "@intentic/extension-manifest": "workspace:*",
         "@intentic/registry": "workspace:*",
         "@orpc/contract": "catalog:",
         "tslib": "catalog:",

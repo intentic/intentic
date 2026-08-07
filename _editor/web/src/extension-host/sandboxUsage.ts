@@ -1,4 +1,4 @@
-import { sandboxRouteAllowed } from "@intentic/extension-api";
+import { sandboxRouteAllowed } from "@intentic/extension-manifest";
 import { jsonBody } from "../composables/sandbox/jsonBody";
 import { sandboxJson } from "../composables/sandbox/sandboxClient";
 

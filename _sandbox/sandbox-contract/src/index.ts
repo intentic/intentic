@@ -1,5 +1,5 @@
 import type { ContractRoute } from "./routes.js";
-import { contractRoutes, routeNameForRequest } from "./routes.js";
+import { contractRoutes, requestPathFor, routeForProcedure, routeNameForRequest } from "./routes.js";
 import { activityContract } from "./contracts/activity.contract.js";
 import { agentContract } from "./contracts/agent.contract.js";
 import { agentsContract } from "./contracts/agents.contract.js";
@@ -150,3 +150,11 @@ export const SANDBOX_ROUTE_NAMES: readonly string[] = SANDBOX_ROUTES.map((route)
 // The contract route a concrete browser request belongs to, bound to this build's route table.
 export const sandboxRouteName = (method: string, pathWithQuery: string): string | undefined =>
     routeNameForRequest(SANDBOX_ROUTES, method, pathWithQuery);
+
+// The method and concrete path a TYPED call is about to put on the wire, bound to this build's route table.
+// Undefined when the procedure is not one this contract declares, which a typed caller cannot reach — the host
+// gate treats it as a refusal rather than assuming it is harmless.
+export const sandboxRequestFor = (procedure: readonly string[], input: unknown): { method: string; path: string } | undefined => {
+    const route = routeForProcedure(SANDBOX_ROUTES, procedure);
+    return route === undefined ? undefined : { method: route.method, path: requestPathFor(route, input) };
+};

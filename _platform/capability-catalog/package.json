@@ -28,6 +28,7 @@
     },
     "dependencies": {
         "@intentic/extension-api": "workspace:*",
+        "@intentic/extension-manifest": "workspace:*",
         "@intentic/sandbox-contract": "workspace:*",
         "tslib": "catalog:"
     },

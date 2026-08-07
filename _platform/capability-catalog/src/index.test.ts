@@ -1,4 +1,4 @@
-import type { CapabilityContribution } from "@intentic/extension-api";
+import type { CapabilityContribution } from "@intentic/extension-manifest";
 import { describe, expect, it } from "vitest";
 import { CAPABILITY_CATALOG, contributionCard } from "./index.js";
 

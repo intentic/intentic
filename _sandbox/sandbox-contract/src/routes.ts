@@ -82,3 +82,28 @@ export const routeNameForRequest = (routes: readonly ContractRoute[], method: st
     const upper = method.toUpperCase();
     return routes.find((route) => route.method.toUpperCase() === upper && pathMatches(route.path, path))?.name;
 };
+
+// The route a typed client call belongs to. oRPC addresses a procedure by its position in the contract —
+// `['git','stashApply']` — which is the contract's own name for it, so this is a lookup rather than a match.
+export const routeForProcedure = (routes: readonly ContractRoute[], procedure: readonly string[]): ContractRoute | undefined =>
+    routes.find((route) => route.name === procedure.join("."));
+
+// THE CONCRETE PATH A TYPED CALL WILL CARRY — the route template with every `{param}` replaced by the input
+// field of the same name, which is how the OpenAPI link fills them.
+//
+// This exists so a permission gate can check the string the daemon will actually route on rather than the
+// template it came from. Checking the template would quietly widen every grant: a wildcard glob matches the
+// literal `{repo}` braces just as happily as it matches a repo name, so a manifest that narrowed the grant to
+// one repo would still admit calls for every other — the gate would be comparing two patterns instead of
+// testing a value against one.
+//
+// A param with no matching input field keeps its placeholder. That cannot be reached through the typed client
+// (the contract's input schema requires the field), and leaving the braces in is the safe failure: a glob
+// segment still matches it, a literal segment does not.
+export const requestPathFor = (route: ContractRoute, input: unknown): string => {
+    const fields = typeof input === "object" && input !== null ? (input as Record<string, unknown>) : {};
+    return route.path.replace(/\{([^}]+)\}/g, (placeholder, name: string) => {
+        const value = fields[name];
+        return value === undefined ? placeholder : encodeURIComponent(String(value));
+    });
+};

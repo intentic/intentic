@@ -1,4 +1,4 @@
-import type { ExtensionManifest } from "@intentic/extension-api";
+import type { ExtensionManifest } from "@intentic/extension-manifest";
 import { describe, expect, it } from "vitest";
 import { facetsOf, searchTextOf } from "./extensionFacets";
 

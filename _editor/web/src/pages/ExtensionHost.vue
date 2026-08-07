@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { extensionIdOf } from "@intentic/extension-api";
+import { extensionIdOf } from "@intentic/extension-manifest";
 import { computed } from "vue";
 import { RouterLink, useRoute } from "vue-router";
 import { useCapabilities } from "../composables/extensions/useCapabilities";

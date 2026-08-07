@@ -1,4 +1,4 @@
-import type { ExtensionManifest } from "@intentic/extension-api";
+import type { ExtensionManifest } from "@intentic/extension-manifest";
 
 /* WHAT AN EXTENSION GIVES YOU — the manifest's `contributes` said in the reader's words instead of the
  * schema's keys.

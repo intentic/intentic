@@ -11,6 +11,7 @@ import { extensionUiNames } from "../../../_editor/extension-ui/names.mjs";
 const targets = [
     { specifier: "vue", file: "vue.js" },
     { specifier: "@intentic/extension-api", file: "extension-api.js" },
+    { specifier: "@intentic/extension-manifest", file: "extension-manifest.js" },
     { specifier: "@intentic/extension-ui", file: "extension-ui.js", names: extensionUiNames },
     { specifier: "@tanstack/vue-query", file: "vue-query.js" },
 ];

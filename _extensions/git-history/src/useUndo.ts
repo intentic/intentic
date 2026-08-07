@@ -1,4 +1,4 @@
-import { type GitActionResult, GitActionResultSchema, GitUndoStateSchema, type UndoableAction } from "@intentic/sandbox-contract";
+import type { UndoableAction } from "@intentic/sandbox-contract";
 import { useQuery, useQueryClient } from "@tanstack/vue-query";
 import { computed, type Ref } from "vue";
 import { host } from "./host.js";
@@ -16,7 +16,6 @@ import { useRefRefresh } from "./useRefRefresh.js";
  * Refreshed off the ref push, since the thing it reports IS a ref move — including the agent's, which is the
  * case where a stale Undo button would be most dangerous: it would name an action the user never took. */
 
-const encode = (value: string): string => encodeURIComponent(value);
 
 // What the button says. Git's reflog subject is the honest description but it is also long and shaped for a log
 // ("commit (amend): fix the parser"), so the KIND names the verb and the subject rides the tooltip.
@@ -39,7 +38,7 @@ export function useUndo(repo: Ref<string>) {
     const key = computed(() => api.sandbox.key(`git-history`, `undo`, repo.value));
     const query = useQuery({
         queryKey: key,
-        queryFn: async () => GitUndoStateSchema.parse(await api.sandbox.json(`/git/${encode(repo.value)}/undo`)),
+        queryFn: () => api.sandbox.rpc.git.undoable({ repo: repo.value }),
         enabled: computed(() => api.sandbox.reachable()),
     });
     useRefRefresh(repo, [`undo`]);
@@ -59,13 +58,7 @@ export function useUndo(repo: Ref<string>) {
             if (target === undefined) {
                 return;
             }
-            const result: GitActionResult = GitActionResultSchema.parse(
-                await api.sandbox.json(`/git/${encode(repo.value)}/undo`, {
-                    method: `POST`,
-                    headers: { "content-type": `application/json` },
-                    body: JSON.stringify({ previousSha: target.previousSha, discardChanges }),
-                }),
-            );
+            const result = await api.sandbox.rpc.git.undo({ repo: repo.value, previousSha: target.previousSha, discardChanges });
             await Promise.all([
                 queryClient.invalidateQueries({ queryKey: key.value }),
                 queryClient.invalidateQueries({ queryKey: api.sandbox.key(`git-history`, `log`, repo.value) }),

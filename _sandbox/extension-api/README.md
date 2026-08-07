@@ -2,15 +2,26 @@
 
 The one SDK an extension programs against — the extension-author contract for the intentic app.
 
-With `@intentic/extension-ui`, one of only two packages an extension may depend on besides
-`@intentic/sandbox-contract`. Published to npm; it must stay free of app internals and must **not** pull in
-`@intentic/sandbox-contract` (that would invert the boundary). See the extension system in
-[ARCHITECTURE.md](../../ARCHITECTURE.md) for how the host loads and gates extensions.
+One of the packages an extension may depend on, with `@intentic/extension-manifest`,
+`@intentic/extension-ui` and `@intentic/sandbox-contract`. Published to npm; it must stay free of app
+internals. See the extension system in [ARCHITECTURE.md](../../ARCHITECTURE.md) for how the host loads and
+gates extensions.
+
+It **does** name `@intentic/sandbox-contract` types, and that is deliberate: `api.sandbox.rpc` is the daemon's
+own contract as a typed client, which is the whole reason an extension no longer has to build a URL to reach
+it. The dependency is type-only, so nothing of the contract lands in an extension's runtime. This used to be
+forbidden — the contract imported the manifest schema from here, so depending back would have closed a cycle.
+`@intentic/extension-manifest` exists to break exactly that, and its README has the reasoning.
 
 ## What's here
 
-- **[manifest.ts](src/manifest.ts)** — the `intentic-extension.json` schema. The manifest is the **approval
-  + gating surface**: the install dialog shows exactly the declared contribution points, and the host
+- **[api.ts](src/api.ts)** — `IntenticApi`, the host surface delivered to `activate(api, context)`. There is
+  no ambient global; everything an extension registers is a `Disposable` pushed onto
+  `context.subscriptions`, so deactivation unwinds it. `api.sandbox.rpc` is the typed daemon client, gated by
+  the manifest's `permissions.sandbox` allowlist exactly as the older `request`/`json` doors are.
+- **The manifest schema lives in [@intentic/extension-manifest](../extension-manifest)**, not here — it is what
+  an extension *declares*, and the daemon needs it without needing any of this package. The manifest is the
+  **approval + gating surface**: the install dialog shows exactly the declared contribution points, and the host
   refuses any runtime registration (view, command, viewer, setting, process…) the approved manifest never
   declared. Contribution points: `views`, `files`, `viewers`, `documents`, `commands`, `settings`,
   `processes`, `agent`, `environment`, `capabilities`, `listener`, `bin`, plus the `permissions.sandbox` route
@@ -20,9 +31,6 @@ With `@intentic/extension-ui`, one of only two packages an extension may depend 
   source/filter/starter wording a generic automation editor renders. Installing a listener therefore adds a
   configurable automation source without an app release or a second provider table.
   Identity is derived, never declared — `extensionIdOf(manifest) = ${publisher}.${name}`.
-- **[api.ts](src/api.ts)** — `IntenticApi`, the host surface delivered to `activate(api, context)`. There is
-  no ambient global; everything an extension registers is a `Disposable` pushed onto
-  `context.subscriptions`, so deactivation unwinds it.
 - **[facts.ts](src/facts.ts)** — the stable **detection** vocabulary (`RepoFacts`, `CapabilityFacts`) a
   view's `detect()` reads to decide when to activate. This is *not* the data plane.
 

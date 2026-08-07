@@ -1,4 +1,4 @@
-import { ExtensionManifestSchema, extensionIdOf } from "@intentic/extension-api";
+import { ExtensionManifestSchema, extensionIdOf } from "@intentic/extension-manifest";
 import { githubRepoOf, type RegistryFacts, type RegistryFile, REGISTRY_TOPIC, resolveSource } from "@intentic/registry";
 import type { GithubReader, GithubRepo } from "./github.js";
 

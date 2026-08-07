@@ -1,5 +1,7 @@
-import type { ExtensionManifest, ExtensionModule } from "@intentic/extension-api";
-import { extensionApiVersion, extensionIdOf, satisfiesEngines } from "@intentic/extension-api";
+import type { ExtensionModule } from "@intentic/extension-api";
+import type { ExtensionManifest } from "@intentic/extension-manifest";
+import { extensionApiVersion, satisfiesEngines } from "@intentic/extension-api";
+import { extensionIdOf } from "@intentic/extension-manifest";
 import { type ExtensionSummary, ExtensionsListSchema } from "@intentic/sandbox-contract";
 import { shallowRef } from "vue";
 import { extensionSettingsStore } from "../composables/extensions/useExtensionSettings";

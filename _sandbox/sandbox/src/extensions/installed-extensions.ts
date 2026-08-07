@@ -1,6 +1,6 @@
 import { readdir } from "node:fs/promises";
 import { join } from "node:path";
-import { type ExtensionManifest, extensionIdOf } from "@intentic/extension-api";
+import { type ExtensionManifest, extensionIdOf } from "@intentic/extension-manifest";
 import type { Capability, ExtensionSummary, InvalidWorkspaceExtension } from "@intentic/sandbox-contract";
 import {
     extensionDir,

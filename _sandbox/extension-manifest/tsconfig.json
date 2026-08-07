@@ -8,6 +8,5 @@
     },
     "include": ["./src/**/*"],
     "exclude": ["./src/**/*.test.ts"],
-    "references": [{ "path": "../extension-manifest" }, { "path": "../registry" }],
     "extends": "@intentic/tsconfig/tsconfig.base.json"
 }

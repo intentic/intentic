@@ -29,6 +29,7 @@
     },
     "dependencies": {
         "@intentic/extension-api": "workspace:*",
+        "@intentic/extension-manifest": "workspace:*",
         "@intentic/registry": "workspace:*",
         "zod": "catalog:"
     },

@@ -1,6 +1,7 @@
 import { access } from "node:fs/promises";
 import { join } from "node:path";
-import { type ExtensionManifest, extensionApiVersion } from "@intentic/extension-api";
+import { extensionApiVersion } from "@intentic/extension-api";
+import { type ExtensionManifest } from "@intentic/extension-manifest";
 import { extensionRead } from "../capabilities/extension-dirs.js";
 
 /* IS THIS EXTENSION FIT TO PUBLISH — the checks that can be answered from the files alone, and the reason they

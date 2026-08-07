@@ -1,7 +1,7 @@
 import { sandboxContract } from "@intentic/sandbox-contract";
 import { createORPCClient, ORPCError } from "@orpc/client";
 import type { ContractRouterClient } from "@orpc/contract";
-import { OpenAPILink } from "@orpc/openapi-client/fetch";
+import { OpenAPILink, type OpenAPILinkOptions } from "@orpc/openapi-client/fetch";
 import { useSandboxSession } from "./sandboxSession";
 import { useEndpoint } from "./useEndpoint";
 import { useSandbox } from "./useSandbox";
@@ -38,52 +38,78 @@ export class SandboxUnaddressedError extends Error {
     }
 }
 
-export const sandboxRpc: ContractRouterClient<typeof sandboxContract> = createORPCClient(
-    new OpenAPILink(sandboxContract, {
-        // Resolved per request rather than captured at construction: the link is built once at module load,
-        // and a fetch bound then is invisible to anything that replaces it afterwards (a test's stub, an
-        // instrumentation wrapper). No credentials — the daemon is cross-origin and bearer-authed, never cookied.
-        //
-        // The hook is also where every typed call gets its clock. Same `rpc.request` op as sandboxClient's raw
-        // fetch, so one table row covers both ways of reaching the daemon; the path is the URL's, minus origin
-        // and query, so a route aggregates instead of splitting per file/repo argument. A stream's span ends at
-        // the response HEADERS, not at the last frame — which is the right measure for /events and the attach:
-        // what matters there is how long the connection took to establish.
-        fetch: (request) => {
-            const path = ((): string => {
-                try {
-                    return new URL(request.url).pathname;
-                } catch {
-                    return request.url;
-                }
-            })();
-            return trackPerf(`rpc.request`, { path, method: request.method }, () => globalThis.fetch(request));
-        },
-        // Read per request, not captured: a sandbox switch (or a daemon that re-announced a new URL after a
-        // restart) must be picked up by the very next call, with no client rebuild. Same reason the loopback
-        // shortcut can be adopted mid-session — this hook simply starts returning the faster base.
-        url: () => {
-            const base = daemonBase.value;
-            if (base === undefined || base === ``) {
-                throw new SandboxUnaddressedError();
+// Everything about reaching the daemon that does NOT depend on who is asking: the base, the credentials, the
+// clock. Shared by every client built below, which is what makes an extension's reach identical to the app's
+// in all respects but the gate.
+const linkOptions: OpenAPILinkOptions<Record<never, never>> = {
+    // Resolved per request rather than captured at construction: the link is built once at module load,
+    // and a fetch bound then is invisible to anything that replaces it afterwards (a test's stub, an
+    // instrumentation wrapper). No credentials — the daemon is cross-origin and bearer-authed, never cookied.
+    //
+    // The hook is also where every typed call gets its clock. Same `rpc.request` op as sandboxClient's raw
+    // fetch, so one table row covers both ways of reaching the daemon; the path is the URL's, minus origin
+    // and query, so a route aggregates instead of splitting per file/repo argument. A stream's span ends at
+    // the response HEADERS, not at the last frame — which is the right measure for /events and the attach:
+    // what matters there is how long the connection took to establish.
+    fetch: (request) => {
+        const path = ((): string => {
+            try {
+                return new URL(request.url).pathname;
+            } catch {
+                return request.url;
             }
-            return base;
-        },
-        headers: async () => {
-            const token = await getSessionToken();
-            if (token === undefined) {
-                throw new Error(`Sign in with Google to reach your sandbox.`);
-            }
-            const connectToken = active.value?.token;
-            return {
-                authorization: `Bearer ${token}`,
-                // The daemon binds its owner on the FIRST authenticated request (TOFU) only if it carries the
-                // sandbox's connect token; it ignores the header once bound, so sending it always is harmless.
-                ...(connectToken !== undefined ? { "x-intentic-connect": connectToken } : {}),
-            };
-        },
-    }),
-);
+        })();
+        return trackPerf(`rpc.request`, { path, method: request.method }, () => globalThis.fetch(request));
+    },
+    // Read per request, not captured: a sandbox switch (or a daemon that re-announced a new URL after a
+    // restart) must be picked up by the very next call, with no client rebuild. Same reason the loopback
+    // shortcut can be adopted mid-session — this hook simply starts returning the faster base.
+    url: () => {
+        const base = daemonBase.value;
+        if (base === undefined || base === ``) {
+            throw new SandboxUnaddressedError();
+        }
+        return base;
+    },
+    headers: async () => {
+        const token = await getSessionToken();
+        if (token === undefined) {
+            throw new Error(`Sign in with Google to reach your sandbox.`);
+        }
+        const connectToken = active.value?.token;
+        return {
+            authorization: `Bearer ${token}`,
+            // The daemon binds its owner on the FIRST authenticated request (TOFU) only if it carries the
+            // sandbox's connect token; it ignores the header once bound, so sending it always is harmless.
+            ...(connectToken !== undefined ? { "x-intentic-connect": connectToken } : {}),
+        };
+    },
+};
+
+// The app's own client — ungated, because the app IS the host.
+export const sandboxRpc: ContractRouterClient<typeof sandboxContract> = createORPCClient(new OpenAPILink(sandboxContract, linkOptions));
+
+/* THE SAME CLIENT, ANSWERABLE TO A MANIFEST — one instance per extension, for the extension host.
+ *
+ * The gate runs before the request is built, receives the procedure the caller named and the input it passed,
+ * and throws to refuse; returning is consent. That is the whole difference between this and the app's own
+ * client, and it is deliberately the only one: an extension reaches the daemon exactly as the app does, over
+ * the same base with the same credentials, and cannot reach it any other way.
+ *
+ * Interception at the PROCEDURE, not at the request, is what makes the gate exact. A path-based guard has to
+ * recover the caller's intent from a formatted URL; here the contract has already named it. */
+export const gatedSandboxRpc = (gate: (procedure: readonly string[], input: unknown) => void): ContractRouterClient<typeof sandboxContract> =>
+    createORPCClient(
+        new OpenAPILink(sandboxContract, {
+            ...linkOptions,
+            interceptors: [
+                ({ path, input, next }) => {
+                    gate(path, input);
+                    return next();
+                },
+            ],
+        }),
+    );
 
 // The HTTP status behind a failed daemon call, or undefined when the call never got an answer (DNS, TLS, a
 // dead tunnel, an abort). oRPC maps every non-2xx to an ORPCError carrying the status — including the daemon's

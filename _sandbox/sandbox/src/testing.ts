@@ -2,7 +2,7 @@ import { tmpdir } from "node:os";
 import { basename, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { HookJSONOutput, SyncHookJSONOutput } from "@anthropic-ai/claude-agent-sdk";
-import type { ListenerContribution } from "@intentic/extension-api";
+import type { ListenerContribution } from "@intentic/extension-manifest";
 import type { IsolatedAgent, PersistedAgent } from "./agents/agents-store.js";
 import type { IsolationPlan, TurnIsolation } from "./agents/isolation.js";
 import { overlaysDir } from "./agents/isolation.js";

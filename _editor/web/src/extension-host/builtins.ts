@@ -1,5 +1,6 @@
-import type { ExtensionManifest, ExtensionModule } from "@intentic/extension-api";
-import { extensionIdOf } from "@intentic/extension-api";
+import type { ExtensionModule } from "@intentic/extension-api";
+import type { ExtensionManifest } from "@intentic/extension-manifest";
+import { extensionIdOf } from "@intentic/extension-manifest";
 import * as acceptance from "@intentic/ext-acceptance";
 import * as activity from "@intentic/ext-activity";
 import * as apps from "@intentic/ext-repo-apps";

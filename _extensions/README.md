@@ -22,8 +22,16 @@ its initials; `extensionMarks.test.ts` in the web app keeps that from happening 
 glyph names are real.
 
 Dependencies are limited **by lint** (`.oxlintrc.json`, scoped to `_extensions/**`) to
-`@intentic/extension-api`, `@intentic/extension-ui`, and `@intentic/sandbox-contract`. Reaching into
-`@intentic-app/*` or the app internals is a boundary violation and fails the build.
+`@intentic/extension-api`, `@intentic/extension-manifest`, `@intentic/extension-ui`, and
+`@intentic/sandbox-contract`. Reaching into `@intentic-app/*` or the app internals is a boundary violation and
+fails the build.
+
+**Reach the daemon through `api.sandbox.rpc`**, the contract as a typed client: `rpc.git.stashApply({ repo, ref,
+pop })` rather than a hand-built URL, a hand-set method and a hand-declared response shape. The older
+`api.sandbox.request`/`json` take a path string and stay only for the routes the contract does not declare
+(raw file bytes, chunked upload). Both go through the same `permissions.sandbox` gate, so switching doors
+changes nothing about what an extension is allowed to reach — only about how much of the call it has to
+restate, and whether a daemon that has moved on is a build error or a silent one.
 
 **Before drawing a control, check whether `api` already owns it.** Some surfaces are the shell's and an
 extension only asks for them: `api.terminal`, `api.chat`, `api.documents` — and `api.models`, the app's own

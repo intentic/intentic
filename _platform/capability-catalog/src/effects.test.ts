@@ -1,4 +1,4 @@
-import type { CapabilityContribution, ExtensionManifest } from "@intentic/extension-api";
+import type { CapabilityContribution, ExtensionManifest } from "@intentic/extension-manifest";
 import { describe, expect, it } from "vitest";
 import { capabilityEffects } from "./effects.js";
 import { CapabilityKindSchema } from "@intentic/sandbox-contract";
