@@ -10,7 +10,7 @@
 #      "a script added to the site is bundled by construction" true — and also what makes it silently untrue the
 #      day the glob is narrowed, a build runs against a stale checkout, or a bundler drops a file it cannot
 #      stat. The app spawns these by basename at run time, so a missing one is a launcher button that fails only
-#      once a user presses it. Every source script must be present AND byte-identical.
+#      once a user presses it. Every script the COMMIT carries must be present AND byte-identical.
 #
 #   2. THE DEEP LINK IS NOT REGISTERED. `intentic://` is the entire channel from the SPA into the app — setup,
 #      recreate, sign-in, and the credential coming back. On the installed paths that registration is a
@@ -26,7 +26,7 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
-SOURCE_SCRIPTS="$ROOT/_site/site/public/scripts"
+SOURCE_REL="_site/site/public/scripts"
 
 if [ ! -d "${1:-$ROOT/_editor/desktop-app/dist-bin}" ]; then
     echo "error: no artifact directory at ${1:-$ROOT/_editor/desktop-app/dist-bin} — build first (build-desktop.sh or stage-local-downloads.sh)" >&2
@@ -53,10 +53,20 @@ need() {
     }
 }
 
+# The scripts as the COMMIT carries them, extracted once — not as they happen to sit in the working tree. The
+# runners keep their checkout between jobs (`clean: false`, docs/ci-runner.md) and share the machine with five
+# others, so what is on disk can hold an untracked leftover, and it can CHANGE while the six-minute bundle build
+# runs: in job 92707727494 the .deb was packed with a cleanup.sh that the .rpm, bundled two seconds later, no
+# longer saw — three correct installers, a tree that moved under them, and a red build. A release ships what the
+# commit says, so that is the thing worth asserting; a dirty working tree is the developer's business, not this
+# script's.
+git -C "$ROOT" archive HEAD "$SOURCE_REL" | tar -x -C "$WORK"
+SOURCE_SCRIPTS="$WORK/$SOURCE_REL"
+
 # Every script the site ships, by basename. This is the expectation the glob is supposed to satisfy.
 mapfile -t EXPECTED < <(find "$SOURCE_SCRIPTS" -maxdepth 1 -type f -printf '%f\n' | sort)
 if [ "${#EXPECTED[@]}" -eq 0 ]; then
-    echo "error: no scripts found in $SOURCE_SCRIPTS — the source of truth is empty, which cannot be right." >&2
+    echo "error: no scripts committed at $SOURCE_REL — the source of truth is empty, which cannot be right." >&2
     exit 1
 fi
 
@@ -81,15 +91,15 @@ compare_scripts() {
             fail "$label: $name did not ship"
             problems=$((problems + 1))
         elif ! cmp -s "$SOURCE_SCRIPTS/$name" "$dir/$name"; then
-            fail "$label: $name differs from _site/site/public/scripts/$name"
+            fail "$label: $name differs from the committed $SOURCE_REL/$name"
             problems=$((problems + 1))
         fi
     done
-    # A file in the bundle that the site no longer ships means the build read a stale tree — the app would spawn
+    # A file in the bundle that the commit does not carry means the build read a stale tree — the app would spawn
     # a script nobody can review at its source path any more.
     while IFS= read -r name; do
         if ! printf '%s\n' "${EXPECTED[@]}" | grep -qxF "$name"; then
-            fail "$label: stale $name is bundled but no longer in the site's scripts"
+            fail "$label: stale $name is bundled but is not committed at $SOURCE_REL"
             problems=$((problems + 1))
         fi
     done < <(find "$dir" -maxdepth 1 -type f -printf '%f\n')
@@ -175,7 +185,7 @@ check_nsis() {
 }
 
 echo "==> verifying desktop bundles in ${DIST#"$ROOT"/}"
-echo "    against ${#EXPECTED[@]} scripts in ${SOURCE_SCRIPTS#"$ROOT"/}"
+echo "    against the ${#EXPECTED[@]} scripts committed at $SOURCE_REL ($(git -C "$ROOT" rev-parse --short HEAD))"
 
 # `if` rather than `[ -f … ] && check_…`: under `set -e` a trailing AND-list whose test is false exits the
 # script non-zero, so an absent Windows artifact would read as a verification failure.
