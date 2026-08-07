@@ -171,7 +171,9 @@ const fixedTiles = computed<readonly AreaTile[]>(() => [
         id: `agents`,
         to: `/agents`,
         label: `Agents`,
-        icon: `comments`,
+        // `robot`, not `comments` — the two Work-band tiles have to differ in SILHOUETTE, not in detail. The
+        // reasoning, and what it rules out, is on `robot` in the icon table.
+        icon: `robot`,
         ...(agentAttention.value > 0
             ? {
                   badge: {
@@ -186,7 +188,8 @@ const fixedTiles = computed<readonly AreaTile[]>(() => [
         id: `workspace`,
         to: `/workspace`,
         label: `Workspace`,
-        icon: `folder`,
+        // The other half of that pair — a branching tree, which is what this view opens on anyway.
+        icon: `file-tree`,
         ...(workspaceBadge.value === undefined ? {} : { badge: workspaceBadge.value }),
     },
     /* PERMANENT, AND THE BADGE CARRIES THE QUEUE. Drafts used to appear only once something was waiting, which made

@@ -58,6 +58,7 @@ export type IconName =
     | "file"
     | "file-edit"
     | "file-pdf"
+    | "file-tree"
     | "filter"
     | "folder"
     | "folder-open"
@@ -86,6 +87,7 @@ export type IconName =
     | "question-circle"
     | "refresh"
     | "repeat"
+    | "robot"
     | "save"
     | "search"
     | "send"
@@ -167,6 +169,9 @@ export const ICONS: Record<IconName, string> = {
     file: "ri:file-line",
     "file-edit": "ri:file-edit-line",
     "file-pdf": "ri:file-pdf-line",
+    /* The Workspace area's glyph, and deliberately NOT `folder` — see `robot` below for the pair's whole story.
+     * A branching tree is also the truer picture of that view: it opens on a file tree, not on one directory. */
+    "file-tree": "ri:node-tree",
     filter: "ri:filter-3-line",
     folder: "ri:folder-line",
     "folder-open": "ri:folder-open-line",
@@ -200,6 +205,17 @@ export const ICONS: Record<IconName, string> = {
     "plus-circle": "ri:add-circle-line",
     "question-circle": "ri:question-line",
     refresh: "ri:refresh-line",
+    /* The Agents area's glyph. AT RAIL SIZE AN ICON IS ITS SILHOUETTE — 18px of 1.5px stroke resolves the outer
+     * shape and roughly how full the middle is, and nothing finer. Agents wore `comments` and Workspace wore
+     * `folder`, which are the same silhouette: a thin outlined box filling the tile, told apart only by a bump
+     * two pixels wide (a bubble's tail, a folder's tab). They sit adjacent in the rail's Work band, so the two
+     * tiles the app is used from were the two nobody could tell apart. `desktop` (Browsers) is a third box.
+     *
+     * The fix is to leave the family rather than redraw the bump: a round-ish head with eyes reads as a face at
+     * any size, and Workspace's `file-tree` reads as branching. Not a people glyph (`users`/`team`) — Subagents
+     * already wears `users`, and that only moves the collision down the rail. Not a filled variant of the same
+     * shape either: it separates them, but a solid tile in an all-outline set reads as "unread". */
+    robot: "ri:robot-2-line",
     save: "ri:save-line",
     search: "ri:search-line",
     send: "ri:send-plane-line",

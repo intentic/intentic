@@ -62,13 +62,13 @@ const tabs = computed<readonly Tab[]>(() => [
     {
         to: `/agents`,
         label: `Agents`,
-        icon: `comments`,
+        icon: `robot`,
         needsSandbox: true,
         ...(attention.value > 0
             ? { badge: { count: attention.value, tooltip: `${attention.value} need${attention.value === 1 ? `s` : ``} you` } }
             : {}),
     },
-    { to: `/workspace`, label: `Files`, icon: `folder`, needsSandbox: true },
+    { to: `/workspace`, label: `Files`, icon: `file-tree`, needsSandbox: true },
     { to: `/drafts`, label: `Review`, icon: `send`, needsSandbox: true, ...(reviewBadge.value === undefined ? {} : { badge: reviewBadge.value }) },
     { to: `/menu`, label: `Menu`, icon: `bars`, needsSandbox: false, ...(sandboxBadge.value === undefined ? {} : { badge: sandboxBadge.value }) },
 ]);

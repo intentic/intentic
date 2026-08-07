@@ -50,8 +50,10 @@ export function useShellCommands(): void {
                     isOpen.value = true;
                 },
             },
-            { command: `view.workspace`, title: `Go to Workspace`, icon: `folder`, handler: () => router.push(`/workspace`) },
-            { command: `view.agents`, title: `Go to Agents`, icon: `comments`, handler: () => router.push(`/agents`) },
+            // The same glyphs the rail gives these two areas: a command that jumps somewhere should be wearing
+            // what it jumps to.
+            { command: `view.workspace`, title: `Go to Workspace`, icon: `file-tree`, handler: () => router.push(`/workspace`) },
+            { command: `view.agents`, title: `Go to Agents`, icon: `robot`, handler: () => router.push(`/agents`) },
             { command: `view.secrets`, title: `Go to Sandbox Secrets`, icon: `key`, handler: () => router.push(`/sandbox/secrets`) },
             // Logs sits on the sandbox hub rather than the rail (it is read-only forensics about the box, not a
             // surface you work from) — so the palette is what makes it one keystroke away when something broke,

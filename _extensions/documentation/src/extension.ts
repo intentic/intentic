@@ -35,7 +35,8 @@ export const activate = (api: IntenticApi, context: ExtensionContext): void => {
             /* `question-circle`: the icon set has no `book`, and the two obvious alternatives both collide at
              * rail size. `align-left` (the first attempt) is a stack of horizontal lines, which is Acceptance's
              * `list-check` with the ticks removed — indistinguishable in a 20px tile. `file` is a page outline,
-             * which is Workspace's `folder` at a glance. A ring with a mark inside shares its silhouette with
+             * which is every other boxy glyph in the rail at a glance (`desktop`, and Workspace's `folder` until
+             * that tile moved to `file-tree`). A ring with a mark inside shares its silhouette with
              * nothing else in the rail, and "?" is the most widely understood "read about this" affordance.
              * `clock` (Automations) is the only other round glyph, so RAIL_ORDER keeps the two apart.
              *
