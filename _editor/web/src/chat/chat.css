@@ -154,8 +154,9 @@
    nothing else in here:
 
      meta   text-2xs  0.6875rem  tool cards, timestamps, badges, hints, option descriptions
-     body   text-xs   0.75rem    everything read or typed: bubbles, prose, composer, menu rows, todos
-     title  text-sm   0.875rem   card header lines (plan / question / permission)
+     body   text-xs   0.75rem    everything read or typed: bubbles, prose, composer, menu rows, todos,
+                                 and the question card's ask — a sentence, so it reads at the size of one
+     title  text-sm   0.875rem   card header lines that are labels, not prose (plan / permission)
 
    The column is dense on purpose: a turn is mostly chrome around an answer, and a chat panel is read
    beside the code it is about, not instead of it. A pass that lifted every tier ~8-18% (and split

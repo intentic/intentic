@@ -933,13 +933,15 @@ const onEditKeydown = (event: KeyboardEvent): void => {
             <div v-if="message.question" class="chat-surface w-full overflow-hidden rounded-xl">
                 <!-- The question wraps in full here rather than truncating behind a tooltip; a multi-question
                      card carries a generic title and breaks each question out inline in the body below.
-                     font-medium, not semibold: this header is a SENTENCE, often two lines of it, and at
-                     semibold two lines of prose read as a banner shouted at the reader rather than as a
-                     question being asked. Weight is doing one job here — separating the ask from the options
-                     under it — and one step is enough to do it. -->
+                     Body tier, font-medium: this header is a SENTENCE, often two lines of it, and prose held
+                     a size above the answer it is asking about reads as a banner shouted at the reader rather
+                     than as a question being asked — the same ask sits at this size in the multi-question
+                     card's body. Weight alone separates it from the options under it, and one step of it is
+                     enough. The other card headers (plan / permission) keep the title tier: they are single
+                     truncated lines, not prose. -->
                 <div class="flex items-start gap-2 border-b border-line px-3.5 py-2">
                     <Icon name="comments" class="mt-0.5 text-sm text-link" />
-                    <span class="min-w-0 flex-1 text-sm font-medium text-content">{{
+                    <span class="min-w-0 flex-1 text-xs font-medium text-content">{{
                         message.question.questions.length > 1 ? "A few questions" : message.question.questions[0]?.question
                     }}</span>
                     <span v-if="message.question.status === 'answered'" class="mt-0.5 shrink-0 text-2xs font-medium text-success">✓ Answered</span>
