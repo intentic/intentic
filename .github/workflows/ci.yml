@@ -679,7 +679,82 @@ jobs:
 
       - run: bash _tools/scripts/prepare-image-trees.sh
       # `shell: bash` because the job's default is `sh`, where the `${VAR::N}` slice below is a Bad substitution.
-      - run: TAGS="latest sha-${GITHUB_SHA::8}" bash _tools/scripts/publish-images.sh
+      # The sandbox pushes per-arch tags (this runner is the amd64 half; images-arm64 is the other) and the
+      # merge job publishes the plain multi-arch tags; dind-host stays single-arch (publish-images.sh says why).
+      - run: TAGS="latest sha-${GITHUB_SHA::8}" ARCH_SUFFIX=-amd64 IMAGES=sandbox bash _tools/scripts/publish-images.sh
+        shell: bash
+      - run: TAGS="latest sha-${GITHUB_SHA::8}" IMAGES=dind-host bash _tools/scripts/publish-images.sh
+        shell: bash
+
+  # The sandbox image's arm64 half, natively built — GitHub's hosted arm runners rather than the x86 fleet,
+  # because the trees payload must be prepared on the arch it ships for (pnpm deploy fetches the HOST arch's
+  # native prebuilds; publish-images.sh says the rest). Cold caches by construction (no /ci-cache off the
+  # fleet): pnpm's store rides setup-node's cache, turbo rebuilds, and the docker build warms itself off the
+  # registry's own arm64 tags. The release does NOT reuse these sha tags — its arm64 half is version-stamped
+  # inside release.yml (sandbox-arm64 there) so a released manifest's halves never skew.
+  images-arm64:
+    needs: [changes, verify-core]
+    if: |
+      !cancelled() && github.event_name == 'push' && github.ref == 'refs/heads/main'
+      && needs.changes.outputs.images == 'true'
+      && needs.verify-core.result == 'success'
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 90
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v6
+        with:
+          node-version-file: package.json
+          cache: pnpm
+      - uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - uses: actions/cache@v6
+        with:
+          path: |
+            .image-out/iq-models
+            .image-out/.iq-models-complete
+          key: iq-models-${{ hashFiles('_search/iq-engine/scripts/fetch-model.mjs') }}
+      - run: pnpm install --frozen-lockfile
+      - run: bash _tools/scripts/prepare-image-trees.sh
+      - run: TAGS="latest sha-${GITHUB_SHA::8}" ARCH_SUFFIX=-arm64 IMAGES=sandbox bash _tools/scripts/publish-images.sh
+        shell: bash
+
+  # Stitch the two halves into the plain tags — two manifest calls per tag, no bytes moved. Until this runs,
+  # `latest` still points at the previous merge, so a consumer mid-pipeline never sees a half-published tag.
+  images-merge:
+    needs: [images, images-arm64]
+    if: ${{ needs.images.result == 'success' && needs.images-arm64.result == 'success' }}
+    runs-on: [self-hosted, intentic]
+    container:
+      image: ghcr.io/intentic/ci-base:latest
+      volumes:
+        - /var/run/docker.sock:/var/run/docker.sock
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      packages: write
+    env:
+      REGISTRIES: ghcr.io/intentic
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          clean: false
+      - uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - run: bash _tools/scripts/merge-image-manifests.sh sandbox latest "sha-${GITHUB_SHA::8}"
         shell: bash
 
   # Platform image publishing: build + push web + api on every push to main that touches the platform, then

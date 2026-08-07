@@ -3,8 +3,9 @@
 #   sandbox    the AI-agent workspace daemon + CLI
 #   dind-host  a Docker-in-Docker + sshd deploy-target "host" — connect.ps1 stands one up on Windows so a
 #              server-less user can deploy locally (the e2e harness + intentic-local.sh use the same recipe)
-# Used by CI — the Images workflow (latest + commit SHA on push to main) and the release (the version + the
-# moving `stable` tag, via semantic-release successCmd) — and runnable by hand:
+# Used by CI — the Images workflow (latest + commit SHA on push to main, one job per arch) and the release
+# (release-images.sh: the version + the moving `stable` tag, via semantic-release publishCmd) — and runnable
+# by hand:
 #   docker login ghcr.io && TAGS=0.1.0 pnpm publish:images
 # TAGS is a space-separated tag list; every listed tag is pushed. On release the moving `stable` tag is pushed
 # onto the new version; _deploy/state-resolver/src/lib/images.ts and the connect scripts reference `sandbox:stable`
@@ -13,6 +14,15 @@
 set -euo pipefail
 
 TAGS="${TAGS:?set TAGS (space-separated, e.g. "0.1.0" or "latest sha-abc1234")}"
+# Which of the two images to build — the multi-arch flow builds `sandbox` per arch on different runners while
+# `dind-host` stays a single amd64 build (it exists for the Windows-local flow; nothing pulls it on arm).
+IMAGES="${IMAGES:-sandbox dind-host}"
+# Per-arch tag suffix ("-amd64"/"-arm64") for the multi-arch flow: each runner builds its NATIVE arch under
+# `<tag><suffix>`, and merge-image-manifests.sh publishes the plain tag as one multi-arch manifest. The
+# suffix rides the tags rather than a buildx --platform flag because the payload (`trees`) must be prepared
+# natively per arch — pnpm deploy fetches the HOST arch's native prebuilds (sharp, onnxruntime, ast-grep),
+# so a cross-built image would carry the wrong ones. Empty = the single-arch flow, plain tags, unchanged.
+ARCH_SUFFIX="${ARCH_SUFFIX:-}"
 # Space-separated registries, every one of which gets every tag. Adding one is how a second registry would be
 # served: the bytes are built once and every listed registry receives the identical manifest.
 #
@@ -68,21 +78,32 @@ publish() {
     local registry
     for registry in $REGISTRIES; do
         for tag in $TAGS; do
-            tag_args+=(-t "$registry/$image:$tag")
+            tag_args+=(-t "$registry/$image:$tag$ARCH_SUFFIX")
         done
         # `latest` moves on every main push that touches the core, `stable` on every release; whichever is
         # newer is a warm parent, and the release job (which pushes neither) reads both. A missing or
         # unreachable ref is a non-fatal warning, so this is correct against a cold registry too — which is
-        # exactly what GHCR is on the first run.
-        cache_args+=(--cache-from "type=registry,ref=$registry/$image:latest")
-        cache_args+=(--cache-from "type=registry,ref=$registry/$image:stable")
+        # exactly what GHCR is on the first run. Under a suffix the per-arch tags are the true parents (the
+        # plain tag is a manifest list whose amd64 half also warms an amd64 build, so it stays in the list).
+        cache_args+=(--cache-from "type=registry,ref=$registry/$image:latest$ARCH_SUFFIX")
+        cache_args+=(--cache-from "type=registry,ref=$registry/$image:stable$ARCH_SUFFIX")
+        if [ -n "$ARCH_SUFFIX" ]; then
+            cache_args+=(--cache-from "type=registry,ref=$registry/$image:latest")
+            cache_args+=(--cache-from "type=registry,ref=$registry/$image:stable")
+        fi
     done
     docker buildx build -f "$dockerfile" "${tag_args[@]}" "${cache_args[@]}" \
         --cache-to "type=inline" \
         "$@" --push "$context"
 }
 
-# The sandbox image COPYs its compiled payload from .image-out — prepare-image-trees.sh must have run first.
-[ -d "$root/.image-out/sandbox" ] || { echo "missing $root/.image-out — run _tools/scripts/prepare-image-trees.sh first" >&2; exit 1; }
-publish sandbox "$root/_sandbox/sandbox/Dockerfile" "$root" --build-context "trees=$root/.image-out"
-publish dind-host "$root/_tools/dind-host/Dockerfile" "$root/_tools/dind-host"
+case " $IMAGES " in
+    *" sandbox "*)
+        # The sandbox image COPYs its compiled payload from .image-out — prepare-image-trees.sh must have run first.
+        [ -d "$root/.image-out/sandbox" ] || { echo "missing $root/.image-out — run _tools/scripts/prepare-image-trees.sh first" >&2; exit 1; }
+        publish sandbox "$root/_sandbox/sandbox/Dockerfile" "$root" --build-context "trees=$root/.image-out"
+        ;;
+esac
+case " $IMAGES " in
+    *" dind-host "*) publish dind-host "$root/_tools/dind-host/Dockerfile" "$root/_tools/dind-host" ;;
+esac

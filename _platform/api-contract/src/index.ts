@@ -4,6 +4,8 @@ import { z } from "zod";
 import {
     CfTokenSchema,
     CfZonesSchema,
+    CloudCredentialsSchema,
+    CloudOptionsSchema,
     DaemonUrlSchema,
     ImageDataUrlSchema,
     InviteListSchema,
@@ -57,6 +59,19 @@ export const sandboxContract = {
         .input(sandboxIdInput)
         .output(z.object({ ok: z.boolean() })),
     zones: oc.route({ method: "POST", path: "/sandbox/zones" }).input(CfTokenSchema).output(CfZonesSchema),
+    // The cloud lane (schemas.ts "the cloud lane"): `cloudOptions` validates a pasted provider credential by
+    // spending it on the provider's own catalog (regions + sizes with live prices); `cloudProvision` spends it
+    // once more to create the ONE VM in the user's account whose first boot runs the sandbox's live setup code
+    // — so it requires a fresh `setupCode` mint (mode intentic) first, exactly like the command lane. The
+    // credential is request-scoped both times (the zones contract): never persisted, logged, or stored.
+    cloudOptions: oc
+        .route({ method: "POST", path: "/sandbox/cloud-options" })
+        .input(z.object({ credentials: CloudCredentialsSchema }))
+        .output(CloudOptionsSchema),
+    cloudProvision: oc
+        .route({ method: "POST", path: "/sandbox/cloud-provision" })
+        .input(z.object({ sandboxId: z.string(), credentials: CloudCredentialsSchema, location: z.string(), size: z.string() }))
+        .output(SandboxSummarySchema),
     setupCode: oc
         .route({ method: "POST", path: "/sandbox/setup-code" })
         .input(z.object({ sandboxId: z.string(), target: SetupCodeTargetSchema }))

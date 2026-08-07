@@ -78,6 +78,45 @@ jobs:
           if-no-files-found: error
           retention-days: 7
 
+  # The sandbox image's arm64 half, built NATIVELY on GitHub's hosted arm runners (free for public repos)
+  # while Windows verifies — the payload (`trees`) must be prepared on the arch it ships for, because pnpm
+  # deploy fetches the HOST arch's native prebuilds (publish-images.sh says the rest). Versions are stamped
+  # exactly as windows-build stamps them, so the two halves of the released manifest carry the same version;
+  # the publish job's release-images.sh merges this `<version>-arm64` under the version + stable tags. Off
+  # the self-hosted fleet, so no /ci-cache and no pnpm-setup action — the windows-verify pattern instead,
+  # with pnpm's store cached by setup-node. An aborted release orphans at most one `<version>-arm64` tag.
+  sandbox-arm64:
+    needs: plan
+    if: ${{ needs.plan.outputs.version != '' }}
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 90
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v6
+        with:
+          node-version-file: package.json
+          cache: pnpm
+      - uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      # The same iq-models cache the images + publish jobs share — the models are arch-neutral bytes.
+      - uses: actions/cache@v6
+        with:
+          path: |
+            .image-out/iq-models
+            .image-out/.iq-models-complete
+          key: iq-models-${{ hashFiles('_search/iq-engine/scripts/fetch-model.mjs') }}
+      - run: pnpm install --frozen-lockfile
+      - run: bash _tools/scripts/set-versions.sh "${{ needs.plan.outputs.version }}"
+      - run: bash _tools/scripts/prepare-image-trees.sh
+      - run: TAGS="${{ needs.plan.outputs.version }}" ARCH_SUFFIX=-arm64 IMAGES=sandbox bash _tools/scripts/publish-images.sh
+
   # A real interactive Windows session installs the candidate, handles a cold and warm OS deep link, proves the
   # WebView loaded local content, and uninstalls while the tray process is still alive.
   windows-verify:
@@ -111,9 +150,11 @@ jobs:
 
   # semantic-release recomputes the plan as a safety check. release-prepare.sh refuses if it differs, builds the
   # other release assets, and asks build-desktop.sh to combine Linux bundles with this tested NSIS candidate.
+  # sandbox-arm64 gates it too: release-images.sh merges that job's `<version>-arm64` into the version+stable
+  # manifests, and publishing without it would fail there — after the GitHub release already went out.
   publish:
-    needs: [plan, windows-verify]
-    if: ${{ needs.windows-verify.result == 'success' }}
+    needs: [plan, windows-verify, sandbox-arm64]
+    if: ${{ needs.windows-verify.result == 'success' && needs.sandbox-arm64.result == 'success' }}
     runs-on: [self-hosted, intentic, desktop]
     container:
       image: ghcr.io/intentic/ci-desktop:latest

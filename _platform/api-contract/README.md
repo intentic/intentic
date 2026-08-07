@@ -6,7 +6,7 @@ Consumed by both the backend ([`@intentic-app/api`](../../_platform/api), which 
 
 ## Responsibilities
 
-- Define `apiContract` — the aggregate oRPC router (`me`, `projects`, `inventory`).
+- Define `apiContract` — the aggregate oRPC router (`me`, `sandbox`, `invite`, `desktop`). `sandbox` includes the setup wizard's cloud lane (`cloudOptions`/`cloudProvision`): provider credentials are request-scoped inputs, never stored rows.
 - Define the Zod schemas + inferred wire types (`ProjectSchema`/`Project`, `ServerSchema`/`Server`, `CloudflareStatusSchema`, `Repo` kinds, …).
 - It contains **no** implementation — only the contract shapes both sides bind to.
 

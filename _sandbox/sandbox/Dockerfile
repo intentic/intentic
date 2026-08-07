@@ -176,7 +176,10 @@ RUN mkdir -p /root/.config/opencode \
 # ponytail: bump the pin deliberately; a wire-API or Management-endpoint change surfaces as a translator-only
 # failure (native-harness turns never touch it).
 ARG CLIPROXY_VERSION=7.2.110
+# CLIProxyAPI names its arm build `linux_aarch64` where dpkg (and every other asset in this file) says
+# `arm64` — mapped here, verified against the v7.2.110 release's asset list.
 RUN arch="$(dpkg --print-architecture)" \
+    && case "$arch" in arm64) arch="aarch64" ;; esac \
     && mkdir -p /tmp/cliproxy \
     && curl -fsSL "https://github.com/router-for-me/CLIProxyAPI/releases/download/v${CLIPROXY_VERSION}/CLIProxyAPI_${CLIPROXY_VERSION}_linux_${arch}.tar.gz" | tar -xz -C /tmp/cliproxy \
     && install -m 0755 "$(find /tmp/cliproxy -type f -name cli-proxy-api | head -n1)" /usr/local/bin/cli-proxy-api \

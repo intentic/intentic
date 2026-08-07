@@ -71,6 +71,10 @@ const configSchema = z.object({
             poolSize: z.coerce.number().int().nonnegative().default(1), // INTENTIC_CLOUDFLARE_POOL_SIZE
         })
         .prefault({}),
+    // Where the connect bootstrap scripts are served from — the cloud lane bakes `${scriptOrigin}/connect`
+    // into a new VM's first-boot script (sandbox/cloud/user-data.ts), the same URL the setup wizard's
+    // copy-paste command uses. A self-hosted platform points this at its own site. SCRIPT_ORIGIN.
+    scriptOrigin: z.url().default(`https://intentic.dev`),
     api: z
         .object({
             url: z.url().default(`http://localhost:6480`),

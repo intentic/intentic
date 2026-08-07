@@ -7,6 +7,7 @@ The **platform backend** — Hono + oRPC + Prisma + Better Auth. The platform is
 - Authenticate the user (Better Auth + Google) and expose the typed oRPC surface (`me`, `setup.*`).
 - Mint the per-user connection token + serve the setup one-liner. The workspace gate is enforced in the browser, which probes the daemon's `/health` directly — the platform never decides liveness.
 - Store the sandbox's public `daemonUrl` the **browser** derives (`sandbox-<sha256(token)[:12]>.<zone>`) and writes (`setup.bind`), and serve it back (`setup.binding`) so the browser knows where to reach it. Persist nothing else about the sandbox.
+- The setup wizard's **cloud lane** ([src/sandbox/cloud/](src/sandbox/cloud/)): create ONE VM in the **user's own** cloud account (Hetzner / DigitalOcean / Oracle Always-Free) whose first boot runs the sandbox's setup code. The pasted provider credential is request-scoped like the Cloudflare zone listing — spent on the provider's catalog + create calls, never persisted — so the platform keeps no way back into the machine; only display metadata (`Sandbox.cloud`) survives.
 
 ## Routes (see [src/app.ts](src/app.ts))
 
@@ -19,6 +20,7 @@ The **platform backend** — Hono + oRPC + Prisma + Better Auth. The platform is
 - [src/main.ts](src/main.ts) — entrypoint: `serve(...)`.
 - [src/app.ts](src/app.ts) — the Hono app factory + all route wiring; [src/router.ts](src/router.ts) + [src/context.ts](src/context.ts) — oRPC.
 - [src/auth.ts](src/auth.ts) — Better Auth (Google sign-in + the desktop one-time-token handoff).
+- [src/sandbox/cloud/index.ts](src/sandbox/cloud/index.ts) — the cloud lane's provider switch; one plain-fetch adapter per provider beside it (Oracle's request signing in [src/sandbox/cloud/oci-sign.ts](src/sandbox/cloud/oci-sign.ts), the first-boot script in [src/sandbox/cloud/user-data.ts](src/sandbox/cloud/user-data.ts)).
 - [src/config.ts](src/config.ts) — `@puristic/env` config; [src/prisma.ts](src/prisma.ts) — client factory; [src/types.ts](src/types.ts) — the shared Prisma type.
 
 ## Conventions & gotchas

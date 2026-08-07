@@ -2,6 +2,7 @@
 import type { Disposable } from "@intentic/extension-api";
 import type { SandboxSummary } from "@intentic-app/api-contract";
 import { Code, commandLang, ConfirmDialog, type IconName, OS_OPTIONS, Segmented, useOsPreference } from "@intentic/ui";
+import { cloudProviderMeta } from "../pages/setupCloud";
 import { sandboxSubdomain } from "@intentic/sandbox-contract";
 import Button from "primevue/button";
 import Popover from "primevue/popover";
@@ -321,7 +322,17 @@ const confirmRemove = async (): Promise<void> => {
                     : `Leave "${pending.name}"? You lose access; the sandbox keeps running.`
             }}
         </p>
-        <template v-if="pending?.role === 'owner' && cleanupCommand !== undefined">
+        <!-- A cloud-lane sandbox's machine lives in the OWNER'S provider account, where it keeps running (and
+             billing) after this removal — and intentic kept no way back into it (the provision credential was
+             request-scoped), so pointing at the provider's console by server name is everything this dialog
+             can honestly offer, and exactly enough. -->
+        <p v-if="pending?.role === 'owner' && pending.cloud !== null" class="mt-3 text-sm text-muted">
+            Its machine <span class="font-mono text-content">{{ pending.cloud.serverName }}</span> keeps running in your
+            {{ cloudProviderMeta(pending.cloud.provider).label }} account<template v-if="pending.cloud.provider !== 'oracle'">
+                — and billing you</template
+            >. Delete it in the {{ cloudProviderMeta(pending.cloud.provider).label }} console when you're done with it.
+        </p>
+        <template v-else-if="pending?.role === 'owner' && cleanupCommand !== undefined">
             <p class="mt-3 text-sm text-muted">To also remove it from the machine hosting it — including its files — run there:</p>
             <Segmented class="mt-2" v-model="cmdOs" :options="OS_OPTIONS" />
             <Code class="mt-1.5" :code="cleanupCommand" :lang="commandLang(cmdOs)" label="Cleanup command" :wrap="true" />

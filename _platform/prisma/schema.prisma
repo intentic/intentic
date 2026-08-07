@@ -130,6 +130,11 @@ model Sandbox {
     // so re-provisioning only re-does the Cloudflare round-trips for the same result). tunnelToken is encrypted.
     tunnelToken        String?
     tunnelHostname     String?
+    // Where the cloud lane created this sandbox's machine (SandboxCloudSchema + the provider's server id) —
+    // null for every other creation path. Display metadata only, never a credential: the provider token was
+    // request-scoped, so the platform keeps no way back into the machine. Plaintext on purpose — nothing here
+    // is secret, and the delete dialog reads it to name where the still-billing machine lives.
+    cloud              Json?
     members            SandboxMember[]
     createdAt          DateTime        @default(now())
     updatedAt          DateTime        @updatedAt

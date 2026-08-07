@@ -20,9 +20,11 @@ import { useSandbox } from "../composables/sandbox/useSandbox";
 import { DESKTOP_DOWNLOADS, desktopSetupLink, desktopVersion, openDesktopLink } from "../environments/desktop";
 import { environment } from "../environments/environment";
 import { bashCommand, psCommand, scriptSource } from "../environments/scriptCommand";
+import SetupCloud from "./SetupCloud.vue";
 import SetupCompose from "./SetupCompose.vue";
 import SetupHandoff from "./SetupHandoff.vue";
 import SetupRunDetails from "./SetupRunDetails.vue";
+import { cloudProviderMeta } from "./setupCloud";
 import type { ComposeArgs } from "./setupCompose";
 import { type AttachOutcome, daemonUrlProblem, normalizeDaemonUrl, probeDaemon } from "./setupAttach";
 import { autoSandboxName } from "./setupName";
@@ -40,7 +42,9 @@ import { setupReportView } from "./setupReport";
  * command carries only that code and the connect script redeems it at POST /setup/claim for the real values — so no
  * raw token lands in shell history. Step 3 also offers desktop sync (on by default): the choice + folder ride the
  * same code (SYNC_DIR + a platform-minted single-use SYNC_PAIR_TOKEN in the payload), so the one pasted command
- * additionally enrolls the sync agent after the sandbox boots — no second paste. Once running, the DAEMON announces
+ * additionally enrolls the sync agent after the sandbox boots — no second paste. Step 3 also carries the CLOUD
+ * MACHINE choice (`machine` below, SetupCloud.vue): no computer to paste into, so one is created in the user's
+ * own cloud account and its first boot claims this same code headlessly. Once running, the DAEMON announces
  * its URL + liveness to the platform; this page just polls sandbox.list for a fresh lastSeenAt and then opens the
  * workspace — the browser never resolves the sandbox hostname here, so no DNS race can wedge setup. That wait is
  * step 3's own footer rather than a fourth step: it asks the user for nothing, so a card of its own was chrome
@@ -243,10 +247,39 @@ const commandVisible = computed(() => (desktop.value || mobile.value ? showComma
 // Compose declares its own env, so neither switch under the command applies to it — but "no tab is on screen
 // at all" is a different thing from "the compose tab is", and only the second one hides the sync option.
 const composeShown = computed(() => commandVisible.value && runTab.value === `compose`);
+/* WHICH MACHINE runs step 3 — the computer the user already has (the command / handoff / app button), or a
+ * new one created in THEIR cloud account (SetupCloud.vue). A phone defaults to `cloud` because it is the
+ * first path a phone can actually finish alone: the email handoff asks for a second computer, this asks for a
+ * credential paste. The picker is hidden inside the desktop app (the app IS a computer the user has — its one
+ * button is the step there), so `machine` stays `mine` in it by construction.
+ *
+ * The cloud machine claims the SAME minted setup code the command would, so everything downstream — the
+ * locked gate, the claim stamp, the stage report, the announce watch — is untouched; only the card's content
+ * and the wait's wording switch on this. It needs the intentic-provided tunnel (the machine boots headless,
+ * with no Cloudflare of its own), so the form yields to a pointer at step 2 while `mode` says `own`. */
+const machine = ref<"mine" | "cloud">(mobile.value ? `cloud` : `mine`);
+const cloudOffered = computed(() => intenticAvailable.value && !desktop.value);
+// The provisioned machine's display facts (SandboxCloudSchema) — set by the provision response (or a resumed
+// row that was provisioned last visit), and the switch that turns the cloud form into its summary line.
+const cloudMachine = ref<SandboxSummary[`cloud`]>(null);
+const cloudProviderLabel = computed(() => (cloudMachine.value === null ? `` : cloudProviderMeta(cloudMachine.value.provider).label));
+// The provision response is a fresher row (it carries the cloud stamp) — adopt it, then let the ordinary
+// claim → report → announce watch narrate the machine's first boot.
+const onProvisioned = (summary: SandboxSummary): void => {
+    created.value = summary;
+    cloudMachine.value = summary.cloud;
+};
+
 // The step names the machine, because "run this" alone reads as something the platform does for you. In the
 // app there is no command to point at — the step is one button — so "this" becomes "it", and the button under
-// it is free to say the verb instead of repeating the place.
-const runTitle = computed(() => (desktop.value ? `Run it on this computer` : `Run this on your computer`));
+// it is free to say the verb instead of repeating the place. The cloud choice changes the machine itself, so
+// the title follows it: there, nothing is run BY the user at all.
+const runTitle = computed(() => {
+    if (machine.value === `cloud` && cloudOffered.value) {
+        return `Create a machine for it in your cloud`;
+    }
+    return desktop.value ? `Run it on this computer` : `Run this on your computer`;
+});
 
 /* The command's options are checkboxes, and now they look like checkboxes: the design system's own control
  * (animated in primeng.css, so this row ticks the same way every other box in the app does) with its name
@@ -375,7 +408,9 @@ const handoff = computed<Handoff>(() => {
     if (claimedAt.value !== null || report.value !== null) {
         return `claimed`;
     }
-    return copied.value || launched.value ? `handed` : `yours`;
+    // A provisioned cloud machine is the strongest form of "handed": it will run the command on its own first
+    // boot, so from here the wait is on the provider's boot rather than on the user.
+    return copied.value || launched.value || cloudMachine.value !== null ? `handed` : `yours`;
 });
 
 /* The card escalates on its own, because the failure it guards against is silent: someone who has not realised
@@ -397,7 +432,10 @@ watch(commandReady, (ready) => {
 // A phone gets the same long fuse, for the same reason in a different shape: the step is a walk to another
 // machine BY CONSTRUCTION there, and the handoff above says so before the command is even reached — so forty
 // seconds would fire at someone who has understood perfectly and is halfway to their desk.
-const nudgeAfterMs = computed(() => (composeShown.value || mobile.value ? 3 * 60_000 : 40_000));
+// A cloud machine's fuse is the longest: its first boot legitimately spends minutes on cloud-init + a Docker
+// install + the image pull before anything can claim, and a nudge inside that window would accuse a machine
+// that is doing exactly what it should.
+const nudgeAfterMs = computed(() => (cloudMachine.value !== null ? 6 * 60_000 : composeShown.value || mobile.value ? 3 * 60_000 : 40_000));
 // And when it stops assuming the command was never run, and starts helping the person whose terminal errored.
 const STALLED_MS = 3 * 60_000;
 // A claimed code with no daemon behind it yet: the first image pull is genuinely slow, so this waits much
@@ -860,6 +898,12 @@ onMounted(async () => {
     name.value = found.name;
     created.value = found;
     resuming.value = true;
+    // A resumed sandbox that was provisioned last visit continues as the cloud story it is — the machine may
+    // still be booting, and showing the command lane would ask the user to run a code a machine already holds.
+    if (found.cloud !== null) {
+        machine.value = `cloud`;
+        cloudMachine.value = found.cloud;
+    }
 });
 
 // Escape hatch from a resumed setup: forget the resumed sandbox and start a new one in its place. Everything
@@ -878,6 +922,9 @@ const startFresh = (): void => {
     copied.value = false;
     launched.value = false;
     claimedAt.value = null;
+    // The provisioned machine belongs to the abandoned sandbox — the next one has no machine yet, and keeping
+    // the stamp would freeze its mint (see the watcher below) for a VM that claims someone else's code.
+    cloudMachine.value = null;
     subdomain.value = ``;
     derivedPrefix.value = ``;
     // The attach lane's inputs described the sandbox being abandoned — a stale domain would otherwise be sitting
@@ -908,6 +955,12 @@ watch(
         const chosen = target.value;
         const key = targetKey.value;
         if (chosen === undefined || key === undefined || created.value === null || mintedFor.value === key) {
+            return;
+        }
+        // A provisioned cloud machine boots holding THE minted code — re-minting would overwrite it
+        // server-side and the machine's claim would find a code that no longer exists. Once one exists, the
+        // code is frozen with it.
+        if (cloudMachine.value !== null) {
             return;
         }
         mintTimer = setTimeout(() => void mint(chosen, key), 500);
@@ -1375,6 +1428,40 @@ watch(commandReady, (ready) => {
                             <span>{{ lockedReason }}</span>
                         </div>
                         <template v-else>
+                            <!-- WHICH machine — the reader's own, or one created for them in their cloud account.
+                                 First on the card because everything under it is the answer to it. A phone opens
+                                 on `cloud`: it is the one path a phone finishes without a second computer. Hidden
+                                 in the desktop app, where "this computer" is the whole point of being in the app. -->
+                            <Segmented
+                                v-if="cloudOffered"
+                                v-model="machine"
+                                :options="[
+                                    { label: `A computer I have`, value: `mine` },
+                                    { label: `A new cloud machine`, value: `cloud` },
+                                ]"
+                                :stretch="mobile"
+                            />
+
+                            <template v-if="machine === `cloud` && cloudOffered">
+                                <!-- The machine boots headless with no Cloudflare of its own, so only the
+                                     intentic-provided tunnel can make it reachable — a step-2 own-zone pick has
+                                     to be walked back before the form is any use. -->
+                                <p v-if="mode !== `intentic`" class="flex items-start gap-2 text-xs text-muted">
+                                    <Icon name="info-circle" class="mt-0.5 shrink-0" />
+                                    <span>Cloud machines use intentic's domain — switch step 2 back to “Use intentic's domain” to create one.</span>
+                                </p>
+                                <!-- Provisioned: the form's work is done, and the one fact worth keeping on screen
+                                     is where the machine lives — the wait below narrates the rest. -->
+                                <p v-else-if="cloudMachine" class="flex items-start gap-2 text-xs text-muted">
+                                    <Icon name="check" class="mt-0.5 shrink-0 text-success" />
+                                    <span class="min-w-0">
+                                        <span class="font-mono text-content">{{ cloudMachine.serverName }}</span> was created in your
+                                        {{ cloudProviderLabel }} account ({{ cloudMachine.location }}) — it sets itself up from first boot.
+                                    </span>
+                                </p>
+                                <SetupCloud v-else-if="created" :sandbox-id="created.id" @provisioned="onProvisioned" />
+                            </template>
+                            <template v-else>
                             <!-- Inside the desktop app the terminal is gone: one click hands this same setup code to the
                                  app, which runs the same connect script on this machine and streams what it says into
                                  its manager window. So in the app this IS the step — a line of consequence, the button
@@ -1591,6 +1678,7 @@ watch(commandReady, (ready) => {
                                     >
                                 </p>
                             </div>
+                            </template>
                         </template>
 
                         <!-- Step 4's whole job, as the footer of the step it reports on — now saying WHICH of the two
@@ -1630,8 +1718,13 @@ watch(commandReady, (ready) => {
                                         <span class="font-medium text-success">Your machine picked it up.</span> Starting Docker — the first run takes
                                         a few minutes.
                                     </template>
-                                    <!-- Handed off two ways, and the next move differs: a copied command still has to
-                                         be pasted, while the app already has everything and is opening its own window. -->
+                                    <!-- Handed off three ways, and the next move differs: a copied command still has to
+                                         be pasted, the app already has everything and is opening its own window, and a
+                                         cloud machine is booting with nothing left for anyone to do. -->
+                                    <template v-else-if="handoff === `handed` && cloudMachine">
+                                        <span class="font-medium text-content">Machine created.</span> Its first boot installs Docker and your sandbox
+                                        — usually a few minutes. This page opens your workspace the moment it answers.
+                                    </template>
                                     <template v-else-if="handoff === `handed` && launched">
                                         <span class="font-medium text-content">Handed to the app.</span> Follow it in the Intentic window — this page
                                         opens your workspace the moment it answers.
@@ -1643,6 +1736,10 @@ watch(commandReady, (ready) => {
                                          they could act on — the one fact this state has is whose move it is, so
                                          it says that instead. In the app there is no command to name and the
                                          button has a label, so it names the button. -->
+                                    <template v-else-if="machine === `cloud` && cloudOffered">
+                                        <span class="font-medium text-content">Waiting for you to create the machine.</span> Paste a credential above
+                                        and press "Create the machine" — nothing runs (or costs anything) until you do.
+                                    </template>
                                     <template v-else-if="desktop && !commandVisible">
                                         <span class="font-medium text-content">Waiting for you to start it.</span> Nothing runs until you press "Set
                                         it up now" above.
@@ -1684,7 +1781,16 @@ watch(commandReady, (ready) => {
                                          where the command runs — it needs the one thing it hasn't done, which is
                                          open the mail on the other machine. Telling that reader to find a
                                          terminal is the same wrong advice this screen used to give by default. -->
-                                    <span v-if="mobile && emailed" class="min-w-0">
+                                    <!-- A created cloud machine that has not claimed after its long fuse is the one
+                                         state where the provider's console is the next place to look — the boot log
+                                         there says what the first boot actually did. -->
+                                    <span v-if="cloudMachine" class="min-w-0">
+                                        <span class="font-medium">Still building.</span> Check
+                                        <span class="font-mono">{{ cloudMachine.serverName }}</span> in your {{ cloudProviderLabel }} console — its
+                                        boot log is <code>/var/log/cloud-init-output.log</code>. Deleting the machine there and creating a fresh
+                                        sandbox here is always safe.
+                                    </span>
+                                    <span v-else-if="mobile && emailed" class="min-w-0">
                                         <span class="font-medium">Still nothing.</span> Open the link we emailed you on the computer that will host
                                         your sandbox — the command is waiting there.
                                     </span>
@@ -1708,7 +1814,7 @@ watch(commandReady, (ready) => {
                                 </p>
                                 <!-- After three minutes, stop assuming it was never run and start helping the person
                              whose terminal answered back. Both readings get an action they can take. -->
-                                <p v-if="stalled && commandVisible" class="pl-6 text-2xs opacity-90">
+                                <p v-if="stalled && commandVisible && !cloudMachine" class="pl-6 text-2xs opacity-90">
                                     Already ran it? Check that terminal — an error there stops the sandbox before it can report in. Safe to run again.
                                 </p>
                                 <!-- `cta`, because in this banner copying again IS the way out — the quiet chip
@@ -1717,7 +1823,7 @@ watch(commandReady, (ready) => {
                                      Except on a phone that has mailed itself the link, where copying again is
                                      not the way out of anything: the clipboard was never the blocked step. -->
                                 <CopyButton
-                                    v-if="commandVisible && runTab !== `compose` && !(mobile && emailed)"
+                                    v-if="commandVisible && runTab !== `compose` && !(mobile && emailed) && !cloudMachine"
                                     class="ml-6 self-start"
                                     :text="selectedCommand"
                                     label="Copy again"
@@ -1736,8 +1842,15 @@ watch(commandReady, (ready) => {
                                      send a phone whose command is folded away to an app window that only exists on
                                      a desktop. -->
                                 <span class="min-w-0"
-                                    >Picked up a while ago, still no sandbox. Check {{ launched ? `the Intentic window` : `that terminal` }} for an
-                                    error — it's safe to re-run.</span
+                                    >Picked up a while ago, still no sandbox. Check
+                                    {{
+                                        launched
+                                            ? `the Intentic window`
+                                            : cloudMachine
+                                              ? `the machine's boot log in your ${cloudProviderLabel} console`
+                                              : `that terminal`
+                                    }}
+                                    for an error — it's safe to re-run.</span
                                 >
                             </p>
                         </div>

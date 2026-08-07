@@ -236,7 +236,11 @@ survive reconnects. Its subsystems:
 a bootstrap shim: it gets Docker on, fetches the `ic` host-side CLI ([_sandbox/ic](_sandbox/ic)) and hands the
 flow to `ic sandbox connect` — so is the desktop app ([_editor/desktop-app](_editor/desktop-app)) not a third
 way: it *spawns that same `connect.sh`*, which is what makes its onboarding identical to the pasted one rather
-than a second implementation to keep in step. Either way the
+than a second implementation to keep in step. Nor is the setup wizard's **cloud lane** (a machine created in
+the *user's own* Hetzner/DigitalOcean/Oracle account for someone — a phone, usually — with no computer to
+paste into): the VM's cloud-init user-data is that same one-liner run headlessly, claiming the same setup
+code ([\_platform/api/src/sandbox/cloud/](_platform/api/src/sandbox/cloud/); the provider credential is
+request-scoped, the platform keeps no way back into the machine). Either way the
 tunnel is named `sandbox-<id>` where `<id> = sha256(connectToken).slice(0, 12)`
 ([tunnel-ids.ts](_sandbox/sandbox-contract/src/tunnel-ids.ts)), and it is provisioned one of two ways:
 
@@ -739,8 +743,10 @@ them by spawning a process, never by import:
 
 Who pays for scale is a design decision, not an accident:
 
-- **Compute is user-owned.** Every sandbox runs on the user's PC (`connect.sh`) or the user's server
-  (the `workspace` provider). There is no intentic-operated fleet, scheduler, or capacity manager —
+- **Compute is user-owned.** Every sandbox runs on the user's PC (`connect.sh`), the user's server
+  (the `workspace` provider), or a VM the setup wizard's cloud lane creates **in the user's own cloud
+  account** (billed by their provider to them; the platform spends the pasted credential once and stores
+  none of it). There is no intentic-operated fleet, scheduler, or capacity manager —
   agent turns, dev servers, and builds cost intentic nothing. (Corollary: `connect.sh` sets no
   `--memory`/`--cpus` caps; a runaway sandbox is the user's machine's problem.)
 - **The platform is off the hot path.** The browser drives the daemon directly; the daemon announces

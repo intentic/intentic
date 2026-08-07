@@ -1,13 +1,16 @@
 import { randomBytes } from "node:crypto";
-import { apiContract, SetupReportSchema } from "@intentic-app/api-contract";
+import { apiContract, SandboxCloudSchema, SetupReportSchema } from "@intentic-app/api-contract";
 import { Prisma } from "@intentic-app/prisma";
 import type { MemberRole } from "@intentic/sandbox-contract";
-import { GrantedRoleSchema } from "@intentic/sandbox-contract";
+import { GrantedRoleSchema, sandboxSubdomain } from "@intentic/sandbox-contract";
 import { implement, ORPCError } from "@orpc/server";
 import type { OrpcContext } from "../context.js";
-import { sha256Hex } from "@intentic/sandbox-contract/tunnel-ids";
+import { sandboxIdFromToken, sha256Hex } from "@intentic/sandbox-contract/tunnel-ids";
 import { decryptSecret, encryptSecret } from "../crypto.js";
 import { requireOwnedSandbox, requireUser } from "../guards.js";
+import { CloudCredentialError, CloudProviderError } from "./cloud/common.js";
+import { cloudCreate, cloudOptions } from "./cloud/index.js";
+import { cloudInitUserData } from "./cloud/user-data.js";
 import { CloudflareTokenError, deleteSandboxTunnel, listZoneNames, provisionSandboxTunnel, sandboxHostname } from "./cloudflare.js";
 import { claimReserved, topUp } from "./sandbox-pool.js";
 import { sendSetupLinkEmail } from "./setup-email.js";
@@ -41,6 +44,7 @@ const toSummary = (
         lastSeenAt: Date | null;
         setupCodeClaimedAt: Date | null;
         setupReport: unknown;
+        cloud: unknown;
         token: string;
     },
     role: MemberRole,
@@ -50,6 +54,9 @@ const toSummary = (
     // The stored report was validated on write (/setup/report); the parse here only shields the summary from
     // rows written before this schema existed — anything unrecognizable reads as "no report".
     const report = SetupReportSchema.safeParse(sandbox.setupReport);
+    // Same shield for the cloud stamp (cloudProvision wrote it validated; the stored serverId is dropped by
+    // the parse — the browser has no use for it).
+    const cloud = SandboxCloudSchema.safeParse(sandbox.cloud);
     return {
         id: sandbox.id,
         name: sandbox.name,
@@ -58,6 +65,7 @@ const toSummary = (
         lastSeenAt: sandbox.lastSeenAt === null ? null : sandbox.lastSeenAt.toISOString(),
         setupCodeClaimedAt: sandbox.setupCodeClaimedAt === null ? null : sandbox.setupCodeClaimedAt.toISOString(),
         setupReport: report.success ? report.data : null,
+        cloud: cloud.success ? cloud.data : null,
         token: decryptSecret(context.config, sandbox.token),
         role,
         providedTunnel: sandbox.daemonUrl !== null && zone !== undefined && new URL(sandbox.daemonUrl).hostname.endsWith(`.${zone}`),
@@ -173,6 +181,69 @@ export const sandboxRoutes = {
             }
             throw error;
         }
+    }),
+    // The cloud lane's credential check + catalog: spend the pasted provider credential on the provider's own
+    // region/size/price listing (cloud/index.ts), then drop it with the request — the `zones` contract. Both
+    // named refusals become BAD_REQUESTs the wizard can render; anything else (network, surprise shapes)
+    // propagates like every other handler's unexpected failure.
+    cloudOptions: os.sandbox.cloudOptions.handler(async ({ context, input }) => {
+        requireUser(context);
+        try {
+            return await cloudOptions(input.credentials);
+        } catch (error) {
+            if (error instanceof CloudCredentialError || error instanceof CloudProviderError) {
+                throw new ORPCError(`BAD_REQUEST`, { message: error.message });
+            }
+            throw error;
+        }
+    }),
+    /* Create the ONE machine in the user's own cloud account whose first boot runs this sandbox's setup code
+     * (cloud/user-data.ts). Requires a LIVE intentic-mode code: the machine boots headless with no Cloudflare
+     * of its own, so only the platform-provisioned tunnel can make it reachable — and a dead code would build
+     * a machine that boots to a 404. The wizard mints (its lane defaults to intentic mode) before calling
+     * this, so the gate only fires on a stale tab.
+     *
+     * The credential is request-scoped here exactly as in cloudOptions — after this response the platform
+     * cannot reach the machine again, which is why the non-secret residue (provider, server name, location)
+     * is stamped on the row: it is everything the UI can ever say about where the machine lives. The server
+     * name is derived from the tunnel id, so the machine in the provider's console visibly matches the
+     * sandbox-<id> hostname the user already sees. */
+    cloudProvision: os.sandbox.cloudProvision.handler(async ({ context, input }) => {
+        const sandbox = await requireOwnedSandbox(context, input.sandboxId);
+        if (sandbox.setupCode === null || sandbox.setupCodeExpiresAt === null || sandbox.setupCodeExpiresAt < new Date()) {
+            throw new ORPCError(`BAD_REQUEST`, { message: `this sandbox has no live setup code — reopen its setup screen and retry` });
+        }
+        const payload =
+            typeof sandbox.setupPayload === `string` ? (JSON.parse(decryptSecret(context.config, sandbox.setupPayload)) as Record<string, string>) : {};
+        if (payload[`SANDBOX_HOSTNAME`] === undefined) {
+            throw new ORPCError(`BAD_REQUEST`, { message: `the setup code targets your own Cloudflare — cloud machines need the intentic-provided tunnel` });
+        }
+        const connectToken = decryptSecret(context.config, sandbox.token);
+        const name = `intentic-${sandboxSubdomain(sandboxIdFromToken(connectToken) ?? sandbox.id)}`;
+        const userData = cloudInitUserData({
+            scriptOrigin: context.config.scriptOrigin,
+            platformUrl: context.config.api.url,
+            setupCode: sandbox.setupCode,
+        });
+        let serverId: string;
+        try {
+            serverId = (await cloudCreate(input.credentials, { name, location: input.location, size: input.size, userData })).serverId;
+        } catch (error) {
+            if (error instanceof CloudCredentialError || error instanceof CloudProviderError) {
+                throw new ORPCError(`BAD_REQUEST`, { message: error.message });
+            }
+            // Surface WHY like setupCode's tunnel provisioning — a raw throw serializes as a bare
+            // "Internal server error" in the wizard.
+            if (error instanceof Error) {
+                throw new ORPCError(`BAD_GATEWAY`, { message: error.message });
+            }
+            throw error;
+        }
+        const updated = await context.prisma.sandbox.update({
+            where: { id: sandbox.id },
+            data: { cloud: { provider: input.credentials.provider, serverId, serverName: name, location: input.location } },
+        });
+        return toSummary(updated, `owner`, context);
     }),
     // Mint the short-lived setup code the install one-liner carries instead of raw tokens. Per target mode:
     // `intentic` — provision the tunnel + proxied DNS record UP FRONT (cached on the row, so only the first

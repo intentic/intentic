@@ -1,5 +1,7 @@
 import { createHash } from "node:crypto";
 import { Prisma } from "@intentic-app/prisma";
+import { sandboxSubdomain } from "@intentic/sandbox-contract";
+import { sandboxIdFromToken } from "@intentic/sandbox-contract/tunnel-ids";
 import { call, ORPCError } from "@orpc/server";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { OrpcContext } from "../context.js";
@@ -455,5 +457,89 @@ describe(`sandbox routes`, () => {
         });
         const { sandboxes: unflagged } = await call(sandboxRoutes.list, undefined, { context: context({ prisma: prismaAgain, config: tokenless }) });
         expect(unflagged.every((sandbox) => !sandbox.providedTunnel)).toBe(true);
+    });
+});
+
+describe(`cloud lane routes`, () => {
+    // A row a cloudProvision can act on: live intentic-mode setup code (plaintext payload — secrets.key is
+    // empty in the fake config, so encryptSecret was a passthrough when it was stored).
+    const provisionable = {
+        ...sandboxRow,
+        setupCode: `c0de`,
+        setupCodeExpiresAt: new Date(Date.now() + 60_000),
+        setupPayload: JSON.stringify({ SANDBOX_HOSTNAME: `sandbox-abc.intentic.dev`, OWNER_EMAIL: `owner@example.com` }),
+    };
+    const cloudConfig = { ...context().config, scriptOrigin: `https://site.test`, api: { url: `https://api.test` } } as OrpcContext[`config`];
+
+    it(`cloudOptions maps a rejected provider credential to BAD_REQUEST`, async () => {
+        vi.stubGlobal(`fetch`, () => Promise.resolve(new Response(``, { status: 401 })));
+        await expectOrpcCode(
+            call(sandboxRoutes.cloudOptions, { credentials: { provider: `hetzner`, token: `bad` } }, { context: context() }),
+            `BAD_REQUEST`,
+        );
+    });
+
+    it(`cloudProvision refuses without a live setup code, and refuses an own-Cloudflare code`, async () => {
+        const stale = { ...sandboxRow, setupCode: `c0de`, setupCodeExpiresAt: new Date(Date.now() - 1) };
+        const prisma = fakePrisma({ sandbox: { findFirst: vi.fn().mockResolvedValue(stale) } });
+        await expectOrpcCode(
+            call(
+                sandboxRoutes.cloudProvision,
+                { sandboxId: `s1`, credentials: { provider: `hetzner`, token: `t` }, location: `fsn1`, size: `cx22` },
+                { context: context({ prisma }) },
+            ),
+            `BAD_REQUEST`,
+        );
+
+        const ownCf = { ...provisionable, setupPayload: JSON.stringify({ ZONE: `example.com`, SUBDOMAIN: `sandbox-abc` }) };
+        const prismaOwn = fakePrisma({ sandbox: { findFirst: vi.fn().mockResolvedValue(ownCf) } });
+        await expectOrpcCode(
+            call(
+                sandboxRoutes.cloudProvision,
+                { sandboxId: `s1`, credentials: { provider: `hetzner`, token: `t` }, location: `fsn1`, size: `cx22` },
+                { context: context({ prisma: prismaOwn }) },
+            ),
+            `BAD_REQUEST`,
+        );
+    });
+
+    it(`cloudProvision creates the machine whose first boot runs this sandbox's code, and stamps the row`, async () => {
+        const bodies: Record<string, unknown>[] = [];
+        vi.stubGlobal(`fetch`, (_url: URL | string, init?: RequestInit): Promise<Response> => {
+            bodies.push(JSON.parse(init?.body as string) as Record<string, unknown>);
+            return Promise.resolve(new Response(JSON.stringify({ server: { id: 42 } }), { status: 201 }));
+        });
+        const update = vi.fn().mockImplementation(({ data }: { data: { cloud: unknown } }) => ({ ...provisionable, cloud: data.cloud }));
+        const prisma = fakePrisma({ sandbox: { findFirst: vi.fn().mockResolvedValue(provisionable), update } });
+        const summary = await call(
+            sandboxRoutes.cloudProvision,
+            { sandboxId: `s1`, credentials: { provider: `hetzner`, token: `t` }, location: `fsn1`, size: `cx22` },
+            { context: context({ prisma, config: cloudConfig }) },
+        );
+        // The machine name mirrors the sandbox-<id> hostname; the user-data is the headless one-liner with
+        // THIS sandbox's code and THIS platform's URL.
+        const expectedName = `intentic-${sandboxSubdomain(sandboxIdFromToken(`tok`) ?? ``)}`;
+        expect(bodies[0]).toMatchObject({ name: expectedName, server_type: `cx22`, location: `fsn1` });
+        expect(bodies[0]?.[`user_data`]).toContain(`sh -s -- c0de -y`);
+        expect(bodies[0]?.[`user_data`]).toContain(`PLATFORM_URL=https://api.test`);
+        expect(bodies[0]?.[`user_data`]).toContain(`https://site.test/connect`);
+        expect(update.mock.calls[0]![0]).toMatchObject({
+            data: { cloud: { provider: `hetzner`, serverId: `42`, serverName: expectedName, location: `fsn1` } },
+        });
+        // The summary carries the display facts (serverId stays in the row — the browser has no use for it).
+        expect(summary.cloud).toEqual({ provider: `hetzner`, serverName: expectedName, location: `fsn1` });
+    });
+
+    it(`cloudProvision surfaces an unexpected provider failure as BAD_GATEWAY with its message`, async () => {
+        vi.stubGlobal(`fetch`, () => Promise.reject(new Error(`socket hang up`)));
+        const prisma = fakePrisma({ sandbox: { findFirst: vi.fn().mockResolvedValue(provisionable) } });
+        await expectOrpcCode(
+            call(
+                sandboxRoutes.cloudProvision,
+                { sandboxId: `s1`, credentials: { provider: `digitalocean`, token: `t` }, location: `fra1`, size: `s-2vcpu-4gb` },
+                { context: context({ prisma, config: cloudConfig }) },
+            ),
+            `BAD_GATEWAY`,
+        );
     });
 });

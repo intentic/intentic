@@ -353,6 +353,22 @@ export const SetupReportSchema = z.object({
 });
 export type SetupReport = z.infer<typeof SetupReportSchema>;
 
+// The clouds the setup wizard's cloud lane can provision a machine in — each is an adapter in the api's
+// sandbox/cloud/. Hetzner and DigitalOcean are the paid x86 paths; Oracle is the Always-Free ARM path
+// (A1.Flex inside the user's own free-tier allowance).
+export const CloudProviderSchema = z.enum(["hetzner", "digitalocean", "oracle"]);
+export type CloudProvider = z.infer<typeof CloudProviderSchema>;
+
+// Where the cloud lane put a sandbox's machine — the non-secret residue of a provision, stamped on the row.
+// serverName is the name visible in the provider's own console, which is exactly what the delete warning
+// needs the user to go find.
+export const SandboxCloudSchema = z.object({
+    provider: CloudProviderSchema,
+    serverName: z.string(),
+    location: z.string(),
+});
+export type SandboxCloud = z.infer<typeof SandboxCloudSchema>;
+
 export const SandboxSummarySchema = z.object({
     id: z.string(),
     name: z.string(),
@@ -369,6 +385,11 @@ export const SandboxSummarySchema = z.object({
     // floors, so this is a rendering fact, never the security boundary.
     role: MemberRoleSchema,
     providedTunnel: z.boolean(),
+    // Where the cloud lane created this sandbox's machine (sandbox.cloudProvision) — null for every other
+    // creation path. Display metadata only, never a credential: the platform cannot reach the machine again
+    // (the provider token was request-scoped), so this exists to SAY so — the switcher badge and the delete
+    // dialog's "the machine in your <provider> account keeps running — remove it there" warning read it.
+    cloud: SandboxCloudSchema.nullable(),
 });
 export type SandboxSummary = z.infer<typeof SandboxSummarySchema>;
 
@@ -446,6 +467,52 @@ export const SetupCodeTargetSchema = z.discriminatedUnion("mode", [
 export type SetupCodeTarget = z.infer<typeof SetupCodeTargetSchema>;
 export const SetupCodeSchema = z.object({ code: z.string(), hostname: z.string(), expiresAt: z.string() });
 export type SetupCode = z.infer<typeof SetupCodeSchema>;
+
+// ---- the cloud lane: provision the machine itself, in the USER'S cloud account ----
+//
+// The command lane assumes a machine exists; this lane is for the user (a phone, most often) who has none.
+// They paste a provider credential, pick a region and size, and the platform creates ONE VM in THEIR account
+// whose first-boot script runs the exact published one-liner with the sandbox's live setup code — from there
+// the ordinary claim → report → announce states narrate progress. The credential follows the CfTokenSchema
+// contract exactly: request-scoped, used for the provider calls of that one request, then discarded — never
+// persisted, logged, or stored. The platform keeps no way back into the machine; only SandboxCloudSchema's
+// display facts survive.
+//
+// Oracle's credential is not a bearer token: OCI signs every request with an RSA API key. The console's
+// "add API key" dialog emits a config snippet (user/tenancy OCID, fingerprint, region) — the user pastes
+// that verbatim plus the key PEM, and the adapter parses both (a malformed paste is a BAD_REQUEST naming
+// what's missing, not a signature failure later).
+export const CloudCredentialsSchema = z.discriminatedUnion("provider", [
+    z.object({ provider: z.literal("hetzner"), token: z.string().min(1) }),
+    z.object({ provider: z.literal("digitalocean"), token: z.string().min(1) }),
+    z.object({ provider: z.literal("oracle"), config: z.string().min(1), privateKey: z.string().min(1) }),
+]);
+export type CloudCredentials = z.infer<typeof CloudCredentialsSchema>;
+
+// One pickable region/size, priced from the provider's own catalog API at options time — live numbers, so the
+// wizard never shows a stale price it hard-coded. Prices are monthly and in the provider's billing currency;
+// Oracle's one shape carries 0/USD (inside the Always-Free allowance) with the caveat in the wizard's copy.
+export const CloudLocationSchema = z.object({ id: z.string(), label: z.string() });
+export const CloudSizeSchema = z.object({
+    id: z.string(),
+    label: z.string(),
+    cpus: z.number(),
+    memoryGb: z.number(),
+    diskGb: z.number(),
+    monthlyPrice: z.number(),
+    currency: z.string(),
+});
+// Fetching the options doubles as the credential check: a bad paste fails here, before anything is created.
+// defaults preselect the cheapest workable pick so the mobile flow is credential → Create.
+export const CloudOptionsSchema = z.object({
+    locations: z.array(CloudLocationSchema),
+    sizes: z.array(CloudSizeSchema),
+    defaultLocation: z.string(),
+    defaultSize: z.string(),
+});
+export type CloudOptions = z.infer<typeof CloudOptionsSchema>;
+export type CloudLocation = z.infer<typeof CloudLocationSchema>;
+export type CloudSize = z.infer<typeof CloudSizeSchema>;
 
 // ---- workspace state: the Overview / topology read-model ----
 //
