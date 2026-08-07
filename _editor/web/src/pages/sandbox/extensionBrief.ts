@@ -58,3 +58,39 @@ export const extensionBrief = ({ id, dir, wish }: ExtensionBrief): string =>
         // the Extensions tab, so "it still loads" is something the agent can go and read rather than assert.
         done: `Done when the Extensions tab still lists ${id} outside its "Not loadable" group after reloading the extensions, and its view draws what was asked for.`,
     });
+
+/* TIGHTENING THE PERMISSIONS, once the ledger has something to say.
+ *
+ * The measurement is the whole reason this turn can be asked for at all, and it is also the reason the turn must
+ * not be mechanical. "Never called" is evidence of one thing only: nobody exercised the path that would have
+ * called it, in this workspace, since the counting started. An error handler that has never fired, a view nobody
+ * has opened, a route reached once a month — every one of those reads identically to a permission that was
+ * copied in and never needed. So the ask is to READ the code and decide, not to delete the rows the panel
+ * marked, and leaving one in with a reason written down is a good outcome rather than a failure to act. */
+const TIGHTEN_INVARIANTS =
+    `Read the extension's code before you touch its manifest. Remove a route only when nothing in the code can ` +
+    `reach it; where something can, leave it and say in one line what calls it and why it has not been observed — ` +
+    `an error path, a screen nobody opened, a monthly job. Change no behaviour: this turn edits ` +
+    `\`permissions.sandbox\` and nothing else, and if that would mean editing code to make a route unnecessary, ` +
+    `propose it instead of doing it.`;
+
+export interface TightenBrief {
+    readonly id: string;
+    readonly dir: string;
+    // The declared routes with no observed call, and how long the ledger has been watching — both are needed to
+    // weigh a "never", and the agent should be able to argue the evidence is too thin.
+    readonly unused: readonly string[];
+    // The declared routes that ARE used, with their counts, phrased for the prompt. Present so the agent can see
+    // the extension has genuinely been exercised rather than take the claim on trust.
+    readonly used: readonly { readonly route: string; readonly calls: number }[];
+}
+
+export const tightenBrief = ({ id, dir, unused, used }: TightenBrief): string =>
+    composeAsk({
+        subject: `Tighten the daemon routes ${id} asks for, in ${dir}/intentic-extension.json.`,
+        why: `Of the routes it declares, these have never been observed being called: ${unused.join(`, `)}. These have: ${used.map((route) => `${route.route} (${route.calls.toLocaleString()})`).join(`, `)}.`,
+        diagnosis: `The counts come from the host's own permission gate, which records which declared entry covered each call — so the used ones are certain, and an unused one only means nothing exercised it here.`,
+        goal: `Decide, route by route, whether the extension still needs it. The result is a shorter permissions list, a note for each route you kept, or a reasoned "leave it as it is".`,
+        invariants: TIGHTEN_INVARIANTS,
+        done: `Done when every route in the list is either gone or has a one-line reason, and the extension still loads and works after reloading the extensions.`,
+    });

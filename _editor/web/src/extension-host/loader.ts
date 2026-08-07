@@ -1,5 +1,5 @@
 import type { ExtensionManifest, ExtensionModule } from "@intentic/extension-api";
-import { extensionApiVersion, extensionIdOf } from "@intentic/extension-api";
+import { extensionApiVersion, extensionIdOf, satisfiesEngines } from "@intentic/extension-api";
 import { type ExtensionSummary, ExtensionsListSchema } from "@intentic/sandbox-contract";
 import { shallowRef } from "vue";
 import { extensionSettingsStore } from "../composables/extensions/useExtensionSettings";
@@ -7,7 +7,6 @@ import { sandboxError, sandboxJson, sandboxRequest } from "../composables/sandbo
 import { errorMessage } from "../composables/useAsyncAction";
 import { createExtensionApi, deactivateExtension, type HostBindings } from "./apiImpl";
 import { builtinModules } from "./builtins";
-import { satisfiesEngines } from "./engines";
 
 /* Loads and activates the installed extensions from ONE list — GET /extensions, which enumerates the
  * compiled-in first-party ones (manifest baked into the image, code in this bundle), the daemon-side baked

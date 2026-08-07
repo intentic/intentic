@@ -6,6 +6,7 @@ import {
     ExtensionProcessStatusSchema,
     ExtensionSettingsInputSchema,
     ExtensionSettingsSchema,
+    ExtensionReadinessSchema,
     ExtensionUsageInputSchema,
     ExtensionsListSchema,
     OkSchema,
@@ -33,6 +34,10 @@ export const extensionsContract = {
     // the permission gate runs (apiImpl.ts) — the daemon sees an extension's traffic as ordinary authenticated
     // requests and cannot tell which extension, or which declared entry, any of it belongs to.
     recordUsage: oc.route({ method: "POST", path: "/extensions/{id}/usage" }).input(ExtensionUsageInputSchema).output(OkSchema),
+    /* Whether this extension is fit for somebody else to run — the checks answerable from its files alone. Read
+     * on demand rather than carried on the list: it reads the bundle off disk per extension, and it is looked at
+     * when an author is about to publish, not every time the tab renders. */
+    readiness: oc.route({ method: "GET", path: "/extensions/{id}/readiness" }).input(CapabilityIdParamSchema).output(ExtensionReadinessSchema),
     // Declared background processes (contributes.processes): tmux-managed through the panel machinery
     // (session `panel-ext-<id>-<name>`, PORT-assigned, optional tunneled preview route).
     processStatus: oc

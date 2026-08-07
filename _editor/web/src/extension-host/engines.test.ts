@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { satisfiesEngines } from "./engines";
+import { satisfiesEngines } from "@intentic/extension-api";
 
 describe(`satisfiesEngines`, () => {
     it(`caret on 0.x treats the minor as breaking`, () => {

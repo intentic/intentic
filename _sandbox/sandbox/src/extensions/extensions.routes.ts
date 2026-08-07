@@ -1,5 +1,5 @@
 import { join } from "node:path";
-import { extensionIdOf, type ProcessContribution } from "@intentic/extension-api";
+import { extensionApiVersion, extensionIdOf, type ProcessContribution, satisfiesEngines } from "@intentic/extension-api";
 import { type ExtensionSummary, extensionsContract, previewUrl, zoneFromUrl } from "@intentic/sandbox-contract";
 import { sandboxIdFromToken } from "@intentic/sandbox-contract/tunnel-ids";
 import { implement, ORPCError } from "@orpc/server";
@@ -9,6 +9,7 @@ import type { OrpcContext } from "../context.js";
 import { writeExtensionEnablement } from "./extension-enablement.js";
 import { extensionProcessKey, reconcileListenerProcesses, startAutoStartProcesses, startExtensionProcess } from "./extension-processes.js";
 import { readAllExtensionSettings, writeExtensionSettings } from "./extension-settings.js";
+import { extensionReadiness } from "./extension-readiness.js";
 import { readExtensionUsage, recordExtensionUsage } from "./extension-usage.js";
 import { extensionInventory, type InstalledExtension, installedExtensions } from "./installed-extensions.js";
 import { writeWorkspaceExtension } from "./workspace-extension-scaffold.js";
@@ -151,6 +152,19 @@ export const createExtensionsRoutes = (services: Services) => {
                 new Date().toISOString(),
             );
             return { ok: true } as const;
+        }),
+        readiness: i.readiness.handler(async ({ input }) => {
+            const extension = await find(input.id);
+            const usage = (await readExtensionUsage(root))[extensionIdOf(extension.manifest)];
+            // The extension's own directory — for a workspace or baked one that is where it sits, and for a
+            // git-installed one it is the checkout, which is what a publisher would push.
+            const checks = await extensionReadiness(
+                extension.dir,
+                extension.manifest,
+                satisfiesEngines(extension.manifest.engines.intentic, extensionApiVersion),
+                usage,
+            );
+            return { checks };
         }),
         setEnabled: i.setEnabled.handler(async ({ input }) => {
             const extension = await find(input.id);

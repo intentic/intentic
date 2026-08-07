@@ -1,9 +1,14 @@
 <script setup lang="ts">
 import { extensionIdOf } from "@intentic/extension-api";
+import { ExtensionReadinessSchema } from "@intentic/sandbox-contract";
 import { BrandMark, cmp, StatusBadge } from "@intentic/ui";
 import ToggleSwitch from "primevue/toggleswitch";
-import { computed } from "vue";
+import { computed, ref, watch } from "vue";
+import { startAgent } from "../../composables/agents/agentActions";
+import { sandboxJson } from "../../composables/sandbox/sandboxClient";
+import { errorMessage } from "../../composables/useAsyncAction";
 import type { ExtensionEntry } from "../../composables/extensions/useExtensionList";
+import { tightenBrief } from "./extensionBrief";
 import ExtensionSettingsForm from "./ExtensionSettingsForm.vue";
 
 /* ONE EXTENSION, on one line until asked otherwise.
@@ -57,6 +62,57 @@ const routes = computed(() =>
         return { route, calls, unused: observed.value !== undefined && calls === 0 };
     }),
 );
+
+/* OFFERED ONLY WHERE THE OWNER CAN ACT. A workspace extension's manifest is a file in this workspace; an
+ * installed one's is a file in somebody else's repository at a pinned commit, and editing it here would be
+ * editing a checkout the next update overwrites. For those the figures stay informational — the honest thing to
+ * do with them is raise it with whoever maintains it, which is what the note under the list says.
+ *
+ * It also needs something to act ON: at least one route observed used (so the extension has genuinely been
+ * exercised) and at least one never called. */
+const tightenable = computed(
+    () =>
+        entry.extension.source === `workspace` &&
+        observed.value !== undefined &&
+        routes.value.some((route) => route.unused) &&
+        routes.value.some((route) => route.calls > 0),
+);
+
+/* IS IT FIT FOR SOMEBODY ELSE TO RUN. Fetched when the row opens rather than carried on the list: it reads the
+ * bundle off disk per extension, and it is read when an author is thinking about publishing, not on every render
+ * of a tab that has twenty rows.
+ *
+ * Shown for a WORKSPACE extension only, because that is the one an author is about to publish. The same checks
+ * would be true of an installed extension, but there they describe somebody else's decision at a commit this
+ * owner cannot change — a red cross against a thing you cannot fix is noise. */
+const readiness = ref<{ id: string; label: string; status: string; detail: string }[]>();
+const readinessError = ref<string>();
+watch(
+    () => [expanded, entry.extension.id] as const,
+    async ([open]) => {
+        if (!open || entry.extension.source !== `workspace`) {
+            return;
+        }
+        readinessError.value = undefined;
+        try {
+            const result = ExtensionReadinessSchema.parse(await sandboxJson(`/extensions/${encodeURIComponent(entry.extension.id)}/readiness`));
+            readiness.value = [...result.checks];
+        } catch (failure) {
+            readiness.value = undefined;
+            readinessError.value = errorMessage(failure, `Could not check this extension.`);
+        }
+    },
+    { immediate: true },
+);
+
+// The extension's own directory, which is where its manifest is. A workspace extension's name IS its directory
+// (the daemon enumerates one per subdirectory), so this needs no round trip to find out.
+const tighten = computed(() => ({
+    id: extensionIdOf(manifest.value),
+    dir: `.intentic/workspace-extensions/${manifest.value.name}`,
+    unused: routes.value.filter((route) => route.unused).map((route) => route.route),
+    used: routes.value.filter((route) => route.calls > 0).map(({ route, calls }) => ({ route, calls })),
+}));
 
 // How many places fit on a line before the column starts eating words rather than items.
 const PLACES_SHOWN = 3;
@@ -210,7 +266,34 @@ const tone = computed(() => TONE[entry.state.variant] ?? `text-muted`);
                 <p v-else-if="routes.some((route) => route.unused)" class="mt-1.5 text-2xs text-subtle">
                     Dashed routes have never been called. That is worth raising with whoever maintains it, not acting on alone — a route used only by
                     a screen you have not opened looks identical.
+                    <!-- The one case where "raise it with the maintainer" means "you are the maintainer": this
+                         manifest is a file in this workspace. The turn it starts reads the code and decides route
+                         by route rather than deleting what is dashed — see tightenBrief. -->
+                    <button v-if="tightenable" type="button" :class="cmp.linkButton(`text-2xs`)" @click="startAgent(tightenBrief(tighten))">
+                        Have an agent go through them
+                    </button>
                 </p>
+            </div>
+
+            <!-- Only for a workspace extension, and only what is answerable off its files. The failures here are
+                 the ones that are invisible in this workspace — the daemon serves the entry live, so a bundle
+                 that only works because of how it is being loaded here looks perfect until it is a commit in
+                 somebody else's sandbox. -->
+            <div v-if="entry.extension.source === `workspace`">
+                <p :class="cmp.sectionLabel(`mb-1.5 text-2xs`)">Fit to publish</p>
+                <p v-if="readinessError" class="text-2xs text-danger">{{ readinessError }}</p>
+                <ul v-else-if="readiness" class="flex flex-col gap-1">
+                    <li v-for="check in readiness" :key="check.id" class="flex gap-1.5 text-2xs">
+                        <Icon
+                            :name="check.status === `pass` ? `check` : check.status === `warn` ? `exclamation-triangle` : `times`"
+                            :class="check.status === `pass` ? `text-success` : check.status === `warn` ? `text-warning` : `text-danger`"
+                            class="mt-0.5 shrink-0"
+                        />
+                        <span class="text-muted"
+                            >{{ check.label }} — <span class="text-subtle">{{ check.detail }}</span></span
+                        >
+                    </li>
+                </ul>
             </div>
 
             <!-- Identity, on its own hairline: the full id the collapsed row leaves off a baked-in extension,

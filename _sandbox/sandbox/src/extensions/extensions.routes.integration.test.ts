@@ -194,3 +194,62 @@ test("usage the manifest no longer declares is dropped, so a removed permission 
     expect(usage?.[kept]?.calls).toBe(1);
     expect(usage?.["DELETE /everything"]).toBeUndefined();
 });
+
+test("readiness catches the two failures that are invisible here and fatal once published", async () => {
+    const workspace = workspacePaths(mkdtempSync(join(tmpdir(), "ext-readiness-")));
+    const client = clientFor(createApp(services({ workspace })));
+
+    // A scaffolded extension is publishable on every check that can be answered from its files.
+    await client.extensions.create({ publisher: "workspace", name: "clean" });
+    const clean = await client.extensions.readiness({ id: "workspace.clean" });
+    expect(clean.checks.filter((check) => check.status === "fail")).toEqual([]);
+    // Its permissions check passes on the strongest possible ground: the scaffold declares no daemon reach at
+    // all, so there is nothing to have earned. (The `warn` state is for an extension that DOES declare routes and
+    // has never been exercised — the case where this check has nothing to say and must not say "fine".)
+    expect(clean.checks.find((check) => check.id === "permissions")).toMatchObject({
+        status: "pass",
+        detail: "It asks for no daemon routes at all.",
+    });
+
+    /* Now the two ways a bundle that works here dies elsewhere. Both are silent in this workspace — the daemon
+     * serves the entry live and the author never sees a failure — and both are fatal at activation for anyone
+     * who installs the published sha. */
+    const dir = join(workspaceExtensionsRoot(workspace.root), "broken");
+    await mkdir(dir, { recursive: true });
+    await writeFile(
+        join(dir, "intentic-extension.json"),
+        JSON.stringify({ publisher: "workspace", name: "broken", version: "0.1.0", engines: { intentic: "^1.0.0" }, entry: "extension.js" }),
+    );
+    await writeFile(
+        join(dir, "extension.js"),
+        `import { h } from "vue";\nimport { thing } from "./helper.js";\nimport axios from "axios";\nexport const activate = () => {};\n`,
+    );
+
+    const broken = await client.extensions.readiness({ id: "workspace.broken" });
+    const failed = Object.fromEntries(broken.checks.map((check) => [check.id, check]));
+    // A relative import cannot resolve against the blob URL the bundle is imported from — reported before the
+    // second import is even considered, because it is the one that 404s.
+    expect(failed.bundle?.status).toBe("fail");
+    expect(failed.bundle?.detail).toContain("./helper.js");
+    // And the engines range excludes the app it would be published from, so no installer could activate it.
+    expect(failed.engines?.status).toBe("fail");
+    expect(failed.engines?.detail).toContain("^1.0.0");
+});
+
+test("readiness reports a promised file that is not there", async () => {
+    const workspace = workspacePaths(mkdtempSync(join(tmpdir(), "ext-readiness-paths-")));
+    const client = clientFor(createApp(services({ workspace })));
+    const dir = join(workspaceExtensionsRoot(workspace.root), "promises");
+    await mkdir(dir, { recursive: true });
+    // A manifest promising a CLI directory that was never committed: nothing fails here, and the agent's PATH
+    // quietly lacks the tool on somebody else's machine.
+    await writeFile(
+        join(dir, "intentic-extension.json"),
+        JSON.stringify({ publisher: "workspace", name: "promises", version: "0.1.0", engines: { intentic: "^2.0.0" }, contributes: { bin: "bin" } }),
+    );
+
+    const checks = await client.extensions.readiness({ id: "workspace.promises" });
+    const paths = checks.checks.find((check) => check.id === "paths");
+    expect(paths?.status).toBe("fail");
+    expect(paths?.detail).toContain("bin directory (bin)");
+});

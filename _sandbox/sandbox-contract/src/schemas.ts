@@ -5420,3 +5420,14 @@ export const ChoreProbeRequestSchema = z.object({ repo: z.string().min(1), id: P
 // POST /chores/ledger — record a run, or snooze. Written daemon-side rather than by the browser so a chore turn
 // started from anywhere (the panel, an automation, the agent itself) lands in one ledger.
 export const ChoreLedgerWriteSchema = ChoreLedgerEntrySchema;
+
+/* One publishability check and what it found. `warn` is a real third state, not a soft failure: the permissions
+ * check has nothing to say about an extension nobody has exercised yet, and reporting that as a pass would be
+ * the check lying at the exact moment it matters most. */
+export const ReadinessCheckSchema = z.object({
+    id: z.string(),
+    label: z.string(),
+    status: z.enum(["pass", "warn", "fail"]),
+    detail: z.string(),
+});
+export const ExtensionReadinessSchema = z.object({ checks: z.array(ReadinessCheckSchema) });

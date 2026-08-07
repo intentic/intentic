@@ -1,5 +1,6 @@
 export * from "./api.js";
 export * from "./diff.js";
+export * from "./engines.js";
 export * from "./facts.js";
 export * from "./host.js";
 export * from "./manifest.js";
