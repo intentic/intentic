@@ -24,3 +24,8 @@ what a form looks like is a product decision, not a protocol. The enums it keys 
 
 - Only user-provided, non-secret fields appear in an add-form descriptor. Backends are never added through a bare
   form: servers register themselves via the connect-host command, and Cloudflare goes through its own step.
+- **A card's `description` is one line — 60 characters or fewer.** The grid puts three or four tiles across what
+  is left of the page after the index column, and a row is as tall as its tallest tile, so a sentence with a
+  clause after the dash costs height on the two cards beside it as well as its own. Everything longer goes in
+  `hint`: the config form prints it in full, and the catalog's free-text search reads it, so a card stays
+  findable by words its tile no longer has room to show.

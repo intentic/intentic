@@ -247,13 +247,18 @@ const inScope = computed(() => {
 });
 
 // The kind is searched alongside the words a reader can see, because it is what somebody typing "mcp" or "ssh"
-// means — those are the names of the things, and no card's prose repeats them.
+// means — those are the names of the things, and no card's prose repeats them. The HINT is searched for the
+// mirror reason: a tile's description is one line now, so the words that identify a card to the person looking
+// for it ("webauthn", "socket mode", "botfather") live in prose the grid no longer prints. Searching only what
+// is visible would make the catalog findable exactly to the extent it is already scannable, which is backwards.
 const visibleCards = computed(() => {
     const needle = search.value.trim().toLowerCase();
     if (needle === ``) {
         return inScope.value;
     }
-    return inScope.value.filter((card) => `${card.entry.name} ${card.entry.description} ${card.entry.kind}`.toLowerCase().includes(needle));
+    return inScope.value.filter((card) =>
+        `${card.entry.name} ${card.entry.description} ${card.entry.kind} ${card.entry.hint ?? ``}`.toLowerCase().includes(needle),
+    );
 });
 
 // The visible cards grouped into their display sections, in category order; empty sections are dropped. Derived
@@ -261,7 +266,7 @@ const visibleCards = computed(() => {
 const groupedCatalog = computed(() =>
     CAPABILITY_CATEGORIES.flatMap((category) => {
         const entries = visibleCards.value.filter((card) => card.entry.category === category.id);
-        return entries.length === 0 ? [] : [{ label: category.label, hint: category.hint, entries }];
+        return entries.length === 0 ? [] : [{ label: category.label, entries }];
     }),
 );
 
@@ -1500,53 +1505,68 @@ const submitLabel = computed(() =>
                     <!-- HEADINGS ONLY WHERE THE GRID SPANS MORE THAN ONE CATEGORY. Under a single category the
                          rail has already said which one and the page's own description carries its sentence, so a
                          heading repeating both above the only group in view is a line of chrome. -->
-                    <div v-for="group in groupedCatalog" :key="group.label" class="flex flex-col gap-3">
-                        <div v-if="!inCategory">
-                            <div :class="cmp.sectionLabel()">{{ group.label }}</div>
-                            <div class="mt-0.5 text-xs text-muted">{{ group.hint }}</div>
-                        </div>
+                    <div v-for="group in groupedCatalog" :key="group.label" class="flex flex-col gap-2">
+                        <!-- The label alone. The category's sentence is the PAGE's description the moment the rail
+                             points at it, so printing all ten of them down the full catalog spends a line each on
+                             text nobody is reading yet — and the catalog is the view that has no room to spare. -->
+                        <div v-if="!inCategory" :class="cmp.sectionLabel()">{{ group.label }}</div>
                         <!-- Container queries, not viewport ones: the grid is what is left of the page after the
                              index column takes its 16rem, so how many tiles fit is a fact about this pane. -->
-                        <div class="grid grid-cols-1 gap-3 @xl:grid-cols-2 @3xl:grid-cols-3">
+                        <div class="grid grid-cols-1 gap-2 @xl:grid-cols-2 @3xl:grid-cols-3 @5xl:grid-cols-4">
                             <button
                                 v-for="card in group.entries"
                                 :key="card.entry.id"
                                 type="button"
-                                class="flex h-full w-full items-start gap-3 rounded-lg border border-line bg-card p-3 text-left transition-colors hover:border-line-strong hover:bg-overlay"
+                                class="flex h-full w-full items-start gap-2 rounded-lg border border-line bg-card px-2.5 py-2 text-left transition-colors hover:border-line-strong hover:bg-overlay"
                                 @click="pick(card.entry)"
                             >
-                                <BrandMark :size="32" :name="card.entry.name" :logo="card.entry.logo" :icon="entryIcon(card.entry)" />
+                                <BrandMark :size="24" :name="card.entry.name" :logo="card.entry.logo" :icon="entryIcon(card.entry)" />
                                 <div class="min-w-0">
                                     <!-- WRAPPING, because the tile is a third of a pane rather than a third of the
                                          page now. Without it the badges hold their line and squeeze the name into
-                                         two, which puts the one word a scanner is looking for last. -->
+                                         two, which puts the one word a scanner is looking for last.
+
+                                         EVERY BADGE IS A GLYPH, with its sentence in the tooltip: the words spent
+                                         a whole line of a tile that is now two lines tall, and they were the same
+                                         words on every card carrying them — a strip of green ticks reads as a
+                                         column of state faster than "1 connected" repeated down the grid. -->
                                     <div class="flex flex-wrap items-center gap-x-1.5">
-                                        <span class="font-medium text-content">{{ card.entry.name }}</span>
+                                        <span class="text-xs font-semibold text-content">{{ card.entry.name }}</span>
+                                        <!-- The count only once there is more than one to count: a lone tick already
+                                             means connected, and "1" beside it is a number nobody needs. -->
                                         <span
                                             v-if="card.connected > 0"
-                                            class="inline-flex items-center gap-1 text-2xs text-success"
+                                            v-tooltip.top="`${card.connected} connected`"
+                                            class="inline-flex items-center gap-0.5 text-2xs text-success"
                                             :aria-label="`${card.connected} connected`"
                                         >
                                             <Icon name="check-circle" />
-                                            {{ card.connected }} connected
+                                            <template v-if="card.connected > 1">{{ card.connected }}</template>
+                                        </span>
+                                        <span v-if="card.recommendation" class="text-2xs text-info" aria-label="Recommended">
+                                            <Icon name="sparkles" />
                                         </span>
                                         <span
-                                            v-if="card.recommendation"
-                                            class="inline-flex items-center gap-1 text-2xs text-info"
-                                            aria-label="Recommended"
+                                            v-if="card.entry.requires?.includes('devops') && !hasCapability('devops')"
+                                            v-tooltip.top="`Requires DevOps`"
+                                            class="text-2xs text-muted"
+                                            aria-label="Requires DevOps"
                                         >
-                                            <Icon name="sparkles" />
-                                            Recommended
+                                            <Icon name="lock" />
                                         </span>
                                         <CapabilityEffects :effects="badgeEffects(card.entry)" :compact="true" />
                                     </div>
-                                    <div class="mt-0.5 text-xs text-muted">{{ card.entry.description }}</div>
-                                    <div v-if="card.entry.requires?.includes('devops') && !hasCapability('devops')" class="mt-1 text-xs text-muted">
-                                        Requires DevOps
-                                    </div>
+                                    <!-- CLAMPED, not merely short. Card copy is authored to one line, but a card
+                                         derives from any enabled extension's manifest — including one nobody here
+                                         wrote — and a row is as tall as its tallest tile, so one long sentence
+                                         used to inflate the two cards beside it. -->
+                                    <div class="line-clamp-2 text-2xs text-muted">{{ card.entry.description }}</div>
                                     <!-- Derived from what is checked out in the workspace, so the claim comes
-                                         with the thing that was read to make it rather than being asserted. -->
-                                    <div v-if="card.recommendation" class="mt-1 text-xs text-info">{{ card.recommendation.reason }}</div>
+                                         with the thing that was read to make it rather than being asserted. The
+                                         two lines this costs are spent only on the handful of cards the scan
+                                         actually vouched for — a claim nobody can check is one nobody should act
+                                         on, which is not a thing to hide behind a hover. -->
+                                    <div v-if="card.recommendation" class="text-2xs text-info">{{ card.recommendation.reason }}</div>
                                     <div v-if="card.recommendation" class="truncate font-mono text-2xs text-subtle">
                                         {{ card.recommendation.evidence }}
                                     </div>

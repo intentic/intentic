@@ -52,8 +52,8 @@ const {
     icon,
     idle = false,
 } = defineProps<{
-    /** PIXELS, like <Avatar> and for the same reason: the sizes in use are 20, 22, 32 and 40, and snapping
-     *  them to a scale would move four surfaces to make a prop look tidier. Everything inside tracks it. */
+    /** PIXELS, like <Avatar> and for the same reason: the sizes in use are 20, 22, 24, 32 and 40, and snapping
+     *  them to a scale would move five surfaces to make a prop look tidier. Everything inside tracks it. */
     size: number;
     /** The monogram tier — the one thing every caller can always supply. Not an accessible label: see below. */
     name: string;

@@ -13,7 +13,7 @@
                 "catalog": {
                     "name": "OpenCode",
                     "logo": "opencode",
-                    "description": "Run OpenCode as a chat provider over ACP — its own models, tools and config, driven from this chat.",
+                    "description": "Run OpenCode as a chat provider over ACP.",
                     "category": "extend",
                     "hint": "Sign in by running the login command in a Terminal once — the agent keeps its own credentials in the sandbox."
                 },
@@ -30,7 +30,7 @@
                 "catalog": {
                     "name": "Gemini CLI",
                     "logo": "googlegemini",
-                    "description": "Run Google's Gemini CLI as a chat provider over ACP.",
+                    "description": "Run Google's Gemini CLI as a chat provider.",
                     "category": "extend",
                     "hint": "Provide GEMINI_API_KEY in the environment, or run the CLI's login in a Terminal once."
                 },
@@ -53,7 +53,7 @@
                 "kind": "agent",
                 "catalog": {
                     "name": "Custom ACP agent",
-                    "description": "Run any agent speaking the Agent Client Protocol (stdio) as a chat provider — Goose, Qwen Code, anything from the ACP registry.",
+                    "description": "Any ACP agent — Goose, Qwen Code, your own.",
                     "category": "extend",
                     "hint": "The command must be on the sandbox PATH and speak ACP over stdio (split on whitespace — no shell quoting). Credentials go in the environment block, or run the login command in a Terminal once.",
                     "guide": {

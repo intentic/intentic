@@ -13,7 +13,7 @@
                 "catalog": {
                     "name": "Reddit",
                     "logo": "reddit",
-                    "description": "Read, comment, post, vote and join subreddits — the agent acts as you in a real logged-in browser.",
+                    "description": "Post, comment and vote on Reddit as you.",
                     "category": "communication",
                     "hint": "Use Log in to sign in once — the agent then acts as you on Reddit. Automating an account may be against Reddit's terms — use your own."
                 },
@@ -27,7 +27,7 @@
                 "catalog": {
                     "name": "X (Twitter)",
                     "logo": "x",
-                    "description": "Read, reply, post, like, follow and join Communities — the agent acts as you in a real logged-in browser.",
+                    "description": "Post, reply, like and follow on X as you.",
                     "category": "communication",
                     "hint": "Use Log in to sign in once — the agent then acts as you on X. Automating an account may be against X's terms — use your own."
                 },
@@ -41,7 +41,7 @@
                 "catalog": {
                     "name": "YouTube",
                     "logo": "youtube",
-                    "description": "Watch, comment, reply, like and subscribe (join channels) — the agent acts as you in a real logged-in browser.",
+                    "description": "Watch, comment, like and subscribe as you.",
                     "category": "communication",
                     "hint": "Use Log in to sign in once — the agent then acts as you on YouTube. Google is strict about automated logins — completing sign-in yourself in the window is what gets past that."
                 },

@@ -32,7 +32,7 @@
                 "catalog": {
                     "name": "Telegram",
                     "logo": "telegram",
-                    "description": "Let the agent read and reply in Telegram chats — and wake it when someone messages or @mentions it.",
+                    "description": "Read and reply in Telegram; wake on messages.",
                     "category": "communication",
                     "hint": "One token from @BotFather is the whole setup — no app review, no public URL. In GROUPS a bot sees only messages that @mention it until you turn privacy mode off (`/setprivacy` → Disable), which is the same trade-off as Discord's Message Content intent: hear everything, or only what is addressed to you.",
                     "guide": {

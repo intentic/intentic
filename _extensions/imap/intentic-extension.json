@@ -36,7 +36,7 @@
                 "catalog": {
                     "name": "IMAP",
                     "icon": "envelope",
-                    "description": "Connect an email inbox over IMAP for the agent to read — and to wake automations the moment new mail arrives.",
+                    "description": "Read an inbox over IMAP; wake automations.",
                     "category": "communication",
                     "guide": {
                         "url": "https://myaccount.google.com/apppasswords",

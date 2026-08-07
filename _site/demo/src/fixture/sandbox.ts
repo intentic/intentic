@@ -98,7 +98,7 @@ const CONNECTOR_EXTENSIONS: Omit<ExtensionSummary, "enabled">[] = [
                         catalog: {
                             name: `GitHub`,
                             logo: `github/f5f5f5`,
-                            description: `Issues, PRs and code search as agent tools — plus git clone/pull/push and CI pipelines on your workspace repos.`,
+                            description: `Issues, PRs, code search and git on your repos.`,
                             category: `code`,
                         },
                         fields: [
@@ -122,7 +122,7 @@ const CONNECTOR_EXTENSIONS: Omit<ExtensionSummary, "enabled">[] = [
                         catalog: {
                             name: `PostgreSQL`,
                             logo: `postgresql`,
-                            description: `Let the agent query your database with psql — schema, rows, and migrations it can read before it writes.`,
+                            description: `Query your database with psql, before it writes.`,
                             category: `data`,
                         },
                         fields: [
@@ -142,7 +142,7 @@ const CONNECTOR_EXTENSIONS: Omit<ExtensionSummary, "enabled">[] = [
                         catalog: {
                             name: `Sentry`,
                             logo: `sentry`,
-                            description: `Read issues, events and stack traces — the agent starts a fix from the error that actually fired.`,
+                            description: `Start a fix from the error that actually fired.`,
                             category: `observability`,
                         },
                         fields: [
@@ -159,7 +159,7 @@ const CONNECTOR_EXTENSIONS: Omit<ExtensionSummary, "enabled">[] = [
                         catalog: {
                             name: `Outline`,
                             logo: `outline/f5f5f5`,
-                            description: `Search and write your team's knowledge base — the agent reads the docs it is expected to follow.`,
+                            description: `Search and write your team's knowledge base.`,
                             category: `business`,
                         },
                         fields: [
@@ -190,7 +190,7 @@ const CONNECTOR_EXTENSIONS: Omit<ExtensionSummary, "enabled">[] = [
                         catalog: {
                             name: `Discord`,
                             logo: `discord`,
-                            description: `The agent reads and sends messages as a real participant — @mention it in a thread and it replies there.`,
+                            description: `Reads and sends as a real participant.`,
                             category: `communication`,
                         },
                         fields: [

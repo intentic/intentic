@@ -15,7 +15,7 @@
                 "catalog": {
                     "name": "GitHub",
                     "logo": "github",
-                    "description": "Issues, PRs and code search as agent tools — plus git clone/pull/push and CI pipelines on your workspace repos.",
+                    "description": "Issues, PRs, code search and git on your repos.",
                     "category": "code",
                     "hint": "The agent uses the token with curl against the GitHub API. With Git access on you can git pull/push in the terminal — ssh-form URLs work too (rerouted over HTTPS when native SSH isn't available), so any repo-scoped token works. For native ssh://git we register an SSH key to your account, which needs write:public_key on a classic PAT (or the \"Git SSH keys: write\" permission on a fine-grained token); without it git still works over HTTPS and we show the key to add manually. Workspace repos on GitHub also get a CI webhook (the Pipelines view + instant CI automations), which needs admin:repo_hook on a classic PAT (or \"Webhooks: write\"); without it the Pipelines view shows the hook to add manually.",
                     "guide": {
@@ -62,7 +62,7 @@
                 "catalog": {
                     "name": "GitLab",
                     "logo": "gitlab",
-                    "description": "Issues, merge requests, and pipelines as agent tools — plus git clone/pull/push and CI pipelines on your workspace repos.",
+                    "description": "Issues, merge requests, pipelines and git.",
                     "category": "code",
                     "hint": "The agent uses the token with curl against the GitLab API. With Git access on, we register an SSH key to your account (the api scope covers key upload) so you can git clone/pull/push over ssh://git in the terminal; if key upload is refused, ssh-form URLs are rerouted over HTTPS so git still works. Workspace repos on this GitLab also get a CI webhook (the Pipelines view + instant CI automations) — the api scope covers it, but the token's user needs at least the Maintainer role on the project; otherwise the Pipelines view shows the hook to add manually.",
                     "guide": {
@@ -118,7 +118,7 @@
                 "catalog": {
                     "name": "npm",
                     "logo": "npm",
-                    "description": "Publish and manage your packages on the npm registry — publish, dist-tags, deprecations, owners, and private installs.",
+                    "description": "Publish and manage packages on the npm registry.",
                     "category": "code",
                     "hint": "The agent uses the npm CLI, already authenticated against registry.npmjs.org. Publishing may ask for a one-time 2FA code: with a TOTP secret stored below, the agent mints codes itself (`otp <name>`) and only ever sees the expiring code, never the secret. Write tokens expire after at most 90 days — when one dies, paste a fresh one under Sandbox ▸ Secrets.",
                     "guide": {
@@ -160,7 +160,7 @@
                 "catalog": {
                     "name": "npmjs.com",
                     "logo": "npm",
-                    "description": "Your npm account in a real logged-in browser — approve staged publishes, answer WebAuthn 2FA with the sandbox's own passkey, manage tokens and packages.",
+                    "description": "Your npm account in a real logged-in browser.",
                     "category": "code",
                     "hint": "Use Log in to sign in once. A physical security key cannot reach this browser — sign in with a recovery code instead, then open npm's 2FA settings and `Add Security Key`: the sandbox enrolls its own passkey and answers every later 2FA prompt itself. Pairs with the npm connector — its publishes get their web approvals here."
                 },
@@ -219,7 +219,7 @@
                 "catalog": {
                     "name": "Redmine",
                     "logo": "redmine",
-                    "description": "Connect your Redmine instance for issues and projects.",
+                    "description": "Issues and projects from your Redmine.",
                     "category": "code",
                     "hint": "The agent uses the API key with curl.",
                     "guide": {
@@ -259,7 +259,7 @@
                 "catalog": {
                     "name": "Outline",
                     "logo": "outline",
-                    "description": "Connect your Outline wiki for docs and knowledge base.",
+                    "description": "Docs and knowledge base from your Outline wiki.",
                     "category": "business",
                     "hint": "The agent uses the token with curl against the Outline API.",
                     "guide": {
@@ -298,7 +298,7 @@
                 "catalog": {
                     "name": "SigNoz",
                     "icon": "wave-pulse",
-                    "description": "Query traces, logs and metrics from a SigNoz instance.",
+                    "description": "Query traces, logs and metrics from SigNoz.",
                     "category": "observability",
                     "hint": "The agent queries observability with curl.",
                     "guide": {
@@ -336,7 +336,7 @@
                 "catalog": {
                     "name": "Komodo",
                     "icon": "box",
-                    "description": "Drive your Komodo deployments — stacks, deployments, servers, builds and container logs as agent tools.",
+                    "description": "Drive your Komodo stacks and deployments.",
                     "category": "deploy",
                     "hint": "The agent talks to Komodo Core's HTTP API with curl. A Komodo API key is a key + secret pair — the secret is this card's rotatable credential, the key identifies it (like a database user). The key inherits its user's permissions, so a read-only agent wants a non-admin user.",
                     "guide": {
@@ -381,7 +381,7 @@
                 "catalog": {
                     "name": "PostgreSQL",
                     "logo": "postgresql",
-                    "description": "Query your PostgreSQL database from the agent with psql.",
+                    "description": "Query your PostgreSQL database with psql.",
                     "category": "data",
                     "hint": "The agent queries your database with psql.",
                     "guide": {
@@ -432,7 +432,7 @@
                 "catalog": {
                     "name": "MySQL",
                     "icon": "database",
-                    "description": "Query your MySQL / MariaDB database from the agent.",
+                    "description": "Query your MySQL / MariaDB database.",
                     "category": "data",
                     "hint": "The agent queries your database with the mysql client.",
                     "guide": {

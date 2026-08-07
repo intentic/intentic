@@ -143,9 +143,14 @@ export interface CapabilityCatalogEntry {
     // An @intentic/ui IconName rendered when no simple-icons `logo` fits the brand (before the per-kind
     // fallback). undefined → the generic per-kind icon.
     readonly icon?: string | undefined;
+    // ONE LINE — 60 characters or fewer. Three or four tiles sit across the grid and a row is as tall as its
+    // tallest one, so a second clause here costs height on the cards beside it too. The grid clamps it at two
+    // lines regardless. Anything longer belongs in `hint`.
     readonly description: string;
     readonly requires?: readonly CapabilityKind[] | undefined;
     readonly fields: readonly CapabilityField[];
+    // The paragraph, printed under the add-form — and searched from the catalog, so a card stays findable by
+    // words its one-line description no longer has room for.
     readonly hint?: string | undefined;
     readonly guide?: CapabilityGuide | undefined;
     /* ONE PER SANDBOX — there is nothing to name and nothing to have two of (the Docker Engine is the machine's
@@ -233,7 +238,7 @@ export const CAPABILITY_CATALOG: readonly CapabilityCatalogEntry[] = [
         name: "DevOps",
         kind: "devops",
         category: "platform",
-        description: "Self-host and deploy: scaffolds your intent + desired-state repos, each with its own operator panel.",
+        description: "Self-host and deploy your own apps.",
         fields: [],
         hint: "One-time setup — then provision hosts, services and apps.",
     },
@@ -242,7 +247,7 @@ export const CAPABILITY_CATALOG: readonly CapabilityCatalogEntry[] = [
         name: "pnpm + turbo monorepo",
         kind: "monorepo",
         category: "platform",
-        description: "Scaffold an empty pnpm + turbo monorepo as its own repo; add apps (API / Web / Landing) to it from its operator panel.",
+        description: "Scaffold an empty pnpm + turbo monorepo.",
         fields: [],
         hint: "Names the repo. Once it's created, open its panel to add a Hono API, a Vue web app, or an Astro landing page.",
     },
@@ -252,7 +257,7 @@ export const CAPABILITY_CATALOG: readonly CapabilityCatalogEntry[] = [
         kind: "integration",
         category: "business",
         logo: "stripe",
-        description: "Connect your Stripe account for the agent and app.",
+        description: "Connect Stripe for the agent and your app.",
         requires: ["devops"],
         fields: [{ key: "provider", label: "", value: "stripe" }],
         hint: "The API key is read from your sandbox env (STRIPE_API_KEY) on the next provision.",
@@ -263,7 +268,7 @@ export const CAPABILITY_CATALOG: readonly CapabilityCatalogEntry[] = [
         kind: "docker",
         category: "platform",
         logo: "docker",
-        description: "Run containers inside your sandbox — its own isolated Docker Engine + Compose for dev databases, stacks and builds.",
+        description: "Run containers — its own Docker Engine + Compose.",
         singleton: true,
         /* The engine itself takes no configuring; these are the things a user chooses about it, in the two
          * families DockerConfigSchema defines — and the `rebuild` chip is what tells them apart on sight,
@@ -310,7 +315,7 @@ export const CAPABILITY_CATALOG: readonly CapabilityCatalogEntry[] = [
         kind: "ssh",
         category: "servers",
         icon: "server",
-        description: "Give the agent a remote machine to operate over SSH.",
+        description: "Operate a remote machine over SSH.",
         fields: [
             { key: "host", label: "Host", placeholder: "1.2.3.4 or box.example.com" },
             { key: "port", label: "Port", default: "22" },
@@ -343,7 +348,7 @@ export const CAPABILITY_CATALOG: readonly CapabilityCatalogEntry[] = [
         kind: "vpn",
         category: "servers",
         icon: "shield",
-        description: "Put the sandbox on a private network — WireGuard, FortiGate SSL-VPN (FortiClient) or IPsec.",
+        description: "Private network — WireGuard, FortiGate or IPsec.",
         fields: [
             // The discriminator: every field below is gated on it, so one card serves all three protocols and
             // the daemon receives exactly one arm of the config union.
@@ -502,7 +507,7 @@ export const CAPABILITY_CATALOG: readonly CapabilityCatalogEntry[] = [
         name: "Claude plugin",
         kind: "plugin",
         category: "extend",
-        description: "Install a Claude Code plugin from a git repo — skills, agents, hooks and MCP servers.",
+        description: "Install a Claude Code plugin from a git repo.",
         fields: [
             { key: "url", label: "Git URL", placeholder: "https://github.com/owner/plugin" },
             { key: "ref", label: "Branch, tag or commit", optional: true },
@@ -525,7 +530,7 @@ export const CAPABILITY_CATALOG: readonly CapabilityCatalogEntry[] = [
         name: "Extension",
         kind: "extension",
         category: "extend",
-        description: "Install an intentic extension from a git repo — app views, commands, settings, agent skills and background processes.",
+        description: "Install an intentic extension from a git repo.",
         fields: [
             { key: "url", label: "Git URL", placeholder: "https://github.com/owner/extension" },
             // A full sha, not a branch: extension code runs trusted in your browser, so installs pin exactly
@@ -555,7 +560,7 @@ export const CAPABILITY_CATALOG: readonly CapabilityCatalogEntry[] = [
         kind: "endpoint",
         category: "extend",
         icon: "sparkles",
-        description: "Run your own models — Ollama, vLLM, llama.cpp, LM Studio, a gateway — as a provider in the chat.",
+        description: "Your own models — Ollama, vLLM, a gateway.",
         fields: [
             { key: "baseUrl", label: "API base URL", placeholder: "http://host.docker.internal:11434/v1" },
             {

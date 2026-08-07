@@ -33,7 +33,7 @@
                 "catalog": {
                     "name": "WhatsApp",
                     "logo": "whatsapp",
-                    "description": "Let the agent read and reply in WhatsApp chats and groups — paired as a linked device on a number you dedicate to it.",
+                    "description": "Read and reply in WhatsApp chats and groups.",
                     "category": "communication",
                     "hint": "This is an UNOFFICIAL connection — it links to WhatsApp the way WhatsApp Web does, which is against WhatsApp's terms of service, and numbers do get banned. Use a DEDICATED number (a prepaid SIM or eSIM), never your personal one: the agent acts as that number. No Meta account, no webhook, no public URL — pairing takes a minute.",
                     "guide": {

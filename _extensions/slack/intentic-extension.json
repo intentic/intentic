@@ -35,7 +35,7 @@
                 "catalog": {
                     "name": "Slack",
                     "icon": "slack",
-                    "description": "Let the agent read, post and react in your Slack workspace — and wake it when someone @mentions it.",
+                    "description": "Read, post and react in Slack; wake on @mention.",
                     "category": "communication",
                     "hint": "Both tokens come from one Slack app. The app-level token (xapp-) opens the Socket Mode connection this sandbox listens on — no public URL, no inbound firewall hole. The bot token (xoxb-) is what the agent calls the Web API with. Ask the agent to \"set yourself up in my Slack\" and it writes the app manifest for you to paste.",
                     "guide": {

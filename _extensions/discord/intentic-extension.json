@@ -37,7 +37,7 @@
                 "catalog": {
                     "name": "Discord",
                     "logo": "discord",
-                    "description": "Let the agent read and post in your Discord server.",
+                    "description": "Read and post in your Discord server.",
                     "category": "communication",
                     "hint": "Voice transcription runs a local whisper model: bigger = more accurate but slower on CPU (Medium ≈ 1.5GB download on first use). Set the voice language to an ISO code like pl or en to pin transcription (auto-detect can misfire on short utterances).",
                     "guide": {

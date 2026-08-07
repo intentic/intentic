@@ -266,8 +266,15 @@ const MARK_FIELDS = {
 const CatalogSchema = z.object({
     name: z.string().min(1),
     ...MARK_FIELDS,
+    // ONE LINE — aim for 60 characters or fewer. The grid clamps this at two lines and a card sits beside two
+    // others in a pane the index column has already taken 16rem out of, so a paragraph here is a paragraph the
+    // reader gets truncated. Everything longer belongs in `hint`, which the config form prints in full and the
+    // catalog's search reads. Not capped in the schema: an extension published before this rule should still
+    // install, and a card that reads badly is a worse outcome than one that fails to load only in theory.
     description: z.string().min(1),
     category: z.string().min(1),
+    // The paragraph. Shown under the add-form, and searched from the catalog — so the words that identify this
+    // card to someone hunting for it ("webauthn", "socket mode") belong here even when the tile can't show them.
     hint: z.string().optional(),
     // The credential-creation walkthrough the install dialog renders (the platform catalog's guide shape).
     guide: z
