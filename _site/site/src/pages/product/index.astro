@@ -1,5 +1,5 @@
 ---
-import { productHref, productPages } from "@intentic-dev/site-content/product";
+import { type ProductPage, productHref, productPages } from "@intentic-dev/site-content/product";
 import { APP_URL, DEMO_PATH } from "@intentic-dev/site-content/site";
 import { Image } from "astro:assets";
 import BaseLayout from "../../layouts/BaseLayout.astro";
@@ -10,18 +10,25 @@ import { shotAsset, SHOT_WIDTHS } from "../../lib/shots";
 /* The product index: every surface as a card, in the order the menu lists them. It is what the mega-menu is
  * a shortcut to — and the page a search engine, a shared link or a touch device lands on. */
 
-const groups = [
-    { label: "Run agents", blurb: "Start work, steer it, and decide what lands.", slugs: productPages.filter((page) => page.group === "run") },
-    {
-        label: "Configure the environment",
-        blurb: "The workspace they operate in, and the machine it runs on.",
-        slugs: productPages.filter((page) => page.group === "environment"),
-    },
-];
+/* Every group, and that is now load-bearing: the top bar's menu is one flat column of feature pages, so this
+ * page is the only place the grouping is stated at all — and while `extend` was missing from it, Doorbell had
+ * a menu row and a page and no card on the index those two point at. Derived from the `group` union rather
+ * than listed, so a group added to a page cannot go unrendered here again. */
+const BANDS: Record<ProductPage["group"], { label: string; blurb: string }> = {
+    run: { label: "Run agents", blurb: "Start work, steer it, and decide what lands." },
+    environment: { label: "Configure the environment", blurb: "The workspace they operate in, and the machine it runs on." },
+    extend: { label: "Extend it", blurb: "What else the same sandbox can be pointed at." },
+};
+
+const groups = Object.entries(BANDS).map(([group, band]) => ({
+    label: band.label,
+    blurb: band.blurb,
+    slugs: productPages.filter((page) => page.group === group),
+}));
 ---
 
 <BaseLayout
-    title="The product · intentic"
+    title="Features · intentic"
     description="Every surface of the intentic workspace: the fleet board, plan mode, diff review, the shared editor and terminal, capabilities, and the sandbox on hardware you own."
 >
     <Nav />
@@ -29,7 +36,7 @@ const groups = [
         <section class="relative overflow-hidden border-b border-line">
             <div class="absolute inset-0 bg-linear-to-br from-primary-600/10 via-canvas to-canvas" aria-hidden="true"></div>
             <div class="relative mx-auto max-w-7xl px-6 pt-28 pb-14 lg:pt-32">
-                <div class="eyebrow">The product</div>
+                <div class="eyebrow">Features</div>
                 <h1 class="mt-3 max-w-3xl text-3xl leading-tight font-semibold tracking-tight sm:text-4xl">
                     A workstation for your agents, surface by surface.
                 </h1>

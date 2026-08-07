@@ -1,7 +1,6 @@
 import { compareHref } from "./compare";
 import { docsDestinations } from "./docs";
 import type { ShotImage } from "./landing";
-import type { ProductPage } from "./product";
 import { productHref, productPages } from "./product";
 import { DEMO_PATH, githubReleasesUrl } from "./site";
 
@@ -46,36 +45,33 @@ export type NavEntry =
       }
     | { type: "link"; label: string; href: string; prefix: string; external?: boolean };
 
-const productItems = (group: ProductPage["group"]): MenuItem[] =>
-    productPages
-        .filter((page) => page.group === group)
-        .map((page) => ({
-            label: page.navLabel,
-            href: productHref(page.slug),
-            description: page.menuBlurb,
-            shot: { name: page.hero.name, alt: page.hero.alt },
-        }));
+/* Every feature page as a menu row, in the tree's own order — which already runs "what it is" before "what
+ * else it can do", so Doorbell lands last without a header having to say so.
+ *
+ * ONE COLUMN, no group labels: three headers over 3/3/2 rows was more scaffolding than the eight links under
+ * it, and the grouping they carried is what the /product/ index page is for, at a size where a band of cards
+ * can actually hold a blurb. What the menu is FOR is the preview rail beside it — a visitor who has installed
+ * nothing seeing the real surfaces — and that survives the headers going. */
+const productItems = (): MenuItem[] =>
+    productPages.map((page) => ({
+        label: page.navLabel,
+        href: productHref(page.slug),
+        description: page.menuBlurb,
+        shot: { name: page.hero.name, alt: page.hero.alt },
+    }));
 
 export const navEntries: NavEntry[] = [
     {
+        /* "Features", not "Product": the site's own copy says free and open source, MIT on GitHub, platform
+         * included — and a bar that then says "Product" is reading from a SaaS vendor's script beside it. The
+         * URLs stay /product/*, because a label is a word and a URL is a promise other people have already
+         * linked to. */
         type: "menu",
-        label: "Product",
+        label: "Features",
         prefix: "/product",
-        sections: [
-            { label: "Run agents", items: productItems("run") },
-            { label: "The environment", items: productItems("environment") },
-            // The third column is the nav's version of the landing page's "Extend it" band: the surfaces
-            // that answer "what else can it do" sit apart from the ones that answer "what is it". Doorbell
-            // used to head the "Run agents" column, which read as a claim that a website chat widget is
-            // what this product is for.
-            {
-                label: "Extend it",
-                items: [
-                    ...productItems("extend"),
-                    { label: "Extension gallery", href: "/extensions/", description: "Everything published, and the commit you'd install" },
-                ],
-            },
-        ],
+        // The extension gallery is NOT a row here: it is already "Extensions" in this same bar, two items to
+        // the right, and a menu whose neighbour duplicates it teaches the reader that the bar has no shape.
+        sections: [{ items: productItems() }],
         action: { label: "Try the live workspace", href: DEMO_PATH },
     },
     {
