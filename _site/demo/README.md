@@ -11,9 +11,9 @@ pnpm -C _site/demo dev      # http://localhost:47146/demo/
 pnpm -C _site/demo build    # → _site/site/public/demo/ (Astro copies it into the site's dist)
 ```
 
-Working on the marketing site's hero overlay means running **both** dev servers: `astro dev` proxies `/demo/`
+Reaching the demo from the marketing site means running **both** dev servers: `astro dev` proxies `/demo/`
 to this one (`_site/site/astro.config.mjs`), because `public/demo/` is a build output that nothing produces
-during `astro dev`. Without it the overlay says so in the frame rather than 404ing.
+during `astro dev`. Without it the site's demo link says so on the page rather than 404ing.
 
 ## Why it is its own package
 
@@ -63,7 +63,7 @@ is the tool: it is how the served routes were found, and how the next one will b
 
 The fixture is written to prove every surface exists, which made the opening frame a workspace at full tilt:
 nine agents, a question, a land conflict, fourteen extensions in the rail. Fullness is a **control** now
-(`src/mode.ts`), and the play button opens the middle one.
+(`src/mode.ts`), and the site's demo link opens the middle one.
 
 | Mode | The board | The rail |
 | --- | --- | --- |

@@ -5,12 +5,12 @@ The public website at intentic.dev — an Astro build, all copy imported rather 
 ## Responsibilities
 
 - Render the marketing and documentation pages.
-- Ship the interactive demo into its own `public/`, so the hero iframe is same-origin.
+- Ship the interactive demo into its own `public/`, so it is a page of this site at `/demo/`.
 - Emit the machine-readable surface: per-page markdown and `llms.txt`.
 
 ## Key files
 
-- [src/pages/index.astro](src/pages/index.astro) — the landing page, and the hero the demo runs in.
+- [src/pages/index.astro](src/pages/index.astro) — the landing page, whose hero shot links to the demo.
 - [src/pages/docs](src/pages/docs) — the documentation pages.
 - [src/layouts](src/layouts) — the shells every page composes into.
 - [src/lib/registry.ts](src/lib/registry.ts) — the extension registry the marketplace pages read.
@@ -24,5 +24,7 @@ This package is layout and routing; a wording change should not need to touch it
 ## Conventions & gotchas
 
 - `dist/` is checked in for the docs pages' markdown mirrors. Do not read it as source.
-- The demo is built into this site's `public/` deliberately: a cross-origin iframe gets partitioned storage, and
-  the demo seeds credentials into localStorage before the app boots.
+- The demo is built into this site's `public/` deliberately: it seeds credentials into localStorage before the
+  app boots, so it has to be served from this site's own origin rather than linked to somewhere else.
+- The demo opens as its own full page, never in an overlay: an IDE wants the whole viewport, and every link to
+  it on the site — nav, hero, product and compare CTAs — is a plain `<a>` to `/demo/`.

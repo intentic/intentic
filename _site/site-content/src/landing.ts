@@ -35,14 +35,13 @@ export interface HeroShot extends ShotImage {
 }
 
 /* The invitation to stop looking at the screenshot and use the thing. The hero keeps the still image — it is the
- * LCP, and this page ships almost no JavaScript — and the demo is loaded only on the press. */
+ * LCP, and this page ships almost no JavaScript — and the press is a link to the demo's own page, where an IDE
+ * gets the whole viewport instead of a hole cut in a marketing page. */
 export interface HeroDemo {
-    /** On the frame itself. Says what happens, because "Play" on a screenshot could mean a video. */
+    /** On the frame itself. Says where the press goes, because "Play" on a screenshot could mean a video. */
     playLabel: string;
-    /** Under the button: what the visitor is about to get, and what it is not. */
+    /** Under the link: what the visitor is about to get, and what it is not. */
     note: string;
-    /** Where a narrow screen goes instead — an embedded IDE on a phone is not a demo, it is a maze. */
-    newTabLabel: string;
 }
 
 /**
@@ -150,9 +149,8 @@ export const landingContent: LandingContent = {
             frameLabel: "acme-shop · /agents",
         },
         demo: {
-            playLabel: "Try the live workspace",
+            playLabel: "Open the live workspace",
             note: "The real app on a recorded workspace. Approve a plan, answer an agent, read a diff. Nothing to install.",
-            newTabLabel: "Open the live workspace",
         },
     },
     loop: {
