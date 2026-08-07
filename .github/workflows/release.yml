@@ -22,8 +22,12 @@ jobs:
         username: ${{ github.actor }}
         password: ${{ secrets.GITHUB_TOKEN }}
     timeout-minutes: 20
+    # A job's `permissions` REPLACES the set it inherits, so every job whose container comes from ghcr has to
+    # name `packages` itself — the token is what pulls the image, and without it the pull is denied before the
+    # first step runs.
     permissions:
       contents: write
+      packages: read
     outputs:
       version: ${{ steps.release.outputs.version }}
     steps:
@@ -53,6 +57,7 @@ jobs:
     timeout-minutes: 90
     permissions:
       contents: read
+      packages: read
     env:
       CARGO_HOME: /ci-cache/cargo
       CARGO_TARGET_DIR: /ci-cache/desktop-release-windows-target

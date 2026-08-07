@@ -27,13 +27,17 @@ vi.hoisted(() => {
     })) as typeof globalThis.matchMedia;
 });
 
+// Every grammar we ship, imported and compiled from cold in one test — `ensureLang` tokenizes a warm-up line
+// per language precisely so the rules compile off the render path, and that work all lands here. Seconds of
+// real work against a suite budget sized for the milliseconds every other test spends, so it gets its own,
+// big enough that only a hang reaches it on a runner shared with every other suite.
 test(`every id in LANGS loads the grammar it names`, async () => {
     const { ensureLang } = useHighlighter();
     const missing = (await Promise.all(Object.keys(LANGS).map(async (id) => [id, await ensureLang(id)] as const)))
         .filter(([, core]) => core === undefined)
         .map(([id]) => id);
     expect(missing).toEqual([]);
-});
+}, 60_000);
 
 test(`the overlay's instructions and comments come out as distinct colours`, async () => {
     const overlay = `FROM intentic/sandbox:latest\n# the Environment card's approved overlay\nENV PATH=/root/.cargo/bin:$PATH\n`;

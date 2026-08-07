@@ -206,7 +206,11 @@ pub fn run(mode: Mode, slug: Option<String>) -> Result<()> {
         if base_image.is_empty() {
             bail!("the approved overlay has no FROM instruction.");
         }
-        if !base_is_allowed(&base_image, current_base.as_deref(), rollback_target.as_deref()) {
+        if !base_is_allowed(
+            &base_image,
+            current_base.as_deref(),
+            rollback_target.as_deref(),
+        ) {
             bail!(
                 "the approved overlay must start with FROM {DEFAULT_REGISTRY}:<tag>\n       (or FROM this sandbox's own base, {}); found {base_image}.",
                 current_base.as_deref().unwrap_or("<none>")
@@ -335,7 +339,12 @@ pub fn run(mode: Mode, slug: Option<String>) -> Result<()> {
      * one routine `docker image prune` from deleting the only way back. The tag is created BEFORE the
      * record that names it, so the record never points at nothing. */
     let new_base_id = docker::image_id(&base_image);
-    let next = next_previous(&saved, old_base_id.as_deref(), new_base_id.as_deref(), &slug);
+    let next = next_previous(
+        &saved,
+        old_base_id.as_deref(),
+        new_base_id.as_deref(),
+        &slug,
+    );
     if next != saved.previous {
         if let (Some(pin), Some(old)) = (next.as_deref(), old_base_id.as_deref()) {
             docker::quiet(&["tag", old, pin]);
@@ -384,7 +393,8 @@ pub fn run(mode: Mode, slug: Option<String>) -> Result<()> {
     if !docker::run_argv(&argv, &log) {
         docker::quiet(&["rm", "-f", &container]);
         let all_optional: Vec<String> = probes.iter().map(|probe| probe.token.clone()).collect();
-        let retry_argv = match contract::run_command(&request, &env_nul, true, &all_optional, &log) {
+        let retry_argv = match contract::run_command(&request, &env_nul, true, &all_optional, &log)
+        {
             Ok(retry_argv) => retry_argv,
             Err(err) => {
                 restore_parked(&container, &parked, &slug, &channel, &saved);
@@ -527,7 +537,10 @@ fn base_is_allowed(
 /// sandboxes on one daemon must not fight over it), named by the image's own id (re-pinning is idempotent).
 fn rollback_tag(slug: &str, image_id: &str) -> String {
     let id = image_id.trim_start_matches("sha256:");
-    format!("intentic-sandbox-rollback-{slug}:{}", &id[..id.len().min(12)])
+    format!(
+        "intentic-sandbox-rollback-{slug}:{}",
+        &id[..id.len().min(12)]
+    )
 }
 
 /// What the record's `previous` becomes on a swap whose bases resolved to these identities. `previous` is
@@ -645,7 +658,10 @@ mod tests {
         // A rebuild (same base, new overlay) must not overwrite `previous` with the image we are already on.
         assert_eq!(
             next_previous(
-                &saved(Some("img:2"), Some("intentic-sandbox-rollback-abc:0123456789ab")),
+                &saved(
+                    Some("img:2"),
+                    Some("intentic-sandbox-rollback-abc:0123456789ab")
+                ),
                 Some("sha256:aaaa"),
                 Some("sha256:aaaa"),
                 "abc"
@@ -681,7 +697,10 @@ mod tests {
             "intentic-sandbox-rollback-abc:0123456789ab"
         );
         // A short id is not sliced past its end.
-        assert_eq!(rollback_tag("a", "sha256:abc"), "intentic-sandbox-rollback-a:abc");
+        assert_eq!(
+            rollback_tag("a", "sha256:abc"),
+            "intentic-sandbox-rollback-a:abc"
+        );
     }
 
     #[test]
@@ -706,8 +725,16 @@ mod tests {
     #[test]
     fn an_overlay_may_only_extend_an_official_base_the_dev_tag_or_its_own() {
         // Official releases, any tag.
-        assert!(base_is_allowed("ghcr.io/intentic/sandbox:stable", None, None));
-        assert!(base_is_allowed("ghcr.io/intentic/sandbox:1.2.3", None, None));
+        assert!(base_is_allowed(
+            "ghcr.io/intentic/sandbox:stable",
+            None,
+            None
+        ));
+        assert!(base_is_allowed(
+            "ghcr.io/intentic/sandbox:1.2.3",
+            None,
+            None
+        ));
         // The dogfood tag, so the dev loop and the rebuild loop are not mutually exclusive.
         assert!(base_is_allowed(DEV_TAG, None, None));
         // This container's own stamped base — the case that lets an already-extended sandbox rebuild.

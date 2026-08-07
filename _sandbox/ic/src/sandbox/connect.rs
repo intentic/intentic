@@ -500,7 +500,9 @@ fn run_desktop_sync(container: &str, public_url: &str, pair_token: &str, sync_di
 /// arrives allowed to start, stop and update this machine's sandboxes and nothing else — no shell, no files,
 /// no screen. Widening it is a switch on the computer's own card.
 fn run_host_agent(container: &str, public_url: &str, pair_token: &str) -> bool {
-    println!("intentic: connecting this computer so you can manage its sandboxes from your browser…");
+    println!(
+        "intentic: connecting this computer so you can manage its sandboxes from your browser…"
+    );
     if !wait_local_health(container) {
         return false;
     }
@@ -634,7 +636,11 @@ fn machine_label() -> String {
         .ok()
         .and_then(named)
         .or_else(|| std::env::var("COMPUTERNAME").ok().and_then(named))
-        .or_else(|| std::fs::read_to_string("/etc/hostname").ok().and_then(named))
+        .or_else(|| {
+            std::fs::read_to_string("/etc/hostname")
+                .ok()
+                .and_then(named)
+        })
         .or_else(|| {
             std::process::Command::new("hostname")
                 .output()
