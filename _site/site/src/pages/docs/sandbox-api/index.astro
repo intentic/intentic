@@ -1,0 +1,327 @@
+---
+import DocsCodeBlock from "../../../components/DocsCodeBlock.astro";
+import DocsLayout from "../../../components/DocsLayout.astro";
+
+/* The daemon's route surface as a page. Every row of `groups` says what the group is FOR rather than
+ * enumerating its routes: the enumeration is what dates fastest, and the daemon already advertises its own
+ * (the /events hello frame), which is the copy that cannot go stale. */
+
+const health = `curl https://sandbox-a1b2c3d4e5f6.intentic.dev/health
+
+{ "ok": true, "sandboxId": "a1b2c3d4e5f6", "boot": { … }, "announce": { … } }`;
+
+const mint = `curl -X POST "$SANDBOX/system/control/tokens" \\
+  -H "authorization: Bearer $OWNER_SESSION" \\
+  -H "content-type: application/json" \\
+  -d '{"label":"nightly CI","scope":"read"}'
+
+{ "id": "6f1c…", "token": "ict_9wQ…" }`;
+
+const call = `SANDBOX=https://sandbox-a1b2c3d4e5f6.intentic.dev
+
+# GET — input rides the query string
+curl "$SANDBOX/workspace/file?path=README.md" \\
+  -H "x-intentic-control: $INTENTIC_TOKEN"
+
+# Everything else — input rides the JSON body, including DELETE
+curl -X POST "$SANDBOX/git/root/commit" \\
+  -H "x-intentic-control: $INTENTIC_TOKEN" \\
+  -H "content-type: application/json" \\
+  -d '{"message":"fix the flaky test"}'`;
+
+const turn = `# Start a turn. It answers as soon as the run exists — the work is detached.
+curl -X POST "$SANDBOX/agent" \\
+  -H "x-intentic-control: $INTENTIC_TOKEN" \\
+  -H "content-type: application/json" \\
+  -d '{"prompt":"Update the changelog for the last five commits.",
+       "conversationId":"nightly-changelog",
+       "isolated":true}'
+
+{ "run": "run_8c2f…" }
+
+# Watch it: server-sent events, from the start or from a cursor you kept.
+curl -N -X POST "$SANDBOX/agent/attach" \\
+  -H "x-intentic-control: $INTENTIC_TOKEN" \\
+  -H "content-type: application/json" \\
+  -d '{"conversationId":"nightly-changelog","after":0}'`;
+
+const events = `curl -N "$SANDBOX/events" -H "authorization: Bearer $SESSION"
+
+data: {"kind":"hello","workspaceId":"…","routes":["agent.run","git.status", …],"build":"…"}
+
+data: {"kind":"heartbeat"}
+
+data: {"kind":"workspaceChanged","paths":["src/app.ts","README.md"]}
+
+data: {"kind":"refsChanged","repos":["root"]}`;
+
+/* Scope is chosen at mint and stored WITH the token rather than derived from the caller, because the daemon
+ * cannot tell an editor from a CLI from a CI job — they are all "a program holding a secret", so the only
+ * honest moment to decide how far one reaches is when a person mints it. */
+const scopes = [
+    {
+        name: `editor`,
+        reach: `One conversation — run a turn, answer a card it parked on, read transcripts, search the tree.`,
+        note: `What an ACP editor bridge holds. It cannot see the fleet or land work.`,
+    },
+    {
+        name: `read`,
+        reach: `Observation only — the fleet, past sessions, workspace search, listening ports.`,
+        note: `The one rung that is genuinely narrow, and the reason the ladder has a bottom.`,
+    },
+    {
+        name: `drive`,
+        reach: `Everything read sees, plus making an agent work: start, answer, steer and stop a turn.`,
+        note: `Stops short of anything that moves code into the main tree.`,
+    },
+    {
+        name: `land`,
+        reach: `Everything drive does, plus merging a conversation's worktree into the main tree, and discarding one.`,
+        note: `Separate because the usual arrangement is a program that works and a person who decides.`,
+    },
+];
+
+// Grouped by what a reader is trying to do, not alphabetically: the agent surface first, because it is the one
+// most people are here for, and the provider plumbing last, because almost nobody calls it directly.
+const groups = [
+    { name: `agent`, about: `One conversation: run a turn, attach to it, reply, steer, stop, rewind.` },
+    { name: `agents`, about: `The fleet — every registered conversation, its cumulative diff, and landing or discarding its work.` },
+    { name: `sessions`, about: `Past conversations and their transcripts.` },
+    { name: `workspace`, about: `The /work tree: read and write files, search, health, classification, cloning, dependency setup.` },
+    { name: `git`, about: `Per-repo git for every repo under /work — status, log, stage, commit, branch, stash, rebase, push.` },
+    { name: `history`, about: `Daemon-owned snapshots of the workspace, with diff and restore.` },
+    { name: `system`, about: `Identity, the live event stream, terminals, browsers, subagents, presence, sessions.` },
+    { name: `capabilities`, about: `The connected integrations, and the streamed apply that provisions one.` },
+    { name: `secrets`, about: `Env-var secrets: set, remove, list keys, inventory across every store, owner-only reveal.` },
+    { name: `settings`, about: `Per-sandbox agent settings, token-savings reporting, the built-in system prompts.` },
+    { name: `extensions`, about: `Installed extensions, their approved manifests, and their settings.` },
+    { name: `automations`, about: `Scheduled and event-driven wake-ups, plus the owner's approval queue.` },
+    { name: `workflows`, about: `Multi-session designs — create, edit, delete, run.` },
+    { name: `loops`, about: `Run a conversation again until its goal is met: start, stop, list.` },
+    { name: `chores`, about: `What every repo currently measures, and what has been done about it.` },
+    { name: `prepush`, about: `The pre-push check: start it, poll its state, cancel it.` },
+    { name: `ci`, about: `Pipelines on the workspace repos' remotes — runs, rerun, cancel, and open an agent on a failure.` },
+    { name: `panels`, about: `Per-repository dev servers, and the content facts extensions detect on.` },
+    { name: `ports`, about: `Listening TCP ports, and forwarding one through the preview proxy.` },
+    { name: `public`, about: `The workspace outbox — publish a file to a public address, or withdraw it.` },
+    { name: `memory`, about: `The agent's persistent memory notes: read, write, delete.` },
+    { name: `drafts`, about: `Agent-proposed posts awaiting approval.` },
+    { name: `activity`, about: `The append-only audit feed of what the agent did.` },
+    { name: `usage`, about: `The durable spend ledger, grouped by day, provider, account and model.` },
+    { name: `logs`, about: `Daemon-owned debug logs — terminal captures, CLI run logs, daemon.log.` },
+    { name: `push`, about: `Web-push notification subscriptions for this sandbox.` },
+    { name: `inventory`, about: `The deploy config's managed hosts and services.` },
+    { name: `intentic`, about: `Run the in-sandbox intentic CLI and stream its output.` },
+    { name: `vpn`, about: `Dial, drop and inspect the links a vpn capability configured.` },
+    { name: `komodo`, about: `A connected Komodo orchestrator: stacks, deployments, servers, builds, logs.` },
+    { name: `claude`, about: `Claude subscription OAuth, and the Claude accounts this sandbox holds.` },
+    { name: `grok`, about: `xAI subscription OAuth and its connected account.` },
+    { name: `translator`, about: `The routed subscriptions — Codex, Gemini, Grok and Kimi under the Claude Code harness.` },
+    { name: `codex, gemini, kimi, endpoints`, about: `A model-catalog route each, for the model picker.` },
+];
+---
+
+<DocsLayout
+    pageId="sandbox-api"
+    heading="HTTP API"
+    lead="Everything your sandbox does, it does over one HTTP API on hardware you own. The browser is only its first client — an extension, a script or a CI job calls the same routes with the same credential."
+>
+    <p>
+        There is no intentic API in the cloud that reaches your code. The platform stores your identity and your sandbox's address and
+        nothing else; the API on this page is served by <strong>your</strong> daemon, inside <strong>your</strong> container, and the only way
+        in is a credential you minted.
+    </p>
+
+    <h2>Where it is</h2>
+    <p>
+        Each sandbox answers on its own hostname, <code>https://sandbox-&lt;id&gt;.&lt;zone&gt;</code>, over its private Cloudflare tunnel.
+        The app shows the exact URL on <strong>Sandbox → Overview</strong>. One route is deliberately open — <code>/health</code>, the "is a
+        daemon there" probe every launch script and readiness loop makes.
+    </p>
+    <DocsCodeBlock code={health} lang="bash" title="Any machine" />
+    <p>
+        The sandbox id in that answer is how a caller proves it reached <em>this</em> daemon rather than something else on the same port.
+        On the machine running the sandbox there is also <code>https://local-&lt;id&gt;.&lt;zone&gt;</code>, a public DNS name that resolves
+        to <code>127.0.0.1</code> — a real certificate on a loopback address, so a browser on that machine skips the round trip to
+        Cloudflare and back.
+    </p>
+
+    <h2>How a call is authorized</h2>
+    <p>Two kinds of caller, two credentials, and the difference is whether a person is present.</p>
+
+    <h3>A person, in a browser</h3>
+    <p>
+        The sandbox authenticates the end user <strong>directly against Google</strong>: the browser presents a Google ID token, and the
+        daemon verifies its signature against Google's published keys. The platform never holds or signs this credential, so a platform
+        compromise cannot command your sandbox. The first verified identity to arrive becomes the owner; further people are granted access
+        by the owner, with a role that decides how far they reach.
+    </p>
+    <p>
+        <code>POST /system/session</code> exchanges that token for a daemon-minted session, which is what every steady-state call presents
+        as <code>authorization: Bearer …</code>. Calling it again with a still-valid session renews it.
+    </p>
+
+    <h3>A program, anywhere</h3>
+    <p>
+        Anything outside a browser presents a <strong>control token</strong> in the <code>x-intentic-control</code> header instead. A control
+        token is shown to you exactly once at mint — the daemon keeps only its hash — and it can be revoked individually at any time.
+    </p>
+    <DocsCodeBlock code={mint} lang="bash" title="Minting one as the owner" />
+    <p>
+        The app mints one for you on <strong>Sandbox → Computers → Editor bridge</strong>, at <code>editor</code> scope, together with the
+        settings snippet an ACP editor needs. Any other scope is minted through the route above, which requires an owner session.
+    </p>
+
+    <h3>What a scope reaches</h3>
+    <table>
+        <thead>
+            <tr><th>Scope</th><th>Reaches</th></tr>
+        </thead>
+        <tbody>
+            {
+                scopes.map((scope) => (
+                    <tr>
+                        <td><code>{scope.name}</code></td>
+                        <td>
+                            {scope.reach} <span class="text-subtle">{scope.note}</span>
+                        </td>
+                    </tr>
+                ))
+            }
+        </tbody>
+    </table>
+    <p>
+        Worth saying plainly: at <code>drive</code> and above, a stolen token is the agent's reach, because driving an agent means editing
+        files and running commands in this sandbox. <code>read</code> is the one that is genuinely narrower, which is why it exists
+        separately rather than as a politeness. A token presented on a route outside its scope gets a <code>403</code> that says so, rather
+        than a confusing <code>401</code>.
+    </p>
+
+    <h2>The shape of a call</h2>
+    <p>
+        The API is described by a typed contract that the daemon implements and the browser is built against, served over OpenAPI. That has
+        one consequence worth internalising: <strong>the contract's path is the URL</strong>, there is no envelope, and the body you send and
+        the body you get back are the declared shapes.
+    </p>
+    <table>
+        <thead>
+            <tr><th>Convention</th><th>Detail</th></tr>
+        </thead>
+        <tbody>
+            <tr><td>Input on GET</td><td>The query string.</td></tr>
+            <tr><td>Input on everything else</td><td>A JSON body — including <code>DELETE</code>, which sends its parameters in the body rather than the query.</td></tr>
+            <tr><td>Path parameters</td><td>Written <code>{"{repo}"}</code>, <code>{"{id}"}</code> in the contract, URL-encoded in the request. <code>root</code> is the workspace repo itself.</td></tr>
+            <tr><td>Output</td><td>JSON, except the byte routes and the streams below.</td></tr>
+        </tbody>
+    </table>
+    <DocsCodeBlock code={call} lang="bash" title="Two calls" />
+
+    <h2>Drive an agent</h2>
+    <p>
+        The reason most scripts are here. A turn executes as a <strong>detached daemon-side run</strong>: starting it acks with a run id, and
+        any number of clients render it by attaching — so a reload, a second window, another device, or your script all watch the same work
+        identically, and nothing is lost if the caller goes away.
+    </p>
+    <DocsCodeBlock code={turn} lang="bash" title="Start a turn and watch it" />
+    <p>
+        <code>conversationId</code> is yours to choose and is what makes a run resumable and addressable later. <code>isolated: true</code>
+        runs the turn in that conversation's own git worktree instead of the shared tree, which is what lets several agents work at once
+        without colliding; the work reaches your main tree only when something calls <code>land</code>.
+    </p>
+
+    <h2>The route surface</h2>
+    <p>
+        Around 230 routes in the groups below. Rather than list them here, where they would date, ask the daemon: the
+        <code>hello</code> frame on <code>/events</code> advertises every route name this particular daemon implements.
+    </p>
+    <table>
+        <thead>
+            <tr><th>Group</th><th>What it covers</th></tr>
+        </thead>
+        <tbody>
+            {
+                groups.map((group) => (
+                    <tr>
+                        <td><code>{group.name}</code></td>
+                        <td>{group.about}</td>
+                    </tr>
+                ))
+            }
+        </tbody>
+    </table>
+
+    <h2>Streams</h2>
+    <p>
+        Long-lived routes emit server-sent events: blank-line separated frames, each carrying one <code>data:</code> line of JSON.
+    </p>
+    <DocsCodeBlock code={events} lang="bash" title="GET /events" />
+    <table>
+        <thead>
+            <tr><th>Stream</th><th>Carries</th></tr>
+        </thead>
+        <tbody>
+            <tr>
+                <td><code>GET /events</code></td>
+                <td>
+                    The sandbox's liveness and everything that changed out of band: a <code>hello</code> identity frame, heartbeats, boot
+                    progress, batches of changed file paths, the repo set, which repos' git refs moved, the presence roster and the fleet.
+                </td>
+            </tr>
+            <tr><td><code>POST /agent/attach</code></td><td>One turn's frames, replayed from your cursor and then live.</td></tr>
+            <tr><td><code>POST /capabilities</code>, <code>/intentic/apply/events</code></td><td>Progress lines while a capability or a deployment applies.</td></tr>
+            <tr><td><code>GET /system/terminal</code></td><td>A WebSocket carrying a tmux session's bytes. A WebSocket cannot set headers, so it authorizes a short-lived ticket from the query string instead.</td></tr>
+        </tbody>
+    </table>
+    <p>
+        Those change pushes are not a nicety. An intentic workspace is file-first — the agent edits files and moves git refs with its own
+        tools, out of band from every HTTP route — so without them a client is only ever as fresh as the last thing someone clicked.
+    </p>
+
+    <h2>Routes that aren't JSON</h2>
+    <table>
+        <thead>
+            <tr><th>Route</th><th>Why it's different</th></tr>
+        </thead>
+        <tbody>
+            <tr><td><code>GET /workspace/raw</code></td><td>A file's bytes with a content type by extension — how images and PDFs are previewed, where the text route would corrupt them.</td></tr>
+            <tr><td><code>GET /workspace/media</code></td><td>A streamed byte range for audio and video. A media element cannot send a header, so this takes a path-scoped ticket minted by <code>POST /workspace/media-ticket</code>.</td></tr>
+            <tr><td><code>POST /workspace/upload</code></td><td>Raw bytes to <code>?path=</code>, in parts via <code>?offset=</code> so a large file stays under the edge's body cap.</td></tr>
+            <tr><td><code>GET /extensions/{"{id}"}/bundle</code></td><td>An installed extension's ESM bundle, as bytes.</td></tr>
+        </tbody>
+    </table>
+
+    <h2>Failures</h2>
+    <table>
+        <thead>
+            <tr><th>Status</th><th>Means</th></tr>
+        </thead>
+        <tbody>
+            <tr><td><code>400</code></td><td>The input didn't match the declared shape, or a path escaped the workspace.</td></tr>
+            <tr><td><code>401</code></td><td>No credential, or one that doesn't verify. Indistinguishable, on purpose.</td></tr>
+            <tr><td><code>403</code></td><td>A real credential that may not go there — an identity that isn't a member, a member below the route's role floor (the answer names the tier), or a control token outside its scope.</td></tr>
+            <tr><td><code>404</code></td><td>No such route on this daemon, or no such thing. Also the answer for the daemon's own credential files, which are not readable through the file API.</td></tr>
+            <tr><td><code>413</code></td><td>Too large — the file routes are bounded so one open log can't stall the daemon.</td></tr>
+        </tbody>
+    </table>
+
+    <h2>Open on purpose</h2>
+    <p>
+        A handful of routes check no bearer, because the caller provably cannot present one: <code>/health</code>, the web-chat widget's
+        routes, an automation's webhook fire, a CI provider's webhook, a workflow gate, and the enrollment routes a new computer redeems a
+        one-time pairing token on. Each carries its own narrower check instead.
+    </p>
+
+    <h2>Old daemon, new client</h2>
+    <p>
+        Your browser is routinely newer than the daemon it talks to — a released app plane serves every sandbox, whatever image each user
+        last pulled. That stays supported, and it is why <code>hello</code> advertises route names: a client compares that list against the
+        contract it was built with, so a route the daemon predates surfaces as a named gap instead of a <code>404</code> nobody can
+        attribute. Pin nothing; ask.
+    </p>
+
+    <h2>Next</h2>
+    <ul>
+        <li><a href="/docs/sandbox-api/host/">Host API</a>: the same daemon from inside the app, typed, for an extension's views.</li>
+        <li><a href="/docs/extensions/manifest/">Manifest reference</a>: how an extension declares which of these routes it may call.</li>
+    </ul>
+</DocsLayout>

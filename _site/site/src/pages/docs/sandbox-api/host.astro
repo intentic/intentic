@@ -1,0 +1,318 @@
+---
+import DocsCodeBlock from "../../../components/DocsCodeBlock.astro";
+import DocsLayout from "../../../components/DocsLayout.astro";
+
+/* The IntenticApi surface as a page. Deliberately a reference and not a tutorial — "Build an extension" is the
+ * tutorial, and it links here for everything it deliberately did not use. */
+
+const activate = `import type { ExtensionContext, IntenticApi } from "@intentic/extension-api";
+import { bindHost } from "./host.js";
+
+export const activate = (api: IntenticApi, context: ExtensionContext): void => {
+    bindHost(api);
+
+    context.subscriptions.push(
+        api.views.register({ /* … */ }),
+        api.commands.register(\`incidents.acknowledge\`, () => { /* … */ }),
+    );
+};`;
+
+const slot = `import { hostSlot } from "@intentic/extension-api";
+
+// One slot per extension, bound by activate() before anything renders. The shell publishes ONE copy of the
+// API module to every bundle, so a handle held at module scope would be a global the last extension to
+// activate silently takes over.
+export const { bindHost, host } = hostSlot(\`ext-incidents\`);`;
+
+const rpc = `import { useQuery } from "@tanstack/vue-query";
+import { computed } from "vue";
+import { host } from "./host.js";
+
+const api = host();
+
+const query = useQuery({
+    // Scoped to the ACTIVE sandbox, so a switch can't serve you another box's data.
+    queryKey: computed(() => api.sandbox.key(\`incidents\`, \`log\`, repo.value)),
+    // A procedure, not a URL: the input shape and the answer's shape are both checked at build time.
+    queryFn: () => api.sandbox.rpc.git.log({ repo: repo.value, limit: 300 }),
+    // A sleeping sandbox produces no wall of errors.
+    enabled: computed(() => api.sandbox.reachable()),
+});`;
+
+const badge = `// Module state, not view state: a badge you only see once you have already navigated to the view is
+// pointless, so the count has to keep working while the view is unmounted.
+let openCount = 0;
+
+api.views.register({
+    id: \`incidents\`,
+    label: \`Incidents\`,
+    surface: \`rail\`,
+    detect: (repos) => repos.filter((repo) => repo.vitest).map((repo) => ({ key: repo.repo, title: repo.repo, repo: repo.repo })),
+    badge: () => (openCount > 0 ? { count: openCount, tone: \`warning\`, tooltip: \`${"$"}{openCount} need triage\` } : undefined),
+    view: async () => (await import(\`./IncidentsView.vue\`)).default,
+});`;
+
+const packages = [
+    {
+        name: `@intentic/extension-api`,
+        about: `The one you program against: the IntenticApi types, the detection facts, the diff payload, hostSlot, and the SSE reader.`,
+    },
+    {
+        name: `@intentic/extension-manifest`,
+        about: `The manifest schema and the route-permission rule, so your manifest is validated where you write it rather than at install.`,
+    },
+    {
+        name: `@intentic/sandbox-contract`,
+        about: `The daemon's own wire contract. What api.sandbox.rpc is typed against, and where every request and response shape is declared.`,
+    },
+    {
+        name: `@intentic/extension-ui`,
+        about: `The shell's own buttons, inputs, cards and icons. Resolved by the host at runtime; mark it external.`,
+    },
+];
+---
+
+<DocsLayout
+    pageId="sandbox-api/host"
+    heading="Host API"
+    lead="The same daemon, from inside the app. An extension's activate() is handed one IntenticApi object — the authenticated transport, the workspace facts, and every surface of the shell it may contribute to."
+>
+    <p>
+        There is no ambient global and no client you construct. The API arrives as the argument to
+        <code>activate()</code>, everything you register comes back as a disposable, and every door to the daemon on it is gated by the
+        route allowlist in your manifest. If you are writing your first extension, start with
+        <a href="/docs/extensions/build/">Build an extension</a> — this page is the reference it links back to.
+    </p>
+
+    <h2>Getting the handle</h2>
+    <DocsCodeBlock code={activate} lang="typescript" title="src/extension.ts" />
+    <p>
+        Views and composables that render later need the same handle, and passing it down through props is not what anyone wants to write.
+        <code>hostSlot()</code> gives your extension its own module-scoped accessor:
+    </p>
+    <DocsCodeBlock code={slot} lang="typescript" title="src/host.ts" />
+    <p>
+        Push every registration onto <code>context.subscriptions</code>. They are disposed in reverse order when the extension is switched
+        off, which is what makes turning it off actually unwind it rather than leave tiles behind.
+    </p>
+
+    <h2>api.sandbox — talking to the daemon</h2>
+    <p>
+        Auth is injected host-side; an extension never sees a token. Reach is scoped: every door here is checked against your manifest's
+        <code>permissions.sandbox</code> allowlist, so a call to an undeclared method and path throws rather than reaching the whole daemon.
+    </p>
+    <table>
+        <thead>
+            <tr><th>Member</th><th>What it does</th></tr>
+        </thead>
+        <tbody>
+            <tr>
+                <td><code>rpc</code></td>
+                <td>
+                    <strong>The door to reach for.</strong> The daemon's whole contract as a typed client, so a call names a procedure
+                    instead of building a URL: <code>rpc.git.log(&#123; repo, limit &#125;)</code> carries the declared input shape and
+                    answers the declared output shape, both checked when you build.
+                </td>
+            </tr>
+            <tr><td><code>json&lt;T&gt;(path, init?)</code></td><td>A path-based call, parsed as JSON. The escaping, the query encoding and the shape of the answer are all yours to get right — prefer <code>rpc</code>.</td></tr>
+            <tr><td><code>request(path, init?)</code></td><td>The raw <code>Response</code>, for the byte routes and the streams.</td></tr>
+            <tr><td><code>key(...parts)</code></td><td>A cache key scoped to the active sandbox. The required prefix for every query key you write, so caches never bleed across a sandbox switch.</td></tr>
+            <tr><td><code>reachable()</code></td><td>Whether the sandbox is answering. Reactive inside a computed, so it drives a query's <code>enabled</code>.</td></tr>
+            <tr><td><code>origin()</code></td><td>The daemon's public origin, for building an externally shareable URL like a webhook endpoint. Not needed for the calls above.</td></tr>
+        </tbody>
+    </table>
+    <DocsCodeBlock code={rpc} lang="typescript" title="A typed read, cached correctly" />
+    <p>
+        You get the shell's own Vue and vue-query instances, so your components join the app's single query cache and re-theme with it. The
+        routes behind <code>rpc</code> are the ones on the <a href="/docs/sandbox-api/">HTTP API</a> page.
+    </p>
+
+    <h2>api.workspace — repos, files and diffs</h2>
+    <table>
+        <thead>
+            <tr><th>Member</th><th>What it does</th></tr>
+        </thead>
+        <tbody>
+            <tr><td><code>repos()</code>, <code>capabilities()</code></td><td>The detection facts: what each repo under /work contains, and which integrations the owner connected. Reactive.</td></tr>
+            <tr><td><code>onDidChange(listener)</code></td><td>Those facts changed.</td></tr>
+            <tr><td><code>onDidChangeRefs(listener)</code></td><td>A git ref moved in one of these repos — a commit, a branch, a checkout, a rebase. The one signal no file watcher can give you, and the one that matters for work the user did not do.</td></tr>
+            <tr><td><code>file(path)</code>, <code>readJson&lt;T&gt;(path)</code></td><td>Read a workspace file, or read it as a JSON object. Both answer <code>undefined</code> when it is absent — for <code>readJson</code>, also when it is truncated or hand-mangled, because one bad file must never blank the surface reading it.</td></tr>
+            <tr><td><code>write(path, body)</code></td><td>Create or replace a workspace file. Throws on failure, unlike the reads: a write that silently did nothing would lose what the caller was told was saved.</td></tr>
+            <tr><td><code>openDiff(payload)</code>, <code>fillDiff(payload)</code></td><td>Open a diff in the shell's editor tab strip, beside the files it is about. Open it <code>pending</code> and fill it later when the content is slow to compute.</td></tr>
+        </tbody>
+    </table>
+    <p>
+        Keep durable state in the workspace rather than in settings. It survives a reload, it is shared across the owner's browsers, and the
+        agent writing into it out of band is usually the whole point. The file routes still need declaring —
+        <code>api.workspace.file</code> removes the encoding, not the grant.
+    </p>
+
+    <h2>api.views — the sidebar surfaces</h2>
+    <p>
+        A view registers once and produces one <strong>activation</strong> per sidebar element, decided by <code>detect()</code> against the
+        facts. Activate on evidence, not names: "this repo has a vitest config" survives a rename, "this repo is called api" does not.
+    </p>
+    <table>
+        <thead>
+            <tr><th>Field</th><th>Meaning</th></tr>
+        </thead>
+        <tbody>
+            <tr><td><code>id</code>, <code>label</code>, <code>surface</code></td><td>Must match a <code>contributes.views</code> entry in the approved manifest, or the registration is refused. Surfaces: <code>rail</code>, <code>directory</code>, <code>sandbox</code>.</td></tr>
+            <tr><td><code>detect(repos, capabilities)</code></td><td>Returns one activation per element: a stable <code>key</code> (the route segment), a <code>title</code>, an optional <code>icon</code>, the <code>repo</code> it is rooted at, and any extra <code>props</code>. Called on every facts poll; a throwing detect just contributes nothing that round.</td></tr>
+            <tr><td><code>badge(activation)</code></td><td>What the tile says without being opened. Needs <code>"badge": true</code> in the manifest.</td></tr>
+            <tr><td><code>fallback</code></td><td>This view's activations are dropped for repos a non-fallback view already claimed.</td></tr>
+            <tr><td><code>auxiliary</code></td><td>Adds a surface <em>beside</em> whatever else serves the repo instead of claiming it — a test runner, a docs browser.</td></tr>
+            <tr><td><code>view()</code></td><td>Lazily imported root component, rendered with <code>repo</code> and your props bound.</td></tr>
+        </tbody>
+    </table>
+    <DocsCodeBlock code={badge} lang="typescript" title="A rail view with a badge" />
+    <p>
+        A badge is a claim on someone's attention, so the bar is high: it must mean "something happened here you don't know about", never
+        "here is a statistic". A count lit most of the day teaches people to stop seeing the rail. <code>count</code> is for work whose
+        <em>size</em> is what you act on; <code>mark</code> is a glyph for a pending action where the size changes nothing;
+        <code>tone</code> is <code>info</code> (the resting tone), <code>warning</code> (a risk being carried) or <code>danger</code>
+        (something is broken — stay sparing, its value is that it is rare).
+    </p>
+    <p>
+        <code>badge</code> is read inside the host's own computed and runs on every render of every surface that draws tiles, so it must be
+        cheap and pure: derive it from state you already keep, never fetch.
+    </p>
+
+    <h2>api.viewers and api.documents</h2>
+    <table>
+        <thead>
+            <tr><th>Member</th><th>What it does</th></tr>
+        </thead>
+        <tbody>
+            <tr>
+                <td><code>viewers.register(&#123; id, component &#125;)</code></td>
+                <td>A renderer for a file type. The host resolves the open file, fetches it the way your manifest asked (text, blob or a streaming URL) and renders your component with it. You only render.</td>
+            </tr>
+            <tr>
+                <td><code>documents.register(&#123; id, detect, view &#125;)</code></td>
+                <td>
+                    "There is something to <em>read</em> about this directory." Path-keyed rather than repo-keyed, which is the whole
+                    reason it isn't a view: a monorepo is one repo with fifty documented packages. <code>detect(path)</code> returns the
+                    row's icon, tooltip and tab title, or nothing.
+                </td>
+            </tr>
+            <tr><td><code>documents.open(id, path)</code></td><td>Open one of your own documents as if its row icon had been clicked — for the directories with no row, like the workspace root.</td></tr>
+        </tbody>
+    </table>
+    <p>
+        <code>documents.detect</code> is called for every visible directory row on every render of the tree. Like <code>badge</code>, it
+        must be a lookup and never a fetch, and the state it reads has to outlive the view being unmounted — so it belongs in module state
+        owned by <code>activate()</code>.
+    </p>
+
+    <h2>api.commands and api.settings</h2>
+    <table>
+        <thead>
+            <tr><th>Member</th><th>What it does</th></tr>
+        </thead>
+        <tbody>
+            <tr><td><code>commands.register(command, handler)</code></td><td>Must match a <code>contributes.commands</code> entry. That is also where its palette title and any global shortcut are declared, because a shortcut is consequential enough for the owner to have approved it.</td></tr>
+            <tr><td><code>commands.execute(command, ...args)</code></td><td>Run one, yours or another extension's.</td></tr>
+            <tr><td><code>settings.get(key)</code>, <code>set(key, value)</code></td><td>Your own declared settings — string, number or boolean. Persisted daemon-side, keyed by <code>publisher.name</code>, so they survive an update, a remove and re-add, or a re-clone.</td></tr>
+            <tr><td><code>settings.onDidChange(listener)</code></td><td>Someone changed one, possibly in another browser.</td></tr>
+        </tbody>
+    </table>
+
+    <h2>api.processes, api.terminal and api.chat</h2>
+    <table>
+        <thead>
+            <tr><th>Member</th><th>What it does</th></tr>
+        </thead>
+        <tbody>
+            <tr><td><code>processes.status/start/stop(name)</code></td><td>Your own declared background processes. A name the manifest never declared is refused.</td></tr>
+            <tr><td><code>terminal.open(session)</code></td><td>Aim the shell's one terminal panel at a tmux session and focus it. <code>setOpen(open)</code> shows or hides the panel without focusing anything.</td></tr>
+            <tr><td><code>chat.openSession(sessionId)</code></td><td>Open the tab for a stored conversation — for a run history or an audit row, where "why did it do that" is only answerable by reading the transcript.</td></tr>
+            <tr>
+                <td><code>chat.composeWorkflow(workflowId)</code></td>
+                <td>
+                    Open a new chat aimed at a workflow, so the next message the user types becomes that run's request. It hands over the
+                    <em>start</em> of the work rather than performing it, which is how a Run button avoids becoming a second way to begin
+                    agent work with its own dialog that looks like nothing else in the product.
+                </td>
+            </tr>
+        </tbody>
+    </table>
+
+    <h2>api.models — which model a run will spend</h2>
+    <p>
+        The picker is not a widget: it is a live read of every connected provider's catalog, which credentials the sandbox actually holds,
+        and what each model can do. An extension that rendered its own control could only offer a worse list — and would happily offer
+        models the sandbox has no credential for, which is a run that fails minutes later.
+    </p>
+    <table>
+        <thead>
+            <tr><th>Member</th><th>What it does</th></tr>
+        </thead>
+        <tbody>
+            <tr><td><code>agentRun()</code></td><td>What a run opens on when nobody has chosen: the sandbox's Agent-runs model, falling back to the owner's own chat setting. Reactive.</td></tr>
+            <tr><td><code>describe(selection)</code></td><td>Name a selection you already hold — a pin read back from disk arrives as bare ids and has to be rendered before anyone opens the picker. Reactive, so a disconnected account changes what a stored pin says about itself.</td></tr>
+            <tr><td><code>pick(&#123; anchor, ... &#125;)</code></td><td>Open the picker over an element — a popover on desktop, a sheet on mobile. Resolves with the pick, or <code>undefined</code> if dismissed.</td></tr>
+        </tbody>
+    </table>
+    <p>
+        A <code>PickedModel</code> covers the whole choice: <code>provider</code>, <code>model</code>, a display <code>label</code>, and
+        optionally which connected <code>account</code> and which <code>harness</code>. The last two are pins, and absent — "whatever the
+        daemon resolves" — is the state most callers want, because it is what keeps a saved choice working after an account is disconnected.
+        Pin the account when the surface starts <em>unattended</em> runs: nobody is watching at 6am, and a first account that has run out of
+        headroom is a run that errors every time until someone reads the row.
+    </p>
+
+    <h2>api.navigate, api.route and api.theme</h2>
+    <table>
+        <thead>
+            <tr><th>Member</th><th>What it does</th></tr>
+        </thead>
+        <tbody>
+            <tr><td><code>navigate(path)</code></td><td>Send the shell to an app path, like <code>/capabilities</code>.</td></tr>
+            <tr><td><code>route.query()</code></td><td>The current URL query, flattened. Reactive: read it inside a computed and your view re-renders when the URL moves.</td></tr>
+            <tr><td><code>route.setQuery(patch, &#123; push &#125;)</code></td><td>Merge a patch in; a key set to <code>undefined</code> is removed. Replaces the history entry by default, pushes when asked.</td></tr>
+            <tr><td><code>theme.mode()</code>, <code>onDidChange</code></td><td><code>light</code> or <code>dark</code>, for the rare case CSS variables can't cover — a canvas, a chart palette.</td></tr>
+        </tbody>
+    </table>
+    <p>
+        A view's own route space is the query, not the path: <code>/ext/:ext/:key?</code> is the whole route and <code>:key</code> already
+        means "which activation". So a view with internal navigation — an open document, a selected run — puts that state in the query,
+        which is what lets a reload keep it and a link carry it. Derive from the URL rather than mirroring it into a ref; back and forward
+        then work for free.
+    </p>
+
+    <h2>Versioning</h2>
+    <p>
+        <code>api.apiVersion</code> is the host's extension-API version, and it is what your manifest's <code>engines.intentic</code> range
+        is checked against <em>before</em> your code is loaded. Current API: <strong>2.0.0</strong>. Additive surface is a minor bump,
+        breaking is a major — so <code>"^2.0.0"</code> is the range you want.
+    </p>
+
+    <h2>The packages</h2>
+    <table>
+        <thead>
+            <tr><th>Package</th><th>Holds</th></tr>
+        </thead>
+        <tbody>
+            {
+                packages.map((pkg) => (
+                    <tr>
+                        <td><code>{pkg.name}</code></td>
+                        <td>{pkg.about}</td>
+                    </tr>
+                ))
+            }
+        </tbody>
+    </table>
+    <p>
+        Mark all of them external when you bundle, along with <code>vue</code> and <code>@tanstack/vue-query</code>. The host supplies them
+        at runtime, and bundling your own copy forks reactivity and the query cache.
+    </p>
+
+    <h2>Next</h2>
+    <ul>
+        <li><a href="/docs/sandbox-api/">HTTP API</a>: the routes behind <code>api.sandbox.rpc</code>, and how to call them without a browser.</li>
+        <li><a href="/docs/extensions/build/">Build an extension</a>: the same surface as a walkthrough, ending in a real install.</li>
+        <li><a href="/docs/extensions/manifest/">Manifest reference</a>: every contribution point these registrations have to match.</li>
+    </ul>
+</DocsLayout>

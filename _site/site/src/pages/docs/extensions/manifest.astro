@@ -69,12 +69,16 @@ const processes = `"processes": [
 
     <h2>permissions.sandbox</h2>
     <p>
-        Each entry is <code>"&lt;METHOD&gt; &lt;path-glob&gt;"</code>, where <code>*</code> matches exactly one path segment. A call through
-        <code>api.sandbox.request</code> or <code>api.sandbox.json</code> to anything not covered throws. An extension has no ambient client
-        to your daemon.
+        Each entry is <code>"&lt;METHOD&gt; &lt;path-glob&gt;"</code>, where <code>*</code> matches exactly one path segment. Every door in
+        <code>api.sandbox</code> is checked against it — the typed <code>rpc</code> client resolves to a method and a concrete path and is
+        gated on that, exactly as <code>request</code> and <code>json</code> are — so a call to anything not covered throws. An extension has
+        no ambient client to your daemon.
     </p>
     <DocsCodeBlock code={permissions} lang="json" title="A route allowlist" />
-    <p>Keep it as narrow as the feature needs. This list is what a reviewer reads to decide what your extension can reach.</p>
+    <p>
+        Keep it as narrow as the feature needs. This list is what a reviewer reads to decide what your extension can reach. The
+        <a href="/docs/sandbox-api/">HTTP API</a> page is what the routes are.
+    </p>
 
     <h2>contributes.views</h2>
     <table>

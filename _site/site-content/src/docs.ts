@@ -125,6 +125,33 @@ export const docsSections: DocsSection[] = [
         ],
     },
     {
+        label: "Sandbox API",
+        items: [
+            {
+                id: "sandbox-api",
+                title: "HTTP API",
+                blurb: "Every route your sandbox serves, and the credential to call it",
+                meta: {
+                    title: "Sandbox HTTP API · intentic docs",
+                    description:
+                        "Call your own sandbox over HTTP: the base URL, control tokens and their scopes, the route groups, the event streams, and the failures.",
+                    datePublished: "2026-08-07",
+                },
+            },
+            {
+                id: "sandbox-api/host",
+                title: "Host API",
+                blurb: "The IntenticApi an extension is handed",
+                meta: {
+                    title: "Extension host API reference · intentic docs",
+                    description:
+                        "Every member of the IntenticApi object: the typed daemon client, workspace facts and files, views, documents, commands, models and routing.",
+                    datePublished: "2026-08-07",
+                },
+            },
+        ],
+    },
+    {
         label: "Guides",
         items: [
             {
