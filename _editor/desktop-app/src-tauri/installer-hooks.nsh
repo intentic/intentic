@@ -1,6 +1,6 @@
 ; WHY AN UNINSTALL HOOK AT ALL — this app is meant to be running when you uninstall it.
 ;
-; The tray is where Intentic lives once its window is closed (windows.rs, `hide_to_tray`), so the ordinary
+; The tray is where Intentic lives once its window is closed (windows.rs, `apply_close`), so the ordinary
 ; state at uninstall time is "running, with nothing on screen". Tauri's uninstaller meets that with a
 ; MessageBox — "Intentic is running. Click OK to kill it" — which is a prompt about the app's own design,
 ; asked of someone who already told the machine to remove it, and it reads as the uninstaller having found

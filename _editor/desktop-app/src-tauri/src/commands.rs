@@ -3,7 +3,7 @@ use tauri::{AppHandle, Manager, State};
 
 use crate::scripts::{self, Host, ScriptRun};
 use crate::setup_link::{RecreateArgs, SetupArgs};
-use crate::state::{AppState, Settings};
+use crate::state::{AppState, CloseAction, Settings};
 
 type CommandResult<T> = Result<T, String>;
 
@@ -366,6 +366,19 @@ pub async fn sandbox_logs(slug: String, tail: u32) -> CommandResult<String> {
 #[tauri::command]
 pub fn workspace_open(app: AppHandle) {
     crate::windows::show_workspace(&app);
+}
+
+/// The close confirmation's answer (windows.rs). `remember` is the dialog's "always do this" — the only thing
+/// that retires the question, and the reason it is worth asking at all.
+///
+/// There is no command for cancelling: that is the dialog closing its own window, which changes nothing.
+#[tauri::command]
+pub fn close_workspace(app: AppHandle, action: CloseAction, remember: bool) {
+    // Handled OFF this callback, because answering destroys the very webview that called it — the WebView2 COM
+    // re-entrancy the workspace window's navigation handler already steps around the same way (windows.rs).
+    tauri::async_runtime::spawn(async move {
+        crate::windows::resolve_close(&app, action, remember);
+    });
 }
 
 #[tauri::command]

@@ -58,6 +58,7 @@ pub fn run() {
             commands::sandbox_logs,
             commands::machine_report,
             commands::workspace_open,
+            commands::close_workspace,
             commands::settings_get,
             commands::settings_set,
         ])
@@ -118,9 +119,10 @@ pub fn run() {
     app.run(|_app, _event| {});
 }
 
-/// Where the app lives once its window is closed, and the only way back out of it: closing the workspace hides
-/// rather than quits, so `Quit` here is the sole exit. That is a lot of weight on an icon the user may never
-/// have seen, which is why the first hide says in words that this menu is where the app went.
+/// Where the app lives once its window is closed: the × hides the workspace rather than ending the app, so
+/// `Open Intentic` here is the way back to it. That is a lot of weight on an icon the user may never have
+/// seen, which is why the × asks the first time and names this tray in the asking (windows.rs) — and why
+/// `Quit` is offered there too, rather than only here.
 fn create_tray(app: &AppHandle) -> tauri::Result<()> {
     let open = MenuItemBuilder::with_id("open", "Open Intentic").build(app)?;
     // "This computer", matching the window it opens — the screen covers the machine's sandboxes AND its desktop

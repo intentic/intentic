@@ -59,18 +59,39 @@ not, and clicking a handoff reads as the window changing screens. Two consequenc
   asking again on a screen the user did not open is what made the handoff feel like a second, unrelated
   installer. It is also the *only* direction that consent covers, which is what [the link's
   source](#a-link-from-outside-is-not-a-link-from-us) is about.
-- **Closing the workspace face hides it; the app lives in the tray.** The window is hidden rather than
-  destroyed, so reopening is instant and the webview keeps the session it signed in with. Closing the launcher
-  face is a step back to the workspace. **Quit** in the tray menu is the only thing that ends the process.
+- **Closing the workspace face asks what to do; by default it hides and the app lives in the tray.** The window
+  is hidden rather than destroyed, so reopening is instant and the webview keeps the session it signed in with.
+  Closing the launcher face is a step back to the workspace.
 
   The cost of that model is a process the user cannot see, and it has already been paid once: nobody found the
   tray icon, and the app was met instead as the uninstaller's *"Intentic is running"* prompt. Windows is why —
   it files new tray icons behind the overflow arrow by default and no app can promote itself out of there. Two
-  things answer it, and neither is optional to the design: the **first** hide explains in a dialog where the
-  window went and what ends the app ([`windows.rs`](src-tauri/src/windows.rs), `hide_to_tray` — marked once per
-  install, outside `Settings`, which the launcher UI overwrites wholesale), and the uninstaller **closes the app
-  itself** instead of asking ([`installer-hooks.nsh`](src-tauri/installer-hooks.nsh), which `installer.nsi`
-  inserts ahead of its own running-app check).
+  things answer it, and neither is optional to the design: the **×** raises the app's own confirmation before
+  anything moves, and the uninstaller **closes the app itself** instead of asking
+  ([`installer-hooks.nsh`](src-tauri/installer-hooks.nsh), which `installer.nsi` inserts ahead of its own
+  running-app check).
+
+### The × is a question — `confirm-close`
+
+The first answer to the invisible-process problem was a notice *after* the fact: the window vanished and an OS
+message box reported that Intentic was "still running". It reported rather than asked, so the only gesture it
+left was **OK** to something already done — and every native message box carries an icon, which is what makes
+Windows play the alert chime at it. A window closing exactly as designed sounded like a fault.
+
+So the close asks first, and the dialog is a **third window label** ([`windows.rs`](src-tauri/src/windows.rs),
+`ask_before_closing` → [`CloseConfirm.vue`](src/CloseConfirm.vue)) rather than a native box. Being this app's
+own window is not decoration: it is the only way to draw the thing silently, and the only way to offer more
+than one button. Three things follow from it:
+
+- **It is a dialog, not a third face.** Off the taskbar, owned by the frame it is about, centred over it, and
+  destroyed on answer — so the one-window rule the smoke tier asserts still holds. It is titled `Close
+  Intentic?`, which deliberately does not start with the workspace title those assertions match on.
+- **Two answers, and remembering one retires the question.** *Keep it in the tray* and *Quit Intentic*, with
+  **always do this** storing the choice in `close-action.json` — outside `Settings`, which the launcher UI
+  overwrites wholesale, so changing an origin there cannot put the question back. Escape, Cancel and the
+  dialog's own × mean the window stays; there is no command for that, because nothing happens.
+- **It answers off its own IPC callback** (`commands.rs`), because answering destroys the webview that called
+  — the same WebView2 COM re-entrancy the workspace's navigation handler steps around.
 
 ## Why it runs the scripts instead of reimplementing them
 

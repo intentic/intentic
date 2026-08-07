@@ -2,6 +2,7 @@ use tauri::{AppHandle, Manager, WebviewUrl, WebviewWindow, WebviewWindowBuilder,
 use tauri_plugin_dialog::{DialogExt, MessageDialogButtons, MessageDialogKind};
 
 use crate::setup_link::{parse_link, Link, SetupArgs, Source};
+use crate::state::CloseAction;
 
 /* ONE WINDOW ON SCREEN, EVER — these two labels are two FACES of it, not two windows.
  *
@@ -19,9 +20,23 @@ use crate::setup_link::{parse_link, Link, SetupArgs, Source};
 pub const WORKSPACE: &str = "workspace";
 pub const LAUNCHER: &str = "launcher";
 
+/// The third label, and NOT a third face: a dialog the app draws about the window it is standing in front of.
+/// It keeps to the one-window rule the way a dialog does — off the taskbar, owned by the frame it is about,
+/// and gone the moment it is answered.
+pub const CONFIRM_CLOSE: &str = "confirm-close";
+
 /// The frame both faces share when neither has one to inherit — a cold start, on either face.
 const DEFAULT_SIZE: (f64, f64) = (1440.0, 900.0);
 const MIN_SIZE: (f64, f64) = (900.0, 600.0);
+
+/// The dialog's frame. Fixed, because everything in it is: two choices and a line of small print — measured
+/// against the rendered content rather than guessed, with slack for a wider font. Taller on Windows, the one
+/// platform where the tray option has to say where the icon goes (CloseConfirm.vue).
+const CONFIRM_SIZE: (f64, f64) = if cfg!(target_os = "windows") {
+    (460.0, 332.0)
+} else {
+    (460.0, 300.0)
+};
 
 /// Bring `window` up in `other`'s place. Placed and sized BEFORE it is shown and `other` hidden only after, so
 /// nothing between the two frames is ever on screen. Physical units throughout: outer position with inner size
@@ -109,14 +124,14 @@ pub fn show_workspace_at(app: &AppHandle, path: Option<&str>) {
         });
     match builder.build() {
         Ok(window) => {
-            // Closing this face steps the app into the tray rather than ending it. The window is HIDDEN, never
-            // destroyed, so reopening from the tray is instant and this webview keeps the session it signed in
-            // with instead of reloading the SPA. `Quit` in the tray menu is the only thing that ends the app.
+            // The × is a question, not an exit — see `request_close`. Whichever way it is answered, the window
+            // is HIDDEN rather than destroyed, so reopening from the tray is instant and this webview keeps the
+            // session it signed in with instead of reloading the SPA.
             let handle = app.clone();
             window.on_window_event(move |event| {
                 if let WindowEvent::CloseRequested { api, .. } = event {
                     api.prevent_close();
-                    hide_to_tray(&handle);
+                    request_close(&handle);
                 }
             });
             swap_in(&window, app.get_webview_window(LAUNCHER));
@@ -129,32 +144,126 @@ pub fn show_workspace(app: &AppHandle) {
     show_workspace_at(app, None);
 }
 
-/// The window steps aside and the app stays up — said out loud the FIRST time it happens, and only then.
-///
-/// A window that disappears into a tray icon is only a good deal if the user can find the icon, and on Windows
-/// they often cannot: new tray icons are filed behind the overflow arrow by default, and nothing an app can do
-/// promotes itself out of there. That is how this app came to be met as the uninstaller's "Intentic is running"
-/// prompt — a process nobody could see, announcing itself at the worst possible moment. So the first hide says
-/// where the window went, where to look, and what ends the app for real.
-fn hide_to_tray(app: &AppHandle) {
-    if let Some(window) = app.get_webview_window(WORKSPACE) {
-        let _ = window.hide();
+/* THE × IS A QUESTION, ASKED BEFORE ANYTHING HAPPENS — and asked in this app's own voice.
+ *
+ * A window that disappears into a tray icon is only a good deal if the user can find the icon, and on Windows
+ * they often cannot: new tray icons are filed behind the overflow arrow by default, and nothing an app can do
+ * promotes itself out of there. That is how this app came to be met as the uninstaller's "Intentic is running"
+ * prompt — a process nobody could see, announcing itself at the worst possible moment.
+ *
+ * The first answer to that was a notice AFTER the fact: the window vanished, and an OS message box said where
+ * it had gone. Two things were wrong with it and both were the same thing. It reported rather than asked, so
+ * the one gesture it left was "OK" to something already done — and every native message box carries an icon,
+ * which is what makes Windows play the alert chime at it. A window closing the way its author intended is not
+ * an event that should sound like a fault.
+ *
+ * So the close asks first, offers the two answers that actually exist, and is drawn by this app rather than by
+ * the platform — which is also the only way to draw it silently. Answer it once with "always do this" and the
+ * question is gone for good (`AppState::close_action`).
+ */
+fn request_close(app: &AppHandle) {
+    match app.state::<crate::state::AppState>().close_action() {
+        Some(action) => apply_close(app, action),
+        None => ask_before_closing(app),
     }
-    if !app.state::<crate::state::AppState>().claim_tray_notice() {
+}
+
+/// Both answers, once one has been given. Hiding rather than destroying is what makes the tray instant, and
+/// `exit` is the tray menu's own Quit reached from the × instead — same exit, so a downloaded update installs
+/// on the way out exactly as it would there.
+fn apply_close(app: &AppHandle, action: CloseAction) {
+    match action {
+        CloseAction::Tray => {
+            if let Some(window) = app.get_webview_window(WORKSPACE) {
+                let _ = window.hide();
+            }
+        }
+        CloseAction::Quit => app.exit(0),
+    }
+}
+
+/// Raise the dialog over the window it is about. Built hidden and placed before it is ever shown, the same as
+/// `swap_in`, so nothing appears in the wrong spot for a frame.
+///
+/// Every failure here falls through to the tray rather than leaving the × doing nothing: a close that seems to
+/// be ignored is the worst outcome available, and the app staying up is the recoverable one.
+fn ask_before_closing(app: &AppHandle) {
+    if let Some(window) = app.get_webview_window(CONFIRM_CLOSE) {
+        let _ = window.set_focus();
         return;
     }
-    app.dialog()
-        .message(
-            "Intentic is still running, in the system tray.\n\n\
-             Open it again from there, or right-click the tray icon and choose Quit to close it completely.\n\n\
-             On Windows the icon may be hidden behind the ^ arrow next to the clock — drag it onto the taskbar \
-             to keep it in sight.",
-        )
-        .title("Intentic is still running")
-        .kind(MessageDialogKind::Info)
-        // Never blocking: this runs on the main thread inside a window event, and waiting for an answer here
-        // is waiting on the thread that would have to draw the answer.
-        .show(|_| {});
+    let parent = app.get_webview_window(WORKSPACE);
+    let mut builder =
+        WebviewWindowBuilder::new(app, CONFIRM_CLOSE, WebviewUrl::App("index.html".into()))
+            .title("Close Intentic?")
+            .inner_size(CONFIRM_SIZE.0, CONFIRM_SIZE.1)
+            .resizable(false)
+            .maximizable(false)
+            .minimizable(false)
+            // No second taskbar entry and no second alt-tab stop: this app is one window, and a dialog is
+            // something you answer, not something you switch to.
+            .skip_taskbar(true)
+            // The frame between "window mapped" and "webview painted", which is white by default and reads as
+            // a flash on a dark dialog — the exact impression of malfunction this whole change is about.
+            // Mirrors `--color-canvas` in dark mode (@intentic/ui semantic-colors.css), which index.html pins.
+            .background_color(tauri::window::Color(15, 13, 10, 255))
+            .visible(false);
+    if let Some(parent) = &parent {
+        builder = match builder.parent(parent) {
+            Ok(owned) => owned,
+            Err(error) => {
+                eprintln!("close confirmation could not be owned by the workspace: {error}");
+                return apply_close(app, CloseAction::Tray);
+            }
+        };
+    }
+    match builder.build() {
+        Ok(window) => {
+            center_over(&window, parent.as_ref());
+            let _ = window.show();
+            let _ = window.set_focus();
+        }
+        Err(error) => {
+            eprintln!("close confirmation failed to open: {error}");
+            apply_close(app, CloseAction::Tray);
+        }
+    }
+}
+
+/// The middle of the window being asked about, not the middle of the screen — a dialog that opens away from
+/// the thing it is about reads as belonging to something else.
+fn center_over(window: &WebviewWindow, over: Option<&WebviewWindow>) {
+    let placed = over.and_then(|over| {
+        let position = over.outer_position().ok()?;
+        let frame = over.outer_size().ok()?;
+        let own = window.outer_size().ok()?;
+        Some(tauri::PhysicalPosition::new(
+            position.x + (frame.width as i32 - own.width as i32) / 2,
+            position.y + (frame.height as i32 - own.height as i32) / 2,
+        ))
+    });
+    match placed {
+        Some(position) => {
+            let _ = window.set_position(position);
+        }
+        None => {
+            let _ = window.center();
+        }
+    }
+}
+
+/// The dialog's answer, arriving from the one command it can call (commands.rs). Cancelling is not an answer
+/// and never reaches here — it is the dialog closing itself and the window staying exactly as it was.
+pub fn resolve_close(app: &AppHandle, action: CloseAction, remember: bool) {
+    if remember {
+        app.state::<crate::state::AppState>()
+            .remember_close_action(action);
+    }
+    // Before the window it is about moves, so the two never animate against each other.
+    if let Some(window) = app.get_webview_window(CONFIRM_CLOSE) {
+        let _ = window.destroy();
+    }
+    apply_close(app, action);
 }
 
 /// The app's own face — the setup it was handed, and the sandboxes on this machine afterwards. The title here

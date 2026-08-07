@@ -21,6 +21,16 @@ use crate::setup_link::{RecreateArgs, SetupArgs};
 pub const APP_URL: &str = "https://app.intentic.dev";
 pub const PLATFORM_URL: &str = "https://api.intentic.dev";
 
+/// What the workspace window's × does — the two answers its confirmation offers (windows.rs).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum CloseAction {
+    /// The window steps aside and the app stays up, reachable from the tray.
+    Tray,
+    /// The close ends the app, exactly as the tray menu's Quit does.
+    Quit,
+}
+
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", default)]
 pub struct Settings {
@@ -81,18 +91,22 @@ impl AppState {
         write_json(&self.config_dir.join("settings.json"), &settings);
     }
 
-    /// True exactly once per install — the first time a close hides the window instead of ending the app.
+    /// What a close should do without asking again — `None` until the user has ticked "always do this".
     ///
     /// Deliberately NOT a [`Settings`] field: the launcher UI saves that struct wholesale, so changing an
-    /// origin there would re-arm a notice the user has already read. And it claims the marker by WRITING it,
-    /// answering false if that write fails — a notice this app cannot remember having shown is one it would
-    /// show on every close, which is worse than the silence.
-    pub fn claim_tray_notice(&self) -> bool {
-        let marker = self.config_dir.join("tray-notice-shown");
-        if marker.exists() {
-            return false;
-        }
-        std::fs::write(&marker, "").is_ok()
+    /// origin there would throw away an answer the user has already given and put the question back. An
+    /// unreadable or unwritable file answers `None`, which is the question returning rather than a wrong × —
+    /// the one failure mode here that cannot surprise anybody.
+    pub fn close_action(&self) -> Option<CloseAction> {
+        read_json(&self.close_action_path())
+    }
+
+    pub fn remember_close_action(&self, action: CloseAction) {
+        write_json(&self.close_action_path(), &action);
+    }
+
+    fn close_action_path(&self) -> PathBuf {
+        self.config_dir.join("close-action.json")
     }
 
     pub fn name_of(&self, slug: &str) -> Option<String> {
