@@ -42,8 +42,10 @@ one-line install for the specific thing that is absent.
 
 **macOS** — capture works, input does not. The methods throw rather than silently doing nothing.
 
-**Windows enumeration** — `Get-Process` already knows every process with a main window and its title; the
-P/Invoke is only for the two things it does not carry, the window rectangle and which window is in front.
+**Windows enumeration** — `EnumWindows` supplies every visible top-level window, including several owned by one
+process; process lookup adds the app name, and the remaining P/Invokes supply bounds and foreground state.
+`Get-Process.MainWindowHandle` is intentionally not used because it collapses a workspace and its dialog into
+one row.
 
 **Wayland enumeration mostly cannot happen**, and that is a design decision rather than a gap: a compositor does
 not let one client enumerate another's windows, the same protection that stops it synthesising input. The

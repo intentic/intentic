@@ -23,6 +23,35 @@ export const asList = <T>(json: string): T[] => {
     return [value as T];
 };
 
+/** An optional setting as CI means it: an absent variable and GitHub's empty-string expansion are both absent. */
+export const nonEmpty = (value: string | undefined): string | undefined => {
+    const trimmed = value?.trim();
+    return trimmed === undefined || trimmed === `` ? undefined : trimmed;
+};
+
+/** True only when this conversation's restored transcript contains the expected assistant reply. */
+export const assistantReplied = (json: string, expected: string): boolean => {
+    try {
+        const parsed: unknown = JSON.parse(json);
+        if (typeof parsed !== `object` || parsed === null || !(`messages` in parsed) || !Array.isArray(parsed.messages)) {
+            return false;
+        }
+        const reply = expected.trim().toLowerCase();
+        return parsed.messages.some(
+            (message) =>
+                typeof message === `object` &&
+                message !== null &&
+                `role` in message &&
+                message.role === `assistant` &&
+                `text` in message &&
+                typeof message.text === `string` &&
+                message.text.trim().toLowerCase() === reply,
+        );
+    } catch {
+        return false;
+    }
+};
+
 /** One row of Windows' own list of installed programs. */
 export interface UninstallEntry {
     readonly DisplayName?: string;

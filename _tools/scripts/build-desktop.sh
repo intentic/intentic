@@ -5,8 +5,8 @@
 #   • the Windows NSIS installer via cargo-xwin (MSVC target, no Windows runner),
 #   • latest.json — the tauri-updater manifest.
 #
-# Runs from release-prepare.sh: build-desktop.sh <version>. Installs its own toolchain when missing
-# (idempotent), so the release job needs no extra before_script.
+# Runs from release-prepare.sh: build-desktop.sh <version> --windows-prebuilt <dir>. Installs its own toolchain
+# when missing (idempotent), so the release job needs no extra before_script.
 #
 # Updater signing: set TAURI_SIGNING_PRIVATE_KEY (+ optional _PASSWORD) as masked CI variables — generate a
 # pair once with `pnpm --filter @intentic/desktop-app exec tauri signer generate`. The committed pubkey lives
@@ -17,7 +17,7 @@
 # Release — the download surface the site and the updater both point at.
 set -euo pipefail
 
-VERSION="${1:?usage: build-desktop.sh <version> [--linux-only|--windows-only]}"
+VERSION="${1:?usage: build-desktop.sh <version> [--linux-only|--windows-only|--windows-prebuilt <dir>]}"
 # Two verification jobs each want ONE side of this build, and the release wants both. One build script either
 # way, so the artifacts a CI job verifies are produced by exactly the path that produces the released ones.
 #
@@ -26,20 +26,31 @@ VERSION="${1:?usage: build-desktop.sh <version> [--linux-only|--windows-only]}"
 #                   run.
 #   --windows-only  skips the Linux bundles. For the job that hands `Intentic-setup.exe` to the Windows runner:
 #                   a deb/rpm/AppImage build costs it several minutes of artifacts nothing downstream opens.
+#   --windows-prebuilt <dir>
+#                   builds Linux and stages the already-tested NSIS candidate from this directory. The release
+#                   uses it so Windows approves the bytes publish-github.sh actually attaches.
 #
 # Neither writes latest.json — a manifest naming a platform whose installer the run did not produce would
 # advertise an update that 404s, and that is true in both directions.
 LINUX_ONLY=0
 WINDOWS_ONLY=0
+WINDOWS_PREBUILT=""
 case "${2:-}" in
     --linux-only) LINUX_ONLY=1 ;;
     --windows-only) WINDOWS_ONLY=1 ;;
+    --windows-prebuilt)
+        WINDOWS_PREBUILT="${3:?usage: build-desktop.sh <version> --windows-prebuilt <dir>}"
+        ;;
     "") ;;
     *)
-        echo "error: unknown flag '${2}' (expected --linux-only or --windows-only)" >&2
+        echo "error: unknown flag '${2}' (expected --linux-only, --windows-only, or --windows-prebuilt <dir>)" >&2
         exit 2
         ;;
 esac
+if [ -n "$WINDOWS_PREBUILT" ] && [ ! -f "$WINDOWS_PREBUILT/Intentic-setup.exe" ]; then
+    echo "error: the tested Windows installer is missing from $WINDOWS_PREBUILT" >&2
+    exit 2
+fi
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 APP="$ROOT/_editor/desktop-app"
 TAURI_DIR="$APP/src-tauri"
@@ -91,7 +102,7 @@ if ! command -v cargo >/dev/null 2>&1; then
     # shellcheck disable=SC1091
     source "${CARGO_HOME:-$HOME/.cargo}/env"
 fi
-if [ "$LINUX_ONLY" -eq 0 ]; then
+if [ "$LINUX_ONLY" -eq 0 ] && [ -z "$WINDOWS_PREBUILT" ]; then
     rustup target add x86_64-pc-windows-msvc >/dev/null
     if ! command -v cargo-xwin >/dev/null 2>&1; then
         echo "==> installing cargo-xwin"
@@ -139,7 +150,7 @@ if [ "$WINDOWS_ONLY" -eq 0 ]; then
     pnpm exec tauri build --config "$CONFIG" --bundles deb,rpm,appimage
 fi
 
-if [ "$LINUX_ONLY" -eq 0 ]; then
+if [ "$LINUX_ONLY" -eq 0 ] && [ -z "$WINDOWS_PREBUILT" ]; then
     echo "==> building Windows NSIS installer (cargo-xwin)"
     pnpm exec tauri build --config "$CONFIG" --runner cargo-xwin --target x86_64-pc-windows-msvc --bundles nsis
 fi
@@ -149,9 +160,22 @@ if [ "$WINDOWS_ONLY" -eq 0 ]; then
     cp "$LINUX_BUNDLES"/appimage/*.AppImage "$OUT/Intentic.AppImage"
     cp "$LINUX_BUNDLES"/deb/*.deb "$OUT/Intentic.deb"
     cp "$LINUX_BUNDLES"/rpm/*.rpm "$OUT/Intentic.rpm"
+    appimage_signatures=("$LINUX_BUNDLES"/appimage/*.AppImage.sig)
+    if [ -f "${appimage_signatures[0]}" ]; then
+        cp "${appimage_signatures[0]}" "$OUT/Intentic.AppImage.sig"
+    fi
 fi
-if [ "$LINUX_ONLY" -eq 0 ]; then
+if [ -n "$WINDOWS_PREBUILT" ]; then
+    cp "$WINDOWS_PREBUILT/Intentic-setup.exe" "$OUT/Intentic-setup.exe"
+    if [ -f "$WINDOWS_PREBUILT/Intentic-setup.exe.sig" ]; then
+        cp "$WINDOWS_PREBUILT/Intentic-setup.exe.sig" "$OUT/Intentic-setup.exe.sig"
+    fi
+elif [ "$LINUX_ONLY" -eq 0 ]; then
     cp "$WIN_BUNDLES"/nsis/*-setup.exe "$OUT/Intentic-setup.exe"
+    windows_signatures=("$WIN_BUNDLES"/nsis/*-setup.exe.sig)
+    if [ -f "${windows_signatures[0]}" ]; then
+        cp "${windows_signatures[0]}" "$OUT/Intentic-setup.exe.sig"
+    fi
 fi
 
 # --- updater manifest (only when the artifacts were signed) ---
@@ -159,8 +183,12 @@ fi
 # only one of them would advertise an update that 404s for everyone on the other.
 if [ -n "${TAURI_SIGNING_PRIVATE_KEY:-}" ] && [ "$LINUX_ONLY" -eq 0 ] && [ "$WINDOWS_ONLY" -eq 0 ]; then
     echo "==> writing latest.json"
-    appimage_sig="$(cat "$LINUX_BUNDLES"/appimage/*.AppImage.sig)"
-    nsis_sig="$(cat "$WIN_BUNDLES"/nsis/*-setup.exe.sig)"
+    if [ ! -f "$OUT/Intentic.AppImage.sig" ] || [ ! -f "$OUT/Intentic-setup.exe.sig" ]; then
+        echo "error: updater signing is enabled but a staged desktop signature is missing" >&2
+        exit 1
+    fi
+    appimage_sig="$(cat "$OUT/Intentic.AppImage.sig")"
+    nsis_sig="$(cat "$OUT/Intentic-setup.exe.sig")"
     cat >"$OUT/latest.json" <<MANIFEST
 {
     "version": "${VERSION}",
@@ -176,6 +204,7 @@ else
     echo "==> TAURI_SIGNING_PRIVATE_KEY not set — skipping signatures + latest.json (no auto-update for this release)"
 fi
 
+rm -f "$OUT/SHA256SUMS"
 (cd "$OUT" && sha256sum ./*) >"$OUT/SHA256SUMS"
 echo "==> desktop artifacts:"
 ls -lh "$OUT"

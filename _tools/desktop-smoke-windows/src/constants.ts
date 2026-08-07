@@ -6,13 +6,16 @@
 /** What Windows lists the app as, and what `installedApp` matches on. `productName` in the bundle config. */
 export const PRODUCT_NAME = `Intentic`;
 
+/** Tauri's bundle identifier, which names this app's directory under Windows' roaming app-data directory. */
+export const APP_IDENTIFIER = `dev.intentic.desktop`;
+
 /** The scheme the whole channel from the SPA into the app rides on. */
 export const SCHEME = `intentic`;
 
 /* The link every tier fires. A setup link, because it is the one a first-time user meets and the only one
  * whose arrival is VISIBLE without a test hook: the app asks whether to run it, then parks a pending setup and
- * raises the setup screen. The code is nonsense on purpose — nothing here should reach a real platform, and a
- * claim attempt must fail loudly rather than quietly reaching production. */
+ * raises the setup screen. The code is nonsense on purpose; tier 1 points the platform at loopback and hands
+ * the setup to a failing local CLI stand-in, while the nightly supplies real direct-token credentials. */
 export const SETUP_LINK = `${SCHEME}://setup?code=windows-smoke-code&name=WindowsSmoke`;
 
 /* What the app calls itself, matched on the distinctive half rather than the whole title so these assertions

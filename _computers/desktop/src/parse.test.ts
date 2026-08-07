@@ -102,6 +102,14 @@ test("PowerShell's many-window output is read the same way", () => {
     expect(many[1]?.bounds).toEqual({ x: 1, y: 2, width: 3, height: 4 });
 });
 
+test("two top-level windows owned by one process remain two windows", () => {
+    const windows = parseWindowsJson(
+        '[{"id":"21","title":"Intentic","app":"intentic","x":0,"y":0,"width":800,"height":600,"focused":false},{"id":"22","title":"Set up a sandbox?","app":"intentic","x":100,"y":100,"width":400,"height":220,"focused":true}]',
+    );
+    expect(windows.map((window) => window.id)).toEqual(["21", "22"]);
+    expect(windows.map((window) => window.app)).toEqual(["intentic", "intentic"]);
+});
+
 // A handle of 0 is a process without a real window; listing it would offer the agent something unfocusable.
 test("windows without a usable handle are dropped", () => {
     expect(parseWindowsJson('{"id":"0","title":"ghost","app":"svchost"}')).toEqual([]);

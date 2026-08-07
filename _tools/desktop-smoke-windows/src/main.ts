@@ -1,7 +1,7 @@
 /* The entry point the Windows job calls, one command per tier.
  *
  *   node dist/main.js doctor    [--needs-docker]
- *   node dist/main.js install   --installer <path> [--app-url <url>] [--keep-installed]
+ *   node dist/main.js install   --installer <path> [--expected-version <version>] [--app-url <url>] [--keep-installed]
  *   node dist/main.js setup     [--sandbox-image <ref>] [--ic-bin <path>] [--web-origin <url>]
  *   node dist/main.js agents    [--turn-seconds <n>]
  *   node dist/main.js teardown
@@ -18,7 +18,7 @@
 import { SANDBOX_HOSTNAME } from "./constants.js";
 import { runDoctor } from "./doctor.js";
 import { createHarness } from "./harness.js";
-import { sandboxContainerName } from "./parse.js";
+import { nonEmpty, sandboxContainerName } from "./parse.js";
 import { runAgentsTier } from "./tier-agents.js";
 import { runInstallTier } from "./tier-install.js";
 import { runSetupTier } from "./tier-setup.js";
@@ -50,7 +50,8 @@ const main = async (): Promise<number> => {
         }
         await runInstallTier(harness, {
             installer,
-            appUrl: flag(argv, `app-url`),
+            expectedVersion: nonEmpty(flag(argv, `expected-version`)),
+            appUrl: nonEmpty(flag(argv, `app-url`)),
             keepInstalled: present(argv, `keep-installed`),
         });
         return harness.report(`the Windows installer installs, launches and answers a deep link`);
@@ -70,7 +71,7 @@ const main = async (): Promise<number> => {
         // tiers read it from the one hostname constant, so a rename cannot leave the two disagreeing.
         await runAgentsTier(harness, {
             container: sandboxContainerName(SANDBOX_HOSTNAME),
-            agentAuthVolume: process.env[`INTENTIC_AGENT_AUTH_VOLUME`],
+            agentAuthVolume: nonEmpty(process.env[`INTENTIC_AGENT_AUTH_VOLUME`]),
             turnSeconds: Number(flag(argv, `turn-seconds`) ?? 300),
         });
         return harness.report(`the sandbox is reachable, gated, and runs an /agents turn`);

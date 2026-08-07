@@ -160,10 +160,11 @@ jobs:
 
           echo "ci-base=$(any "$(match '^_tools/ci-base/')" "$(missing ghcr.io/intentic/ci-base:latest)")" >> "$GITHUB_OUTPUT"
           echo "ci-desktop=$(any "$(match '^_tools/ci-(desktop|base)/')" "$(missing ghcr.io/intentic/ci-desktop:latest)")" >> "$GITHUB_OUTPUT"
-          # desktop-check's whole input closure — `turbo run build test --filter=@intentic/desktop-app... --dry`
-          # names it (desktop-app, desktop-smoke, ui, tsconfig) and each entry is one of them. _tools/ci-desktop
-          # is here because the job's IMAGE is an input like any other.
-          echo "desktop=$(match '^(_editor/desktop-app/|_site/site/public/scripts/|_editor/ui/|_tools/ci-desktop/|_tools/desktop-smoke/|_tools/desktop-smoke-windows/|_tools/tsconfig/|pnpm-lock\.yaml)')" >> "$GITHUB_OUTPUT"
+          # The desktop build plus both executable smoke harnesses' complete closure. This includes the Windows
+          # driver, the shared daemon contracts/port derivation, ic (the nightly artifact), the scripts that
+          # produce or verify bundles, and the workflow/action that assembles the job. Omitting an indirect
+          # workspace dependency here means a changed harness can skip the only host capable of running it.
+          echo "desktop=$(match '^(_editor/(desktop-app|ui)/|_site/site/public/scripts/|_computers/desktop/|_sandbox/(ic|sandbox-contract|sandbox-run)/|_tools/(ci-desktop|desktop-smoke|desktop-smoke-windows|tsconfig)/|_tools/scripts/(build-desktop|build-ic|verify-desktop-bundle|verify-desktop-install)\.sh|\.github/(actions/pnpm-setup/|workflows/(ci|nightly|release)\.yml)|package\.json|pnpm-lock\.yaml|pnpm-workspace\.yaml|turbo\.json)')" >> "$GITHUB_OUTPUT"
           # The ic host-side CLI (Rust) — its own crate, checked by ic-check with the same cargo gate the
           # desktop crate gets. The scripts dir is an input too: the shims and the binary are one flow.
           echo "ic=$(match '^(_sandbox/ic/|_site/site/public/scripts/)')" >> "$GITHUB_OUTPUT"
@@ -695,36 +696,10 @@ jobs:
       - run: DEPLOY_VERSION="${GITHUB_SHA::8}" bash _tools/scripts/deploy-platform.sh
         shell: bash
 
-  # Release: semantic-release over the core group's verified build — the cross-compiled machine agents, the
-  # desktop installers, the sandbox/dind-host images at the release version + moving `stable` tag, and the
-  # GitHub Release whose pushed tag is what publishes the npm packages (npm-publish.yml).
-  #
-  # It gates on the verify matrix rather than on `images`: what this publishes is the npm packages, the sandbox
-  # images and the desktop installers, and release-prepare.sh says so itself by building only the PUB closure.
-  # The release builds its own sandbox tree because semantic-release stamps the version into every package.json
-  # first and the sandbox READS that at runtime — the images job's sha-/latest images are built unstamped
-  # (0.0.0 = dev mode), so they are NOT retaggable as a release.
-  #
-  # desktop-verify is deliberately NOT a `needs` edge. It was one, on the theory that it was the cheap half —
-  # when the pipeline already knows the desktop is broken, don't spend the release's forty minutes finding out
-  # again. The measurement says it is not cheap and not half: desktop-verify runs build-desktop.sh and
-  # verify-desktop-install.sh, which are the exact two scripts release-prepare.sh runs itself (lines 29 and 47),
-  # and it costs 8m09s / 8m18s warm and 14m06s cold. Gating on it made a desktop-touching release pay that
-  # serially, twice.
-  #
-  # Dropping the edge costs nothing real, because that edge was never the gate on the installers. It cannot be:
-  # desktop-verify builds version 0.0.0 in its OWN target dir, so its bytes are not the published bytes, and
-  # release-prepare.sh says so at length where it re-verifies its own output. A desktop break is now discovered
-  # inside prepareCmd instead of before it — still ahead of the tag semantic-release pushes when prepare
-  # returns, so a broken desktop ships in neither arrangement. The job stays in the pipeline as a parallel,
-  # non-gating check.
-  #
-  # ci-desktop is a needs edge because this job RUNS IN that image — the same reason desktop-check and
-  # desktop-verify carry it. Without it the dependency was real but undeclared, so the job started whenever
-  # verify-core was green and pulled whatever `latest` happened to be there: nothing at all before the image
-  # was first published, and the previous build during the pipeline that rebuilds it. Tolerating `skipped` is
-  # the point — the image job skips in almost every pipeline, and this edge only has to bind in the ones where
-  # it doesn't.
+  # The whole release lifecycle is one reusable-workflow call because the exact NSIS candidate has to cross an
+  # OS boundary before semantic-release may publish. The call holds the `release` concurrency lock throughout:
+  # plan version → cross-build once → execute on Windows → stage those same bytes → publish. A lock on only the
+  # final Linux job would let two pipelines plan the same next version while the first candidate was on Windows.
   release:
     needs: [verify-core, ci-base, ci-desktop]
     if: |
@@ -732,65 +707,12 @@ jobs:
       && needs.verify-core.result == 'success'
       && needs.ci-base.result != 'failure'
       && needs.ci-desktop.result != 'failure'
-    runs-on: [self-hosted, intentic, desktop]
-    container:
-      # The desktop toolchain image: prepareCmd runs build-desktop.sh, which is a Rust build like
-      # desktop-check's. Everything ci-base carries comes with it, so nothing else in this job changes.
-      image: ghcr.io/intentic/ci-desktop:latest
-      volumes:
-        - /ci-cache:/ci-cache
-        - /var/run/docker.sock:/var/run/docker.sock
-      credentials:
-        username: ${{ github.actor }}
-        password: ${{ secrets.GITHUB_TOKEN }}
-    # `resource_group: release` — serialize releases without cancelling one in flight.
     concurrency:
       group: release
       cancel-in-progress: false
-    # The publish is heavy (a cold image build pushes ~1.5 GB). Room beyond the default so a cold first build
-    # cannot fail the job AFTER the release already succeeded.
-    timeout-minutes: 120
+    uses: ./.github/workflows/release.yml
+    secrets: inherit
     permissions:
       contents: write
       packages: write
       id-token: write
-    env:
-      # Same pin as the `images` job: semantic-release's publishCmd is publish-images.sh, whose default is
-      # both registries, and the only login here is to ghcr.io.
-      REGISTRIES: ghcr.io/intentic
-      CARGO_HOME: /ci-cache/cargo
-      CARGO_TARGET_DIR: /ci-cache/desktop-target
-      # cargo-xwin's MSVC CRT + Windows SDK (~1.1 GB), on the shared volume for the same reason the registry
-      # is: a content-addressed download every run reads and none modifies. Its default lives under $HOME/.cache,
-      # which dies with the container, so every release re-downloaded it (~2m40s).
-      XWIN_CACHE_DIR: /ci-cache/xwin
-      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      # OPTIONAL, and unset today. build-desktop.sh branches on
-      # `-n`, so an absent secret is an empty string and the release skips minisign signatures and latest.json,
-      # exactly as every release has so far. Wired through anyway so that setting the secret is the whole
-      # change: the desktop app's updater endpoint (src-tauri/tauri.conf.json) polls for a latest.json that
-      # nothing currently produces, and this is the one variable standing between here and it.
-      TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
-    steps:
-      - uses: actions/checkout@v7
-        with:
-          # semantic-release reads the whole history to work out the next version.
-          fetch-depth: 0
-          clean: false
-      - uses: ./.github/actions/pnpm-setup
-      - uses: docker/login-action@v4
-        with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-
-      # Same key as the `images` job — semantic-release's publishCmd runs the same prepare-image-trees.sh, and
-      # a release that re-downloads the models is the same wasted fetch.
-      - uses: actions/cache@v6
-        with:
-          path: |
-            .image-out/iq-models
-            .image-out/.iq-models-complete
-          key: iq-models-${{ hashFiles('_search/iq-engine/scripts/fetch-model.mjs') }}
-
-      - run: pnpm exec semantic-release

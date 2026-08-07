@@ -30,11 +30,12 @@
  * a tier that cannot reach its credential has nothing to say, and must not fail.
  */
 
+import { randomUUID } from "node:crypto";
 import { localDaemonPort } from "@intentic/sandbox-run";
 import { sandboxIdFromToken } from "@intentic/sandbox-contract/tunnel-ids";
 import { CONNECT_TOKEN } from "./constants.js";
 import type { Harness } from "./harness.js";
-import { controlTokenStore } from "./parse.js";
+import { assistantReplied, controlTokenStore } from "./parse.js";
 import { run } from "./run.js";
 
 export interface AgentsTierOptions {
@@ -150,33 +151,29 @@ export const runAgentsTier = async (harness: Harness, options: AgentsTierOptions
     }
 
     harness.section(`one /agents turn`);
-    const started = await callDaemon(port, `/agent`, token, { prompt: PROMPT, title: `windows smoke` });
+    // Client-minted once, then used for every operation on this conversation. A timestamp or a route response
+    // is not the identity: the same stable id keys the turn, registry card, polling read and transcript.
+    const conversationId = `windows-smoke-${randomUUID()}`;
+    const started = await callDaemon(port, `/agent`, token, { conversationId, prompt: PROMPT, title: `windows smoke` });
     if (started.status !== 200) {
         harness.fail(`starting a turn answered ${started.status}`, started.body.slice(0, 800));
         return;
     }
     harness.pass(`the turn started`);
 
-    /* Completion is read from the fleet registry rather than the attach stream: `/agents` is a plain GET whose
-     * body says whether a conversation is still running, and a poll over it needs no event-stream client in a
-     * tier whose subject is Windows rather than transports. The attach path is covered where it belongs, in the
-     * daemon's own suites. */
+    /* Poll the conversation's own transcript rather than the fleet roster. The roster is a list of summaries
+     * and cannot prove which reply belongs to this turn; the transcript route is keyed by the same identity the
+     * POST carried. Require an ASSISTANT bubble equal to the expected answer so the prompt's own word "ready"
+     * cannot satisfy the assertion before the model replies. */
+    let transcript = await callDaemon(port, `/agents/${encodeURIComponent(conversationId)}/transcript`, token);
     const done = await harness.untilTrue(options.turnSeconds, `the turn completed`, async () => {
-        const state = await callDaemon(port, `/agents`, token);
-        return state.status === 200 && !state.body.includes(`"running"`);
+        transcript = await callDaemon(port, `/agents/${encodeURIComponent(conversationId)}/transcript`, token);
+        return transcript.status === 200 && assistantReplied(transcript.body, EXPECTED);
     });
     if (!done) {
-        harness.detail((await callDaemon(port, `/agents`, token)).body.slice(0, 1_500));
+        const state = await callDaemon(port, `/agents/${encodeURIComponent(conversationId)}`, token);
+        harness.detail(`agent: ${state.body.slice(0, 800)}\ntranscript: ${transcript.body.slice(0, 800)}`);
         return;
     }
-
-    const transcript = await callDaemon(port, `/sessions`, token);
-    if (transcript.status === 200 && transcript.body.toLowerCase().includes(EXPECTED)) {
-        harness.pass(`the agent replied, and the reply reached the transcript`);
-    } else {
-        harness.fail(
-            `no reply containing "${EXPECTED}" in the transcript`,
-            `An account is connected and a turn ran, so this is the turn failing rather than the plumbing.\n${transcript.body.slice(0, 800)}`,
-        );
-    }
+    harness.pass(`the agent replied, and the reply reached its transcript`);
 };

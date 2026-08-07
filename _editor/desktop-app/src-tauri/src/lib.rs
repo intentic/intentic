@@ -92,7 +92,11 @@ pub fn run() {
                         );
                     }
                 }
-                spawn_update_check(app.handle().clone());
+                // Air-gapped installs and executable smoke tiers can disable the one background request this
+                // process otherwise makes independently of the workspace origin.
+                if std::env::var_os("INTENTIC_DISABLE_UPDATE_CHECK").is_none() {
+                    spawn_update_check(app.handle().clone());
+                }
             }
 
             /* BEFORE the link, nothing opens. A first-time user's very first act is clicking "Set up on this

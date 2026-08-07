@@ -135,13 +135,13 @@ node _tools/desktop-smoke-windows/dist/main.js teardown
 | | Needs | Where it runs | Roughly |
 | --- | --- | --- | --- |
 | `doctor` | nothing | before everything | seconds |
-| `install` | nothing | **every push to main** that touches the desktop tree | ~10 min |
+| `install` | nothing | desktop changes on main, and **every release candidate** | ~10 min |
 | `setup` | Docker Desktop, Linux containers | nightly | ~20–30 min |
 | `agents` | the above + `WINDOWS_AGENT_AUTH_VOLUME` | nightly | ~5–10 min |
 
-`install` gating main rather than sitting in the nightly is the point of splitting them: it needs no Docker, no
-credentials and no network beyond the installer's own, so the tier that closes the biggest hole is also the
-cheapest one to run.
+`install` gating main rather than sitting in the nightly is the point of splitting them: it needs no Docker or
+credentials. The installed app talks only to a loopback stub and harmless local command stand-ins; only a bare
+machine's WebView2 bootstrap may need the network.
 
 What each tier asserts, and why each assertion earns its place, is in
 [`_tools/desktop-smoke-windows/README.md`](../_tools/desktop-smoke-windows/README.md).
@@ -150,11 +150,11 @@ What each tier asserts, and why each assertion earns its place, is in
 
 ## Where the artifacts come from
 
-The Windows runner never builds anything. A Linux job (`desktop-windows-build`, in both `ci.yml` and
-`nightly.yml`) cross-builds two files and uploads them:
+The Windows runner never builds product binaries. Linux jobs cross-build what each workflow needs and upload it:
 
-- `Intentic-setup.exe` — via `build-desktop.sh <version> --windows-only`, the same script the release runs, so
-  the bytes under test are produced by exactly the path that produces the released ones.
+- `Intentic-setup.exe` — via `build-desktop.sh <version> --windows-only`. For a release, the serialized release
+  workflow builds the versioned candidate once, Windows executes it, and publication stages that same artifact
+  with `--windows-prebuilt`; no second installer build can differ after the check.
 - `ic-windows-amd64.exe` — because `connect.ps1` is a **bootstrap shim**: the setup flow lives in the `ic` CLI,
   which the shim downloads from the *latest GitHub Release*. Left to do that, the Windows tier would verify
   the last release's flow against this commit's installer. `IC_BIN` — the shim's own local-dev override — is

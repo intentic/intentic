@@ -10,7 +10,7 @@ window, a tray icon and a registry entry, so it needs a real Windows session. Se
 ```powershell
 pnpm turbo run build --filter=@intentic/desktop-smoke-windows...
 node dist/main.js doctor            # the machine, before the product
-node dist/main.js install  --installer path\to\Intentic-setup.exe
+node dist/main.js install  --installer path\to\Intentic-setup.exe [--expected-version 1.2.3]
 node dist/main.js setup             # needs Docker Desktop on Linux containers
 node dist/main.js agents            # needs a connected account (see the runner doc)
 node dist/main.js teardown          # put the machine back
@@ -42,8 +42,10 @@ machine pass rather than telling you what it is.
 
 ### `install` — does it install, launch, and answer a link
 
-No Docker, no credentials, no network beyond the installer's own — which is what lets this gate every push to
-main rather than sit in the nightly.
+No Docker and no credentials. The installer may fetch WebView2 on a bare machine; after installation, the tier
+points both app origins at a loopback server and puts failing Docker/CLI stand-ins in the launched app's
+environment. Accepting the setup confirmation therefore proves the handoff without contacting the platform,
+installing Docker, or downloading a CLI.
 
 | | |
 | --- | --- |
@@ -52,6 +54,7 @@ main rather than sit in the nightly.
 | registration | `intentic://` resolves to a command, asserted **before the app has ever run** |
 | deep link, app not running | a real `intentic://setup` link **starts** the app, which asks first, and lands on the setup screen |
 | launch | the process survives startup and maps its workspace window |
+| web content | the workspace WebView requests the loopback page, rather than merely mapping an empty native frame |
 | deep link, app running | the same link reaches the instance already running, through the OS handler |
 | one window | …**in the workspace's place**, not beside it |
 | uninstall | completes silently **with the app still running**, which is the ordinary state at uninstall time |
@@ -71,7 +74,12 @@ first-time user's path. Running: the OS starts a second copy whose argv the sing
 
 **The one-window row** guards a failure invisible to every other assertion here: a setup screen that opens as a
 *second* window satisfies the search above it, and what the user gets is an unasked-for window in front of the
-one they were reading.
+one they were reading. The Windows driver uses `EnumWindows`, so two visible top-level windows owned by the same
+Tauri process remain two rows; `Get-Process.MainWindowHandle` would collapse them and make this assertion empty.
+
+For releases, this tier receives the semantic version as an expected value and reads it back from Windows after
+installation. The release workflow builds that candidate once, runs it here, and gives the same downloaded file
+to `release-prepare.sh`; publication never cross-builds a replacement after Windows has passed.
 
 ### `setup` — does the shipped setup actually go through
 
@@ -156,9 +164,8 @@ misconfigured".
 ## Not covered here
 
 **The `/agents` page in a browser.** That needs the platform stack — Postgres, the API, the web build — running
-beside the sandbox, and the SPA is byte-identical on every OS, so what it would add over the tiers above is
-"WebView2 rendered a page", which the install tier already asserts by watching the workspace window open at its
-configured origin. The browser journeys live in [`@intentic-app/e2e`](../e2e).
+beside the sandbox, and the SPA is byte-identical on every OS. This tier proves WebView2 fetched and rendered a
+loopback page; browser journeys for the actual SPA live in [`@intentic-app/e2e`](../e2e).
 
 **Real Google sign-in, and real AI-account OAuth.** Both are browser flows against a third party. The first is
 stood in for the same way the browser tier stands it in; the second is the one-time manual step in the runner
@@ -171,8 +178,7 @@ One machine is one machine.
 
 - [src/main.ts](src/main.ts) — the four commands, and why they are four.
 - [src/tier-install.ts](src/tier-install.ts) — install, launch, deep link, uninstall.
+- [src/hermetic.ts](src/hermetic.ts) — loopback workspace plus the harmless setup stand-ins.
 - [src/tier-setup.ts](src/tier-setup.ts) — the shipped `connect.ps1`, run the way the app runs it.
 - [src/tier-agents.ts](src/tier-agents.ts) — reachable, gated, and one turn.
-- [src/parse.ts](src/parse.ts) — every decision the tiers make, as pure functions.
-- [src/probe.ts](src/probe.ts) — the IO half: what the machine is asked, and how.
-- [src/harness.ts](src/harness.ts) — pass / fail / poll-with-a-deadline, the Linux tier's trio in TypeScript.
+- [src/probe.ts](src/probe.ts) — what Windows, Docker, and the desktop say is true.

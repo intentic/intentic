@@ -1,5 +1,15 @@
 import { expect, test } from "vitest";
-import { asList, dockerOsType, installedApp, sandboxContainerName, sandboxSlug, titled, webView2Version } from "./parse.js";
+import {
+    assistantReplied,
+    asList,
+    dockerOsType,
+    installedApp,
+    nonEmpty,
+    sandboxContainerName,
+    sandboxSlug,
+    titled,
+    webView2Version,
+} from "./parse.js";
 
 /* These are the only assertions in this package that can be made without a Windows machine, which is exactly
  * why every decision the tiers make was pushed into a pure function to begin with. What is left unasserted here
@@ -11,6 +21,20 @@ test("ConvertTo-Json's three shapes all read as a list", () => {
     expect(asList(`   \n `)).toEqual([]);
     expect(asList(`{"DisplayName":"Intentic"}`)).toEqual([{ DisplayName: `Intentic` }]);
     expect(asList(`[{"DisplayName":"Intentic"},{"DisplayName":"Other"}]`)).toHaveLength(2);
+});
+
+test("an unset repository variable and its empty Actions expansion both stand the credentialed tier down", () => {
+    expect(nonEmpty(undefined)).toBeUndefined();
+    expect(nonEmpty(``)).toBeUndefined();
+    expect(nonEmpty(`  `)).toBeUndefined();
+    expect(nonEmpty(`agent-auth`)).toBe(`agent-auth`);
+});
+
+test("only the expected assistant bubble completes an agent turn", () => {
+    expect(assistantReplied(`{"messages":[{"role":"user","text":"reply ready"}]}`, `ready`)).toBe(false);
+    expect(assistantReplied(`{"messages":[{"role":"assistant","text":"ready"}]}`, `ready`)).toBe(true);
+    expect(assistantReplied(`{"messages":[{"role":"assistant","text":" READY \\n"}]}`, `ready`)).toBe(true);
+    expect(assistantReplied(`not json`, `ready`)).toBe(false);
 });
 
 test("the installed app is found by display name, across hives", () => {

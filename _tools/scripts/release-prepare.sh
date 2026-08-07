@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # semantic-release prepareCmd: build the release closure, stamp versions, cross-compile the machine agents and
-# the desktop installers, then tag the release and attach them to it. Two ordering rules keep this fast:
+# the desktop installers, then stage them for the release. Two ordering rules keep this fast:
 #   1. Build BEFORE stamping. Versions live only in package.json (read at runtime, never compiled into dist),
 #      but package.json is a turbo hash input — stamping first invalidates the whole closure and forces the
 #      release to rebuild what release:verify just built. Building first replays verify's cache instead.
@@ -9,6 +9,12 @@
 #   bash _tools/scripts/release-prepare.sh 1.135.0
 set -euo pipefail
 VERSION="${1:?usage: release-prepare.sh <version>}"
+: "${PLANNED_RELEASE_VERSION:?PLANNED_RELEASE_VERSION is required}"
+: "${PREBUILT_WINDOWS_DESKTOP_DIR:?PREBUILT_WINDOWS_DESKTOP_DIR is required}"
+if [ "$VERSION" != "$PLANNED_RELEASE_VERSION" ]; then
+  echo "error: semantic-release selected $VERSION after Windows verified $PLANNED_RELEASE_VERSION" >&2
+  exit 1
+fi
 DIR="$(cd "$(dirname "$0")" && pwd)"
 source "$DIR/packages.sh"
 cd "$DIR/../.."
@@ -29,7 +35,7 @@ bash "$DIR/build-agent-binaries.sh" _computers/host intentic-host linux-x64 linu
 bash "$DIR/build-ic.sh" linux-x64 linux-arm64 windows-x64 darwin-x64 darwin-arm64
 # The desktop app: installers rather than a bun binary, but it stages into _editor/desktop-app/dist-bin all the same,
 # so the export below ships it verbatim.
-bash "$DIR/build-desktop.sh" "$VERSION"
+bash "$DIR/build-desktop.sh" "$VERSION" --windows-prebuilt "$PREBUILT_WINDOWS_DESKTOP_DIR"
 
 # …and prove those exact bytes install and run before anything publishes them. build-desktop.sh ends with
 # verify-desktop-bundle.sh (tier 1: the bundled scripts are present and byte-identical); this is tier 2, which
@@ -44,9 +50,10 @@ bash "$DIR/build-desktop.sh" "$VERSION"
 # Verifying the release's OWN output is the only version of this check that cannot be outrun — a failure here
 # aborts semantic-release before it tags, so there is no tag, no Release, and no npm publish.
 #
-# Linux only, and that is the honest limit: running Intentic-setup.exe needs Windows. Until a Windows runner
-# exists the NSIS installer is covered by tier 1 as an archive, and the .ps1 setup path only by the argv unit
-# tests in commands.rs.
+# The Linux packages run here; the NSIS installer was already installed, launched, deep-linked and uninstalled
+# on the Windows runner before this prepare command was allowed to start. build-desktop.sh staged that exact
+# tested file rather than cross-building a replacement, then re-ran the archive verification over the complete
+# release set.
 bash "$DIR/verify-desktop-install.sh"
 
 # This script ENDS HERE, with the artifacts built, verified and unpublished. Nothing below the prepare step

@@ -6,8 +6,8 @@
  * inside `Intentic-setup.exe` was `verify-desktop-bundle.sh` unpacking it with 7z — which proves the files are
  * in the archive and nothing at all about what happens when someone double-clicks it.
  *
- * NO DOCKER, NO CREDENTIALS, NO NETWORK BEYOND THE INSTALLER'S OWN. That is what makes this the tier that can
- * gate every release: everything it asserts is a property of the package and the OS.
+ * NO DOCKER OR CREDENTIALS. The app and setup are pointed at loopback stand-ins; only the installer's own
+ * WebView2 bootstrap may need the network. That is what makes this the tier that can gate every release.
  *
  * The four things no `cargo test` can tell you, and one Windows adds:
  *
@@ -41,11 +41,23 @@ import { join } from "node:path";
 import { appExecutable, appRunning, installSilently, launchApp, quitApp, uninstallSilently } from "./app.js";
 import { CONFIRM_TITLE, PRODUCT_NAME, SCHEME, SETUP_LINK, SETUP_TITLE, WORKSPACE_TITLE } from "./constants.js";
 import type { Harness } from "./harness.js";
-import { answerConfirm, appWindows, findInstalledApp, openLink, schemeCommand, webView2, windowTitled, windowTitles } from "./probe.js";
+import { prepareHermeticDesktop } from "./hermetic.js";
+import {
+    answerConfirm,
+    appWindows,
+    findInstalledApp,
+    openLink,
+    schemeCommand,
+    webView2,
+    windowTitled,
+    windowTitles,
+} from "./probe.js";
 
 export interface InstallTierOptions {
     /** The `Intentic-setup.exe` under test. */
     readonly installer: string;
+    /** When this is a release gate, the version Windows must read back from the installed candidate. */
+    readonly expectedVersion: string | undefined;
     /** Where the app's workspace window should point. A stub origin keeps this tier hermetic. */
     readonly appUrl: string | undefined;
     /** Leave the app installed when the tier finishes — what tier 2 needs, since it runs the INSTALLED scripts. */
@@ -67,164 +79,180 @@ export const runInstallTier = async (harness: Harness, options: InstallTierOptio
         return;
     }
 
-    // Recorded, never asserted. A machine with no runtime is a legitimate machine — the installer is configured
-    // to fetch one — but it changes what a launch failure means, and a log that does not say which kind of
-    // machine this was cannot tell those two apart afterwards.
-    const runtimeBefore = await webView2();
-    harness.section(`the machine, before`);
-    harness.pass(`WebView2 runtime: ${runtimeBefore ?? `absent — the installer's bootstrapper has to fetch one`}`);
+    const hermetic = await prepareHermeticDesktop(options.appUrl);
+    try {
+        // Recorded, never asserted. A machine with no runtime is a legitimate machine — the installer is configured
+        // to fetch one — but it changes what a launch failure means, and a log that does not say which kind of
+        // machine this was cannot tell those two apart afterwards.
+        const runtimeBefore = await webView2();
+        harness.section(`the machine, before`);
+        harness.pass(`WebView2 runtime: ${runtimeBefore ?? `absent — the installer's bootstrapper has to fetch one`}`);
 
-    const already = await findInstalledApp(PRODUCT_NAME);
-    if (already !== undefined) {
-        // Not a failure to recover from: this tier's subject is a FIRST install, and an install over an existing
-        // one is a different code path with different assertions. Saying so is the useful thing — a runner whose
-        // snapshot did not reset is the likeliest cause, and it would otherwise show up as a puzzling pass.
-        harness.fail(
-            `${PRODUCT_NAME} ${already.version ?? ``} is already installed at ${already.installLocation}`,
-            `This tier asserts a FIRST install on a clean machine. Reset the runner's snapshot, or uninstall by hand:\n  ${already.uninstallString} /S`,
-        );
-        return;
-    }
+        const already = await findInstalledApp(PRODUCT_NAME);
+        if (already !== undefined) {
+            // Not a failure to recover from: this tier's subject is a FIRST install, and an install over an existing
+            // one is a different code path with different assertions. Saying so is the useful thing — a runner whose
+            // snapshot did not reset is the likeliest cause, and it would otherwise show up as a puzzling pass.
+            harness.fail(
+                `${PRODUCT_NAME} ${already.version ?? ``} is already installed at ${already.installLocation}`,
+                `This tier asserts a FIRST install on a clean machine. Reset the runner's snapshot, or uninstall by hand:\n  ${already.uninstallString} /S`,
+            );
+            return;
+        }
 
-    // ── 1. install ────────────────────────────────────────────────────────────────────────────────────────
-    harness.section(`install`);
-    const install = await installSilently(options.installer);
-    if (install.code === 0) {
-        harness.pass(`the installer completed unattended`);
-    } else {
-        harness.fail(`the installer exited ${install.code}`, `${install.stdout}${install.stderr}`);
-        return;
-    }
+        // ── 1. install ────────────────────────────────────────────────────────────────────────────────────────
+        harness.section(`install`);
+        const install = await installSilently(options.installer);
+        if (install.code === 0) {
+            harness.pass(`the installer completed unattended`);
+        } else {
+            harness.fail(`the installer exited ${install.code}`, `${install.stdout}${install.stderr}`);
+            return;
+        }
 
-    const installed = await findInstalledApp(PRODUCT_NAME);
-    if (installed === undefined) {
-        harness.fail(
-            `Windows does not list ${PRODUCT_NAME} as installed`,
-            `The installer reported success, so this is a bundler-side regression: nothing wrote the uninstall entry that Add/Remove Programs reads.`,
-        );
-        return;
-    }
-    harness.pass(`Windows lists it: ${installed.name} ${installed.version ?? `(no version)`} at ${installed.installLocation}`);
+        const installed = await findInstalledApp(PRODUCT_NAME);
+        if (installed === undefined) {
+            harness.fail(
+                `Windows does not list ${PRODUCT_NAME} as installed`,
+                `The installer reported success, so this is a bundler-side regression: nothing wrote the uninstall entry that Add/Remove Programs reads.`,
+            );
+            return;
+        }
+        harness.pass(`Windows lists it: ${installed.name} ${installed.version ?? `(no version)`} at ${installed.installLocation}`);
+        if (options.expectedVersion !== undefined) {
+            if (installed.version === options.expectedVersion) {
+                harness.pass(`the installed candidate is release ${options.expectedVersion}`);
+            } else {
+                harness.fail(`Windows installed version ${installed.version ?? `(none)`}, expected ${options.expectedVersion}`);
+            }
+        }
 
-    // ── 2. what the install put on disk ──────────────────────────────────────────────────────────────────
-    harness.section(`on disk`);
-    const executable = await appExecutable(installed.installLocation);
-    if (executable === undefined) {
-        harness.fail(`no executable in ${installed.installLocation}`);
-        return;
-    }
-    harness.pass(`executable at ${executable}`);
+        // ── 2. what the install put on disk ──────────────────────────────────────────────────────────────────
+        harness.section(`on disk`);
+        const executable = await appExecutable(installed.installLocation);
+        if (executable === undefined) {
+            harness.fail(`no executable in ${installed.installLocation}`);
+            return;
+        }
+        harness.pass(`executable at ${executable}`);
 
-    // The bundled scripts, which the bundle config copies out of the site's public tree. `verify-desktop-bundle.sh`
-    // proves the bundled BYTES match the source; this proves the install actually put them on the machine.
-    const scripts = join(installed.installLocation, `scripts`);
-    const shipped = [`connect.ps1`, `recreate.ps1`, `cleanup.ps1`];
-    const missing = shipped.filter((script) => !existsSync(join(scripts, script)));
-    if (missing.length === 0) {
-        harness.pass(`bundled scripts installed at ${scripts}`);
-    } else {
-        harness.fail(`the bundled scripts are not on disk after install: ${missing.join(`, `)}`);
-    }
+        // The bundled scripts, which the bundle config copies out of the site's public tree. `verify-desktop-bundle.sh`
+        // proves the bundled BYTES match the source; this proves the install actually put them on the machine.
+        const scripts = join(installed.installLocation, `scripts`);
+        const shipped = [`connect.ps1`, `recreate.ps1`, `cleanup.ps1`];
+        const missing = shipped.filter((script) => !existsSync(join(scripts, script)));
+        if (missing.length === 0) {
+            harness.pass(`bundled scripts installed at ${scripts}`);
+        } else {
+            harness.fail(`the bundled scripts are not on disk after install: ${missing.join(`, `)}`);
+        }
 
-    // ── 3. the registration a FRESH INSTALL has, before the app has ever run ─────────────────────────────
-    harness.section(`scheme registration, before first launch`);
-    const registered = await schemeCommand(SCHEME);
-    if (registered === undefined) {
-        harness.fail(
-            `nothing is registered for ${SCHEME}://`,
-            `Every ${SCHEME}:// link would go nowhere for a user who has just installed and not yet run the app — which is every first-time user.`,
-        );
-    } else if (registered.includes(installed.installLocation)) {
-        harness.pass(`${SCHEME}:// resolves to the installed app: ${registered}`);
-    } else {
-        harness.fail(`${SCHEME}:// resolves somewhere else: ${registered}`, `Expected a command under ${installed.installLocation}.`);
-    }
+        // ── 3. the registration a FRESH INSTALL has, before the app has ever run ─────────────────────────────
+        harness.section(`scheme registration, before first launch`);
+        const registered = await schemeCommand(SCHEME);
+        if (registered === undefined) {
+            harness.fail(
+                `nothing is registered for ${SCHEME}://`,
+                `Every ${SCHEME}:// link would go nowhere for a user who has just installed and not yet run the app — which is every first-time user.`,
+            );
+        } else if (registered.includes(installed.installLocation)) {
+            harness.pass(`${SCHEME}:// resolves to the installed app: ${registered}`);
+        } else {
+            harness.fail(`${SCHEME}:// resolves somewhere else: ${registered}`, `Expected a command under ${installed.installLocation}.`);
+        }
 
-    // ── 4. the deep link a fresh install gets, with the app NOT running ──────────────────────────────────
-    // FIRST, and before any launch, for the reason section 3 states: one launch and it is the app's own
-    // registration under test rather than the installer's.
-    harness.section(`deep link, app not running`);
-    await openLink(SETUP_LINK);
-    if (await harness.untilTrue(LINK_SECONDS, `the link started the app, which asked before running it`, () => windowTitled(CONFIRM_TITLE))) {
-        await answerConfirm(CONFIRM_TITLE);
-        if (!(await harness.untilTrue(SCREEN_SECONDS, `answering it landed on the setup screen`, () => windowTitled(SETUP_TITLE)))) {
+        // ── 4. the deep link a fresh install gets, with the app NOT running ──────────────────────────────────
+        // FIRST, and before any launch, for the reason section 3 states: one launch and it is the app's own
+        // registration under test rather than the installer's.
+        harness.section(`deep link, app not running`);
+        await openLink(SETUP_LINK);
+        if (await harness.untilTrue(LINK_SECONDS, `the link started the app, which asked before running it`, () => windowTitled(CONFIRM_TITLE))) {
+            await answerConfirm(CONFIRM_TITLE);
+            if (!(await harness.untilTrue(SCREEN_SECONDS, `answering it landed on the setup screen`, () => windowTitled(SETUP_TITLE)))) {
+                harness.detail(await describeWindows());
+            }
+            await harness.untilTrue(10, `the setup ran only the local CLI stand-in`, () => hermetic.setupStarted());
+        } else {
             harness.detail(await describeWindows());
         }
-    } else {
-        harness.detail(await describeWindows());
-    }
-    await quitApp(executable);
-    await harness.untilTrue(20, `the app closed`, async () => (await appWindows(WORKSPACE_TITLE)).length === 0);
+        await quitApp(executable);
+        await harness.untilTrue(20, `the app closed`, async () => (await appWindows(WORKSPACE_TITLE)).length === 0);
 
-    // ── 5. launch ────────────────────────────────────────────────────────────────────────────────────────
-    harness.section(`launch`);
-    const launch = await launchApp(executable);
-    if (launch.code !== 0) {
-        harness.fail(`could not start the app`, `${launch.stdout}${launch.stderr}`);
-        return;
-    }
-    if (!(await harness.untilTrue(WINDOW_SETTLE_SECONDS, `the workspace window opened`, () => windowTitled(WORKSPACE_TITLE)))) {
-        harness.detail(
-            `The app's window never appeared. On this machine WebView2 was ${runtimeBefore ?? `absent before the install`}; a window that never maps with no runtime present is the runtime, not the app.`,
-        );
-        harness.detail(await describeWindows());
-    }
-    if (await appRunning(executable)) {
-        harness.pass(`the process survived startup`);
-    } else {
-        harness.fail(`the process exited during startup`, `Workspace origin was ${options.appUrl ?? `the app's default`}.`);
-    }
-
-    // ── 6. the deep link, into the app that is already running ───────────────────────────────────────────
-    // Through the OS handler, not by calling the executable with an argument: this is the route a link takes
-    // from an external browser, and it exercises the registration and the single-instance forward together.
-    harness.section(`deep link, app running`);
-    await openLink(SETUP_LINK);
-    if (await harness.untilTrue(LINK_SECONDS, `the link reached the running app, which asked before running it`, () => windowTitled(CONFIRM_TITLE))) {
-        await answerConfirm(CONFIRM_TITLE);
-        if (!(await harness.untilTrue(SCREEN_SECONDS, `answering it opened the setup screen`, () => windowTitled(SETUP_TITLE)))) {
+        // ── 5. launch ────────────────────────────────────────────────────────────────────────────────────────
+        harness.section(`launch`);
+        const launch = await launchApp(executable);
+        if (launch.code !== 0) {
+            harness.fail(`could not start the app`, `${launch.stdout}${launch.stderr}`);
+            return;
+        }
+        if (!(await harness.untilTrue(WINDOW_SETTLE_SECONDS, `the workspace window opened`, () => windowTitled(WORKSPACE_TITLE)))) {
+            harness.detail(
+                `The app's window never appeared. On this machine WebView2 was ${runtimeBefore ?? `absent before the install`}; a window that never maps with no runtime present is the runtime, not the app.`,
+            );
             harness.detail(await describeWindows());
         }
-    } else {
-        harness.detail(await describeWindows());
-    }
+        if (hermetic.workspaceInspectable) {
+            await harness.untilTrue(30, `the workspace WebView loaded the local stub`, () => hermetic.workspaceRequested());
+        }
+        if (await appRunning(executable)) {
+            harness.pass(`the process survived startup`);
+        } else {
+            harness.fail(`the process exited during startup`, `Workspace origin was ${hermetic.appUrl}.`);
+        }
 
-    // …IN the workspace's frame, not beside it. The whole window model as one assertion, and worth one because
-    // the failure it guards is invisible to every other assertion here: a setup screen that opens as a SECOND
-    // window satisfies the search above, and what the user gets is an unasked-for window in front of the one
-    // they were reading. Taken after the search, so the swap has landed.
-    if (
-        !(await harness.untilTrue(
-            15,
-            `the workspace stepped aside — one window, not two`,
-            async () => (await appWindows(WORKSPACE_TITLE)).length === 1,
-        ))
-    ) {
-        harness.detail(await describeWindows());
-    }
+        // ── 6. the deep link, into the app that is already running ───────────────────────────────────────────
+        // Through the OS handler, not by calling the executable with an argument: this is the route a link takes
+        // from an external browser, and it exercises the registration and the single-instance forward together.
+        harness.section(`deep link, app running`);
+        await openLink(SETUP_LINK);
+        if (await harness.untilTrue(LINK_SECONDS, `the link reached the running app, which asked before running it`, () => windowTitled(CONFIRM_TITLE))) {
+            await answerConfirm(CONFIRM_TITLE);
+            if (!(await harness.untilTrue(SCREEN_SECONDS, `answering it opened the setup screen`, () => windowTitled(SETUP_TITLE)))) {
+                harness.detail(await describeWindows());
+            }
+        } else {
+            harness.detail(await describeWindows());
+        }
 
-    if (await appRunning(executable)) {
-        harness.pass(`the original instance handled the link and is still running`);
-    } else {
-        harness.fail(`the original instance died while handling the link`);
-    }
+        // …IN the workspace's frame, not beside it. The whole window model as one assertion, and worth one because
+        // the failure it guards is invisible to every other assertion here: a setup screen that opens as a SECOND
+        // window satisfies the search above, and what the user gets is an unasked-for window in front of the one
+        // they were reading. Taken after the search, so the swap has landed.
+        if (
+            !(await harness.untilTrue(
+                15,
+                `the workspace stepped aside — one window, not two`,
+                async () => (await appWindows(WORKSPACE_TITLE)).length === 1,
+            ))
+        ) {
+            harness.detail(await describeWindows());
+        }
 
-    // ── 7. uninstall ─────────────────────────────────────────────────────────────────────────────────────
-    if (options.keepInstalled) {
-        harness.section(`left installed for the setup tier`);
-        harness.pass(`${executable} stays on the machine`);
-        return;
-    }
+        if (await appRunning(executable)) {
+            harness.pass(`the original instance handled the link and is still running`);
+        } else {
+            harness.fail(`the original instance died while handling the link`);
+        }
 
-    // Deliberately WITHOUT quitting first: the app running is the ordinary state at uninstall time, and the
-    // pre-uninstall hook exists precisely for it.
-    harness.section(`uninstall, with the app running`);
-    const uninstall = await uninstallSilently(installed.uninstallString);
-    if (uninstall.code === 0) {
-        harness.pass(`the uninstaller completed unattended, without a prompt`);
-    } else {
-        harness.fail(`the uninstaller exited ${uninstall.code}`, `${uninstall.stdout}${uninstall.stderr}`);
+        // ── 7. uninstall ─────────────────────────────────────────────────────────────────────────────────────
+        if (options.keepInstalled) {
+            harness.section(`left installed for the setup tier`);
+            harness.pass(`${executable} stays on the machine`);
+            return;
+        }
+
+        // Deliberately WITHOUT quitting first: the app running is the ordinary state at uninstall time, and the
+        // pre-uninstall hook exists precisely for it.
+        harness.section(`uninstall, with the app running`);
+        const uninstall = await uninstallSilently(installed.uninstallString);
+        if (uninstall.code === 0) {
+            harness.pass(`the uninstaller completed unattended, without a prompt`);
+        } else {
+            harness.fail(`the uninstaller exited ${uninstall.code}`, `${uninstall.stdout}${uninstall.stderr}`);
+        }
+        await harness.untilTrue(60, `Windows no longer lists it`, async () => (await findInstalledApp(PRODUCT_NAME)) === undefined);
+        await harness.untilTrue(30, `no process is left running`, async () => !(await appRunning(executable)));
+    } finally {
+        await hermetic.close();
     }
-    await harness.untilTrue(60, `Windows no longer lists it`, async () => (await findInstalledApp(PRODUCT_NAME)) === undefined);
-    await harness.untilTrue(30, `no process is left running`, async () => !(await appRunning(executable)));
 };

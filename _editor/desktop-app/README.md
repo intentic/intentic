@@ -188,10 +188,11 @@ too.
 
 ## Release & update
 
-`_tools/scripts/build-desktop.sh` runs in `release-prepare.sh`: Linux `deb`/`rpm`/AppImage natively, the
-Windows NSIS installer via `cargo-xwin` on the same Linux runner, and `latest.json`. The artifacts land in
-`dist-bin/`, and `publish-github.sh` attaches them to the **GitHub Release**, exactly like `intentic-sync` and
-`intentic-host` — the anonymous download surface behind the Download button on the site.
+The release workflow computes the version, cross-builds its Windows NSIS candidate once, and executes that file
+on Windows before publication. `release-prepare.sh` then runs `_tools/scripts/build-desktop.sh` for the Linux
+`deb`/`rpm`/AppImage and stages the already-tested Windows candidate beside them; it does not rebuild it.
+`latest.json` and the artifacts land in `dist-bin/`, and `publish-github.sh` attaches them to the **GitHub
+Release**, exactly like `intentic-sync` and `intentic-host`.
 
 Updater artifacts are minisign-signed when `TAURI_SIGNING_PRIVATE_KEY` is set in CI (generate a pair with
 `pnpm --filter @intentic/desktop-app exec tauri signer generate`; the pubkey is committed in
@@ -199,7 +200,7 @@ Updater artifacts are minisign-signed when `TAURI_SIGNING_PRIVATE_KEY` is set in
 
 ## How it is tested
 
-Five tiers, ordered by cost. Each proves something the one before it cannot, and the split is driven by one
+Eight tiers, ordered by cost. Each proves something the one before it cannot, and the split is driven by one
 fact: **this app is cross-built on Linux and its Windows conventions first execute on a user's machine.**
 
 | Tier | Runs | Proves |
@@ -207,8 +208,11 @@ fact: **this app is cross-built on Linux and its Windows conventions first execu
 | `cargo test` | per PR (`desktop-check`) | the argv/env each flow assembles — for **both** hosts, since `Host` is a value rather than a `cfg!` read, so the `.ps1` named-parameter conventions are covered on a Linux runner |
 | `_tools/scripts/verify-desktop-bundle.sh` | every build (called by `build-desktop.sh`) | the bundled scripts are present and byte-identical **to the ones the commit carries** (not to the working tree, which on a runner shared by six jobs can drift under a six-minute build), and the `.desktop` entry both registers `intentic://` and carries the `%u` that delivers it. Reads the deb, rpm, AppImage **and the NSIS installer** — the only automated look inside the Windows artifact |
 | `_tools/scripts/verify-desktop-install.sh` | main + nightly (`desktop-verify`) | the artifacts install on a **bare** Debian, launch under Xvfb, and answer a real `xdg-open intentic://` — with the app running *and* with it closed, which are different mechanisms — see [`_tools/desktop-smoke`](../../_tools/desktop-smoke/README.md) |
+| `@intentic/desktop-smoke-windows install` | desktop changes on main + every release candidate | the real NSIS installer runs on Windows; the installed app handles cold and warm OS links, renders loopback WebView content, and uninstalls while running. A release publishes the same installer bytes this tier passed |
 | `_tools/scripts/verify-desktop-setup.sh` | nightly | the `connect.sh` **extracted from the installer** brings a sandbox up on a clean Docker host, hermetically (no Cloudflare, no Google, no platform) |
-| `_tools/scripts/verify-images-public.sh` | nightly | the images those scripts pull are readable **without a credential**. The only tier that runs logged out — every other one carries the runner's `ghcr.io` login, including the tier above, so a package published private is invisible to all of them and surfaces first as a user's install dying at `error from registry: unauthorized` |
+| `@intentic/desktop-smoke-windows setup` | nightly | the installed `connect.ps1`, Windows PowerShell 5.1 conventions, Docker Desktop's Linux-container mode, and a sandbox answering health |
+| `@intentic/desktop-smoke-windows agents` | nightly when the account volume exists | the host loopback route and control-token gate, followed by one real model reply read from that conversation's transcript |
+| `_tools/scripts/verify-images-public.sh` | nightly | the images those scripts pull are readable **without a credential**. The only tier that runs logged out — the setup tiers carry the runner's `ghcr.io` login, so a package published private is invisible to them and surfaces first as a user's install dying at `error from registry: unauthorized` |
 
 Run the last two locally against your own build:
 
@@ -218,9 +222,8 @@ bash _tools/scripts/verify-desktop-bundle.sh _site/site/public/desktop
 bash _tools/scripts/verify-desktop-install.sh _site/site/public/desktop   # needs Docker
 ```
 
-**Not covered:** running `Intentic-setup.exe` (needs Windows — a runner job belongs beside `desktop-verify`),
-and the setup-code claim round trip, which needs a Cloudflare pool and so belongs with the gated nightly
-suites. Whether every extension view renders is the browser tier's job
+**Not covered:** the setup-code claim round trip, which needs a Cloudflare pool and so belongs with the gated
+nightly suites. Whether every extension view renders is the browser tier's job
 ([`_tools/e2e/specs/extension-views.spec.ts`](../../_tools/e2e/specs/extension-views.spec.ts)) — the workspace
 screen is an unmodified webview onto the hosted SPA with no IPC, so that is a browser property, not a
 desktop one.
@@ -231,6 +234,7 @@ desktop one.
 pnpm --filter @intentic/desktop-app dev         # the app's own UI alone, in a browser
 pnpm --filter @intentic/desktop-app tauri:dev   # the full app
 INTENTIC_APP_URL=https://localhost:47145 pnpm --filter @intentic/desktop-app tauri:dev   # against a local web
+INTENTIC_DISABLE_UPDATE_CHECK=1 pnpm --filter @intentic/desktop-app tauri:dev            # fully offline
 ```
 
 - **Linux builds need system packages** — `webkit2gtk-4.1`, `gtk-3`, `libayatana-appindicator3`, `librsvg2`
