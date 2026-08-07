@@ -43,7 +43,7 @@
         "swap:sandbox": "sh _sandbox/sandbox/scripts/dev-sandbox.sh",
         "rebuild:sandbox": "pnpm build:sandbox && sh _sandbox/sandbox/scripts/dev-sandbox.sh",
         "libs:watch": "nice -n 15 tsgo --build --watch tsconfig.libs.json",
-        "prepare": "git rev-parse --git-dir > /dev/null 2>&1 && chmod +x .githooks/* && git config core.hooksPath .githooks || true",
+        "prepare": "node _tools/scripts/githooks.mjs",
         "clear": "find . \\( -name 'node_modules' -o -name '.cache' -o -name 'dist' -o -name '.turbo' -o -name 'pnpm-lock.yaml' \\) -prune -exec rm -rf '{}' +",
         "cache:clear": "find . \\( -name '.cache' -o -name 'dist' -o -name '.turbo' \\) -prune -exec rm -rf '{}' +",
         "diff:stat": "git diff HEAD --shortstat"
