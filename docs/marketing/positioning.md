@@ -1,8 +1,8 @@
 # intentic — Positioning
 
 Who intentic is for, the pains it removes, and why it wins. **The product being sold is
-intentic-app** — the hosted workspace at app.intentic.dev: a persistent workstation for co-piloted
-**specialized agents** on hardware you own, with any browser as a window onto it. The sandbox and
+intentic-app** — the hosted workspace at app.intentic.dev: a persistent **sandbox** per co-piloted
+**specialized agent**, on hardware you own, with any browser as a window onto it. The sandbox and
 CLI those agents run on are MIT open source on GitHub
 (`github.com/intentic/intentic`) — the trust layer you can read and run yourself. Every claim traces
 to a file in the repo; if a claim has no path, it doesn't go on the site.
@@ -11,10 +11,10 @@ Companion docs: [messaging.md](messaging.md) (what we say), [landing-blueprint.m
 
 ## What it is
 
-**intentic is a persistent workstation for your agents — it runs on hardware you own, and every
+**intentic gives your agents a machine of their own — it runs on hardware you own, and every
 browser is a window onto it.** The agents live on your machine, not in a tab: close the laptop and
 the runs keep going; open any browser — or a phone — and the same fleet is there, sorted by who
-needs you. What lives on that workstation is a **specialized agent** — an autonomous employee in a
+needs you. What lives on that machine is a **specialized agent** — an autonomous employee in a
 purpose-built **sandbox** on hardware *you* own: its dev-tools really installed, wired to the
 systems it may reach (**capabilities**), its context curated for one job, running on your own
 Claude/Codex/Grok subscription. Run one, or ten in parallel.
@@ -45,7 +45,7 @@ it with capabilities (GitHub, databases, Discord, Stripe, SSH, MCP servers…), 
 **automations**, and run a whole team of agents. The platform is architecturally a
 thin identity store that *cannot* touch your code, secrets, or systems (`README.md`, `ARCHITECTURE.md`).
 
-**Category**: the persistent agent workstation you own — cloud-grade reach and observability with
+**Category**: the persistent agent sandbox you own — cloud-grade reach and observability with
 local-grade ownership.
 
 **Business model**: bring your own model subscription + your own hardware, and nothing to pay us —
@@ -92,7 +92,7 @@ payment event, a GitHub push, a new email — with a guard command deciding whet
 Ranked for the **landing page**, which gets one claim and about five arguments. The order changed on
 2026-08-02: #1 and #3 used to lead, and the site spent four bands on them. They are reasons to believe
 — true, and only legible to a reader already inside the agent-tooling debate. Re-centered 2026-08-07:
-#1 now carries persistence and reach — the workstation claim — after the brand line moved off the IDE
+#1 now carries persistence and reach — the machine-of-their-own claim — after the brand line moved off the IDE
 frame (see messaging.md's retired-framing list). What is both unique and picturable in one read is #1
 below, so that is what the page now claims and proves; the rest support it or live on `/product/*`,
 `/docs/*` and `/compare/`. See

@@ -232,7 +232,7 @@ button; the scrim is nearly clear until hover, so the screenshot still does its 
 
 Pressing it opens the demo in a **near-full-viewport overlay**, not in the hero frame. That was the one design
 decision the implementation changed: the hero column is ~525px, which puts the app in its mobile shell — a real
-surface, but the wrong first impression for a visitor on a desktop, who should meet the whole workstation. The overlay gives it 94vw × 90vh,
+surface, but the wrong first impression for a visitor on a desktop, who should meet the whole workspace. The overlay gives it 94vw × 90vh,
 where the fleet board, the docked chat and the terminal are all on screen at once. Escape, the backdrop and a
 Close button all dismiss it, and the iframe is created once and kept, so re-opening returns to the screen the
 visitor left rather than restarting the recording.

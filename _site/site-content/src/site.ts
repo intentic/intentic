@@ -6,9 +6,14 @@ export const APP_URL = "https://app.intentic.dev";
 // into localStorage before the app boots. Relative, so a preview deploy embeds its own copy rather than prod's.
 export const DEMO_PATH = "/demo/";
 export const ORG_NAME = "intentic";
+/* The brand line, and the one place "workstation" is allowed to appear. It is a metaphor for the claim —
+ * a machine of your own, doing real work — and deliberately NOT the name of anything: the thing that
+ * exists is the **sandbox**, which is what the app, the API and the docs call it without exception. Prose
+ * that needs the noun says "sandbox"; prose that needs the host machine says "laptop, desktop or VPS".
+ * See docs/marketing/messaging.md for the rule. */
 export const ORG_TAGLINE = "Workstation for your agents. A window for you.";
 export const ORG_DESCRIPTION =
-    "Workstation for your agents. A window for you. Every coding agent gets its own sandbox and git worktree on hardware you own — and keeps running when you close the browser. Reopen from any device, steer the same fleet, and read every diff before it lands. Free.";
+    "Workstation for your agents. A window for you. Every agent works in a sandbox on hardware you own, in a git worktree of its own — and keeps running when you close the browser. Reopen from any device, steer the same fleet, and read every diff before it lands. Free.";
 export const LOGO_URL = `${SITE_URL}/assets/intentic-logo-sized.png`;
 export const FOUNDER_NAME = "Artur Kurowski";
 

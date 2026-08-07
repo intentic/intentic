@@ -1,7 +1,7 @@
 # intentic.dev — Landing page blueprint
 
 The page that converts, section by section — selling **intentic-app** (app.intentic.dev). The one
-thing sold (a persistent **workstation** for co-piloted specialized agents on hardware you own, with
+thing sold (a persistent **sandbox** per co-piloted specialized agent, on hardware you own, with
 any browser as a **window** onto it), the voice rules, the glossary, and the objection bank live in
 [messaging.md](messaging.md); personas and pains (P1–P7) in [positioning.md](positioning.md).
 

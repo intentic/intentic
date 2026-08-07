@@ -336,7 +336,7 @@ export const productPages: ProductPage[] = [
         menuBlurb: "The machine, the image and the bill are yours",
         group: "environment",
         heading: "The agent runs on hardware you own.",
-        sub: "A sandbox is a Docker container on your laptop, workstation or VPS. Read its image, change what is installed, watch what it spends.",
+        sub: "A sandbox is a Docker container on your laptop, desktop or VPS. Read its image, change what is installed, watch what it spends.",
         hero: {
             name: "sandbox-overview",
             alt: "The sandbox hub: the acme-shop sandbox online with its installed version and URL, and an at-a-glance list of its agent account, secrets, capabilities, running services and access.",

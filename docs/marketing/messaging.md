@@ -2,10 +2,16 @@
 
 What we say, in which words, everywhere. Pairs with [positioning.md](positioning.md) (personas +
 pains, P1–P7) and [landing-blueprint.md](landing-blueprint.md) (section placement). The product
-being sold is **intentic-app** (app.intentic.dev): a **persistent workstation for your agents** —
-co-piloted agents living in sandboxes on hardware you own, still running when you look away, reached
-from any browser. The sandbox and CLI that run on your machine are MIT open source on GitHub — the
-trust layer you can read and run yourself.
+being sold is **intentic-app** (app.intentic.dev): **a machine of their own for your agents** —
+co-piloted agents living in **sandboxes** on hardware you own, still running when you look away,
+reached from any browser. The sandbox and CLI that run on your machine are MIT open source on
+GitHub — the trust layer you can read and run yourself.
+
+> **One word for the thing.** The object is always a **sandbox** — that is what the app's own tab,
+> the API, the packages and the docs call it, without exception. "Workstation" appears in exactly one
+> place, the brand tagline, where it is a *metaphor for the claim* and not the name of anything. Do
+> not use it as a synonym for the sandbox, and do not use it for the host machine either — a host is
+> a "laptop, desktop or VPS". See the glossary below.
 
 ## Rules of voice
 
@@ -20,7 +26,7 @@ trust layer you can read and run yourself.
   providers as plural examples for credibility, never as the headline or the brand hook — the
   subject is always the **specialized agent** (the autonomous employee), never one provider.
 - Honesty is a feature: that it is free and MIT is stated plainly; the app is new and says so.
-- **Hide setup complexity, expose operational state.** The machinery that makes the workstation
+- **Hide setup complexity, expose operational state.** The machinery that makes the sandbox
   reachable — the tunnel, Docker, daemon auth — is sold as its absence ("one command", "no ports to
   open", "a private tunnel"), never explained or itemized. What the copy shows off is the state of
   the runs: the board, who needs you, what each agent changed and spent, the diff. Plumbing is a
@@ -28,15 +34,15 @@ trust layer you can read and run yourself.
 
 ## Message hierarchy
 
-**The one thing the page sells:** **a persistent workstation for your agents — it runs on hardware
-you own, and every browser is a window onto it.** The agents live on your machine, not in a tab:
+**The one thing the page sells:** **your agents get a machine of their own — it runs on hardware you
+own, and every browser is a window onto it.** The agents live on your machine, not in a tab:
 close the laptop and the runs keep going; open any browser — or a phone — and the same fleet is
-there, sorted by who needs you. The agents that workstation is built for are **co-piloted
-specialized agents** — autonomous employees, each a purpose-built sandbox on hardware you own,
-running on your own Claude/Codex/Grok subscription. Run one, or ten in parallel.
+there, sorted by who needs you. What that machine is built for are **co-piloted specialized
+agents** — autonomous employees, each a purpose-built sandbox on hardware you own, running on your
+own Claude/Codex/Grok subscription. Run one, or ten in parallel.
 
 **The golden path is the story spine**, and every band ladders onto one of its steps: connect a
-machine with one command → give the work to agents, each in its own sandbox and git worktree → walk
+machine with one command → give the work to agents, each in its own git worktree → walk
 away, the runs continue → reopen from any browser or phone onto the same runs → steer, answer,
 interrupt → read every diff before it lands.
 
@@ -103,18 +109,29 @@ section.
 
 ## Glossary (use these words, exactly)
 
-- **workstation** — the machine side of the product: the sandboxes and runs that live on hardware
-  the user owns and keep going when every browser is closed. The headline noun. Never "server",
-  never "cloud", never "instance" — the word has to keep saying *a real machine of yours*.
-- **window** — any signed-in browser on any device: a view onto the same running workstation,
-  holding nothing a run depends on. Close it, open another anywhere, nothing is lost. The headline's
+- **sandbox** — the machine side of the product, and **the only noun for it**: the Docker container on
+  hardware the user owns that holds the workspace, runs the agents, and keeps going when every browser
+  is closed. This is the word the app's tab, the API routes, the npm packages and the docs all use, so
+  copy that disagrees with it teaches the reader a word the product will not answer to. Never
+  "server", never "cloud", never "instance", never "workstation" — the word has to keep saying *a real
+  machine of yours*. One host can run several; a user switches between them by name.
+- **workstation** — **the brand tagline only.** "Workstation for your agents. A window for you." is a
+  metaphor for the claim — a machine of your own, doing real work — deliberately naming nothing in the
+  system. Outside the tagline the word is banned in both directions: not a synonym for the sandbox
+  (that is what the collision was), and not a word for the host machine either, which is a "laptop,
+  desktop or VPS". If prose needs the *idea*, write "a machine of their own".
+- **window** — any signed-in browser on any device: a view onto the same running sandbox, holding
+  nothing a run depends on. Close it, open another anywhere, nothing is lost. The tagline's
   second noun; "the window" in copy always means this, never a desktop app window.
 - **specialized agent** (a.k.a. **autonomous employee**) — a coding agent given its own sandbox for
   one job: dev-tools really installed, wired to your systems, context curated for that role. A
-  *mechanism* word — what lives on the workstation — never the headline claim.
+  *mechanism* word — what a sandbox is *for* — never the headline claim. Careful with the level: a
+  specialized agent is one sandbox, while the parallel conversations inside it each get a **git
+  worktree**, not a sandbox of their own. "Each agent gets its own sandbox and worktree" conflates
+  the two and is the second-most common slip after "workstation".
 - **the environment** — the sum of the layers a prompt can't reach: the image the tools are installed
   in, the capabilities the agent may use, the context it loads each turn. The deep differentiator
-  under the workstation claim: all of it is **visible and editable**, not merely existent.
+  under the ownership claim: all of it is **visible and editable**, not merely existent.
 - **co-piloted** — the working stance: the agent runs autonomously, but you configure its context,
   supervise its work, and stay in the loop for the decisions that matter. Never "fire-and-forget",
   never "fully autonomous" without this qualifier.
@@ -202,10 +219,11 @@ section.
   `intentic · Workstation for your agents. A window for you.`
 - Org description (`_site/site-content/src/site.ts`, JSON-LD) — the canonical product sentence; keep
   the site and these docs in sync with it verbatim: `Workstation for your agents. A window for you.
-  Every coding agent gets its own sandbox and git worktree on hardware you own — and keeps running
-  when you close the browser. Reopen from any device, steer the same fleet, and read every diff
-  before it lands. Free.`
-- Keywords to carry naturally: agent workstation, persistent coding agent, self-hosted AI agent,
+  Every agent works in a sandbox on hardware you own, in a git worktree of its own — and keeps
+  running when you close the browser. Reopen from any device, steer the same fleet, and read every
+  diff before it lands. Free.`
+- Keywords to carry naturally — "agent workstation" is earned by the tagline in the title and needs
+  no help from body copy, which says "sandbox": agent workstation, persistent coding agent, self-hosted AI agent,
   run agents on your own hardware, control agents from anywhere, remote agent control, coding
   agent, agent sandbox, specialized agent, autonomous agent, AI employee, agent workforce, Claude
   Code, Codex, Grok, AI IDE, Devin alternative, own your code.

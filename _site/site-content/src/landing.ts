@@ -328,6 +328,6 @@ export const landingContent: LandingContent = {
     },
     finalCta: {
         heading: "Put ten agents to work. Come back whenever.",
-        sub: "One command to a live workstation on your hardware. Free — and nothing lands until you have read the diff.",
+        sub: "One command to a live sandbox on your hardware. Free — and nothing lands until you have read the diff.",
     },
 };

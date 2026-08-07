@@ -15,7 +15,7 @@ const desktop = computed(() => desktopVersion() !== undefined);
 
 const year = new Date().getFullYear();
 
-// Four pillars laddering to the headline — workstation, persistence, reach, environment — one line each:
+// Four pillars laddering to the headline — sandbox, persistence, reach, environment — one line each:
 // a sign-in page is read in a glance, so every body is short enough to hold a single line at this panel's
 // measure and never wrap mid-thought.
 const features: readonly { icon: IconName; title: string; description: string }[] = [

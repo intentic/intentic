@@ -4,7 +4,7 @@
 
 ### Workstation for your agents. A window for you.
 
-Each agent gets its own sandbox and git worktree on hardware **you** own — and keeps running when you look away.<br>
+Every agent works in a sandbox on hardware **you** own, in a git worktree of its own — and keeps running when you look away.<br>
 Run ten in parallel, reopen from any device, read every diff before it lands. Free.
 
 <p>
@@ -35,9 +35,9 @@ Run ten in parallel, reopen from any device, read every diff before it lands. Fr
 
 ## What this is
 
-intentic is a **persistent workstation for your agents** — it runs on hardware you own, and every browser is
-a window onto it. What lives there are **specialized agents** — autonomous employees, each with a sandbox of
-its own: dev-tools really installed, wired to the systems it operates, context curated for one job. The runs
+intentic gives your agents **a machine of their own** — a persistent **sandbox** on hardware you own, with
+every browser a window onto it. What lives in one is a **specialized agent** — an autonomous employee with
+dev-tools really installed, wired to the systems it operates, and context curated for one job. The runs
 live on your machine, not in a tab: close the laptop and they keep going; reopen from any browser — or your
 phone — onto the same fleet. Works with **Claude Code, Codex, Grok, Kimi Code and Gemini**, on your own
 subscription.
@@ -47,7 +47,7 @@ subscription.
 Nothing to install locally — you need a machine that stays on and a browser.
 
 1. **Sign in with Google** at **[app.intentic.dev](https://app.intentic.dev)** and name a sandbox.
-2. **Paste the one command it gives you** on the machine that should host it (laptop, workstation, VPS).
+2. **Paste the one command it gives you** on the machine that should host it (laptop, desktop, VPS).
    It starts the sandbox daemon and an outbound-only Cloudflare tunnel — no ports to open, no inbound firewall rule.
 3. **The workspace opens** the moment the daemon reports in. Specialize the agent, give it work, review what it does.
 
@@ -144,7 +144,7 @@ flowchart LR
         id["Identity<br/>+ your sandbox's URL"]
     end
 
-    subgraph yours["Your machine · laptop, workstation, VPS"]
+    subgraph yours["Your machine · laptop, desktop, VPS"]
         daemon["Sandbox daemon"]
         agents["Claude · Codex · Grok<br/>Kimi Code · Gemini"]
         code[("Your code,<br/>keys and credentials")]

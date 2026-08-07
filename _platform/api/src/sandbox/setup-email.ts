@@ -35,7 +35,7 @@ export const sendSetupLinkEmail = async (config: Config, logger: Logger, setup: 
             heading: `Finish setting up "${setup.sandboxName}"`,
             // Names the machine, because that is the entire content of this mail: the reader already knows what
             // they were doing, and the one thing they got wrong was which device to do it on.
-            body: `Open this on the computer that will host your sandbox — a laptop, a workstation, or a server you
+            body: `Open this on the computer that will host your sandbox — a laptop, a desktop, or a server you
             have a shell on. Your install command is waiting on the other side, ready to copy into a terminal.`,
             action: `Open setup`,
             link,

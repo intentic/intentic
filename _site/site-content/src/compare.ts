@@ -144,7 +144,7 @@ export const comparePages: ComparePage[] = [
             },
             {
                 title: "The machine and the screen come apart",
-                body: "The sandbox is Docker, so it runs on a workstation, a VPS, a Mac or a Windows PC and dials out over a private tunnel. The machine doing the work need not be the machine you are looking at.",
+                body: "The sandbox is Docker, so it runs on a desktop, a VPS, a Mac or a Windows PC and dials out over a private tunnel. The machine doing the work need not be the machine you are looking at.",
             },
             {
                 title: "Agents that run when you are not there",
@@ -535,7 +535,7 @@ export const comparePages: ComparePage[] = [
             },
             {
                 title: "Where the machine doing the work can be",
-                body: "Superset ships for macOS today, with Windows and Linux still to come. A sandbox is Docker, so the work can happen on a workstation, a VPS, a Mac or a Windows PC — and that machine need not be the one you are looking at.",
+                body: "Superset ships for macOS today, with Windows and Linux still to come. A sandbox is Docker, so the work can happen on a desktop, a VPS, a Mac or a Windows PC — and that machine need not be the one you are looking at.",
             },
             {
                 title: "Scheduled, or woken by what happened",

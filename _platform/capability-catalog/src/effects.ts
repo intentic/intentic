@@ -34,7 +34,7 @@ export type CapabilityEffect =
     | { readonly kind: "runtime"; readonly level: "net-admin" | "privileged" }
     /* The host's GPUs, passed into the sandbox (docker's gpu option). Its own member rather than a third
      * `runtime` level because what it costs is not a privilege inside the container but a resource OUTSIDE it:
-     * `--gpus=all` claims every GPU on that machine, and on the shared workstation or homelab box these
+     * `--gpus=all` claims every GPU on that machine, and on the shared desktop or homelab box these
      * sandboxes actually run on, that is somebody's inference job. A user reading "requires GPU access" would
      * assume the polite thing was happening; this member exists so the panel can say the impolite one. */
     | { readonly kind: "gpu" }
