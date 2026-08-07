@@ -63,7 +63,13 @@ The five UI extensions under [`_extensions/`](../../_extensions) are the working
 ## Key files
 
 - [src/api.ts](src/api.ts) — the handle an extension is given; the centre of this package.
-- [src/manifest.ts](src/manifest.ts) — every contribution point, and what declaring one means.
-- [src/permissions.ts](src/permissions.ts) — what an extension may reach, and the gate that enforces it.
 - [src/facts.ts](src/facts.ts) — the public facts a view's `detect()` answers from.
+- [src/engines.ts](src/engines.ts) — how `engines.intentic` is matched against the version below, for the host
+  and the daemon alike.
 - [src/route.ts](src/route.ts) — the query rules a view with internal navigation uses.
+- [src/version.ts](src/version.ts) and [src/surface.json](src/surface.json) — the protocol version, and what
+  each version of it promised.
+
+The manifest schema and the `permissions.sandbox` matcher are **not here** — they moved to
+[@intentic/extension-manifest](../extension-manifest), which exists so the daemon can read a manifest without
+depending on the browser-facing API.

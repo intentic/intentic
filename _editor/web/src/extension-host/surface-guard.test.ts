@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { extensionApiVersion } from "@intentic/extension-api";
@@ -84,4 +84,19 @@ test(`the SDK README names exactly the contribution points the schema has`, () =
     expect(sentence).not.toBeNull();
     const named = [...(sentence?.[1] ?? ``).matchAll(/`(\w+)`/g)].map((match) => match[1] ?? ``).toSorted();
     expect(named).toEqual(liveSurface().contributes);
+});
+
+test(`every file the SDK README points at exists`, () => {
+    /* The package split moved the manifest schema and the permissions matcher out of this package, and the
+     * README went on linking `src/manifest.ts` and `src/permissions.ts` — two dead links in the first document
+     * an extension author reads. Nothing catches a stale relative link but a check like this: it is still valid
+     * markdown, still renders, and only fails for the reader.
+     *
+     * Anchors and external URLs are skipped; what is checked is exactly what can rot when a file moves. */
+    const readme = readFileSync(resolve(sdkRoot, `README.md`), `utf8`);
+    const links = [...readme.matchAll(/\]\(([^)]+)\)/gu)]
+        .map((match) => (match[1] ?? ``).split(`#`)[0] ?? ``)
+        .filter((target) => target !== `` && !/^[a-z]+:/u.test(target));
+    const broken = links.filter((target) => !existsSync(resolve(sdkRoot, target)));
+    expect(broken).toEqual([]);
 });
