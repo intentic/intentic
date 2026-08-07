@@ -586,10 +586,19 @@ jobs:
       - run: pnpm turbo run build --filter=@intentic/desktop-smoke-windows...
       # First and separately: the machine, not the product. A runner in the wrong state fails every assertion
       # below for reasons that have nothing to do with the build, and this is the step that says so.
+      # RECONCILE, THEN ASSERT. The teardown below runs after every tier, but "after" is exactly what a
+      # cancelled job, a lost runner or a reboot mid-install does not get — and what it leaves behind is an
+      # installed app, which the doctor is right to refuse and which then needs a person. Reconciling first
+      # makes the machine's expected state something this job reaches on its own, so a replacement runner needs
+      # no hand-cleaning to take over. Teardown is idempotent and cannot fail, so a clean machine walks through
+      # it; anything the doctor still objects to afterwards is a state teardown could not reach, and worth a
+      # human. Nothing here can heal a runner registered as a SERVICE — that is the one machine property a job
+      # cannot fix from inside itself, and the doctor names it with its remedy.
+      - run: node _tools/desktop-smoke-windows/dist/main.js teardown
       - run: node _tools/desktop-smoke-windows/dist/main.js doctor
       - run: node _tools/desktop-smoke-windows/dist/main.js install --installer windows-artifacts/Intentic-setup.exe
-      # Always, so a run that failed mid-tier does not leave the next one meeting a machine that is already
-      # installed — the state whose message is only correct on a runner that resets from a snapshot.
+      # Always, so a run that failed mid-tier hands the next one a clean machine rather than relying on the
+      # reconcile above to notice.
       - run: node _tools/desktop-smoke-windows/dist/main.js teardown
         if: always()
 

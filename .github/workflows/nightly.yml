@@ -201,6 +201,10 @@ jobs:
       # compiles native packages this machine has no toolchain for.
       - run: pnpm install --frozen-lockfile --filter=@intentic/desktop-smoke-windows...
       - run: pnpm turbo run build --filter=@intentic/desktop-smoke-windows...
+      # Reconcile before asserting, for the reason ci.yml's desktop-verify-windows spells out. More is at stake
+      # here than an install: these tiers create a sandbox container, a network and a cloudflared sidecar, and
+      # a nightly cut short between the install and the teardown below leaves all of it on the machine.
+      - run: node _tools/desktop-smoke-windows/dist/main.js teardown
       - run: node _tools/desktop-smoke-windows/dist/main.js doctor --needs-docker
       # --keep-installed: tiers 2 and 3 run the scripts the INSTALLER put on the machine, so the install has to
       # survive the tier that made it. Reading them from the source tree would test a file no user ever runs.

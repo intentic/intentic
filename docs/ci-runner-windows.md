@@ -31,49 +31,67 @@ anyway, `doctor` (below) answers the question in about ten seconds.
 
 ---
 
-## The two settings people get wrong
+## The one setting people get wrong
 
-### 1. The runner must run in a logged-in session, not as a service
+**The runner must run in a logged-in session, not as a service.** This is the one that costs a day. The Actions
+runner is normally installed as a Windows service, and a service runs in session 0, **which has no desktop**.
+The app under test has a window and a tray icon, and every assertion in tier 1 reads window titles. Installed
+as a service, the app starts, no window is ever mapped, and the log fills with `the workspace window opened
+(waited 60s)` — which reads exactly like a broken build.
 
-This is the one that costs a day. The Actions runner is normally installed as a Windows service, and a service
-runs in session 0, **which has no desktop**. The app under test has a window and a tray icon, and every
-assertion in tier 1 reads window titles. Installed as a service, the app starts, no window is ever mapped, and
-the log fills with `the workspace window opened (waited 60s)` — which reads exactly like a broken build.
+It is the one setting left because it is the one the pipeline cannot fix for itself: a job runs *inside* the
+runner process, so it can no more move that process onto a desktop than it can lift itself by its own collar.
+Everything else about the machine's state, the tiers reconcile on their own — see below.
 
-So: configure the runner, and start it with `run.cmd` from a logged-in console rather than `svc.cmd install`.
-To survive a reboot, pair automatic logon with a scheduled task that runs `run.cmd` **at logon** (not at
-startup) with *Run only when user is logged on* selected.
+So it is a property of how the runner was REGISTERED, and registering is a script:
 
-`doctor` asserts this directly, and is the fastest way to confirm it before anything else is debugged.
+```powershell
+# From an ELEVATED PowerShell on the runner. Token from Settings > Actions > Runners > New self-hosted runner.
+./_tools/scripts/setup-windows-runner.ps1 -Url https://github.com/intentic -Token <registration-token>
+```
 
-### 2. The machine must reset to a clean snapshot before each run
+Run it on a machine somebody already registered as a service and it takes the service out and puts the logon
+task in — `-Repair` does that alone, no token needed. `doctor` asserts the result directly, and names that
+command when it fails, so this is also the answer to a runner that mysteriously stopped mapping windows.
 
-Tier 1's subject is a **first** install. Run it twice without a reset and the second run is testing an upgrade
-over an existing install — a different code path, with different correct answers. The tier refuses rather than
-quietly testing the wrong thing, and says so.
+After an unattended reboot the runner waits for someone to sign in. `-AutoLogon` removes that wait by storing a
+logon password in the registry in cleartext; it is off by default because that is a poor trade on a machine
+anybody also uses.
 
-A `teardown` step runs after every tier (`if: always()`) and uninstalls the app, clears its `intentic://`
-registration and removes the sandbox container, so a machine with no snapshot still works. A snapshot is
-better: it also covers the WebView2 runtime, whose *absence* is a state worth testing on some runs, since the
-installer's job on a bare machine includes fetching it.
+---
+
+## What the machine does NOT need arranging
+
+Tier 1's subject is a **first** install: run it over an existing one and it is testing an upgrade, a different
+code path with different correct answers. So the tier refuses a machine that already has the app — which used
+to mean a person had to go and clean it whenever a run was cancelled or a box rebooted mid-install.
+
+It does not any more. **Every Windows tier tears down before it asserts, as well as after.** The teardown
+uninstalls the app, clears its `intentic://` registration and removes the sandbox container and its sidecar; it
+is idempotent and cannot fail, so a clean machine walks straight through it. Whatever `doctor` objects to after
+that is a state the teardown could not reach, which is worth a human.
+
+That is what lets a replacement runner take over with nothing but the registration above. A snapshot-reset
+machine is still nicer — it also covers the WebView2 runtime, whose *absence* is a state worth testing on some
+runs, since the installer's job on a bare machine includes fetching it — but nothing requires one.
 
 ---
 
 ## Registering it
 
-```powershell
-# From the ORGANISATION's Settings > Actions > Runners > New self-hosted runner (Windows x64).
-mkdir C:\actions-runner; cd C:\actions-runner
-# ...download and expand the runner tarball the page names...
+`setup-windows-runner.ps1` (above) does the whole of it — downloads the runner, configures it, and registers
+the logon task. What it passes, and why, if you ever do it by hand:
 
+```powershell
 ./config.cmd --url https://github.com/intentic `
              --token <registration-token> `
              --name windows-desktop-1 `
              --labels windows-desktop `
-             --work C:\actions-work `
+             --work _work `
              --unattended --replace
 
-./run.cmd   # NOT svc.cmd install — see above
+# then a scheduled task running run.cmd AT LOGON, "run only when user is logged on".
+# NOT svc.cmd install — see above.
 ```
 
 **`--labels windows-desktop`, and deliberately not `intentic`.** `runs-on` is an AND over labels, so a Windows
@@ -96,6 +114,10 @@ Nothing else. No Rust, no Tauri toolchain: the installer arrives as a build arti
 cross-built it. No C or Python toolchain either, which is why every job here installs the smoke tier's subtree
 rather than the workspace: packages elsewhere in the tree compile from source on Windows when npm carries no
 prebuild for them, and there is nothing on this machine to compile them with.
+
+No machine-wide settings either — no long-path registry flag, no developer mode, no execution-policy change,
+no `git config` of any kind. That is deliberate and worth keeping: every one of them is a thing a replacement
+machine would silently lack, and the failure it caused would name something else entirely.
 
 ---
 
@@ -169,7 +191,7 @@ The Windows runner never builds product binaries. Linux jobs cross-build what ea
 | What you see | What it is |
 | --- | --- |
 | every window assertion times out | the runner is a service — session 0 has no desktop |
-| `already installed` | the snapshot did not reset, or a previous run's teardown did not complete |
+| `already installed` | something the reconcile teardown could not remove — a stuck uninstaller, or an install under a different account |
 | `the daemon runs windows containers, not linux` | Docker Desktop is in Windows-container mode — one tray-menu click |
 | the app starts, no window, WebView2 reported absent | the installer's runtime bootstrapper did not complete; usually no outbound network |
 | `no Docker daemon answers` right after a snapshot reset | Docker Desktop takes up to a minute past login; the job does not wait for it |
