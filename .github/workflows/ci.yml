@@ -523,12 +523,19 @@ jobs:
       - uses: ./.github/actions/pnpm-setup
       - run: bash _tools/scripts/build-desktop.sh 0.0.0 --windows-only
       - run: bash _tools/scripts/build-ic.sh windows-x64
+      # Staged into one directory rather than uploaded as two paths, because an upload of several paths is
+      # rooted at their COMMON ANCESTOR — for two different dist-bin directories that is the repo root, and the
+      # installer arrives as `_editor/desktop-app/dist-bin/Intentic-setup.exe` instead of at the name the
+      # Windows tier is handed. A directory upload is rooted at the directory, so the names survive.
+      # Emptied first: this job checks out with `clean: false`, so the directory can survive from a run whose
+      # build failed after it was staged.
+      - run: |
+          rm -rf windows-artifacts && mkdir -p windows-artifacts
+          cp _editor/desktop-app/dist-bin/Intentic-setup.exe _sandbox/ic/dist-bin/ic-windows-amd64.exe windows-artifacts/
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: windows-desktop-artifacts
-          path: |
-            _editor/desktop-app/dist-bin/Intentic-setup.exe
-            _sandbox/ic/dist-bin/ic-windows-amd64.exe
+          path: windows-artifacts
           if-no-files-found: error
           retention-days: 7
 

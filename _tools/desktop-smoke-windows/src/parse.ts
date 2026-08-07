@@ -74,19 +74,27 @@ export interface InstalledApp {
  *
  * An entry with no InstallLocation is dropped rather than defaulted: the whole point of reading this key is to
  * be told where the app went, and guessing %LOCALAPPDATA%\<name> would turn a bundler regression into a set of
- * downstream "file not found" failures that name the wrong cause. */
+ * downstream "file not found" failures that name the wrong cause.
+ *
+ * `installLocation` is UNQUOTED and `uninstallString` deliberately is not. Windows writes both with surrounding
+ * quotes, and they are consumed differently: the location is handed to `readdir`, which reads a quote as an
+ * ordinary path character and then resolves the whole thing relative to the working directory, while the
+ * uninstall string is handed to a shell that needs the quotes to survive a space in the path. */
 export const installedApp = (entries: readonly UninstallEntry[], displayName: string): InstalledApp | undefined => {
-    const match = entries.find((entry) => entry.DisplayName === displayName && (entry.InstallLocation ?? ``) !== ``);
+    const match = entries.find((entry) => entry.DisplayName === displayName && unquote(entry.InstallLocation ?? ``) !== ``);
     if (match === undefined) {
         return undefined;
     }
     return {
         name: displayName,
         version: match.DisplayVersion,
-        installLocation: match.InstallLocation as string,
+        installLocation: unquote(match.InstallLocation as string),
         uninstallString: match.UninstallString ?? ``,
     };
 };
+
+/** Strips one layer of surrounding double quotes, which is how Windows stores a path that may contain spaces. */
+export const unquote = (value: string): string => value.replace(/^"(.*)"$/s, `$1`);
 
 /* `docker info --format {{.OSType}}` — the question `connect.ps1` and `ic` both skip.
  *
