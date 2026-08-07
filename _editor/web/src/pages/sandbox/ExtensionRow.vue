@@ -143,9 +143,13 @@ const consequences = computed<string[]>(() => {
     return [...deferred, `${entry.dependents.length} configured connector${plural} (${named}) keep their config but lose their Capabilities card`];
 });
 
-// The exception rows carry their colour on a left edge rather than across the row: a tinted row competes with
-// the switch for the same eye, and a 2px edge is legible down the whole group at a glance.
-const ACCENT: Record<string, string> = { danger: `border-danger/70`, warning: `border-warning/70` };
+/* The exception rows carry their colour on a left edge rather than across the row: a tinted row competes with
+ * the switch for the same eye, and a 2px edge is legible down the whole group at a glance.
+ *
+ * SIDE-SCOPED, and that is not tidiness. The group draws its hairline between rows as a border on the row
+ * itself, so a bare `border-danger` — which sets every edge's colour — repaints that divider red: two broken
+ * extensions in a row put a full-width red rule across the card. Only the left edge is ours to colour. */
+const ACCENT: Record<string, string> = { danger: `border-l-danger/70`, warning: `border-l-warning/70` };
 const accent = computed(() => (entry.state.attention ? ACCENT[entry.state.variant] : undefined));
 
 // The host's explanation of a non-nominal state, in the tone of the state it explains. Anything the host
@@ -159,7 +163,7 @@ const tone = computed(() => TONE[entry.state.variant] ?? `text-muted`);
          a row that happens to have grown a panel under it. The tint is an ink wash rather than `bg-canvas`
          because canvas and card are one step apart in light mode — a treatment that only exists in the dark
          scheme is a treatment that isn't there. -->
-    <div class="group border-l-2" :class="[expanded ? `bg-content/6` : `transition-colors hover:bg-content/4`, accent ?? `border-transparent`]">
+    <div class="group border-l-2" :class="[expanded ? `bg-content/6` : `transition-colors hover:bg-content/4`, accent ?? `border-l-transparent`]">
         <div class="flex items-center gap-3 pl-2.5 pr-3">
             <button
                 type="button"
