@@ -1,0 +1,163 @@
+---
+import DocsCodeBlock from "../../components/DocsCodeBlock.astro";
+import DocsLayout from "../../components/DocsLayout.astro";
+
+/* The user-facing half of capabilities. The manifest page already covers CONTRIBUTING a card; nothing covered
+ * adding one, which is the step between "I have a sandbox" and "it can do my job". */
+
+const env = `# Two Postgres connections, added as "analytics" and "billing".
+POSTGRES_URL_ANALYTICS=postgres://…
+POSTGRES_URL_BILLING=postgres://…
+
+# The agent never guesses these: each connection's own skill file names its exact variables.`;
+
+const skills = `.claude/skills/
+├── analytics/SKILL.md     # how to query THIS database, with its variable names
+├── github/SKILL.md        # the gh CLI, scoped to the token you gave it
+└── ssh/SKILL.md           # every connected machine, in one cheatsheet`;
+
+const categories = [
+    { name: `Code & issues`, hint: `Repos, issues and pipelines as agent tools — GitHub, GitLab, Redmine.` },
+    { name: `Observability`, hint: `Query errors, traces, logs and metrics — Sentry, SigNoz.` },
+    { name: `Data`, hint: `Let the agent query your SQL databases — Postgres, MySQL.` },
+    { name: `Communication`, hint: `Let the agent read and send messages — Discord, Slack, Telegram, WhatsApp, email.` },
+    { name: `Business & docs`, hint: `Payments and knowledge bases — Stripe, Outline, npm.` },
+    { name: `Your computers`, hint: `Let the agent work on a machine of your own: run commands, handle files, see the screen.` },
+    { name: `Servers`, hint: `Remote machines over SSH, and private networks over VPN.` },
+    { name: `Deploy & infra`, hint: `Drive container deployments — Docker, Komodo.` },
+    { name: `Platform`, hint: `Scaffold managed repos that appear as their own operator panels.` },
+    { name: `Extend`, hint: `Any MCP server, any Claude Code plugin, any model endpoint, any extension.` },
+];
+
+const shapes = [
+    {
+        name: `A command-line tool`,
+        detail: `The agent gets the CLI on its PATH and your credential in its environment. This is most connectors — GitHub, a database, Sentry.`,
+    },
+    {
+        name: `An MCP server`,
+        detail: `Its tools appear to the agent directly, named after the connection. Point it at any MCP server, hosted or your own.`,
+    },
+    {
+        name: `A logged-in browser`,
+        detail: `For a platform whose API can't cover "all the actions". You sign in once, out of band; the profile persists and the agent drives that browser already signed in.`,
+    },
+    {
+        name: `A machine`,
+        detail: `A server over SSH, a private network over VPN, or one of your own computers dialling in. One capability is one machine, and its id is the name the agent addresses it by.`,
+    },
+];
+---
+
+<DocsLayout
+    pageId="capabilities"
+    heading="Capabilities"
+    lead="How an agent gets reach: the tools it can run, the systems it can query, the machines it can operate — each added in a click, with the credential stored in your sandbox and never in your repo."
+>
+    <p>
+        A fresh sandbox can read and write your code. It cannot yet look at your error tracker, query your database, open a pull request, or
+        deploy anything. Capabilities are how you close that gap, one connection at a time, on the
+        <strong>Capabilities</strong> page.
+    </p>
+
+    <h2>What you're actually adding</h2>
+    <p>Four shapes, and which one a card uses is a detail of that integration rather than a choice you make:</p>
+    <table>
+        <thead>
+            <tr><th>Shape</th><th>What it means</th></tr>
+        </thead>
+        <tbody>
+            {
+                shapes.map((shape) => (
+                    <tr>
+                        <td><strong>{shape.name}</strong></td>
+                        <td>{shape.detail}</td>
+                    </tr>
+                ))
+            }
+        </tbody>
+    </table>
+
+    <h2>The catalog</h2>
+    <p>The "+" grid is grouped by what a connection is <em>for</em>, not by how it works:</p>
+    <table>
+        <thead>
+            <tr><th>Section</th><th>Holds</th></tr>
+        </thead>
+        <tbody>
+            {
+                categories.map((category) => (
+                    <tr>
+                        <td><strong>{category.name}</strong></td>
+                        <td>{category.hint}</td>
+                    </tr>
+                ))
+            }
+        </tbody>
+    </table>
+    <p>
+        Most connector cards come from installed extensions rather than being baked into the app, which is why the grid grows without an
+        update — and why you can add your own. See <a href="/docs/extensions/manifest/">contributes.capabilities</a>.
+    </p>
+
+    <h2>Adding one</h2>
+    <p>
+        Pick a card and you get two things side by side: a <strong>guide</strong> and a <strong>form</strong>. The guide is the part that
+        usually costs the time — where to create the credential, which scopes it needs, and a deep link straight to the right settings page
+        (at the provider, or at your own instance if you're self-hosting one). The form is the fields that connection needs, with secrets
+        masked.
+    </p>
+    <p>
+        Saving applies it, and you watch it happen: provisioning runs as a real terminal job with its output on screen, rather than a spinner
+        that either turns green or doesn't. The card then reports one of four states — <strong>active</strong>, <strong>pending</strong>,
+        <strong>error</strong> or <strong>inactive</strong> — re-probed live, so "connected" means the daemon just checked, not that it
+        worked once.
+    </p>
+    <p>
+        Some capabilities need something installed in the sandbox image — the browser one needs Chromium. Those bake a fragment into your
+        environment overlay and sit <strong>pending</strong> until you approve the rebuild, because changing what the container contains is
+        your call, not the extension's.
+    </p>
+
+    <h2>What the agent receives</h2>
+    <p>Two things, both of them boring on purpose: an environment, and a cheatsheet.</p>
+    <DocsCodeBlock code={env} lang="bash" title="The agent's shell" />
+    <p>
+        Every variable is suffixed with the connection's own id, so a second connection of the same kind never collides with the first. That
+        is what makes <em>two</em> databases, or a work GitHub and a personal one, a normal setup rather than a conflict.
+    </p>
+    <DocsCodeBlock code={skills} lang="bash" title="In the workspace" />
+    <p>
+        Each connection also writes a skill file the agent loads automatically: what the tool is, how to drive it, and the exact variable
+        names <em>this</em> connection uses. So the agent doesn't guess at credentials or invent flags — the thing that otherwise turns a
+        connected tool into three wasted turns.
+    </p>
+
+    <h2>Where the credentials live</h2>
+    <p>
+        In your sandbox, in a file the agent is specifically not allowed to read. The manifest of active capabilities sits in your
+        workspace's control-plane directory and is on the daemon's secret denylist, so the generic file routes answer "not found" for it —
+        an agent cannot read its own credential store out through the file API, and neither can an extension.
+    </p>
+    <p>
+        Nothing goes to the intentic platform. The platform holds your identity and your sandbox's address; every credential here is one your
+        sandbox stores and your sandbox uses.
+    </p>
+    <p>
+        Plain environment secrets that aren't tied to a card — an API key your own code needs — go on <strong>Sandbox → Secrets</strong>
+        instead. That page also has an inventory view that aggregates every store, showing keys and where they came from, never values.
+    </p>
+
+    <h2>Living with them</h2>
+    <ul>
+        <li><strong>Re-adding edits.</strong> Adding a connection under an id that already exists updates it in place rather than making a second one.</li>
+        <li><strong>Removing tears down.</strong> The credential, the environment variables and the skill file all go.</li>
+        <li><strong>One bad entry costs only itself.</strong> If a stored connection can't be read — a hand-edit, a format that moved — it is skipped and reported by name, never rewritten away, and every other capability keeps working.</li>
+    </ul>
+
+    <h2>Next</h2>
+    <ul>
+        <li><a href="/docs/automations/">Automations &amp; workflows</a>: have the agent act on what a connected system tells it.</li>
+        <li><a href="/docs/autonomous-employees/">Autonomous employees</a>: the narrative version — specialise one sandbox until it does a job on its own.</li>
+    </ul>
+</DocsLayout>

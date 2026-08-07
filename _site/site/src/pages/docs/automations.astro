@@ -1,0 +1,180 @@
+---
+import DocsCodeBlock from "../../components/DocsCodeBlock.astro";
+import DocsLayout from "../../components/DocsLayout.astro";
+
+/* Three mechanisms that get confused for each other, on one page precisely so the differences are visible.
+ * "6 · Make it autonomous" in the autonomous-employees guide is the narrative version; this is the reference. */
+
+// The token is a query parameter and the BODY is the payload, verbatim — the daemon reads it as text and hands
+// it to the guard and the prompt, so it does not have to be JSON.
+const fire = `curl -X POST "$SANDBOX/automations/nightly-sweep/fire?token=…" \\
+  -H "content-type: application/json" \\
+  -d '{"release":"v2.4.0"}'
+
+{ "ok": true }`;
+
+const triggers = [
+    {
+        name: `Schedule`,
+        detail: `A cron expression. A nightly cleanup, a morning report, a weekly release note.`,
+    },
+    {
+        name: `Webhook`,
+        detail: `An address anything can POST to, with a token minted when you save it. The caller has no sign-in, which is the point — a pipeline, a monitor, a cron box elsewhere.`,
+    },
+    {
+        name: `Listener`,
+        detail: `A connected provider's own events: a Discord or Slack message, an email arriving, a pipeline failing, a Doorbell visitor. Narrow it by channel, by event type, or to messages that mention the agent.`,
+    },
+    {
+        name: `Workspace`,
+        detail: `Something happened in the sandbox itself — a turn settled, an agent landed, dependencies broke or were fixed. Optionally scoped to one repo.`,
+    },
+];
+---
+
+<DocsLayout
+    pageId="automations"
+    heading="Automations, workflows & loops"
+    lead="Three ways an agent does work you aren't sitting there for: something outside wakes it, a design runs several agents in order, or one agent repeats until the goal is actually met."
+>
+    <p>They get mistaken for each other, so the distinction first:</p>
+    <table>
+        <thead>
+            <tr><th>Use</th><th>When</th></tr>
+        </thead>
+        <tbody>
+            <tr><td><strong>An automation</strong></td><td>Something outside should start the work — a clock, a webhook, a message, a change in the workspace.</td></tr>
+            <tr><td><strong>A workflow</strong></td><td>The work is several agents in a particular order, each handing on to the next. You author it once and run it repeatedly.</td></tr>
+            <tr><td><strong>A loop</strong></td><td>One agent should keep going until a goal is met, rather than stopping after one turn.</td></tr>
+        </tbody>
+    </table>
+
+    <h2>Automations</h2>
+    <p>
+        An automation is a trigger, a prompt, and the choices about who runs it. When it fires, the agent wakes with your prompt and whatever
+        the trigger carried.
+    </p>
+    <table>
+        <thead>
+            <tr><th>Trigger</th><th>Fires on</th></tr>
+        </thead>
+        <tbody>
+            {
+                triggers.map((trigger) => (
+                    <tr>
+                        <td><strong>{trigger.name}</strong></td>
+                        <td>{trigger.detail}</td>
+                    </tr>
+                ))
+            }
+        </tbody>
+    </table>
+    <DocsCodeBlock code={fire} lang="bash" title="Firing a webhook automation" />
+
+    <h3>Deciding not to run</h3>
+    <p>
+        A <strong>guard</strong> is a shell one-liner run in the workspace before the wake. Exit 0 and the agent wakes; anything else and the
+        run is recorded as skipped. It is the cheap way to stop a schedule from spending a turn to discover there was nothing to do — check
+        whether the queue is empty, whether the branch moved, whether yesterday's report already exists.
+    </p>
+
+    <h3>Who serves the wake</h3>
+    <p>
+        An automation can pin its provider, model, harness and <strong>account</strong>. The account matters more here than anywhere else,
+        for a reason a chat never meets: nobody is watching. A sandbox holds several accounts side by side, and when the first is out of
+        headroom — or belongs to an organisation that turned the plan off — every fire errors against it until a human happens to read the
+        row. Pinning is the difference between a quiet nightly sweep and a Doorbell that turned visitors away all day.
+    </p>
+
+    <h3>Approving a fire</h3>
+    <p>Two ways to keep a hand on the wheel, and they are different promises:</p>
+    <ul>
+        <li>
+            <strong>Require approval</strong> holds every fire in a queue until you approve it. Nothing runs on its own.
+        </li>
+        <li>
+            <strong>Hold for a while</strong> puts the fire in the same visible queue and then runs it itself once the hold has elapsed and
+            no turn is live — your window to cancel or start it early, with silence as consent. This is what a "checks broke, a fix is about
+            to start" notice wants: time to see it, without a standing decision to make.
+        </li>
+    </ul>
+    <p>
+        An explicit "ask me" always wins over a hold. A held fire snapshots the payload that caused it, so approving it later replays exactly
+        what fired — including across a daemon restart, and including the conversation it belonged to, so a visitor's chat stays one thread
+        rather than becoming a second card.
+    </p>
+
+    <h3>Chores</h3>
+    <p>
+        An automation can be marked a <strong>chore</strong>: maintenance of this codebase, rather than a reaction to the outside world. It
+        fires exactly like any other automation — the flag only decides which shelf it sits on, because a nightly dependency audit and a
+        nightly Stripe poll are both "schedule" and are not the same kind of thing.
+    </p>
+
+    <h2>Workflows</h2>
+    <p>
+        A workflow is a <strong>design</strong>: named steps, each declaring which steps must finish before it starts. That makes it a graph
+        rather than a list, so independent steps run at once — two models on the same task, three reviewers on one diff — and the design is
+        checked when you save it. A cycle, a dependency naming a step that isn't there, or a step with no way to know it's finished is
+        refused with the same sentence the editor shows you while you type.
+    </p>
+    <p>
+        Every step is an ordinary isolated agent. It appears on the fleet board, you can open it and read the transcript, and it lands like
+        anything else. Nothing fires a workflow on its own — somebody runs it, or an automation's prompt does.
+    </p>
+    <table>
+        <thead>
+            <tr><th>Per step</th><th>What it decides</th></tr>
+        </thead>
+        <tbody>
+            <tr><td><strong>Goal</strong></td><td>What "done" means, in your words — the sentence the step is measured against. Leave it out and the step is measured against whatever was asked of the run this time, which is usually what you meant.</td></tr>
+            <tr><td><strong>Instruction</strong></td><td>What the step is told to <em>do</em>, which is a different sentence: "the suite is green" is a goal, "run the tests, take the top failure, fix it" is an instruction. Leave it out and the request is handed over verbatim.</td></tr>
+            <tr><td><strong>Handoff</strong></td><td>Whether this step starts fresh or continues from the one before it.</td></tr>
+            <tr><td><strong>Output</strong></td><td>Nothing, a structured claim (<code>done</code> plus a reason), or JSON matching fields you declare.</td></tr>
+            <tr><td><strong>Checks</strong></td><td>What else has to be true: a shell command that must exit 0, or a judge given a rubric. ANDed with the output above.</td></tr>
+            <tr><td><strong>Spend cap</strong></td><td>A dollar ceiling. The one resource you cannot recover after an unattended fan-out.</td></tr>
+        </tbody>
+    </table>
+    <p>
+        A step's own word for it is advisory by construction — that is why a command check outranks everything else here. "The suite passes"
+        is a fact; "I believe I am done" is a self-assessment, and it exists because plenty of goals have no command that could check them.
+    </p>
+
+    <h3>Gates</h3>
+    <p>
+        A <strong>gate</strong> turns a finished run into a release decision, for a pipeline that has no way to sign in. It reads exactly one
+        declared field off one named step and compares it against the values that mean ship it — an allowlist, never a blocklist, because a
+        model that answers "mostly-pass" or "pass with notes" must not ship, and nobody should have had to enumerate the ways it can hedge.
+        The gate's webhook carries its own token, minted on save.
+    </p>
+    <p>
+        Keeping the gate separate from the design is the point: what a run does stays the graph's business, so today's release check can be
+        an acceptance sweep and next month's a security review, without the gate ever learning what either of them is.
+    </p>
+
+    <h2>Loops</h2>
+    <p>
+        A loop is started <em>against a conversation</em> — "keep going until this is true" — and it has no editor and no id of its own,
+        because it isn't a thing you maintain: it converges or it gives up, and then it's history. The conversation need not exist yet, which
+        is what lets "run this until it's green" be the first thing you ever say to a new agent.
+    </p>
+    <p>
+        It uses the same vocabulary as a workflow step — a goal, an output, checks — plus one question of its own: whether each iteration
+        starts <strong>fresh</strong> or <strong>continues</strong> the last one. Long-running work wants fresh, so context doesn't rot; a
+        keep-refining-this loop wants continue.
+    </p>
+    <p>
+        <strong>Stopping a loop is not stopping the turn.</strong> Stop means "don't start another iteration" and deliberately leaves the
+        work in flight alone, so you can say "this is the last one" while watching iteration six do something good. Killing the running turn
+        is the agent's own Stop; pressing both is how you abandon a loop outright.
+    </p>
+    <p>Every loop that has run is kept, with its iteration history — because "why did it stop at four?" is the question a loop gets read for.</p>
+
+    <h2>Next</h2>
+    <ul>
+        <li><a href="/docs/parallel-agents/">Parallel agents</a>: what each of these opens — an isolated conversation you review and land.</li>
+        <li><a href="/docs/doorbell/">Doorbell</a>: a listener automation with a chat widget on the front of it.</li>
+        <li><a href="/docs/capabilities/">Capabilities</a>: connect the system whose events you want to wake on.</li>
+    </ul>
+</DocsLayout>

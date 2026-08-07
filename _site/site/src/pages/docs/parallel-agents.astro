@@ -1,0 +1,188 @@
+---
+import DocsCodeBlock from "../../components/DocsCodeBlock.astro";
+import DocsLayout from "../../components/DocsLayout.astro";
+
+/* The mechanics behind the fleet board. This page exists because "run a separate agent for each job" was a
+ * product claim and an FAQ answer with nothing underneath it — the words isolation, worktree and land appeared
+ * nowhere in the docs a reader could reach. */
+
+const layout = `/work                     the shared tree — what you see in the Workspace view
+  api/                    a repo
+  web/                    another repo
+
+# and, for one isolated conversation, its own checkout of the same thing:
+/history/worktrees/<conversation>/
+  api/                    on branch agent/<conversation>
+  web/                    on branch agent/<conversation>`;
+
+const mount = `/work                     THIS conversation's worktree, mounted over the workspace root
+/mnt/intentic-main        the shared tree, still reachable on purpose`;
+
+const lanes = [
+    {
+        name: `Attention`,
+        holds: `Agents that stopped and need you: a plan to approve, a question to answer, a tool permission to grant, a land that hit a conflict.`,
+    },
+    { name: `Active`, holds: `Turns that are running, or conversations you have open and are working in.` },
+    { name: `Finished`, holds: `Everything that ran to completion — landed, or holding work that is ready for you to land.` },
+];
+---
+
+<DocsLayout
+    pageId="parallel-agents"
+    heading="Parallel agents"
+    lead="Several agents working at once, each in its own checkout of your repos, none of them able to overwrite another's edits — and a review step before any of it reaches the tree you work in."
+>
+    <p>
+        One sandbox, many conversations. Press <strong>New agent</strong> and you get a fresh <em>isolated</em> conversation: it runs in its
+        own git worktree of every repo in your workspace, on its own branch. That is the default, and it is what makes running five agents at
+        once a normal afternoon rather than a merge disaster.
+    </p>
+
+    <h2>What an isolated conversation gets</h2>
+    <p>
+        On its first turn, the conversation is given one worktree per repo, laid out exactly like your workspace so that monorepo-relative
+        paths, <code>.claude/</code> config resolution and the agent's own habits all work unmodified. Each sits on a branch named
+        <code>agent/&lt;conversation&gt;</code>.
+    </p>
+    <DocsCodeBlock code={layout} lang="bash" title="One conversation's checkout" />
+    <p>
+        The checkouts live outside <code>/work</code>, so they never show up in your file tree, your search, or the workspace history. Git
+        object stores are shared — a worktree costs a checkout, not a clone. The composition is frozen when it is created: a repo you clone
+        into the workspace later doesn't retroactively join a conversation that is already running.
+    </p>
+
+    <h3>The agent sees its worktree as /work</h3>
+    <p>
+        Every absolute path an agent inherits — from a memory, a <code>CLAUDE.md</code>, a message you wrote quoting a file, its own earlier
+        turn — says <code>/work</code>. So the turn runs in its own mount namespace where its worktree <em>is</em> the workspace root:
+    </p>
+    <DocsCodeBlock code={mount} lang="bash" title="Inside an isolated turn" />
+    <p>
+        The agent cannot take a wrong turn into the shared tree by accident, and nothing has to be remembered or refused. Writing to the main
+        tree is still possible for an agent that genuinely means it — comparing against main, reading a sibling repo — it is just no longer
+        what happens by mistake. Two things are deliberately shared rather than copied: your daemon state (chat transcripts, attachments) and
+        the installed dependency trees, without which a worktree could not resolve an import.
+    </p>
+
+    <h3>It is rebased before every turn</h3>
+    <p>
+        A conversation can sit for hours between turns while the main line moves under it. So before a turn starts, the daemon rebases the
+        branch onto the current main line. If the rebase would conflict it is rolled back and the turn runs from where it was — a branch that
+        cannot be moved cleanly simply isn't moved. This is why a resumed conversation reads today's code instead of writing a delta against
+        a base that no longer exists.
+    </p>
+
+    <h2>The board</h2>
+    <p>
+        <strong>Agents</strong> is a kanban of every conversation, attention leftmost because the board's whole job is to tell you where you
+        are needed.
+    </p>
+    <table>
+        <thead>
+            <tr><th>Lane</th><th>Holds</th></tr>
+        </thead>
+        <tbody>
+            {
+                lanes.map((lane) => (
+                    <tr>
+                        <td><strong>{lane.name}</strong></td>
+                        <td>{lane.holds}</td>
+                    </tr>
+                ))
+            }
+        </tbody>
+    </table>
+    <p>
+        The lanes are projections of what each agent is actually doing, not a status you set — so dragging a card doesn't assign a lane, it
+        runs the action that would cause one. Dropping onto <strong>Finished</strong> lands a card that is ready, stops one that is running,
+        or opens conflict resolution on one that is stuck. A drop with no action behind it is refused and the card springs back, which is the
+        honest answer: there is no way to make an agent "be running" without sending it a message. A separate discard zone appears while a
+        card is in flight.
+    </p>
+
+    <h2>Reviewing the work</h2>
+    <p>
+        Open an agent and you get its <strong>cumulative</strong> output: everything the conversation has done since its branch was cut, per
+        repo, as one flat change set with each file marked landed or not. It is deliberately not a staged/unstaged view — a worktree you
+        never checked out has no index you could stage into.
+    </p>
+
+    <h2>Landing</h2>
+    <p>
+        Landing takes the agent's delta and applies it to your main tree <strong>as uncommitted changes</strong>. They appear in your normal
+        Changes panel, and your own commit is the review boundary. That is the whole model, and three consequences follow from it:
+    </p>
+    <ul>
+        <li><strong>Your history is never rewritten.</strong> Main's HEAD does not move when work lands; nothing is merged into it behind you.</li>
+        <li><strong>Landing twice is safe.</strong> Each land applies only what is new since the last one, so an agent you keep talking to keeps delivering increments.</li>
+        <li><strong>Nothing is ever lost.</strong> Whatever the worktree still held is committed onto the agent's branch first, so the branch stays a complete record even if the land itself does nothing.</li>
+    </ul>
+
+    <h3>When it conflicts</h3>
+    <p>
+        If the patch cannot apply — you edited the same lines, or an overlapping file is dirty — then <strong>nothing lands for that
+        repo</strong> and the card says so. The worktree keeps everything, and landing again works the moment you have resolved your side.
+        Work that already reached the main tree by another road is specifically not treated as a conflict: an agent that committed onto the
+        main line itself, or a branch you merged by hand, resolves as "already there" rather than stranding the card on a refusal nobody
+        could act on.
+    </p>
+
+    <h3>Landing automatically</h3>
+    <p>
+        <strong>Sandbox → Agent</strong> has an auto-land switch that lands every clean turn at completion. It is <strong>off by
+        default</strong>, because the two mistakes are not the same size: work held on its branch costs one press to release, while work that
+        landed unread has to be noticed before it can be undone. Individual agents can override the sandbox-wide setting, and an agent that
+        never expressed an opinion follows the sandbox wherever you point it next.
+    </p>
+    <p>
+        It is a sandbox setting rather than a browser preference for a specific reason: agents opened by an automation, a webhook or a chat
+        message finish their turns with nobody in the room, and a preference held in a browser could not govern them.
+    </p>
+
+    <h3>Asking for a land</h3>
+    <p>
+        Collaborators may drive agents but not merge into your tree. When one presses land, the ask rides the agent's card so every
+        maintainer's board sees who is waiting; the land or discard that answers it clears the request.
+    </p>
+
+    <h2>Finishing with an agent</h2>
+    <table>
+        <thead>
+            <tr><th>Action</th><th>What it costs you</th></tr>
+        </thead>
+        <tbody>
+            <tr>
+                <td><strong>Archive</strong></td>
+                <td>
+                    Nothing. Every commit, the registry entry and the whole transcript stay; only the checkout is reclaimed, and it is
+                    restorable from the commits. Sending the agent another message brings it straight back.
+                </td>
+            </tr>
+            <tr><td><strong>Unarchive</strong></td><td>Puts the card back on the board untouched.</td></tr>
+            <tr><td><strong>Discard</strong></td><td>Throws the worktree and its work away. This is the destructive one, and it is refused while a turn is running.</td></tr>
+        </tbody>
+    </table>
+    <p>
+        Finished agents are archived automatically after three days by default (<strong>Sandbox → Agent</strong>). That sweep is on where
+        almost everything else is off, because a finished card is not a row in a list — it holds a full checkout of every repo, so a lane that
+        grows forever is disk that grows forever.
+    </p>
+
+    <h2>Conversations that aren't isolated</h2>
+    <p>
+        Not every conversation wants a branch. A chat you restore from the History menu runs on the shared <code>/work</code> tree, in the
+        tree you are looking at — its tab reads "New chat" rather than "New agent". These have no branch, so there is nothing to land and
+        nothing to discard; their edits are simply your working tree, the way an agent in a terminal would work.
+    </p>
+    <p>
+        Reach for isolation when you want work you can review before it touches anything, or when you want more than one agent going at once.
+        Reach for the shared tree when you are working <em>with</em> the agent on what is in front of you.
+    </p>
+
+    <h2>Next</h2>
+    <ul>
+        <li><a href="/docs/automations/">Automations &amp; workflows</a>: agents that start themselves, and multi-step runs.</li>
+        <li><a href="/docs/sandbox-api/">HTTP API</a>: start an isolated turn, watch it, and land it from a script.</li>
+    </ul>
+</DocsLayout>

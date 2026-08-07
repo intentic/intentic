@@ -76,6 +76,77 @@ export const docsSections: DocsSection[] = [
         ],
     },
     {
+        label: "Work with it",
+        items: [
+            {
+                id: "parallel-agents",
+                title: "Parallel agents",
+                blurb: "Many agents at once, reviewed before anything lands",
+                meta: {
+                    title: "Parallel agents · intentic docs",
+                    description:
+                        "Run several agents at once, each in its own checkout of your repos, and review what they did before any of it reaches the tree you work in.",
+                    datePublished: "2026-08-07",
+                },
+            },
+            {
+                id: "capabilities",
+                title: "Capabilities",
+                blurb: "Give the agent tools, systems and machines",
+                meta: {
+                    title: "Capabilities · intentic docs",
+                    description:
+                        "Connect GitHub, databases, MCP servers, SSH hosts and more. Where the credentials live, and what the agent actually receives.",
+                    datePublished: "2026-08-07",
+                },
+            },
+            {
+                id: "automations",
+                title: "Automations & workflows",
+                blurb: "Work that starts without you, and multi-step runs",
+                meta: {
+                    title: "Automations, workflows & loops · intentic docs",
+                    description:
+                        "Wake an agent on a schedule, a webhook or a message; run several agents in order as a workflow; or loop one until the goal is met.",
+                    datePublished: "2026-08-07",
+                },
+            },
+            {
+                id: "models",
+                title: "Models & accounts",
+                blurb: "Providers, harnesses, accounts and what they cost",
+                meta: {
+                    title: "Models & accounts · intentic docs",
+                    description:
+                        "Which model serves a turn: the provider, the connected account, the agentic loop it runs in, and where the spend is reported.",
+                    datePublished: "2026-08-07",
+                },
+            },
+            {
+                id: "access",
+                title: "Access & sharing",
+                blurb: "One owner, invited people, enforced tiers",
+                meta: {
+                    title: "Access & sharing · intentic docs",
+                    description:
+                        "How the owner is decided, what each invited tier can do, and why the daemon rather than the UI is what enforces it.",
+                    datePublished: "2026-08-07",
+                },
+            },
+            {
+                id: "your-machine",
+                title: "Your own machine",
+                blurb: "Desktop sync, connected computers, the editor bridge",
+                meta: {
+                    title: "Your own machine · intentic docs",
+                    description:
+                        "Sync a folder into the sandbox, let the agent operate your computer, or drive its agents from Zed or JetBrains over ACP.",
+                    datePublished: "2026-08-07",
+                },
+            },
+        ],
+    },
+    {
         label: "Extend",
         items: [
             {
