@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 # Build + push the first-party intentic images to every registry in REGISTRIES (see below — GHCR):
-#   sandbox    the AI-agent workspace daemon + CLI
+#   sandbox    the AI-agent workspace daemon + CLI — TWO PROFILES of one Dockerfile (packs/profiles.json):
+#              `standard` (core + the standard feature packs, composed by compose-image-dockerfile.mjs) owns
+#              the plain tags every runner references; the minimal `core` rides `core-` prefixed tags
 #   dind-host  a Docker-in-Docker + sshd deploy-target "host" — connect.ps1 stands one up on Windows so a
 #              server-less user can deploy locally (the e2e harness + intentic-local.sh use the same recipe)
 # Used by CI — the Images workflow (latest + commit SHA on push to main, one job per arch) and the release
@@ -69,28 +71,34 @@ setup_builder
 # build, and thereby made it SILENT: sandbox:buildcache froze at 2026-07-23 and nothing said so for eight days,
 # during which every sandbox build ran fully cold (~20 min, in both the images and release jobs, every
 # pipeline). Inline has no second upload to fail — if the image pushed, the cache is fresh.
+# TAG_PREFIX distinguishes the sandbox PROFILES on one GHCR package: the standard image owns the plain tags
+# (`latest`, `stable`, versions — everything that referenced sandbox:stable keeps meaning the batteries-included
+# image), the core image the `core-` prefixed ones. Cache reads cover both prefixes: the core layer set is a
+# strict prefix of the standard one, so whichever profile pushed last is a warm parent for either build.
 publish() {
     local image="$1" dockerfile="$2" context="$3"
     shift 3
     # One build, every registry: buildx pushes each -t it was given, so the bytes are built once and every
     # registry receives the identical manifest rather than independent builds that could drift.
     local tag_args=() cache_args=()
-    local registry
+    local registry prefix
     for registry in $REGISTRIES; do
         for tag in $TAGS; do
-            tag_args+=(-t "$registry/$image:$tag$ARCH_SUFFIX")
+            tag_args+=(-t "$registry/$image:${TAG_PREFIX:-}$tag$ARCH_SUFFIX")
         done
         # `latest` moves on every main push that touches the core, `stable` on every release; whichever is
         # newer is a warm parent, and the release job (which pushes neither) reads both. A missing or
         # unreachable ref is a non-fatal warning, so this is correct against a cold registry too — which is
         # exactly what GHCR is on the first run. Under a suffix the per-arch tags are the true parents (the
         # plain tag is a manifest list whose amd64 half also warms an amd64 build, so it stays in the list).
-        cache_args+=(--cache-from "type=registry,ref=$registry/$image:latest$ARCH_SUFFIX")
-        cache_args+=(--cache-from "type=registry,ref=$registry/$image:stable$ARCH_SUFFIX")
-        if [ -n "$ARCH_SUFFIX" ]; then
-            cache_args+=(--cache-from "type=registry,ref=$registry/$image:latest")
-            cache_args+=(--cache-from "type=registry,ref=$registry/$image:stable")
-        fi
+        for prefix in "" "core-"; do
+            cache_args+=(--cache-from "type=registry,ref=$registry/$image:${prefix}latest$ARCH_SUFFIX")
+            cache_args+=(--cache-from "type=registry,ref=$registry/$image:${prefix}stable$ARCH_SUFFIX")
+            if [ -n "$ARCH_SUFFIX" ]; then
+                cache_args+=(--cache-from "type=registry,ref=$registry/$image:${prefix}latest")
+                cache_args+=(--cache-from "type=registry,ref=$registry/$image:${prefix}stable")
+            fi
+        done
     done
     docker buildx build -f "$dockerfile" "${tag_args[@]}" "${cache_args[@]}" \
         --cache-to "type=inline" \
@@ -101,7 +109,13 @@ case " $IMAGES " in
     *" sandbox "*)
         # The sandbox image COPYs its compiled payload from .image-out — prepare-image-trees.sh must have run first.
         [ -d "$root/.image-out/sandbox" ] || { echo "missing $root/.image-out — run _tools/scripts/prepare-image-trees.sh first" >&2; exit 1; }
-        publish sandbox "$root/_sandbox/sandbox/Dockerfile" "$root" --build-context "trees=$root/.image-out"
+        # Two profiles of one Dockerfile (see packs/profiles.json): `standard` — the core file with the
+        # standard feature packs spliced in — owns the plain tags every runner references; the bare core file
+        # is the minimal image under `core-` prefixed tags. Composed fresh here so the published bytes always
+        # come from the checked-in pack files.
+        node "$root/_tools/scripts/compose-image-dockerfile.mjs" standard > "$root/.image-out/Dockerfile.standard"
+        publish sandbox "$root/.image-out/Dockerfile.standard" "$root" --build-context "trees=$root/.image-out"
+        TAG_PREFIX="core-" publish sandbox "$root/_sandbox/sandbox/Dockerfile" "$root" --build-context "trees=$root/.image-out"
         ;;
 esac
 case " $IMAGES " in

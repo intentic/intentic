@@ -24,8 +24,6 @@
     "dependencies": {
         "@agentclientprotocol/sdk": "catalog:",
         "@anthropic-ai/claude-agent-sdk": "catalog:",
-        "@discordjs/opus": "catalog:",
-        "@discordjs/voice": "catalog:",
         "@hono/node-server": "catalog:",
         "@intentic/constants": "workspace:*",
         "@intentic/extension-api": "workspace:*",
@@ -52,7 +50,6 @@
         "@xterm/headless": "catalog:",
         "chokidar": "catalog:",
         "croner": "catalog:",
-        "discord.js": "catalog:",
         "file-type": "catalog:",
         "hono": "catalog:",
         "jose": "catalog:",

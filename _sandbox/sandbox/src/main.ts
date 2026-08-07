@@ -18,7 +18,8 @@ import { statePath } from "./workspace/state-paths.js";
 import { capabilityCtx } from "./capabilities/capability.js";
 import { restoreConnectorHooks } from "./capabilities/cli/connector-hooks.js";
 import { linkSshHosts } from "./capabilities/ssh-hosts.js";
-import { startTranslator } from "./agent/translator.js";
+import { startTranslator, translatorWanted } from "./agent/translator.js";
+import { onPath } from "./platform/on-path.js";
 import { DOCKER_PANEL_KEY, startDockerdIfEnabled } from "./capabilities/handlers/docker.js";
 import { writeAgentToken } from "./auth/agent-token.js";
 import { startClaudeRefresh } from "./claude/claude-credentials.js";
@@ -185,12 +186,18 @@ const main = async (): Promise<void> => {
         );
     });
 
-    // The sandbox-wide CODEX_HOME's config.toml: privacy hardening plus, when a translator is baked, the
-    // `translator` model_provider on the ChatGPT subscription — the default that serves the Claude agent's shell
-    // delegation (its freeform `codex exec` can't pass per-turn overrides). Best-effort; authoritative overwrite.
-    void writeCodexConfig(join(services.authRoot, "codex"), config.translator.url).catch((error: unknown) =>
-        logger.warn({ err: error }, "codex config not written"),
-    );
+    /* The sandbox-wide CODEX_HOME's config.toml: privacy hardening plus, when a translator is baked, the
+     * `translator` model_provider on the ChatGPT subscription — the default that serves the Claude agent's shell
+     * delegation (its freeform `codex exec` can't pass per-turn overrides). Best-effort; authoritative overwrite.
+     *
+     * "Baked" is the BINARY, not TRANSLATOR_URL. The runner sets that URL on every image, so on a core one it
+     * would select a model_provider nothing is listening on and every delegated `codex exec` would fail against
+     * a dead port. Empty instead ⇒ Codex's own OPENAI_API_KEY provider, which is the one credential such a
+     * sandbox may still have. */
+    void (async () => {
+        const translatorUrl = (await onPath("cli-proxy-api")) ? config.translator.url : "";
+        await writeCodexConfig(join(services.authRoot, "codex"), translatorUrl);
+    })().catch((error: unknown) => logger.warn({ err: error }, "codex config not written"));
 
     // Setup-time desktop sync: arm the platform-minted pairing token so the connect script can enroll its agent.
     // No-op once that token has been redeemed — the burn is recorded on /history, so the copy living in the
@@ -558,10 +565,28 @@ const main = async (): Promise<void> => {
         void restoreConnectorHooks(services.capabilities, services.logger);
     }
     void startDockerdIfEnabled(bootCtx);
-    // The translator (CLIProxyAPI) backing "Codex/Grok under the Claude Code harness": starts when TRANSLATOR_URL
-    // is baked (no-op on a bare dev run) and serves those providers on their connected subscription OAuth.
-    // Best-effort — a routed turn that finds it down surfaces its own error, and a native-harness turn never touches it.
-    startTranslator(services);
+    /* The translator (CLIProxyAPI) backing "Codex/Grok under the Claude Code harness": serves those providers on
+     * their connected subscription OAuth, plus the user's own openai-protocol endpoints.
+     *
+     * GATED ON THE BINARY BEING IN THIS IMAGE, because it is a feature pack now (packs/translator.Dockerfile)
+     * and a core image doesn't carry it — TRANSLATOR_URL is runner-set either way, so the URL alone stopped
+     * meaning "there is a translator here". Ungated, the spawn fails ENOENT and the restart ladder retries it
+     * for the daemon's lifetime, filling the log with a failure that is really just an image without the pack.
+     * And gated on there being something to serve: the auth-dir/endpoint read (never the Management API, which
+     * is the very proxy this decides to start) keeps a sandbox nobody has connected anything to from running a
+     * proxy for nothing. A turn that later wants it says so itself, naming the rebuild. */
+    void (async () => {
+        if (config.translator.url === "") {
+            return;
+        }
+        if (!(await onPath("cli-proxy-api"))) {
+            logger.info("translator: cli-proxy-api is not in this image — add it by rebuilding from the Environment card");
+            return;
+        }
+        if (await translatorWanted(services)) {
+            startTranslator(services);
+        }
+    })().catch((error: unknown) => logger.warn({ err: error }, "translator: start gate failed"));
     // Installed extensions' declared autoStart processes come back the same way (manifests on /work).
     void startAllExtensionProcesses(services);
 
@@ -679,14 +704,26 @@ const main = async (): Promise<void> => {
     // Awaiting it is just an observation point; nothing here blocks on it.
     void services.iq.warm().catch((error: unknown) => logger.warn({ err: error }, "iq index warmup failed — search runs on the index as it stands"));
 
-    // Warm the Grok provider's OpenCode server at boot instead of lazily on the first /grok/oauth/start. The cold
-    // `opencode serve` spawn is CPU-heavy; in a constrained container it can deschedule the daemon long enough to
-    // stall the /events heartbeat past the browser's watchdog, flashing the UI to "connecting" mid-session — which
-    // unmounts the account page and aborts the in-flight Grok connect. At boot that spike hides behind the initial
-    // connect screen. Best-effort: ensure() is idempotent, so the first interactive call reuses this warm client.
-    void services.openCode
-        .client()
-        .catch((error: unknown) => logger.warn({ err: error }, "opencode warmup failed — first grok connect boots it lazily"));
+    /* Warm the Grok provider's OpenCode server at boot instead of lazily on the first /grok/oauth/start. The cold
+     * `opencode serve` spawn is CPU-heavy; in a constrained container it can deschedule the daemon long enough to
+     * stall the /events heartbeat past the browser's watchdog, flashing the UI to "connecting" mid-session — which
+     * unmounts the account page and aborts the in-flight Grok connect. At boot that spike hides behind the initial
+     * connect screen. Best-effort: ensure() is idempotent, so the first interactive call reuses this warm client.
+     *
+     * Warming is for a provider somebody USES, so it waits on the xAI credential OpenCode itself persists — a
+     * sandbox that has never connected Grok was paying a ~175 MB bun spawn on every boot to hold a server for a
+     * provider with no account behind it. And on a core image the binary is a pack away (packs/opencode.Dockerfile),
+     * where the spawn only ever ends in the SDK's start timeout; the lazy path a connect takes says so properly. */
+    void (async () => {
+        if (!(await services.openCode.connected("xai"))) {
+            return;
+        }
+        if (!(await onPath("opencode"))) {
+            logger.info("opencode: the binary is not in this image — add it by rebuilding from the Environment card");
+            return;
+        }
+        await services.openCode.client();
+    })().catch((error: unknown) => logger.warn({ err: error }, "opencode warmup failed — first grok connect boots it lazily"));
 
     const shutdown = (): void => {
         logger.info("shutting down intentic sandbox daemon…");

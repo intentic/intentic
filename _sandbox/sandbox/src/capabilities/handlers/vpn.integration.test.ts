@@ -116,8 +116,8 @@ test("a fortinet connection's password never reaches disk", async () => {
     expect(await readWorkspaceFile(skillPath(root))).toContain("name: vpn");
 });
 
-test("fragment carries every client and both runtime directives, once", () => {
-    const fragment = vpnHandler.fragment!(office.config)!;
+test("fragment carries every client and both runtime directives, once", async () => {
+    const fragment = (await vpnHandler.fragment!(office.config))!;
     expect(fragment).toContain("wireguard-tools");
     expect(fragment).toContain("openconnect");
     expect(fragment).toContain("strongswan");

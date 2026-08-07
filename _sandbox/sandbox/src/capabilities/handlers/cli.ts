@@ -1,5 +1,6 @@
 import { join } from "node:path";
 import type { CliConfig } from "@intentic/sandbox-contract";
+import { extensionRuntimeAbsent, RUNTIME_ABSENT_DETAIL } from "../../extensions/extension-readiness.js";
 import { listenerStatus } from "../../extensions/listener-status.js";
 import { terminalExec } from "../../terminal/terminal-run.js";
 import { capabilityJobSession } from "../../terminal/terminal-session.js";
@@ -68,6 +69,12 @@ export const cliHandler: CapabilityHandler = {
         // behind it the way a browser or a connected computer has one.
         let skill = await contributedSkill(connector, id, "");
         if (skill === undefined) {
+            // Two very different reasons the cheatsheet isn't readable, and only one of them is anybody's fault.
+            // A rotted checkout is repaired by reinstalling; a messaging connector on a core image is the whole
+            // extension tree not being in this image, which no amount of reinstalling brings.
+            if (await extensionRuntimeAbsent(connector.extension)) {
+                throw new Error(`${provider} is ${RUNTIME_ABSENT_DETAIL}`);
+            }
             throw new Error(`the extension declaring "${provider}" has no readable skill file — reinstall it`);
         }
         for (const key of keys) {
@@ -96,6 +103,16 @@ export const cliHandler: CapabilityHandler = {
         // restore heals that; a `pending` here is what a restore that COULDN'T (revoked token, no network on
         // the full-setup path) looks like, instead of a card that lies about it.
         const cliConfig = config as CliConfig;
+        /* The card is in every image; the gateway behind a messaging connector is not. Without this the card
+         * read "active" on a core image — the two checks below both go through a status the gateway PUSHES, and
+         * a gateway that was never started pushes nothing, so both fell through to active. There is no
+         * connection here and no way to make one, so it is stated rather than implied by silence. Worded
+         * without "rebuild" on purpose: these trees ride a publish-time build context, so the environment
+         * overlay the web sends a rebuild-worded status to could not install them.  */
+        const connector = (await contributionRegistry(hostOf(ctx))).get(contributionKey("cli", cliConfig.provider));
+        if (connector !== undefined && (await extensionRuntimeAbsent(connector.extension))) {
+            return { state: "pending", detail: RUNTIME_ABSENT_DETAIL };
+        }
         if (cliConfig["git"] === "on" && CORE_CONNECTOR_HOOKS[cliConfig.provider] !== undefined && !(await gitAccessWired(gitHostOf(cliConfig)))) {
             return { state: "pending", detail: "git access needs a re-add" };
         }

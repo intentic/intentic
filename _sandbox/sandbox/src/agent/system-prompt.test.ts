@@ -48,7 +48,7 @@ test("custom replaces everything — nothing is appended to it", () => {
 });
 
 test("intentic ships its own prompt as the base, with the harness guidance after it", () => {
-    const prompt = sdkSystemPrompt({ ...BASE, mode: "intentic", custom: undefined, append: "extra" });
+    const prompt = sdkSystemPrompt({ ...BASE, mode: "intentic", custom: undefined, append: "extra", browserOutputDir: "/work/.intentic/browser/output" });
     // A string, because Intentic's prompt is not the CLI's preset — the SDK has to be told to drop that.
     expect(typeof prompt).toBe("string");
     const text = prompt as string;
@@ -62,6 +62,13 @@ test("intentic ships its own prompt as the base, with the harness guidance after
     // this line is the only thing that stops the agent treating a clone dropped there as project code.
     expect(text).toContain("`refs/`");
     expect(text.endsWith("extra")).toBe(true);
+});
+
+// The dir is turn-plan's browser-presence signal: omitted when no browser servers were wired (a core image
+// without the browser pack), and then the prompt must not advertise tools the turn cannot load.
+test("no browser servers this turn — the prompt advertises no browser", () => {
+    const prompt = sdkSystemPrompt({ ...BASE, mode: "intentic", custom: undefined, append: undefined });
+    expect(prompt as string).not.toContain("mcp__web__browser");
 });
 
 test("claude keeps the CLI's preset and hands the same guidance to its append", () => {

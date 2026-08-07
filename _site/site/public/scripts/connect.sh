@@ -170,7 +170,8 @@ case "${SANDBOX_IMAGE:-}" in
         if [ -n "$repo_root" ] && [ -f "$repo_root/_sandbox/sandbox/Dockerfile" ]; then
             echo "intentic: building the local sandbox image ${SANDBOX_IMAGE} from your checkout (cached when unchanged; the first build takes a few minutes)…"
             if ! (cd "$repo_root" && bash _tools/scripts/prepare-image-trees.sh &&
-                docker build --build-context trees=.image-out -f _sandbox/sandbox/Dockerfile -t "$SANDBOX_IMAGE" .); then
+                node _tools/scripts/compose-image-dockerfile.mjs standard > .image-out/Dockerfile.standard &&
+                docker build --build-context trees=.image-out -f .image-out/Dockerfile.standard -t "$SANDBOX_IMAGE" .); then
                 if docker image inspect "$SANDBOX_IMAGE" >/dev/null 2>&1; then
                     echo "intentic: building ${SANDBOX_IMAGE} failed (see the docker output above) — continuing with the PREVIOUS local build, which does NOT include your latest changes." >&2
                 else

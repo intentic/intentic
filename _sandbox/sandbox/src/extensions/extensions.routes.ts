@@ -10,7 +10,7 @@ import type { OrpcContext } from "../context.js";
 import { writeExtensionEnablement } from "./extension-enablement.js";
 import { extensionProcessKey, reconcileListenerProcesses, startAutoStartProcesses, startExtensionProcess } from "./extension-processes.js";
 import { readAllExtensionSettings, writeExtensionSettings } from "./extension-settings.js";
-import { extensionReadiness } from "./extension-readiness.js";
+import { extensionReadiness, extensionRuntimeAbsent, RUNTIME_ABSENT_DETAIL } from "./extension-readiness.js";
 import { readExtensionUsage, recordExtensionUsage } from "./extension-usage.js";
 import { extensionInventory, type InstalledExtension, installedExtensions } from "./installed-extensions.js";
 import { writeWorkspaceExtension } from "./workspace-extension-scaffold.js";
@@ -159,12 +159,7 @@ export const createExtensionsRoutes = (services: Services) => {
             const usage = (await readExtensionUsage(root))[extensionIdOf(extension.manifest)];
             // The extension's own directory — for a workspace or baked one that is where it sits, and for a
             // git-installed one it is the checkout, which is what a publisher would push.
-            const checks = await extensionReadiness(
-                extension.dir,
-                extension.manifest,
-                satisfiesEngines(extension.manifest.engines.intentic, extensionApiVersion),
-                usage,
-            );
+            const checks = await extensionReadiness(extension, satisfiesEngines(extension.manifest.engines.intentic, extensionApiVersion), usage);
             return { checks };
         }),
         setEnabled: i.setEnabled.handler(async ({ input }) => {
@@ -205,6 +200,12 @@ export const createExtensionsRoutes = (services: Services) => {
             // one would be the daemon running a contribution the owner switched off.
             if (!extension.enabled) {
                 throw new ORPCError("PRECONDITION_FAILED", { message: "the extension is disabled" });
+            }
+            // The autoStart path skips a runtime-less extension silently (nothing asked for it); a button press
+            // asked for it, so it gets the reason instead of a start that would leave a shell sitting at a
+            // module-not-found and a row that reads "running".
+            if (await extensionRuntimeAbsent(extension)) {
+                throw new ORPCError("PRECONDITION_FAILED", { message: `this extension's code is ${RUNTIME_ABSENT_DETAIL}` });
             }
             await startExtensionProcess(services, extension, process);
             return { ok: true } as const;

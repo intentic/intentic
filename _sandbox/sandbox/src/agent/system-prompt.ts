@@ -83,11 +83,11 @@ const PUBLIC_GUIDANCE =
 // convention: the agent could not put a screenshot anywhere else if it tried. It used to promise the same
 // directory while the tool wrote model-named files into the agent's cwd, which cost sessions a failed Read
 // and a `find /` — and, when a session didn't check, left PNGs in the user's workspace (browser-artifacts.ts).
-const browserGuidance = (outputDir: string | undefined): string =>
+const browserGuidance = (outputDir: string): string =>
     "You have a real browser. Load it with ToolSearch (`+browser`) to get `mcp__web__browser_navigate`, " +
     "`mcp__web__browser_take_screenshot` and the rest — use it to read pages that need JavaScript, to check a " +
     "docs site, and to LOOK at web UI you have changed rather than reasoning about it from the source alone. " +
-    `Screenshots land in ${outputDir ?? ".intentic/browser/output"} whatever you name them, never in the repo ` +
+    `Screenshots land in ${outputDir} whatever you name them, never in the repo ` +
     "you are working in; the result tells you the path — Read it back from there. Clicks and navigations time " +
     "themselves out and come back as errors, but `browser_evaluate` awaits whatever the page hands it: give any " +
     "in-page wait a deadline of its own rather than looping until a condition you are debugging comes true.";
@@ -164,7 +164,10 @@ const harnessGuidance = ({ append, unattended, browserOutputDir }: Omit<SdkSyste
     CHECKLIST_GUIDANCE,
     REFERENCE_GUIDANCE,
     PUBLIC_GUIDANCE,
-    browserGuidance(browserOutputDir),
+    // Only when the turn actually wired browser servers (turn-plan omits the dir when Chromium is absent —
+    // a core image without the browser pack): advertising a browser that isn't there sends the model hunting
+    // for tools it cannot load, or installing its own.
+    ...(browserOutputDir === undefined ? [] : [browserGuidance(browserOutputDir)]),
     ...(append === undefined ? [] : [append]),
 ];
 

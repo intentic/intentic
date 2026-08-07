@@ -1,8 +1,8 @@
-import { constants } from "node:fs";
 import { access, readdir, readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { IGNORED_DIRS, REFERENCE_DIR } from "@intentic/workspace-ignore";
 import { isManifest, managerFromPackageJson, recipeFor, type SetupRecipe } from "@intentic/workspace-setup";
+import { onPath } from "../platform/on-path.js";
 import type { ManagedProcesses } from "../processes/managed-processes.js";
 import { unresolvedDependencies, unresolvedSummary, type UnresolvedPackage } from "./dependency-drift.js";
 
@@ -56,33 +56,6 @@ export interface ProjectSetupStatus extends WorkspaceProject {
 // punctuation collapse to `_`. The `--install` suffix matches the `--add_apps` convention — an underscore
 // inside the suffix means it can never collide with an app panel key (`<repo>--<app>`, app being a slug).
 export const installPanelKey = (dir: string): string => `${dir === "" ? "root" : dir.replace(/[^a-zA-Z0-9_-]/g, "_")}--install`;
-
-// Is `binary` executable on PATH? Read straight off the filesystem rather than spawning `command -v`: no shell
-// (the manager name reaches us from an uploaded package.json), no per-call process. Cached for the daemon's
-// life — PATH is fixed at container start, and a capability rebuild restarts the daemon.
-const pathCache = new Map<string, Promise<boolean>>();
-const onPath = (binary: string): Promise<boolean> => {
-    const cached = pathCache.get(binary);
-    if (cached !== undefined) {
-        return cached;
-    }
-    const probe = (async (): Promise<boolean> => {
-        for (const dir of (process.env["PATH"] ?? "").split(":")) {
-            if (dir === "") {
-                continue;
-            }
-            try {
-                await access(join(dir, binary), constants.X_OK);
-                return true;
-            } catch {
-                // next PATH entry
-            }
-        }
-        return false;
-    })();
-    pathCache.set(binary, probe);
-    return probe;
-};
 
 const exists = async (path: string): Promise<boolean> => {
     try {

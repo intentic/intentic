@@ -49,7 +49,7 @@ export const invalidExtensionFragment = (content: string): string | undefined =>
 // compose-time defense for a checkout that changed underneath).
 export const capabilityFragments = async (services: Services, capability: Capability): Promise<string[]> => {
     const fragments: string[] = [];
-    const core = registry[capability.kind].fragment?.(capability.config)?.trim();
+    const core = (await registry[capability.kind].fragment?.(capability.config))?.trim();
     if (core !== undefined && core !== "") {
         fragments.push(core);
     }

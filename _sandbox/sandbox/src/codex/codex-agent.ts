@@ -14,6 +14,7 @@ import { splitAttachments, withFileNote } from "../agent/attachment-note.js";
 import { EXECUTE_PROMPT, type ExecutePhase, type PlanPhase, runPlanEmulation } from "../agent/plan-emulation.js";
 import { toolCategoryOf, workspacePath } from "../agent/tool-calls.js";
 import { CODEX_ADVISORY, CODEX_MODEL_INVALID } from "./codex-models.js";
+import { CODEX_BINARY_MISSING, codexBinary } from "./codex-path.js";
 
 /* The Codex provider adapter: same seam as agent.ts's runAgent — AgentRequest in, AgentEvent frames out — but
  * backed by the Codex CLI (`codex exec` via @openai/codex-sdk) instead of the Claude Agent SDK. Provider
@@ -42,8 +43,16 @@ export interface CodexTurn {
 export type CodexRunner = (turn: CodexTurn) => AsyncIterable<ThreadEvent>;
 
 // The SDK does NOT inherit process.env when `env` is passed, so the runner receives the full environment.
+//
+// The binary is named explicitly (codex-path.ts): the SDK's own lookup resolves the pruned @openai/codex
+// package and fails with a message about node_modules, where the real state is an image without the codex pack.
+// Thrown rather than yielded — runCodexAgent's catch turns it into the turn's one error frame.
 const defaultRunner: CodexRunner = async function* (turn) {
-    const codex = new Codex({ env: turn.env, ...(turn.config !== undefined ? { config: turn.config } : {}) });
+    const codexPathOverride = await codexBinary();
+    if (codexPathOverride === undefined) {
+        throw new Error(CODEX_BINARY_MISSING);
+    }
+    const codex = new Codex({ codexPathOverride, env: turn.env, ...(turn.config !== undefined ? { config: turn.config } : {}) });
     const thread = turn.sessionId !== undefined ? codex.resumeThread(turn.sessionId, turn.options) : codex.startThread(turn.options);
     const input: Input =
         turn.images !== undefined && turn.images.length > 0

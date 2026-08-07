@@ -57,6 +57,11 @@ const toCatalog = (ids: readonly string[]): { models: { id: string; label: strin
 // boot exists to avoid.
 const BOOT_TIMEOUT_MS = 60_000;
 
+// The rebuild-fixable state, in the user's terms. "rebuild" is load-bearing — it is the word the UI reads to
+// route a state to the Environment card — so it has to survive any rewording of this sentence.
+export const OPENCODE_BINARY_MISSING =
+    "This sandbox's image doesn't include the OpenCode CLI yet — rebuild it from the Environment card in Sandbox ▸ Environment to run Grok here.";
+
 export const createOpenCodeService = (xdgDataHome: string, fetchImpl: typeof fetch = fetch): OpenCodeService => {
     let booting: Promise<OpencodeClient> | undefined;
     // xAI's catalog rarely changes, so cache it briefly: a grok turn AND every Claude turn's delegation note read

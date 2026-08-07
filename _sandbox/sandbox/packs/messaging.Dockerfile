@@ -1,0 +1,19 @@
+# The messaging gateway runtimes — deployed trees from the `trees` build context, so this pack is BAKE-ONLY
+# (profiles can include it; an overlay rebuild cannot, and the daemon surfaces "not in this image" for a
+# messaging connector on a core image instead — extensions/extension-readiness.ts). Their MANIFESTS are baked
+# in every image by the core Dockerfile so the capability cards exist either way; these COPYs put the runnable
+# gateways behind them.
+COPY --from=trees extensions/discord /opt/extensions/discord
+# Same glibc rationale as the daemon tree's node-pty rebuild — the discord gateway's voice stack compiles opus
+# from source, linked against whatever host ran pnpm deploy.
+RUN cd /opt/extensions/discord/node_modules/.pnpm/@discordjs+opus@*/node_modules/@discordjs/opus \
+    && rm -rf prebuild build-tmp-napi-v3 \
+    && npm run install \
+    && npm cache clean --force
+COPY --from=trees extensions/imap /opt/extensions/imap
+# The slack gateway is pure JS (Socket Mode over undici) — no native build step to redo after the COPY.
+COPY --from=trees extensions/slack /opt/extensions/slack
+# The telegram gateway is pure JS AND dependency-free (the Bot API is fetch + JSON), so its tree is its own dist.
+COPY --from=trees extensions/telegram /opt/extensions/telegram
+# The whatsapp gateway is JS + WASM (baileys' crypto bridge ships compiled wasm) — no native build step either.
+COPY --from=trees extensions/whatsapp /opt/extensions/whatsapp

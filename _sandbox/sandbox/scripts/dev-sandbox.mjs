@@ -62,6 +62,8 @@ const run = (command, args) =>
 const IMAGE_ONLY_PATHS = [
     join(REPO_ROOT, "_sandbox/sandbox/Dockerfile"),
     join(REPO_ROOT, "_sandbox/sandbox/docker-entrypoint.sh"),
+    // The feature-pack fragments the dev image (standard profile) splices in — image layers by definition.
+    join(REPO_ROOT, "_sandbox/sandbox/packs"),
     // Copied to /usr/local/bin and /root/.claude/skills, outside any mounted dist.
     join(REPO_ROOT, "_sandbox/sandbox/bin"),
     join(REPO_ROOT, "_sandbox/sandbox/skills"),

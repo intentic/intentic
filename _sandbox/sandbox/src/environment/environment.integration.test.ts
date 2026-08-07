@@ -48,11 +48,17 @@ const stubServices = (environmentHashApplied = "", capabilities: Capability[] = 
                 previousImage: "",
             },
             extensionsDir: EXTENSIONS_DIR,
+            // Read by the provider-pack fragment source (codexConnected) on every compose — empty: no provider.
+            openaiApiKey: "",
         }),
         workspace: unstubbed<Services["workspace"]>("workspace", { root: mkdtempSync(join(tmpdir(), "environment-")) }),
         files: unstubbed<Services["files"]>("files", { read: readWorkspaceFile, write: writeWorkspaceFile, remove: removeWorkspacePath }),
         logger: unstubbed<Services["logger"]>("logger", { warn: () => undefined }),
         capabilities: unstubbed<Services["capabilities"]>("capabilities", { list: async () => capabilities }),
+        // The other two provider-pack predicates: an empty auth dir (no translator subscriptions on disk) and
+        // no xAI sign-in — compose then carries no provider fragments, which is what these tests are shaped for.
+        authRoot: mkdtempSync(join(tmpdir(), "environment-auth-")),
+        openCode: unstubbed<Services["openCode"]>("openCode", { connected: async () => false }),
     });
 
 const vpn = (id: string): Capability => ({

@@ -2,6 +2,7 @@ import { join } from "node:path";
 import type { ProcessContribution } from "@intentic/extension-manifest";
 import { previewLabel } from "@intentic/sandbox-contract";
 import type { Services } from "../composition.js";
+import { extensionRuntimeAbsent } from "./extension-readiness.js";
 import { enabledExtensions, type ExtensionHost, type InstalledExtension, installedExtensions } from "./installed-extensions.js";
 import { listenerProcessesDesired, listenerState } from "./listener-state.js";
 
@@ -35,12 +36,28 @@ export const startExtensionProcess = async (services: Services, extension: Insta
     });
 };
 
-// autoStart processes for one extension — after a successful install (the capabilities add route's post-apply
-// seam) and at boot convergence. A listener extension's processes exist only while its provider is wanted
-// (listenerProcessesDesired), so a fresh sandbox runs no idle gateway for an integration nobody enabled.
-export const startAutoStartProcesses = async (services: Services, extension: InstalledExtension): Promise<void> => {
+/* THE SPAWN GATE for one extension's declared processes — both halves in one place so no caller can consult
+ * only one of them. The code has to BE here, and, for a listener extension, its provider has to be wanted at
+ * all (listenerProcessesDesired, which is the half the gateway's own /state feed shares).
+ *
+ * The runtime half is what keeps a core image from running a messaging gateway: those extensions bake their
+ * manifests without the trees behind them, and a declared process is started by TYPING its command into a
+ * shell in a tmux session. `node dist/gateway.js` with no dist/ prints a module-not-found, the shell returns to
+ * its prompt, and the session lives on — so the manager, which tracks the SESSION, would report that gateway
+ * running for the life of the container. Not spawning it at all is the only honest answer available here. */
+const processesDesired = async (services: Services, extension: InstalledExtension): Promise<boolean> => {
+    if (await extensionRuntimeAbsent(extension)) {
+        return false;
+    }
     const listener = extension.manifest.contributes?.listener;
-    if (listener !== undefined && !listenerProcessesDesired(await listenerState(services, listener.provider))) {
+    return listener === undefined || listenerProcessesDesired(await listenerState(services, listener.provider));
+};
+
+// autoStart processes for one extension — after a successful install (the capabilities add route's post-apply
+// seam) and at boot convergence. A listener extension's processes exist only while its provider is wanted, so a
+// fresh sandbox runs no idle gateway for an integration nobody enabled.
+export const startAutoStartProcesses = async (services: Services, extension: InstalledExtension): Promise<void> => {
+    if (!(await processesDesired(services, extension))) {
         return;
     }
     for (const process of extension.manifest.contributes?.processes ?? []) {
@@ -69,7 +86,7 @@ export const reconcileListenerProcesses = async (services: Services): Promise<vo
             if (listener === undefined) {
                 continue;
             }
-            const desired = listenerProcessesDesired(await listenerState(services, listener.provider));
+            const desired = await processesDesired(services, extension);
             for (const process of extension.manifest.contributes?.processes ?? []) {
                 if (process.autoStart !== true) {
                     continue;

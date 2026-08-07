@@ -516,8 +516,10 @@ export const planHarnessTurn = async (
             ...(tools.length > 0 ? { tools } : {}),
             ...(Object.keys(sdkServers).length > 0 ? { sdkServers } : {}),
             // The same directory the browser servers got as `--output-dir` — the hook that redirects model-named
-            // screenshots into it needs the value too, and one source keeps them from drifting.
-            browserOutputDir: browserOutputDir(services.workspace.root),
+            // screenshots into it needs the value too, and one source keeps them from drifting. Omitted when
+            // the turn wired no browser servers (no Chromium in this image — the browser pack rides a rebuild):
+            // its absence is what keeps the system prompt from advertising a browser that isn't there.
+            ...(Object.keys(browser.servers).length > 0 ? { browserOutputDir: browserOutputDir(services.workspace.root) } : {}),
             // The debugging ports those same servers' Chromiums will open, so the first browser tool call can
             // register a session the owner can watch (browser/browser-sessions.ts).
             ...(Object.keys(browser.ports).length > 0 ? { browserPorts: browser.ports } : {}),

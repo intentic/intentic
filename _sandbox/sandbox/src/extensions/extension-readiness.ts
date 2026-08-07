@@ -3,6 +3,7 @@ import { join } from "node:path";
 import { extensionApiVersion } from "@intentic/extension-api";
 import { type ExtensionManifest } from "@intentic/extension-manifest";
 import { extensionRead } from "../capabilities/extension-dirs.js";
+import type { InstalledExtension } from "./installed-extensions.js";
 
 /* IS THIS EXTENSION FIT TO PUBLISH — the checks that can be answered from the files alone, and the reason they
  * are worth answering before anybody else runs them.
@@ -75,6 +76,42 @@ const promisedPaths = (manifest: ExtensionManifest): { readonly what: string; re
     return promised;
 };
 
+/* THE SENTENCE EVERY SURFACE SAYS when an extension's manifest is here and its code is not. Kept in one place
+ * because it is said in four (the connector card's status, the add that can't write a skill, the process route,
+ * the check below) and four wordings of one fact is four chances to describe a different situation.
+ *
+ * Deliberately free of the word "rebuild": the trees behind these manifests arrive as a publish-time build
+ * context, so the environment overlay — which is what "rebuild" means to this app, and what the web sends a
+ * rebuild-worded status to — cannot install them. The only move is a sandbox on the standard image. */
+export const RUNTIME_ABSENT_DETAIL = "not included in this image — ships with the standard sandbox image";
+
+/* IS THE EXTENSION'S CODE IN THIS IMAGE AT ALL — the same promised-paths question pathsCheck asks before
+ * publication, asked at runtime, because the image split can now answer it "no" for an extension nobody has
+ * done anything wrong to. The core image bakes the messaging extensions' MANIFESTS so their connector cards
+ * exist in every image; the gateway trees behind them are the standard image's bake-only `messaging` pack.
+ *
+ * BAKED ONLY, and that restriction is the point. A git-installed checkout and a workspace directory hold files
+ * the owner or the author put there, so a missing one is a rotted install or work in progress — pathsCheck
+ * already reports that in their terms, and an author mid-build should still watch their own gateway try to
+ * start and fail rather than be silently refused. Only an image-baked extension can be complete, correct and
+ * still absent.
+ *
+ * The DECLARED files rather than the built ones, though a gateway's absent dist/ is the visible symptom: a pack
+ * copies an extension's whole tree or none of it, so the tracked files answer the same question, and they
+ * answer it the same way every time. Probing a build output would make a spawn gate that says yes or no
+ * depending on whether anybody had run a build — the one thing a gate must never do. */
+export const extensionRuntimeAbsent = async (extension: InstalledExtension): Promise<boolean> => {
+    if (extension.source !== "builtin") {
+        return false;
+    }
+    for (const { path } of promisedPaths(extension.manifest)) {
+        if (!(await exists(join(extension.dir, path)))) {
+            return true;
+        }
+    }
+    return false;
+};
+
 const bundleCheck = async (dir: string, manifest: ExtensionManifest): Promise<ReadinessCheck> => {
     const id = "bundle";
     const label = "The bundle imports only what the host publishes";
@@ -110,17 +147,23 @@ const bundleCheck = async (dir: string, manifest: ExtensionManifest): Promise<Re
     return { id, label, status: "pass", detail: specifiers.length === 0 ? "Imports nothing." : `Imports ${specifiers.join(", ")}.` };
 };
 
-const pathsCheck = async (dir: string, manifest: ExtensionManifest): Promise<ReadinessCheck> => {
+const pathsCheck = async (extension: InstalledExtension): Promise<ReadinessCheck> => {
     const id = "paths";
     const label = "Every file the manifest promises is there";
-    const promised = promisedPaths(manifest);
+    const promised = promisedPaths(extension.manifest);
     const missing: string[] = [];
     for (const { what, path } of promised) {
-        if (!(await exists(join(dir, path)))) {
+        if (!(await exists(join(extension.dir, path)))) {
             missing.push(`${what} (${path})`);
         }
     }
     if (missing.length > 0) {
+        /* An image-baked extension is missing files because the IMAGE does not carry them, not because anyone
+         * forgot one — and there is nothing whoever is reading this can add. A warning rather than a failure for
+         * the same reason: the extension is fit to publish, it is simply not runnable HERE. */
+        if (extension.source === "builtin") {
+            return { id, label, status: "warn", detail: `This extension's code is ${RUNTIME_ABSENT_DETAIL}.` };
+        }
         return { id, label, status: "fail", detail: `Missing: ${missing.join(", ")}.` };
     }
     return { id, label, status: "pass", detail: promised.length === 0 ? "It promises no files." : `All ${promised.length} present.` };
@@ -167,13 +210,12 @@ const permissionsCheck = (manifest: ExtensionManifest, usage: Record<string, { c
 };
 
 export const extensionReadiness = async (
-    dir: string,
-    manifest: ExtensionManifest,
+    extension: InstalledExtension,
     satisfiesEngines: boolean,
     usage: Record<string, { calls: number }> | undefined,
 ): Promise<ReadinessCheck[]> => [
-    await bundleCheck(dir, manifest),
-    await pathsCheck(dir, manifest),
-    enginesCheck(manifest, satisfiesEngines),
-    permissionsCheck(manifest, usage),
+    await bundleCheck(extension.dir, extension.manifest),
+    await pathsCheck(extension),
+    enginesCheck(extension.manifest, satisfiesEngines),
+    permissionsCheck(extension.manifest, usage),
 ];

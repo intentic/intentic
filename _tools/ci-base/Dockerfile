@@ -29,8 +29,8 @@ LABEL org.opencontainers.image.source=https://github.com/intentic/intentic
 #                           whose command exited stays listed as a DEAD pane), so agent-terminals.integration
 #                           runs against a REAL private tmux server — stub it and the test asserts the stub
 #   docker-ce-cli + buildx  the images/release jobs drive the dind service and export a mode=max registry cache
-# The docker apt repo is added the same way _sandbox/sandbox/Dockerfile adds it; resolved once, here, instead of in
-# three jobs at runtime.
+# The docker apt repo is added the same way the sandbox's docker feature pack adds it
+# (_sandbox/sandbox/packs/docker.Dockerfile); resolved once, here, instead of in three jobs at runtime.
 RUN apt-get update \
     && apt-get install -y --no-install-recommends ca-certificates curl git python3 make g++ ripgrep openssh-client tmux \
     && install -m 0755 -d /etc/apt/keyrings \

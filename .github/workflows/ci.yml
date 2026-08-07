@@ -754,7 +754,7 @@ jobs:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
-      - run: bash _tools/scripts/merge-image-manifests.sh sandbox latest "sha-${GITHUB_SHA::8}"
+      - run: bash _tools/scripts/merge-image-manifests.sh sandbox latest "sha-${GITHUB_SHA::8}" core-latest "core-sha-${GITHUB_SHA::8}"
         shell: bash
 
   # Platform image publishing: build + push web + api on every push to main that touches the platform, then

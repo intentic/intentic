@@ -1,5 +1,7 @@
 import { setTimeout as sleep } from "node:timers/promises";
-import { spawn } from "node:child_process";
+import { execFileSync, spawn } from "node:child_process";
+import { writeFileSync } from "node:fs";
+import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { GenericContainer, type StartedTestContainer, Wait } from "testcontainers";
 
@@ -15,15 +17,25 @@ const SOURCE_IMAGE_TAG = "intentic-sandbox-e2e:local";
 
 // Build via the docker CLI, not testcontainers' fromDockerfile: the sandbox Dockerfile needs BuildKit
 // (COPY --chmod), which the CLI uses by default, and the CLI shares the layer cache with CI's images job.
-const buildSourceImage = (): Promise<void> =>
-    new Promise((resolve, reject) => {
-        const build = spawn("docker", ["build", "-f", "_sandbox/sandbox/Dockerfile", "-t", SOURCE_IMAGE_TAG, "."], { cwd: repoRoot });
+// The STANDARD profile — the artifact CI publishes under the plain tags — composed fresh from the checked-in
+// packs into .image-out beside the `trees` payload, whose preparation the caller owns exactly as every other
+// from-source build does (prepare-image-trees.sh must have run).
+const buildSourceImage = async (): Promise<void> => {
+    const dockerfile = join(repoRoot, ".image-out/Dockerfile.standard");
+    writeFileSync(dockerfile, execFileSync("node", ["_tools/scripts/compose-image-dockerfile.mjs", "standard"], { cwd: repoRoot }));
+    await new Promise<void>((resolve, reject) => {
+        const build = spawn(
+            "docker",
+            ["build", "--build-context", "trees=.image-out", "-f", dockerfile, "-t", SOURCE_IMAGE_TAG, "."],
+            { cwd: repoRoot },
+        );
         let output = "";
         build.stdout.on("data", (chunk: Buffer) => (output += chunk.toString()));
         build.stderr.on("data", (chunk: Buffer) => (output += chunk.toString()));
         build.on("error", reject);
         build.on("close", (code) => (code === 0 ? resolve() : reject(new Error(`sandbox image build exited ${code}:\n${output.slice(-4000)}`))));
     });
+};
 
 // Build the image from this repo's Dockerfile (the artifact CI publishes) unless SANDBOX_E2E_IMAGE points at a
 // prebuilt one, then start it in loopback: GOOGLE_CLIENT_ID / PLATFORM_URL stay unset, so auth + announce are

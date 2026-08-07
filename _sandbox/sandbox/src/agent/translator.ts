@@ -1,5 +1,5 @@
 import { type ChildProcess, spawn } from "node:child_process";
-import { mkdir, writeFile } from "node:fs/promises";
+import { mkdir, readdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import {
     type AccountUsage,
@@ -11,7 +11,7 @@ import {
 } from "@intentic/sandbox-contract";
 import type { Config } from "../env.config.js";
 import type { Services } from "../composition.js";
-import { compatYaml, endpointCompatEntries } from "../endpoints/endpoint-translator.js";
+import { compatYaml, endpointCompatEntries, translatedEndpoints } from "../endpoints/endpoint-translator.js";
 import type { AccountUsageStore } from "../usage/account-usage.js";
 import { fetchTranslatorUsage, quotaPoolFor, type TranslatorAuthFile, type TurnLimit } from "../usage/translator-usage.js";
 
@@ -34,6 +34,57 @@ const CLIPROXY_PROVIDER: Record<KeyedProvider, string> = { codex: "codex", grok:
 
 // The subscription-token store (survives sandbox rebuilds alongside the other AI-provider credentials).
 const cliProxyAuthDir = (authRoot: string): string => join(authRoot, "cliproxy");
+
+// CLIProxyAPI's own provider id, back to ours — the inverse of CLIPROXY_PROVIDER, which is what an auth file on
+// disk stamps itself with.
+const KEYED_PROVIDER: Record<string, KeyedProvider> = Object.fromEntries(
+    Object.entries(CLIPROXY_PROVIDER).map(([provider, cliproxy]) => [cliproxy, provider as KeyedProvider]),
+);
+
+/* THE CONNECTION VIEW THAT DOES NOT NEED THE PROXY — every subscription CLIProxyAPI holds, read from its
+ * auth-dir on disk.
+ *
+ * `accounts` below answers the same question through the Management API, which IS the running proxy. That is
+ * right for a routed turn (the proxy has to be up for the turn to run at all) and useless for the two callers
+ * here, because both run BEFORE one exists: whether to spawn the proxy, and whether the translator pack belongs
+ * in the environment overlay. Asking the proxy either question is circular — and on a core image, where the
+ * binary is absent entirely, it can only ever answer "nothing connected", which would keep the pack out of the
+ * very rebuild that would install it.
+ *
+ * Each auth file is one account, named `<type>-<account>.json`; the `type` INSIDE it is read rather than the
+ * filename parsed, since the name is CLIProxyAPI's to change. Nothing is filtered on the files' `disabled` or
+ * `expired` flags: those describe an account's health, `accounts` does not filter on them either, and a stale
+ * credential is still a connected subscription — the answer here has to match the list the user is looking at. */
+export const connectedTranslatorProviders = async (authRoot: string): Promise<Set<KeyedProvider>> => {
+    const dir = cliProxyAuthDir(authRoot);
+    const names = (await readdir(dir).catch(() => [])).filter((name) => name.endsWith(".json"));
+    const types = await Promise.all(
+        names.map(async (name) => {
+            const raw = await readFile(join(dir, name), "utf8").catch(() => undefined);
+            if (raw === undefined) {
+                return undefined;
+            }
+            try {
+                return (JSON.parse(raw) as { type?: unknown }).type;
+            } catch {
+                // A file half-written by a login that is still polling — it counts on the next read.
+                return undefined;
+            }
+        }),
+    );
+    return new Set(types.flatMap((type) => (typeof type === "string" && KEYED_PROVIDER[type] !== undefined ? [KEYED_PROVIDER[type]] : [])));
+};
+
+// Would a translator have anything to serve? Its two workloads are the routed SUBSCRIPTIONS above and the
+// user's own openai-protocol endpoints (endpoint-translator.ts), which it re-serves as compat providers. Neither
+// ⇒ starting it buys nothing, and on a core image the binary it would spawn isn't there to begin with.
+export const translatorWanted = async (services: Services): Promise<boolean> =>
+    (await connectedTranslatorProviders(services.authRoot)).size > 0 || translatedEndpoints(await services.capabilities.list()).length > 0;
+
+// What a user can DO about a helper the running image doesn't carry. The word "rebuild" is load-bearing: it is
+// what the UI reads to route a state to the Environment card, so it must survive any rewording of these strings.
+export const TRANSLATOR_BINARY_MISSING =
+    "This sandbox's image doesn't include the model translator yet — rebuild it from the Environment card in Sandbox ▸ Environment to add it.";
 // The rendered server config (on /history, outside the agent's reach); the login subprocess shares it via --config.
 export const cliProxyConfigPath = (config: Config): string => join(config.historyRoot, "translator", "config.yaml");
 // The Management API base (localhost-only) on the same port that serves the Anthropic endpoint.
@@ -298,7 +349,9 @@ export const createCliProxyClient = (params: {
             child.on("error", (error) => {
                 if (!settled) {
                     settled = true;
-                    reject(error);
+                    // A core image carries no cli-proxy-api, so the spawn fails ENOENT — a message naming a
+                    // binary the user has never heard of, for a state they can actually fix.
+                    reject((error as NodeJS.ErrnoException).code === "ENOENT" ? new Error(TRANSLATOR_BINARY_MISSING) : error);
                 }
             });
             child.on("exit", (exitCode) => {

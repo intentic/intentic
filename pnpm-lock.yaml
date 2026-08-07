@@ -2032,12 +2032,6 @@ importers:
       '@anthropic-ai/claude-agent-sdk':
         specifier: 'catalog:'
         version: 0.3.220(@anthropic-ai/sdk@0.115.0(zod@4.4.3))(@modelcontextprotocol/sdk@1.30.0(zod@4.4.3))(zod@4.4.3)
-      '@discordjs/opus':
-        specifier: 'catalog:'
-        version: 0.10.0
-      '@discordjs/voice':
-        specifier: 'catalog:'
-        version: 0.19.2(@discordjs/opus@0.10.0)(@emnapi/core@1.11.2)(@emnapi/runtime@1.11.2)
       '@hono/node-server':
         specifier: 'catalog:'
         version: 2.0.12(hono@4.12.33)
@@ -2116,9 +2110,6 @@ importers:
       croner:
         specifier: 'catalog:'
         version: 10.0.1
-      discord.js:
-        specifier: 'catalog:'
-        version: 14.27.0
       file-type:
         specifier: 'catalog:'
         version: 22.0.1

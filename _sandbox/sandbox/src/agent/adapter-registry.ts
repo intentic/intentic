@@ -1,5 +1,7 @@
 import { type AgentHarness, type AgentProvider, capabilitiesOf } from "@intentic/sandbox-contract";
-import type { Services } from "../composition.js";
+import { codexReadiness } from "../codex/codex-readiness.js";
+import { OPENCODE_BINARY_MISSING } from "../grok/opencode.js";
+import { onPath } from "../platform/on-path.js";
 import type { AdapterHealth, AgentAdapter } from "./adapter.js";
 import { planAcpTurn, planCodexTurn, planGrokTurn, planHarnessTurn } from "./turn-plan.js";
 
@@ -39,11 +41,6 @@ const attempt = async <T>(fn: () => Promise<T> | T): Promise<T | undefined> => {
     }
 };
 
-// Whether the translator holds a ChatGPT subscription this sandbox can route Codex through — the same
-// condition planCodexTurn gates on, asked without building a turn.
-const translatorHasCodex = async (services: Services): Promise<boolean> =>
-    services.config.translator.url !== "" && (await services.cliProxy.accounts()).codex.length > 0;
-
 const CLAUDE_CODE_ADAPTER: AgentAdapter<"claude-code"> = {
     runtime: "claude-code",
     preflight: (services, input, context, installed) => planHarnessTurn(services, input, context, installed),
@@ -67,19 +64,14 @@ const CLAUDE_CODE_ADAPTER: AgentAdapter<"claude-code"> = {
 const CODEX_ADAPTER: AgentAdapter<"codex"> = {
     runtime: "codex",
     preflight: (services, input, context) => planCodexTurn(services, input, context),
+    // The same question planCodexTurn refuses on, asked without building a turn — one resolver, so the tooltip
+    // and the refusal can never name different reasons (codex/codex-readiness.ts).
     health: async (services) => {
-        const routed = await attempt(() => translatorHasCodex(services));
-        if (routed === undefined) {
+        const readiness = await attempt(() => codexReadiness(services));
+        if (readiness === undefined) {
             return unknown();
         }
-        if (routed || services.config.openaiApiKey !== "") {
-            return ready();
-        }
-        return unavailable(
-            services.config.translator.url === ""
-                ? "This sandbox has no model translator, so Codex can't run here."
-                : "Connect your ChatGPT subscription in Sandbox ▸ Agent to run Codex.",
-        );
+        return readiness.ok ? ready() : unavailable(readiness.detail);
     },
     // One sandbox-wide CODEX_HOME serves every turn (see planCodexTurn), so a thread is looked up without a cwd.
     holdsSession: (services, sessionId) => services.codexThreadExists(sessionId),
@@ -93,7 +85,12 @@ const OPENCODE_ADAPTER: AgentAdapter<"opencode"> = {
         if (connected === undefined) {
             return unknown();
         }
-        return connected ? ready() : unavailable("Sign in with your xAI (SuperGrok/X Premium) account in Setup.");
+        if (!connected) {
+            return unavailable("Sign in with your xAI (SuperGrok/X Premium) account in Setup.");
+        }
+        // Signed in, but OpenCode is a feature pack and this image may not carry it — a state the credential
+        // cannot explain and only a rebuild fixes.
+        return (await onPath("opencode")) ? ready() : unavailable(OPENCODE_BINARY_MISSING);
     },
     holdsSession: (services, sessionId, cwd) => services.openCode.sessionExists(sessionId, cwd),
 };

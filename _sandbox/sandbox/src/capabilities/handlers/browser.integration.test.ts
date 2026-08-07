@@ -57,13 +57,17 @@ test("apply writes the platform SKILL.md; status is pending until logged in / re
     expect((await browserHandler.status(ctx, "reddit", reddit.config)).state).toBe("pending");
 });
 
-test("the fragment adds only Xvfb — Chromium is baked in the base image; no runtime directive needed", () => {
-    expect(browserHandler.fragment!(reddit.config)).toContain("xvfb");
-    // Installing Chromium here again would bake a ~650 MiB duplicate of the baked browser into the overlay.
-    expect(browserHandler.fragment!(reddit.config)).not.toContain("install --with-deps");
-    expect(browserHandler.fragment!(reddit.config)).not.toContain("PLAYWRIGHT_BROWSERS_PATH");
+test("the fragment is the browser pack — Chromium + Xvfb as one unit, no runtime directive", async () => {
+    // No base stamp in a test run — like a core image, so the whole pack rides the fragment. On a standard
+    // image (stamped base) the same call composes nothing: the pack is already baked.
+    const fragment = (await browserHandler.fragment!(reddit.config))!;
+    expect(fragment).toContain("xvfb");
+    expect(fragment).toContain("install --with-deps chromium");
+    // Into playwright's default cache path — a PLAYWRIGHT_BROWSERS_PATH override here would put a second
+    // Chromium beside the one chromium.executablePath() resolves.
+    expect(fragment).not.toContain("PLAYWRIGHT_BROWSERS_PATH");
     // App-level --no-sandbox, not a container privilege — the fragment carries no intentic:runtime line.
-    expect(browserHandler.fragment!(reddit.config)).not.toContain("intentic:runtime");
+    expect(fragment).not.toContain("intentic:runtime");
 });
 
 test("remove deletes the skill dir; status returns to inactive", async () => {

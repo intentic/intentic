@@ -1,7 +1,7 @@
 import { join } from "node:path";
 import { type CapabilityContribution, contributionDiscriminator } from "@intentic/extension-manifest";
 import type { CapabilityKind } from "@intentic/sandbox-contract";
-import { enabledExtensions, type ExtensionHost } from "../extensions/installed-extensions.js";
+import { enabledExtensions, type ExtensionHost, type InstalledExtension } from "../extensions/installed-extensions.js";
 import type { CapabilityCtx } from "./capability.js";
 import { extensionRead } from "./extension-dirs.js";
 
@@ -17,8 +17,10 @@ import { extensionRead } from "./extension-dirs.js";
 
 export interface ResolvedContribution {
     readonly spec: CapabilityContribution;
-    // The extension's checkout/bake dir — skill/fragment paths resolve against it.
-    readonly dir: string;
+    // The extension that declared it: its dir is what skill/fragment paths resolve against, and whether its
+    // code is in this image at all is what the card's status has to answer for — a core image bakes the
+    // messaging manifests, so the cards exist there with nothing behind them.
+    readonly extension: InstalledExtension;
 }
 
 export const contributionKey = (kind: CapabilityKind, id: string): string => `${kind}:${id}`;
@@ -38,7 +40,7 @@ export const contributionRegistry = async (host: ExtensionHost): Promise<Map<str
         for (const spec of extension.manifest.contributes?.capabilities ?? []) {
             const key = contributionKey(spec.kind, spec.id);
             if (!registry.has(key)) {
-                registry.set(key, { spec, dir: extension.dir });
+                registry.set(key, { spec, extension });
             }
         }
     }
@@ -91,7 +93,9 @@ export const contributionSecretField = (spec: CapabilityContribution): string | 
 
 // The checkout-relative fragment path as absolute — cli only, and only when it declares one.
 export const contributionFragmentPath = (contribution: ResolvedContribution): string | undefined =>
-    contribution.spec.kind === "cli" && contribution.spec.fragment !== undefined ? join(contribution.dir, contribution.spec.fragment) : undefined;
+    contribution.spec.kind === "cli" && contribution.spec.fragment !== undefined
+        ? join(contribution.extension.dir, contribution.spec.fragment)
+        : undefined;
 
 /* THE CARD'S SKILL.md, read and rendered for ONE instance. Two substitutions, the same for every kind:
  *   `${tools}` → the kind's core tool-surface note (how to drive the shared browser, what a connected
@@ -107,7 +111,7 @@ export const contributedSkill = async (contribution: ResolvedContribution, id: s
     if (!("skill" in contribution.spec)) {
         return undefined;
     }
-    const source = await extensionRead(join(contribution.dir, contribution.spec.skill));
+    const source = await extensionRead(join(contribution.extension.dir, contribution.spec.skill));
     return source === undefined ? undefined : source.replaceAll("${tools}", tools).replaceAll("${id}", id).replace(/^name: .*$/m, `name: ${id}`);
 };
 

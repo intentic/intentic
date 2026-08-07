@@ -23,7 +23,9 @@ const collect = async (request: Parameters<typeof runAgent>[0], queryFn: QueryFn
     return events;
 };
 
-const request = { prompt: "add a /ping route", cwd: "/work", signal: new AbortController().signal };
+// browserOutputDir present: the shape of a browser-carrying turn (the standard image's ordinary case) — its
+// absence is the core-image signal that strips the browser guidance, asserted in system-prompt.test.ts.
+const request = { prompt: "add a /ping route", cwd: "/work", signal: new AbortController().signal, browserOutputDir: "/work/.intentic/browser/output" };
 
 // Bash routing through bin/tmux-run is decided by whether the wrapper is baked into the image, so a suite run
 // INSIDE that image sees a `terminal` frame these event-shape assertions never asked for. Every case below states

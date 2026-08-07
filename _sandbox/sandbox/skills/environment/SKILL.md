@@ -12,18 +12,24 @@ propose custom Dockerfile steps — the owner reviews and approves them, then a 
 
 ## Check what's already here first
 
-The image is not bare, and reaching for an install before looking wastes a lot of a turn. Already baked:
+The image is not bare, and reaching for an install before looking wastes a lot of a turn. Baked in every
+profile:
 
 - **Toolchain** — git (+ git-lfs), tmux, zsh, make/g++, python3 with **pip and venv**, node 24 (which runs
-  `.ts` files directly — `tsx` is a shim over it), pnpm/npm, docker (dormant until the capability is granted).
-- **First-party CLIs** — `intentic`, `iq`, `lsp`, and **Chromium with browser tools**
-  (`mcp__web__browser_navigate`, `mcp__web__browser_take_screenshot`, … — load them with ToolSearch; never
-  install a browser).
+  `.ts` files directly — `tsx` is a shim over it), pnpm/npm.
+- **First-party CLIs** — `intentic`, `iq`, `lsp`.
 - **Search & data** — ripgrep, `jq`, `yq` (YAML; note python3 has no PyYAML), sqlite3, xmllint, file, tree.
 - **Network** — curl, wget, rsync, openssh, ss/ip, netstat/ifconfig, lsof, fuser, ping, traceroute, dig/host,
   nc, socat.
 - **Process & files** — ps/top, killall/pstree, strace, patch, less, nano/vi, diff, hexdump/xxd/column,
   unzip/zip, tar with gzip/xz/zstd/bzip2, sponge, envsubst, uuidgen, bc, dos2unix.
+
+The heavier features are FEATURE PACKS that ride the image profile: the standard sandbox image also bakes
+**Chromium with browser tools** (`mcp__web__browser_navigate`, `mcp__web__browser_take_screenshot`, … — load
+them with ToolSearch; never install a browser yourself), a dormant Docker Engine, the provider CLIs
+(`codex`, `opencode`, `cli-proxy-api`) and semantic `iq ask`. On a minimal (core) image each arrives through
+its capability's own fragment on an owner rebuild — never propose an overlay for those; enabling the
+capability composes it automatically.
 
 Check with `command -v <tool>` before assuming something is missing. If a staple that belongs in that list is
 genuinely absent, it is worth proposing below — the list above grew from exactly that.
@@ -65,8 +71,8 @@ Tell the owner to review and approve the change on the platform's **Sandbox page
 You cannot approve or apply it yourself; the rebuild runs outside this container (the owner pastes a
 rebuild command locally, or it applies on the next `intentic deploy apply` for server-managed sandboxes). Until
 the rebuild, the new tools are not available — say so instead of retrying. A capability that extends the
-image (VPN, Discord voice) composes its own fragment automatically — never propose an overlay for those,
-just point the owner at the same rebuild.
+image (VPN, a browser connector, Docker) composes its own fragment automatically — never propose an overlay
+for those, just point the owner at the same rebuild.
 
 ## Docker Engine problems are the Docker capability's options, not an overlay
 

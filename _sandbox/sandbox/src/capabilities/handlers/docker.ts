@@ -1,8 +1,10 @@
 import { execFile } from "node:child_process";
+import { existsSync } from "node:fs";
 import { readFile, writeFile } from "node:fs/promises";
 import { setTimeout as delay } from "node:timers/promises";
 import { promisify } from "node:util";
 import type { CapabilityStatus, DockerConfig, IntenticLine } from "@intentic/sandbox-contract";
+import { packFragment } from "../../environment/packs.js";
 import type { CapabilityCtx, CapabilityHandler } from "../capability.js";
 
 // The in-sandbox Docker Engine. The base image bakes Docker + Compose, but the engine stays dormant — and the
@@ -19,10 +21,12 @@ const exec = promisify(execFile);
 // The panel key behind the visible dockerd session (panel-docker) — shared with main.ts's boot adopt.
 export const DOCKER_PANEL_KEY = "docker";
 
-// The engine is baked into the base image — this directive IS the fragment; baking it into the overlay is what
-// records the owner's privilege grant (and what flips the derived environment state to "rebuild required").
-const DOCKER_FRAGMENT = `# docker capability: the engine is baked into the base image — this directive alone grants dockerd
-# the privileges it needs (translated to a --privileged run by the allowlisted rebuild executors).
+// The privilege half of the fragment — always present: baking this directive into the overlay is what records
+// the owner's privilege grant (and what flips the derived environment state to "rebuild required"). The ENGINE
+// half is the docker feature pack (packs/docker.Dockerfile), resolved per compose: nothing when the running
+// base image bakes it (the standard image does), the install itself on a core image.
+const DOCKER_DIRECTIVE = `# docker capability: this directive grants dockerd the privileges it needs
+# (translated to a --privileged run by the allowlisted rebuild executors).
 # intentic:runtime --privileged`;
 
 /* The GPU option's half of the fragment (config.gpu === "on"). Two layers have to line up for `docker run
@@ -265,10 +269,22 @@ export const dockerHandler: CapabilityHandler = {
     // ONLY the image family may be read here: a fragment is the thing whose hash decides whether the owner is
     // asked to rebuild, so an engine option leaking into it would charge a rebuild for a value dockerd rereads
     // on restart (DockerConfigSchema makes the argument).
-    fragment: (config) => (gpuAsked(config) ? `${DOCKER_FRAGMENT}\n${GPU_FRAGMENT}` : DOCKER_FRAGMENT),
+    fragment: async (config) => {
+        const engine = await packFragment("docker");
+        const directive = gpuAsked(config) ? `${DOCKER_DIRECTIVE}\n${GPU_FRAGMENT}` : DOCKER_DIRECTIVE;
+        return engine === undefined ? directive : `${engine}\n${directive}`;
+    },
     apply: async function* (ctx, id, config) {
         if (await cliMissing()) {
-            yield { kind: "log", message: `Stored ${id} — no docker CLI in this dev run; the engine starts in a real sandbox container.` };
+            // Two worlds have no docker CLI: a bare dev run (nothing to do — the engine exists in a real
+            // sandbox) and a core image (the docker pack rides the overlay — same rebuild that grants the
+            // privilege). /opt/sandbox is the in-image sentinel: only the baked daemon tree lives there.
+            yield existsSync("/opt/sandbox")
+                ? {
+                      kind: "log" as const,
+                      message: `Stored ${id} — this image doesn't carry the Docker Engine yet. Rebuild the sandbox from the Environment card; the engine installs and starts with the rebuild.`,
+                  }
+                : { kind: "log" as const, message: `Stored ${id} — no docker CLI in this dev run; the engine starts in a real sandbox container.` };
             return;
         }
         if (await dockerUp()) {

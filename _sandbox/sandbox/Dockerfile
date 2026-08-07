@@ -1,14 +1,23 @@
-# The per-project AI-agent sandbox image (published as ghcr.io/intentic/sandbox). The
-# monorepo is compiled OUTSIDE Docker: _tools/scripts/prepare-image-trees.sh builds the seven baked packages
-# (turbo, warm cache) and prunes their production trees + the iq models into .image-out/, which enters this
-# build as the named context `trees`. Every layer here is a pinned tool install (registry-cache-stable) or a
-# cheap tree COPY, so a source change rebuilds in seconds — no pnpm install / turbo run inside a cacheless
-# container. Build from the REPO ROOT (the main context still carries the source-copied bits — iq plugin,
-# skills, bin scripts, entrypoint, connectors):
+# The CORE sandbox image — the floor: what the daemon and its web workspace need to function, nothing else.
+# Everything heavier (Chromium, Docker Engine, provider CLIs, semantic-search models, messaging gateways) is a
+# FEATURE PACK: a checked-in fragment under packs/ that _tools/scripts/compose-image-dockerfile.mjs splices at
+# the two marker lines below to build a published profile (packs/profiles.json — `standard` is what
+# ghcr.io/intentic/sandbox:stable ships), and that the daemon composes into the environment overlay when a
+# capability needs it on demand (src/environment/packs.ts). Same fragment files both ways, so the baked and
+# on-demand paths cannot drift; a splice stamps /opt/packs/<name> so the daemon knows what its base carries.
+#
+# The monorepo is compiled OUTSIDE Docker: _tools/scripts/prepare-image-trees.sh builds the baked packages
+# (turbo, warm cache) and prunes their production trees into .image-out/, which enters this build as the named
+# context `trees`. Every layer here is a pinned tool install (registry-cache-stable) or a cheap tree COPY, so a
+# source change rebuilds in seconds — no pnpm install / turbo run inside a cacheless container. Build from the
+# REPO ROOT (the main context still carries the source-copied bits — iq plugin, skills, bin scripts,
+# entrypoint, connectors):
 #   bash _tools/scripts/prepare-image-trees.sh
-#   docker build --build-context trees=.image-out -f _sandbox/sandbox/Dockerfile -t ghcr.io/intentic/sandbox .
-# At run time connect.sh / the workspace provider inject agent credentials (ANTHROPIC_API_KEY or
-# CLAUDE_CODE_OAUTH_TOKEN) and mount the workspace volume at /work — neither is baked into the image.
+#   node _tools/scripts/compose-image-dockerfile.mjs standard > .image-out/Dockerfile.standard
+#   docker build --build-context trees=.image-out -f .image-out/Dockerfile.standard -t ghcr.io/intentic/sandbox .
+# (or build this file directly for the bare core profile). At run time connect.sh / the workspace provider
+# inject agent credentials (ANTHROPIC_API_KEY or CLAUDE_CODE_OAUTH_TOKEN) and mount the workspace volume at
+# /work — neither is baked into the image.
 
 FROM node:24.18.0-bookworm-slim@sha256:b31e7a42fdf8b8aa5f5ed477c72d694301273f1069c5a2f71d53c6482e99a2fc AS runtime
 # Links the GHCR package to the repo (inherits its visibility/permissions, shows under its Packages).
@@ -38,21 +47,11 @@ LABEL org.opencontainers.image.source=https://github.com/intentic/intentic
 RUN apt-get update \
     && apt-get install -y --no-install-recommends git ca-certificates procps tmux zsh ncurses-term curl jq openssh-server openssh-client sshpass rsync iproute2 python3 python3-pip python3-venv make g++ ripgrep \
     && rm -rf /var/lib/apt/lists/*
-# Docker Engine + Compose + buildx are baked into the base sandbox but stay DORMANT: every runner
-# (connect.sh/.ps1, dev-sandbox.sh, rebuild.sh, update.sh, the workspace provider) starts this container
-# unprivileged, and dockerd (which needs --privileged) only runs once the docker CAPABILITY is added — its
-# fragment's "# intentic:runtime --privileged" directive rides the owner-approved overlay into an allowlisted
-# rebuild, after which the daemon runs dockerd as the visible panel-docker tmux session. Baking the engine
-# anyway keeps that grant a near-instant rebuild (a cache-hit FROM + directive overlay), not an engine install.
-# Every runner mounts a named volume at /var/lib/docker (empty until the grant) so images and dev-DB volumes
-# survive recreates — and layers land on a real filesystem (overlay2), not the container's own overlayfs.
-RUN install -m 0755 -d /etc/apt/keyrings \
-    && curl -fsSL https://download.docker.com/linux/debian/gpg -o /etc/apt/keyrings/docker.asc \
-    && chmod a+r /etc/apt/keyrings/docker.asc \
-    && echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/debian bookworm stable" > /etc/apt/sources.list.d/docker.list \
-    && apt-get update \
-    && apt-get install -y --no-install-recommends docker-ce docker-ce-cli containerd.io docker-compose-plugin docker-buildx-plugin \
-    && rm -rf /var/lib/apt/lists/*
+# Docker Engine, Chromium, provider CLIs et al. are NOT here — each is a feature pack (packs/<name>.Dockerfile)
+# spliced at the markers below for the profiles that bake it, or riding the environment overlay on demand.
+# Every runner still mounts a named volume at /var/lib/docker (empty until the docker capability's privilege
+# grant) so a later engine install finds images and dev-DB volumes surviving recreates — and layers land on a
+# real filesystem (overlay2), not the container's own overlayfs.
 # Repos the agent creates by hand default to main, matching gitInit's --initial-branch and Forgejo.
 RUN git config --global init.defaultBranch main
 # Auth POLICY is baked (it is a constant of the image); the host key — the sandbox's SSH identity — is not, so
@@ -157,34 +156,9 @@ RUN corepack enable && corepack prepare pnpm@11.13.1 --activate \
 # 45 MiB by the playwright layer, ~23% of a 2 GB pull, for a cache nothing reads (installs in /work are pnpm's,
 # and its store lives on the volume).
 RUN npm install -g node-gyp@13.0.1 && node-gyp --version && npm cache clean --force
-# The `opencode` CLI on PATH — the Grok provider (grok/opencode.ts) spawns `opencode serve` via
-# @opencode-ai/sdk's createOpencodeServer, which shells out to this binary. xAI OAuth tokens are persisted by
-# OpenCode under XDG_DATA_HOME, which the service pins to the workspace's .intentic so they survive restarts.
-# The agent's shell also drives it directly (`opencode run`) to delegate tasks to Grok (agent/delegation.ts).
-# Pin the CLI in lockstep with the SDK version in _sandbox/sandbox/package.json so the client/server wire API matches.
-# ponytail: bump this together with @opencode-ai/sdk; a version skew surfaces as server-start / event-shape errors.
-RUN npm install -g opencode-ai@1.17.15 && opencode --version && npm cache clean --force
-# OpenCode privacy defaults, in the GLOBAL config (the only level where autoupdate:false is honored): no
-# auto-update (the CLI is version-pinned above) and no session sync to opncd.ai, even manual /share. The
-# daemon's server-spawn config (grok/opencode.ts) merges over this file, so runtime overrides are unaffected.
-RUN mkdir -p /root/.config/opencode \
-    && printf '{ "autoupdate": false, "share": "disabled" }\n' > /root/.config/opencode/opencode.json
-# The `cli-proxy-api` binary on PATH — CLIProxyAPI, the translator that lets the Claude Code harness drive
-# Codex/Grok/Kimi/Google models on the user's SUBSCRIPTION OAuth: agent/translator.ts spawns it as the server (a
-# routed turn's ANTHROPIC_BASE_URL points at it), and its Management/device flows connect the subscriptions. A
-# prebuilt Go release, pinned like the npm CLIs above.
-# ponytail: bump the pin deliberately; a wire-API or Management-endpoint change surfaces as a translator-only
-# failure (native-harness turns never touch it).
-ARG CLIPROXY_VERSION=7.2.110
-# CLIProxyAPI names its arm build `linux_aarch64` where dpkg (and every other asset in this file) says
-# `arm64` — mapped here, verified against the v7.2.110 release's asset list.
-RUN arch="$(dpkg --print-architecture)" \
-    && case "$arch" in arm64) arch="aarch64" ;; esac \
-    && mkdir -p /tmp/cliproxy \
-    && curl -fsSL "https://github.com/router-for-me/CLIProxyAPI/releases/download/v${CLIPROXY_VERSION}/CLIProxyAPI_${CLIPROXY_VERSION}_linux_${arch}.tar.gz" | tar -xz -C /tmp/cliproxy \
-    && install -m 0755 "$(find /tmp/cliproxy -type f -name cli-proxy-api | head -n1)" /usr/local/bin/cli-proxy-api \
-    && test -x /usr/local/bin/cli-proxy-api \
-    && rm -rf /tmp/cliproxy
+# The provider CLIs — `opencode` (Grok), `cli-proxy-api` (the subscription translator) and `codex` — are
+# feature packs: connected-provider state decides whether each rides the overlay (environment/provider-packs.ts),
+# and the standard profile bakes them all.
 # cloudflared on PATH — `intentic deploy apply` shells out to `cloudflared access tcp` to reach a self-host's SSH
 # through its Cloudflare tunnel when the host is registered with via:"cloudflared" (a NAT'd local machine).
 # Pinned to the same version connect.sh runs as the tunnel sidecar. Placed HERE, before the tree COPYs below,
@@ -247,36 +221,8 @@ RUN arch="$(dpkg --print-architecture)" \
     && curl -fsSL "https://github.com/mikefarah/yq/releases/download/v${YQ_VERSION}/yq_linux_${arch}" -o /usr/local/bin/yq \
     && chmod +x /usr/local/bin/yq \
     && yq --version
-# Chromium for the agent's browser tools, deliberately the LAST layer above the tree COPYs. The revision has to
-# be the one the daemon's own playwright resolves — browser-tools.ts calls chromium.executablePath() on it and
-# hands the result to @playwright/mcp as --executable-path — and a playwright version pins its chromium
-# revision, so installing the version prepare-image-trees.sh deployed gives the same revision by construction.
-# Passing that version through a few-byte file is the whole point: this layer's cache key moves only when
-# playwright is upgraded. Driving the install from the tree instead (`cd /opt/sandbox && node
-# node_modules/playwright/cli.js install`) reads the exact same module, but it has to sit BELOW
-# `COPY --from=trees sandbox`, where every commit evicted it — 2m09s re-downloading ~180 MiB, in both the images
-# and release jobs, every pipeline. `install-deps` pulls the shared libraries Chromium links against (fonts,
-# nss, libdrm…), which a plain `install chromium` does not.
-#
-# Baked, not left to a rebuild: a browser is ordinary for coding work (open the docs, screenshot the dev server
-# you just changed), and the alternative is what actually happened — an agent asked to look at a URL found no
-# browser, ran `npx playwright install` mid-turn, and burned a quarter of its session pulling 114 MiB into a
-# container layer that a recreate then threw away. ~180 MiB of image is the cheaper side of that trade. The
-# download lands in /root/.cache/ms-playwright, which is exactly where executablePath() looks.
-#
-# THE HEADLESS SHELL IS DELETED AGAIN IMMEDIATELY. `install chromium` fetches two browsers — chromium (389 MiB
-# on disk) and chromium-headless-shell (262 MiB) — and playwright only ever launches the shell for the
-# `chromium-headless-shell` channel or its own default headless launch. Neither happens here: both MCP specs
-# (browser-tools.ts browserServerSpec / isolatedBrowserSpec, headed and --headless) pass --executable-path from
-# chromium.executablePath(), which is the full browser, and browser-login.ts launches headed. There is no flag
-# to fetch one without the other, so it goes after the fact, in the same layer that downloaded it.
-# If a future launch drops --executable-path or asks for the shell channel, this rm is what breaks it — restore
-# the shell there rather than resolving a missing-browser error at runtime.
-COPY --from=trees playwright-version /opt/playwright-version
-RUN npx --yes playwright@"$(cat /opt/playwright-version)" install --with-deps chromium \
-    && rm -rf /root/.cache/ms-playwright/chromium_headless_shell-* \
-    && rm -rf /var/lib/apt/lists/* /root/.npm/_npx \
-    && npm cache clean --force
+# ---- packs:pre-trees ---- (spliced by compose-image-dockerfile.mjs — pinned pack installs land here, ABOVE
+# the tree COPYs, so a source change never evicts a pack download; the core profile carries none)
 # The intentic CLI on PATH — the /intentic endpoint shells out to it for resolve/plan dry-runs, and
 # connect.sh runs it via `--entrypoint intentic`. tsc emits cli.js without the exec bit, so chmod it:
 # runc resolves the entrypoint with Go's exec.LookPath, which reports a non-executable PATH entry as
@@ -291,8 +237,8 @@ RUN chmod +x /opt/intentic-cli/dist/cli.js \
 # replacement) and cannot run a file. A project-local tsx still wins — node_modules/.bin precedes /usr/local/bin.
 RUN printf '%s\n' '#!/bin/sh' 'exec node "$@"' > /usr/local/bin/tsx \
     && chmod +x /usr/local/bin/tsx
-# The baked embedding model behind `iq ask` (IQ_MODEL_DIR below); absent → iq degrades to lexical, never fetches.
-COPY --from=trees iq-models /opt/iq-models
+# The embedding model behind `iq ask` is the `semantic` feature pack (fetched into /opt/iq-models, where
+# IQ_MODEL_DIR below points); absent — the core profile — iq degrades to lexical, never fetches at runtime.
 # The iq Claude Code plugin (skill + SessionStart nudge) — the single source that teaches every agent to prefer
 # iq over grep/find/Glob. Baked here and always loaded via IQ_PLUGIN_DIR (agent.routes.ts prepends it to the SDK
 # `plugins` option), so iq is the default in the sandbox exactly as external users get it from the marketplace.
@@ -300,20 +246,14 @@ COPY --from=trees iq-models /opt/iq-models
 COPY _search/iq/plugin /opt/iq-plugin
 # The sandbox daemon.
 COPY --from=trees sandbox /opt/sandbox
-# Native modules without portable prebuilds (node-pty always; @discordjs/opus has none for this Node major)
-# get source-compiled by whatever host ran pnpm deploy — linked against THAT host's glibc. Rebuild them against
-# this image's glibc with the baked toolchain (python3/make/g++ above; the node image ships its own headers, so
-# node-gyp compiles offline). Without this, a tree deployed on a newer-glibc dev box ships binaries this
-# runtime can't load. Driven directly, not via `npm rebuild`: node-pty's npm install script wants tsc (its lib/
-# is already compiled in the tarball — only the .node needs building), and opus's loader requires the exact
-# glibc-tagged prebuild dir its node-pre-gyp install lays down after the stale tags are removed.
-# The registry-prebuilt natives (sharp, ast-grep, onnxruntime, davey) are manylinux — safe as copied.
+# node-pty ships no linux prebuild, so it gets source-compiled by whatever host ran pnpm deploy — linked
+# against THAT host's glibc. Rebuild it against this image's glibc with the baked toolchain (python3/make/g++
+# above; the node image ships its own headers, so node-gyp compiles offline). Without this, a tree deployed on
+# a newer-glibc dev box ships a binary this runtime can't load. Driven directly, not via `npm rebuild`:
+# node-pty's npm install script wants tsc (its lib/ is already compiled in the tarball — only the .node needs
+# building). The registry-prebuilt natives (sharp, ast-grep, onnxruntime, davey) are manylinux — safe as copied.
 RUN cd /opt/sandbox/node_modules/.pnpm/node-pty@*/node_modules/node-pty \
-    && node-gyp rebuild \
-    && cd /opt/sandbox/node_modules/.pnpm/@discordjs+opus@*/node_modules/@discordjs/opus \
-    && rm -rf prebuild build-tmp-napi-v3 \
-    && npm run install \
-    && npm cache clean --force
+    && node-gyp rebuild
 # The lsp CLI on PATH — the agent's TypeScript rename + diagnostics tool, gated by the lspTools setting (the
 # daemon writes/removes its skill at /work/.claude/skills/lsp). It drives the TS language service (its own
 # bundled typescript) over whatever tsconfig project the agent points it at in /work. `lsp diag` and the
@@ -335,25 +275,16 @@ RUN chmod +x /opt/sandbox/node_modules/@intentic/lsp/dist/cli.js \
 # transformers, ast-grep) for a CLI whose own code is under 1 MiB. Same chmod-as-existence-check rationale.
 RUN chmod +x /opt/sandbox/node_modules/@intentic/iq/dist/cli.js \
     && ln -s /opt/sandbox/node_modules/@intentic/iq/dist/cli.js /usr/local/bin/iq
-# The `codex` CLI on PATH — the agent's shell delegates tasks to the user's connected Codex account
-# (`codex exec`, agent/delegation.ts), authenticated via the CODEX_HOME injected per turn.
-#
-# Also symlinked out of the daemon's tree, and here the duplicate was worse than wasted bytes: @openai/codex-sdk
-# (the Codex primary adapter) depends on @openai/codex at an EXACT version, so the tree already carries the
-# platform binary — 350 MiB of it — and the `npm install -g @openai/codex@…` this replaces added a second,
-# separately-pinned 280 MiB copy, 220 MiB of the pull. The two pins were supposed to move together and had
-# already drifted: the image shipped codex-cli 0.142.5 on PATH while the SDK drove 0.146.0. Resolving the
-# wrapper out of the tree makes that skew unrepresentable, and deletes the pin nobody has to remember.
-# The wrapper (not the vendored binary) is the symlink target: it is what picks the platform package, so this
-# stays arch-agnostic. `codex --version` is the guard — a tree layout change fails the build, loudly.
-RUN codex_bin="$(find /opt/sandbox/node_modules/.pnpm -maxdepth 6 -path '*@openai/codex/bin/codex.js' | head -n1)" \
-    && ln -s "$codex_bin" /usr/local/bin/codex \
-    && codex --version
+# The `codex` CLI is the codex feature pack (a global install pinned to @openai/codex-sdk's exact dependency —
+# packs/codex.Dockerfile): prepare-image-trees.sh prunes the ~350 MiB @openai/codex platform package OUT of the
+# daemon tree, so the pack's copy is the only one and the daemon's adapter drives it via codexPathOverride.
 # Image-baked first-party extensions — one manifest checkout per subdir, enumerated by installedExtensions()
 # via SANDBOX_EXTENSIONS_DIR (the iq-plugin precedent): present in every sandbox, not removable, no capability
 # entry. connectors, social, computers and acp-agents are data-only (manifest + skill packs + client image
-# fragments) so they copy straight from context; discord, imap, slack, telegram and whatsapp ship their deployed gateway
-# trees from the trees context (node_modules included).
+# fragments) so they copy straight from context. The messaging gateways (discord, imap, slack, telegram,
+# whatsapp) bake their MANIFESTS here — the cards exist in every image — while their deployed runtime trees are
+# the bake-only `messaging` feature pack (packs/messaging.Dockerfile, in the standard profile); on a core image
+# the daemon surfaces "not included in this image" instead of spawning a runtime that isn't there.
 #
 # The four data-only packs are what makes the /capabilities grid: every card that is a ROW over a generic core
 # handler (a cli connector, a social platform, an OS pack, an ACP preset) is one of these manifest entries, so
@@ -362,18 +293,11 @@ COPY _extensions/connectors /opt/extensions/connectors
 COPY _extensions/social /opt/extensions/social
 COPY _extensions/computers /opt/extensions/computers
 COPY _extensions/acp-agents /opt/extensions/acp-agents
-COPY --from=trees extensions/discord /opt/extensions/discord
-# Same glibc rationale as the sandbox rebuild above — the discord gateway's voice stack compiles opus from source.
-RUN cd /opt/extensions/discord/node_modules/.pnpm/@discordjs+opus@*/node_modules/@discordjs/opus \
-    && rm -rf prebuild build-tmp-napi-v3 \
-    && npm run install
-COPY --from=trees extensions/imap /opt/extensions/imap
-# The slack gateway is pure JS (Socket Mode over undici) — no native build step to redo after the COPY.
-COPY --from=trees extensions/slack /opt/extensions/slack
-# The telegram gateway is pure JS AND dependency-free (the Bot API is fetch + JSON), so its tree is its own dist.
-COPY --from=trees extensions/telegram /opt/extensions/telegram
-# The whatsapp gateway is JS + WASM (baileys' crypto bridge ships compiled wasm) — no native build step either.
-COPY --from=trees extensions/whatsapp /opt/extensions/whatsapp
+COPY _extensions/discord/intentic-extension.json /opt/extensions/discord/
+COPY _extensions/imap/intentic-extension.json /opt/extensions/imap/
+COPY _extensions/slack/intentic-extension.json /opt/extensions/slack/
+COPY _extensions/telegram/intentic-extension.json /opt/extensions/telegram/
+COPY _extensions/whatsapp/intentic-extension.json /opt/extensions/whatsapp/
 # documentation is a UI extension with daemon-side contributions, so it sits between the two groups: its views are
 # compiled into the web bundle like the manifest-only ones below, but `contributes.bin` (the intentic-docs CLI the
 # agent runs) and `contributes.agent` (the documenting skill) are read from the image, so those two directories have
@@ -402,6 +326,8 @@ COPY _extensions/preview/intentic-extension.json /opt/extensions/preview/
 COPY _extensions/repo-apps/intentic-extension.json /opt/extensions/repo-apps/
 COPY _extensions/viewers/intentic-extension.json /opt/extensions/viewers/
 COPY _extensions/workflows/intentic-extension.json /opt/extensions/workflows/
+# ---- packs:post-trees ---- (spliced by compose-image-dockerfile.mjs — packs that read the daemon tree or
+# COPY from the trees context land here, below every tree COPY they depend on)
 # pane-log-clean on PATH — the tmux pipe-pane hooks (above / logs/log-files.ts) replay each pane's byte
 # stream through it (a headless VT emulator using @xterm/headless from the daemon's node_modules) to keep
 # the terminal logs readable. Symlinked like intentic/iq: node resolves @xterm/headless from the target's
@@ -456,9 +382,11 @@ WORKDIR /work
 # LANG: without a UTF-8 locale zsh's line editor counts BYTES as columns, so bira's multibyte prompt glyphs
 # (╰─, ↵) desync the cursor and corrupt the prompt after any non-zero exit status. C.utf8 is glibc-built-in.
 ENV WORKSPACE_ROOT=/work SANDBOX_PORT=8787 LANG=C.utf8 IQ_MODEL_DIR=/opt/iq-models IQ_PLUGIN_DIR=/opt/iq-plugin EXTENSIONS_DIR=/opt/extensions
-# The bundled translator's fixed localhost endpoint + a loopback-only bearer (the token is just what Claude Code
-# must send as ANTHROPIC_AUTH_TOKEN to a same-host proxy). Baked so config.translator.url is set in the image; a
-# bare `tsx watch` dev run leaves both empty ⇒ no translator, and routed (codex/grok-under-Claude-Code) turns
+# The translator's fixed localhost endpoint + a loopback-only bearer (the token is just what Claude Code must
+# send as ANTHROPIC_AUTH_TOKEN to a same-host proxy). The ENV is a pointer, not the binary — cli-proxy-api
+# itself is the `translator` pack, and main.ts only spawns it when it is present and a connected provider
+# routes through it. Baked in every profile so config.translator.url is set wherever the pack lands; a bare
+# `tsx watch` dev run leaves both empty ⇒ no translator, and routed (codex/grok-under-Claude-Code) turns
 # surface streamAgent's clean "no translator" error. The port is TRANSLATOR_PORT (@intentic/constants) — every
 # fixed bind in this container is declared there and asserted distinct, because this line once read 8788 and
 # silently fought the loopback listener for it. container-ports.test.ts holds the two in step.

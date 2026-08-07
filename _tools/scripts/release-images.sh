@@ -15,3 +15,5 @@ TAGS="$VERSION stable" ARCH_SUFFIX=-amd64 IMAGES=sandbox bash "$DIR/publish-imag
 # dind-host stays a single amd64 image (publish-images.sh says why) — plain tags, no merge.
 TAGS="$VERSION stable" IMAGES=dind-host bash "$DIR/publish-images.sh"
 ARM64_REF="$VERSION-arm64" bash "$DIR/merge-image-manifests.sh" sandbox "$VERSION" stable
+# The core profile's halves, published by the same jobs under core- prefixed tags (publish-images.sh TAG_PREFIX).
+ARM64_REF="core-$VERSION-arm64" bash "$DIR/merge-image-manifests.sh" sandbox "core-$VERSION" core-stable

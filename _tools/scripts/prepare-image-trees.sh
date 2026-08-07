@@ -43,17 +43,16 @@ done
 # onnxruntime-web is @huggingface/transformers' BROWSER backend (WebAssembly/WebGPU) — ~129 MiB that can never
 # load in the image: the node dist the daemon and iq resolve (dist/transformers.node.{mjs,cjs}) requires only
 # onnxruntime-node + onnxruntime-common, and nothing else in dist/ resolves the web package. pnpm deploy has no
-# per-dependency exclude, so it is pruned from the tree after the fact; the -xtype l pass clears the symlinks
-# left dangling in dependents' node_modules (never followed, but no reason to ship them).
+# per-dependency exclude, so it is pruned from the tree after the fact.
+# @openai/codex is the ~350 MiB platform binary @openai/codex-sdk exact-pins — only ever needed at SPAWN time,
+# and the codex feature pack global-installs the same pinned version onto PATH (packs/codex.Dockerfile;
+# packs.test.ts holds the pins in step), which the adapter drives via codexPathOverride. Shipping it in the
+# tree too would put the one copy the pack owns back into every image, core included.
+# The -xtype l pass clears the symlinks both prunes leave dangling in dependents' node_modules (never
+# followed, but no reason to ship them).
 rm -rf "$out"/sandbox/node_modules/.pnpm/onnxruntime-web@*
+rm -rf "$out"/sandbox/node_modules/.pnpm/@openai+codex@*
 find "$out/sandbox/node_modules" -xtype l -delete
-
-# The Dockerfile bakes Chromium from a layer that sits ABOVE the tree COPYs (so a source change can't evict a
-# ~180 MiB download), which means it cannot read the deployed tree's playwright to decide what to install.
-# Hand it the version instead: a playwright version pins its chromium revision, so installing the SAME version
-# yields the same revision — the one the daemon's chromium.executablePath() resolves at runtime. Emitted from
-# the deployed tree rather than package.json so it is the resolved version, catalog indirection included.
-node -p "require('./$out/sandbox/node_modules/playwright/package.json').version" > "$out/playwright-version"
 
 # The baked embedding + reranker models (~57MB from HF). The marker sits OUTSIDE the model dir so the tree
 # COPY'd into the image stays exactly the layout fetch-model.mjs validated.

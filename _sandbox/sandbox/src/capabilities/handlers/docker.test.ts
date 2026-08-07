@@ -6,19 +6,20 @@ import { addressPoolOf, isPrivileged, withEngineSettings } from "./docker.js";
 // here we pin the two contracts other code trusts: the fragment's directive (what the rebuild executors
 // allowlist and the composed overlay records) and the CapEff probe deciding "rebuild required" vs "start now".
 
-test("the fragment is exactly the privileged runtime directive (the engine itself is baked in the base image)", () => {
-    const fragment = registry.docker.fragment?.({}) ?? "";
+test("the fragment carries the privileged directive plus the engine pack when the base image lacks it", async () => {
+    const fragment = (await registry.docker.fragment?.({})) ?? "";
     expect(fragment).toContain("# intentic:runtime --privileged");
-    // Comment-only: no RUN/ENV — a docker rebuild is a cache-hit build, not an engine install.
-    expect(fragment.split("\n").every((line) => line.trim() === "" || line.startsWith("#"))).toBe(true);
+    // No base stamp in a test run — like a core image, so the engine install rides the fragment. On a
+    // standard image (stamped base) the same compose yields the directive alone: a cache-hit rebuild.
+    expect(fragment).toContain("docker-ce");
 });
 
 /* The gpu option's fragment has to satisfy BOTH layers or the option is a lie: the directive gets the devices
  * as far as this container, and the toolkit registers the nvidia runtime with the dockerd running INSIDE it.
  * With only the first, the agent's `docker compose up` still dies on `could not select device driver "nvidia"`
  * in a container that can see the GPU — which is the exact failure this whole option exists to end. */
-test("the gpu option adds the passthrough directive AND the toolkit the nested engine needs", () => {
-    const fragment = registry.docker.fragment?.({ gpu: "on" }) ?? "";
+test("the gpu option adds the passthrough directive AND the toolkit the nested engine needs", async () => {
+    const fragment = (await registry.docker.fragment?.({ gpu: "on" })) ?? "";
     expect(fragment).toContain("# intentic:runtime --privileged");
     expect(fragment).toContain("# intentic:runtime --gpus=all");
     expect(fragment).toContain("nvidia-container-toolkit");
@@ -27,9 +28,9 @@ test("the gpu option adds the passthrough directive AND the toolkit the nested e
 
 // Off is the default and the absence is total: an overlay that never asked must not carry a directive a host
 // could refuse, so a sandbox on a GPU-less machine keeps starting exactly as it did.
-test("gpu off leaves no trace in the fragment", () => {
+test("gpu off leaves no trace in the fragment", async () => {
     for (const config of [{}, { gpu: "off" }]) {
-        expect(registry.docker.fragment?.(config) ?? "").not.toContain("--gpus");
+        expect((await registry.docker.fragment?.(config)) ?? "").not.toContain("--gpus");
     }
 });
 
@@ -48,9 +49,9 @@ test("the echo carries every option, so the card opens on what the user actually
  * option that leaked into the fragment would change the overlay's hash and so demand an owner-approved rebuild
  * for a value dockerd rereads every time it starts. This test is the guard on that; the daemon.json half is
  * `withEngineSettings` below. */
-test("engine options never touch the fragment — only the image family costs a rebuild", () => {
+test("engine options never touch the fragment — only the image family costs a rebuild", async () => {
     const engine = { registryMirror: "https://mirror.example", insecureRegistries: "registry.lan:5000", addressPool: "10.201.0.0/16" };
-    expect(registry.docker.fragment?.(engine)).toBe(registry.docker.fragment?.({}));
+    expect(await registry.docker.fragment?.(engine)).toBe(await registry.docker.fragment?.({}));
 });
 
 /* MERGED, never written over: the GPU fragment's `nvidia-ctk runtime configure` writes its runtime into this

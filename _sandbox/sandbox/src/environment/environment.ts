@@ -4,6 +4,7 @@ import type { Environment } from "@intentic/sandbox-contract";
 import { sha256Hex } from "@intentic/sandbox-contract/tunnel-ids";
 import type { Services } from "../composition.js";
 import { capabilityFragments, workspaceExtensionFragments } from "./fragment-sources.js";
+import { providerPackFragments } from "./provider-packs.js";
 import { statePath } from "../workspace/state-paths.js";
 
 // The overlay Dockerfile extending the sandbox image. The approved file is DAEMON-COMPOSED from three parts:
@@ -101,6 +102,9 @@ export const composeEnvironment = async (services: Services): Promise<string | u
         ...new Set([
             ...(await Promise.all(capabilities.map((capability) => capabilityFragments(services, capability)))).flat(),
             ...(await workspaceExtensionFragments(services)),
+            // The helper binaries a CONNECTED provider needs (codex/opencode/cli-proxy-api), for a base image
+            // that doesn't already bake them — see provider-packs.ts.
+            ...(await providerPackFragments(services)),
         ]),
     ].toSorted();
     const custom = ((await services.files.read(customPath(services))) ?? "").trim();

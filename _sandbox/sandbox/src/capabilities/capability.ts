@@ -60,10 +60,12 @@ export interface CapabilityCtx {
 // `fragment` is a code-versioned Dockerfile fragment (RUN/ENV + optional "# intentic:runtime <flag>" directive
 // lines) this ENTRY bakes into the composed environment overlay — resolved per entry (the config decides),
 // deduped by exact content at compose time. Fragments must be self-contained: install and purge their own
-// build deps, never rely on another fragment's layers.
+// build deps, never rely on another fragment's layers. A handler whose payload is a feature pack resolves it
+// through environment/packs.ts (async — the pack file and the base image's stamp are both reads), which
+// returns nothing when the running base already bakes the pack.
 export interface CapabilityHandler {
     readonly requires?: readonly CapabilityKind[];
-    readonly fragment?: (config: unknown) => string | undefined;
+    readonly fragment?: (config: unknown) => string | undefined | Promise<string | undefined>;
     readonly apply: (ctx: CapabilityCtx, id: string, config: unknown) => AsyncGenerator<IntenticLine>;
     readonly status: (ctx: CapabilityCtx, id: string, config: unknown) => Promise<CapabilityStatus>;
     readonly remove?: (ctx: CapabilityCtx, id: string, config: unknown) => Promise<void>;
