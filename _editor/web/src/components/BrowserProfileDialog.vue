@@ -2,17 +2,23 @@
 import { cmp } from "@intentic/ui";
 import Button from "primevue/button";
 import Dialog from "primevue/dialog";
-import { onBeforeUnmount, ref, watch } from "vue";
+import { computed, onBeforeUnmount, ref, watch } from "vue";
 import { viewportCoords } from "../composables/browser/viewportCoords";
 import { socketUrl as wsSocketUrl } from "../composables/sandbox/wsTicket";
 
-/* Guided browser login for a `browser`-kind capability. Opens the daemon's /system/browser-login WebSocket: the
- * daemon drives a real (headless) Chromium at the platform's sign-in page and screencasts it here as image frames;
- * we forward the user's mouse + keyboard back over the same socket. The user signs in (incl. 2FA/CAPTCHA), clicks
- * "I'm done", and the daemon persists the logged-in profile so the agent's browser tools reuse it. Modeled on
- * terminalSession.ts (same token+connect query-string auth over the sandbox's tunnel). */
+/* A `browser`-kind capability's own Chromium, in the user's hands. Opens the daemon's /system/browser-profile
+ * WebSocket: the daemon drives the platform's persistent profile on a virtual display and screencasts it here as
+ * image frames; we forward the user's mouse + keyboard back over the same socket. Modeled on terminalSession.ts
+ * (same token+connect query-string auth over the sandbox's tunnel).
+ *
+ * `login` is the first visit: it opens the platform's sign-in page, the user signs in (incl. 2FA/CAPTCHA) and
+ * clicks "I'm done", and the daemon keeps the logged-in profile so the agent's browser tools reuse it.
+ * `browse` is every visit after that: the SAME profile, already signed in, opened on the platform's home page
+ * for the user to do something in themselves. One component because it is one browser and one wire — what
+ * differs is where it starts, whether finishing re-attests the account, and the address bar, which only browsing
+ * needs (the screencast is the page alone, so there is no window chrome in the picture to click). */
 
-const props = defineProps<{ visible: boolean; platform: string; label: string }>();
+const props = defineProps<{ visible: boolean; platform: string; label: string; mode: "login" | "browse" }>();
 const emit = defineEmits<{ (event: "update:visible", value: boolean): void; (event: "done"): void }>();
 
 // Keys forwarded as key events; everything printable rides as an insertText `text` frame instead.
@@ -26,8 +32,14 @@ const viewW = ref(1280);
 const viewH = ref(800);
 const surface = ref<HTMLElement>();
 const imgEl = ref<HTMLImageElement>();
+// The address bar's text: the page's own URL, except while the user is editing it — a `url` frame landing
+// mid-type would eat what they were typing.
+const address = ref("");
+const editingAddress = ref(false);
 let socket: WebSocket | undefined;
 let lastMove = 0;
+
+const browsing = computed(() => props.mode === "browse");
 
 const sendMsg = (message: object): void => {
     if (socket?.readyState === WebSocket.OPEN) {
@@ -44,7 +56,9 @@ const connect = async (): Promise<void> => {
     status.value = "connecting";
     errorMsg.value = undefined;
     frame.value = undefined;
-    const url = await wsSocketUrl(`/system/browser-login`, { platform: props.platform });
+    address.value = "";
+    editingAddress.value = false;
+    const url = await wsSocketUrl(`/system/browser-profile`, { platform: props.platform, mode: props.mode });
     if (url === undefined) {
         status.value = "error";
         errorMsg.value = "Sandbox isn't reachable, or you're not signed in.";
@@ -60,6 +74,7 @@ const connect = async (): Promise<void> => {
             width?: number;
             height?: number;
             message?: string;
+            url?: string;
         };
         // The encoding alternates: a cheap jpeg while the page paints, a sharp webp once it settles — so the
         // frame says which it is rather than the client assuming (screencast.ts).
@@ -70,13 +85,17 @@ const connect = async (): Promise<void> => {
             viewW.value = message.width ?? viewW.value;
             viewH.value = message.height ?? viewH.value;
             surface.value?.focus();
+        } else if (message.type === "url" && message.url !== undefined) {
+            if (!editingAddress.value) {
+                address.value = message.url;
+            }
         } else if (message.type === "saved") {
             emit("done");
             close();
             emit("update:visible", false);
         } else if (message.type === "error") {
             status.value = "error";
-            errorMsg.value = message.message ?? "Login failed.";
+            errorMsg.value = message.message ?? "The browser couldn't be opened.";
         }
     });
     ws.addEventListener("error", () => {
@@ -148,13 +167,31 @@ const onPaste = (event: ClipboardEvent): void => {
     sendMsg({ type: "text", text });
 };
 
-const finish = (): void => {
-    status.value = "saving";
-    sendMsg({ type: "done" });
+// A typed address is a place, not a URL — "reddit.com/r/rust" is what a person writes, so assume https rather
+// than handing the daemon something Chromium would refuse to navigate to.
+const go = (): void => {
+    const typed = address.value.trim();
+    if (typed === "") {
+        return;
+    }
+    editingAddress.value = false;
+    sendMsg({ type: "go", url: /^https?:\/\//i.test(typed) ? typed : `https://${typed}` });
+    surface.value?.focus();
 };
+
 const cancel = (): void => {
     close();
     emit("update:visible", false);
+};
+// Hand the window back: the daemon closes Chromium (flushing the profile to disk) and answers `saved`. A socket
+// that never opened has nothing to flush and would leave the button spinning at a daemon that isn't listening.
+const finish = (): void => {
+    if (socket?.readyState !== WebSocket.OPEN) {
+        cancel();
+        return;
+    }
+    status.value = "saving";
+    sendMsg({ type: "done" });
 };
 </script>
 
@@ -165,15 +202,52 @@ const cancel = (): void => {
         :draggable="false"
         :dismissable-mask="false"
         :style="{ width: '64rem', maxWidth: '95vw' }"
-        :header="`Log in to ${label}`"
+        :header="browsing ? `${label} — your browser` : `Log in to ${label}`"
         @update:visible="!$event && cancel()"
     >
         <p class="mb-3 text-xs text-muted">
-            Sign in as you would normally — including any 2FA. When you're on your logged-in home page, click
-            <b>I'm done</b> and the agent will act as you here. Your session stays inside your sandbox.
+            <template v-if="browsing">
+                This is the signed-in browser the agent uses for {{ label }} — do whatever you need in it. The agent
+                can't use it while this window is open, and anything you change here it sees next time.
+            </template>
+            <template v-else>
+                Sign in as you would normally — including any 2FA. When you're on your logged-in home page, click
+                <b>I'm done</b> and the agent will act as you here. Your session stays inside your sandbox.
+            </template>
         </p>
 
         <div v-if="errorMsg" :class="cmp.alertDanger('mb-3')">{{ errorMsg }}</div>
+
+        <!-- The address bar exists only while browsing: signing in goes where the platform sends it, and a URL
+             field there would be a way to wander off the flow the window is open for. -->
+        <div v-if="browsing" class="mb-2 flex items-center gap-1">
+            <Button size="small" :text="true" severity="secondary" aria-label="Back" :disabled="status !== 'ready'" @click="sendMsg({ type: 'back' })">
+                <template #icon><Icon name="arrow-left" /></template>
+            </Button>
+            <Button
+                size="small"
+                :text="true"
+                severity="secondary"
+                aria-label="Reload"
+                :disabled="status !== 'ready'"
+                @click="sendMsg({ type: 'reload' })"
+            >
+                <template #icon><Icon name="refresh" /></template>
+            </Button>
+            <input
+                v-model="address"
+                type="text"
+                spellcheck="false"
+                autocomplete="off"
+                aria-label="Address"
+                :disabled="status !== 'ready'"
+                :class="cmp.input('min-w-0 flex-1 font-mono text-xs')"
+                @focus="editingAddress = true"
+                @blur="editingAddress = false"
+                @keydown.enter="go"
+            />
+            <Button size="small" :text="true" label="Go" :disabled="status !== 'ready'" @click="go" />
+        </div>
 
         <div
             ref="surface"
@@ -196,10 +270,17 @@ const cancel = (): void => {
         </div>
 
         <template #footer>
-            <Button label="Cancel" severity="secondary" :text="true" @click="cancel" />
-            <Button label="I'm done" :disabled="status !== 'ready'" :loading="status === 'saving'" @click="finish">
+            <!-- Browsing ends by closing, and the daemon flushes the profile on the way out — so there is one
+                 button, not a Cancel that would suggest the visit could be undone. -->
+            <Button v-if="browsing" label="Close" :loading="status === 'saving'" @click="finish">
                 <template #icon><Icon name="check" /></template>
             </Button>
+            <template v-else>
+                <Button label="Cancel" severity="secondary" :text="true" @click="cancel" />
+                <Button label="I'm done" :disabled="status !== 'ready'" :loading="status === 'saving'" @click="finish">
+                    <template #icon><Icon name="check" /></template>
+                </Button>
+            </template>
         </template>
     </Dialog>
 </template>

@@ -125,11 +125,13 @@ vi.mock(`../components/HostConnectDialog.vue`, () => ({
         },
     }),
 }));
-vi.mock(`../components/BrowserLoginDialog.vue`, () => ({
+vi.mock(`../components/BrowserProfileDialog.vue`, () => ({
     default: defineComponent({
-        props: { visible: Boolean, platform: String, label: String },
+        props: { visible: Boolean, platform: String, label: String, mode: String },
         render() {
-            return this.visible ? h(`div`, { "data-login": this.platform }, this.label) : null;
+            // One window, two jobs — so the stub records WHICH one it was opened for: a hand-off that landed on
+            // the browse mode would be pointing at the wrong step.
+            return this.visible ? h(`div`, { "data-browser": this.platform, "data-mode": this.mode }, this.label) : null;
         },
     }),
 }));
@@ -202,7 +204,9 @@ it(`opens the sign-in window when a browser account is added and the login is wh
 
     await submitForm(el);
 
-    expect(el.querySelector(`[data-login]`)?.getAttribute(`data-login`)).toBe(`reddit`);
+    const window = el.querySelector(`[data-browser]`);
+    expect(window?.getAttribute(`data-browser`)).toBe(`reddit`);
+    expect(window?.getAttribute(`data-mode`)).toBe(`login`);
     expect(push).not.toHaveBeenCalled();
 });
 
@@ -213,7 +217,7 @@ it(`does not open the sign-in window when the browser is still waiting on a rebu
 
     await submitForm(el);
 
-    expect(el.querySelector(`[data-login]`)).toBeNull();
+    expect(el.querySelector(`[data-browser]`)).toBeNull();
     // Still no navigation: the card is where the row that names the rebuild — and leads to it — lives.
     expect(push).not.toHaveBeenCalled();
     const link = [...el.querySelectorAll(`a`)].find((anchor) => anchor.getAttribute(`href`) === `/sandbox/environment`);
@@ -227,8 +231,24 @@ it(`returns to the catalog when the capability came back active`, async () => {
 
     await submitForm(el);
 
-    expect(el.querySelector(`[data-login]`)).toBeNull();
+    expect(el.querySelector(`[data-browser]`)).toBeNull();
     expect(push).toHaveBeenCalled();
+});
+
+// A connected account is not finished with. The row that offers a re-log-in also offers the browser ITSELF —
+// the same signed-in profile the agent uses, for the user to do something in by hand — and the difference
+// between the two is the mode the window opens in, not a second browser.
+it(`offers the connected browser to be used, not only signed into again`, async () => {
+    const el = start(`reddit`, { state: `active` });
+    await submitForm(el);
+
+    const open = [...el.querySelectorAll(`button`)].find((button) => button.textContent?.includes(`Open browser`));
+    open?.click();
+    await nextTick();
+
+    const window = el.querySelector(`[data-browser]`);
+    expect(window?.getAttribute(`data-browser`)).toBe(`reddit`);
+    expect(window?.getAttribute(`data-mode`)).toBe(`browse`);
 });
 
 it(`leaves the form on screen with the failure when the apply fails, offering no command`, async () => {

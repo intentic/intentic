@@ -19,7 +19,7 @@ test("isWatchIgnored skips junk dirs (incl. .git) + browser profiles, but not so
     expect(watchIgnored(at("app", "node_modules", "dep", "index.js"))).toBe(true);
     expect(watchIgnored(at("app", ".git", "config"))).toBe(true);
     expect(watchIgnored(at("app", "dist", "bundle.js"))).toBe(true);
-    // The browser-login profile churns credential files constantly — still never watched (event-spam guard).
+    // A connected browser's profile churns credential files constantly — still never watched (event-spam guard).
     expect(watchIgnored(at(".intentic", "browser", "reddit", "Default", "Cookies"))).toBe(true);
     // Agent worktrees are full checkouts an agent edits at speed — never watched; sibling .claude config is.
     expect(watchIgnored(at("app", ".claude", "worktrees", "fix", "src", "main.ts"))).toBe(true);

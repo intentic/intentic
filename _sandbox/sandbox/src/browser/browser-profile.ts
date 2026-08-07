@@ -3,24 +3,37 @@ import type { BrowserContext, Page } from "playwright";
 import { ensureXvfb } from "./display.js";
 import { armPasskeys } from "./passkeys.js";
 import { dispatchInput, startScreencast, VIEW_HEIGHT, VIEW_WIDTH, type Screencast, type ScreencastClientMessage } from "./screencast.js";
-import { acquireLoginLock, markConnected, passkeyPath, releaseLoginLock, sessionDir } from "./session-store.js";
+import { acquireProfileLock, markConnected, passkeyPath, releaseProfileLock, sessionDir } from "./session-store.js";
 import { STEALTH_INIT } from "./stealth.js";
 import type { Services } from "../composition.js";
 import { redeemTicket } from "../auth/ws-tickets.js";
 import { contributionKey, contributionRegistry } from "../capabilities/contributions.js";
 
-// The /system/browser-login route: a guided, live browser sign-in. Like /system/terminal it's a WebSocket the
-// header-less browser drives, so it authorizes token+connect from the query string (app.ts exempts it from the
-// bearer middleware). The daemon launches a persistent (profile-backed) Chromium at the platform's login page,
-// screencasts it to the client, and forwards the owner's mouse/keyboard back over CDP; when the owner clicks
-// Done, the profile holds the auth cookies and the session is marked connected so the agent's @playwright/mcp
-// reuses it. One login per platform at a time (a persistent profile can't be opened twice).
-export const createBrowserLoginRoute = (services: Services) =>
+/* The /system/browser-profile route: THE OWNER'S OWN HANDS ON A PLATFORM'S CONNECTED BROWSER. Like
+ * /system/terminal it's a WebSocket the header-less browser drives, so it authorizes token+connect from the
+ * query string (app.ts exempts it from the bearer middleware). The daemon launches the persistent
+ * (profile-backed) Chromium for one platform, screencasts it to the client, and forwards the owner's
+ * mouse/keyboard back over CDP.
+ *
+ * Two modes over one window, because they are the same browser at two moments of its life:
+ *   login  — open the platform's sign-in page; when the owner clicks Done the profile holds the auth cookies
+ *            and the session is marked connected, so the agent's @playwright/mcp reuses it.
+ *   browse — open the platform's home page in the profile that ALREADY has those cookies. Nothing is marked:
+ *            this is the owner using their own connected account by hand (check a message, clear a captcha,
+ *            change a setting the agent shouldn't), and a session it cannot judge is not one to re-attest.
+ * Browsing needs an address bar, which a screencast of the page alone can't provide (there is no window chrome
+ * in the picture) — hence the `go`/`back`/`reload` frames and the `url` frames going the other way.
+ *
+ * One window per platform at a time (a persistent profile can't be opened twice) — the same lock that parks
+ * the agent's browser tools for that platform while the owner has the wheel. */
+export const createBrowserProfileRoute = (services: Services) =>
     upgradeWebSocket((c) => {
         let platform: string | undefined;
         let context: BrowserContext | undefined;
         let screencast: Screencast | undefined;
         let closed = false;
+        // Whether finishing means "this account is now connected" (login) or just "close the window" (browse).
+        let signingIn = true;
 
         const cleanup = async (): Promise<void> => {
             if (closed) {
@@ -32,10 +45,10 @@ export const createBrowserLoginRoute = (services: Services) =>
             try {
                 await context?.close();
             } catch (err) {
-                services.logger.warn({ err }, "browser-login: context close failed");
+                services.logger.warn({ err }, "browser-profile: context close failed");
             }
             if (platform !== undefined) {
-                releaseLoginLock(platform);
+                releaseProfileLock(platform);
             }
         };
 
@@ -43,25 +56,30 @@ export const createBrowserLoginRoute = (services: Services) =>
             onOpen: async (_event, ws) => {
                 const url = new URL(c.req.url);
                 try {
-                    // Signing a live Chromium into a service ADDS a credential — that is the owner's tier
-                    // alone, like everything else on the capabilities surface.
+                    // Signing a live Chromium into a service ADDS a credential, and browsing it is acting AS the
+                    // owner in their own account — the owner's tier alone, like everything else on the
+                    // capabilities surface.
                     redeemTicket(services, url, "owner");
                 } catch (err) {
-                    services.logger.warn({ err }, "browser-login ticket rejected");
+                    services.logger.warn({ err }, "browser-profile ticket rejected");
                     ws.close(1008, "unauthorized");
                     return;
                 }
                 // A platform is real iff an enabled extension declares it — the same registry the browser handler
-                // resolves against, so a card that can be added is a card that can be logged into.
+                // resolves against, so a card that can be added is a card that can be opened.
                 const requested = url.searchParams.get("platform") ?? "";
                 const contribution = (await contributionRegistry(services)).get(contributionKey("browser", requested));
                 if (contribution === undefined || contribution.spec.kind !== "browser") {
                     ws.close(1008, "invalid platform");
                     return;
                 }
-                const { loginUrl } = contribution.spec;
-                if (!acquireLoginLock(requested)) {
-                    ws.close(1008, "a login for this platform is already in progress");
+                signingIn = url.searchParams.get("mode") !== "browse";
+                // Signed in, a login page only bounces to the feed — so a browse window starts where the owner
+                // means to be. The two are separate manifest fields because some platforms sign in on another
+                // site entirely (YouTube at accounts.google.com).
+                const startUrl = signingIn ? contribution.spec.loginUrl : contribution.spec.homeUrl;
+                if (!acquireProfileLock(requested)) {
+                    ws.close(1008, "this browser is already open in another window");
                     return;
                 }
                 platform = requested;
@@ -98,22 +116,42 @@ export const createBrowserLoginRoute = (services: Services) =>
                     const page = ctx.pages()[0] ?? (await ctx.newPage());
                     // The sandbox's software security key, plugged in BEFORE the first navigation: this window
                     // is where the owner enrolls it (a site's "Add security key" lands on the virtual
-                    // authenticator and persists) and where a stored one answers the login's own 2FA prompt.
+                    // authenticator and persists) and where a stored one answers a 2FA prompt.
                     const storePath = passkeyPath(services.workspace.root, requested);
                     const arm = (target: Page): void =>
                         void armPasskeys(ctx, target, storePath).catch((err: unknown) =>
-                            services.logger.warn({ err }, "browser-login: passkey arm failed"),
+                            services.logger.warn({ err }, "browser-profile: passkey arm failed"),
                         );
                     ctx.on("page", arm);
                     arm(page);
+                    // WHERE THE ADDRESS BAR GETS ITS TEXT. Read off the STREAMED page rather than the one that
+                    // fired the event, because a popup moves the picture: what the field must show is the page
+                    // being looked at. Same-document navigations count — an SPA's own routing is most of what
+                    // moves on these sites.
+                    const report = (): void => {
+                        const current = screencast?.page()?.url();
+                        if (current !== undefined && !closed) {
+                            ws.send(JSON.stringify({ type: "url", url: current }));
+                        }
+                    };
+                    const watch = (target: Page): void => {
+                        target.on("framenavigated", (frame) => {
+                            if (frame === target.mainFrame()) {
+                                report();
+                            }
+                        });
+                    };
+                    ctx.on("page", watch);
+                    watch(page);
                     screencast = await startScreencast(ctx, (frame) => ws.send(JSON.stringify({ type: "frame", ...frame })));
-                    // Don't hard-fail on a slow login page; the user can still interact once it paints.
-                    await page.goto(loginUrl, { waitUntil: "domcontentloaded" }).catch((err: unknown) => {
-                        services.logger.warn({ err }, "browser-login initial nav");
+                    // Don't hard-fail on a slow page; the user can still interact once it paints.
+                    await page.goto(startUrl, { waitUntil: "domcontentloaded" }).catch((err: unknown) => {
+                        services.logger.warn({ err }, "browser-profile initial nav");
                     });
                     ws.send(JSON.stringify({ type: "ready", width: VIEW_WIDTH, height: VIEW_HEIGHT }));
+                    report();
                 } catch (err) {
-                    services.logger.warn({ err }, "browser-login launch failed");
+                    services.logger.warn({ err }, "browser-profile launch failed");
                     ws.send(JSON.stringify({ type: "error", message: err instanceof Error ? err.message : "failed to start the browser" }));
                     await cleanup();
                     ws.close(1011, "launch failed");
@@ -122,8 +160,9 @@ export const createBrowserLoginRoute = (services: Services) =>
             onMessage: async (event, ws) => {
                 // Read through the screencast each message rather than holding a session: the stream rebinds as
                 // popups open and close, so "the page the owner is looking at" is whatever it is attached to now.
-                const session = screencast?.attached();
-                if (session === undefined || closed) {
+                const view = screencast;
+                const session = view?.attached();
+                if (view === undefined || session === undefined || closed) {
                     return;
                 }
                 let message: ScreencastClientMessage;
@@ -133,20 +172,38 @@ export const createBrowserLoginRoute = (services: Services) =>
                     return;
                 }
                 if (message.type === "done") {
-                    const connected = platform;
-                    // Close first so Chromium flushes the profile's cookies to disk, then mark connected.
+                    const finished = platform;
+                    // Close first so Chromium flushes the profile's cookies to disk, then mark connected — a
+                    // browse window changes nothing about whether the account is connected, so it only closes.
                     await cleanup();
-                    if (connected !== undefined) {
-                        await markConnected(services.workspace.root, connected);
+                    if (signingIn && finished !== undefined) {
+                        await markConnected(services.workspace.root, finished);
                     }
                     ws.send(JSON.stringify({ type: "saved" }));
                     ws.close(1000, "done");
                     return;
                 }
+                // The address bar's three buttons. Driven through Playwright rather than raw CDP so a navigation
+                // that hangs gives up on its own instead of leaving the click looking ignored; each is best-effort
+                // for the same reason the initial goto is (a slow site is still usable once it paints).
+                if (message.type === "go" || message.type === "back" || message.type === "reload") {
+                    const page = view.page();
+                    if (page === undefined) {
+                        return;
+                    }
+                    const navigation =
+                        message.type === "go"
+                            ? page.goto(message.url, { waitUntil: "domcontentloaded" })
+                            : message.type === "back"
+                              ? page.goBack({ waitUntil: "domcontentloaded" })
+                              : page.reload({ waitUntil: "domcontentloaded" });
+                    await navigation.catch((err: unknown) => services.logger.warn({ err }, "browser-profile navigation failed"));
+                    return;
+                }
                 try {
                     await dispatchInput(session, message);
                 } catch (err) {
-                    services.logger.warn({ err }, "browser-login input dispatch failed");
+                    services.logger.warn({ err }, "browser-profile input dispatch failed");
                 }
             },
             onClose: () => {

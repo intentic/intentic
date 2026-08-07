@@ -1,7 +1,7 @@
 import type { BrowserContext, CDPSession, Page } from "playwright";
 
 // The live-browser wire, shared by the two surfaces that show a Chromium the user isn't sitting in front of:
-// the guided login (browser-login.ts — the owner drives) and the agent's browser view (browser-view.ts — the
+// the platform's own profile (browser-profile.ts — the owner drives) and the agent's browser view (browser-view.ts — the
 // owner watches, and may take the wheel). Both are the same three things: image frames out over CDP's
 // screencast, the owner's mouse/keyboard back in over CDP's Input domain, and a rebind that follows popups —
 // so they are one module rather than two copies that drift.
@@ -53,6 +53,12 @@ export type ScreencastClientMessage =
     // Stream a specific page instead of whichever the agent opened last — the browser view's tab strip. Pins,
     // so the agent opening a tab no longer moves the picture out from under the user (see `pinned` below).
     | { readonly type: "bind"; readonly pageId: string }
+    /* The address bar, which only the owner's own window (browser-profile.ts) has: the picture is the page and
+     * nothing else, so there is no window chrome in it to click. Handled by that route against the bound PAGE
+     * rather than here against a CDP session — going back is a page's history, not an input event. */
+    | { readonly type: "go"; readonly url: string }
+    | { readonly type: "back" }
+    | { readonly type: "reload" }
     // The tab went to the background (or the route was left). Nobody is looking, so nothing should be encoded
     // or sent — a browsing agent would otherwise push frames down the tunnel at a hidden <img> indefinitely.
     | { readonly type: "pause" }
@@ -125,6 +131,9 @@ export const dispatchInput = async (session: CDPSession, message: ScreencastClie
 // `attached` is what an input frame is dispatched to, so mouse/keyboard follow the page on screen automatically.
 export interface Screencast {
     readonly attached: () => CDPSession | undefined;
+    // The page those frames are of — what a navigation acts on and where an address bar reads its text. The
+    // session above is the input path; this is the same picture asked about as a page rather than a socket.
+    readonly page: () => Page | undefined;
     // Point the stream at another page. `pin` marks the choice as the USER's, which stops the auto-follow below
     // from overriding it; the route passes it for a `bind` frame and omits it for its own popup handling.
     readonly bind: (page: Page, pin?: boolean) => Promise<void>;
@@ -265,6 +274,7 @@ export const startScreencast = async (context: BrowserContext, onFrame: (frame: 
 
     return {
         attached: () => attached,
+        page: () => boundTo,
         bind,
         setPaused: async (next) => {
             if (stopped || paused === next) {

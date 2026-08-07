@@ -6,9 +6,9 @@ import { redeemTicket } from "../auth/ws-tickets.js";
 
 /* The /system/browser-view route: WATCH THE AGENT BROWSE, and take the wheel if you want to.
  *
- * Same wire as /system/browser-login (a header-less WebSocket authorizing token+connect from the query string;
+ * Same wire as /system/browser-profile (a header-less WebSocket authorizing token+connect from the query string;
  * app.ts exempts it from the bearer middleware) and the same frames, because it is the same thing pointed at a
- * different browser: there, the daemon's own Chromium waiting for the owner to sign in; here, the Chromium the
+ * different browser: there, the platform's own profile with the owner at the wheel; here, the Chromium the
  * agent is driving through its tools.
  *
  * The stream is READ-ONLY BY DEFAULT — not by refusing input, but because the client sends none until the user

@@ -42,7 +42,7 @@ import { ExportBusyError, isReadyExport, listExports, openExport, removeExport, 
 import { BundleFormatError, restoreBundle } from "./portability/restore.js";
 import { createCiWebhookRoute } from "./ci/webhook.routes.js";
 import { createListenerRoutes } from "./extensions/listener.routes.js";
-import { createBrowserLoginRoute } from "./browser/browser-login.js";
+import { createBrowserProfileRoute } from "./browser/browser-profile.js";
 import { createHostConnectRoute, createHostMcpRoute, hostSummaries } from "./hosts/host.routes.js";
 import { computers } from "./hosts/machine-reports.js";
 import { createBrowserViewRoute } from "./browser/browser-view.js";
@@ -152,7 +152,7 @@ const READY_EXEMPT = new Set([
     "/system/presence",
     "/system/ws-ticket",
     "/system/terminal",
-    "/system/browser-login",
+    "/system/browser-profile",
     "/system/browser-view",
     // A connected computer reconnects on its own backoff, which a booting daemon would otherwise park just long
     // enough to look like an outage on the card. Its socket needs nothing the boot chain builds.
@@ -282,9 +282,9 @@ export const createApp = (services: Services): Hono<AppEnv> => {
             if (
                 c.req.path === "/health" ||
                 c.req.path === "/system/terminal" ||
-                // /system/browser-login is a WebSocket upgrade too — it authorizes token+connect from the query
-                // string itself (see createBrowserLoginRoute), same as /system/terminal.
-                c.req.path === "/system/browser-login" ||
+                // /system/browser-profile is a WebSocket upgrade too — it authorizes token+connect from the query
+                // string itself (see createBrowserProfileRoute), same as /system/terminal.
+                c.req.path === "/system/browser-profile" ||
                 // …and so is /system/browser-view, the same screencast pointed at the browser the AGENT drives.
                 c.req.path === "/system/browser-view" ||
                 // /workspace/media is fetched by a <video>/<audio> element, which cannot carry a header either.
@@ -618,12 +618,13 @@ export const createApp = (services: Services): Hono<AppEnv> => {
     // upgradeWebSocket drives it); registered before the oRPC catch-all so the upgrade matches here.
     app.get("/system/terminal", createTerminalRoute(services));
 
-    // Guided browser login for `browser`-kind capabilities: a WebSocket that screencasts a live Chromium the
-    // owner signs into (see createBrowserLoginRoute). Same shared `ws` server + query-string auth as the terminal.
-    app.get("/system/browser-login", createBrowserLoginRoute(services));
+    // A `browser`-kind capability's own Chromium, in the owner's hands: a WebSocket that screencasts the
+    // platform's persistent profile — to sign into, or to use the connected account by hand (see
+    // createBrowserProfileRoute). Same shared `ws` server + query-string auth as the terminal.
+    app.get("/system/browser-profile", createBrowserProfileRoute(services));
 
-    // Watch the browser the AGENT is driving — the same screencast wire as the login, attached to a live
-    // `browser-*` session instead of a fresh sign-in Chromium (see createBrowserViewRoute).
+    // Watch the browser the AGENT is driving — the same screencast wire as the profile window, attached to a
+    // live `browser-*` session instead of the platform's own profile (see createBrowserViewRoute).
     app.get("/system/browser-view", createBrowserViewRoute(services));
 
     // Deploy-target enrollment from the connect-host script (curl, not a browser): authenticated by the connect

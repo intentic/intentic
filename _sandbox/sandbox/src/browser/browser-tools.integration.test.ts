@@ -4,7 +4,7 @@ import { join } from "node:path";
 import type { Capability } from "@intentic/sandbox-contract";
 import { expect, test } from "vitest";
 import { browserServerSpec, browserServersOf, isolatedBrowserSpec } from "./browser-tools.js";
-import { acquireLoginLock, markConnected, releaseLoginLock } from "./session-store.js";
+import { acquireProfileLock, markConnected, releaseProfileLock } from "./session-store.js";
 
 const tempRoot = (): string => mkdtempSync(join(tmpdir(), "browser-tools-"));
 const reddit: Capability = { id: "reddit", kind: "browser", config: { platform: "reddit" } };
@@ -99,10 +99,10 @@ test("a login in progress suppresses that platform's server (the profile is lock
     }
     const root = tempRoot();
     await markConnected(root, "reddit");
-    expect(acquireLoginLock("reddit")).toBe(true);
+    expect(acquireProfileLock("reddit")).toBe(true);
     // The credential-free browser is unaffected — it holds no profile to lock.
     expect(Object.keys((await browserServersOf([reddit], root)).servers)).toEqual(["web"]);
-    releaseLoginLock("reddit");
+    releaseProfileLock("reddit");
 });
 
 // Without the binary there is nothing to drive, and executablePath() alone never says so.

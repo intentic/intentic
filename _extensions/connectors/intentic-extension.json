@@ -166,6 +166,7 @@
                 },
                 "fields": [],
                 "loginUrl": "https://www.npmjs.com/login",
+                "homeUrl": "https://www.npmjs.com/",
                 "skill": "skills/npmjs/SKILL.md"
             },
             {

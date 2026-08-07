@@ -43,7 +43,7 @@ const isDaemonStatePath = (abs: string): boolean => {
 
 export const isWatchIgnored = (root: string, abs: string): boolean => {
     const segments = abs.split(sep);
-    // The browser-login profile churns constantly (Chromium rewrites Cookies etc.), agent worktrees are whole
+    // A connected browser's profile churns constantly (Chromium rewrites Cookies etc.), agent worktrees are whole
     // checkouts an agent edits at full speed, and a reference clone into the shelf writes thousands of files in
     // one burst — never watch any of them, or every write fires a tree refetch. The shelf is root-level-only,
     // so its predicate needs the root-relative path, not the absolute one.

@@ -8,7 +8,7 @@ import type { McpServerConfig } from "@anthropic-ai/claude-agent-sdk";
 import type { Capability } from "@intentic/sandbox-contract";
 import { browserOutputDir } from "./browser-artifacts.js";
 import { ensureXvfb } from "./display.js";
-import { hasSession, isLoginActive, passkeyPath, sessionDir } from "./session-store.js";
+import { hasSession, isProfileOpen, passkeyPath, sessionDir } from "./session-store.js";
 import { ensureStealthScript } from "./stealth.js";
 
 // The agent's browser tools come from Microsoft's official @playwright/mcp, spawned per turn as stdio MCP
@@ -255,7 +255,7 @@ export const browserServersOf = async (capabilities: readonly Capability[], root
         web: isolatedBrowserSpec(runtime.cli, runtime.executablePath, browserOutputDir(root), await writeBrowserConfig("web", webPort)),
     };
     const loggedIn = capabilities.filter(
-        (capability) => capability.kind === "browser" && hasSession(root, capability.config.platform) && !isLoginActive(capability.config.platform),
+        (capability) => capability.kind === "browser" && hasSession(root, capability.config.platform) && !isProfileOpen(capability.config.platform),
     );
     if (loggedIn.length === 0) {
         return { servers, ports, passkeys };

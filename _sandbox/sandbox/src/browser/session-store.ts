@@ -4,7 +4,7 @@ import { dirname } from "node:path";
 import { statePath } from "../workspace/state-paths.js";
 
 // A logged-in browser session for one social platform. The session IS a persistent Chromium profile: the
-// guided-login flow (system/browser-login.ts) writes it, the agent's @playwright/mcp reads it via
+// owner's own profile window (browser/browser-profile.ts) writes it, the agent's @playwright/mcp reads it via
 // `--user-data-dir`, and both point Chromium at `sessionDir`. It lives under .intentic (outside the three repos,
 // gitignored, never committed) on the /work volume, so it survives a sandbox rebuild like claude.json does.
 
@@ -37,21 +37,22 @@ export const clearSession = async (root: string, platform: string): Promise<void
     await rm(passkeyPath(root, platform), { force: true });
 };
 
-// A persistent `--user-data-dir` can't be opened twice: while a guided login holds a platform's profile, the
-// per-turn @playwright/mcp for that platform must not spawn (and vice-versa). One daemon process, so a
-// module-level set is the whole lock — no cross-process concern.
-const loginLocks = new Set<string>();
+// A persistent `--user-data-dir` can't be opened twice: while the owner has a platform's profile open in their
+// own window (signing in, or using the account by hand), the per-turn @playwright/mcp for that platform must
+// not spawn (and vice-versa). One daemon process, so a module-level set is the whole lock — no cross-process
+// concern.
+const profileLocks = new Set<string>();
 
-export const isLoginActive = (platform: string): boolean => loginLocks.has(platform);
+export const isProfileOpen = (platform: string): boolean => profileLocks.has(platform);
 
-export const acquireLoginLock = (platform: string): boolean => {
-    if (loginLocks.has(platform)) {
+export const acquireProfileLock = (platform: string): boolean => {
+    if (profileLocks.has(platform)) {
         return false;
     }
-    loginLocks.add(platform);
+    profileLocks.add(platform);
     return true;
 };
 
-export const releaseLoginLock = (platform: string): void => {
-    loginLocks.delete(platform);
+export const releaseProfileLock = (platform: string): void => {
+    profileLocks.delete(platform);
 };

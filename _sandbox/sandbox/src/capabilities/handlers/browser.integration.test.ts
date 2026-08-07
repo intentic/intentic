@@ -78,7 +78,7 @@ test("remove deletes the skill dir; status returns to inactive", async () => {
     expect(await browserHandler.status(ctx, "reddit", reddit.config)).toEqual({ state: "inactive" });
 });
 
-test("every contributed platform has a real login URL and a skill that leaves room for the core tools note", async () => {
+test("every contributed platform has a real login URL, a home to open on, and a skill that leaves room for the core tools note", async () => {
     const registry = await contributionRegistry(host);
     const browsers = [...registry.values()].filter((entry) => entry.spec.kind === "browser");
     expect(browsers.length).toBeGreaterThan(0);
@@ -87,6 +87,11 @@ test("every contributed platform has a real login URL and a skill that leaves ro
             continue;
         }
         expect(spec.loginUrl, spec.id).toMatch(/^https:\/\//);
+        // Where the OWNER's own window opens once the account is connected. Its own field rather than the login
+        // page, which signed in only redirects, and rather than the login URL's origin, which for YouTube is
+        // accounts.google.com.
+        expect(spec.homeUrl, spec.id).toMatch(/^https:\/\//);
+        expect(spec.homeUrl, spec.id).not.toBe(spec.loginUrl);
         expect(spec.skill, spec.id).toMatch(/^skills\/.+\/SKILL\.md$/);
     }
 });

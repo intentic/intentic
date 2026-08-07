@@ -316,10 +316,14 @@ export const CapabilityContributionSchema = z
             skill: z.string().min(1),
             fragment: z.string().min(1).optional(),
         }),
-        // A site the agent acts on AS THE OWNER, through the shared logged-in Chromium. `loginUrl` is what the
-        // guided-login window opens; the profile it persists is the credential. No `env` and no `fragment`: the
-        // browser itself is core (one Chromium install serves every platform), only the identity is per-entry.
-        z.object({ ...contributionBase, kind: z.literal("browser"), loginUrl: z.url(), skill: z.string().min(1) }),
+        /* A site the agent acts on AS THE OWNER, through the shared logged-in Chromium. `loginUrl` is what the
+         * sign-in window opens; the profile it persists is the credential. `homeUrl` is where that same profile
+         * opens once it HAS one — the owner's own hands on the connected browser, which a login page is the wrong
+         * place to start (signed in, it only redirects). Two fields because for some platforms the login lives on
+         * another site entirely (YouTube signs in at accounts.google.com), so one cannot be derived from the other.
+         * No `env` and no `fragment`: the browser itself is core (one Chromium install serves every platform),
+         * only the identity is per-entry. */
+        z.object({ ...contributionBase, kind: z.literal("browser"), loginUrl: z.url(), homeUrl: z.url(), skill: z.string().min(1) }),
         // An operating system a connected computer can run — the skill pack that teaches the agent THAT machine's
         // shell. The enrollment, the socket and the scope enforcement are core; only the pack varies.
         z.object({ ...contributionBase, kind: z.literal("host"), skill: z.string().min(1) }),

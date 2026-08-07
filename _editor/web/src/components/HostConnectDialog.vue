@@ -6,7 +6,7 @@ import { computed, onBeforeUnmount, watch } from "vue";
 import { useHostConnect } from "../composables/sandbox/useHostConnect";
 import ScriptSourceSwitch from "./ScriptSourceSwitch.vue";
 
-/* "Connect this computer" for a `host`-kind capability. The counterpart of the browser-login dialog: that one
+/* "Connect this computer" for a `host`-kind capability. The counterpart of the browser-profile dialog: that one
  * signs a session in FOR the user, this one hands them a command to run ON the machine they want connected —
  * because the one thing a browser tab cannot do is install something on a computer that isn't this one.
  *

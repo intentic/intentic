@@ -4,13 +4,13 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { expect, test } from "vitest";
 import {
-    acquireLoginLock,
+    acquireProfileLock,
     clearSession,
     hasSession,
-    isLoginActive,
+    isProfileOpen,
     markConnected,
     passkeyPath,
-    releaseLoginLock,
+    releaseProfileLock,
     sessionDir,
 } from "./session-store.js";
 
@@ -45,14 +45,14 @@ test("the passkey store sits beside the profile and is cleared with the session"
 });
 
 test("the login lock is exclusive per platform", () => {
-    expect(isLoginActive("youtube")).toBe(false);
-    expect(acquireLoginLock("youtube")).toBe(true);
-    expect(isLoginActive("youtube")).toBe(true);
+    expect(isProfileOpen("youtube")).toBe(false);
+    expect(acquireProfileLock("youtube")).toBe(true);
+    expect(isProfileOpen("youtube")).toBe(true);
     // A second acquire while held fails — one guided login at a time per platform.
-    expect(acquireLoginLock("youtube")).toBe(false);
+    expect(acquireProfileLock("youtube")).toBe(false);
     // A different platform is unaffected.
-    expect(acquireLoginLock("reddit")).toBe(true);
-    releaseLoginLock("youtube");
-    releaseLoginLock("reddit");
-    expect(isLoginActive("youtube")).toBe(false);
+    expect(acquireProfileLock("reddit")).toBe(true);
+    releaseProfileLock("youtube");
+    releaseProfileLock("reddit");
+    expect(isProfileOpen("youtube")).toBe(false);
 });

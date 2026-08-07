@@ -91,7 +91,7 @@ vi.mock(`../composables/sandbox/useHostConnect`, () => ({
     useHostConnect: () => ({ hostFor: () => undefined, revoke: vi.fn(), refresh: vi.fn(), start: vi.fn(), stop: vi.fn() }),
 }));
 vi.mock(`../composables/sandbox/useVpn`, () => ({ importForticlient: vi.fn(), useVpn: () => ({ links: ref([]) }) }));
-vi.mock(`../components/BrowserLoginDialog.vue`, () => ({ default: defineComponent({ render: () => null }) }));
+vi.mock(`../components/BrowserProfileDialog.vue`, () => ({ default: defineComponent({ render: () => null }) }));
 vi.mock(`../components/HostConnectDialog.vue`, () => ({ default: defineComponent({ render: () => null }) }));
 
 const { default: Capabilities } = await import("./Capabilities.vue");

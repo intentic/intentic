@@ -19,6 +19,7 @@
                 },
                 "fields": [],
                 "loginUrl": "https://www.reddit.com/login/",
+                "homeUrl": "https://www.reddit.com/",
                 "skill": "skills/reddit/SKILL.md"
             },
             {
@@ -33,6 +34,7 @@
                 },
                 "fields": [],
                 "loginUrl": "https://x.com/i/flow/login",
+                "homeUrl": "https://x.com/home",
                 "skill": "skills/x/SKILL.md"
             },
             {
@@ -47,6 +49,7 @@
                 },
                 "fields": [],
                 "loginUrl": "https://accounts.google.com/ServiceLogin?continue=https%3A%2F%2Fwww.youtube.com%2F",
+                "homeUrl": "https://www.youtube.com/",
                 "skill": "skills/youtube/SKILL.md"
             }
         ]

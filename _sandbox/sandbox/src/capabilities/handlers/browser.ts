@@ -13,10 +13,11 @@ import { contributedSkill, contributionKey, contributionRegistry, hostOf } from 
 // SKILL.md into .claude/skills/<id> (auto-loaded by the agent's settingSources) and its `fragment` is the
 // browser feature pack — Chromium + Xvfb as one unit (packs/browser.Dockerfile), nothing when the running base
 // image already bakes it (the standard image does; a core image rides it through an owner rebuild).
-// The login itself happens out-of-band over the /system/browser-login
+// The login itself happens out-of-band over the /system/browser-profile
 // WebSocket, which persists a Chromium profile under .intentic/browser/<platform>; the agent's @playwright/mcp
-// (wired in agent.routes) reads that profile so it's already signed in. Distinct from `cli` (env credential +
-// curl) — here the credential is a browser session, not an env var.
+// (wired in agent.routes) reads that profile so it's already signed in, and the owner can reopen that same
+// profile by hand on the same route. Distinct from `cli` (env credential + curl) — here the credential is a
+// browser session, not an env var.
 const skillPath = (root: string, id: string): string => join(root, ".claude", "skills", id, "SKILL.md");
 
 // Is the browser pack actually present — Chromium at playwright's cache path AND Xvfb on PATH? The probe for

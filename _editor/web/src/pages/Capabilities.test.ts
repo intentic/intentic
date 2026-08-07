@@ -63,7 +63,7 @@ vi.mock(`../composables/terminal/useBackgroundProcesses`, () => ({
 vi.mock(`../composables/sandbox/useHostConnect`, () => ({
     useHostConnect: () => ({ hostFor: () => undefined, revoke: vi.fn(), refresh: vi.fn(), start: vi.fn(), stop: vi.fn() }),
 }));
-vi.mock(`../components/BrowserLoginDialog.vue`, () => ({ default: defineComponent({ render: () => null }) }));
+vi.mock(`../components/BrowserProfileDialog.vue`, () => ({ default: defineComponent({ render: () => null }) }));
 vi.mock(`../components/HostConnectDialog.vue`, () => ({ default: defineComponent({ render: () => null }) }));
 
 // The one daemon call the import makes. It takes XML and returns connections, so what the spy RECEIVES is the

@@ -1,5 +1,5 @@
 /* WHERE A CLICK LANDS IN THE REMOTE PAGE — the rule both screencast surfaces follow: the agent's browser view
- * (useBrowserView) and the guided login (BrowserLoginDialog). One module because it is one geometry problem, and
+ * (useBrowserView) and a platform's own profile window (BrowserProfileDialog). One module because it is one geometry problem, and
  * a copy of it in each file is a copy that drifts — they had already drifted into the same bug independently.
  *
  * THE ELEMENT'S RECT IS NOT WHERE THE PICTURE IS. Both surfaces render the frame `object-contain` in a box that

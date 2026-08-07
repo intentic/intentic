@@ -3,7 +3,7 @@ import type { MemberRole } from "@intentic/sandbox-contract";
 import { roleAtLeast } from "@intentic/sandbox-contract";
 import type { Caller } from "./auth.js";
 
-/* One-shot tickets for the WebSocket upgrades (/system/terminal, /system/browser-login, /system/browser-view).
+/* One-shot tickets for the WebSocket upgrades (/system/terminal, /system/browser-profile, /system/browser-view).
  *
  * A browser cannot put an Authorization header on a WebSocket, so those three routes used to take the caller's
  * bearer as `?token=` — a 30-day session, or an hour-long Google ID token, written into a URL. URLs are the

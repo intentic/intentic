@@ -1,7 +1,7 @@
 <!-- Per-capability credential help on the "+" config form: the scopes the token needs, the numbered
      how-to-get-it, and a deep "Create a token ↗" link straight to the provider's token page. Data comes from
      the card's `guide` metadata (CAPABILITY_CATALOG). The CALL SITE decides whether there is a guide to
-     render — a card without one (devops/monorepo/stripe, the browser-login ones) must not reach here, since
+     render — a card without one (devops/monorepo/stripe, the browser-kind ones) must not reach here, since
      the docked placement would otherwise hold a 288px column open around nothing.
 
      NOTHING HERE IS BEHIND A DISCLOSURE, AND IT SITS BESIDE THE FORM RATHER THAN IN IT. Two shapes came before
