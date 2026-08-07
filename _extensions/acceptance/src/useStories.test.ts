@@ -61,7 +61,7 @@ const children = (path: string, entries: readonly WorkspaceTreeEntry[]) =>
 const file = (path: string, content: string) =>
     [
         `/workspace/file?path=${encodeURIComponent(path)}`,
-        WorkspaceFileSchema.parse({ path, content, size: content.length, offset: 0, bytes: content.length }),
+        WorkspaceFileSchema.parse({ path, content, size: content.length, offset: 0, bytes: content.length, shared: true }),
     ] as const;
 
 // Drive the composable the way the view does: inside an app context (vue-query injects its client from there)

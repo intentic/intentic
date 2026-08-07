@@ -46,7 +46,7 @@ done
 # per-dependency exclude, so it is pruned from the tree after the fact.
 # @openai/codex is the ~350 MiB platform binary @openai/codex-sdk exact-pins — only ever needed at SPAWN time,
 # and the codex feature pack global-installs the same pinned version onto PATH (packs/codex.Dockerfile;
-# packs.test.ts holds the pins in step), which the adapter drives via codexPathOverride. Shipping it in the
+# packs.integration.test.ts holds the pins in step), which the adapter drives via codexPathOverride. Shipping it in the
 # tree too would put the one copy the pack owns back into every image, core included.
 # The -xtype l pass clears the symlinks both prunes leave dangling in dependents' node_modules (never
 # followed, but no reason to ship them).

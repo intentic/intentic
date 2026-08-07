@@ -20,9 +20,11 @@ export const DEMO_SANDBOX: SandboxSummary = {
     daemonUrl: DEMO_DAEMON_ORIGIN,
     lastSeenAt: new Date().toISOString(),
     setupCodeClaimedAt: null,
+    setupReport: null,
     token: `demo-connect-token`,
     role: `owner`,
     providedTunnel: false,
+    cloud: null,
 };
 
 const SESSION = {

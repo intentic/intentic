@@ -6,7 +6,7 @@
 # for it, comments included.
 # The playwright version pins the chromium revision — it MUST be the one the daemon's own playwright resolves
 # (browser-tools.ts hands chromium.executablePath() to @playwright/mcp), so installing the same version yields
-# the same revision by construction. packs.test.ts holds the pin to the daemon's playwright dependency.
+# the same revision by construction. packs.integration.test.ts holds the pin to the daemon's playwright dependency.
 # ponytail: bump together with the `playwright` catalog entry.
 # THE HEADLESS SHELL IS DELETED IMMEDIATELY. `install chromium` fetches two browsers — chromium and
 # chromium-headless-shell — and nothing here ever launches the shell: both MCP specs (browser-tools.ts, headed
