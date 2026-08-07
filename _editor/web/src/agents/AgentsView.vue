@@ -777,7 +777,13 @@ const grabCard = (event: PointerEvent, agent: FleetAgent, card: HTMLElement): vo
              field dropping to its own second row, the row wins — a 90px search box is not a search box. The
              field stays compact on a roomy board, and it is the bar's centre rather than a left-hand
              afterthought: the two sides flank it on equal `flex-1 basis-0` tracks, so the field sits in the
-             middle of the BAR and not merely in whatever space the left group happened to leave. -->
+             middle of the BAR and not merely in whatever space the left group happened to leave.
+             That second row has to be ASKED for. `flex-1 basis-0` means the flanks measure zero, so the line
+             always "fits" (0 + 288 + 0) and nothing ever wraps — while their `shrink-0` contents render at full
+             width anyway, straight over the field. On a phone that put "New agent" across the field's right end
+             and both pills UNDER it: invisible, and the unread pill is the only way to mark all read, so the
+             board lost it entirely. Below the same width at which the lanes stack, the field takes a row of its
+             own and the flanks keep the first one to themselves. -->
         <div class="view-header view-header-wrap flex flex-wrap items-center gap-x-2 gap-y-1 border-b border-line px-3 py-1">
             <div class="flex min-w-0 flex-1 basis-0 items-center gap-2">
                 <span class="shrink-0 text-sm font-semibold text-content">Agents</span>
@@ -805,7 +811,8 @@ const grabCard = (event: PointerEvent, agent: FleetAgent, card: HTMLElement): vo
                 :busy="searching"
                 label="Filter agents by your messages"
                 placeholder="Filter by your messages…"
-                class="mx-auto w-72 max-w-full shrink-0"
+                class="mx-auto max-w-full shrink-0"
+                :class="narrow ? 'order-last basis-full' : 'w-72'"
             />
             <div class="flex min-w-0 flex-1 basis-0 items-center justify-end gap-2">
                 <!-- The tally, so an empty board under a query reads as "nothing matched" rather than as a board
