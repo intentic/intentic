@@ -31,27 +31,20 @@
  *      whole job is to end it so the built-in check never raises a message box at someone who already told the
  *      machine to remove it. An uninstall that leaves the app running is a dialog nobody is there to answer.
  *
- * Assertions read WINDOW TITLES, not a test hook — the app has none and should not grow one. The window
- * appearing IS the behaviour a user is promised. The app shows one window and swaps two screens through it, so
- * the title is what says which screen is up.
+ * Assertions read WINDOWS, not a test hook — the app has none and should not grow one. The window appearing IS
+ * the behaviour a user is promised. Which windows are the app's is decided by the PROGRAM that owns them, and
+ * the title only ever says which of its two screens is up: the app shows one window and swaps screens through
+ * it. Those are separate questions, and answering both with the title is how another program's window — a
+ * browser reading the product's own docs is titled `Intentic …` — gets counted as the app's. See `appWindows`.
  */
 
 import { existsSync } from "node:fs";
-import { join } from "node:path";
+import { basename, join } from "node:path";
 import { appExecutable, appRunning, installSilently, launchApp, quitApp, uninstallSilently } from "./app.js";
-import { CONFIRM_TITLE, PRODUCT_NAME, SCHEME, SETUP_LINK, SETUP_TITLE, WORKSPACE_TITLE } from "./constants.js";
+import { APP_IDENTIFIER, CONFIRM_TITLE, PRODUCT_NAME, SCHEME, SETUP_LINK, SETUP_TITLE, WORKSPACE_TITLE } from "./constants.js";
 import type { Harness } from "./harness.js";
 import { prepareHermeticDesktop } from "./hermetic.js";
-import {
-    answerConfirm,
-    appWindows,
-    findInstalledApp,
-    openLink,
-    schemeCommand,
-    webView2,
-    windowTitled,
-    windowTitles,
-} from "./probe.js";
+import { answerConfirm, appWindowTitled, appWindows, findInstalledApp, openLink, schemeCommand, webView2, windowTitles } from "./probe.js";
 
 export interface InstallTierOptions {
     /** The `Intentic-setup.exe` under test. */
@@ -67,6 +60,14 @@ export interface InstallTierOptions {
 const WINDOW_SETTLE_SECONDS = 60;
 const LINK_SECONDS = 45;
 const SCREEN_SECONDS = 30;
+
+/* The single-instance plugin's own window, which the app owns for its whole life and nobody ever sees: 15×15
+ * pixels at the origin, kept mapped because handing a second launch's argv to the first is a window message.
+ * Tauri names it after the bundle identifier, so this is derived rather than written down twice.
+ *
+ * It has to be named because the one-window rule counts the app's windows BY OWNING PROGRAM, and by that
+ * measure a perfectly ordinary app is always showing two. What the rule means is windows a person can see. */
+const SINGLE_INSTANCE_WINDOW = `${APP_IDENTIFIER}-siw`;
 
 const describeWindows = async (): Promise<string> => {
     const titles = await windowTitles();
@@ -135,6 +136,10 @@ export const runInstallTier = async (harness: Harness, options: InstallTierOptio
             return;
         }
         harness.pass(`executable at ${executable}`);
+        // How every window assertion below finds the app's OWN windows — see `appWindows` for why not by title.
+        // Windows names a process after its executable's base name, so this is that name and nothing to keep in
+        // step by hand.
+        const app = basename(executable, `.exe`);
 
         // The bundled scripts, which the bundle config copies out of the site's public tree. `verify-desktop-bundle.sh`
         // proves the bundled BYTES match the source; this proves the install actually put them on the machine.
@@ -166,9 +171,13 @@ export const runInstallTier = async (harness: Harness, options: InstallTierOptio
         // registration under test rather than the installer's.
         harness.section(`deep link, app not running`);
         await openLink(SETUP_LINK);
-        if (await harness.untilTrue(LINK_SECONDS, `the link started the app, which asked before running it`, () => windowTitled(CONFIRM_TITLE))) {
-            await answerConfirm(CONFIRM_TITLE);
-            if (!(await harness.untilTrue(SCREEN_SECONDS, `answering it landed on the setup screen`, () => windowTitled(SETUP_TITLE)))) {
+        if (
+            await harness.untilTrue(LINK_SECONDS, `the link started the app, which asked before running it`, () =>
+                appWindowTitled(app, CONFIRM_TITLE),
+            )
+        ) {
+            await answerConfirm(app, CONFIRM_TITLE);
+            if (!(await harness.untilTrue(SCREEN_SECONDS, `answering it landed on the setup screen`, () => appWindowTitled(app, SETUP_TITLE)))) {
                 harness.detail(await describeWindows());
             }
             await harness.untilTrue(10, `the setup ran only the local CLI stand-in`, () => hermetic.setupStarted());
@@ -176,7 +185,7 @@ export const runInstallTier = async (harness: Harness, options: InstallTierOptio
             harness.detail(await describeWindows());
         }
         await quitApp(executable);
-        await harness.untilTrue(20, `the app closed`, async () => (await appWindows(WORKSPACE_TITLE)).length === 0);
+        await harness.untilTrue(20, `the app closed`, async () => (await appWindows(app)).length === 0);
 
         // ── 5. launch ────────────────────────────────────────────────────────────────────────────────────────
         harness.section(`launch`);
@@ -185,7 +194,7 @@ export const runInstallTier = async (harness: Harness, options: InstallTierOptio
             harness.fail(`could not start the app`, `${launch.stdout}${launch.stderr}`);
             return;
         }
-        if (!(await harness.untilTrue(WINDOW_SETTLE_SECONDS, `the workspace window opened`, () => windowTitled(WORKSPACE_TITLE)))) {
+        if (!(await harness.untilTrue(WINDOW_SETTLE_SECONDS, `the workspace window opened`, () => appWindowTitled(app, WORKSPACE_TITLE)))) {
             harness.detail(
                 `The app's window never appeared. On this machine WebView2 was ${runtimeBefore ?? `absent before the install`}; a window that never maps with no runtime present is the runtime, not the app.`,
             );
@@ -205,9 +214,13 @@ export const runInstallTier = async (harness: Harness, options: InstallTierOptio
         // from an external browser, and it exercises the registration and the single-instance forward together.
         harness.section(`deep link, app running`);
         await openLink(SETUP_LINK);
-        if (await harness.untilTrue(LINK_SECONDS, `the link reached the running app, which asked before running it`, () => windowTitled(CONFIRM_TITLE))) {
-            await answerConfirm(CONFIRM_TITLE);
-            if (!(await harness.untilTrue(SCREEN_SECONDS, `answering it opened the setup screen`, () => windowTitled(SETUP_TITLE)))) {
+        if (
+            await harness.untilTrue(LINK_SECONDS, `the link reached the running app, which asked before running it`, () =>
+                appWindowTitled(app, CONFIRM_TITLE),
+            )
+        ) {
+            await answerConfirm(app, CONFIRM_TITLE);
+            if (!(await harness.untilTrue(SCREEN_SECONDS, `answering it opened the setup screen`, () => appWindowTitled(app, SETUP_TITLE)))) {
                 harness.detail(await describeWindows());
             }
         } else {
@@ -218,13 +231,9 @@ export const runInstallTier = async (harness: Harness, options: InstallTierOptio
         // the failure it guards is invisible to every other assertion here: a setup screen that opens as a SECOND
         // window satisfies the search above, and what the user gets is an unasked-for window in front of the one
         // they were reading. Taken after the search, so the swap has landed.
-        if (
-            !(await harness.untilTrue(
-                15,
-                `the workspace stepped aside — one window, not two`,
-                async () => (await appWindows(WORKSPACE_TITLE)).length === 1,
-            ))
-        ) {
+        const visibleWindows = async (): Promise<number> =>
+            (await appWindows(app)).filter((window) => window.title !== SINGLE_INSTANCE_WINDOW).length;
+        if (!(await harness.untilTrue(15, `the workspace stepped aside — one window, not two`, async () => (await visibleWindows()) === 1))) {
             harness.detail(await describeWindows());
         }
 

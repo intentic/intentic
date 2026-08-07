@@ -120,11 +120,25 @@ export const windows = async (): Promise<WindowInfo[]> => await screen.windows()
 
 export const windowTitles = async (): Promise<string[]> => (await screen.windows()).map((window) => window.title);
 
-export const windowTitled = async (fragment: string): Promise<boolean> => titled(await windowTitles(), fragment);
+/* THE APP'S OWN WINDOWS, BY THE PROGRAM THAT OWNS THEM — never by title.
+ *
+ * Every window question this tier asks is about the app under test, and the title is only ever which SCREEN is
+ * up. Selecting by title conflates the two, and on any desktop that is not empty it silently answers about
+ * somebody else's window: a browser tab reading the product's docs is titled `Intentic …`, which is enough to
+ * make "the app closed" never come true and "one window, not two" count to three. It also cuts the other way —
+ * on a machine where only the browser is open, "the workspace window opened" passes with no app at all.
+ *
+ * `app` is the process name Windows reports for the window's owning process (`intentic-desktop`), so this is
+ * the same identity `appRunning` uses. Compared case-insensitively because the casing is the OS's business. */
+export const appWindows = async (app: string): Promise<WindowInfo[]> =>
+    (await screen.windows()).filter((window) => window.app.toLowerCase() === app.toLowerCase());
 
-/** Mapped windows whose title starts the way this app's do — the input to the one-window rule. */
-export const appWindows = async (prefix: string): Promise<WindowInfo[]> =>
-    (await screen.windows()).filter((window) => window.title.startsWith(prefix));
+/** Whether one of the APP's own windows is showing the named screen. */
+export const appWindowTitled = async (app: string, fragment: string): Promise<boolean> =>
+    titled(
+        (await appWindows(app)).map((window) => window.title),
+        fragment,
+    );
 
 /* Say yes to the confirmation the app raises for a link it did not watch its own window ask for.
  *
@@ -132,9 +146,12 @@ export const appWindows = async (prefix: string): Promise<WindowInfo[]> =>
  * recently created, and a Return sent to the wrong window is a keystroke delivered somewhere in the CI
  * desktop with no trace. Return rather than a click, for the same reason the Linux tier presses Return: the
  * affirmative button's position is the dialog's business and changes with the copy in it, while "the default
- * button" is what the platform promises. */
-export const answerConfirm = async (titleFragment: string): Promise<boolean> => {
-    const found = (await screen.windows()).find((window) => window.title.includes(titleFragment));
+ * button" is what the platform promises.
+ *
+ * Scoped to the app's own windows for the reason above, and here it is not merely a wrong answer: a Return
+ * aimed by title alone can land in whatever the person at this desk happens to have open. */
+export const answerConfirm = async (app: string, titleFragment: string): Promise<boolean> => {
+    const found = (await appWindows(app)).find((window) => window.title.includes(titleFragment));
     if (found === undefined) {
         return false;
     }
