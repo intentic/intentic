@@ -229,11 +229,11 @@ test("readiness catches the two failures that are invisible here and fatal once 
     const failed = Object.fromEntries(broken.checks.map((check) => [check.id, check]));
     // A relative import cannot resolve against the blob URL the bundle is imported from — reported before the
     // second import is even considered, because it is the one that 404s.
-    expect(failed.bundle?.status).toBe("fail");
-    expect(failed.bundle?.detail).toContain("./helper.js");
+    expect(failed["bundle"]?.status).toBe("fail");
+    expect(failed["bundle"]?.detail).toContain("./helper.js");
     // And the engines range excludes the app it would be published from, so no installer could activate it.
-    expect(failed.engines?.status).toBe("fail");
-    expect(failed.engines?.detail).toContain("^1.0.0");
+    expect(failed["engines"]?.status).toBe("fail");
+    expect(failed["engines"]?.detail).toContain("^1.0.0");
 });
 
 test("readiness reports a promised file that is not there", async () => {
