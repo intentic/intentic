@@ -26,6 +26,7 @@ export const DEMO_SANDBOX: SandboxSummary = {
     token: `demo-connect-token`,
     role: `owner`,
     providedTunnel: false,
+    // The demo's sandbox is a local one, not something the cloud lane provisioned.
     cloud: null,
 };
 

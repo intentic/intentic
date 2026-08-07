@@ -55,6 +55,30 @@ test("the installed app is found by display name, across hives", () => {
     });
 });
 
+test("the quotes Windows stores around InstallLocation are stripped, and the ones around UninstallString are not", () => {
+    // What the real registry holds — and the install tier reads the location with readdir, which treats a
+    // leading quote as an ordinary path character and resolves the lot relative to the working directory.
+    // The uninstall string keeps its quotes: that one goes to a shell, which needs them to survive a space.
+    const entries = [
+        {
+            DisplayName: `Intentic`,
+            DisplayVersion: `1.184.0`,
+            InstallLocation: `"C:\\Users\\ci\\AppData\\Local\\Intentic"`,
+            UninstallString: `"C:\\Users\\ci\\AppData\\Local\\Intentic\\uninstall.exe"`,
+        },
+    ];
+    expect(installedApp(entries, `Intentic`)).toEqual({
+        name: `Intentic`,
+        version: `1.184.0`,
+        installLocation: `C:\\Users\\ci\\AppData\\Local\\Intentic`,
+        uninstallString: `"C:\\Users\\ci\\AppData\\Local\\Intentic\\uninstall.exe"`,
+    });
+});
+
+test("an entry whose InstallLocation is only quotes is no location at all", () => {
+    expect(installedApp([{ DisplayName: `Intentic`, InstallLocation: `""` }], `Intentic`)).toBeUndefined();
+});
+
 test("an entry with no InstallLocation is not the install — a guessed path would name the wrong cause", () => {
     // Windows lists plenty of rows with no location. Treating one as the install turns a bundler regression
     // into a set of "file not found" failures that point at the app instead of at the package.

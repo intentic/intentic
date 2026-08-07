@@ -1,6 +1,19 @@
 import { capabilitiesOf, HARNESSES, PROVIDERS } from "@intentic/sandbox-contract";
-import { expect, test } from "vitest";
-import { ADAPTERS, adapterFor } from "./adapter-registry.js";
+import { expect, test, vi } from "vitest";
+
+/* WHICH BINARIES THE IMAGE CARRIES IS NOT WHAT THIS FILE ASSERTS. The opencode arm's health asks the real PATH
+ * whether the feature pack is installed, which makes its answer a property of the machine the suite happens to
+ * run on: present on a developer's box, absent in the CI container, and the assertions below are about the
+ * CREDENTIAL logic either way. Stubbed present so the unit tests one thing.
+ *
+ * Spread over the real module rather than replaced wholesale — `resolveOnPath` is reached from elsewhere in
+ * this graph, and a factory naming only `onPath` would leave that one undefined. */
+vi.mock("../platform/on-path.js", async (importOriginal) => ({
+    ...(await importOriginal<typeof import("../platform/on-path.js")>()),
+    onPath: async () => true,
+}));
+
+const { ADAPTERS, adapterFor } = await import("./adapter-registry.js");
 
 /* The guard the registry's own comment promises, and the counterpart to agent-catalog.test.ts: that file
  * demands every (provider, harness) pair have a capability record, this one demands the runtime that record
