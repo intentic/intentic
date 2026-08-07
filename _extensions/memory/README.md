@@ -11,6 +11,7 @@ What the agent has chosen to remember, as notes you can read and edit.
 
 - [src/memoryNote.ts](src/memoryNote.ts) — what a note is, and its total parser.
 - [src/useMemory.ts](src/useMemory.ts) — reading and writing the note set.
+- [src/MemoryView.vue](src/MemoryView.vue) — the section: which note is open, and the drafts held across switches.
 - [src/NotePane.vue](src/NotePane.vue) — one note, open.
 
 ## How it fits
@@ -28,3 +29,8 @@ been remembered yet. No repo or capability evidence is needed for something the 
 
 - The notes are files, not a database. That is what makes them reviewable, greppable, and editable by the agent
   that wrote them without a write API in between.
+- **Which note is a picker, not an index column.** As a hub section this view sits beside the hub's own 16rem
+  rail, so a rail of its own put two navigation columns in front of the content and left the note — the thing
+  being read — the narrowest third of the width. The picker says the same thing on the row the section header
+  already occupies. It gives up nothing, because the set is listed inside the view too: `MEMORY.md` is a table
+  of contents to its siblings and its entries are real links.

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { MemoryFileEntry } from "@intentic/sandbox-contract";
-import { cmp, formatBytes, formatTimestamp, Icon, InfoHint, type NavGroup, NavRail, Row, useDevice } from "@intentic/extension-ui";
+import { cmp, formatBytes, Icon, InfoHint, Picker, type PickerOptions } from "@intentic/extension-ui";
 import { computed, ref, watch } from "vue";
 import { INDEX_NAME, noteTitle, projectLabel } from "./memoryNote";
 import { freshness } from "./noteTime";
@@ -11,84 +11,98 @@ import { useMemory } from "./useMemory";
  * every one, plus a markdown note per fact, per project. Read it to know what it believes, edit a note to
  * correct it, forget one to take it back.
  *
- * Laid out as index-and-reader rather than a list you scroll past. The two questions asked here are "what does
- * it know?" and "is THIS right?", and they alternate — so the index stays on screen while a note is read, and
- * picking the next one never costs a scroll back up. On a phone there is only room for one at a time, so the
- * reader takes over and offers a way back.
+ * WHICH NOTE IS A PICKER, NOT A SECOND RAIL. This was an index column beside the reader, and as a hub section
+ * that put two navigation columns side by side — the hub's 16rem rail, then a 14rem one, then whatever was
+ * left for the note. The note is the content and it was getting the smallest third of the width. A picker says
+ * the same thing (every note, grouped by project, filterable once the list is long) in one control on the row
+ * the section header already occupies, and hands the whole remaining width to the prose.
+ *
+ * It costs nothing that the rail was carrying, because the set is ALSO listed inside the view: MEMORY.md is a
+ * table of contents to its siblings and its entries are real links (see linkifyNoteRefs), so "what does it
+ * know?" is answered by the note that opens first rather than by chrome beside it.
  *
  * A HUB SECTION, so the page chrome is the hub's and this file draws neither a title nor a frame (see
- * extension.ts for why it left the rail). The index-and-reader split is kept and hand-rolled here rather than
- * taken from <SplitView>, which is a PAGE: it brings a header, a width cap and a 16rem column, and the hub has
- * already spent all three. The notes index is deliberately narrower than the hub's own so the two read as
- * different levels of the same tree rather than as two rails arguing. */
+ * extension.ts for why it left the rail). */
 
-const { mobile } = useDevice();
 const { files, error, isLoading } = useMemory();
 
-const selected = ref<{ project: string; name: string }>();
-const query = ref(``);
+/* THE SELECTION IS ONE STRING, `project/name` — the picker's option value, the draft map's key and the
+ * reader's remount key are all the same identity, so none of them can drift from the others. A project
+ * directory never contains a slash (see projectLabel), so the first one splits it back apart. */
+const keyOf = (project: string, name: string): string => `${project}/${name}`;
+const selected = ref<string>();
+const note = computed(() => {
+    if (selected.value === undefined) {
+        return undefined;
+    }
+    const cut = selected.value.indexOf(`/`);
+    return { project: selected.value.slice(0, cut), name: selected.value.slice(cut + 1) };
+});
+const selectedEntry = computed(() => files.value.find((file) => keyOf(file.project, file.name) === selected.value));
 
 /* Unsaved edits, keyed by note. Held here, above the reader, because the reader is REUSED as the selection
  * moves — without this, reading another note to check a fact would silently drop the correction being written.
- * A note with a draft says so in the list, so an edit left open can be found again. */
-const keyOf = (project: string, name: string): string => `${project}/${name}`;
+ * A note with a draft says so in the picker, so an edit left open can be found again. */
 const drafts = ref(new Map<string, string>());
 const draft = computed<string | undefined>({
-    get: () => (selected.value === undefined ? undefined : drafts.value.get(keyOf(selected.value.project, selected.value.name))),
+    get: () => (selected.value === undefined ? undefined : drafts.value.get(selected.value)),
     set: (value) => {
         if (selected.value === undefined) {
             return;
         }
-        const key = keyOf(selected.value.project, selected.value.name);
         if (value === undefined) {
-            drafts.value.delete(key);
+            drafts.value.delete(selected.value);
         } else {
-            drafts.value.set(key, value);
+            drafts.value.set(selected.value, value);
         }
     },
 });
 
-/* One section per project, MEMORY.md pinned first — it is the map to everything under it — and the rest left
- * in the daemon's newest-first order, so what the agent learned most recently leads. Projects keep that order
- * too: the one being worked in is the one that just wrote a note. */
-const groups = computed<NavGroup<MemoryFileEntry>[]>(() => {
-    const needle = query.value.trim().toLowerCase();
-    const matches = (file: MemoryFileEntry): boolean =>
-        needle === `` || file.name.toLowerCase().includes(needle) || noteTitle(file.name).toLowerCase().includes(needle);
+const noteLabel = (name: string): string => (name === INDEX_NAME ? `Index` : noteTitle(name));
+
+/* One group per project, MEMORY.md pinned first — it is the map to everything under it — and the rest left in
+ * the daemon's newest-first order, so what the agent learned most recently leads. Projects keep that order
+ * too: the one being worked in is the one that just wrote a note.
+ *
+ * The annotation is when the note was last written, EXCEPT while an edit is open on it, where the fact worth
+ * the space is that the edit exists — that is what makes an abandoned correction findable again. */
+const options = computed<PickerOptions>(() => {
     const byProject = new Map<string, MemoryFileEntry[]>();
-    for (const file of files.value.filter(matches)) {
+    for (const file of files.value) {
         byProject.set(file.project, [...(byProject.get(file.project) ?? []), file]);
     }
     const projects = [...byProject.entries()];
     return projects.map(([project, entries]) => ({
-        key: project,
         // Only worth a heading when there is something to tell apart: with one project every row belongs to it,
         // and the path is a line of chrome above the content.
         label: projects.length > 1 ? projectLabel(project) : undefined,
-        items: entries.toSorted((a, b) => Number(b.name === INDEX_NAME) - Number(a.name === INDEX_NAME)),
+        options: entries
+            .toSorted((a, b) => Number(b.name === INDEX_NAME) - Number(a.name === INDEX_NAME))
+            .map((file) => ({
+                value: keyOf(file.project, file.name),
+                label: noteLabel(file.name),
+                icon: file.name === INDEX_NAME ? (`sparkles` as const) : (`file` as const),
+                description: drafts.value.has(keyOf(file.project, file.name)) ? `Unsaved` : freshness(file.modifiedAt),
+            })),
     }));
 });
-const visibleCount = computed(() => groups.value.reduce((total, group) => total + group.items.length, 0));
 
 const projectCount = computed(() => new Set(files.value.map((file) => file.project)).size);
 const totalBytes = computed(() => files.value.reduce((total, file) => total + file.sizeBytes, 0));
 
-const isSelected = (file: MemoryFileEntry): boolean => selected.value?.project === file.project && selected.value.name === file.name;
-const rowTitle = (name: string): string => (name === INDEX_NAME ? `Index` : noteTitle(name));
-const selectedEntry = computed(() => files.value.find((file) => isSelected(file)));
-
-/* Open on the index instead of an empty half-screen: it is the one note that summarises all the others, and it
- * is what the agent itself reads first. Only where both panes fit — on a phone the reader covers the list, and
- * landing inside a note the user didn't pick would hide the very thing they came to see. */
+/* Open on the index instead of an empty pane: it is the one note that summarises all the others, and it is
+ * what the agent itself reads first. Every width does this now — the picker sits above the reader rather than
+ * in front of it, so landing in a note hides nothing the reader came for. */
 watch(
-    [files, mobile],
+    files,
     () => {
-        if (selected.value === undefined && !mobile.value) {
-            const first = groups.value[0];
-            const index = first?.items.find((file) => file.name === INDEX_NAME) ?? first?.items[0];
-            if (index !== undefined) {
-                selected.value = { project: index.project, name: index.name };
-            }
+        if (selected.value !== undefined) {
+            return;
+        }
+        const first = files.value[0];
+        const opening = files.value.find((file) => file.project === first?.project && file.name === INDEX_NAME) ?? first;
+        if (opening !== undefined) {
+            selected.value = keyOf(opening.project, opening.name);
         }
     },
     { immediate: true },
@@ -96,16 +110,10 @@ watch(
 
 // A reference inside a note names a sibling in the SAME project — memory notes never cross projects.
 const openSibling = (name: string): void => {
-    if (selected.value !== undefined) {
-        selected.value = { project: selected.value.project, name };
+    if (note.value !== undefined) {
+        selected.value = keyOf(note.value.project, name);
     }
 };
-
-/* WHICH PANE A PHONE SHOWS. The index SELECTS a document, so going into one is the point and there is no room to
- * do it beside the list: the phone shows the list, then the note, with a way back (NotePane's own header carries
- * it, which is why `standalone` is the same condition). Desktop shows both. */
-const showIndex = computed(() => !mobile.value || selected.value === undefined);
-const showNote = computed(() => !mobile.value || selected.value !== undefined);
 </script>
 
 <template>
@@ -113,10 +121,10 @@ const showNote = computed(() => !mobile.value || selected.value !== undefined);
     <div class="flex flex-col gap-3">
         <div v-if="error" :class="cmp.alertDanger('px-4 py-3 text-sm')">{{ error }}</div>
 
-        <!-- What the whole set amounts to, and what the set IS. Both rode the page header until this became a
-             section and the page header stopped being this view's; they belong together anyway — the sentence
-             explaining what a memory note is, and the count of how many there are. -->
-        <div class="flex flex-wrap items-center gap-x-2 gap-y-1">
+        <!-- The section's one row of chrome: what a memory note is, which one is open, and what the whole set
+             amounts to. The picker rides here rather than above the reader because this row exists anyway —
+             navigation that costs no vertical space of its own is the entire reason it stopped being a column. -->
+        <div class="flex flex-wrap items-center gap-x-3 gap-y-2">
             <InfoHint label="Memory">
                 <span class="block text-sm font-medium text-content">Agent memory</span>
                 <span class="mt-1 block text-xs text-muted">
@@ -125,92 +133,60 @@ const showNote = computed(() => !mobile.value || selected.value !== undefined);
                     to take the fact back. References between notes are links: follow them to read the chain.
                 </span>
             </InfoHint>
-            <span v-if="files.length > 0" class="text-2xs text-subtle">
+
+            <!-- A fixed width, so the control does not resize itself every time a longer note is picked. -->
+            <Picker
+                v-if="files.length > 0"
+                v-model="selected"
+                :options="options"
+                class="w-64 max-w-full py-1.5 text-xs"
+                aria-label="Note"
+                header="Notes"
+                placeholder="Pick a note…"
+            />
+
+            <span v-if="files.length > 0" class="ml-auto text-2xs text-subtle">
                 {{ files.length }} {{ files.length === 1 ? `note` : `notes` }} · {{ projectCount }}
                 {{ projectCount === 1 ? `project` : `projects` }} · {{ formatBytes(totalBytes) }}
             </span>
         </div>
 
-        <!-- Bounded, so the index and the note each keep their own scroll and their own place. Unbounded, the
-             hub page would scroll them together and reaching note 50 would scroll the note itself off screen —
-             which is the exact failure <SplitView> exists to prevent on the pages that still use it. -->
-        <div class="flex max-h-[68dvh] min-h-0 gap-4" :class="mobile ? `flex-col` : `flex-row`">
-            <!-- Narrower than the hub's own 16rem index, so the two columns read as different levels rather than
-                 as a pair. Full width on a phone, where it is the only thing on screen. -->
-            <div v-if="showIndex" class="flex min-h-0 flex-col" :class="mobile ? `` : `w-56 shrink-0`">
-                <NavRail v-model="query" :groups="groups" :count="visibleCount" filterable placeholder="Filter notes…">
-                    <template #row="{ item: file }">
-                        <Row
-                            :key="`${file.project}/${file.name}`"
-                            as="button"
-                            density="dense"
-                            :icon="file.name === INDEX_NAME ? `sparkles` : `file`"
-                            :title="rowTitle(file.name)"
-                            :selected="isSelected(file)"
-                            class="rounded-md"
-                            @click="selected = { project: file.project, name: file.name }"
-                        >
-                            <template #title>
-                                <span class="flex items-center gap-1.5">
-                                    <span class="min-w-0 truncate">{{ rowTitle(file.name) }}</span>
-                                    <span
-                                        v-if="drafts.has(`${file.project}/${file.name}`)"
-                                        class="h-1.5 w-1.5 shrink-0 rounded-full bg-warning"
-                                        v-tooltip.top="'Unsaved changes'"
-                                    ></span>
-                                </span>
-                            </template>
-                            <template #description>
-                                <span class="flex items-center gap-1.5">
-                                    <span class="min-w-0 truncate font-mono">{{ file.name }}</span>
-                                    <span aria-hidden="true">·</span>
-                                    <span class="shrink-0" :title="formatTimestamp(file.modifiedAt)">{{ freshness(file.modifiedAt) }}</span>
-                                </span>
-                            </template>
-                        </Row>
-                    </template>
-                    <template #empty>
-                        <p class="px-2 py-6 text-center text-xs text-muted">No note matches “{{ query.trim() }}”.</p>
-                    </template>
-                </NavRail>
+        <!-- Bounded, so the note scrolls inside its own frame and the picker above it stays put. Unbounded, the
+             hub page would scroll them together and reaching the end of a long note would take the way to the
+             next one off screen with it. -->
+        <div class="flex max-h-[72dvh] min-h-0 flex-col">
+            <p v-if="files.length === 0 && isLoading" class="text-sm text-muted">Loading…</p>
+
+            <div v-else-if="files.length === 0" :class="cmp.emptyState('flex flex-col items-center gap-2 px-6 py-12 text-sm')">
+                <Icon name="sparkles" class="text-base text-subtle" />
+                <p class="text-content">Nothing remembered yet.</p>
+                <p class="max-w-sm text-xs text-muted">
+                    Notes appear here as the agent saves what it learns while working — how you like things done, how this repo is put together, what
+                    it was corrected on.
+                </p>
             </div>
 
-            <div v-if="showNote" class="flex min-h-0 min-w-0 flex-1 flex-col">
-                <p v-if="files.length === 0 && isLoading" class="text-sm text-muted">Loading…</p>
+            <!-- Keyed by note so a switch resets its scroll and view mode, but the draft above it is keyed by
+                 note too and so survives the remount. -->
+            <NotePane
+                v-else-if="note"
+                :key="selected"
+                v-model:draft="draft"
+                :project="note.project"
+                :name="note.name"
+                :entry="selectedEntry"
+                @open="openSibling"
+                @forgotten="selected = undefined"
+            />
 
-                <div v-else-if="files.length === 0" :class="cmp.emptyState('flex flex-col items-center gap-2 px-6 py-12 text-sm')">
-                    <Icon name="sparkles" class="text-base text-subtle" />
-                    <p class="text-content">Nothing remembered yet.</p>
-                    <p class="max-w-sm text-xs text-muted">
-                        Notes appear here as the agent saves what it learns while working — how you like things done, how this repo is put together,
-                        what it was corrected on.
-                    </p>
-                </div>
-
-                <!-- Keyed by note so a switch resets its scroll and view mode, but the draft above it is keyed by
-                     note too and so survives the remount. -->
-                <NotePane
-                    v-else-if="selected"
-                    :key="`${selected.project}/${selected.name}`"
-                    v-model:draft="draft"
-                    :project="selected.project"
-                    :name="selected.name"
-                    :entry="selectedEntry"
-                    :standalone="mobile"
-                    @open="openSibling"
-                    @forgotten="selected = undefined"
-                    @back="selected = undefined"
-                />
-
-                <section
-                    v-else
-                    class="flex min-h-0 flex-col items-center justify-center gap-2 rounded-lg border border-dashed border-line px-6 py-10 text-center"
-                >
-                    <Icon name="sparkles" class="text-base text-subtle" />
-                    <p class="text-sm text-muted">Pick a note to read it.</p>
-                    <p class="max-w-xs text-xs text-subtle">Start with <b>Index</b> — it's the map the agent itself opens first.</p>
-                </section>
-            </div>
+            <section
+                v-else
+                class="flex min-h-0 flex-col items-center justify-center gap-2 rounded-lg border border-dashed border-line px-6 py-10 text-center"
+            >
+                <Icon name="sparkles" class="text-base text-subtle" />
+                <p class="text-sm text-muted">Pick a note to read it.</p>
+                <p class="max-w-xs text-xs text-subtle">Start with <b>Index</b> — it's the map the agent itself opens first.</p>
+            </section>
         </div>
     </div>
 </template>

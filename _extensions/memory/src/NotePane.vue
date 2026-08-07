@@ -29,10 +29,8 @@ import { useMemoryFile, useMemoryMutations } from "./useMemory";
 const { project, name, entry } = defineProps<{
     project: string;
     name: string;
-    // The list row this note came from — its size and mtime are already known, so the header needs no fetch.
+    // The list entry this note came from — its size and mtime are already known, so the header needs no fetch.
     entry: MemoryFileEntry | undefined;
-    // Whether the pane is the only thing on screen (phone), which is the one case that needs a way back.
-    standalone?: boolean;
 }>();
 
 const emit = defineEmits<{
@@ -40,7 +38,6 @@ const emit = defineEmits<{
     open: [name: string];
     // The note is gone; the view owns the selection, so it decides what to show next.
     forgotten: [];
-    back: [];
 }>();
 
 /* The in-progress edit, owned by the VIEW rather than this component: a draft has to survive reading another
@@ -111,9 +108,6 @@ const onProseClick = (event: MouseEvent): void => {
          the failure. -->
     <Panel grow :title="title">
         <template #lead>
-            <button v-if="standalone" type="button" :class="cmp.iconButton(`-ml-1`)" aria-label="Back to all notes" @click="emit(`back`)">
-                <Icon name="arrow-left" />
-            </button>
             <Icon :name="isIndex ? `sparkles` : `file`" class="shrink-0 text-xs text-subtle" />
         </template>
         <template #badges>
