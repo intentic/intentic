@@ -711,16 +711,30 @@ const setProvider = (provider: string): void => {
                         <option v-for="face in faces" :key="face.id" :value="face.id">
                             {{ face.label }}{{ face.ready ? `` : ` (not signed in yet)` }}
                         </option>
+                        <!-- A pin whose card is gone still has to be VISIBLE in the control, or the select
+                             renders blank and reads as "no account" — which is the one other thing it could
+                             mean, and the two behave identically at 3am but need different fixing. -->
+                        <option v-if="form.actsAs !== `` && actsAsLabel === undefined" :value="form.actsAs" disabled>
+                            {{ form.actsAs }} (no longer exists)
+                        </option>
                     </select>
-                    <p v-if="form.actsAs === ``" class="text-xs text-muted">
+                    <!-- The four states this picker can be in, most specific first. The orphan case is third
+                         rather than folded into "not signed in": a pin to a face that no longer exists is read
+                         by the turn as NO accounts, and telling someone to go finish a login for a card that
+                         isn't there would send them looking for something they deleted. -->
+                    <p v-if="faces.length === 0" class="text-xs text-muted">
+                        You haven't set up any faces yet, so this wake can work but not speak.
+                        <button type="button" :class="cmp.linkButton('inline')" @click="host().navigate(`/sandbox/identities`)">Set one up</button>
+                    </p>
+                    <p v-else-if="form.actsAs === ``" class="text-xs text-muted">
                         This wake reaches none of your connected accounts — it can read and work, but it cannot post, reply or send as anyone. Nobody
                         is watching an automation, so it only gets a voice when you name one.
                     </p>
-                    <p v-else-if="actsAsLabel && !actsAsLabel.ready" class="text-xs text-warning">
-                        {{ actsAsLabel.label }} isn't signed in yet, so this wake still can't post. Finish its login under Capabilities first.
+                    <p v-else-if="actsAsLabel === undefined" class="text-xs text-warning">
+                        This is pinned to a face that no longer exists, so it reaches no accounts at all. Pick another one.
                     </p>
-                    <p v-else-if="faces.length === 0" class="text-xs text-muted">
-                        You haven't set up any identities yet — until you do, automations can work but not speak.
+                    <p v-else-if="!actsAsLabel.ready" class="text-xs text-warning">
+                        {{ actsAsLabel.label }} isn't signed in yet, so this wake still can't post. Finish its login under Capabilities first.
                     </p>
                 </div>
                 <label class="flex items-center gap-2 text-sm text-content">
