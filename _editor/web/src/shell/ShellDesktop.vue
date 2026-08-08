@@ -31,26 +31,30 @@ import { usePushFlow } from "../composables/workspace/usePushFlow";
 import { usePorts } from "../composables/sandbox/usePorts";
 import { useSandbox } from "../composables/sandbox/useSandbox";
 import { useVpn } from "../composables/sandbox/useVpn";
+import { extensionsLoaded } from "../extension-host/loader";
 import AccountPanel from "./AccountPanel.vue";
 import { chatDock, terminalDock } from "./dockSlots";
+import { type RailSeat, useRailMemory } from "./railMemory";
 import PresenceAvatars from "../presence/PresenceAvatars.vue";
 import QuickOpen from "./QuickOpen.vue";
 import SandboxGate from "../sandbox-gates/SandboxGate.vue";
 import SandboxSwitcher from "../sandbox-gates/SandboxSwitcher.vue";
 
-interface AreaTile {
-    // The rail element's id — a core shell tile's own name, or the contributing extension's id. It is what
-    // RAIL_GROUPS ranks and groups by, so core tiles and extension tiles sort against ONE table (see registry.ts)
-    // instead of core tiles being pinned above and extensions ordered among themselves.
-    readonly id: string;
-    // The route the tile links to (e.g. /workspace, /panel/app).
-    readonly to: string;
-    readonly label: string;
-    // An `IconName` for the fixed areas; undefined for a repository tile, which renders its initials instead.
-    readonly icon?: IconName;
+/* A rail element. The identity half — id, route, label, icon — is `RailSeat`, which is also the shape the rail's
+ * memory keeps, so a remembered seat and a live tile are the same thing to everything downstream of here: one
+ * sort, one banding, one template.
+ *   id    — a core shell tile's own name, or the contributing extension's id. It is what RAIL_GROUPS ranks and
+ *           groups by, so core tiles and extension tiles sort against ONE table (see registry.ts) instead of
+ *           core tiles being pinned above and extensions ordered among themselves.
+ *   to    — the route the tile links to (e.g. /workspace, /panel/app).
+ *   icon  — an `IconName` for the fixed areas; undefined for a repository tile, which renders initials instead. */
+interface AreaTile extends RailSeat {
     // What the tile says without being opened. The same shape core areas and extensions both fill, so the rail
     // renders ONE badge element instead of a hardcoded span per route.
     readonly badge?: ViewBadge;
+    // Set on a seat being held for a tile that hasn't loaded yet — drawn dim and inert, never badged. See
+    // railMemory.ts for why the rail draws seats it does not yet have tiles for.
+    readonly ghost?: boolean;
 }
 
 // ONE label per tile, badge included. The badge used to carry a tooltip of its own, nested inside the tile's —
@@ -66,8 +70,8 @@ const tileLabel = (tile: AreaTile): string => (tile.badge?.tooltip === undefined
  * `--chat-width` CSS variable (useLayout), which the chat panel's drag handle updates. The shared (device-
  * independent) lifecycle — liveness, presence, plan — lives in WorkspaceShell, which picks this or ShellMobile. */
 
-const { panels } = usePanels();
-const { capabilities } = useCapabilities();
+const { panels, settled: panelsSettled } = usePanels();
+const { capabilities, settled: capabilitiesSettled } = useCapabilities();
 // Drafts is agent-driven; its tile is permanent and the badge carries how much is owed (see draftsBadge).
 const { owed: draftsOwed, broken: draftsBroken } = useDrafts();
 // The agent's browsers, on the same appear-on-content terms. Polled loosely: this is the always-on read that
@@ -282,8 +286,24 @@ const tiles = computed<readonly AreaTile[]>(() =>
             .map(extensionTile),
     ].toSorted((left, right) => railRank(left.id) - railRank(right.id)),
 );
-// The tiles cut into their bands, so the template can draw a hairline between runs.
-const tileBands = computed(() => railBands(tiles.value, (tile) => tile.id));
+/* THE RAIL IS COMPLETE — every source that can still add a navigation tile has answered. Extension tiles need
+ * their extension activated AND the workspace facts their detect() reads, and those are three separate arrivals
+ * on every load; until all three are in, a missing tile is late rather than absent, which is the distinction the
+ * held seats below are built on. */
+const railSettled = computed(() => extensionsLoaded.value && panelsSettled.value && capabilitiesSettled.value);
+// The seats the rail had last time and hasn't filled yet — see railMemory.ts. Empty once the run is complete,
+// and empty on a first-ever visit, so the rail this composes is the live one in every settled state.
+const heldSeats = useRailMemory(tiles, railSettled);
+/* What the column draws: the live tiles, plus a held seat wherever one hasn't arrived — sorted by the SAME table
+ * the live run uses, so each lands in the seat its tile will occupy and is replaced in place rather than shifting
+ * anything. A seat and a tile of equal rank keep the live one first, which only happens between two activations
+ * of one extension: adjacent, identical-looking seats where the order can't be seen. */
+const railSeats = computed<readonly AreaTile[]>(() =>
+    [...tiles.value, ...heldSeats.value].toSorted((left, right) => railRank(left.id) - railRank(right.id)),
+);
+// The seats cut into their bands, so the template can draw a hairline between runs — held seats included, so
+// the hairlines don't move in either as the run fills.
+const tileBands = computed(() => railBands(railSeats.value, (tile) => tile.id));
 
 /* ALT+↑/↓ — WALK THE RAIL. The column is vertical, so the arrows ARE its axis, and the Alt+PageUp/PageDown
  * family next door keeps meaning what it means (the tabs WITHIN an area, resolved by focus): one modifier for
@@ -418,33 +438,48 @@ useKeybindings();
             <div class="icon-rail-nav flex flex-col items-center overflow-y-auto overscroll-contain">
                 <template v-for="(band, at) in tileBands" :key="band.group.id">
                     <span v-if="at > 0" class="my-1 icon-rail-divider h-px bg-line"></span>
-                    <RouterLink
-                        v-for="tile in band.items"
-                        :key="tile.to"
-                        :to="tile.to"
-                        class="icon-rail-tile relative flex items-center justify-center rounded-lg text-muted transition-colors hover:bg-overlay hover:text-content"
-                        :class="{ 'pointer-events-none opacity-40': !reachable, 'bg-primary-600/15 text-link': isNavActive(tile.to) }"
-                        :tabindex="reachable ? undefined : -1"
-                        :aria-disabled="!reachable"
-                        :aria-label="tileLabel(tile)"
-                        v-tooltip.right="tileLabel(tile)"
-                    >
-                        <span v-if="tile.icon === undefined" class="text-sm font-semibold">{{ initialsOf(tile.label) }}</span>
-                        <Icon v-else :name="tile.icon!" class="text-lg" />
-                        <!-- One badge for every tile, core or extension — see AreaTile.badge. A `mark` replaces the
-                             number outright rather than sitting beside it: the chip is four pixels of glance, and a
-                             glyph AND a digit in it would be two claims competing for the same read. No tooltip of its
-                             own either: it would nest inside the tile's and open a second box on top of it — its
-                             sentence rides the tile instead (see tileLabel). -->
+                    <template v-for="tile in band.items" :key="tile.to">
+                        <!-- A SEAT BEING HELD, not a tile: this one was in the rail last time and hasn't loaded
+                             back yet (railMemory.ts). It draws the glyph it will draw, dim and pulsing, so the
+                             tile lights up in place instead of pushing everything under it down as it arrives.
+                             Not focusable and hidden from assistive tech — there is nothing here to act on, and
+                             a screen reader announcing a link that doesn't exist yet would be worse than the
+                             silence. -->
                         <span
-                            v-if="tile.badge"
-                            class="absolute right-0.5 top-0.5 flex min-w-4 items-center justify-center rounded-full px-1 text-center text-[0.6rem] font-semibold leading-4"
-                            :class="badgeClass(tile.badge)"
+                            v-if="tile.ghost"
+                            class="icon-rail-tile flex animate-pulse items-center justify-center rounded-lg bg-overlay/50 text-muted opacity-40 motion-reduce:animate-none"
+                            aria-hidden="true"
                         >
-                            <Icon v-if="tile.badge.mark !== undefined" :name="tile.badge.mark as IconName" />
-                            <template v-else>{{ badgeText(tile.badge) }}</template>
+                            <span v-if="tile.icon === undefined" class="text-sm font-semibold">{{ initialsOf(tile.label) }}</span>
+                            <Icon v-else :name="tile.icon!" class="text-lg" />
                         </span>
-                    </RouterLink>
+                        <RouterLink
+                            v-else
+                            :to="tile.to"
+                            class="icon-rail-tile relative flex items-center justify-center rounded-lg text-muted transition-colors hover:bg-overlay hover:text-content"
+                            :class="{ 'pointer-events-none opacity-40': !reachable, 'bg-primary-600/15 text-link': isNavActive(tile.to) }"
+                            :tabindex="reachable ? undefined : -1"
+                            :aria-disabled="!reachable"
+                            :aria-label="tileLabel(tile)"
+                            v-tooltip.right="tileLabel(tile)"
+                        >
+                            <span v-if="tile.icon === undefined" class="text-sm font-semibold">{{ initialsOf(tile.label) }}</span>
+                            <Icon v-else :name="tile.icon!" class="text-lg" />
+                            <!-- One badge for every tile, core or extension — see AreaTile.badge. A `mark` replaces
+                                 the number outright rather than sitting beside it: the chip is four pixels of
+                                 glance, and a glyph AND a digit in it would be two claims competing for the same
+                                 read. No tooltip of its own either: it would nest inside the tile's and open a
+                                 second box on top of it — its sentence rides the tile instead (see tileLabel). -->
+                            <span
+                                v-if="tile.badge"
+                                class="absolute right-0.5 top-0.5 flex min-w-4 items-center justify-center rounded-full px-1 text-center text-[0.6rem] font-semibold leading-4"
+                                :class="badgeClass(tile.badge)"
+                            >
+                                <Icon v-if="tile.badge.mark !== undefined" :name="tile.badge.mark as IconName" />
+                                <template v-else>{{ badgeText(tile.badge) }}</template>
+                            </span>
+                        </RouterLink>
+                    </template>
                 </template>
             </div>
 

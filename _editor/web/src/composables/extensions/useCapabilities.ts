@@ -112,6 +112,9 @@ export function useCapabilities() {
         // verbatim beside the claim, so the card says why rather than asking to be trusted.
         recommendationFor: (card: string): CapabilityRecommendation | undefined =>
             recommendations.value.find((recommendation) => recommendation.card === card),
+        // The manifest has actually arrived (or definitively failed) — the rail's other half of "is this tile
+        // absent or merely late", alongside the panels list (see usePanels.settled).
+        settled: computed(() => query.isFetched.value || query.isError.value),
         error,
         isLoading: query.isLoading,
         refetch: query.refetch,

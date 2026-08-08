@@ -40,6 +40,9 @@ export function usePanels() {
 
     return {
         panels: computed<PanelSummary[]>(() => query.data.value?.panels ?? []),
+        // The list has actually arrived (or definitively failed) — what the rail waits on before deciding an
+        // extension tile is absent rather than late, since every repo-driven tile is detected from these facts.
+        settled: computed(() => query.isFetched.value || query.isError.value),
         error,
         isLoading: query.isLoading,
         start,

@@ -37,6 +37,13 @@ export interface ExtensionHostStatus {
 
 export const extensionStatuses = shallowRef<readonly ExtensionHostStatus[]>([]);
 
+// Whether a load pass has run to completion — every extension either registered what it contributes or failed
+// trying. It is what tells the rail its own composition is final: until this flips, a tile that is missing may
+// simply be an activate() still in flight, which is the difference between "not there" and "not there yet"
+// (shell/railMemory.ts). Stays true through a later reconcile — a toggle changes the rail deliberately, and
+// nothing should hold a seat open for the tile the owner just switched off.
+export const extensionsLoaded = shallowRef(false);
+
 // Whether an extension has anything to register in the shell. A manifest with UI contributions and no code to
 // run is a real defect; one without is simply daemon-side.
 const hasUi = (manifest: ExtensionManifest): boolean =>
@@ -164,4 +171,5 @@ export const loadExtensions = async (host: HostBindings): Promise<void> => {
         }
     }
     extensionStatuses.value = [...listedStatuses, ...unlistedStatuses];
+    extensionsLoaded.value = true;
 };
