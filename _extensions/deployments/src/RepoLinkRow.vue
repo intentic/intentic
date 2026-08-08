@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import type { DeployRepoLink } from "@intentic/sandbox-contract";
+import type { DeployRepoLink } from "./contract";
 import { Button, cmp, Icon, Picker, type PickerOption, StatusBadge } from "@intentic/extension-ui";
 import { computed, ref } from "vue";
 

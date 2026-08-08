@@ -1,7 +1,7 @@
 import type { ExtensionServerApi, ExtensionServerContext } from "@intentic/extension-api";
 import { OpenAPIHandler } from "@orpc/openapi/fetch";
 import { implement, ORPCError } from "@orpc/server";
-import { memoryContract } from "../contract.js";
+import { memoryContract } from "./contract.js";
 import { deleteMemoryFile, listMemoryFiles, memoryRoot, readMemoryFile, writeMemoryFile } from "./memory-files.js";
 
 /* ext-memory's backend half — the /memory routes that used to be daemon core, now served from the extension's

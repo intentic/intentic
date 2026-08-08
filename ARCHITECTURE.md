@@ -546,12 +546,16 @@ minted per-extension token (the `x-intentic-extension` grant in [grants.ts](_san
 deliberately NOT the all-routes panel token. Workspace files it touches directly with `node:fs` under
 `api.workspaceRoot` — full trust means no file service in between.
 
-The first extracted feature is **memory**: its routes, file layer and schemas now live entirely in
-`_extensions/memory` (UI half compiled into the web bundle as before; backend baked as `dist/server.js`), and
-the daemon core carries no memory feature at all. That is the intended trajectory — feature backends
-(activity, automations, logs, CI…) migrating out one by one, each migration deleting its core routes, until
-the daemon is the kernel: files/git/watcher, terminals and processes, the agent runtime, capabilities and
-their privileged handlers, auth, and the extension system itself.
+The first extracted features are **memory** and **deployments**: each one's routes, translation layer and
+schemas live entirely in its `_extensions/` package (UI halves compiled into the web bundle as before;
+backends baked as `dist/server.js`), and the daemon core carries neither feature at all. Deployments also
+exercises the two kernel calls a real feature backend needs: `GET /capabilities/{id}/connection` — a
+capability's stored config, secrets included, refused to every signed-in caller so only a declared extension
+grant can read it — and `POST /agent` for its one-click fix turns. That is the intended trajectory — feature
+backends (activity, chores, logs, drafts, then the automations family and CI) migrating out one by one, each
+migration deleting its core routes, until the daemon is the kernel: files/git/watcher, terminals and
+processes, the agent runtime, capabilities and their privileged handlers, auth, and the extension system
+itself.
 
 ### Capabilities
 

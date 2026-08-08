@@ -317,6 +317,8 @@ COPY _extensions/acceptance/intentic-extension.json /opt/extensions/acceptance/
 COPY _extensions/activity/intentic-extension.json /opt/extensions/activity/
 COPY _extensions/automations/intentic-extension.json /opt/extensions/automations/
 COPY _extensions/deployments/intentic-extension.json /opt/extensions/deployments/
+# …deployments ships a BACKEND bundle too (manifest `server`, run by the daemon's backend host), like memory below.
+COPY _extensions/deployments/dist /opt/extensions/deployments/dist
 COPY _extensions/git-history/intentic-extension.json /opt/extensions/git-history/
 COPY _extensions/logs/intentic-extension.json /opt/extensions/logs/
 COPY _extensions/maintenance/intentic-extension.json /opt/extensions/maintenance/

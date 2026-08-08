@@ -1,4 +1,4 @@
-import type { DeployAlert } from "@intentic/sandbox-contract";
+import type { DeployAlert } from "./contract";
 import { describe, expect, it } from "vitest";
 import { incidents, incidentTone, incidentTooltip, topTier, unseenIncidents } from "./incidents";
 

@@ -1,4 +1,4 @@
-import { type DeployOverviewResponse, DeployOverviewResponseSchema, DeploySeenResponseSchema } from "@intentic/sandbox-contract";
+import { type DeployOverviewResponse, DeployOverviewResponseSchema, DeploySeenResponseSchema, DEPLOYMENTS_BASE } from "./contract";
 import type { Disposable, ViewBadge } from "@intentic/extension-api";
 import { ref } from "vue";
 import { incidents, incidentTooltip, topTier, unseenIncidents } from "./incidents";
@@ -33,7 +33,7 @@ const refresh = async (): Promise<void> => {
         const next = new Map(boards.value);
         for (const capability of watched) {
             try {
-                next.set(capability, DeployOverviewResponseSchema.parse(await api.sandbox.json(`/komodo/${capability}/overview`)));
+                next.set(capability, DeployOverviewResponseSchema.parse(await api.sandbox.json(`${DEPLOYMENTS_BASE}/komodo/${capability}/overview`)));
             } catch {
                 // One unreachable connection leaves the others' boards standing — and leaves its OWN last
                 // known board standing too, rather than blanking it. A flapping tile is worse than a slightly
@@ -94,7 +94,9 @@ export const markDeploymentsSeen = async (capability: string): Promise<void> => 
         if (!api.sandbox.reachable()) {
             return;
         }
-        const { seenAt } = DeploySeenResponseSchema.parse(await api.sandbox.json(`/komodo/${capability}/seen`, { method: `POST` }));
+        const { seenAt } = DeploySeenResponseSchema.parse(
+            await api.sandbox.json(`${DEPLOYMENTS_BASE}/komodo/${capability}/seen`, { method: `POST` }),
+        );
         const board = boards.value.get(capability);
         if (board !== undefined) {
             boards.value = new Map(boards.value).set(capability, { ...board, seenAt });

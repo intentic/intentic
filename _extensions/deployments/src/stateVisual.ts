@@ -1,5 +1,5 @@
 import type { IconName, StatusVariant } from "@intentic/extension-ui";
-import type { DeployServerState, DeployState } from "@intentic/sandbox-contract";
+import type { DeployServerState, DeployState } from "./contract";
 import type { IncidentTone } from "./incidents";
 
 /* Every way a deployment state is drawn, in one table — the statusVisual.ts pattern from ext-pipelines. Class

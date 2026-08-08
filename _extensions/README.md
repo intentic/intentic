@@ -58,6 +58,7 @@ fails any extension that reaches `/{provider}/models` or `/{provider}/accounts` 
 | `activity` | UI view | The agent activity feed. |
 | `repo-apps` | UI view | Per-repo apps: preview URLs, add/start/stop, vitest. |
 | `automations` | UI view | Cron / webhook / listener automations. |
+| `deployments` | UI view + backend | Container health, incidents and one-click redeploys over a connected Komodo. Its whole Komodo side (client, board translation, repo→stack links, fix turns) is its backend — the daemon core carries no Komodo feature; the credential is read through the daemon's connection route, declared in `permissions.daemon`. |
 | `documentation` | UI view + agent CLI + plugin | Plain-language architecture docs for every repo and package: a map-first agent run writes them as a reviewable draft, the owner publishes them into the repo. Ships the `intentic-docs` CLI (`contributes.bin`) and the `documenting` skill (`contributes.agent`). |
 | `git-history` | UI document | Every repository's commit graph, as an icon on its Workspace tree row: lanes and merges, a commit's changed files, and the write actions on one (branch, tag, checkout, cherry-pick, revert, drop, merge, rebase, reset) — plus the branch switcher. The uncommitted half of the same story stays in the app's Changes panel. |
 | `logs` | UI view | Workspace log tail. |

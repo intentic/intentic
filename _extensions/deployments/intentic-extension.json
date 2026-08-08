@@ -4,18 +4,11 @@
     "version": "1.0.0",
     "category": "work",
     "icon": "box",
-    "engines": { "intentic": "^2.0.0" },
+    "engines": { "intentic": "^2.1.0" },
+    "server": "dist/server.js",
     "permissions": {
-        "sandbox": [
-            "GET /settings",
-            "GET /komodo/*/overview",
-            "POST /komodo/*/action",
-            "POST /komodo/*/link",
-            "POST /komodo/*/logs",
-            "POST /komodo/*/fix",
-            "POST /komodo/*/seen",
-            "GET /settings"
-        ]
+        "sandbox": ["GET /settings"],
+        "daemon": ["GET /capabilities/*/connection", "POST /agent"]
     },
     "contributes": {
         "views": [{ "id": "deployments", "label": "Deployments", "surface": "rail", "badge": true }]

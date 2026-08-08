@@ -1,28 +1,26 @@
-import { type AgentTurn, type DeployResource, komodoContract } from "@intentic/sandbox-contract";
+import type { ExtensionServerApi, ExtensionServerContext } from "@intentic/extension-api";
+import { OpenAPIHandler } from "@orpc/openapi/fetch";
 import { implement, ORPCError } from "@orpc/server";
-import { streamAgent } from "../agent/agent.routes.js";
-import { startConversationTurn } from "../agent/turn-resume.js";
-import type { WakeFn } from "../automations/scheduler.js";
-import type { Services } from "../composition.js";
-import type { OrpcContext } from "../context.js";
-import { plainText } from "../terminal/plain-text.js";
-import { discoverRepos } from "../workspace/repo-discovery.js";
-import { type FetchFn, komodoClient, komodoConnectionFor, type KomodoConnection } from "./komodo-client.js";
+import type { DeployResource } from "../contract.js";
+import { komodoContract } from "./contract.js";
+import { discoverRepoDirs, readFileOrUndefined } from "./discover.js";
+import { type FetchFn, komodoClient, type KomodoConnection } from "./komodo-client.js";
 import { deployAlerts, deploymentResource, serverEntry, stackResource } from "./komodo-overview.js";
 import { repoLinks } from "./komodo-repos.js";
+import { fileKomodoStore, komodoStorePath } from "./komodo-store.js";
+import { plainText } from "./plain-text.js";
 
-/* The Deployments rail view's whole backend, over one connected `komodo` capability.
- *
- * The credential never leaves the daemon — that is the entire reason these routes exist rather than the view
- * calling Komodo from the browser, and it is the same promise the CI routes keep for vendor tokens.
+/* The Deployments rail view's whole backend, over one connected `komodo` capability — ext-deployments' server
+ * half, moved out of the daemon core. The credential still never reaches a browser: the backend reads it
+ * through the daemon's connection route (declared in permissions.daemon, refused to any signed-in caller) and
+ * dials Komodo from inside the sandbox, so the view's calls carry no key in either direction.
  *
  * The two halves behave differently on failure, on purpose:
  *   • `overview` DEGRADES. A Komodo that does not answer resolves with `reachable: false` and an empty board,
  *     because "we cannot see production" is a state to render, not an error that blanks the view. The rail
  *     reads that as a `warning`, never a `danger`.
  *   • the ACTIONS propagate. A refused deploy is an upstream answer the operator needs verbatim, so it becomes
- *     a BAD_GATEWAY carrying Komodo's own words.
- */
+ *     a BAD_GATEWAY carrying Komodo's own words. */
 
 // How many log lines seed the view's inline tail. Komodo caps at 5000; 200 is enough to see a crash without
 // making the response something the browser has to scroll through to find the error.
@@ -67,15 +65,22 @@ const OPERATIONS = {
     },
 } as const;
 
-export const createKomodoRoutes = (services: Services, wake: WakeFn = streamAgent, fetchFn: FetchFn = fetch) => {
-    const i = implement(komodoContract).$context<OrpcContext>();
+export const activateServer = (api: ExtensionServerApi, _context: ExtensionServerContext, fetchFn: FetchFn = fetch): void => {
+    const i = implement(komodoContract);
+    const store = fileKomodoStore(komodoStorePath(api.workspaceRoot));
 
+    /* The daemon's connection read, resolved per call so a rotated key applies on the next click. The kind and
+     * provider are re-checked here: the route hands back whatever capability the id names, and dialling a
+     * non-Komodo capability's config at a Komodo would send somebody's OTHER credential to the wrong host. */
     const connect = async (capability: string): Promise<KomodoConnection> => {
-        const connection = await komodoConnectionFor(services.capabilities, capability);
-        if (connection === undefined) {
+        const connection = await api.daemon
+            .json<{ kind: string; config: Record<string, string | undefined> }>(`/capabilities/${encodeURIComponent(capability)}/connection`)
+            .catch(() => undefined);
+        const { provider, url, apiKey, apiSecret } = connection?.config ?? {};
+        if (connection?.kind !== "cli" || provider !== "komodo" || url === undefined || apiKey === undefined || apiSecret === undefined) {
             throw new ORPCError("NOT_FOUND", { message: `no connected Komodo capability "${capability}"` });
         }
-        return connection;
+        return { capability, baseUrl: url.replace(/\/+$/, ""), apiKey, apiSecret };
     };
 
     // Re-resolve the resource per call rather than trusting the id a card was rendered with: a stale card must
@@ -95,19 +100,19 @@ export const createKomodoRoutes = (services: Services, wake: WakeFn = streamAgen
         return [connection, resource];
     };
 
-    return {
+    const router = i.router({
         overview: i.overview.handler(async ({ input }) => {
             const connection = await connect(input.capability);
             const client = komodoClient(connection, fetchFn);
-            const seenAt = await services.komodoStore.seenAt(input.capability);
+            const seenAt = await store.seenAt(input.capability);
             const seen = seenAt === undefined ? {} : { seenAt };
             // The repo half does not depend on Komodo answering. A workspace with a compose file and nothing
             // linked yet is exactly the state where the owner most needs to see what this view is for, so it
             // is computed outside the try and survives an unreachable Komodo (with no suggestions, since
             // there are no stack names to suggest from).
-            const scan = { root: services.workspace.root, read: services.files.read };
-            const links = await services.komodoStore.links(input.capability);
-            const repoDirs = await discoverRepos(services.workspace.root);
+            const scan = { root: api.workspaceRoot, read: readFileOrUndefined };
+            const links = await store.links(input.capability);
+            const repoDirs = await discoverRepoDirs(api.workspaceRoot);
             try {
                 // One fan-out. All five are independent reads, so a serial version would make the view five
                 // round-trips slower for nothing; Promise.all means one slow call bounds the response rather
@@ -141,7 +146,7 @@ export const createKomodoRoutes = (services: Services, wake: WakeFn = streamAgen
                 // Degrade, don't throw: an unreachable Komodo is the single most important thing this view can
                 // say, and it can only say it by rendering.
                 const reason = error instanceof Error ? error.message : String(error);
-                services.logger.warn({ err: error, capability: input.capability }, "komodo: overview unreachable");
+                api.log(`overview unreachable for "${input.capability}": ${reason}`);
                 return {
                     komodoUrl: connection.baseUrl,
                     reachable: false,
@@ -155,14 +160,14 @@ export const createKomodoRoutes = (services: Services, wake: WakeFn = streamAgen
             }
         }),
         link: i.link.handler(async ({ input }) => {
-            await services.komodoStore.link(input.capability, input.repo, input.stack);
+            await store.link(input.capability, input.repo, input.stack);
             return { ok: true as const };
         }),
-        // The daemon's clock, not the browser's: a device with a fast clock would otherwise stamp itself past
+        // The backend's clock, not the browser's: a device with a fast clock would otherwise stamp itself past
         // breakages that have not happened yet and silence them before they arrive.
         seen: i.seen.handler(async ({ input }) => {
             const at = Date.now();
-            await services.komodoStore.markSeen(input.capability, at);
+            await store.markSeen(input.capability, at);
             return { seenAt: at };
         }),
         action: i.action.handler(async ({ input }) => {
@@ -198,23 +203,31 @@ export const createKomodoRoutes = (services: Services, wake: WakeFn = streamAgen
                 ...(tail !== "" ? [`--- container log tail ---\n${tail}`] : []),
             ].join("\n\n");
             const conversationId = mintFixConversationId(resource.name, Date.now());
-            const turn: AgentTurn & { conversationId: string } = {
-                prompt,
-                conversationId,
-                isolated: true,
-                // One click on a broken container, with no model picker anywhere near it — `agentRunModel`
-                // answers for it, the same as the CI fix this is deliberately identical to.
-                unattended: true,
-                title: `Fix deployment: ${resource.name}`.slice(0, TITLE_MAX),
-            };
-            // The same detached-run boundary as POST /agent and the CI fix — registering on the run map is what
-            // gives the fix an ordinary fleet card the UI can navigate to.
-            const started = await startConversationTurn(services, wake, turn);
-            if (started === undefined) {
-                // Minted ids are unique, so this is an invariant breach rather than a user-level busy state.
-                throw new ORPCError("CONFLICT", { message: "the deployment fix conversation is already running" });
-            }
+            /* POST /agent — the same detached-run boundary the core route used to reach in-process, now as the
+             * declared daemon call it always morally was. Registering on the run map is what gives the fix an
+             * ordinary fleet card the UI can navigate to; `unattended` lets the sandbox's agent-run model
+             * answer for a click that has no model picker anywhere near it. */
+            await api.daemon
+                .json(`/agent`, {
+                    method: "POST",
+                    body: JSON.stringify({
+                        prompt,
+                        conversationId,
+                        isolated: true,
+                        unattended: true,
+                        title: `Fix deployment: ${resource.name}`.slice(0, TITLE_MAX),
+                    }),
+                })
+                .catch((error: unknown) => {
+                    throw new ORPCError("CONFLICT", { message: error instanceof Error ? error.message : String(error) });
+                });
             return { conversationId };
         }),
-    };
+    });
+
+    const handler = new OpenAPIHandler(router);
+    api.routes.mount(async (request) => {
+        const { matched, response } = await handler.handle(request, { prefix: "/" });
+        return matched ? response : undefined;
+    });
 };

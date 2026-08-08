@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import type { DeployAction, DeployResource } from "@intentic/sandbox-contract";
+import type { DeployAction, DeployResource } from "./contract";
 import { Button, cmp, Code, Icon, StatusBadge } from "@intentic/extension-ui";
 import { computed, ref } from "vue";
 import { imageLabel, STATE_TONE } from "./stateVisual";

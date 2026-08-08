@@ -251,12 +251,6 @@ const STATE_FILES = [
         note: "Re-add the CI webhook on the Pipelines view — its secret is per-sandbox.",
     },
     {
-        path: ".intentic/komodo.json",
-        invalidates: [],
-        why: "Per-connection 'when the owner last looked at Deployments'; the view reads it through /komodo/{capability}/overview, not off disk — and it is written BY that view being opened, so invalidating on it would refetch the board in answer to the browser's own click.",
-        portability: "carry",
-    },
-    {
         path: ".intentic/control-tokens.json",
         invalidates: [],
         why: "Hashed control tokens (the ACP editor bridge, and anything else driving this sandbox from outside), listed on demand by the owner.",

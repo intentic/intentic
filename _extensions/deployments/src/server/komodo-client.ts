@@ -1,5 +1,3 @@
-import type { CapabilitiesStore } from "../capabilities/capabilities-store.js";
-
 /* The Komodo Core API behind one client shape, authenticated with an API key PAIR (`x-api-key` +
  * `x-api-secret`) resolved per call from the `komodo` cli capability the route names.
  *
@@ -37,25 +35,6 @@ const TIMEOUT_MS = 15_000;
  * names us honestly rather than impersonating a browser. Worth keeping on every outbound call this daemon
  * makes to a user-hosted service for the same reason. */
 const USER_AGENT = "intentic-sandbox";
-
-// The `komodo` cli capabilities currently connected, newest-manifest-order. The rail renders one tile per
-// entry, so this is also what decides how many Deployments tiles exist.
-export const komodoConnections = async (capabilities: CapabilitiesStore): Promise<KomodoConnection[]> =>
-    (await capabilities.list()).flatMap((capability) => {
-        if (capability.kind !== "cli" || capability.config.provider !== "komodo") {
-            return [];
-        }
-        const { url, apiKey, apiSecret } = capability.config;
-        // A half-filled capability (added before the schema validated, or hand-edited) is skipped rather than
-        // throwing: one bad entry costs itself, the capabilities-store rule.
-        if (url === undefined || apiKey === undefined || apiSecret === undefined) {
-            return [];
-        }
-        return [{ capability: capability.id, baseUrl: url.replace(/\/+$/, ""), apiKey, apiSecret }];
-    });
-
-export const komodoConnectionFor = async (capabilities: CapabilitiesStore, capability: string): Promise<KomodoConnection | undefined> =>
-    (await komodoConnections(capabilities)).find((connection) => connection.capability === capability);
 
 /* POST {module}/{Operation} with the params object as the WHOLE body.
  *

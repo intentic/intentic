@@ -32,7 +32,14 @@
             "entry": ["src/main.ts", "src/**/*.test.ts"]
         },
         "_sandbox/sandbox": {
-            "entry": ["src/main.ts", "src/extensions/backend/backend-host-main.ts", "src/**/*.test.ts", "bin/*.mjs", "bin/*.test.mjs", "scripts/*.{sh,mjs}"]
+            "entry": [
+                "src/main.ts",
+                "src/extensions/backend/backend-host-main.ts",
+                "src/**/*.test.ts",
+                "bin/*.mjs",
+                "bin/*.test.mjs",
+                "scripts/*.{sh,mjs}"
+            ]
         },
         "_search/iq": {
             "entry": ["src/cli.ts", "plugin/**", "src/**/*.test.ts"]
@@ -56,8 +63,11 @@
         "_extensions/imap": {
             "entry": ["src/index.ts", "src/gateway.ts", "src/**/*.test.ts"]
         },
+        "_extensions/deployments": {
+            "entry": ["src/server/server.ts", "src/**/*.test.ts"]
+        },
         "_extensions/memory": {
-            "entry": ["src/index.ts", "src/server/server.ts", "src/**/*.test.ts"]
+            "entry": ["src/server/server.ts", "src/**/*.test.ts"]
         },
         "_extensions/*": {
             "entry": ["src/index.ts", "src/**/*.test.ts"]

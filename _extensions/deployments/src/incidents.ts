@@ -1,4 +1,4 @@
-import type { DeployAlert } from "@intentic/sandbox-contract";
+import type { DeployAlert } from "./contract";
 
 /* WHAT REACHES THE RAIL, and the several things that deliberately do not.
  *

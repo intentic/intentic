@@ -8,11 +8,12 @@
 set -euo pipefail
 cd "$(dirname "$0")/../.."
 
-# ext-memory builds its BACKEND bundle (dist/server.js) here — the Dockerfile COPYs it from the repo tree
-# beside the manifest (no deploy tree: the bundle is self-contained, so shipping node_modules would be waste).
+# ext-memory and ext-deployments build their BACKEND bundles (dist/server.js) here — the Dockerfile COPYs
+# them from the repo tree beside the manifest (no deploy tree: the bundles are self-contained, so shipping
+# node_modules would be waste).
 pnpm turbo run build --filter=@intentic/sandbox --filter=@intentic/cli \
     --filter=@intentic/ext-discord --filter=@intentic/ext-imap --filter=@intentic/ext-slack --filter=@intentic/ext-telegram --filter=@intentic/ext-whatsapp \
-    --filter=@intentic/ext-memory
+    --filter=@intentic/ext-memory --filter=@intentic/ext-deployments
 
 out=.image-out
 # Regenerate the deploy trees but PRESERVE the cached model dir (and its completeness marker).

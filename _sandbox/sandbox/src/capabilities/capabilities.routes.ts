@@ -174,6 +174,29 @@ export const createCapabilitiesRoutes = (services: Services) => {
             }
             return registry[capability.kind].status(ctx, capability.id, capability.config);
         }),
+        /* One capability's stored config, secrets included — the extension BACKENDS' credential read (see the
+         * contract's note). The identity check is the whole gate: the bearer middleware sets `identity` for
+         * every member it verifies, and this route serves precisely the callers it never does — the daemon's
+         * own header grants, of which the extension token is the only one that must also DECLARE this route.
+         * Secrets echoing as hasToken booleans everywhere else on this surface is unchanged: this route is
+         * unreachable from anything that renders. */
+        connection: i.connection.handler(async ({ input, context }) => {
+            if (context.identity !== undefined) {
+                throw new ORPCError("FORBIDDEN", { message: "the connection read serves extension backends, never a signed-in browser" });
+            }
+            const capability = await services.capabilities.get(input.id);
+            if (capability === undefined) {
+                throw new ORPCError("NOT_FOUND", { message: "no capability with that id" });
+            }
+            // Only the string-valued fields: a connection is env-shaped by construction (a cli's url/key pair,
+            // a browser platform's urls), and a structured value leaking through would only confuse a caller
+            // that expects to put these into headers.
+            const config = Object.fromEntries(Object.entries(capability.config).filter(([, value]) => typeof value === "string")) as Record<
+                string,
+                string
+            >;
+            return { id: capability.id, kind: capability.kind, config };
+        }),
         marketplace: i.marketplace.handler(async ({ input }) => browseMarketplace(ctx, input.url, input.token)),
         // "Not needed", recorded against the evidence the card is CURRENTLY recommended on — re-derived here
         // rather than taken from the client, so the dismissal answers the claim that was actually on screen and

@@ -1,7 +1,7 @@
 {
     "name": "@intentic/ext-deployments",
     "version": "1.0.0",
-    "description": "Deployments — container health, incidents and one-click redeploys over a connected Komodo, as a first-party intentic extension",
+    "description": "Deployments \u2014 container health, incidents and one-click redeploys over a connected Komodo, as a first-party intentic extension",
     "license": "MIT",
     "private": true,
     "type": "module",
@@ -14,6 +14,7 @@
         }
     },
     "scripts": {
+        "build": "vite build --config vite.server.config.ts",
         "typecheck": "vue-tsc --noEmit",
         "test": "vitest run"
     },
@@ -22,11 +23,16 @@
         "@intentic/extension-manifest": "workspace:*",
         "@intentic/extension-ui": "workspace:*",
         "@intentic/sandbox-contract": "workspace:*",
-        "@tanstack/vue-query": "catalog:"
+        "@orpc/contract": "catalog:",
+        "@orpc/openapi": "catalog:",
+        "@orpc/server": "catalog:",
+        "@tanstack/vue-query": "catalog:",
+        "zod": "catalog:"
     },
     "devDependencies": {
         "@intentic/tsconfig": "workspace:*",
         "typescript": "catalog:",
+        "vite": "catalog:",
         "vitest": "catalog:",
         "vue": "catalog:",
         "vue-tsc": "catalog:"

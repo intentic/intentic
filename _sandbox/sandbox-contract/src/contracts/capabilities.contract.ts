@@ -3,6 +3,7 @@ import { IntenticLineSchema } from "../events.js";
 import {
     CapabilitiesListSchema,
     CapabilityCardParamSchema,
+    CapabilityConnectionSchema,
     CapabilityIdParamSchema,
     CapabilityLoginSchema,
     CapabilityOtpSchema,
@@ -26,6 +27,12 @@ export const capabilitiesContract = {
     // Replace just the secret in a capability's config (the /secrets page's edit) and re-run its apply.
     setSecret: oc.route({ method: "POST", path: "/capabilities/{id}/secret" }).input(CapabilitySecretInputSchema).output(OkSchema),
     status: oc.route({ method: "GET", path: "/capabilities/{id}/status" }).input(CapabilityIdParamSchema).output(CapabilityStatusSchema),
+    /* One capability's stored config, secrets included — how an extension BACKEND dials the service behind a
+     * connected capability (ext-deployments reads its Komodo's key pair through this). Never a browser's: the
+     * handler refuses any caller with a member identity, so only the daemon's header grants reach it, and an
+     * extension's grant reaches it only when its manifest declares the route in `permissions.daemon` — which
+     * is the install dialog saying, in one line, "this extension can read connected credentials". */
+    connection: oc.route({ method: "GET", path: "/capabilities/{id}/connection" }).input(CapabilityIdParamSchema).output(CapabilityConnectionSchema),
     marketplace: oc.route({ method: "POST", path: "/capabilities/marketplace" }).input(MarketplaceRequestSchema).output(MarketplaceSchema),
     // "Not needed": stop offering this card until the workspace evidence behind it changes. Nothing is torn
     // down and nothing is remembered about the card itself — only the evidence it was declined against.

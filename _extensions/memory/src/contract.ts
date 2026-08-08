@@ -1,4 +1,3 @@
-import { oc } from "@orpc/contract";
 import { z } from "zod";
 
 /* THE MEMORY EXTENSION'S OWN WIRE CONTRACT — shared by its two halves and by nobody else.
@@ -27,7 +26,7 @@ export type MemoryFileEntry = z.infer<typeof MemoryFileEntrySchema>;
 export const MemoryListSchema = z.object({ files: z.array(MemoryFileEntrySchema) });
 
 // `project` + `name` ride the query (names may contain slashes, which don't fit a path segment).
-const MemoryFileQuerySchema = z.object({
+export const MemoryFileQuerySchema = z.object({
     project: z.string().min(1),
     name: z.string().min(1),
 });
@@ -40,19 +39,9 @@ export const MemoryFileSchema = z.object({
 });
 export type MemoryFile = z.infer<typeof MemoryFileSchema>;
 // Memory notes are small by construction (one fact per file); the cap guards the route, not real usage.
-const MemoryWriteSchema = z.object({
+export const MemoryWriteSchema = z.object({
     project: z.string().min(1),
     name: z.string().min(1),
     content: z.string().max(1_048_576),
 });
-const OkSchema = z.object({ ok: z.literal(true) });
-
-// The agent's persistent memory notes (.intentic/claude/projects/<project>/memory) — read for the memory
-// panel, write/delete so the owner can curate what the agent remembers. oRPC's OpenAPI codec reads non-GET
-// input from the JSON body, so write and delete send {project, name} in the body.
-export const memoryContract = {
-    list: oc.route({ method: "GET", path: "/memory" }).output(MemoryListSchema),
-    read: oc.route({ method: "GET", path: "/memory/file" }).input(MemoryFileQuerySchema).output(MemoryFileSchema),
-    write: oc.route({ method: "PUT", path: "/memory/file" }).input(MemoryWriteSchema).output(OkSchema),
-    delete: oc.route({ method: "DELETE", path: "/memory/file" }).input(MemoryFileQuerySchema).output(OkSchema),
-};
+export const OkSchema = z.object({ ok: z.literal(true) });

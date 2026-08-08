@@ -1,4 +1,4 @@
-import type { DeployAlert, DeployResource, DeployServer, DeployState } from "@intentic/sandbox-contract";
+import type { DeployAlert, DeployResource, DeployServer, DeployState } from "../contract.js";
 import type { KomodoAlert, KomodoDeploymentInfo, KomodoListItem, KomodoServerInfo, KomodoStackInfo, KomodoStackService } from "./komodo-client.js";
 
 /* Komodo's vocabulary → the view's. Pure functions over already-fetched data, so the mapping is testable
@@ -10,7 +10,7 @@ import type { KomodoAlert, KomodoDeploymentInfo, KomodoListItem, KomodoServerInf
  * one where a new enum variant blanks an operator's board during an incident. */
 
 // Komodo's deep links, from its own `usableResourcePath`: the lowercase plural, then the resource id.
-export const resourceUrl = (baseUrl: string, path: string, id: string): string => `${baseUrl}/${path}/${id}`;
+const resourceUrl = (baseUrl: string, path: string, id: string): string => `${baseUrl}/${path}/${id}`;
 
 /* Eleven state words across DeploymentState and StackState, onto five.
  *

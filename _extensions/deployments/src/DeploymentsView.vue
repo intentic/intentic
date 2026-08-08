@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import type { DeployAction, DeployResource, DeployServer } from "@intentic/sandbox-contract";
+import type { DeployAction, DeployResource, DeployServer } from "./contract";
 import { Button, cmp, CountBar, type CountItem, Icon, InfoHint, Page, PageAction, PageHeader, RowGroup, timeAgo } from "@intentic/extension-ui";
 import { computed, onMounted, ref, toRef } from "vue";
 import { markDeploymentsSeen } from "./attention";

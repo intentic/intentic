@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import type { DeployServer } from "@intentic/sandbox-contract";
+import type { DeployServer } from "./contract";
 import { Icon, StatusBadge } from "@intentic/extension-ui";
 import { computed } from "vue";
 import { gaugeTone, SERVER_TONE } from "./stateVisual";

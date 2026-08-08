@@ -1,5 +1,5 @@
 import { basename, join, relative } from "node:path";
-import type { DeployRepoLink } from "@intentic/sandbox-contract";
+import type { DeployRepoLink } from "../contract.js";
 
 /* Which workspace repo belongs to which Komodo stack.
  *
@@ -73,7 +73,7 @@ export interface RepoScanDeps {
 /* One repo's compose evidence: the first compose file docker would pick, and the project name it declares.
  * A repo with no compose file yields nothing — it is not a candidate, and listing it would pad the view with
  * rows that can never be linked. */
-export const repoComposeName = async (deps: RepoScanDeps, repoDir: string): Promise<{ projectName: string; composePath: string } | undefined> => {
+const repoComposeName = async (deps: RepoScanDeps, repoDir: string): Promise<{ projectName: string; composePath: string } | undefined> => {
     for (const name of COMPOSE_NAMES) {
         const path = join(repoDir, name);
         const contents = await deps.read(path);

@@ -1,16 +1,15 @@
+import { parsePinned, pinnedModelLabel, SandboxSettingsSchema } from "@intentic/sandbox-contract";
 import {
     type DeployAction,
     type DeployFixResponse,
     DeployFixResponseSchema,
     type DeployLogsResponse,
     DeployLogsResponseSchema,
+    DEPLOYMENTS_BASE,
     type DeployOverviewResponse,
     DeployOverviewResponseSchema,
     type DeployResource,
-    parsePinned,
-    pinnedModelLabel,
-    SandboxSettingsSchema,
-} from "@intentic/sandbox-contract";
+} from "./contract";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/vue-query";
 import { computed, type Ref } from "vue";
 import { host } from "./host";
@@ -38,7 +37,7 @@ export function useDeploymentBoard(capability: Ref<string>) {
     const query = useQuery({
         queryKey,
         queryFn: async (): Promise<DeployOverviewResponse> =>
-            DeployOverviewResponseSchema.parse(await api.sandbox.json(`/komodo/${capability.value}/overview`)),
+            DeployOverviewResponseSchema.parse(await api.sandbox.json(`${DEPLOYMENTS_BASE}/komodo/${capability.value}/overview`)),
         enabled,
         refetchInterval: POLL_MS,
     });
@@ -46,7 +45,10 @@ export function useDeploymentBoard(capability: Ref<string>) {
 
     const act = useMutation({
         mutationFn: (input: { resource: DeployResource; action: DeployAction }) =>
-            api.sandbox.json(`/komodo/${capability.value}/action`, post({ kind: input.resource.kind, id: input.resource.id, action: input.action })),
+            api.sandbox.json(
+                `${DEPLOYMENTS_BASE}/komodo/${capability.value}/action`,
+                post({ kind: input.resource.kind, id: input.resource.id, action: input.action }),
+            ),
         // Komodo's execute returns as soon as the operation is accepted, so the board it refetches may still
         // show the old state for a beat. That is honest — the poll above is what lands the new one — and it
         // beats optimistically drawing a state the container has not reached.
@@ -56,14 +58,14 @@ export function useDeploymentBoard(capability: Ref<string>) {
     // Bind a workspace repo to one of this Komodo's stacks (empty `stack` unlinks). Invalidates, because the
     // overview is what carries the link back — no optimistic copy to drift.
     const link = useMutation({
-        mutationFn: (input: { repo: string; stack: string }) => api.sandbox.json(`/komodo/${capability.value}/link`, post(input)),
+        mutationFn: (input: { repo: string; stack: string }) => api.sandbox.json(`${DEPLOYMENTS_BASE}/komodo/${capability.value}/link`, post(input)),
         onSuccess: invalidate,
     });
 
     const logs = useMutation({
         mutationFn: async (resource: DeployResource): Promise<DeployLogsResponse> =>
             DeployLogsResponseSchema.parse(
-                await api.sandbox.json(`/komodo/${capability.value}/logs`, post({ kind: resource.kind, id: resource.id })),
+                await api.sandbox.json(`${DEPLOYMENTS_BASE}/komodo/${capability.value}/logs`, post({ kind: resource.kind, id: resource.id })),
             ),
     });
 
@@ -72,7 +74,9 @@ export function useDeploymentBoard(capability: Ref<string>) {
     // on the card.
     const fix = useMutation({
         mutationFn: async (resource: DeployResource): Promise<DeployFixResponse> =>
-            DeployFixResponseSchema.parse(await api.sandbox.json(`/komodo/${capability.value}/fix`, post({ kind: resource.kind, id: resource.id }))),
+            DeployFixResponseSchema.parse(
+                await api.sandbox.json(`${DEPLOYMENTS_BASE}/komodo/${capability.value}/fix`, post({ kind: resource.kind, id: resource.id })),
+            ),
     });
 
     /* WHAT THE FIX BUTTON IS ABOUT TO SPEND — the sandbox's agent-run model, read only so the button can name
