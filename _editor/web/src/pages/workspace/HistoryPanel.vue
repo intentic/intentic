@@ -136,9 +136,12 @@ const confirmRestore = (id: string): void => {
 
                     <div class="mt-1.5 flex items-center gap-2">
                         <template v-if="confirmRestoreId === snapshot.id">
+                            <!-- The chat clause is not decoration: an open conversation is reasoning about the
+                                 files this is about to move, and until it was told, the only symptom was its
+                                 next turn behaving as though edits existed that no longer did. -->
                             <span class="flex-1 text-2xs text-warning"
-                                >Rewrite all files to this checkpoint? Files created after it are removed; git branches and secrets are
-                                untouched.</span
+                                >Rewrite all files to this checkpoint? Files created after it are removed; git branches and secrets are untouched.
+                                Open chats working here are told the files moved.</span
                             >
                             <button
                                 type="button"
@@ -155,7 +158,7 @@ const confirmRestore = (id: string): void => {
                             class="rounded border border-line px-2 py-0.5 text-2xs text-muted transition-colors hover:bg-overlay hover:text-content max-md:min-h-11 max-md:px-3 max-md:text-xs"
                             :disabled="busy"
                             @click="confirmRestoreId = snapshot.id"
-                            v-tooltip.right="'Files only — secrets and branches untouched. A safety checkpoint is saved first.'"
+                            v-tooltip.right="'Files only — secrets and branches untouched. A safety checkpoint is saved first, and open chats are told.'"
                         >
                             <Icon name="history" class="mr-1 text-2xs" />Restore
                         </button>

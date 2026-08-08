@@ -1301,3 +1301,95 @@ describe(`hydrating a conversation whose turn is still running`, () => {
         expect(conversation.messages.value.find((message) => message.plan !== undefined)?.plan?.status).toBe(`pending`);
     });
 });
+
+/* FORKING FROM A CUT. The gesture is the transcript's, but everything it decides lives here: which tab the user
+ * lands in, what that tab is holding, and — the part the old edit-and-branch got wrong — whether anything ran. */
+describe(`forking at a cut`, () => {
+    beforeEach(() => {
+        storage.clear();
+        resetChat();
+        sandboxRequestMock.mockReset();
+    });
+
+    // Four bubbles, two of them prompts the daemon still holds a state for — a conversation reopened from
+    // history, which is the state most forks are taken from.
+    const seed = (): ReturnType<typeof useChat> => {
+        const chat = useChat();
+        chat.active.value.restoreMessages([
+            { role: `user`, text: `first`, checkpointId: `snap-1` },
+            { role: `assistant`, text: `one` },
+            { role: `user`, text: `second`, checkpointId: `snap-2` },
+            { role: `assistant`, text: `two` },
+        ]);
+        return chat;
+    };
+
+    it(`opens a new tab holding the prompt below the cut, and sends nothing`, () => {
+        const chat = seed();
+        const source = chat.active.value;
+
+        chat.forkAt(2, `now`);
+
+        // The fork is a new tab, focused, carrying the turns above the cut and nothing below it.
+        expect(chat.conversations.value).toHaveLength(2);
+        const fork = chat.active.value;
+        expect(fork).not.toBe(source);
+        expect(fork.messages.value.map((message) => message.text)).toEqual([`first`, `one`]);
+        // The prompt is in the composer to be read and changed — not in the transcript, and not on the wire.
+        expect(fork.draft.value).toBe(`second`);
+        expect(sandboxRequestMock).not.toHaveBeenCalled();
+        // And the source is exactly as it was, which is the point of forking rather than rewinding.
+        expect(source.messages.value.map((message) => message.text)).toEqual([`first`, `one`, `second`, `two`]);
+    });
+
+    // Past the last message there is no prompt below the cut to inherit, so the fork opens on an empty composer:
+    // the whole conversation, carried on in a fresh tab.
+    it(`forks the whole conversation with an empty composer`, () => {
+        const chat = seed();
+
+        chat.forkAt(4, `now`);
+
+        const fork = chat.active.value;
+        expect(fork.messages.value.map((message) => message.text)).toEqual([`first`, `one`, `second`, `two`]);
+        expect(fork.draft.value).toBe(``);
+    });
+
+    /* "Files as they were" is only sayable in a checkout of the fork's own, so asking for it turns the fork
+     * isolated whatever the source was — a fork of a main-tree chat that wants the old files becomes an agent. */
+    it(`isolates a fork that asks for the files as they were`, () => {
+        const chat = seed();
+        chat.active.value.isolated.value = false;
+
+        chat.forkAt(2, `then`);
+
+        expect(chat.active.value.isolated.value).toBe(true);
+    });
+
+    // Asking for today's files decides nothing about placement, so the fork simply works where its source did —
+    // main tree or worktree alike.
+    it(`leaves a fork asking for today's files where its source was working`, () => {
+        const chat = seed();
+        chat.active.value.isolated.value = false;
+
+        chat.forkAt(2, `now`);
+        expect(chat.active.value.isolated.value).toBe(false);
+
+        chat.setActive(chat.conversations.value[0]!.conversationId);
+        chat.active.value.isolated.value = true;
+        chat.forkAt(2, `now`);
+        expect(chat.active.value.isolated.value).toBe(true);
+    });
+
+    // A cut nobody could have made — past the end of a transcript that has since shrunk, or into a chat whose
+    // turn started while the menu sat open — opens no tab at all.
+    it(`refuses a cut out of range, and any cut while a turn runs`, () => {
+        const chat = seed();
+
+        chat.forkAt(9, `now`);
+        expect(chat.conversations.value).toHaveLength(1);
+
+        chat.active.value.streaming.value = true;
+        chat.forkAt(2, `now`);
+        expect(chat.conversations.value).toHaveLength(1);
+    });
+});

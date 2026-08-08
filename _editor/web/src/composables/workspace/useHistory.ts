@@ -4,6 +4,7 @@ import { computed } from "vue";
 import { sandboxJson } from "../sandbox/sandboxClient";
 import { jsonBody } from "../sandbox/jsonBody";
 import { useAsyncAction } from "../useAsyncAction";
+import { useChat } from "../chat/useChat";
 import { resetEditBuffers } from "./useEditBuffers";
 import { sandboxKey } from "../sandbox/useSandbox";
 import { useSandboxQuery } from "../sandbox/useSandboxQuery";
@@ -45,6 +46,17 @@ export const restoreSnapshot = (queryClient: QueryClient, id: string): Promise<v
     run(async () => {
         await sandboxJson(`/history/restore`, jsonBody(`POST`, { id }));
         await invalidateWorkspace(queryClient);
+        /* AND TELL THE CHATS THAT WERE WATCHING. This restore rewrote /work, which is the workspace every
+         * main-tree conversation is reasoning about — their contexts now describe files that changed underneath
+         * them, and until this line the only evidence was the next turn behaving oddly. The timeline and the
+         * transcript are two views of one history, so a move made in either has to be visible from the other.
+         *
+         * Isolated chats are left alone: they work in checkouts of their own, which this did not touch. */
+        for (const conversation of useChat().conversations.value) {
+            if (!conversation.isolated.value) {
+                conversation.noteWorkspaceRestored();
+            }
+        }
     }, `Restore failed.`);
 
 export function useHistory() {

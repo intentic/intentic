@@ -35,6 +35,8 @@ import ChatAccountPanel from "./ChatAccountPanel.vue";
 import ChatCommandPopover from "./ChatCommandPopover.vue";
 import ChatImageThumb from "./ChatImageThumb.vue";
 import ChatMentionPopover from "./ChatMentionPopover.vue";
+import ChatForkCut from "./ChatForkCut.vue";
+import ChatForkLine from "./ChatForkLine.vue";
 import ChatMessageView from "./ChatMessageView.vue";
 import ChatModelPicker from "./ChatModelPicker.vue";
 import ChatModeMenu from "./ChatModeMenu.vue";
@@ -364,6 +366,14 @@ const isStreaming = (message: ChatMessage): boolean =>
 // the same top edge and pile up on the one before it. Recomputed per streamed frame like the list it replaces,
 // and just as shallow: one pass, no message read beyond its role.
 const turns = computed(() => turnsOf(messages.value));
+
+/* WHERE EACH TURN STARTS in the flat transcript — the number a fork cut above that turn hands the daemon, and
+ * the one thing the grouped render has thrown away (a section knows its messages, not their positions).
+ *
+ * Built as one index rather than searched per turn: `turns` is rebuilt on every paint of a streaming answer, so
+ * a findIndex per section would be quadratic in the transcript on every frame — the cost this file's v-memo
+ * note is about, arriving by a different road. */
+const cuts = computed(() => new Map(messages.value.map((message, index) => [message.id, index])));
 
 // --- Composer --------------------------------------------------------------------------------
 const effortIndex = computed(() => efforts.value.findIndex((e) => e.value === effort.value));
@@ -1168,27 +1178,38 @@ watch(
         <div ref="scroller" class="chat-scroller scrollbar-thin flex flex-1 flex-col overflow-auto" :class="{ 'chat-realize': realizing }">
             <div ref="content" class="flex min-w-0 flex-1 flex-col">
                 <div class="chat-turns flex flex-1 flex-col gap-1 pt-4">
+                    <!-- Where a forked chat says so — above the turns it inherited, which without it read as
+                         this conversation's own beginning. -->
+                    <ChatForkLine />
                     <template v-if="messages.length > 0">
                         <!-- One section per turn, purely so each prompt's sticky range ends where its answer
                              does. A bare "continue" and an app errand both fold into the turn they serve
                              (see foldsIntoTurn), so the question that defines the work stays pinned through
                              the continued answer. -->
-                        <section v-for="turn in turns" :key="turn.id" class="flex flex-col gap-1">
-                            <!-- v-memo skips the vnode entirely for a row whose inputs are unchanged, which
-                                 during a streaming turn is every row but the one being written: `turns` is
-                                 rebuilt on each paint, so without it the whole transcript is re-created to
-                                 redraw one bubble. The key lists exactly what the row renders from — a
-                                 message keeps its identity through the reducer unless that message changed,
-                                 and `folded` holds still per turn (see ChatTurn.folded). -->
-                            <ChatMessageView
-                                v-for="message in turn.messages"
-                                :key="message.id"
-                                v-memo="[message, isStreaming(message), turn.folded]"
-                                :message="message"
-                                :streaming="isStreaming(message)"
-                                :folded="message.id === turn.id ? turn.folded : undefined"
-                            />
-                        </section>
+                        <template v-for="turn in turns" :key="turn.id">
+                            <!-- The fork point, in the gap ABOVE each turn: everything over the line is what a
+                                 fork here keeps. Not above the FIRST turn — a fork that inherits nothing is a
+                                 new chat, which the strip above already offers. -->
+                            <ChatForkCut v-if="(cuts.get(turn.id) ?? 0) > 0" :cut="cuts.get(turn.id) ?? 0" />
+                            <section class="flex flex-col gap-1">
+                                <!-- v-memo skips the vnode entirely for a row whose inputs are unchanged, which
+                                     during a streaming turn is every row but the one being written: `turns` is
+                                     rebuilt on each paint, so without it the whole transcript is re-created to
+                                     redraw one bubble. The key lists exactly what the row renders from — a
+                                     message keeps its identity through the reducer unless that message changed,
+                                     and `folded` holds still per turn (see ChatTurn.folded). -->
+                                <ChatMessageView
+                                    v-for="message in turn.messages"
+                                    :key="message.id"
+                                    v-memo="[message, isStreaming(message), turn.folded]"
+                                    :message="message"
+                                    :streaming="isStreaming(message)"
+                                    :folded="message.id === turn.id ? turn.folded : undefined"
+                                />
+                            </section>
+                        </template>
+                        <!-- And one past the end: the whole conversation, carried on somewhere else. -->
+                        <ChatForkCut :cut="messages.length" />
                     </template>
                     <!-- The transcript is on its way (a history open, a restored tab whose local mirror was
                          empty). Without this state the round-trip wears the "Start a conversation" text

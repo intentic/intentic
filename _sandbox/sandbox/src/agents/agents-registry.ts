@@ -341,6 +341,7 @@ export const createAgentsRegistry = (store: AgentsStore, standings: LandStanding
             // under it would be describing a turn the board no longer shows as the last word.
             ...(entry.failure !== undefined && status === "error" ? { failure: entry.failure } : {}),
             ...(entry.origin !== undefined ? { origin: entry.origin } : {}),
+            ...(entry.forkedFrom !== undefined ? { forkedFrom: entry.forkedFrom } : {}),
             ...(entry.title !== undefined ? { title: entry.title } : {}),
             ...(entry.model !== undefined ? { model: entry.model } : {}),
             ...(entry.effort !== undefined ? { effort: entry.effort } : {}),

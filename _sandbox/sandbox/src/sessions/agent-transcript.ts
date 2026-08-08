@@ -1,5 +1,5 @@
 import { type AgentHarness, type AgentProvider, capabilitiesOf, type RestoredMessage } from "@intentic/sandbox-contract";
-import type { RewindPoints } from "../agent/rewind-points.js";
+import type { TurnAnchors } from "../agent/turn-anchors.js";
 import { readCodexSession } from "./codex-sessions.js";
 import { userPromptsOf } from "./prompt-index.js";
 import type { TranscriptRecord } from "./transcript-record.js";
@@ -14,8 +14,8 @@ export interface TranscriptAgent {
 
 export interface AgentTranscriptDeps {
     readonly record: TranscriptRecord;
-    // Which checkpoint each message can be rewound to — read per transcript, never stored in it (see below).
-    readonly rewindPoints: RewindPoints;
+    // What each message can be put back to — read per transcript, never stored in it (see below).
+    readonly turnAnchors: TurnAnchors;
     readonly root: string;
     readonly codexHome: string;
     /* Which SDK session holds this conversation's turns — asked of the REGISTRY, which recorded it from the
@@ -53,23 +53,29 @@ export const storedTranscript = async (deps: AgentTranscriptDeps, agent: Transcr
  * what the daemon streamed — and it exists for every conversation that has run a turn since it was introduced,
  * including the ones no provider store would answer for.
  *
- * Each user message is stamped with the checkpoint it can be rewound to, looked up per read rather than stored
- * in the record. That is the point: a rewind rewrites those points, so reading them fresh is what makes a
+ * Each user message is stamped with the state it can be put back to, looked up per read rather than stored in
+ * the record. That is the point: a rewind rewrites those anchors, so reading them fresh is what makes a
  * reopened tab offer exactly the turns still there to go back to — where a value frozen into the record would
  * keep offering turns a previous rewind already dropped. The lookup is one small file read for the whole
  * conversation, on a path that is already reading the transcript. */
 export const agentTranscript = async (deps: AgentTranscriptDeps, agent: TranscriptAgent): Promise<RestoredMessage[]> => {
     const recorded = await deps.record.read(agent.id);
     const messages = recorded.length > 0 ? recorded : await storedTranscript(deps, agent);
-    const points = await deps.rewindPoints.all(agent.id);
-    if (points.size === 0) {
+    const anchors = await deps.turnAnchors.all(agent.id);
+    if (anchors.size === 0) {
         return messages;
     }
     const stamped: RestoredMessage[] = [];
     for (const [index, message] of messages.entries()) {
-        // Only user bubbles carry one — an assistant message is not a point anyone can go back TO — and only
-        // where a checkpoint exists, so an offer on screen is one the rewind route will honour.
-        const checkpointId = message.role === "user" ? points.get(index) : undefined;
+        /* Only user bubbles carry one — an assistant message is not a point anyone can go back TO — and only
+         * where an anchor exists, so an offer on screen is one the daemon will honour.
+         *
+         * What rides up is the anchor's IDENTITY, not its contents: a checkpoint id where there is one, else
+         * the conversation's own name for that turn's commits. The client never opens it — it reads it as
+         * "there is a state here" and hands the message's index back when it wants to use it — so the two
+         * placements need no separate field, and a client cannot address a commit the daemon did not choose. */
+        const anchor = message.role === "user" ? anchors.get(index) : undefined;
+        const checkpointId = anchor === undefined ? undefined : anchor.kind === "tree" ? anchor.snapshot : `worktree:${index}`;
         stamped.push(checkpointId === undefined ? message : { ...message, checkpointId });
     }
     return stamped;

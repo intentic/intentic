@@ -25,6 +25,7 @@ import { startAnchor, type TurnPlacement } from "../agents/isolation.js";
 import { holdAccount } from "../claude/claude-credentials.js";
 import { accountLimitReset } from "../usage/account-usage.js";
 import { isIsolated } from "../agents/agents-store.js";
+import { anchorWorktree, forkWorktreeBase } from "./anchor-worktree.js";
 import { landAgent } from "../agents/land.js";
 import { landingPaths } from "../agents/landing-paths.js";
 import { landingVerdict, standing } from "../rules/rules.js";
@@ -140,6 +141,12 @@ async function* runConversationTurn(
             ...(input.fast !== undefined ? { fast: input.fast } : {}),
             ...(input.account !== undefined ? { account: input.account } : {}),
             ...(input.origin !== undefined ? { origin: input.origin } : {}),
+            /* A fork names its source on its first turn and only then — `forkOf` rides exactly one request, and
+             * the entry keeps what it said. `keep` counts the source's record rows above the cut, which IS the
+             * index of the message the cut sat above, so the source can put its own mark back in that gap. */
+            ...(input.forkOf !== undefined
+                ? { forkedFrom: { conversationId: input.forkOf.conversationId, index: input.forkOf.keep, files: input.forkOf.files } }
+                : {}),
         },
         Date.now(),
     );
@@ -200,7 +207,16 @@ async function* runConversationTurn(
     try {
         // Lazily create (first turn) or repair the conversation's worktree composition, then announce it.
         const entry = services.agents.entry(conversationId);
-        const worktree = await services.agentWorktrees.ensure(conversationId, entry?.repos ?? [], input.worktreeBase);
+        /* A FORK THAT ASKED FOR THE FILES AS THEY WERE starts its checkout at the source's own commits for that
+         * message, so the two lines of work are genuinely comparable — without this, "try it another way from
+         * here" would begin at whatever the workspace had become by the time it was asked, and the comparison
+         * it exists for would be against the wrong thing. Undefined wherever that cannot be honoured (see
+         * forkWorktreeBase), which falls through to today's files rather than refusing to start.
+         *
+         * A workflow's own pinned base still wins: it pins every candidate to ONE snapshot on purpose, and a
+         * fork inside one must not quietly step off it. */
+        const worktreeBase = input.worktreeBase ?? (await forkWorktreeBase(services.turnAnchors, input.forkOf));
+        const worktree = await services.agentWorktrees.ensure(conversationId, entry?.repos ?? [], worktreeBase);
         if ((entry?.repos.length ?? 0) === 0) {
             await services.agents.recordWorktree(conversationId, worktree.repos);
         }
@@ -303,6 +319,26 @@ async function* runConversationTurn(
             dir: services.agentWorktrees.worktreeDir(conversationId, repo),
         }));
         yield worktreeFrame(synced);
+        /* THIS TURN'S BEFORE-STATE, in the currency an isolated conversation has: its own branch. The main
+         * tree's fence capture (runTurn, below) is not available here — history covers /work, which this turn
+         * never touches — so the equivalent is to commit whatever is sitting in the checkout and remember the
+         * commit per repo. On the ordinary clean checkout it writes nothing and simply reads HEAD.
+         *
+         * Recorded AFTER the rebase above, deliberately: what the agent is about to read is the rebased branch,
+         * so that is the state "before this message" means. An anchor taken before it would send a fork back to
+         * a main line the source never worked against.
+         *
+         * This is what makes an agent's own history reachable at all. Until it existed, an isolated
+         * conversation had no per-message state anywhere: rewind had nothing to offer, and a fork could only
+         * start from wherever the checkout happened to have got to by the time somebody asked — which is not
+         * the point the user pointed at. Best-effort: a repo that will not commit costs its own anchor, never
+         * the turn. */
+        const anchored = await anchorWorktree(services, conversationId, worktree.repos);
+        if (anchored.length > 0) {
+            await services.turnAnchors
+                .record(turn.conversationId, turn.index, { kind: "worktree", repos: anchored })
+                .catch((error: unknown) => services.logger.warn({ err: error }, "anchors: recording the turn's commits failed"));
+        }
         /* The rebase the harness takes back whenever a card settles (agent.ts). It answers with the pair the
          * two audiences need — the frame for the transcript, the note for the model — and with undefined on
          * the ordinary answer, where the branch was already on today's main line and nothing needs saying.
@@ -734,15 +770,17 @@ async function* runTurn(
     if (notes.length > 0) {
         yield { kind: "preamble", notes };
     }
-    // Attribution fence: capture anything pending as user-authored (terminal edits, desktop-sync arrivals,
-    // unflushed UI writes) BEFORE the agent runs, so the turn-end snapshot below is purely the agent's work.
-    // A no-op skip when the tree is clean; a history failure never blocks a turn. Isolated turns skip BOTH
-    // snapshots: history captures the MAIN tree, which an isolated turn never touches — the worktree branch's
-    // diff-vs-base is that conversation's review and rollback surface.
+    /* THE TURN'S BEFORE-STATE, recorded under this message so that going back to it — a rewind, or a fork that
+     * wants the files as they were here — has something to name. Both placements record one; what differs is
+     * what a "state" IS where the turn runs, which is the distinction agent/turn-anchors.ts exists to carry.
+     *
+     * MAIN TREE — the attribution fence: capture anything pending as user-authored (terminal edits,
+     * desktop-sync arrivals, unflushed UI writes) BEFORE the agent runs, so the turn-end snapshot is purely the
+     * agent's work. A no-op skip when the tree is clean; a history failure never blocks a turn. */
     if (worktree === undefined) {
         // The turn-start state's checkpoint id: the fence capture when it recorded something, else the newest
         // visible checkpoint (a clean tree at turn start IS that checkpoint's state — the common case). The
-        // client hangs "restore to before this message" on the frame; no id (fresh workspace) ⇒ no button.
+        // client hangs "go back to before this message" on the frame; no id (fresh workspace) ⇒ no offer.
         const checkpointId = await services.history
             .snapshot("user")
             .then(async (id) => id ?? (await services.history.list())[0]?.id)
@@ -752,18 +790,21 @@ async function* runTurn(
             });
         if (checkpointId !== undefined) {
             /* Written down as well as streamed. The frame alone reaches only the browser watching THIS turn,
-             * and the affordance it powers ("go back to before this message") is wanted most by the tab that
-             * comes back tomorrow — see agent/rewind-points.ts. Awaited, unlike the fence snapshot above: it is
-             * one small file write, and a frame promising a rewind the daemon cannot resolve is worse than a
-             * turn that starts a millisecond later. */
+             * and the affordance it powers is wanted most by the tab that comes back tomorrow — see
+             * agent/turn-anchors.ts. Awaited, unlike the fence snapshot above: it is one small file write, and
+             * a frame promising a state the daemon cannot resolve is worse than a turn that starts a
+             * millisecond later. */
             if (turn !== undefined) {
-                await services.rewindPoints
-                    .record(turn.conversationId, turn.index, checkpointId)
-                    .catch((error: unknown) => services.logger.warn({ err: error }, "rewind: recording the turn's checkpoint failed"));
+                await services.turnAnchors
+                    .record(turn.conversationId, turn.index, { kind: "tree", snapshot: checkpointId })
+                    .catch((error: unknown) => services.logger.warn({ err: error }, "anchors: recording the turn's checkpoint failed"));
             }
             yield { kind: "checkpoint", id: checkpointId, ...(turn !== undefined ? { index: turn.index } : {}) };
         }
     }
+    // An isolated turn takes no history capture — history covers the MAIN tree, which it never touches. Its
+    // before-state is its own branch, and it is anchored by the isolated arm above, which is where the worktree
+    // composition (and so the per-repo commits) is known.
     mark("snapshot");
     /* This turn's identity in the activity log, minted here because here is the first moment it exists. Every
      * event the turn writes — the four lifecycle marks below and one per sniffed outbound provider call — carries

@@ -394,12 +394,12 @@ export const planHarnessTurn = async (
      *
      * The three clauses are that sentence, spelled: `unattended` drops everything a surface started (a loop
      * iteration, a chore, an acceptance story, and every automation wake — a schedule mints a FRESH conversation
-     * on each fire, so nothing else here would tell it from a person opening one); `branchOf` drops a
+     * on each fire, so nothing else here would tell it from a person opening one); `forkOf` drops a
      * conversation cut from another, whose opening message continues a transcript it was handed rather than
      * starting one; and a turn count of zero is what makes it once per conversation rather than once per
      * message — the registry counts every turn that ran, however it ended. */
     const conversationTurns = input.conversationId === undefined ? 0 : (services.agents.entry(input.conversationId)?.turns ?? 0);
-    const contextEligible = iqContext && input.unattended !== true && input.branchOf === undefined && conversationTurns === 0;
+    const contextEligible = iqContext && input.unattended !== true && input.forkOf === undefined && conversationTurns === 0;
     /* PRE-INJECTION'S OWN COIN FLIP, on the same terms as the terse steer's — a fraction of otherwise-eligible
      * turns run without the retrieved context so the two arms are populations of the same command stream.
      * Independent of the terse flip on purpose: two independent flips leave each experiment's other-arm turns

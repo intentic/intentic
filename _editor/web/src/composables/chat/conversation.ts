@@ -166,7 +166,7 @@ export class Conversation {
     // The tmux session this conversation's Bash commands are running in (`agent-<sdk session>`), from the
     // daemon's own `terminal` frame. Held so the transcript can offer to WATCH the shell — the agent's terminals
     // no longer tab themselves into the panel (useWorkTerminals), so the Bash card is where that door lives.
-    // Undefined until the first Bash of a turn; a fresh conversation, a branch, and a restored transcript all
+    // Undefined until the first Bash of a turn; a fresh conversation, a fork, and a restored transcript all
     // start without one, because whatever shell they inherited belongs to a session they no longer run in.
     readonly agentTerminal = ref<string | undefined>();
 
@@ -334,10 +334,17 @@ export class Conversation {
     // permanent by the next send (the segment cut).
     private pendingSwitchNoticeId: number | undefined;
 
-    // Where this conversation was cut from, until its first turn carries it (see branchFrom). Undefined on every
-    // conversation that is not a branch, and on a branch from its first send onward — the daemon has copied the
+    // Where this conversation was cut from, until its first turn carries it (see forkFrom). Undefined on every
+    // conversation that is not a fork, and on a fork from its first send onward — the daemon has copied the
     // rows by then, and from there this conversation's record is its own.
-    private pendingBranchOf: { conversationId: string; keep: number } | undefined;
+    private pendingForkOf: { conversationId: string; keep: number; files: "then" | "now" } | undefined;
+
+    /* WHERE THIS CONVERSATION WAS FORKED FROM, for as long as anyone might ask — unlike the field above, this
+     * one outlives the first send. It is what the header's "Forked from …" chip reads, and what the SOURCE's
+     * transcript counts to mark its own cut points, so the two halves of one fork can find each other. Carried
+     * in the tab snapshot, because a relationship that vanished on reload would be worse than none: the user
+     * would be left with two chats that are obviously related and no way to say how. */
+    readonly forkedFrom = ref<{ conversationId: string; title: string | null; index: number } | undefined>(undefined);
 
     // Aborts the in-flight ATTACH STREAM when the user hits Stop / closes the tab; cleared once the stream
     // settles. The turn itself runs detached on the daemon — only /agent/stop cancels it.
@@ -530,34 +537,44 @@ export class Conversation {
         return true;
     }
 
-    /* Seed this conversation as a BRANCH of `source` taken just before `index`: the turns before that point
-     * become this conversation's transcript and its settings ride across, while the source is left completely
-     * untouched — that is the whole point of branching over rewinding. No session is carried: a branch is a new
+    /* Seed this conversation as a FORK of `source` cut just before `index`: the turns before that point become
+     * this conversation's transcript and its settings ride across, while the source is left completely
+     * untouched — that is the whole point of forking over rewinding. No session is carried: a fork is a new
      * conversation daemon-side.
      *
      * The daemon is told where the cut was rather than what was on this screen, so it can copy that prefix of
      * the SOURCE's record into this conversation's own. Two things follow that sending bubbles up never gave:
-     * the branch's first turn is seeded with the full recorded turns (tool calls and attachments included, not a
-     * prose summary of them), and the branch reads back with its inherited history when it is reopened
-     * tomorrow instead of appearing to begin mid-conversation. */
-    branchFrom(source: Conversation, index: number): void {
+     * the fork's first turn is seeded with the full recorded turns (tool calls and attachments included, not a
+     * prose summary of them), and the fork reads back with its inherited history when it is reopened tomorrow
+     * instead of appearing to begin mid-conversation.
+     *
+     * `files` is the user's own choice between the two forks that are worth telling apart, and it is the reason
+     * this takes a mode at all rather than always doing one thing. "now" continues over the workspace as it
+     * stands. "then" asks for the files as they were at the cut, which is only expressible in a checkout of the
+     * fork's own — so it turns the fork isolated whatever the source was, and a fork of a plain chat that wants
+     * the old files becomes an agent on the board. The daemon resolves WHICH commits that means from the
+     * source's turn anchors; nothing about the workspace is decided here. */
+    forkFrom(source: Conversation, index: number, files: "then" | "now"): void {
         const kept = source.messages.value.slice(0, index);
-        this.pendingBranchOf = { conversationId: source.conversationId, keep: recordedRows(kept) };
+        this.pendingForkOf = { conversationId: source.conversationId, keep: recordedRows(kept), files };
+        this.forkedFrom.value = { conversationId: source.conversationId, title: source.title.value, index };
         this.transcript.rebuild(kept);
         this.provider.value = source.provider.value;
         this.harness.value = source.harness.value;
         this.account.value = source.account.value;
         this.model.value = source.model.value;
-        // The PICK, not what it currently clamps to — a branch inherits the user's choice, not one model's ceiling.
+        // The PICK, not what it currently clamps to — a fork inherits the user's choice, not one model's ceiling.
         this.effortPick.value = source.effortPick.value;
         this.thinking.value = source.thinking.value;
         this.fast.value = source.fast.value;
         // The pick again, for the same reason: a fork inherits the posture the user chose, not the one the
         // source's runtime happened to allow it.
         this.modePick.value = source.modePick.value;
-        this.isolated.value = source.isolated.value;
-        // Left null so send() names the branch after the edited message — two tabs sharing one title is the
-        // one thing that makes a branch hard to find again.
+        // "Files as they were" is only sayable in a checkout of one's own, so that choice carries isolation with
+        // it; "now" simply keeps the source's placement, main tree or worktree alike.
+        this.isolated.value = files === `then` ? true : source.isolated.value;
+        // Left null so send() names the fork after its own first message — two tabs sharing one title is the
+        // one thing that makes a fork hard to find again.
         this.title.value = null;
     }
 
@@ -584,11 +601,33 @@ export class Conversation {
                 response.status === 409 ? `This agent is running a turn — stop it before going back.` : `That message can no longer be gone back to.`;
             return false;
         }
+        const dropped = this.messages.value.length - bubble;
         this.transcript.rebuild(this.messages.value.slice(0, bubble));
+        /* SAY WHAT JUST HAPPENED TO THE FILES, in the place the dropped messages used to be. A rewind is the one
+         * move here that changes the workspace without anything on screen showing it: the bubbles simply end,
+         * and a transcript that merely stops is indistinguishable from one that was always that short. The line
+         * names both halves — what left the conversation and what happened on disk — because it is the only
+         * record either of them ever gets. */
+        this.transcript.append({
+            role: `notice`,
+            text: `Went back to here — ${dropped} message${dropped === 1 ? `` : `s`} dropped and the files restored to this point.`,
+        });
         this.session.value = undefined;
         this.error.value = null;
         this.persist(true);
         return true;
+    }
+
+    /* THE FILES MOVED UNDER THIS CONVERSATION, and not by anything it did — somebody restored a checkpoint from
+     * the Checkpoints timeline while this chat was open.
+     *
+     * Worth a line for the same reason the rewind above is: the agent's context still describes the workspace as
+     * it was a moment ago, and nothing else on screen would ever say otherwise. This is the smaller half of that
+     * problem (the transcript is intact, only the disk moved), which is exactly why it is a notice and not a
+     * truncation — what the reader needs is to know that the next turn starts somewhere else. */
+    noteWorkspaceRestored(): void {
+        this.transcript.append({ role: `notice`, text: `The workspace was restored to an earlier checkpoint — the files below this line have changed.` });
+        this.persist(true);
     }
 
     // Redraw the bubbles of a transcript the daemon replayed, leaving every other property of the conversation
@@ -652,7 +691,7 @@ export class Conversation {
         if (text.length === 0 && attachments.length === 0) {
             return;
         }
-        // Stop makes the local stream idle before the daemon can finish unwinding. A direct send (branches and
+        // Stop makes the local stream idle before the daemon can finish unwinding. A direct send (forks and
         // tests use this path; the composer normally comes through drainQueue) joins that cleanup boundary too.
         if (this.stopping !== undefined) {
             await this.stopping;
@@ -680,10 +719,10 @@ export class Conversation {
         }
         // The switch divider (if any) is frozen into the transcript — the segment cut happened.
         this.pendingSwitchNoticeId = undefined;
-        // A branch names its origin on its first turn only: this send is what makes the daemon copy the rows,
+        // A fork names its origin on its first turn only: this send is what makes the daemon copy the rows,
         // and from here on this conversation's record stands on its own.
-        const branchOf = this.pendingBranchOf;
-        this.pendingBranchOf = undefined;
+        const forkOf = this.pendingForkOf;
+        this.pendingForkOf = undefined;
         // First message of a fresh conversation names it — free, no model call. An attachment-only send has no
         // prose to read, so it is named after what was dropped in.
         if (this.title.value === null) {
@@ -724,7 +763,7 @@ export class Conversation {
                         mode: this.mode.value,
                         settings,
                         resume,
-                        branchOf,
+                        forkOf,
                         attachmentPaths,
                         editorContext,
                     }),

@@ -62,6 +62,7 @@ export type IconName =
     | "filter"
     | "folder"
     | "folder-open"
+    | "fork"
     | "forward"
     | "github"
     | "gitlab"
@@ -175,6 +176,10 @@ export const ICONS: Record<IconName, string> = {
     filter: "ri:filter-3-line",
     folder: "ri:folder-line",
     "folder-open": "ri:folder-open-line",
+    /* Forking a CONVERSATION, which is why it is the branch glyph and not `ri:git-fork-line`: git's fork icon
+     * means a copy of somebody else's repository, where this means one line of talk splitting into two — the
+     * picture the cut line in the transcript is already drawing. */
+    fork: "ri:git-branch-line",
     forward: "ri:forward-end-line",
     github: "ri:github-line",
     gitlab: "ri:gitlab-line",

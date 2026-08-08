@@ -69,7 +69,14 @@ defineExpose({
                     <Icon v-if="`checked` in item" v-show="item['checked'] === true" name="check" class="text-2xs text-muted" />
                     <Icon v-else-if="item.icon" :name="item.icon as IconName" class="text-2xs" />
                 </span>
-                <span class="min-w-0 flex-1 truncate">{{ item.label }}</span>
+                <!-- The label, and under it the row's own consequence when it has one to state. A `hint` is for
+                     the menus whose rows are CHOICES rather than commands — "Fork" and "Fork chat only" differ
+                     only in what happens to the files, which no verb short enough to be a label can carry — and
+                     it is optional precisely so the command menus above stay the single dense line they were. -->
+                <span class="flex min-w-0 flex-1 flex-col">
+                    <span class="truncate" :class="item['danger'] === true && `text-danger`">{{ item.label }}</span>
+                    <span v-if="item['hint']" class="truncate text-2xs text-subtle">{{ item["hint"] }}</span>
+                </span>
                 <kbd
                     v-if="item['shortcut']"
                     class="shrink-0 rounded border border-line bg-overlay px-1 py-px font-mono text-[0.65rem] leading-none text-muted"

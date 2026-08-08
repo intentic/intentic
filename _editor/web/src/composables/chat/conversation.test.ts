@@ -1408,7 +1408,7 @@ describe(`Conversation`, () => {
         expect(cards).toEqual([`cancelled`, `cancelled`, `cancelled`]);
     });
 
-    it(`branchFrom copies the turns before the edit and seeds a fresh session from them`, async () => {
+    it(`forkFrom copies the turns above the cut and seeds a fresh session from them`, async () => {
         const source = new Conversation(`c1`);
         sandboxRequestMock.mockImplementation(
             sseResponse([
@@ -1422,38 +1422,38 @@ describe(`Conversation`, () => {
         await source.send(`second`, settings);
         const index = source.messages.value.findIndex((message) => message.text === `second`);
 
-        const branch = new Conversation(`c2`);
-        branch.branchFrom(source, index);
+        const fork = new Conversation(`c2`);
+        fork.forkFrom(source, index, `now`);
         sandboxRequestMock.mockImplementation(
             sseResponse([
                 { kind: `session`, sessionId: `s-2` },
                 { kind: `delta`, text: `redone` },
             ]),
         );
-        await branch.send(`second, revised`, settings);
+        await fork.send(`second, revised`, settings);
 
-        // The branch carries the turns before the edit, then the edited turn and its answer.
-        expect(branch.messages.value.map((message) => message.text)).toEqual([`first`, `one`, `second, revised`, `redone`]);
-        /* The branch is a new conversation daemon-side: no session id rides. What rides instead is where it was
+        // The fork carries the turns above the cut, then its own first turn and the answer to it.
+        expect(fork.messages.value.map((message) => message.text)).toEqual([`first`, `one`, `second, revised`, `redone`]);
+        /* The fork is a new conversation daemon-side: no session id rides. What rides instead is where it was
          * cut from — two RECORD rows (the "first" prompt and the "one" answer) — so the daemon copies that
-         * prefix of c1's record into c2's before running, and the branch seeds itself from there like any other
+         * prefix of c1's record into c2's before running, and the fork seeds itself from there like any other
          * conversation. The bubbles themselves never go up. */
         const body = turnBodies()[2]!;
         expect(`sessionId` in body).toBe(false);
         expect(`history` in body).toBe(false);
-        expect(body[`branchOf`]).toEqual({ conversationId: `c1`, keep: 2 });
-        expect(branch.session.value).toMatchObject({ id: `s-2`, provider: `claude` });
-        expect(branch.conversationId).not.toBe(source.conversationId);
+        expect(body[`forkOf`]).toEqual({ conversationId: `c1`, keep: 2, files: `now` });
+        expect(fork.session.value).toMatchObject({ id: `s-2`, provider: `claude` });
+        expect(fork.conversationId).not.toBe(source.conversationId);
         // Named once. The copy has happened, so a later turn is an ordinary turn on an ordinary conversation.
-        await branch.send(`again`, settings);
-        expect(`branchOf` in turnBodies()[3]!).toBe(false);
-        // The point of branching: the source keeps its own transcript and session, untouched.
+        await fork.send(`again`, settings);
+        expect(`forkOf` in turnBodies()[3]!).toBe(false);
+        // The point of forking: the source keeps its own transcript and session, untouched.
         expect(source.messages.value.map((message) => message.text)).toEqual([`first`, `one`, `second`, `two`]);
         expect(source.session.value).toMatchObject({ id: `s-1` });
         expect(source.contextUsage.value).toMatchObject({ tokens: 500, contextWindow: 1000 });
     });
 
-    it(`a branch taken at the first message starts empty and names itself from the edited text`, async () => {
+    it(`a fork taken at the first message starts empty and names itself from its own first message`, async () => {
         const source = new Conversation(`c1`);
         sandboxRequestMock.mockImplementation(
             sseResponse([
@@ -1464,22 +1464,22 @@ describe(`Conversation`, () => {
         await source.send(`original topic`, settings);
         expect(source.title.value).toBe(`Original topic`);
 
-        const branch = new Conversation(`c2`);
-        branch.branchFrom(source, 0);
-        expect(branch.messages.value).toEqual([]);
+        const fork = new Conversation(`c2`);
+        fork.forkFrom(source, 0, `now`);
+        expect(fork.messages.value).toEqual([]);
         sandboxRequestMock.mockImplementation(sseResponse([{ kind: `session`, sessionId: `s-2` }]));
-        await branch.send(`new topic`, settings);
+        await fork.send(`new topic`, settings);
 
         // Each tab is findable by its own name rather than two tabs sharing one.
-        expect(branch.title.value).toBe(`New topic`);
+        expect(fork.title.value).toBe(`New topic`);
         expect(source.title.value).toBe(`Original topic`);
-        // Nothing preceded the branch point, so the fresh session gets neither a session id nor a history seed.
+        // Nothing preceded the cut, so the fresh session gets neither a session id nor a history seed.
         const body = turnBodies()[1]!;
         expect(`sessionId` in body).toBe(false);
         expect(`history` in body).toBe(false);
     });
 
-    it(`a branch carries the source's provider selection and drops its pending switch notice`, async () => {
+    it(`a fork carries the source's provider selection and drops its pending switch notice`, async () => {
         const source = new Conversation(`c1`);
         sandboxRequestMock.mockImplementation(
             sseResponse([
@@ -1491,14 +1491,14 @@ describe(`Conversation`, () => {
         source.selectProvider(`codex`);
         expect(source.messages.value.at(-1)!.role).toBe(`notice`);
 
-        // Branching before the notice leaves it behind — it belongs to the source's segment cut, not the branch.
-        const branch = new Conversation(`c2`);
-        branch.branchFrom(source, 0);
-        expect(branch.provider.value).toBe(`codex`);
-        expect(branch.messages.value.every((message) => message.role !== `notice`)).toBe(true);
+        // Branching before the notice leaves it behind — it belongs to the source's segment cut, not the fork.
+        const fork = new Conversation(`c2`);
+        fork.forkFrom(source, 0, `now`);
+        expect(fork.provider.value).toBe(`codex`);
+        expect(fork.messages.value.every((message) => message.role !== `notice`)).toBe(true);
 
         sandboxRequestMock.mockImplementation(sseResponse([{ kind: `session`, sessionId: `thr-1` }]));
-        await branch.send(`first, revised`, { ...settings, agent: `codex`, model: `` });
+        await fork.send(`first, revised`, { ...settings, agent: `codex`, model: `` });
         const body = turnBodies()[1]!;
         expect(body[`agent`]).toBe(`codex`);
         expect(`sessionId` in body).toBe(false);
@@ -2136,8 +2136,13 @@ describe(`the transcript's clock`, () => {
         const [path, init] = sandboxRequestMock.mock.calls.at(-1)!;
         expect(path).toBe(`/agent/rewind`);
         expect(JSON.parse(init!.body as string)).toEqual({ conversationId: `c-rewind`, index: 0 });
-        // Everything from the rewound message on is gone, and the next send starts a fresh provider thread.
-        expect(conversation.messages.value).toHaveLength(0);
+        /* Everything from the rewound message on is gone, and the next send starts a fresh provider thread.
+         * What stands in its place is the line saying so: a transcript that merely stopped two messages short
+         * looks exactly like one that was always that length, and the workspace having moved with it is the
+         * part nothing else on screen would ever mention. */
+        expect(conversation.messages.value).toEqual([
+            expect.objectContaining({ role: `notice`, text: `Went back to here — 2 messages dropped and the files restored to this point.` }),
+        ]);
         expect(conversation.session.value).toBeUndefined();
     });
 

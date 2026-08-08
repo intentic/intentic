@@ -46,8 +46,6 @@ const {
     cancelQuestion,
     decidePermission,
     openPlanPreview,
-    editAndResend,
-    streaming: conversationStreaming,
     awaitingDecision,
 } = usePaneView();
 const { mobile } = useDevice();
@@ -382,56 +380,10 @@ const decidedOptions = (question: AskQuestion): DecidedOption[] => {
     ];
 };
 
-/* --- Per-message rewind (hover history icon on user bubbles) ---------------------------------
- *
- * "Go back to before this message": the workspace returns to the checkpoint this turn found, and the
- * conversation goes with it — the messages after this one are dropped and the provider session is forgotten,
- * so the next send starts from what is actually on disk. Restoring the files ALONE was the older behaviour
- * and it left the agent's context describing edits that no longer existed.
- *
- * Two gates, and they are different: `rewindIndex` says the daemon knows where this message sits in its own
- * transcript (so there is something to address), and the conversation-level stream gate says no turn is in
- * flight (so there is nothing to overwrite). The daemon enforces the second one too — this one only spares
- * the user a button that would refuse.
- *
- * Click-again-to-confirm rather than a dialog, unchanged from the restore this replaces: the press is
- * reversible (the daemon takes its own checkpoint before restoring) and a modal for it would be heavier than
- * the thing it guards. The wording carries the extra cost, because dropping messages is the part a user who
- * remembers the old behaviour would not expect. */
-const queryClient = useQueryClient();
-const rewinding = ref(false);
-const confirmRestore = ref(false);
-let confirmTimer: ReturnType<typeof setTimeout> | undefined;
-const canRestore = computed(() => props.message.role === `user` && props.message.rewindIndex !== undefined && !conversationStreaming.value);
-// How many bubbles this press would drop, for the confirm wording — counted over what is on screen, which is
-// what the user is looking at.
-const rewindDrops = computed(() => {
-    const index = conversation.value.messages.value.indexOf(props.message);
-    return index < 0 ? 0 : conversation.value.messages.value.length - index;
-});
-const rewindToCheckpoint = async (): Promise<void> => {
-    if (props.message.rewindIndex === undefined || rewinding.value) {
-        return;
-    }
-    if (!confirmRestore.value) {
-        confirmRestore.value = true;
-        clearTimeout(confirmTimer);
-        confirmTimer = setTimeout(() => (confirmRestore.value = false), 4000);
-        return;
-    }
-    clearTimeout(confirmTimer);
-    confirmRestore.value = false;
-    rewinding.value = true;
-    try {
-        // The workspace views are reading the tree this just rewrote — the same invalidation the plain restore
-        // did, and for the same reason.
-        if (await conversation.value.rewindTo(props.message)) {
-            await invalidateWorkspace(queryClient);
-        }
-    } finally {
-        rewinding.value = false;
-    }
-};
+/* GOING BACK lives in the gap between turns now, not on the bubble — see ChatForkCut. The two controls that
+ * used to hang off a user message (a history icon that rewound in place, a pencil that copied the chat into a
+ * new tab) were the same decision asked twice in different words, and neither said what would happen to the
+ * files. One cut line, one menu, three named outcomes. */
 
 // --- Long prompt clamp (see .chat-prompt-text) ------------------------------------------------
 // The bubble is clamped in CSS; whether the clamp actually bites is a question of wrapping, and wrapping
@@ -591,17 +543,6 @@ const toggleExpanded = (): void => {
     }
 };
 
-// --- Inline edit of a past user message (hover pencil → textarea → branch from here) ---------
-const editing = ref(false);
-const editText = ref(``);
-const editInput = ref<HTMLTextAreaElement>();
-
-// The gate is the conversation-level stream (via useChat), not the per-message `streaming` prop: no branch
-// may be taken while any turn of this chat is in flight (a parked plan/question card keeps the fetch open too).
-const canEdit = computed(() => props.message.role === `user` && !conversationStreaming.value);
-// Mirrors send's guard: an attachment-only re-run is legal, an entirely empty one is not.
-const canSubmitEdit = computed(() => editText.value.trim().length > 0 || (props.message.attachments?.length ?? 0) > 0);
-
 // The chip row with thumbs resolved: the send-time object URL while this window still holds it, else one
 // re-minted from the workspace bytes for a restored/cached bubble (attachmentPreview — reactive, so the name
 // chip flips to a thumb when the bytes land).
@@ -629,60 +570,6 @@ const attachmentsAside = computed(
     () => props.message.text.length > 0 && attachmentThumbs.value.length === 1 && attachmentThumbs.value[0]?.previewUrl !== undefined,
 );
 
-// Manual auto-grow, the composer's grow() pattern bound to this instance's textarea.
-const growEdit = (): void => {
-    const el = editInput.value;
-    if (!el) {
-        return;
-    }
-    el.style.height = `auto`;
-    el.style.height = `${Math.min(el.scrollHeight, 192)}px`;
-};
-
-const startEdit = (): void => {
-    if (!canEdit.value) {
-        return;
-    }
-    editText.value = props.message.text;
-    editing.value = true;
-    void nextTick(() => {
-        growEdit();
-        editInput.value?.focus();
-    });
-};
-
-const cancelEdit = (): void => {
-    editing.value = false;
-};
-
-const submitEdit = (): void => {
-    if (!canSubmitEdit.value || conversationStreaming.value) {
-        return;
-    }
-    editing.value = false;
-    // The branch opens in a new tab and takes focus; this conversation is left exactly as it was.
-    void editAndResend(props.message, editText.value);
-};
-
-const onEditKeydown = (event: KeyboardEvent): void => {
-    // Never act mid-IME-composition (CJK candidates confirm with Enter).
-    if (event.isComposing) {
-        return;
-    }
-    if (event.key === `Escape`) {
-        event.preventDefault();
-        cancelEdit();
-        return;
-    }
-    // On mobile Enter is a newline (the buttons submit) — the virtual keyboard has no Shift+Enter.
-    if (event.key !== `Enter` || mobile.value) {
-        return;
-    }
-    if (!event.shiftKey || event.metaKey || event.ctrlKey) {
-        event.preventDefault();
-        submitEdit();
-    }
-};
 </script>
 
 <template>
@@ -724,7 +611,7 @@ const onEditKeydown = (event: KeyboardEvent): void => {
                 {{ message.text }}
             </div>
         </template>
-        <div v-else-if="message.role === 'user'" class="group flex max-w-[85%] flex-col items-end gap-1.5" :class="{ 'w-full': editing }">
+        <div v-else-if="message.role === 'user'" class="group flex max-w-[85%] flex-col items-end gap-1.5">
             <!-- Stacked: a row of attachments above the prompt. The arrangement for a narrow panel, for edit
                  mode (a thumbnail beside the textarea would come out of the width of the narrowest thing in
                  the panel), and for every attachment set that can't go beside the bubble — see
@@ -733,67 +620,9 @@ const onEditKeydown = (event: KeyboardEvent): void => {
                 v-if="attachmentThumbs.length"
                 :attachments="attachmentThumbs"
                 class="flex-wrap justify-end"
-                :class="!editing && attachmentsAside && '@lg:hidden'"
+                :class="attachmentsAside && '@lg:hidden'"
             />
-            <template v-if="editing">
-                <!-- text-base below md: 16px is the iOS threshold under which focusing zooms the page. -->
-                <textarea
-                    ref="editInput"
-                    v-model="editText"
-                    rows="1"
-                    class="chat-surface scrollbar-thin block max-h-48 w-full resize-none overflow-y-auto rounded-lg px-3 py-2 text-base leading-relaxed text-content focus:outline-none md:text-xs"
-                    @input="growEdit"
-                    @keydown="onEditKeydown"
-                ></textarea>
-                <div class="flex items-center gap-1">
-                    <button type="button" class="composer-ghost h-6 px-2 text-2xs" @click="cancelEdit">Cancel</button>
-                    <button
-                        type="button"
-                        class="composer-ghost h-6 gap-1 px-2 text-2xs disabled:cursor-default disabled:opacity-50"
-                        :disabled="!canSubmitEdit"
-                        v-tooltip.top="'Send as a new branch — this conversation is kept'"
-                        @click="submitEdit"
-                    >
-                        <Icon name="send" class="text-2xs" />
-                        Send
-                    </button>
-                </div>
-            </template>
-            <div v-else class="flex items-center gap-1">
-                <!-- Go back to before this message: the workspace returns to the checkpoint this turn found
-                     and the messages after it are dropped. Two-step: the first click arms (red), the second
-                     goes; arming decays after 4s. The armed wording names what is dropped, because that is
-                     the half a user cannot see coming from the icon. -->
-                <button
-                    v-if="canRestore"
-                    type="button"
-                    class="composer-ghost h-6 w-6 shrink-0 transition-opacity"
-                    :class="[
-                        mobile ? 'opacity-60' : 'opacity-0 focus-visible:opacity-100 group-hover:opacity-100',
-                        { 'text-danger opacity-100': confirmRestore },
-                    ]"
-                    v-tooltip.top="
-                        confirmRestore
-                            ? `Click again — restores the workspace and drops ${rewindDrops} message${rewindDrops === 1 ? '' : 's'}`
-                            : 'Go back to before this message'
-                    "
-                    aria-label="Go back to before this message"
-                    @click="rewindToCheckpoint"
-                >
-                    <Icon :name="rewinding ? 'spinner' : 'history'" :spin="rewinding" class="text-2xs" />
-                </button>
-                <!-- Edit & re-run from here: hover-revealed on desktop, always dimly visible on touch. -->
-                <button
-                    v-if="canEdit"
-                    type="button"
-                    class="composer-ghost h-6 w-6 shrink-0 transition-opacity"
-                    :class="mobile ? 'opacity-60' : 'opacity-0 focus-visible:opacity-100 group-hover:opacity-100'"
-                    v-tooltip.top="'Edit & branch from here'"
-                    aria-label="Edit message"
-                    @click="startEdit"
-                >
-                    <Icon name="pencil" class="text-2xs" />
-                </button>
+            <div class="flex items-center gap-1">
                 <!-- Aside: the same thumbnail to the LEFT of the prompt, taking over from the stacked row
                      above once the panel is wide enough (attachmentsAside settles everything except width).
                      A prompt is pinned for as long as its answer runs, so its height is charged against the

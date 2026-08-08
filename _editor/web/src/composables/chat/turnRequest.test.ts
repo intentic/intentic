@@ -17,7 +17,7 @@ describe(`turnRequestBody`, () => {
         mode: `plan`,
         settings,
         resume: undefined,
-        branchOf: undefined,
+        forkOf: undefined,
         attachmentPaths: [],
         editorContext: undefined,
     } as const;
@@ -52,12 +52,12 @@ describe(`turnRequestBody`, () => {
         expect(wire(turnRequestBody(base))).not.toHaveProperty(`sessionId`);
     });
 
-    // A branch is the one turn that has to say where its conversation came from: it is new daemon-side, so
-    // nothing there knows what it should start with until this names the cut.
-    it(`names a branch's origin, and only for the branch's own first turn`, () => {
-        expect(wire(turnRequestBody(base))).not.toHaveProperty(`branchOf`);
-        expect(wire(turnRequestBody({ ...base, branchOf: { conversationId: `c0`, keep: 4 } }))).toMatchObject({
-            branchOf: { conversationId: `c0`, keep: 4 },
+    // A fork is the one turn that has to say where its conversation came from: it is new daemon-side, so
+    // nothing there knows what it should start with until this names the cut — nor which files it starts on.
+    it(`names a fork's origin and its file choice, and only for the fork's own first turn`, () => {
+        expect(wire(turnRequestBody(base))).not.toHaveProperty(`forkOf`);
+        expect(wire(turnRequestBody({ ...base, forkOf: { conversationId: `c0`, keep: 4, files: `then` } }))).toMatchObject({
+            forkOf: { conversationId: `c0`, keep: 4, files: `then` },
         });
     });
 

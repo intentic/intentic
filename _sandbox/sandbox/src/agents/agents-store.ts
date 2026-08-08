@@ -1,5 +1,5 @@
 import { readFile, rename } from "node:fs/promises";
-import { AgentHarnessSchema, AgentOriginSchema, AgentProviderSchema, LandConflictSchema } from "@intentic/sandbox-contract";
+import { AgentHarnessSchema, AgentOriginSchema, AgentProviderSchema, ForkedFromSchema, LandConflictSchema } from "@intentic/sandbox-contract";
 import { z } from "zod";
 import { writeJsonFile } from "../store/json-file.js";
 
@@ -75,6 +75,9 @@ export const PersistedAgentSchema = z.object({
     // Set when an automation opened this conversation for an outside message (a Discord mention, a web-chat
     // visitor, a webhook) instead of the user starting it. Absent ⇒ a user-started agent.
     origin: AgentOriginSchema.optional(),
+    // Where this conversation was cut from, when it is a fork of another (ForkedFromSchema). Written from the
+    // fork's first turn and never cleared — both ends of the relationship read it from here.
+    forkedFrom: ForkedFromSchema.optional(),
     // The worktree composition: each workspace repo ("root" or a repo id — its root-relative dir) with the full
     // sha its worktree sits on the main line at, and the branch tip whose delta has already LANDED into the main
     // tree (absent ⇒ nothing landed yet — the base is the reference). Land applies `landedTip → tip`, so each

@@ -62,9 +62,10 @@ export const turnRequestBody = (input: {
     readonly settings: TurnSettings;
     // The session this turn resumes, when the selection still matches the runtime/account that minted it.
     readonly resume: SessionRef | undefined;
-    // Where this conversation was branched from, on a branch's first turn — the daemon copies that many rows of
-    // the source's record into this one before running (see Conversation.branchFrom).
-    readonly branchOf: { readonly conversationId: string; readonly keep: number } | undefined;
+    // Where this conversation was forked from, on a fork's first turn — the daemon copies that many rows of the
+    // source's record into this one before running, and `files` tells it whether this fork starts on the files
+    // as they were at the cut or as they are now (see Conversation.forkFrom).
+    readonly forkOf: { readonly conversationId: string; readonly keep: number; readonly files: "then" | "now" } | undefined;
     // Uploaded attachments plus @-mentioned workspace paths — the daemon resolves both the same way.
     readonly attachmentPaths: readonly string[];
     readonly editorContext: EditorContext | undefined;
@@ -85,7 +86,7 @@ export const turnRequestBody = (input: {
     // Which connected account of the provider serves the turn; omitted ⇒ the daemon picks the first.
     account: input.settings.account,
     sessionId: input.resume?.id,
-    ...(input.branchOf !== undefined ? { branchOf: input.branchOf } : {}),
+    ...(input.forkOf !== undefined ? { forkOf: input.forkOf } : {}),
     // An empty selection (a catalog not yet loaded) is dropped from the wire; the daemon then resolves the
     // provider's live catalog default server-side.
     model: input.settings.model || undefined,

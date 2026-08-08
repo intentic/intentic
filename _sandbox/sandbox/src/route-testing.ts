@@ -577,8 +577,8 @@ export const services = (overrides: ServiceOverrides = {}): Services => {
             // "Internal server error", and nothing catches that from the types: tsconfig excludes *.test.ts, so
             // the fake rots in silence.
             open: async () => {},
-            // Inert for the same reason as `open`, and present for the same one: a branch's first turn opens
-            // through THIS door instead (openTurnTranscript), so a fake without it fails every branchOf turn
+            // Inert for the same reason as `open`, and present for the same one: a fork's first turn opens
+            // through THIS door instead (openTurnTranscript), so a fake without it fails every forkOf turn
             // with a bare "Internal server error". There is no record behind the fake to copy a prefix out of.
             fork: async () => {},
             append: async () => {},

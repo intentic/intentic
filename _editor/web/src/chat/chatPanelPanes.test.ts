@@ -59,6 +59,13 @@ vi.hoisted(() => {
 // The workflow ledger, as the panel sees it — a ref this file drives, because the whole subject is what the
 // panel does while it is EMPTY and what it does when the reading comes back.
 const runs = ref<WorkflowRun[]>([]);
+/* The fork line at the head of a transcript asks the fleet where this chat came from, which would otherwise
+ * start the whole roster — queries, polling, the lot — inside a test about which chat the PANEL shows. An empty
+ * roster is the honest answer for these fixtures anyway: none of them is a fork. */
+vi.mock(`../composables/agents/useAgents`, async () => {
+    const { computed } = await import(`vue`);
+    return { useAgents: () => ({ fleet: computed(() => []), agentById: () => undefined }) };
+});
 vi.mock(`../composables/agents/useWorkflowRuns`, async (importOriginal) => ({
     ...(await importOriginal<Record<string, unknown>>()),
     useWorkflowRuns: () => ({ runs, designs: ref([]), start: () => undefined, stop: () => undefined }),

@@ -79,7 +79,7 @@ import { type DraftsStore, fileDraftsStore } from "./drafts/drafts-store.js";
 import { createHostHub, type HostHub } from "./hosts/host-hub.js";
 import { fileHostsStore, type HostsStore } from "./hosts/hosts-store.js";
 import { fileTurnJournal, type TurnJournal } from "./agent/turn-journal.js";
-import { fileRewindPoints, type RewindPoints } from "./agent/rewind-points.js";
+import { fileTurnAnchors, type TurnAnchors } from "./agent/turn-anchors.js";
 import type { Config } from "./env.config.js";
 import { createAgentsRegistry, type AgentsRegistry } from "./agents/agents-registry.js";
 import { fileAgentsStore } from "./agents/agents-store.js";
@@ -319,10 +319,11 @@ export interface Services {
     // daemon died under, which is what turn-resume re-runs. On the HISTORY volume: it holds full prompts, and
     // it must outlive the container recreates (rebuild, update, dev-sandbox.sh swap) that cause the deaths.
     readonly turnJournal: TurnJournal;
-    // Which checkpoint each conversation message can be restored to (historyRoot/rewind-points.json). Written
-    // at every main-tree turn's start beside the `checkpoint` frame, read by the rewind route and by a
-    // transcript being read back — see agent/rewind-points.ts for why this is a map and not the commit.
-    readonly rewindPoints: RewindPoints;
+    // What each conversation message can be put back to (historyRoot/turn-anchors.json) — a workspace
+    // checkpoint for a main-tree turn, that conversation's own per-repo commits for an isolated one. Written at
+    // every turn's start, read by the rewind route, by a fork asking for the files as they were, and by a
+    // transcript being read back — see agent/turn-anchors.ts for why this is a map and not the commit.
+    readonly turnAnchors: TurnAnchors;
     // The activity audit log (historyRoot/activity.jsonl, outside the agent's reach): inbound wakes,
     // sniffed outbound provider calls, voice sessions, failures. /activity reads it; only the daemon appends.
     readonly activity: ActivityStore;
@@ -727,10 +728,10 @@ export const createServices = (config: Config, logger: Logger): Services => {
     const chores = fileChoresStore(join(workspace.root, PROBES_FILE), join(workspace.root, LEDGER_FILE));
     // Bound once, and against the SAME registry instance above — `sessionIdOf` answers from live turn state as
     // well as the persisted entry, so a second registry would report no session for a first turn still running.
-    const rewindPoints = fileRewindPoints(join(config.historyRoot, "rewind-points.json"));
+    const turnAnchors = fileTurnAnchors(join(config.historyRoot, "turn-anchors.json"));
     const transcriptDeps: AgentTranscriptDeps = {
         record: fileTranscriptRecord(join(config.historyRoot, "transcripts")),
-        rewindPoints,
+        turnAnchors,
         root: workspace.root,
         codexHome: codexBase,
         sessionIdOf: agents.sessionIdOf,
@@ -799,7 +800,7 @@ export const createServices = (config: Config, logger: Logger): Services => {
         turnJournal: fileTurnJournal(join(config.historyRoot, "turns")),
         // The same instance the transcript reader holds — two would answer a read from a file the other had
         // already moved past, exactly the argument the chores store above makes.
-        rewindPoints,
+        turnAnchors,
         activity: fileActivityStore(join(config.historyRoot, "activity.jsonl")),
         usage: fileUsageStore(join(config.historyRoot, "usage.jsonl")),
         sandboxSettings: fileSandboxSettingsStore(statePath(workspace.root, ".intentic/settings.json")),

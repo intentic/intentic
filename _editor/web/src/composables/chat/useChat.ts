@@ -496,29 +496,35 @@ export const conversationView = (conversation: ComputedRef<Conversation>) => ({
     stop: (): void => {
         conversation.value.stop();
     },
-    /* Edit a past user message and re-run from that point — as a BRANCH, in a new tab. The turns before the
-     * edited message are copied into a fresh conversation which sends the edited text (with the original turn's
-     * attachments) as its first turn; the source conversation is untouched, so the answer being replaced is
-     * still there to compare against and nothing is destroyed by an experiment. The branch's first send seeds a
-     * fresh daemon session from the copied transcript, the same way a provider switch does. */
-    editAndResend: async (message: ChatMessage, text: string): Promise<void> => {
+    /* FORK THE CONVERSATION AT A CUT — everything above the cut is copied into a fresh tab, and the source is
+     * left completely alone, so the answer being replaced is still there to compare against and nothing is
+     * destroyed by an experiment.
+     *
+     * `cut` is the index of the first message BELOW the line, which is the one number the whole affordance turns
+     * on: it is how many bubbles the fork inherits, and it is also what decides what the composer opens with.
+     * A cut above a user message means "redo this turn differently", so that prompt (and its attachments) is
+     * loaded into the composer ready to be edited — the fork of the whole conversation, cut past the last
+     * message, opens with an empty one instead.
+     *
+     * NOTHING IS SENT. The fork opens with the prompt sitting in the composer where the user can read it, change
+     * it, or replace it entirely — which is what makes forking without editing possible at all, and what stops a
+     * half-considered prompt from running the moment the tab appears. The old edit-then-auto-send did the
+     * opposite on both counts. */
+    forkAt: (cut: number, files: "then" | "now"): void => {
         const source = conversation.value;
-        const index = source.messages.value.findIndex((entry) => entry.id === message.id);
-        if (index === -1 || message.role !== `user` || source.streaming.value) {
+        if (cut < 0 || cut > source.messages.value.length || source.streaming.value) {
             return;
         }
-        // The edited turn's OWN attachments, not the composer's — a branch resends what the original message
-        // carried.
-        const carried = message.attachments ?? [];
-        // Mirror send's own guard before opening a tab, so an empty edit doesn't leave an empty branch behind.
-        if (text.trim().length === 0 && carried.length === 0) {
-            return;
+        const fork = new Conversation();
+        fork.forkFrom(source, cut, files);
+        // The message the cut sits above, when it is one of the user's: the fork opens holding it, so "fork and
+        // ask it differently" is one gesture rather than a fork followed by a hunt for what was said.
+        const below = source.messages.value[cut];
+        if (below?.role === `user`) {
+            fork.draft.value = below.text;
         }
-        const branch = new Conversation();
-        branch.branchFrom(source, index);
-        setConversations([...conversations.value, branch], branch.conversationId, `branch`);
-        track(`message_sent`, { agent: branch.provider.value, edited: true });
-        await branch.send(text, branch.turnSettings(), carried);
+        setConversations([...conversations.value, fork], fork.conversationId, `fork`);
+        track(`conversation_forked`, { agent: fork.provider.value, files, whole: cut === source.messages.value.length });
     },
     // Approving runs the plan (under bypassPermissions — the daemon's call, not the card's); a rejection leaves
     // the agent in plan mode to revise, with the composer's text and staged files as the feedback.
@@ -583,7 +589,7 @@ const {
     attachments,
     send,
     stop,
-    editAndResend,
+    forkAt,
     decidePlan,
     answerQuestion,
     cancelQuestion,
@@ -1979,7 +1985,7 @@ export function useChat() {
         queued,
         removeQueued,
         steerable,
-        editAndResend,
+        forkAt,
         stop,
         decidePlan,
         openPlanPreview,

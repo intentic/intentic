@@ -203,13 +203,13 @@ export const openTurnTranscript = async (
     turn: AgentTurn & { readonly conversationId: string },
 ): Promise<void> => {
     const agent = transcriptAgentOf(turn);
-    /* A BRANCH opens differently, and only ever once: its opening history is a prefix of the conversation it was
-     * cut from, which no provider store and no adoption could supply — the branch is a new conversation nothing
+    /* A FORK opens differently, and only ever once: its opening history is a prefix of the conversation it was
+     * cut from, which no provider store and no adoption could supply — the fork is a new conversation nothing
      * else knows about yet. From the copy onward it is an ordinary conversation: it seeds a switched session
      * from its own record like any other, and it reads back with the turns it inherited rather than beginning
-     * abruptly at the edit. */
-    const branch = turn.branchOf;
-    const opening = branch !== undefined ? services.transcripts.fork(agent, branch.conversationId, branch.keep) : services.transcripts.open(agent);
+     * abruptly at the cut. */
+    const fork = turn.forkOf;
+    const opening = fork !== undefined ? services.transcripts.fork(agent, fork.conversationId, fork.keep) : services.transcripts.open(agent);
     await opening.catch((error: unknown) => services.logger.warn({ err: error, conversationId: turn.conversationId }, "transcript open failed"));
 };
 

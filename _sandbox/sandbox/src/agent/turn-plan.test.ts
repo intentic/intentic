@@ -398,21 +398,21 @@ test("retrieval fires on the opening message and on nothing after it", async () 
 
 /* THE OTHER TWO WAYS A CONVERSATION OPENS, neither of which is a person typing a question into a composer. A
  * wake's prompt is the automation's standing brief — and it mints a fresh conversation on every fire, so the
- * turn count says "opening message" for something nobody asked for just now. A branch's opening message
+ * turn count says "opening message" for something nobody asked for just now. A fork's opening message
  * continues a transcript it was handed: the question it is really asking is several turns above it, in the
  * conversation it was cut from. */
-test("a wake and a branch open conversations that retrieval stays out of", async () => {
+test("a wake and a fork open conversations that retrieval stays out of", async () => {
     const wake: string[] = [];
     await planTurn(retrievingServices(wake, 0), turn({ prompt: "sweep the workspace for drifted dependencies", conversationId: "c2", unattended: true }), context);
     expect(wake).toEqual([]);
 
-    const branch: string[] = [];
+    const fork: string[] = [];
     await planTurn(
-        retrievingServices(branch, 0),
-        turn({ prompt: "try that again without the cache", conversationId: "c3", branchOf: { conversationId: "c1", keep: 12 } }),
+        retrievingServices(fork, 0),
+        turn({ prompt: "try that again without the cache", conversationId: "c3", forkOf: { conversationId: "c1", keep: 12, files: "now" } }),
         context,
     );
-    expect(branch).toEqual([]);
+    expect(fork).toEqual([]);
 });
 
 /* AND THE EXPERIMENT'S ARM GOES WITH THE GATE. A turn the mechanism cannot run on is not a control turn — it is

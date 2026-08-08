@@ -250,14 +250,14 @@ export interface ChatTurn {
 }
 
 /* HOW MANY ROWS THE DAEMON'S RECORD HOLDS FOR THESE BUBBLES — the one place the two numberings are converted,
- * and the count a branch hands the daemon so it can copy that prefix of the source conversation.
+ * and the count a fork hands the daemon so it can copy that prefix of the source conversation.
  *
  * The record and the bubble list are deliberately not the same list: notices are drawn by this client and never
  * recorded, and a bubble that produced nothing at all is not a row. Everything else is 1:1, because both sides
  * fold a turn the same way (one user row, then one assistant row per prose block with its cards beneath it).
  *
  * The assistant guard below MIRRORS the daemon's own (`flush` in sessions/turn-transcript.ts): text, thinking or
- * tools makes a row, and nothing makes none. The two have to agree — a branch that counts one row too many
+ * tools makes a row, and nothing makes none. The two have to agree — a fork that counts one row too many
  * inherits a turn the user cut, one too few drops a turn they kept — so change them together. */
 export const recordedRows = (messages: readonly ChatMessage[]): number =>
     messages.filter((message) => {

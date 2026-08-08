@@ -156,6 +156,18 @@ export type AdmissionPolicy = z.infer<typeof AdmissionPolicySchema>;
 export const PermissionModeSchema = z.enum(["default", "acceptEdits", "plan", "bypassPermissions"]);
 export type PermissionMode = z.infer<typeof PermissionModeSchema>;
 
+/* WHERE A CONVERSATION WAS CUT FROM — the durable half of a fork, carried on the registry entry so both ends
+ * can find each other. `index` is the message the cut sat above in the SOURCE, which is what lets the source's
+ * transcript put the mark back in the right gap. */
+export const ForkedFromSchema = z.object({
+    conversationId: ConversationIdSchema,
+    index: z.number().int().nonnegative(),
+    // Which files this fork opened on — the half of the choice that used to be silent, kept so the fork can
+    // still say it tomorrow rather than only in the seconds after the click.
+    files: z.enum(["then", "now"]),
+});
+export type ForkedFrom = z.infer<typeof ForkedFromSchema>;
+
 export const AgentTurnSchema = z
     .object({
         prompt: z.string(),
@@ -201,13 +213,27 @@ export const AgentTurnSchema = z
         // No `history` field: a turn that switched provider/account/harness carries no transcript up the wire.
         // The daemon seeds the replacement session from its OWN record of the conversation, which is keyed by
         // conversationId and outlives every session (sessions/turn-transcript.ts → handoffHistory).
-        /* WHERE A BRANCH WAS CUT FROM, on its first turn — the one case the daemon cannot work out for itself,
-         * because a branch is a NEW conversation whose record is empty and the cut is a gesture only the client
+        /* WHERE A FORK WAS CUT FROM, on its first turn — the one case the daemon cannot work out for itself,
+         * because a fork is a NEW conversation whose record is empty and the cut is a gesture only the client
          * saw. `keep` counts the source's RECORD rows to copy, not its bubbles (see the web transcript's
          * recordedRows). The daemon copies that prefix into the new conversation's record before the turn runs,
-         * after which a branch is an ordinary conversation: it seeds like any other and reads back in full.
-         * Requires conversationId — the branch it describes IS that conversation. */
-        branchOf: z.object({ conversationId: ConversationIdSchema, keep: z.number().int().nonnegative() }).optional(),
+         * after which a fork is an ordinary conversation: it seeds like any other and reads back in full.
+         * Requires conversationId — the fork it describes IS that conversation.
+         *
+         * `files` is the half the user actually chooses between, and the half that used to be silent. "now"
+         * inherits the workspace as it stands (the fork is a fresh line of conversation over today's files);
+         * "then" puts the fork on the files as they were AT THE CUT, which it can only do in a checkout of its
+         * own — so it implies `isolated`, and the daemon resolves the cut's per-repo commits from the source's
+         * own turn anchors rather than trusting the client with shas. A "then" fork of a conversation that has
+         * no anchor at that index falls back to "now" and says so on the turn, because silently starting from
+         * the wrong files is the failure this whole field exists to prevent. */
+        forkOf: z
+            .object({
+                conversationId: ConversationIdSchema,
+                keep: z.number().int().nonnegative(),
+                files: z.enum(["then", "now"]),
+            })
+            .optional(),
         // The browser sends the chosen model per turn; the provider token is the sandbox's own stored credential.
         model: z.string().optional(),
         /* NOBODY PICKED A MODEL FOR THIS TURN — a surface started it (Fix with agent, a Maintenance chore, a
@@ -258,8 +284,13 @@ export const AgentTurnSchema = z
     .refine((turn) => turn.origin === undefined || turn.conversationId !== undefined, {
         message: "origin requires conversationId",
     })
-    .refine((turn) => turn.branchOf === undefined || turn.conversationId !== undefined, {
-        message: "branchOf requires conversationId",
+    .refine((turn) => turn.forkOf === undefined || turn.conversationId !== undefined, {
+        message: "forkOf requires conversationId",
+    })
+    // A fork that wants the files as they were needs a checkout of its own to put them in — the shared tree is
+    // everyone else's too, and rolling it back under them is what `files: "then"` must never mean.
+    .refine((turn) => turn.forkOf?.files !== "then" || turn.isolated === true, {
+        message: 'forkOf.files "then" requires isolated',
     });
 export type AgentTurn = z.infer<typeof AgentTurnSchema>;
 
@@ -593,6 +624,14 @@ export const AgentSummarySchema = z.object({
     // Present when the conversation was opened by an outside message rather than by the user (see
     // AgentOriginSchema) — the card's provenance line. Absent ⇒ the user started it.
     origin: AgentOriginSchema.optional(),
+    /* Where this conversation was cut from, when it was cut from another. Recorded once, from the fork's very
+     * first turn, and never cleared — it is the relationship, not a pending state.
+     *
+     * It rides the SUMMARY rather than living in the client's tabs because a fork and its source are two chats
+     * that are obviously related and, without this, had no way to say how: the link has to survive closing
+     * either tab and reopening it from history, and it has to be readable from the OTHER side — the source's
+     * own transcript marks its cut points by looking for the conversations that name it. */
+    forkedFrom: ForkedFromSchema.optional(),
     // The ROOT repo's short base sha — the checkout moment's display identity. Per-repo bases stay
     // daemon-internal (agents.diff already reports against them).
     base: z.string().optional(),
@@ -2057,7 +2096,7 @@ export const SnapshotSchema = z.object({
 export type Snapshot = z.infer<typeof SnapshotSchema>;
 
 /* WHICH CONVERSATION MESSAGE A TURN ANSWERS — carried alongside the turn so its pre-turn checkpoint can be
- * filed under it (see the sandbox's agent/rewind-points.ts). `index` is the transcript position the turn began
+ * filed under it (see the sandbox's agent/turn-anchors.ts). `index` is the transcript position the turn began
  * at, which is also how many messages a rewind to it keeps. */
 export interface SnapshotTurn {
     readonly conversationId: string;
@@ -2076,8 +2115,10 @@ export const RewindTurnSchema = z.object({
     index: z.number().int().nonnegative(),
 });
 export const RewindResultSchema = z.object({
-    // The checkpoint the workspace was restored to, for the History timeline to select.
-    snapshot: z.string(),
+    /* The checkpoint the workspace was restored to, for the History timeline to select. Absent when the
+     * conversation works in a checkout of its own: that rewind moved the conversation's own branch, which the
+     * workspace timeline does not carry — there is no row there to select. */
+    snapshot: z.string().optional(),
     // Messages dropped from the transcript — what the client removes from its own bubbles.
     dropped: z.number().int().nonnegative(),
 });
