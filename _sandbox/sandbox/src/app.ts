@@ -72,6 +72,37 @@ import {
 } from "./workspace/workspace-files.js";
 import { scopedTarget } from "./workspace/workspace-scope.js";
 
+/* Headers about ONE transport connection cannot cross the extension-backend proxy. The child host speaks
+ * HTTP/1.1, whose server adds `Connection: keep-alive` and `Keep-Alive` to every answer; the browser-facing
+ * loopback listener speaks HTTP/2, where Node refuses those fields and aborts the response before its body can
+ * reach the browser. `Connection` may name additional hop-by-hop fields, so discover those before removing the
+ * standard set. Apply the same boundary in both directions: HTTP/1 fallback clients can send them too. */
+const HOP_BY_HOP_HEADERS = [
+    "connection",
+    "keep-alive",
+    "proxy-authenticate",
+    "proxy-authorization",
+    "proxy-connection",
+    "te",
+    "trailer",
+    "transfer-encoding",
+    "upgrade",
+] as const;
+
+const endToEndHeaders = (source: Headers): Headers => {
+    const headers = new Headers(source);
+    for (const token of headers.get("connection")?.split(",") ?? []) {
+        const name = token.trim();
+        if (name !== "") {
+            headers.delete(name);
+        }
+    }
+    for (const name of HOP_BY_HOP_HEADERS) {
+        headers.delete(name);
+    }
+    return headers;
+};
+
 // Only genuine server faults (5xx) are logged; expected ORPCErrors (NOT_FOUND/BAD_REQUEST/…) are the routes'
 // normal control flow and would be noise.
 const logUnexpectedError = (services: Services, error: unknown): void => {
@@ -985,7 +1016,7 @@ export const createApp = (services: Services): Hono<AppEnv> => {
             return c.json({ error: `extension backends are ${backend.state}${backend.detail !== undefined ? ` — ${backend.detail}` : ""}` }, 503);
         }
         const url = new URL(c.req.url);
-        const headers = new Headers(c.req.raw.headers);
+        const headers = endToEndHeaders(c.req.raw.headers);
         headers.delete("authorization");
         headers.set("x-intentic-backend", target.hostToken);
         const body = c.req.method === "GET" || c.req.method === "HEAD" ? undefined : c.req.raw.body;
@@ -994,7 +1025,7 @@ export const createApp = (services: Services): Hono<AppEnv> => {
             headers,
             ...(body !== undefined && body !== null ? { body, duplex: "half" } : {}),
         } as RequestInit);
-        return new Response(upstream.body, { status: upstream.status, headers: upstream.headers });
+        return new Response(upstream.body, { status: upstream.status, headers: endToEndHeaders(upstream.headers) });
     });
 
     // The realtime-listener control surface for an extension's gateway process (ext-discord): it reconciles via

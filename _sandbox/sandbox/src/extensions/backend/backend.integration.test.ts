@@ -30,7 +30,17 @@ const echoServer = `export const activateServer = (api, context) => {
     api.routes.mount(async (request) => {
         const url = new URL(request.url);
         if (request.method === "GET" && url.pathname === "/ping") {
-            return Response.json({ pong: true, extension: context.extensionId, q: url.searchParams.get("q") });
+            return Response.json(
+                { pong: true, extension: context.extensionId, q: url.searchParams.get("q") },
+                {
+                    headers: {
+                        connection: "keep-alive, x-backend-hop",
+                        "keep-alive": "timeout=5",
+                        "x-backend-hop": "one connection only",
+                        "x-backend-answer": "preserved",
+                    },
+                },
+            );
         }
         if (request.method === "POST" && url.pathname === "/echo") {
             return Response.json({ echoed: await request.text() });
@@ -84,6 +94,14 @@ test("a workspace extension's backend serves its /x namespace through the daemon
     const ping = await app.request("http://sandbox.test/x/acme.echo/ping?q=hello");
     expect(ping.status).toBe(200);
     expect(await ping.json()).toEqual({ pong: true, extension: "acme.echo", q: "hello" });
+    // The backend host is HTTP/1.1, so every response naturally carries Connection/Keep-Alive. Copying those
+    // through made Node's browser-facing HTTP/2 listener throw ERR_HTTP2_INVALID_CONNECTION_HEADERS after the
+    // route had answered 200, leaving extension views on their loading skeleton forever. A field explicitly
+    // named by Connection is hop-by-hop too; an ordinary end-to-end field must survive the same filter.
+    expect(ping.headers.get("connection")).toBeNull();
+    expect(ping.headers.get("keep-alive")).toBeNull();
+    expect(ping.headers.get("x-backend-hop")).toBeNull();
+    expect(ping.headers.get("x-backend-answer")).toBe("preserved");
     // A body-carrying method streams through.
     const echo = await app.request("http://sandbox.test/x/acme.echo/echo", { method: "POST", body: "round trip" });
     expect(await echo.json()).toEqual({ echoed: "round trip" });
