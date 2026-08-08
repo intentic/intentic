@@ -4,11 +4,12 @@ import { BrandMark, cmp, ConfirmDialog, formatTimestamp, InfoHint, Page, PageHea
 import Button from "primevue/button";
 import { computed, ref } from "vue";
 import { useRole } from "../composables/sandbox/useRole";
-import { attachmentPreview } from "../composables/chat/attachmentPreviews";
 import { useAsyncAction } from "../composables/useAsyncAction";
 import { useDrafts } from "../composables/extensions/useDrafts";
 import { useExtensions } from "../composables/extensions/useExtensions";
 import DraftMeta from "./drafts/DraftMeta.vue";
+import DraftPost from "./drafts/DraftPost.vue";
+import { limitOf, postsATitle } from "./drafts/postText";
 import ScheduleControl from "./drafts/ScheduleControl.vue";
 
 /* Drafts: the approval inbox for posts the agent proposed during its scheduled work. The agent writes one JSON
@@ -18,13 +19,20 @@ import ScheduleControl from "./drafts/ScheduleControl.vue";
  * same automation's sweep when its time comes. There is no create dialog here — drafts originate with the
  * agent, never the UI.
  *
- * THE POST IS THE SUBJECT OF THE ROW. This page had it the other way round: the platform, the target and the
- * status were three filled chips across the header line and the text being approved was the smallest, faintest
- * thing on the screen, clamped to three lines — the longest draft rendered its third line as a bare "…". You
- * cannot approve what you cannot read. The post body now carries the row's own type size, unclamped in the
- * sections where a decision is owed, and everything about WHERE it is going has been demoted to one muted line
- * beneath a brand mark. That single inversion is what removed most of the boxes the page was made of: a logo
- * and a line of plain text say what four tinted pills were saying.
+ * THE POST IS THE SUBJECT OF THE ROW, and it is READ rather than glanced at. Everything about where a draft is
+ * going lives on one muted line beneath a brand mark; under it the post is set as a post — a capped measure,
+ * body type, paragraph rhythm (DraftPost.vue) — because a row as wide as the window runs ~110 characters to
+ * the line, and past about 75 the eye loses the start of the next one. That is what made the queue unreadable
+ * even after the chips came off it: nothing on screen was competing with the text any more, but the text was
+ * still typeset like a log line.
+ *
+ * THE ROW IS ONE COLUMN. The mark hangs in a gutter and the platform line, the post and the facts under it all
+ * start at the same left edge, the way every surface anyone reads posts on composes one.
+ *
+ * ONE FOOTER, THREE FACTS, and they are the ones that DECIDE the post rather than describe it: when it goes,
+ * whether it fits where it is going, and what the agent said it was for. The length against the platform's cap
+ * is the one property of a draft that reading it cannot tell you and that kills the post outright when it is
+ * wrong, so it is stated rather than left to be counted.
  *
  * ONE SECTION PER DECISION, in the order the queue owes them: something broke, something is waiting on you,
  * something is on its way, something already went out. A status badge survives only where its section does not
@@ -113,8 +121,43 @@ const rejectDraft = (draft: DraftSummary): Promise<void> => {
 // The title if the platform wanted one, else the post's opening line.
 const headline = (draft: DraftSummary): string => draft.title ?? draft.content.split(`\n`)[0] ?? draft.id;
 
-// The file name alone: a media chip has room for `chart.png`, not for `.intentic/drafts/media/chart.png`.
-const fileName = (path: string): string => path.split(`/`).at(-1) ?? path;
+/* HOW BIG THE POST IS, against the room the platform gives it. The one property of a draft that decides whether
+ * it can post at all and that reading it cannot tell you — 30 characters over on X is not a worse post, it is
+ * no post — so it sits in the footer of every row that still owes a decision, and turns red when it is the
+ * reason the draft will fail. Platforms with no well-known cap (postText.ts) get a plain count, and only once
+ * the post is long enough for its size to be a question at all. */
+const OVERSIZED = 280;
+const lengthOf = (draft: DraftSummary): string | undefined => {
+    const limit = limitOf(draft.platform);
+    const count = draft.content.length;
+    if (limit !== undefined) {
+        return `${count.toLocaleString()} / ${limit.toLocaleString()}`;
+    }
+    return count > OVERSIZED ? `${count.toLocaleString()} characters` : undefined;
+};
+const isOver = (draft: DraftSummary): boolean => draft.content.length > (limitOf(draft.platform) ?? Infinity);
+
+/* THE AGENT'S OWN NOTE about the draft, which is what `title` holds everywhere the platform doesn't publish one
+ * (postText.ts): why this post, which thread, what it is not saying. Worth keeping — it is the reasoning behind
+ * the thing being approved — and worth keeping SMALL: rendered as a headline it was a three-line bold block
+ * above a post it had no business outweighing. One muted line, the rest on hover. */
+const noteOf = (draft: DraftSummary): string | undefined => (postsATitle(draft.platform, draft.target) ? undefined : draft.title);
+
+/* ONE COLUMN PER ROW. The brand mark sits in a gutter and everything else — the platform line, the post, the
+ * facts under it — starts at the same left edge, the way every surface that shows a post composes one. The
+ * indent is the mark plus <Row>'s own gap (28 + 10, and 22 + 10 on the compact tiers), so it tracks the header
+ * beside it rather than being a number that happens to look right today. Only from `sm` up: on a phone those
+ * 38px are a tenth of the line, and an aligned column costs more than a hanging one is worth. */
+const POST_COLUMN = `sm:pl-[2.375rem]`;
+const QUIET_COLUMN = `sm:pl-8`;
+
+// The row's footer: facts about the post, wrapping on a narrow screen, quieter than the post itself, and held
+// to the post's own measure so the note at its end truncates against the column rather than the window.
+const FACTS = `mt-3 flex max-w-[64ch] flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted`;
+
+// And the note under it: two lines at most, the rest on hover. Below the post rather than above it, because it
+// is the agent talking ABOUT the post — a reader who mistakes it for the post has read the wrong thing.
+const NOTE = `mt-1.5 line-clamp-2 max-w-[64ch] text-2xs leading-relaxed text-subtle`;
 </script>
 
 <template>
@@ -174,11 +217,17 @@ const fileName = (path: string): string => path.split(`/`).at(-1) ?? path;
                         </button>
                     </template>
                     <template #below>
-                        <p v-if="draft.title" class="text-sm font-semibold text-content">{{ draft.title }}</p>
-                        <p class="whitespace-pre-wrap wrap-break-word text-sm text-content" :class="draft.title ? `mt-1` : ``">{{ draft.content }}</p>
-                        <!-- The reason, in the row. It used to live in a tooltip on the status badge — the one
-                             state whose entire content is an explanation, hidden behind a hover. -->
-                        <p :class="cmp.alertDanger(`mt-3`)">{{ draft.error ?? `The publisher did not say why.` }}</p>
+                        <div :class="POST_COLUMN">
+                            <DraftPost :draft="draft" />
+                            <!-- The reason, in the row. It used to live in a tooltip on the status badge — the
+                                 one state whose entire content is an explanation, hidden behind a hover. -->
+                            <p :class="cmp.alertDanger(`mt-3 max-w-[64ch]`)">{{ draft.error ?? `The publisher did not say why.` }}</p>
+                            <div :class="FACTS">
+                                <span v-if="lengthOf(draft)" :class="isOver(draft) ? `text-danger` : ``">{{ lengthOf(draft) }}</span>
+                            </div>
+                            <!-- The agent's own note about the draft, under everything it is a note about. -->
+                            <p v-if="noteOf(draft)" :class="NOTE" v-tooltip.top="noteOf(draft)">{{ noteOf(draft) }}</p>
+                        </div>
                     </template>
                 </Row>
             </RowGroup>
@@ -220,34 +269,19 @@ const fileName = (path: string): string => path.split(`/`).at(-1) ?? path;
                         </Button>
                     </template>
                     <template #below>
-                        <p v-if="draft.title" class="text-sm font-semibold text-content">{{ draft.title }}</p>
-                        <!-- Unclamped, deliberately: this is the section where a decision is owed, and the
-                             post's own words are what the decision is about. -->
-                        <p class="whitespace-pre-wrap wrap-break-word text-sm text-content" :class="draft.title ? `mt-1` : ``">{{ draft.content }}</p>
+                        <div :class="POST_COLUMN">
+                            <!-- Unclamped up to a screenful, deliberately: this is the section where a decision
+                                 is owed, and the post's own words are what the decision is about. -->
+                            <DraftPost :draft="draft" />
 
-                        <!-- What goes out WITH the words. An image attached by mistake cannot be repaired by
-                             re-reading the caption, so attachments are shown rather than counted. -->
-                        <div v-if="draft.media && draft.media.length > 0" class="mt-3 flex flex-wrap items-center gap-2">
-                            <template v-for="path in draft.media" :key="path">
-                                <img
-                                    v-if="attachmentPreview(path)"
-                                    :src="attachmentPreview(path)"
-                                    :alt="fileName(path)"
-                                    class="h-16 w-16 rounded-md border border-line object-cover"
-                                    v-tooltip.top="path"
-                                />
-                                <span
-                                    v-else
-                                    class="flex items-center gap-1.5 rounded-md border border-line px-2 py-1 text-2xs text-muted"
-                                    v-tooltip.top="path"
-                                >
-                                    <Icon name="paperclip" />{{ fileName(path) }}
-                                </span>
-                            </template>
-                        </div>
-
-                        <div class="mt-3 text-xs text-muted">
-                            <ScheduleControl :at="draft.scheduledAt" :label="headline(draft)" @change="patch(draft, { scheduledAt: $event })" />
+                            <!-- The three facts that DECIDE the post rather than describe it: when it goes,
+                                 whether it fits where it is going, and what the agent said it was for. -->
+                            <div :class="FACTS">
+                                <ScheduleControl :at="draft.scheduledAt" :label="headline(draft)" @change="patch(draft, { scheduledAt: $event })" />
+                                <span v-if="lengthOf(draft)" :class="isOver(draft) ? `text-danger` : ``">{{ lengthOf(draft) }}</span>
+                            </div>
+                            <!-- The agent's own note about the draft, under everything it is a note about. -->
+                            <p v-if="noteOf(draft)" :class="NOTE" v-tooltip.top="noteOf(draft)">{{ noteOf(draft) }}</p>
                         </div>
                     </template>
                 </Row>
@@ -290,7 +324,7 @@ const fileName = (path: string): string => path.split(`/`).at(-1) ?? path;
                         </button>
                     </template>
                     <template #below>
-                        <p class="line-clamp-2 whitespace-pre-wrap wrap-break-word text-xs text-muted">{{ draft.content }}</p>
+                        <div :class="QUIET_COLUMN"><DraftPost :draft="draft" tone="quiet" /></div>
                     </template>
                 </Row>
             </RowGroup>
@@ -317,7 +351,7 @@ const fileName = (path: string): string => path.split(`/`).at(-1) ?? path;
                         </button>
                     </template>
                     <template #below>
-                        <p class="line-clamp-2 whitespace-pre-wrap wrap-break-word text-xs text-subtle">{{ draft.content }}</p>
+                        <div :class="QUIET_COLUMN"><DraftPost :draft="draft" tone="quiet" /></div>
                     </template>
                 </Row>
             </RowGroup>
