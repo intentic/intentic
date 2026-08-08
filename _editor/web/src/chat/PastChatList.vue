@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { relativeTime } from "../composables/chat/catalog";
 import type { ChatSession } from "../composables/chat/useChat";
+import MatchLine from "../components/MatchLine.vue";
 import { viewersOfSession } from "../composables/usePresence";
 import PresenceAvatars from "../presence/PresenceAvatars.vue";
 
@@ -10,8 +11,8 @@ import PresenceAvatars from "../presence/PresenceAvatars.vue";
  * a Popover on desktop and a sheet on touch); these two strips had instead each written the list out.
  *
  * Which mattered, because the row is not trivial: it carries the derived title, who else has the session open
- * right now, the SNIPPET explaining why a search matched — the line of the user's own prompt the query hit,
- * shown only when the title isn't the match — and the relative time. Two copies meant two places for the
+ * right now, the SNIPPET explaining why a search matched — the line the query hit and who said it, shown only
+ * when the title isn't the match — and the relative time. Two copies meant two places for the
  * snippet rule to drift, and both files carried a comment insisting the two boxes must not come to mean
  * different things. Now they cannot.
  *
@@ -40,9 +41,15 @@ const emit = defineEmits<{ open: [id: string] }>();
                 <!-- Members with this session open right now. -->
                 <PresenceAvatars :members="viewersOfSession(session.id)" label="in this chat" />
             </span>
-            <!-- Why this row matched, when it wasn't the title: the line of the user's own prompt the query
-                 hit. Absent on an unfiltered list and on a title match, so it never repeats the row above it. -->
-            <span v-if="session.snippet !== undefined" class="line-clamp-2 text-2xs italic text-muted">{{ session.snippet }}</span>
+            <!-- Why this row matched, when it wasn't the title: the line the query hit, and which side of the
+                 chat said it. Absent on an unfiltered list and on a title match, so it never repeats the row
+                 above it. -->
+            <MatchLine
+                v-if="session.snippet !== undefined"
+                :snippet="session.snippet"
+                :needle="query.trim().toLowerCase()"
+                class="line-clamp-2 text-2xs text-muted"
+            />
             <span class="text-2xs text-subtle">{{ relativeTime(session.updatedAt) }}</span>
         </button>
     </template>

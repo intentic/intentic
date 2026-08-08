@@ -1,4 +1,4 @@
-import type { AgentSearchResult } from "@intentic/sandbox-contract";
+import type { AgentSearchResult, MatchSnippet, Speaker } from "@intentic/sandbox-contract";
 import { keepPreviousData, useQuery } from "@tanstack/vue-query";
 import { computed, onScopeDispose, ref, watch } from "vue";
 import { type ChatSession, useChat } from "../chat/useChat";
@@ -6,7 +6,7 @@ import { sandboxJson } from "../sandbox/sandboxClient";
 import { sandboxKey, useSandbox } from "../sandbox/useSandbox";
 import { type FleetAgent, useAgents } from "./useAgents";
 
-/* Filter the fleet by what the USER wrote — the board's header field and the popped-out rail's.
+/* Filter the fleet by what was SAID in it — the board's header field and the popped-out rail's.
  *
  * A FACTORY, not a singleton. The query is how ONE surface is being looked at right now, exactly like the
  * board's showAllFinished / archiveOpen, and the rail lives in a different WINDOW: a filter typed on the board
@@ -19,8 +19,8 @@ import { type FleetAgent, useAgents } from "./useAgents";
  *      for a conversation this browser has open the whole transcript is already in memory. That covers the
  *      common case ("I remember roughly how I opened it") with the responsiveness a filter has to have to be
  *      typed into at all.
- *   2. DAEMON, debounced. Everything the browser does not hold: the later prompts of agents this tab never
- *      opened, and every archived agent. Merges in when it lands.
+ *   2. DAEMON, debounced. Everything the browser does not hold: the rest of the conversation for agents this
+ *      tab never opened, and every archived agent. Merges in when it lands.
  *
  * They are a union, never a replacement — the local tier keeps answering while the daemon one is in flight,
  * so refining a query never flashes the board empty. The daemon tier is the useWorkspaceSearch pattern
@@ -31,75 +31,58 @@ import { type FleetAgent, useAgents } from "./useAgents";
  * filter is pure cost. One typed character therefore leaves the board alone rather than emptying it.
  */
 
-// Which prompts of an OPEN conversation this browser can match without asking the daemon. Only what the user
-// said: the agent's replies and its tool output name nearly every identifier in the workspace, so matching
-// those returns most of the board (see AgentSearchQuerySchema for the same reasoning daemon-side).
-const localPromptsOf = (id: string): readonly string[] => {
+/* What an OPEN conversation SAID, as this browser holds it — matchable without asking the daemon. Both sides
+ * of the chat: the user's prompts and the agent's own bubbles, which is the daemon's rule too (see
+ * AgentSearchQuerySchema). A `notice` row is neither side speaking, and thinking and tool cards live on their
+ * own fields of the message rather than in `text`, so what is left here is exactly the spoken half.
+ */
+const localLinesOf = (id: string): readonly { text: string; speaker: Speaker }[] => {
     const conversation = useChat().conversations.value.find((candidate) => candidate.conversationId === id);
     if (conversation === undefined) {
         return [];
     }
-    return conversation.messages.value.filter((message) => message.role === `user`).map((message) => message.text);
+    return conversation.messages.value.flatMap((message) =>
+        message.role === `user` || message.role === `assistant`
+            ? [{ text: message.text, speaker: message.role === `user` ? (`user` as const) : (`agent` as const) }]
+            : [],
+    );
 };
 
-// How much of a matched prompt a card shows — the daemon's own SNIPPET_CHARS, applied to the local tier so a
+// How much of a matched line a card shows — the daemon's own SNIPPET_CHARS, applied to the local tier so a
 // card looks the same whichever tier found it.
 const SNIPPET_CHARS = 120;
 
-const snippetFor = (prompts: readonly string[], needle: string): string | undefined => {
-    for (const prompt of prompts) {
-        const line = prompt.replace(/\s+/gu, ` `).trim();
-        const at = line.toLowerCase().indexOf(needle);
-        if (at === -1) {
-            continue;
+// The user's own words win when both sides match, exactly as the daemon's matchLines does it: a query is typed
+// from memory, and what a person remembers is their own phrasing.
+const snippetFor = (lines: readonly { text: string; speaker: Speaker }[], needle: string): MatchSnippet | undefined => {
+    const said = (speaker: Speaker): MatchSnippet | undefined => {
+        for (const spoken of lines) {
+            if (spoken.speaker !== speaker) {
+                continue;
+            }
+            const line = spoken.text.replace(/\s+/gu, ` `).trim();
+            const at = line.toLowerCase().indexOf(needle);
+            if (at === -1) {
+                continue;
+            }
+            if (line.length <= SNIPPET_CHARS) {
+                return { text: line, speaker };
+            }
+            const centred = Math.round(at + needle.length / 2 - SNIPPET_CHARS / 2);
+            const start = Math.max(0, Math.min(line.length - SNIPPET_CHARS, centred));
+            const end = start + SNIPPET_CHARS;
+            return { text: `${start > 0 ? `…` : ``}${line.slice(start, end)}${end < line.length ? `…` : ``}`, speaker };
         }
-        if (line.length <= SNIPPET_CHARS) {
-            return line;
-        }
-        const centred = Math.round(at + needle.length / 2 - SNIPPET_CHARS / 2);
-        const start = Math.max(0, Math.min(line.length - SNIPPET_CHARS, centred));
-        const end = start + SNIPPET_CHARS;
-        return `${start > 0 ? `…` : ``}${line.slice(start, end)}${end < line.length ? `…` : ``}`;
-    }
-    return undefined;
+        return undefined;
+    };
+    return said(`user`) ?? said(`agent`);
 };
 
 // A match, and the evidence for it. `snippet` is absent when the hit was the TITLE — the card already shows
 // that, and a line repeating the heading above it is noise where evidence was wanted.
 interface AgentHit {
-    readonly snippet?: string;
+    readonly snippet?: MatchSnippet;
 }
-
-/* Split a line into alternating plain / hit runs, so a template can mark the term without v-html — this text
- * is a user's own prompt and an agent's own title, neither of which is trusted markup.
- *
- * Every occurrence, not just the first: a snippet is windowed around one hit but usually catches its
- * neighbours, and marking one of three identical words reads as a rendering bug. Returns a single plain run
- * when there is nothing to mark, which is also what the unfiltered case renders.
- */
-export const markSegments = (text: string, needle: string): readonly { text: string; hit: boolean }[] => {
-    if (needle.length === 0) {
-        return [{ text, hit: false }];
-    }
-    const haystack = text.toLowerCase();
-    const out: { text: string; hit: boolean }[] = [];
-    let at = 0;
-    for (;;) {
-        const found = haystack.indexOf(needle, at);
-        if (found === -1) {
-            break;
-        }
-        if (found > at) {
-            out.push({ text: text.slice(at, found), hit: false });
-        }
-        out.push({ text: text.slice(found, found + needle.length), hit: true });
-        at = found + needle.length;
-    }
-    if (at < text.length) {
-        out.push({ text: text.slice(at), hit: false });
-    }
-    return out.length === 0 ? [{ text, hit: false }] : out;
-};
 
 const MIN_QUERY = 2;
 const DEBOUNCE_MS = 150;
@@ -165,7 +148,7 @@ export function useAgentFilter() {
         if (agent.title?.toLowerCase().includes(needle.value) === true) {
             return {};
         }
-        const local = snippetFor(localPromptsOf(agent.id), needle.value);
+        const local = snippetFor(localLinesOf(agent.id), needle.value);
         if (local !== undefined) {
             return { snippet: local };
         }
@@ -173,7 +156,7 @@ export function useAgentFilter() {
     };
 
     const matches = (agent: FleetAgent): boolean => !active.value || hitOf(agent) !== undefined;
-    const snippetOf = (agent: FleetAgent): string | undefined => hitOf(agent)?.snippet;
+    const snippetOf = (agent: FleetAgent): MatchSnippet | undefined => hitOf(agent)?.snippet;
 
     /* Matching agents that are OFF the board — the archive. The board would otherwise answer "no matches"
      * for something sitting one click away, which is the failure a filter is least forgiven for.

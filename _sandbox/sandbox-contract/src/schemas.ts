@@ -752,21 +752,38 @@ export type AgentsMoved = z.infer<typeof AgentsMovedSchema>;
 // purge changes nothing the board's pending-move machinery has to hold a card against.
 export const AgentsRemovedSchema = z.object({ removed: z.array(z.string()) });
 export type AgentsRemoved = z.infer<typeof AgentsRemovedSchema>;
-/* Search the fleet by what the USER wrote — the board's filter (and the popped-out rail's).
+/* Search the fleet by what was SAID in it — the board's filter (and the popped-out rail's).
  *
- * Deliberately the user's own prompts and nothing else. An agent's replies and its tool output mention
- * nearly every identifier in the workspace, so a transcript-wide match on a fleet this size returns most of
- * the board and the filter stops filtering; the words the user typed are both what they remember and what
- * tells two agents apart. The card TITLE is the first of those prompts (sanitized), so a title match and a
- * prompt match are one rule, not two.
+ * Both sides of the conversation, and nothing else: the user's own prompts and the agent's chat bubbles. What
+ * an agent ANSWERED is half of what a chat is remembered by — the name it found, the file it named, the number
+ * it reported — and a filter that could not reach it sent people back to opening chats one at a time.
+ *
+ * What stays out is everything that is not speech: extended thinking, tool calls and their output, and the
+ * daemon's own protocol (preambles, attachment notes). That is the line the old user-only rule was really
+ * drawing — tool output alone names nearly every identifier in the workspace, so matching it returns most of
+ * the board and the filter stops filtering. Prose is a fraction of a transcript and reads like a sentence
+ * someone wrote, which is why it can be searched when a diff dump cannot.
+ *
+ * The card TITLE is the first prompt (sanitized), so a title match and a prompt match are one rule, not two.
  *
  * Two chars minimum: below that every agent matches and the scan is pure cost.
  */
 export const AgentSearchQuerySchema = z.object({ query: z.string().trim().min(2) });
-// One matching agent, and the evidence for it. `snippet` is the matched prompt windowed around the hit —
-// absent when the match is the title, which the card already shows. A card that matches for a reason the user
-// cannot see is worse than no filter at all.
-export const AgentMatchSchema = z.object({ id: z.string(), snippet: z.string().optional() });
+/* WHY a row survived the filter: the matched line, windowed around the hit, and which side of the conversation
+ * said it. A result that matches for a reason the reader cannot see is worse than no filter at all.
+ *
+ * `speaker` rides WITH the text rather than beside it because the two are never separately true — every line is
+ * someone's — and because the words alone stopped being self-identifying the moment agent prose became
+ * matchable: "landAgent lives in laneDrop.ts" under a card reads as something the user typed until the row
+ * says otherwise.
+ */
+export const SpeakerSchema = z.enum(["user", "agent"]);
+export type Speaker = z.infer<typeof SpeakerSchema>;
+export const MatchSnippetSchema = z.object({ text: z.string(), speaker: SpeakerSchema });
+export type MatchSnippet = z.infer<typeof MatchSnippetSchema>;
+// One matching agent, and the evidence for it. `snippet` is absent when the match is the TITLE, which the card
+// already shows — repeating it underneath is noise where evidence was wanted.
+export const AgentMatchSchema = z.object({ id: z.string(), snippet: MatchSnippetSchema.optional() });
 export type AgentMatch = z.infer<typeof AgentMatchSchema>;
 // `scanned` is how many agents the daemon actually read prompts for, so the board can say when a query saw
 // less than the whole fleet rather than implying it saw all of it.
@@ -1146,10 +1163,10 @@ export const SessionSummarySchema = z.object({
     id: z.string(),
     title: z.string(),
     updatedAt: z.number(),
-    // Why a searched session matched: the line of the USER's own prompt the query hit, windowed around it.
-    // Absent on an unfiltered list, and on a match the title already shows — a snippet repeating the row's
-    // own heading is noise, not evidence. See AgentMatchSchema for the same field on the fleet's side.
-    snippet: z.string().optional(),
+    // Why a searched session matched: the line the query hit, windowed around it, and who said it. Absent on an
+    // unfiltered list, and on a match the title already shows — a snippet repeating the row's own heading is
+    // noise, not evidence. See AgentMatchSchema for the same field on the fleet's side.
+    snippet: MatchSnippetSchema.optional(),
 });
 export type SessionSummary = z.infer<typeof SessionSummarySchema>;
 export const SessionsListSchema = z.object({ sessions: z.array(SessionSummarySchema) });

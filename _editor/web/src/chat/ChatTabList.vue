@@ -147,7 +147,8 @@ const runsIn = (lane: FleetLane): WorkflowRun[] =>
 const runOnScreen = (run: WorkflowRun): boolean => chatRun.value?.runId === run.runId && showingRunGraph(run, chatRun.value, panes.value);
 
 // A chat with no fleet entry (a plain conversation, or the roster briefly down) has no transcript the daemon
-// can search under an agent id, so it is matched on what this browser holds: its title and its own messages.
+// can search under an agent id, so it is matched on what this browser holds: its title and its own messages —
+// both sides of them, which is the rule everywhere else (see useAgentFilter). A `notice` row is neither side.
 const tabMatches = (entry: OpenChat): boolean => {
     if (!filtering.value) {
         return true;
@@ -158,7 +159,7 @@ const tabMatches = (entry: OpenChat): boolean => {
     const title = entry.conversation.title.value;
     return (
         title?.toLowerCase().includes(needle.value) === true ||
-        entry.conversation.messages.value.some((message) => message.role === `user` && message.text.toLowerCase().includes(needle.value))
+        entry.conversation.messages.value.some((message) => message.role !== `notice` && message.text.toLowerCase().includes(needle.value))
     );
 };
 
@@ -194,9 +195,7 @@ const lanes = computed<Record<FleetLane, OpenChat[]>>(() => {
     grouped.attention.sort((a, b) => lastActive(b) - lastActive(a));
     // ...and Finished leads with the chats holding words that never went out, for the board's own reason: this
     // lane windows too (below), and a half-written message must not be what falls behind the fold.
-    grouped.finished.sort(
-        (a, b) => Number(b.conversation.unsent.value) - Number(a.conversation.unsent.value) || lastActive(b) - lastActive(a),
-    );
+    grouped.finished.sort((a, b) => Number(b.conversation.unsent.value) - Number(a.conversation.unsent.value) || lastActive(b) - lastActive(a));
     return grouped;
 });
 const LANES: readonly { key: FleetLane; label: string; dot: string }[] = [
@@ -897,4 +896,3 @@ const closeTab = (event: Event, id: string): void => {
         <ContextMenu ref="tabMenu" :model="tabMenuItems" :append-to="overlayTarget" :min-width="13" />
     </div>
 </template>
-

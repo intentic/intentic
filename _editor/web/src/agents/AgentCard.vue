@@ -25,12 +25,13 @@ import {
     unreadBadge,
     unregistered,
 } from "../composables/agents/agentStatus";
-import { providerLabel } from "@intentic/sandbox-contract";
+import { type MatchSnippet, providerLabel } from "@intentic/sandbox-contract";
 import { sessionCategory } from "../composables/sessionCategory";
 import IdentityTile from "../components/IdentityTile.vue";
+import MatchLine from "../components/MatchLine.vue";
 import SessionChip from "./SessionChip.vue";
 import { createTitleEdit } from "../composables/agents/titleEdit";
-import { markSegments } from "../composables/agents/useAgentFilter";
+import { markSegments } from "../composables/agents/markSegments";
 import { canArchive, useAgents, type FleetAgent } from "../composables/agents/useAgents";
 import { relativeTime } from "../composables/chat/catalog";
 import { modelLabelFor } from "../composables/chat/providerCatalog";
@@ -59,11 +60,11 @@ const props = defineProps<{
     // `selected` and drawn as such, so a split reads as "these are on screen, this one is live" rather than as
     // several selected cards.
     showing?: boolean;
-    // The board's filter, when one is on. `match` is the line of the user's own prompt the query hit — the
-    // EVIDENCE for this card being in a filtered lane. Absent when the hit was the title (already on the card,
-    // and marked below instead). A card that matches for a reason the user can't see is what teaches people
-    // to stop trusting a search, so the filter never narrows a lane without this.
-    match?: string;
+    // The board's filter, when one is on. `match` is the line the query hit and who said it — the EVIDENCE for
+    // this card being in a filtered lane. Absent when the hit was the title (already on the card, and marked
+    // below instead). A card that matches for a reason the user can't see is what teaches people to stop
+    // trusting a search, so the filter never narrows a lane without this.
+    match?: MatchSnippet;
     query?: string;
 }>();
 const emit = defineEmits<{
@@ -223,9 +224,9 @@ const displayTitle = computed(() => {
     }
     return props.agent.status === `resumed` ? `Untitled chat` : `Untitled agent`;
 });
-// The title with the filter's term marked, and one plain run when no filter is on.
+// The title with the filter's term marked, and one plain run when no filter is on. The matched LINE is marked
+// by MatchLine, which also names the speaker — the two are never shown apart.
 const titleRuns = computed(() => markSegments(displayTitle.value, props.query?.toLowerCase() ?? ``));
-const matchRuns = computed(() => (props.match === undefined ? undefined : markSegments(props.match, props.query?.toLowerCase() ?? ``)));
 // The unread chip (agentStatus.unreadBadge — the rail's cards wear the same one). "New" already says you have
 // not opened it; "Updated" is the flavour that hides a fact — WHEN you last looked — so only it earns a hover.
 const unread = computed(() => {
@@ -403,20 +404,16 @@ const grab = (event: PointerEvent): void => {
              that fits a kanban lane. Row (`dense`): the same blocks along one wrapping line — each block already
              shrinks or wraps internally, so the line degrades on its own as the board narrows. -->
         <div :class="dense ? 'flex flex-wrap items-center gap-x-3 gap-y-1' : 'flex flex-col gap-1.5'">
-            <!-- WHY this card survived the filter: the line of the user's own prompt the query hit. Leads the
-                 body, because while a filter is on that is the question the card is being read to answer —
-                 and only renders when the hit was NOT the title, which is marked in place above instead
-                 (echoing it here would push every other card down the lane to repeat what is already on
+            <!-- WHY this card survived the filter: the line the query hit, and which side of the chat said it.
+                 Leads the body, because while a filter is on that is the question the card is being read to
+                 answer — and only renders when the hit was NOT the title, which is marked in place above
+                 instead (echoing it here would push every other card down the lane to repeat what is already on
                  screen). Two lines before the clamp: a snippet cut to one is usually cut mid-phrase, and a
                  fragment that doesn't contain the sentence is no longer evidence. Full width in the `dense`
                  row form, so it stays a line of prose rather than a column squeezed between two stat blocks. -->
-            <p v-if="matchRuns !== undefined" class="flex min-w-0 items-start gap-1.5 text-2xs text-muted" :class="dense ? 'w-full' : ''">
+            <p v-if="match !== undefined" class="flex min-w-0 items-start gap-1.5 text-2xs text-muted" :class="dense ? 'w-full' : ''">
                 <Icon name="search" class="mt-px shrink-0 text-2xs text-subtle" />
-                <span class="line-clamp-2 min-w-0 flex-1 italic leading-4">
-                    <span v-for="(run, at) in matchRuns" :key="at" :class="run.hit ? 'rounded-sm bg-primary-600/30 not-italic text-content' : ''">{{
-                        run.text
-                    }}</span>
-                </span>
+                <MatchLine :snippet="match" :needle="query?.toLowerCase()" class="line-clamp-2 min-w-0 flex-1 leading-4" />
             </p>
 
             <!-- WORDS OF THE USER'S STILL SITTING IN THIS CHAT'S COMPOSER (FleetAgent.unsent). Leads the body,

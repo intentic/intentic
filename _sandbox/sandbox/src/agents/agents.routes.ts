@@ -4,7 +4,7 @@ import { streamAgent } from "../agent/agent.routes.js";
 import { emitWorkspaceEvent } from "../automations/workspace-events.js";
 import type { Services } from "../composition.js";
 import type { OrpcContext } from "../context.js";
-import { conversationPrompts, matchPrompts } from "../sessions/prompt-index.js";
+import { conversationLines, matchLines } from "../sessions/transcript-search.js";
 import { resolveWithin } from "../workspace/workspace-files.js";
 import { agentRepoChanges, anchorOf } from "./agent-changes.js";
 import { type IsolatedAgent, isIsolated, type PersistedAgent } from "./agents-store.js";
@@ -77,11 +77,13 @@ export const createAgentsRoutes = (services: Services) => {
          * handful, archived agents are off the roster entirely), and a filter that reports "no matches" while
          * the agent sits one click away is a lie the user only catches once.
          *
-         * Matches the TITLE (which is the sanitized first prompt) or any later prompt the user wrote — see
-         * AgentSearchQuerySchema for why an agent's own replies and its tool output are excluded. A title match
-         * carries no snippet: the card already shows it.
+         * Matches the TITLE (which is the sanitized first prompt) or anything either side SAID in the
+         * conversation — the user's later prompts and the agent's own replies — while thinking, tool output and
+         * daemon protocol stay out (see AgentSearchQuerySchema for where that line is drawn, and matchLines for
+         * why the user's own words are the snippet when both sides hit). A title match carries no snippet: the
+         * card already shows it.
          *
-         * A draft agent has no session and so no prompts, and never appears here — the browser matches those
+         * A draft agent has no session and so nothing said, and never appears here — the browser matches those
          * against the title it holds locally, which is all a conversation with no turn yet has.
          */
         search: i.search.handler(async ({ input }) => {
@@ -96,7 +98,7 @@ export const createAgentsRoutes = (services: Services) => {
                     if (entry === undefined) {
                         return undefined;
                     }
-                    const snippet = matchPrompts(conversationPrompts(agent.id, await services.transcripts.prompts(entry)), needle);
+                    const snippet = matchLines(conversationLines(agent.id, await services.transcripts.lines(entry)), needle);
                     return snippet === undefined ? undefined : { id: agent.id, snippet };
                 }),
             );

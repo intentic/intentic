@@ -49,7 +49,7 @@ import type { AgentSummary } from "@intentic/sandbox-contract";
 import { effectScope, nextTick, type EffectScope, type Ref } from "vue";
 import { Conversation } from "../chat/conversation";
 import { useChat } from "../chat/useChat";
-import { markSegments, useAgentFilter } from "./useAgentFilter";
+import { useAgentFilter } from "./useAgentFilter";
 import { type FleetAgent, resetAgents, setAgents, useAgents } from "./useAgents";
 
 const none = { plan: false, question: false, permission: false, conflict: false };
@@ -147,11 +147,14 @@ describe(`useAgentFilter`, () => {
         await nextTick();
         const target = useAgents().fleet.value[0] as FleetAgent;
         expect(filter.matches(target)).toBe(true);
-        expect(filter.snippetOf(target)).toBe(`actually make it use landAgent instead`);
+        // Both sides said "landAgent" here, and the line shown is the user's own — their phrasing is what a
+        // query is typed from.
+        expect(filter.snippetOf(target)).toEqual({ text: `actually make it use landAgent instead`, speaker: `user` });
     });
 
-    // …and the point of the rule: the agent's OWN words are not a match, or a fleet-wide query returns the fleet.
-    it(`ignores the assistant's replies in an open tab`, async () => {
+    // The agent's half of an open tab matches too, and reports itself as the agent's — a reply quoted under a
+    // card reads as something the user wrote unless the row says whose words they were.
+    it(`matches the agent's own reply in an open tab and names the speaker`, async () => {
         setAgents([agent(`a1`, { title: `fix the login bug` })], 1);
         const conversation = new Conversation(`a1`);
         conversation.restoreMessages([
@@ -163,18 +166,36 @@ describe(`useAgentFilter`, () => {
         const filter = filterIn();
         filter.query.value = `landagent`;
         await nextTick();
+        const target = useAgents().fleet.value[0] as FleetAgent;
+        expect(filter.matches(target)).toBe(true);
+        expect(filter.snippetOf(target)).toEqual({ text: `landAgent is defined in laneDrop.ts`, speaker: `agent` });
+    });
+
+    // A notice is neither side speaking — it is something that happened to the turn — so it is not searchable.
+    it(`never matches a notice line`, async () => {
+        setAgents([agent(`a1`, { title: `fix the login bug` })], 1);
+        const conversation = new Conversation(`a1`);
+        conversation.restoreMessages([
+            { role: `user`, text: `fix the login bug` },
+            { role: `notice`, text: `landAgent branch was rebased` },
+        ]);
+        useChat().conversations.value = [placeholder(), conversation];
+
+        const filter = filterIn();
+        filter.query.value = `landagent`;
+        await nextTick();
         expect(filter.matches(useAgents().fleet.value[0] as FleetAgent)).toBe(false);
     });
 
     it(`falls through to the daemon for an agent this browser never opened`, async () => {
         setAgents([agent(`a1`, { title: `fix the login bug` })], 1);
-        answers.agents = { matches: [{ id: `a1`, snippet: `…use landAgent instead` }], scanned: 1 };
+        answers.agents = { matches: [{ id: `a1`, snippet: { text: `…use landAgent instead`, speaker: `user` } }], scanned: 1 };
         const filter = filterIn();
         filter.query.value = `landagent`;
         await settle();
         const target = useAgents().fleet.value[0] as FleetAgent;
         expect(filter.matches(target)).toBe(true);
-        expect(filter.snippetOf(target)).toBe(`…use landAgent instead`);
+        expect(filter.snippetOf(target)).toEqual({ text: `…use landAgent instead`, speaker: `user` });
     });
 
     // The tiers are a union over one agent, so a card can never be listed twice or wear two snippets — the
@@ -184,17 +205,19 @@ describe(`useAgentFilter`, () => {
         const conversation = new Conversation(`a1`);
         conversation.restoreMessages([{ role: `user`, text: `the landAgent bug` }]);
         useChat().conversations.value = [placeholder(), conversation];
-        answers.agents = { matches: [{ id: `a1`, snippet: `stale daemon line` }], scanned: 1 };
+        answers.agents = { matches: [{ id: `a1`, snippet: { text: `stale daemon line`, speaker: `user` } }], scanned: 1 };
 
         const filter = filterIn();
         filter.query.value = `landagent`;
         await settle();
-        expect(filter.snippetOf(useAgents().fleet.value[0] as FleetAgent)).toBe(`the landAgent bug`);
+        expect(filter.snippetOf(useAgents().fleet.value[0] as FleetAgent)).toEqual({ text: `the landAgent bug`, speaker: `user` });
     });
 
     it(`surfaces archived matches, which are off the roster entirely`, async () => {
         setAgents([agent(`a1`, { title: `tidy the readme` })], 1);
-        useAgents().archived.value = [{ ...agent(`old`, { title: `the landAgent rewrite`, archivedAt: 2 }), open: false, unread: false, unsent: false }];
+        useAgents().archived.value = [
+            { ...agent(`old`, { title: `the landAgent rewrite`, archivedAt: 2 }), open: false, unread: false, unsent: false },
+        ];
         const filter = filterIn();
         filter.query.value = `landagent`;
         await settle();
@@ -208,37 +231,12 @@ describe(`useAgentFilter`, () => {
         answers.sessions = {
             sessions: [
                 { id: `sess-1`, title: `tidy the readme`, updatedAt: 1 },
-                { id: `sess-9`, title: `an old plain chat`, updatedAt: 1, snippet: `about landAgent` },
+                { id: `sess-9`, title: `an old plain chat`, updatedAt: 1, snippet: { text: `about landAgent`, speaker: `agent` } },
             ],
         };
         const filter = filterIn();
         filter.query.value = `landagent`;
         await settle();
         expect(filter.sessionMatches.value.map((session) => session.id)).toEqual([`sess-9`]);
-    });
-});
-
-// The term is marked without v-html — this text is a user's own prompt, which is not trusted markup.
-describe(`markSegments`, () => {
-    it(`marks every occurrence, not just the first`, () => {
-        expect(markSegments(`land and land again`, `land`)).toEqual([
-            { text: `land`, hit: true },
-            { text: ` and `, hit: false },
-            { text: `land`, hit: true },
-            { text: ` again`, hit: false },
-        ]);
-    });
-
-    it(`matches case-insensitively while keeping the original casing`, () => {
-        expect(markSegments(`the LandAgent bug`, `landagent`)).toEqual([
-            { text: `the `, hit: false },
-            { text: `LandAgent`, hit: true },
-            { text: ` bug`, hit: false },
-        ]);
-    });
-
-    it(`returns one plain run when there is nothing to mark`, () => {
-        expect(markSegments(`nothing here`, `zzz`)).toEqual([{ text: `nothing here`, hit: false }]);
-        expect(markSegments(`nothing here`, ``)).toEqual([{ text: `nothing here`, hit: false }]);
     });
 });

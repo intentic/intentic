@@ -32,12 +32,13 @@
      Colour is spent the way the board spends it: the work's category in the tile, status in the glyph, the
      live readout in link, and everything else neutral, so an accent on screen always means something. -->
 <script setup lang="ts">
-import type { AgentProvider } from "@intentic/sandbox-contract";
+import type { AgentProvider, MatchSnippet } from "@intentic/sandbox-contract";
 import type { IconName } from "@intentic/ui";
 import { computed } from "vue";
 import { formatElapsed } from "../composables/agents/agentStatus";
-import { markSegments } from "../composables/agents/useAgentFilter";
+import { markSegments } from "../composables/agents/markSegments";
 import IdentityTile from "./IdentityTile.vue";
+import MatchLine from "./MatchLine.vue";
 
 const props = defineProps<{
     title: string;
@@ -64,11 +65,11 @@ const props = defineProps<{
     dashed?: boolean;
     // A destination rather than a session you are in (the rail's off-list search hits): the ink drops a step.
     quiet?: boolean;
-    snippet?: string;
+    // WHY this row survived the filter: the line the query hit and who said it (MatchLine draws both).
+    snippet?: MatchSnippet;
 }>();
 
 const titleRuns = computed(() => markSegments(props.title, props.needle ?? ``));
-const snippetRuns = computed(() => (props.snippet === undefined ? undefined : markSegments(props.snippet, props.needle ?? ``)));
 </script>
 
 <template>
@@ -108,16 +109,9 @@ const snippetRuns = computed(() => (props.snippet === undefined ? undefined : ma
             <span v-if="live.since !== undefined && now !== undefined" class="shrink-0">{{ formatElapsed(live.since, now) }}</span>
         </span>
 
-        <span v-if="snippetRuns !== undefined" class="flex w-full min-w-0 items-start gap-1 text-2xs text-muted">
+        <span v-if="snippet !== undefined" class="flex w-full min-w-0 items-start gap-1 text-2xs text-muted">
             <Icon name="search" class="mt-px shrink-0 text-2xs text-subtle" />
-            <span class="line-clamp-2 min-w-0 flex-1 italic leading-4">
-                <span
-                    v-for="(run, at) in snippetRuns"
-                    :key="at"
-                    :class="run.hit ? 'rounded-sm bg-primary-600/30 not-italic text-content' : ''"
-                    >{{ run.text }}</span
-                >
-            </span>
+            <MatchLine :snippet="snippet" :needle="needle" class="line-clamp-2 min-w-0 flex-1 leading-4" />
         </span>
     </button>
 </template>

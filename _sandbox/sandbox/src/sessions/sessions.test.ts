@@ -35,15 +35,15 @@ test("title match returns without reading the transcript", async () => {
     expect(hits[0]?.snippet).toBeUndefined();
 });
 
-test("a prompt match is found and reports the line it hit", async () => {
+test("a prompt match is found and reports the line it hit, and whose it was", async () => {
     seed("p", 3);
     const hits = await searchWorkspaceSessions("/work", "body p2");
     expect(hits.map((s) => s.id)).toEqual(["p2"]);
-    expect(hits[0]?.snippet).toBe("body p2");
+    expect(hits[0]?.snippet).toEqual({ text: "body p2", speaker: "user" });
 });
 
 // The scan used to read transcripts for the ten most recent sessions only, because each read rebuilt the whole
-// transcript. It reads the user half alone now, and holds it — so recall no longer falls off a cliff at the
+// transcript. It reads the spoken text alone now, and holds it — so recall no longer falls off a cliff at the
 // tenth chat, which is precisely where "the one I'm looking for" tends to live.
 test("a prompt match past the tenth-newest session is still found", async () => {
     seed("w", 12);
@@ -51,17 +51,42 @@ test("a prompt match past the tenth-newest session is still found", async () => 
     expect(hits.map((s) => s.id)).toEqual(["w11"]);
 });
 
-/* The whole point of the rule: YOUR words, not the agent's. On a fleet where every transcript names most of
- * the workspace's identifiers, matching assistant prose or tool output returns nearly everything. */
-test("assistant prose and tool output are not matches", async () => {
+/* WHERE THE LINE IS: both sides SPEAK, and everything else in a transcript does not. The agent's prose is
+ * matchable and reports itself as the agent's; its thinking and its tool output — which between them name most
+ * of the workspace's identifiers, and would hand back nearly every chat — are not searchable text at all. */
+test("assistant prose matches as the agent's; thinking and tool output never match", async () => {
     listSessions.mockResolvedValue([{ sessionId: "r0", customTitle: "chat", lastModified: 1 }]);
     getSessionMessages.mockResolvedValue([
         { type: "user", message: { content: "check the config" } },
-        { type: "assistant", message: { content: [{ type: "text", text: "landAgent lives in laneDrop.ts" }] } },
+        {
+            type: "assistant",
+            message: {
+                content: [
+                    { type: "thinking", thinking: "the caller might be readWorkspaceSession" },
+                    { type: "text", text: "landAgent lives in laneDrop.ts" },
+                    { type: "tool_use", id: "t1", name: "Bash", input: { command: "rg landAgent" } },
+                ],
+            },
+        },
         { type: "user", message: { content: [{ type: "tool_result", tool_use_id: "t1", content: "grep found landAgent 214 times" }] } },
     ]);
-    expect(await searchWorkspaceSessions("/work", "landAgent")).toEqual([]);
+    expect((await searchWorkspaceSessions("/work", "landAgent")).map((s) => s.snippet)).toEqual([
+        { text: "landAgent lives in laneDrop.ts", speaker: "agent" },
+    ]);
     expect((await searchWorkspaceSessions("/work", "check the config")).map((s) => s.id)).toEqual(["r0"]);
+    expect(await searchWorkspaceSessions("/work", "readWorkspaceSession")).toEqual([]);
+    expect(await searchWorkspaceSessions("/work", "214 times")).toEqual([]);
+});
+
+// Both sides can hold the term, and only one line is shown. It is the USER's — a query is typed from memory,
+// and what a person remembers is their own phrasing (transcript-search's matchLines).
+test("the user's own words are the snippet when both sides said the term", async () => {
+    listSessions.mockResolvedValue([{ sessionId: "b0", customTitle: "chat", lastModified: 1 }]);
+    getSessionMessages.mockResolvedValue([
+        { type: "assistant", message: { content: [{ type: "text", text: "the lane drop is in laneDrop.ts" }] } },
+        { type: "user", message: { content: "explain the lane drop" } },
+    ]);
+    expect((await searchWorkspaceSessions("/work", "lane drop"))[0]?.snippet).toEqual({ text: "explain the lane drop", speaker: "user" });
 });
 
 // The daemon staples a readiness/delegation preamble on the front of a prompt and an attachment note on the
@@ -89,7 +114,7 @@ test("a long prompt is windowed around the hit rather than cut from the start", 
     const long = `${"filler ".repeat(40)}\n\nthe landAgent bug\n\n${"more ".repeat(40)}`;
     listSessions.mockResolvedValue([{ sessionId: "n0", customTitle: "chat", lastModified: 1 }]);
     getSessionMessages.mockResolvedValue([{ type: "user", message: { content: long } }]);
-    const snippet = (await searchWorkspaceSessions("/work", "landagent"))[0]?.snippet ?? "";
+    const snippet = (await searchWorkspaceSessions("/work", "landagent"))[0]?.snippet?.text ?? "";
     expect(snippet).toContain("landAgent");
     expect(snippet).not.toContain("\n");
     expect(snippet.startsWith("…")).toBe(true);
@@ -222,7 +247,7 @@ test("a replacement runtime session keeps the conversation's original user title
     expect((await listWorkspaceSessions("/work"))[0]?.title).toBe("Investigate the blank chat.");
 });
 
-test("runtime-handoff search indexes prior user prompts but not assistant prose or protocol", async () => {
+test("runtime-handoff search indexes what both sides said before the switch, but not the protocol", async () => {
     listSessions.mockResolvedValue([{ sessionId: "handoff-search", customTitle: "chat", lastModified: 1 }]);
     getSessionMessages.mockResolvedValue([
         {
@@ -237,7 +262,11 @@ test("runtime-handoff search indexes prior user prompts but not assistant prose 
     ]);
 
     expect((await searchWorkspaceSessions("/work", "blank chat")).map((session) => session.id)).toEqual(["handoff-search"]);
-    expect(await searchWorkspaceSessions("/work", "replayStoredSession")).toEqual([]);
+    // The carried-over reply comes back under the agent, not folded into the user prompt that transported it.
+    expect((await searchWorkspaceSessions("/work", "replayStoredSession"))[0]?.snippet).toEqual({
+        text: "I will inspect replayStoredSession.",
+        speaker: "agent",
+    });
     expect(await searchWorkspaceSessions("/work", "another AI runtime")).toEqual([]);
 });
 

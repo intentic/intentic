@@ -141,12 +141,12 @@ import {
     type SessionSummary,
     workspaceSessionExists,
 } from "./sessions/sessions.js";
-import { readSessionPrompts } from "./sessions/prompt-index.js";
+import type { SpokenLine } from "./sessions/transcript-search.js";
 import { fileThreadSessionsStore, type ThreadSessionsStore } from "./sessions/thread-sessions.js";
 import {
     agentTranscript,
     type AgentTranscriptDeps,
-    createAgentPromptsReader,
+    createSpokenLinesReader,
     storedTranscript,
     type TranscriptAgent,
 } from "./sessions/agent-transcript.js";
@@ -530,10 +530,6 @@ export interface Services {
         readonly list: (dir: string) => Promise<SessionSummary[]>;
         readonly read: (dir: string, id: string) => Promise<RestoredMessage[]>;
         readonly search: (dir: string, query: string) => Promise<SessionSummary[]>;
-        // The user's own prompts in one session, for the fleet filter (agents.search matches them per AGENT,
-        // which the session list can't do — only the registry knows which session a card owns, and the
-        // archive's are off that list entirely). Cached and append-fed daemon-side; see sessions/prompt-index.ts.
-        readonly prompts: (dir: string, id: string) => Promise<readonly string[]>;
         readonly exists: (dir: string, id: string) => Promise<boolean>;
     };
     /* A CONVERSATION's transcript, as opposed to a SESSION's — keyed by conversationId, which is the identity
@@ -549,9 +545,9 @@ export interface Services {
         // from. Same no-op-if-already-opened rule as `open`.
         readonly fork: (agent: TranscriptAgent, source: string, keep: number) => Promise<void>;
         readonly append: (agent: TranscriptAgent, messages: readonly RestoredMessage[]) => Promise<void>;
-        // The conversation's user prompts, cached against the record's size — what /agents/search matches per
-        // entry per keystroke, instead of re-reading the whole store (see createAgentPromptsReader).
-        readonly prompts: (agent: TranscriptAgent) => Promise<readonly string[]>;
+        // What the conversation said, per side, cached against the record's size — what /agents/search matches
+        // per entry per keystroke, instead of re-reading the whole store (see createSpokenLinesReader).
+        readonly lines: (agent: TranscriptAgent) => Promise<readonly SpokenLine[]>;
         // How many messages are stored — the position the next turn starts at, which its checkpoint is filed
         // under so a rewind can address it (see transcript-record.ts).
         readonly count: (agent: TranscriptAgent) => Promise<number>;
@@ -917,7 +913,6 @@ export const createServices = (config: Config, logger: Logger): Services => {
             list: listWorkspaceSessions,
             read: readWorkspaceSession,
             search: searchWorkspaceSessions,
-            prompts: readSessionPrompts,
             exists: workspaceSessionExists,
         },
         transcripts: {
@@ -930,7 +925,7 @@ export const createServices = (config: Config, logger: Logger): Services => {
             // source conversation's record, and no provider knows this conversation exists yet.
             fork: (agent, source, keep) => transcriptDeps.record.fork(agent.id, source, keep),
             append: (agent, messages) => transcriptDeps.record.append(agent.id, messages),
-            prompts: createAgentPromptsReader(transcriptDeps),
+            lines: createSpokenLinesReader(transcriptDeps),
             count: (agent) => transcriptDeps.record.count(agent.id),
             truncate: (agent, keep) => transcriptDeps.record.truncate(agent.id, keep),
         },

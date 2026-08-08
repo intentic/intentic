@@ -35,7 +35,7 @@ import { createAnnouncer } from "./platform/announce.js";
 import { createBootTracker } from "./platform/boot.js";
 import { createPerfTracker } from "./platform/perf.js";
 
-import { userPromptsOf } from "./sessions/prompt-index.js";
+import { spokenLinesOf } from "./sessions/transcript-search.js";
 import type { ThreadSession, ThreadSessionsStore } from "./sessions/thread-sessions.js";
 import { createTerminalRunner } from "./terminal/terminal-run.js";
 
@@ -530,7 +530,6 @@ export const services = (overrides: ServiceOverrides = {}): Services => {
             list: async () => [],
             read: async () => [],
             search: async () => [],
-            prompts: async () => [],
             exists: async () => true,
         },
         platformHostTunnel: async () => ({ status: 200, json: { hostname: "ssh-abc.example.com", tunnelToken: "tok" } }),
@@ -584,7 +583,7 @@ export const services = (overrides: ServiceOverrides = {}): Services => {
             append: async () => {},
             // The same extraction production's cached reader applies over agentTranscript, minus the cache —
             // a test double re-reading per call is exactly the behavior the cache exists to avoid paying for.
-            prompts: async (agent) => userPromptsOf(await merged.transcripts.read(agent)),
+            lines: async (agent) => spokenLinesOf(await merged.transcripts.read(agent)),
             // Both derived from `read`, so the fake's three answers cannot disagree with each other the way a
             // hand-written constant would. `count` is on the TURN path (it files each checkpoint's index), so
             // omitting it here is the failure mode this fake's comment above describes: every agent.run test in

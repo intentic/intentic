@@ -1,7 +1,7 @@
 import { type AgentHarness, type AgentProvider, capabilitiesOf, type RestoredMessage } from "@intentic/sandbox-contract";
 import type { TurnAnchors } from "../agent/turn-anchors.js";
 import { readCodexSession } from "./codex-sessions.js";
-import { userPromptsOf } from "./prompt-index.js";
+import { type SpokenLine, spokenLinesOf } from "./transcript-search.js";
 import type { TranscriptRecord } from "./transcript-record.js";
 
 // Which conversation to answer about. The provider/harness pair is the REGISTRY's, never re-derived from the
@@ -81,8 +81,8 @@ export const agentTranscript = async (deps: AgentTranscriptDeps, agent: Transcri
     return stamped;
 };
 
-/* A conversation's USER prompts, cached — because /agents/search asks for them for every registry entry, live
- * and archived, on every settled keystroke. Answering that from agentTranscript meant re-reading and
+/* What a conversation SAID, cached — because /agents/search asks for it for every registry entry, live and
+ * archived, on every settled keystroke. Answering that from agentTranscript meant re-reading and
  * re-validating the entire transcript store (plus the provider-store backfill for pre-record conversations)
  * per keystroke: measured multi-second event-loop stalls that wedged every other request behind the search,
  * including the transcript read of the very chat the user then clicked.
@@ -93,18 +93,18 @@ export const agentTranscript = async (deps: AgentTranscriptDeps, agent: Transcri
  * creates by appending (a turn whose adoption came back empty deliberately does not, see transcript-record's
  * `open`). So the backfill's prompts can be served for the length of one turn after the provider store behind
  * them moved; the window closes the moment anything is recorded. The prompt a LIVE turn is running on is not
- * this function's problem either: the route unions it in from the routed-prompt index (conversationPrompts),
+ * this function's problem either: the route unions it in from the routed-prompt index (conversationLines),
  * the same way the session search covers its own write-lag window. */
-export const createAgentPromptsReader = (deps: AgentTranscriptDeps): ((agent: TranscriptAgent) => Promise<readonly string[]>) => {
-    const cache = new Map<string, { size: number | undefined; prompts: readonly string[] }>();
+export const createSpokenLinesReader = (deps: AgentTranscriptDeps): ((agent: TranscriptAgent) => Promise<readonly SpokenLine[]>) => {
+    const cache = new Map<string, { size: number | undefined; lines: readonly SpokenLine[] }>();
     return async (agent) => {
         const size = await deps.record.size(agent.id);
         const held = cache.get(agent.id);
         if (held !== undefined && held.size === size) {
-            return held.prompts;
+            return held.lines;
         }
-        const prompts = userPromptsOf(await agentTranscript(deps, agent));
-        cache.set(agent.id, { size, prompts });
-        return prompts;
+        const lines = spokenLinesOf(await agentTranscript(deps, agent));
+        cache.set(agent.id, { size, lines });
+        return lines;
     };
 };

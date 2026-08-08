@@ -4,7 +4,7 @@ import { createApp } from "../app.js";
 
 import type { Services } from "../composition.js";
 
-import { userPromptsOf } from "../sessions/prompt-index.js";
+import { spokenLinesOf } from "../sessions/transcript-search.js";
 
 import { clientFor, codexConnectedProxy, errorCode, fakeHistory, runAgentTurn, services, withTranslator } from "../route-testing.js";
 
@@ -167,16 +167,11 @@ test("a turn's title seeds a fresh entry and agents.rename overwrites it", async
     expect(await errorCode(client.agents.rename({ id: "nope", title: "x" }))).toBe("NOT_FOUND");
 });
 
-/* The fleet filter. Matches the title (which IS the sanitized first prompt) or any later prompt the user
- * wrote, and — the part the board depends on and no session-level search can give it — it answers over the
- * ARCHIVE too. A board whose filter stopped at the live roster would report "no matches" for an agent sitting
- * one click away behind the archive button. */
-test("agents.search matches titles and later prompts, across the archive, and never the agent's own words", async () => {
-    // Prompts keyed by session id, standing in for the transcripts the daemon would read.
-    const prompts: Record<string, string[]> = {
-        "sess-1": ["fix the login bug", "actually make it use landAgent instead"],
-        "sess-2": ["tidy the readme"],
-    };
+/* The fleet filter. Matches the title (which IS the sanitized first prompt) or any later line of the
+ * conversation, and — the part the board depends on and no session-level search can give it — it answers over
+ * the ARCHIVE too. A board whose filter stopped at the live roster would report "no matches" for an agent
+ * sitting one click away behind the archive button. */
+test("agents.search matches titles and later lines, across the archive", async () => {
     // Every store read the fleet makes, with the dir it scoped to — an isolated turn's session is filed under
     // the workspace ROOT (its namespace makes the worktree /work), so a read scoped to the worktree path finds
     // nothing and the card redraws as a conversation that never happened.
@@ -192,13 +187,14 @@ test("agents.search matches titles and later prompts, across the archive, and ne
                 list: async () => [],
                 read: async (dir, id) => {
                     scopedTo.push(dir);
-                    return id === "sess-1" ? [{ role: "user" as const, text: "restored words" }] : [];
+                    return id === "sess-1"
+                        ? [
+                              { role: "user" as const, text: "restored words" },
+                              { role: "assistant" as const, text: "landAgent lives in laneDrop.ts" },
+                          ]
+                        : [];
                 },
                 search: async () => [],
-                prompts: async (dir, id) => {
-                    scopedTo.push(dir);
-                    return prompts[id] ?? [];
-                },
                 exists: async () => true,
             },
         }),
@@ -210,7 +206,10 @@ test("agents.search matches titles and later prompts, across the archive, and ne
     // The session the REGISTRY recorded from the turn's own frame, never re-derived from where the turn ran.
     expect(await client.agents.transcript({ id: "conv1" })).toEqual({
         sessionId: "sess-1",
-        messages: [{ role: "user", text: "restored words" }],
+        messages: [
+            { role: "user", text: "restored words" },
+            { role: "assistant", text: "landAgent lives in laneDrop.ts" },
+        ],
     });
     expect(scopedTo).toEqual(["/work"]);
     // An id the registry has never heard of is a 404 ON THE WIRE, not merely a rejected call: the browser reads
@@ -220,13 +219,27 @@ test("agents.search matches titles and later prompts, across the archive, and ne
     await expect(client.agents.transcript({ id: "nope" })).rejects.toThrow();
     expect((await app.request("/agents/nope/transcript")).status).toBe(404);
 
+    // A second turn on the same conversation: its words are in no title, and the transcript store behind this
+    // fake never sees them — the routed-prompt index is what keeps them searchable.
+    await runAgentTurn(client, { prompt: "also tidy the changelog", conversationId: "conv2", isolated: true });
+
     // Under two characters the contract refuses: below that everything matches and the scan is pure cost.
     expect(await errorCode(client.agents.search({ query: "a" }))).toBe("BAD_REQUEST");
 
     // A title hit needs no transcript, so it reports no snippet — the card already shows what it matched on.
     expect(await client.agents.search({ query: "login" })).toEqual({ matches: [{ id: "conv1" }], scanned: 2 });
-    // …and a hit in a LATER prompt reports the line, which is the whole reason a filtered card is believable.
-    expect(await client.agents.search({ query: "readme" })).toMatchObject({ matches: [{ id: "conv2" }] });
+    // The title is the first prompt, so a hit there needs no transcript either.
+    expect(await client.agents.search({ query: "readme" })).toEqual({ matches: [{ id: "conv2" }], scanned: 2 });
+    // …and a hit in a LATER line reports it, with the side of the chat that said it — the whole reason a
+    // filtered card is believable.
+    expect(await client.agents.search({ query: "changelog" })).toMatchObject({
+        matches: [{ id: "conv2", snippet: { text: "also tidy the changelog", speaker: "user" } }],
+    });
+    // The agent's own reply is matchable too, and says whose words they were — read out of the transcript
+    // rather than out of the routed-prompt index, which only ever holds what the user sent.
+    expect(await client.agents.search({ query: "lanedrop" })).toMatchObject({
+        matches: [{ id: "conv1", snippet: { text: "landAgent lives in laneDrop.ts", speaker: "agent" } }],
+    });
 
     // Archiving takes conv1 off the roster; the filter must still find it.
     await client.agents.archive({ ids: ["conv1"] });
@@ -241,7 +254,7 @@ test("agents.search reads the daemon transcript for a provider with no SDK promp
         id === "codex-search"
             ? [
                   { role: "user" as const, text: "open the codex task" },
-                  { role: "assistant" as const, text: "I mentioned forbidden-assistant-needle" },
+                  { role: "assistant" as const, text: "I mentioned an assistant-needle" },
                   { role: "user" as const, text: "find durable-transcript-needle" },
               ]
             : [];
@@ -253,15 +266,15 @@ test("agents.search reads the daemon transcript for a provider with no SDK promp
                 yield { kind: "done" };
             },
             // Native Codex has no Claude SDK session to search. The daemon transcript is the provider-neutral
-            // source, and includes a later prompt that is deliberately absent from the card title. `prompts`
-            // extracts from the same record through the real userPromptsOf, so the assistant-exclusion
-            // assertion below exercises the extraction rather than a hand-picked list.
+            // source, and includes a later prompt that is deliberately absent from the card title. `lines`
+            // extracts from the same record through the real spokenLinesOf, so the assertions below exercise
+            // the extraction rather than a hand-picked list.
             transcripts: {
                 read: async (agent) => codexSearchTranscript(agent.id),
                 open: async () => {},
                 fork: async () => {},
                 append: async () => {},
-                prompts: async (agent) => userPromptsOf(codexSearchTranscript(agent.id)),
+                lines: async (agent) => spokenLinesOf(codexSearchTranscript(agent.id)),
                 // Derived from the same record `read` answers from, so the fake cannot contradict itself.
                 count: async (agent) => codexSearchTranscript(agent.id).length,
                 truncate: async (agent, keep) => Math.max(0, codexSearchTranscript(agent.id).length - keep),
@@ -270,9 +283,6 @@ test("agents.search reads the daemon transcript for a provider with no SDK promp
                 list: async () => [],
                 read: async () => [],
                 search: async () => [],
-                prompts: async () => {
-                    throw new Error("provider store must not be consulted");
-                },
                 exists: async () => true,
             },
         }),
@@ -281,7 +291,10 @@ test("agents.search reads the daemon transcript for a provider with no SDK promp
     await runAgentTurn(client, { prompt: "open the codex task", title: "Codex task", agent: "codex", conversationId: "codex-search" });
 
     expect(await client.agents.search({ query: "durable-transcript-needle" })).toMatchObject({
-        matches: [{ id: "codex-search", snippet: "find durable-transcript-needle" }],
+        matches: [{ id: "codex-search", snippet: { text: "find durable-transcript-needle", speaker: "user" } }],
     });
-    expect(await client.agents.search({ query: "forbidden-assistant-needle" })).toMatchObject({ matches: [] });
+    // The agent's half of that same record is searchable, and reports itself as the agent's.
+    expect(await client.agents.search({ query: "assistant-needle" })).toMatchObject({
+        matches: [{ id: "codex-search", snippet: { text: "I mentioned an assistant-needle", speaker: "agent" } }],
+    });
 });

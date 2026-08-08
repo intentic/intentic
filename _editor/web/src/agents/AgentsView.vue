@@ -23,6 +23,7 @@ import { useChat } from "../composables/chat/useChat";
 import { useChatPopout } from "../composables/chat/useChatPopout";
 import { useNow } from "../composables/useNow";
 import { commandShortcut, registerCommand } from "../composables/commands/useCommands";
+import MatchLine from "../components/MatchLine.vue";
 import AgentCard from "./AgentCard.vue";
 import HeldWakeCard from "./HeldWakeCard.vue";
 import WorkflowRunCard from "./WorkflowRunCard.vue";
@@ -1237,7 +1238,12 @@ const grabCard = (event: PointerEvent, agent: FleetAgent, card: HTMLElement): vo
                         @click="openSession(session.id)"
                     >
                         <span class="truncate text-xs text-content">{{ session.title }}</span>
-                        <span v-if="session.snippet !== undefined" class="line-clamp-2 text-2xs italic text-muted">{{ session.snippet }}</span>
+                        <MatchLine
+                            v-if="session.snippet !== undefined"
+                            :snippet="session.snippet"
+                            :needle="needle"
+                            class="line-clamp-2 text-2xs text-muted"
+                        />
                         <span class="text-2xs text-subtle">{{ relativeTime(session.updatedAt) }}</span>
                     </button>
                 </section>

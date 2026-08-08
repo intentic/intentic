@@ -30,7 +30,7 @@ import { landAgent } from "../agents/land.js";
 import { landingPaths } from "../agents/landing-paths.js";
 import { landingVerdict, standing } from "../rules/rules.js";
 import { type RepoSync, syncConversation } from "../agents/sync.js";
-import { recordConversationPrompt, recordPrompt } from "../sessions/prompt-index.js";
+import { recordConversationPrompt, recordPrompt } from "../sessions/transcript-search.js";
 import { handoffHistory, turnStartIndex } from "../sessions/turn-transcript.js";
 import type { AgentRequest, ParkedSync } from "./agent.js";
 import { adapterFor } from "./adapter-registry.js";
@@ -1234,7 +1234,7 @@ export const createAgentRoutes = (services: Services) => {
             }
             // A steered message is something the user SAID, so the fleet filter has to find it. Recorded here
             // rather than left to the transcript because the prompt index reads a session's file once and holds
-            // it (prompt-index.ts) — a mid-turn message that only ever landed in the file would be invisible to
+            // it (transcript-search.ts) — a mid-turn message that only ever landed in the file would be invisible to
             // every search until the daemon restarted. `input.text`, not the composed prompt: the editor-context
             // note and the attachment note are protocol, and matching them would hit every steered turn at once.
             const sessionId = services.agents.sessionIdOf(input.conversationId);

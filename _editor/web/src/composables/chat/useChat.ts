@@ -6,6 +6,7 @@ import {
     endpointIdOf,
     endpointProvider,
     type KeyedProvider,
+    type MatchSnippet,
     type Model,
     NATIVE_PROVIDERS,
     type OauthAccount,
@@ -54,9 +55,9 @@ export interface ChatSession {
     readonly id: string;
     readonly title: string;
     readonly updatedAt: number;
-    // Why a searched row matched: the line of the user's own prompt the query hit. Absent on an unfiltered
-    // list, and on a title match — the row already shows the title, so repeating it under itself is noise.
-    readonly snippet?: string;
+    // Why a searched row matched: the line the query hit, and which side of the chat said it. Absent on an
+    // unfiltered list, and on a title match — the row already shows the title, so repeating it is noise.
+    readonly snippet?: MatchSnippet;
 }
 
 /* Manages the shared Claude Code chat as a module-level singleton: a set of concurrent conversations (the
@@ -643,9 +644,7 @@ const providerBase = (p: AgentProvider): string => (p === `grok` ? `/grok` : `/c
 // an endpoint is a capability the user created, so its id names the one route configured for it.
 const modelsPath = (p: AgentProvider): string => {
     const endpointId = endpointIdOf(p);
-    return endpointId !== undefined
-        ? `/endpoints/${encodeURIComponent(endpointId)}/models`
-        : `/providers/${encodeURIComponent(p)}/models`;
+    return endpointId !== undefined ? `/endpoints/${encodeURIComponent(endpointId)}/models` : `/providers/${encodeURIComponent(p)}/models`;
 };
 // Providers whose ONLY credential is the translator subscription: they have no native account handshake, so the
 // card shows the routed row alone and there is nothing for `startConnect` to arm. Grok is deliberately absent —

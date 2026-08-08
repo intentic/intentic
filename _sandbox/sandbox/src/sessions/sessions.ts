@@ -1,20 +1,20 @@
 import { basename } from "node:path";
 import { getSessionInfo, getSessionMessages, listSessions } from "@anthropic-ai/claude-agent-sdk";
-import type { RestoredMessage, RestoredToolCall } from "@intentic/sandbox-contract";
+import type { MatchSnippet, RestoredMessage, RestoredToolCall } from "@intentic/sandbox-contract";
 import { stripAttachmentNote } from "../agent/attachment-note.js";
 import { parseRuntimeHistory } from "../agent/runtime-history.js";
 import { displayNameOf, editDiffContent, resultText, toolCategoryOf, toolLocations, toolTarget } from "../agent/tool-calls.js";
 import { preambleNotes, stripTurnPreamble } from "../agent/turn-preamble.js";
-import { matchPrompts, readSessionPrompts } from "./prompt-index.js";
+import { matchLines, readSessionLines } from "./transcript-search.js";
 
 // A past conversation in this workspace, for the platform's chat-history list. `title` is the SDK's
 // resolved display summary (custom title / auto-summary / first prompt); `updatedAt` is its last-modified ms.
-// `snippet` is set only by a search, and only when the hit was in a prompt the title doesn't already show.
+// `snippet` is set only by a search, and only when the hit was in a line the title doesn't already show.
 export interface SessionSummary {
     readonly id: string;
     readonly title: string;
     readonly updatedAt: number;
-    readonly snippet?: string;
+    readonly snippet?: MatchSnippet;
 }
 
 // The `message` field of a stored turn is an Anthropic message: content is a string or a block array. The
@@ -63,12 +63,13 @@ export const listWorkspaceSessions = async (dir: string): Promise<SessionSummary
 };
 
 /* Filter the history list by a keyword, for the chat-history search box — by the SAME rule the fleet board's
- * filter runs (agents.search): the session's title, and the prompts the USER wrote in it. Two search boxes in
- * one window that disagree about what "matches" means is worse than one of them not existing.
+ * filter runs (agents.search): the session's title, and what either side SAID in it. Two search boxes in one
+ * window that disagree about what "matches" means is worse than one of them not existing, and the board is
+ * literally showing rows from this list underneath its own cards.
  *
  * That rule is also what let the old per-session content cap go. This used to read transcripts for the ten
  * most recent sessions only, because each hit cost a full readWorkspaceSession (tool cards, call-time diffs,
- * result settling — all of it thrown away by a substring test). readSessionPrompts reads the user half alone
+ * result settling — all of it thrown away by a substring test). readSessionLines reads the spoken text alone
  * and holds it, so scanning the whole listed set costs one pass per session for the life of the daemon.
  *
  * Result keeps the newest-first order of `list`. A session whose TITLE matched carries no snippet: the title
@@ -82,7 +83,7 @@ export const searchWorkspaceSessions = async (dir: string, query: string): Promi
             if (session.title.toLowerCase().includes(needle)) {
                 return session;
             }
-            const snippet = matchPrompts(await readSessionPrompts(dir, session.id), needle);
+            const snippet = matchLines(await readSessionLines(dir, session.id), needle);
             // Object.assign, not a spread — these summaries are this call's own, built fresh by the list above.
             return snippet === undefined ? undefined : Object.assign(session, { snippet });
         }),
@@ -123,7 +124,10 @@ export const readWorkspaceSession = async (dir: string, id: string): Promise<Res
  * Exported because a SUBAGENT's transcript is the same file format read from a different file
  * (getSubagentMessages — see sessions/subagent-transcript.ts): one reducer, so a delegation's transcript and its
  * parent's are assembled by identical rules and cannot come to disagree about what a stored turn looks like. */
-export const restoredSessionMessages = (messages: readonly { readonly type?: string; readonly message?: unknown }[], dir: string): RestoredMessage[] => {
+export const restoredSessionMessages = (
+    messages: readonly { readonly type?: string; readonly message?: unknown }[],
+    dir: string,
+): RestoredMessage[] => {
     const out: RestoredMessage[] = [];
     // tool_use id → the card to settle when its result arrives on the following (synthetic) user message. The
     // card is already in `out`; it is mutated in place, so ordering needs no second pass.

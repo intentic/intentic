@@ -3,7 +3,7 @@ import { isFailureSentence } from "../agent/failure-sentences.js";
 import { subagentCountsOf } from "../agent/subagents.js";
 import { loopProjection } from "../loops/loop-state.js";
 import { workflowProjection } from "../workflows/workflow-state.js";
-import { recordConversationPrompt, recordPrompt } from "../sessions/prompt-index.js";
+import { recordConversationPrompt, recordPrompt } from "../sessions/transcript-search.js";
 import { type AgentsStore, type AgentTitleSource, isIsolated, type PersistedAgent } from "./agents-store.js";
 import type { LandOutcome } from "./land.js";
 import type { LandedPresences } from "./landed-presence.js";
