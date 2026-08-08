@@ -1106,6 +1106,32 @@ describe(`chat panes`, () => {
         expect(chat.activeId.value).toBe(ids[0]);
     });
 
+    /* THE RESET — what a click carrying no modifier means on a surface whose modifiers build a selection. It
+     * keeps the FOCUSED chat, since the click that asks for it has already moved the focus onto the row or the
+     * card it landed on; the rest give their columns back without closing anything. */
+    it(`collapses to the focused chat alone`, () => {
+        const chat = useChat();
+        const ids = openThree();
+        chat.openBeside(ids[1]!);
+        chat.openBeside(ids[2]!); // panes [0, 1, 2], focus on 2
+
+        chat.setActive(ids[0]!); // the plain click: focus moves, the columns are still up
+        chat.collapsePanes();
+
+        expect(chat.panes.value).toEqual([ids[0]]);
+        expect(chat.activeId.value).toBe(ids[0]);
+        expect(chat.conversations.value.map((c) => c.conversationId)).toEqual(ids); // nothing was closed
+    });
+
+    it(`leaves a single pane alone`, () => {
+        const chat = useChat();
+        const ids = openThree();
+
+        chat.collapsePanes();
+
+        expect(chat.panes.value).toEqual([ids[0]]);
+    });
+
     /* A multi-selection lands as a SET, and the chats already on screen keep the columns they are in — adding a
      * third chat must not reshuffle the two the user is reading (pane order is insertion order, never the
      * rail's, which re-sorts as turns end). */

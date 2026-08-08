@@ -99,7 +99,7 @@ const {
     busyIds,
     agentById,
 } = useAgents();
-const { active, openConversation, panes, openBeside, closePane, closeTabs, setPanes } = useChat();
+const { active, openConversation, panes, openBeside, closePane, collapsePanes, closeTabs, setPanes } = useChat();
 const { popOut: popOutChat, poppedOut } = useChatPopout();
 // This agent's chat has a column in the chat window but not the focus — the board's half of the rail's
 // "showing" mark, so a split is legible from either surface.
@@ -616,6 +616,10 @@ const clearable = computed(() => lanes.value.finished.length);
  * one-shot verb — the one most people will reach for — is the one that can never be misread. Ctrl/Cmd and
  * Shift are there for whoever learned them on the strips.
  *
+ * And a click with NO modifier is the reset (focusAgent's tail): these gestures make a selection, and a
+ * selection you cannot replace by pointing somewhere else is not one — the split outlived every later click
+ * and had to be dismantled a × at a time.
+ *
  * The pane is claimed BEFORE `open` (see useChat.openBeside): the opening would otherwise take the focused
  * pane's column on its way in, and the chat the user was reading would vanish to make room. */
 const paneOrder = computed<FleetAgent[]>(() => LANES.flatMap((lane) => cardsFor(lane.key)));
@@ -669,7 +673,14 @@ const focusAgent = (agent: FleetAgent, event?: MouseEvent): void => {
     open(agent);
     if (mobile.value) {
         void router.push(`/agents/${encodeURIComponent(agent.id)}`);
+        return;
     }
+    // ...and an UNMODIFIED one is the reset those modifiers are defined against: whatever else was ringed gives
+    // its column back, so "just this one" needs no cleanup after it. The split is one Alt+click away again and
+    // the chats that left the screen are still in the rail, which is what makes this the cheap direction — and
+    // it is the only thing that keeps a stale column out of the actions scoped to what is on screen
+    // (Synthesize). Collapsing AFTER the open, since the chat to keep is the one the click just focused.
+    collapsePanes();
 };
 // The deliberate view-change: focus the dock AND swap the surface to the agent's review detail. Fired by the
 // card's contextual affordance or its double-click accelerator (never a plain click); the card only offers it

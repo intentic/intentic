@@ -164,7 +164,9 @@ const panes = ref<string[]>([]);
  * The slot rule below is what keeps every existing caller working: a plain tab click, a card on the board, a
  * deep link and a history row all land on setActive, and none of them means "open another pane" — they mean
  * "show me this chat", so the incoming chat takes the column the focus was already in and the other panes are
- * left alone. Opening a pane is a separate verb (openBeside / setPanes). */
+ * left alone. Opening a pane is a separate verb (openBeside / setPanes), and so is closing the rest
+ * (collapsePanes) — which is why a CLICK on a row or a card collapses while an arriving deep link does not:
+ * one is a gesture on a selection, the other is an arrival. */
 const reconcilePanes = (kept: readonly Conversation[], focused: string): void => {
     const open = new Set(kept.map((conversation) => conversation.conversationId));
     const held = panes.value.filter((id) => open.has(id));
@@ -1239,6 +1241,23 @@ const closePane = (conversationId: string): void => {
     }
 };
 
+/* BACK TO ONE COLUMN — the reset half of the gesture set, and the counterpart of setPanes.
+ *
+ * Every list that lets Shift and Ctrl build a selection also lets a PLAIN click replace it, and the surfaces
+ * that put chats in columns (the rail's rows, the board's cards) are such lists: the ringed cards ARE the pane
+ * set, so a click carrying no modifier means "just this one" there exactly as it does in a file list. Without
+ * it a split could only be left one × at a time, which made arriving cheaper than leaving — and left actions
+ * scoped to "what is on screen" (Synthesize) acting on a column the user thought they had walked away from.
+ *
+ * It names no id on purpose: the click has already moved the focus, so the chat to keep IS the focused one.
+ * That also keeps it out of setActive, where it would wrongly collapse a deep link's or a history row's
+ * arrival — those are not gestures on a selection. */
+const collapsePanes = (): void => {
+    if (panes.value.length > 1) {
+        panes.value = [activeId.value];
+    }
+};
+
 /* The pane set as a whole — what a multi-selection on the rail or the board lands as. Chats already on screen
  * KEEP their columns and the newcomers are appended in the order given, so adding a third chat never reshuffles
  * the two the user is reading. An empty selection is not a request for an empty panel and is ignored; the way
@@ -1943,6 +1962,7 @@ export function useChat() {
         panes,
         openBeside,
         closePane,
+        collapsePanes,
         setPanes,
         sessions,
         messages,

@@ -70,7 +70,7 @@ const emit = defineEmits<{
     open: [id: string];
 }>();
 
-const { conversations, activeId, tabReveal, panes, openBeside, closePane, setPanes } = useChat();
+const { conversations, activeId, tabReveal, panes, openBeside, closePane, collapsePanes, setPanes } = useChat();
 const { agentById, fleet, loadArchived } = useAgents();
 
 const { poppedOut, toggle: togglePopout, overlayTarget } = useChatPopout();
@@ -492,10 +492,13 @@ const hidePreview = (): void => {
 
 /* --- Picking chats into panes -------------------------------------------------------------------
  * The terminal strip's gesture, on the surface that is this panel's equivalent of it (TerminalPanel's
- * onSegmentClick): a plain click SWITCHES, Ctrl/Cmd+click toggles a chat into a column of its own beside the
- * others, and Shift+click takes the run between the anchor and the row — all three landing on the pane verbs
- * in useChat. Learning it once on either strip is learning it for both, which is the whole reason the
- * gestures are the same to the letter rather than merely similar.
+ * onSegmentClick): a plain click SWITCHES TO THAT ROW ALONE, Ctrl/Cmd+click toggles a chat into a column of
+ * its own beside the others, and Shift+click takes the run between the anchor and the row — all four landing
+ * on the pane verbs in useChat. Learning it once on either strip is learning it for both, which is the whole
+ * reason the gestures are the same to the letter rather than merely similar.
+ *
+ * The plain click is the RESET, as it is in every list that multi-selects: the modifiers build the set, and
+ * the click without one replaces it. That is the only way out of a split that costs the same as the way in.
  *
  * The MENU is what makes it discoverable; the modifiers are the accelerator for whoever already knows. */
 const showing = (id: string): boolean => panes.value.includes(id);
@@ -539,6 +542,11 @@ const onRowClick = (event: MouseEvent, id: string): void => {
     }
     anchor.value = id;
     emit(`select`, id);
+    // The reset half of the same gesture set: a click carrying no modifier means "just this row", here as in
+    // any list that also multi-selects. Only where panes are offered — docked, the split is stored but not
+    // drawn, and collapsing one the reader cannot see would quietly lose the arrangement the pop-out returns
+    // to. The select above has already moved the focus, so this keeps the row that was clicked.
+    collapsePanes();
 };
 
 /* --- Right-click menu -----------------------------------------------------------------------------

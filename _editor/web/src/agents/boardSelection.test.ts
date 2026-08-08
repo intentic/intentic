@@ -10,11 +10,14 @@
 // opened from outside stands for a tab click, a history row and a deep link alike, since all three land on the
 // same write. jsdom lays nothing out, so the scroll is asserted as the CALL — which card, and the cheapest
 // scroll (`nearest`, a no-op on a card already on screen).
+//
+// The board's OTHER selection is at the foot of the file: the several cards a split rings at once, and what a
+// click carrying no modifier does to them.
 import type { AgentSummary } from "@intentic/sandbox-contract";
 import { VueQueryPlugin } from "@tanstack/vue-query";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { type App, createApp, h, nextTick } from "vue";
-import { openAgentConversation, resetChat } from "../composables/chat/useChat";
+import { openAgentConversation, resetChat, useChat } from "../composables/chat/useChat";
 import { queryClient } from "../composables/queryPersistence";
 import { resetAgents, setAgents } from "../composables/agents/useAgents";
 import { router } from "../router";
@@ -195,4 +198,44 @@ it(`scrolls again to a card the board once selected itself — the mark is one s
     await settle();
 
     expect(reveals.at(-1)).toEqual({ card: `Focus agent: agent 0`, block: `nearest` });
+});
+
+/* --- The split, and the click that ends it ------------------------------------------------------
+ * Alt/Ctrl/Shift on a card build the set of chats on screen, which makes the cards a multi-selection — and a
+ * selection you cannot replace by pointing at something else is not one. Before this, every later click merely
+ * swapped the column it landed in: the split outlived the comparison that wanted it and had to be taken apart
+ * one × at a time, with actions scoped to "what is on screen" (Synthesize) still counting the leftover.
+ *
+ * Asserted on the PANE SET rather than on the rings, because the rings are drawn from it — and driven as real
+ * clicks with real modifier flags, since the whole question is which of them the board tells apart. */
+const cardEl = (board: HTMLElement, at: number): HTMLElement => board.querySelector<HTMLElement>(`[aria-label="Focus agent: agent ${at}"]`)!;
+
+it(`collapses a split back to the one card clicked without a modifier`, async () => {
+    seed();
+    const board = await mountBoard();
+
+    cardEl(board, 0).dispatchEvent(new MouseEvent(`click`, { bubbles: true, altKey: true }));
+    await settle();
+    cardEl(board, 1).dispatchEvent(new MouseEvent(`click`, { bubbles: true, altKey: true }));
+    await settle();
+    expect(useChat().panes.value).toEqual([`a0`, `a1`]);
+
+    cardEl(board, 2).click();
+    await settle();
+
+    expect(useChat().panes.value).toEqual([`a2`]);
+    // The two that left the screen are still open — one click in the rail brings either back.
+    expect(useChat().conversations.value.map((c) => c.conversationId)).toEqual(expect.arrayContaining([`a0`, `a1`, `a2`]));
+});
+
+it(`still adds a column when the modifier says so`, async () => {
+    seed();
+    const board = await mountBoard();
+    cardEl(board, 2).click();
+    await settle();
+
+    cardEl(board, 0).dispatchEvent(new MouseEvent(`click`, { bubbles: true, altKey: true }));
+    await settle();
+
+    expect(useChat().panes.value).toEqual([`a2`, `a0`]);
 });
