@@ -881,7 +881,7 @@ const grabCard = (event: PointerEvent, agent: FleetAgent, card: HTMLElement): vo
              and both pills UNDER it: invisible, and the unread pill is the only way to mark all read, so the
              board lost it entirely. Below the same width at which the lanes stack, the field takes a row of its
              own and the flanks keep the first one to themselves. -->
-        <div class="view-header view-header-wrap flex flex-wrap items-center gap-x-2 gap-y-1 border-b border-line px-3 py-1">
+        <div class="view-header view-header-wrap flex flex-wrap items-center gap-x-2 gap-y-1 px-3 py-1">
             <div class="flex min-w-0 flex-1 basis-0 items-center gap-2">
                 <span class="shrink-0 text-sm font-semibold text-content">Agents</span>
                 <!-- Two different facts, two different pills: "needs you" is BLOCKED work (an approval, a
