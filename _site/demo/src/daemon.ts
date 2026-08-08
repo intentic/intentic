@@ -21,6 +21,7 @@ import {
     type TranslatorAccounts,
     type WorkflowRun,
 } from "@intentic/sandbox-contract";
+import { MEMORY_BASE } from "@intentic/ext-memory";
 import { BROWSER_SESSIONS } from "./browser";
 import { automationApprovals, automationsList, deleteAutomation, resolveApproval, saveAutomation } from "./fixture/automations";
 import { demoRuns, demoWorkflows } from "./fixture/workflows";
@@ -443,11 +444,15 @@ const ROUTES: readonly (readonly [string, string, Handler])[] = [
     [`POST`, `/workflows/runs/{runId}/unarchive`, () => refuse(`This is the demo workspace — nothing has been archived to restore.`)],
 
     /* Memory: what the agent carries between sessions, readable and — the point of the surface — editable. The
-     * red pen writes into the fixture, so an edit and a forget both hold until the tab is reloaded. */
-    [`GET`, `/memory`, () => json({ files: memoryList(Date.now()) })],
-    [`GET`, `/memory/file`, ({ url }) => memoryRead(url)],
-    [`PUT`, `/memory/file`, memoryWrite],
-    [`DELETE`, `/memory/file`, memoryForget],
+     * red pen writes into the fixture, so an edit and a forget both hold until the tab is reloaded.
+     *
+     * Served under the memory extension's OWN namespace, because that is where its backend half lives now and
+     * therefore what its panel calls; the paths come from the extension rather than being spelled out here, so
+     * the next move of that boundary lands as a compile error instead of an empty panel. */
+    [`GET`, `${MEMORY_BASE}/memory`, () => json({ files: memoryList(Date.now()) })],
+    [`GET`, `${MEMORY_BASE}/memory/file`, ({ url }) => memoryRead(url)],
+    [`PUT`, `${MEMORY_BASE}/memory/file`, memoryWrite],
+    [`DELETE`, `${MEMORY_BASE}/memory/file`, memoryForget],
     [`GET`, `/capabilities`, () => json({ capabilities: demoCapabilities() })],
     [`GET`, `/usage/rollup`, () => json({ rows: demoUsageRollup(STARTED_AT) })],
     [`GET`, `/secrets/inventory`, () => json({ secrets: [] })],

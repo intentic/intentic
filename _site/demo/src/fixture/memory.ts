@@ -1,4 +1,4 @@
-import type { MemoryFile, MemoryFileEntry } from "@intentic/sandbox-contract";
+import type { MemoryFile, MemoryFileEntry } from "@intentic/ext-memory";
 
 /* WHAT THE AGENT REMEMBERS about acme-shop, across sessions — the markdown files under the workspace's
  * `.intentic/claude/projects/<project>/memory`, which is the one part of an agent's context the owner can read
