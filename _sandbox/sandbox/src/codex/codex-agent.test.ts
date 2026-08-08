@@ -53,7 +53,7 @@ test("a turn maps thread events onto session, deltas, thinking, tools, todos, us
             usage: { input_tokens: 10, cached_input_tokens: 3, cache_write_input_tokens: 0, output_tokens: 5, reasoning_output_tokens: 2 },
         },
     ]);
-    const events = await collect(createCodexAgent("/work/.intentic/codex", runner), request);
+    const events = await collect(createCodexAgent("/work/.intentic/auth/codex", runner), request);
     expect(events).toEqual([
         { kind: "session", sessionId: "thr-1" },
         { kind: "thinking", text: "planning the edit" },
@@ -79,7 +79,7 @@ test("a turn maps thread events onto session, deltas, thinking, tools, todos, us
 
 test("the turn runs full-access with approvals off, resumes the session, and pins CODEX_HOME", async () => {
     const { runner, calls } = fakeRunner([]);
-    await collect(createCodexAgent("/work/.intentic/codex", runner), {
+    await collect(createCodexAgent("/work/.intentic/auth/codex", runner), {
         ...request,
         sessionId: "thr-9",
         model: "gpt-5-codex",
@@ -98,13 +98,13 @@ test("the turn runs full-access with approvals off, resumes the session, and pin
         // Claude's top effort level maps onto Codex's scale ceiling.
         modelReasoningEffort: "xhigh",
     });
-    expect(turn.env["CODEX_HOME"]).toBe("/work/.intentic/codex");
+    expect(turn.env["CODEX_HOME"]).toBe("/work/.intentic/auth/codex");
     expect(turn.env["DISCORD_BOT_TOKEN"]).toBe("tok");
 });
 
 test("a subscription-served turn (codexEndpoint) rides the translator provider block on the local bearer, no auth.json", async () => {
     const { runner, calls } = fakeRunner([]);
-    await collect(createCodexAgent("/work/.intentic/codex", runner), {
+    await collect(createCodexAgent("/work/.intentic/auth/codex", runner), {
         ...request,
         model: "gpt-5.5",
         codexEndpoint: { baseUrl: "http://127.0.0.1:8788", authToken: "intentic-translator-local" },
@@ -129,7 +129,7 @@ test("a subscription-served turn (codexEndpoint) rides the translator provider b
 
 test("a native (account) turn carries no provider config — Codex uses its own credential resolution", async () => {
     const { runner, calls } = fakeRunner([]);
-    await collect(createCodexAgent("/work/.intentic/codex", runner), { ...request, model: "gpt-5-codex" });
+    await collect(createCodexAgent("/work/.intentic/auth/codex", runner), { ...request, model: "gpt-5-codex" });
     expect(calls[0]!.config).toBeUndefined();
     expect(calls[0]!.env["CODEX_API_KEY"]).toBeUndefined();
 });
@@ -152,10 +152,10 @@ test("attached images ride as native inputs while other files are referenced in 
     const { runner, calls } = fakeRunner([]);
     await collect(createCodexAgent("/home", runner), {
         ...request,
-        attachments: ["/work/.intentic/attachments/a/shot.png", "/work/.intentic/attachments/b/report.pdf"],
+        attachments: ["/work/.intentic/artifacts/attachments/a/shot.png", "/work/.intentic/artifacts/attachments/b/report.pdf"],
     });
-    expect(calls[0]!.images).toEqual(["/work/.intentic/attachments/a/shot.png"]);
-    expect(calls[0]!.prompt).toContain("/work/.intentic/attachments/b/report.pdf");
+    expect(calls[0]!.images).toEqual(["/work/.intentic/artifacts/attachments/a/shot.png"]);
+    expect(calls[0]!.prompt).toContain("/work/.intentic/artifacts/attachments/b/report.pdf");
     expect(calls[0]!.prompt).not.toContain("shot.png");
 });
 

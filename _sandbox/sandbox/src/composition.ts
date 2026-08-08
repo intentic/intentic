@@ -83,6 +83,7 @@ import { fileTurnJournal, type TurnJournal } from "./agent/turn-journal.js";
 import { fileTurnAnchors, type TurnAnchors } from "./agent/turn-anchors.js";
 import type { Config } from "./env.config.js";
 import { createAgentsRegistry, type AgentsRegistry } from "./agents/agents-registry.js";
+import type { AgentArchiveDeps } from "./agents/archive.js";
 import { fileAgentsStore } from "./agents/agents-store.js";
 import { createTurnIsolation, type TurnIsolation } from "./agents/isolation.js";
 import { createAgentOrigins, type AgentOrigins } from "./agents/origins.js";
@@ -152,6 +153,7 @@ import {
     type TranscriptAgent,
 } from "./sessions/agent-transcript.js";
 import { fileTranscriptRecord } from "./sessions/transcript-record.js";
+import { purgeConversationState } from "./sessions/conversation-purge.js";
 import { type SandboxSettingsStore, fileSandboxSettingsStore } from "./settings/settings-store.js";
 import { type RuleFiringsStore, fileRuleFiringsStore } from "./rules/rule-firings.js";
 import { type Announcer, createAnnouncer } from "./platform/announce.js";
@@ -348,7 +350,7 @@ export interface Services {
     // Sends those notifications. `notifyIfAway` (the turn/approval triggers) is suppressed while anyone is
     // actively watching; `notify` (the settings test button) always fires.
     readonly pushSender: PushSender;
-    // Claude subscription accounts (one <id>.json per account under .intentic/claude), several per sandbox.
+    // Claude subscription accounts (one <id>.json per account under .intentic/auth/claude), several per sandbox.
     readonly claudeStore: ClaudeStore;
     // Which of those accounts an organization has switched Claude Code off for (claude/seats.json, beside them).
     // Kept apart from the account record because that record is rewritten whole on every token rotation, by every
@@ -558,6 +560,7 @@ export interface Services {
         // Drop everything after the message a rewind went back to; returns how many went.
         readonly truncate: (agent: TranscriptAgent, keep: number) => Promise<number>;
     };
+    readonly purgeConversationState: NonNullable<AgentArchiveDeps["purgeConversationState"]>;
     // platformHostTunnel relays to the platform (connect-token auth) to mint an intentic-provided host tunnel,
     // which needs intentic's platform Cloudflare account the daemon doesn't hold.
     readonly platformHostTunnel: (hostName: string) => Promise<PlatformResponse>;
@@ -599,7 +602,7 @@ export const createServices = (config: Config, logger: Logger): Services => {
     // stays per-workspace. ponytail: sharing OpenCode's XDG dir also shares its session/snapshot storage, and
     // concurrent sandboxes can race a token refresh (recoverable: reconnect once) — split auth.json out /
     // per-provider locks if either bites.
-    const authRoot = config.agentAuthDir !== "" ? config.agentAuthDir : join(workspace.root, ".intentic");
+    const authRoot = config.agentAuthDir !== "" ? config.agentAuthDir : statePath(workspace.root, ".intentic/auth/");
     // Base dir under which each Codex account gets its own CODEX_HOME (`<authRoot>/codex/<id>`); also the
     // adapter's default (the OPENAI_API_KEY fallback home when a turn resolved no account).
     const codexBase = join(authRoot, "codex");
@@ -911,6 +914,7 @@ export const createServices = (config: Config, logger: Logger): Services => {
         workspaceChildren: listWorkspaceChildren,
         iq: createResidentEngine({
             root: workspace.root,
+            indexDir: statePath(workspace.root, ".intentic/cache/", "iq"),
             // An index pass that fails once warm() has settled has no caller to reject — without this the index
             // would stop tracking disk and search would just quietly get older.
             onIndexError: (error) => logger.warn({ err: error }, "iq index pass failed — search results may be stale"),
@@ -940,6 +944,7 @@ export const createServices = (config: Config, logger: Logger): Services => {
             count: (agent) => transcriptDeps.record.count(agent.id),
             truncate: (agent, keep) => transcriptDeps.record.truncate(agent.id, keep),
         },
+        purgeConversationState: (removed, retained) => purgeConversationState(workspace.root, config.historyRoot, removed, retained),
         platformHostTunnel: (hostName) => postToPlatform(config, "/sandbox/host-tunnel", { hostName }),
         ensurePreviewRoutes: createPreviewRouteEnsurer(config, logger),
         members,

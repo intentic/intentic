@@ -57,10 +57,21 @@ The agent half of the dev plane. The browser talks to this daemon **directly** o
 
 ## Conventions & gotchas
 
-- The Claude credential lives in the sandbox's own store (connected via the daemon's `/claude/*` flow), resolved + injected into the SDK per turn — never held by the platform.
+- Workspace-root daemon state has a lifecycle taxonomy: provider homes are secret under `.intentic/auth/`,
+  resumable Claude state is carried under `.intentic/sessions/claude/`, rebuildable search state is under
+  `.intentic/cache/`, durable attachments/browser captures/run evidence are under `.intentic/artifacts/`, and
+  connector discovery state is derived under `.intentic/runtime/`. Small owner-edited manifests remain directly
+  under `.intentic/` so their stable paths stay readable.
+- The Claude credential lives in the sandbox's own `.intentic/auth/claude/` store (connected via the daemon's
+  `/claude/*` flow), resolved + injected into the SDK per turn — never held by the platform. The generic file API
+  protects the whole `auth/` parent, provider-native `sessions/`, and logged-in `browser/` profiles; purpose-built
+  routes expose only the safe slices those stores need.
 - The daemon authenticates every request itself (a Google ID token only at exchange, then a daemon-minted session verified per request), since it is reached directly over its public tunnel — it owns its own auth. Access is tiered: the owner binds on first sign-in, and every invited member holds a granted role (viewer / collaborator / maintainer) stored in `.intentic/members.json`. The bearer middleware holds each request to its route's floor (`src/auth/role-floor.ts`): viewers read, collaborators drive agents (their lands become requests on the agent card), maintainers ship and get the terminal, and credentials-adjacent surfaces stay owner-only. Rotating sessions or changing a member's grant closes that identity's live event, terminal, and browser transports and invalidates unused connection tickets. Account deletion retires browser authorization at the daemon before the platform record disappears; if the daemon cannot be reached, deletion stops and names the sandbox that still needs attention. The platform only mirrors the grants; this daemon is the enforcer.
 - Built on Hono + the Claude Agent SDK + zod; `runAgent`'s `QueryFn` is injectable so co-located `*.test.ts` run without the SDK or network.
 - There is more than one workspace, and a path alone does not say which. Every isolated conversation has its own checkout, so the same path names a different file in each — which is why the workspace read routes take an optional conversation and resolve the root in one place (`src/workspace/workspace-scope.ts`). A checkout is **not** a superset of `/work` (the mirrored dirs are bare mount points from outside the turn's namespace, and untracked workspace content was never in it), so a scoped read falls back to the shared tree and reports which one answered. Search is the stated exception: the iq index is built over `/work` and stays there.
 - A land's product is **uncommitted** — it patches the main working tree and moves no commit. So every reading taken between two shas (`standing.ts`) is blind to the user discarding it afterwards; `landed-presence.ts` is the one that asks the working tree, and it is what keeps a card from claiming work is in a workspace that no longer holds it.
 - Workflow run artifacts are shared state under `.intentic/workflow-runs/`. The JSON ledger retains every active
   run plus 50 ended runs and removes a run's artifacts when that record is evicted or forgotten.
+- Archiving a finished agent preserves its transcript and parked branches while reclaiming checkouts. Explicitly
+  purging the archive also removes the daemon transcript, unshared attachment UUID dirs, and separately-owned
+  Claude session files; provider-native state that still shares an auth home is never guessed at destructively.

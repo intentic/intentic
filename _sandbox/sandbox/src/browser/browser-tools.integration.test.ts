@@ -60,14 +60,14 @@ test("every browser server bounds a single tool call", () => {
 // The credential-free browser carries no identity at all — that is what lets it exist without a login, and
 // what lets two turns run one at once.
 test("isolatedBrowserSpec keeps the profile in memory and needs no display", () => {
-    const spec = isolatedBrowserSpec("cli.js", "/ms/chrome", "/work/.intentic/browser/output", "/tmp/cfg.json") as {
+    const spec = isolatedBrowserSpec("cli.js", "/ms/chrome", "/work/.intentic/artifacts/browser", "/tmp/cfg.json") as {
         args: string[];
         env: Record<string, string>;
     };
     expect(spec.args).toContain("--isolated");
     expect(spec.args).toContain("--headless");
     expect(spec.args).toContain("--output-dir");
-    expect(spec.args).toContain("/work/.intentic/browser/output");
+    expect(spec.args).toContain("/work/.intentic/artifacts/browser");
     expect(spec.args).not.toContain("--user-data-dir");
     expect(spec.args).not.toContain("--init-script");
     expect(spec.env["DISPLAY"]).toBeUndefined();

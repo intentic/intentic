@@ -975,8 +975,8 @@ test("agent.run folds attachments into the claude prompt as absolute paths, allo
             }),
         ),
     );
-    await runAgentTurn(client, { prompt: "", attachments: [".intentic/attachments/x/shot.png"] });
-    expect(seen?.prompt).toContain("/work/.intentic/attachments/x/shot.png");
+    await runAgentTurn(client, { prompt: "", attachments: [".intentic/artifacts/attachments/x/shot.png"] });
+    expect(seen?.prompt).toContain("/work/.intentic/artifacts/attachments/x/shot.png");
 });
 
 test("agent.run rejects an attachment path escaping the workspace with an error frame", async () => {

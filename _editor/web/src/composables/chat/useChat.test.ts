@@ -356,7 +356,7 @@ describe(`per-tab drafts`, () => {
     it(`restores tabs, drafts, attachment metadata, and the active tab from the persisted snapshot`, async () => {
         const chat = useChat();
         chat.draft.value = `draft one`;
-        chat.attachments.value = [{ id: `a1`, name: `pic.png`, path: `.intentic/attachments/u1/pic.png`, status: `done`, progress: 1 }];
+        chat.attachments.value = [{ id: `a1`, name: `pic.png`, path: `.intentic/artifacts/attachments/u1/pic.png`, status: `done`, progress: 1 }];
         chat.newChat();
         chat.draft.value = `draft two`;
         await nextTick(); // flush the persistence watch
@@ -365,7 +365,7 @@ describe(`per-tab drafts`, () => {
         const tabs = chat.conversations.value;
         expect(tabs).toHaveLength(2);
         expect(tabs[0]!.draft.value).toBe(`draft one`);
-        expect(tabs[0]!.attachments.value).toMatchObject([{ name: `pic.png`, path: `.intentic/attachments/u1/pic.png`, status: `done` }]);
+        expect(tabs[0]!.attachments.value).toMatchObject([{ name: `pic.png`, path: `.intentic/artifacts/attachments/u1/pic.png`, status: `done` }]);
         expect(tabs[1]!.draft.value).toBe(`draft two`);
         expect(chat.active.value).toBe(tabs[1]); // the second tab was active when persisted
     });
@@ -374,13 +374,13 @@ describe(`per-tab drafts`, () => {
     it(`restores messages queued behind a running turn, with their attachments`, async () => {
         const chat = useChat();
         chat.active.value.queued.value = [
-            { id: `q1`, text: `also update the tests`, attachments: [{ name: `spec.md`, path: `.intentic/attachments/u1/spec.md` }] },
+            { id: `q1`, text: `also update the tests`, attachments: [{ name: `spec.md`, path: `.intentic/artifacts/attachments/u1/spec.md` }] },
         ];
         await nextTick();
 
         resetChat();
         expect(chat.queued.value).toMatchObject([
-            { text: `also update the tests`, attachments: [{ name: `spec.md`, path: `.intentic/attachments/u1/spec.md` }] },
+            { text: `also update the tests`, attachments: [{ name: `spec.md`, path: `.intentic/artifacts/attachments/u1/spec.md` }] },
         ]);
     });
 
@@ -1240,7 +1240,9 @@ describe(`hydrating a conversation whose turn is still running`, () => {
         const body = new ReadableStream<Uint8Array>({
             start(controller) {
                 controller.enqueue(sseFrame({ kind: `attached`, run: `r1`, prompt: `add the reconcile engine`, startedAt: 1000, seq: 1 }));
-                controller.enqueue(sseFrame({ kind: `frame`, seq: 1, event: { kind: `plan`, requestId: `p1`, text: `# Reconcile engine\n\nStep 1` } }));
+                controller.enqueue(
+                    sseFrame({ kind: `frame`, seq: 1, event: { kind: `plan`, requestId: `p1`, text: `# Reconcile engine\n\nStep 1` } }),
+                );
             },
         });
         return { ok: true, body } as Response;

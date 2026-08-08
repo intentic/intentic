@@ -1,5 +1,11 @@
-import { HISTORY_STATE_FILES, type Portability, type StateFile, stateFileFor, WORKSPACE_STATE_FILES } from "@intentic/sandbox-contract";
-import { IQ_DIR } from "@intentic/iq-engine";
+import {
+    HISTORY_STATE_FILES,
+    type Portability,
+    RETIRED_WORKSPACE_STATE_DIRS,
+    type StateFile,
+    stateFileFor,
+    WORKSPACE_STATE_FILES,
+} from "@intentic/sandbox-contract";
 
 /* WHAT HAPPENS TO ONE PATH IN A BUNDLE — the manifests turned into a decision, in the one place both sides read.
  *
@@ -23,17 +29,23 @@ import { IQ_DIR } from "@intentic/iq-engine";
  *   in a bundle, and the manifest is small enough that declaring is cheap.
  */
 
-// Junk and generated trees are filtered by the walk itself (createIgnoreScope), not here — this answers about
-// state, and a node_modules never reaches it. The iq index is the exception that does: it lives under
-// `.intentic/`, so the walk has no reason to skip it, and it is a rebuildable index of the very files beside it.
-const workspaceDerived = [`${IQ_DIR}/`];
+// Connector gateways live in a separate package and are process-local discovery state, not a core store. They
+// are the sole active generated-tree exception to the core table; extension-contributed paths otherwise all
+// `carry`, which is the workspace default. Retired roots below are quarantine only: no producer reads them.
+const EXTERNAL_DERIVED = [".intentic/runtime/"];
+const retiredPrefixes = (dirs: readonly string[]): string[] => dirs.map((dir) => `.intentic/${dir}/`);
+const RETIRED_SECRET = retiredPrefixes(RETIRED_WORKSPACE_STATE_DIRS.secret);
+const DERIVED_PREFIXES = [...EXTERNAL_DERIVED, ...retiredPrefixes(RETIRED_WORKSPACE_STATE_DIRS.derived)];
+const hasPrefix = (relPath: string, prefixes: readonly string[]): boolean =>
+    prefixes.some((prefix) => relPath === prefix.slice(0, -1) || relPath.startsWith(prefix));
 
-// Workspace-root-relative, forward-slash. Longest-match over the core table, then the derived list above, then
-// the default. Extension-contributed paths are not consulted: they are all `carry`, which is the default, and
-// asking would mean threading the installed-extension set through every caller to learn nothing.
+// Workspace-root-relative, forward-slash. Longest-match over the core table, then the default.
 export const workspacePortability = (relPath: string): Portability => {
-    if (workspaceDerived.some((prefix) => relPath === prefix.slice(0, -1) || relPath.startsWith(prefix))) {
+    if (hasPrefix(relPath, DERIVED_PREFIXES)) {
         return "derived";
+    }
+    if (hasPrefix(relPath, RETIRED_SECRET)) {
+        return "secret";
     }
     return stateFileFor(relPath, WORKSPACE_STATE_FILES)?.portability ?? "carry";
 };
@@ -48,11 +60,8 @@ export const carries = (portability: Portability, secrets: boolean): boolean => 
 /* WHETHER TO ENTER A DIRECTORY, which is NOT the same question as whether the directory itself travels — and
  * conflating the two silently dropped the single most valuable thing in a bundle.
  *
- * Manifest entries nest. `.intentic/claude/` is a credential store, so a no-secrets export must not carry it;
- * `.intentic/claude/projects/` sits inside it and holds the agent's memory notes and every transcript, which
- * the same export must carry. A walk that asked only "does this directory carry?" answered no at `claude`,
- * turned around, and never saw `projects` at all — the memory silently absent from the bundle, which is exactly
- * the class of failure this feature was built to remove.
+ * Manifest entries may nest, and a directory that is itself skipped can still own a carried child. A walk that
+ * asked only "does this directory carry?" would turn around before seeing such a child.
  *
  * So descent asks the broader question: does this directory, OR anything declared beneath it, travel? Files
  * still get the exact decision — this only governs whether the walk looks inside.

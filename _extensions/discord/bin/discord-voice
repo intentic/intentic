@@ -7,11 +7,11 @@ import { readFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 
 const findGatewayUrl = async () => {
-    // Walk up from the agent's cwd to the workspace root, which holds .intentic/extensions-runtime/discord/gateway.url.
+    // Walk up from the agent's cwd to the workspace root, which holds .intentic/runtime/extensions/discord/gateway.url.
     let dir = process.cwd();
     for (;;) {
         try {
-            const url = (await readFile(join(dir, ".intentic", "extensions-runtime", "discord", "gateway.url"), "utf8")).trim();
+            const url = (await readFile(join(dir, ".intentic", "runtime", "extensions", "discord", "gateway.url"), "utf8")).trim();
             if (url !== "") {
                 return url;
             }

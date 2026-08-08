@@ -554,8 +554,8 @@ export const createApp = (services: Services): Hono<AppEnv> => {
         if (target === undefined) {
             return c.json({ error: "invalid path" }, 400);
         }
-        // Same floor as the raw read: the sandbox's owner/members/credential files are not writable through the
-        // generic upload, or any member could hand themselves the sandbox by posting a new owner.json.
+        // Same floor as the raw read: the sandbox's private state is not writable through the generic upload,
+        // or any member could hand themselves the sandbox by posting a new owner.json.
         if (isControlPlanePath(services.workspace.root, target)) {
             return c.json({ error: "not found" }, 404);
         }

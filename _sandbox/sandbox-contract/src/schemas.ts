@@ -184,7 +184,7 @@ export const AgentTurnSchema = z
         // first turn keeps its user-chosen title); an existing entry's title always wins.
         title: z.string().max(80).optional(),
         // Workspace-relative paths of files the user attached, already uploaded via /workspace/upload
-        // (the browser puts them under .intentic/attachments/<uuid>/<name>). The daemon hands them to the
+        // (the browser puts them under .intentic/artifacts/attachments/<uuid>/<name>). The daemon hands them to the
         // provider: Claude reads them from disk via its Read tool; Codex gets images as native inputs.
         attachments: z.array(z.string().min(1)).max(20).optional(),
         // Which provider (model + account) serves the turn; absent = claude. A sessionId only resumes on the
@@ -472,13 +472,13 @@ export type Loop = z.infer<typeof LoopSchema>;
 // dialog greys out its button while you are still deciding.
 export const loopCanConverge = (loop: Pick<Loop, "output" | "checks">): boolean => loop.output.kind !== "none" || loop.checks.length > 0;
 
-/* Where a loop keeps what it must not lose between iterations: <workspace>/.intentic/loops/<conversationId>/.
+/* Where a loop keeps what it must not lose between iterations: <workspace>/.intentic/artifacts/loops/<conversationId>/.
  *
  * Under `.intentic` for the reason the acceptance runs are — it is outside every repo and bound back SHARED
  * into an isolated turn's worktree, so the agent writes and the browser reads the same tree, with nothing to
  * land and no git noise. `progress.md` is the loop's memory in `fresh` mode and its audit trail in `continue`
  * mode; `iteration-<n>.json` is the verdict a `claim` stop reads. */
-export const LOOP_DIR = ".intentic/loops";
+export const LOOP_DIR = ".intentic/artifacts/loops";
 
 // Why an iteration ended, which is not the same question as how the LOOP ended. `continue` is the ordinary
 // "not done yet"; `error` is a turn that surfaced an error frame, which does NOT end the loop by itself — a

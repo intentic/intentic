@@ -121,7 +121,7 @@ export const mapTool = (tools: readonly ChatTool[], id: string, fn: (tool: ChatT
 // object URL for image thumbnails — client-session only, gone on reload (restored history shows text).
 export interface ChatAttachment {
     readonly name: string;
-    // Workspace-relative upload destination (.intentic/attachments/<uuid>/<name>), sent on the turn.
+    // Workspace-relative upload destination (.intentic/artifacts/attachments/<uuid>/<name>), sent on the turn.
     readonly path: string;
     readonly previewUrl?: string;
 }

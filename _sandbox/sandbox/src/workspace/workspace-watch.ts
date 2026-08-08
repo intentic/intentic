@@ -26,19 +26,18 @@ const IGNORE_SEGMENTS = new Set(IGNORED_DIRS);
 //   change batch, which re-marked the engine dirty (main.ts) — a full /work sweep every couple of seconds —
 //   and cost every connected browser a tree refetch plus a manifest invalidation, four times a second, for as
 //   long as the rebuild took. The engine already excludes the dir from its own views (isIqDenied).
-// - the agent session transcripts (.intentic/claude/...) are rewritten on every streamed token, so the same
-//   storm ran through every turn.
+// - agent sessions, provider homes, caches, and connector runtime are all daemon-owned and can rewrite at token
+//   or request cadence, so they are classified as roots rather than enumerated one store at a time.
 // None of it is source and nothing derives from watching it. The .intentic/ MANIFESTS (capabilities,
 // automations, settings, the environment Dockerfiles, approvals, drafts) stay watched — those changes are
 // exactly how another member's write reaches this browser.
 //
-// Entries are the first TWO segments of a .intentic/ path, so a file names itself and a directory covers
-// everything beneath it.
-const DAEMON_STATE_PATHS = new Set([IQ_DIR, ".intentic/claude"]);
+const DAEMON_STATE_PATHS = [IQ_DIR, ".intentic/auth", ".intentic/sessions", ".intentic/runtime"];
 const isDaemonStatePath = (abs: string): boolean => {
     const segments = abs.split(sep);
     const index = segments.indexOf(".intentic");
-    return index !== -1 && DAEMON_STATE_PATHS.has(segments.slice(index, index + 2).join("/"));
+    const path = segments.slice(index).join("/");
+    return index !== -1 && DAEMON_STATE_PATHS.some((root) => path === root || path.startsWith(`${root}/`));
 };
 
 export const isWatchIgnored = (root: string, abs: string): boolean => {

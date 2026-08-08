@@ -19,8 +19,8 @@ test("links every conversation-owned ~/.claude store to the workspace, creating 
     const { home, work } = await scratch();
     await linkClaudeState(work, home);
     for (const name of ["projects", "plans", "backups", "tasks", "sessions", "session-env", "shell-snapshots", "todos"]) {
-        expect(await readlink(join(home, ".claude", name))).toBe(join(work, ".intentic", "claude", name));
-        expect((await lstat(join(work, ".intentic", "claude", name))).isDirectory()).toBe(true);
+        expect(await readlink(join(home, ".claude", name))).toBe(join(work, ".intentic", "sessions", "claude", name));
+        expect((await lstat(join(work, ".intentic", "sessions", "claude", name))).isDirectory()).toBe(true);
     }
 });
 
@@ -28,7 +28,7 @@ test("a second run (daemon restart in the same container) is a no-op", async () 
     const { home, work } = await scratch();
     await linkClaudeState(work, home);
     await linkClaudeState(work, home);
-    expect(await readlink(join(home, ".claude", "projects"))).toBe(join(work, ".intentic", "claude", "projects"));
+    expect(await readlink(join(home, ".claude", "projects"))).toBe(join(work, ".intentic", "sessions", "claude", "projects"));
 });
 
 test("a real directory (a dev-host run) throws, is left intact, and does not block the other links", async () => {
@@ -40,7 +40,7 @@ test("a real directory (a dev-host run) throws, is left intact, and does not blo
     expect((await lstat(projects)).isSymbolicLink()).toBe(false);
     expect((await lstat(join(projects, "real.jsonl"))).isFile()).toBe(true);
     // The refusal is per entry: every other store still converged onto the workspace.
-    expect(await readlink(join(home, ".claude", "plans"))).toBe(join(work, ".intentic", "claude", "plans"));
+    expect(await readlink(join(home, ".claude", "plans"))).toBe(join(work, ".intentic", "sessions", "claude", "plans"));
 });
 
 const settingsOf = async (home: string): Promise<Record<string, unknown>> =>

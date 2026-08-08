@@ -60,7 +60,7 @@ export const ensureModels = (): string | undefined => {
     }
 };
 
-// Index lives under the bench's .cache (not the repo's .intentic/iq) so working trees stay pristine.
+// Index lives under the bench's .cache (not the repo's .intentic/cache/iq) so working trees stay pristine.
 export const indexDirFor = (repoId: string): string => join(cacheDir, "index", repoId);
 
 export const ensureIndex = async (repoId: string, root: string, models: string | undefined): Promise<{ status: IndexStatus; buildMs?: number }> => {

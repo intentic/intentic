@@ -426,8 +426,9 @@ test("the daemon's control plane is unreachable through the generic file API; it
     const body = new Uint8Array([0x89, 0x50, 0x4e, 0x47]);
 
     // owner.json/members.json ARE the answer to "who may drive this sandbox" (re-read from disk per request), and
-    // the rest hold the agent providers' tokens — so a member could otherwise upload a new owner and take the
-    // sandbox, or read the owner's token back out. Answered as if nothing were there, and nothing is written.
+    // the rest hold provider tokens, private conversations, or logged-in browser sessions — so a member could
+    // otherwise take the sandbox or read/write private runtime state. Answered as if nothing were there, and
+    // nothing is written.
     // The root's own .git joins them: it is the --separate-git-dir pointer to the shadow history repo on /history,
     // and a FILE, so a drop of a repo's CONTENTS at the root would aim a directory at it and 500 the whole upload.
     const controlPlane = [
@@ -435,11 +436,18 @@ test("the daemon's control plane is unreachable through the generic file API; it
         ".intentic/members.json",
         ".intentic/capabilities.json",
         ".intentic/claude.json",
-        ".intentic/claude/acc.json",
-        ".intentic/codex/acc/auth.json",
-        ".intentic/kimi/acc.json",
-        ".intentic/opencode/auth.json",
-        ".intentic/cliproxy/kimi-user.json",
+        ".intentic/auth/claude/acc.json",
+        ".intentic/auth/codex/acc/auth.json",
+        ".intentic/auth/opencode/auth.json",
+        ".intentic/auth/cliproxy/kimi-user.json",
+        ".intentic/auth/future-provider/token.json",
+        ".intentic/sessions/claude/projects/-work/session.jsonl",
+        ".intentic/browser/reddit/Default/Cookies",
+        ".intentic/claude/retired-account.json",
+        ".intentic/codex/retired-account/auth.json",
+        ".intentic/kimi/retired-key.json",
+        ".intentic/opencode/retired-auth.json",
+        ".intentic/cliproxy/retired-auth.json",
         ".git",
         ".git/config",
         ".git/objects/ab/cdef",
@@ -453,7 +461,7 @@ test("the daemon's control plane is unreachable through the generic file API; it
     // The root .intentic's other subtrees are ordinary workspace content driven through this very API — chat
     // attachments and a directory's own UI — and a repo's nested .intentic is not the control plane at all. Nor is
     // a NESTED .git: a dropped repo keeps its own and stays connected to its remote.
-    const open = [".intentic/attachments/u1/pic.png", ".intentic/ui/index.html", "app/.intentic/owner.json", "app/.git/config"];
+    const open = [".intentic/artifacts/attachments/u1/pic.png", ".intentic/ui/index.html", "app/.intentic/owner.json", "app/.git/config"];
     for (const path of open) {
         expect([path, (await app.request(`/workspace/upload?path=${path}`, { method: "POST", body })).status]).toEqual([path, 200]);
         expect([path, (await app.request(`/workspace/raw?path=${path}`)).status]).toEqual([path, 200]);

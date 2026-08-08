@@ -40,8 +40,8 @@ const present = async (path: string): Promise<boolean> => {
 };
 
 /* Resolve a root-relative path to an absolute one inside `root`, applying the read routes' two guards: a
- * `../`/absolute path that climbs out is BAD_REQUEST, and the daemon's own credential + auth state is not
- * reachable through the generic file API — read, write, move or delete. NOT_FOUND rather than FORBIDDEN for
+ * `../`/absolute path that climbs out is BAD_REQUEST, and the daemon's own private state is not reachable
+ * through the generic file API — read, write, move or delete. NOT_FOUND rather than FORBIDDEN for
  * the second: the file API simply has nothing there, and a distinct code would confirm what it holds.
  */
 export const containedIn = (root: string, relPath: string): string => {

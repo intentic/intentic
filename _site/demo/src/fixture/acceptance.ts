@@ -3,7 +3,7 @@ import { cartPage, checkoutPage, pricingPage } from "./storefront";
 /* ACCEPTANCE, RECORDED — acme-shop's user stories and the run that walked three of them through the app.
  *
  * Everything this surface shows is FILES, which is the whole reason it can be fixtured at all: the stories are
- * markdown in the repos (`docs/user-stories/**`), and a run is a directory under `.intentic/acceptance/` holding
+ * markdown in the repos (`docs/user-stories/**`), and a run is a directory under `.intentic/artifacts/acceptance/` holding
  * one manifest plus a result, a report and its screenshots per story. So this module contributes paths and
  * bodies to the recording's filesystem (workspace.ts) and nothing else — no route, no state, no special case in
  * the daemon. The extension walks the same directories it would walk against a real sandbox.
@@ -91,13 +91,19 @@ clicking anything, or you will report a bug that is only a race in the test.
 
 // ---- the run ---------------------------------------------------------------------------------------------
 
-const RUNS_DIR = `.intentic/acceptance`;
+const RUNS_DIR = `.intentic/artifacts/acceptance`;
 
 // The stories that run covered — the slug is what `slugOf` derives from the filename, and the conversation id is
 // `xt-<runId>-<slug>`. Both are stored in the manifest rather than re-derived, exactly as a real run stores them.
 const RUN_STORIES = [
     { slug: `01-buy-a-plan`, repo: `web`, group: `checkout`, path: `web/docs/user-stories/checkout/01-buy-a-plan.md`, title: `Buy a plan` },
-    { slug: `02-apply-a-coupon`, repo: `web`, group: `checkout`, path: `web/docs/user-stories/checkout/02-apply-a-coupon.md`, title: `Apply a launch coupon` },
+    {
+        slug: `02-apply-a-coupon`,
+        repo: `web`,
+        group: `checkout`,
+        path: `web/docs/user-stories/checkout/02-apply-a-coupon.md`,
+        title: `Apply a launch coupon`,
+    },
     { slug: `01-sign-up`, repo: `web`, group: `account`, path: `web/docs/user-stories/account/01-sign-up.md`, title: `Sign up for an account` },
 ] as const;
 
@@ -223,7 +229,11 @@ export const acceptanceFiles = (now: number): [string, string][] => {
                             note: `the code is refused as invalid and the total is unchanged`,
                         },
                         { text: `An expired or unknown code is refused with a message that says which`, verdict: `pass` },
-                        { text: `The discounted amount is what Stripe charges`, verdict: `unverified`, note: `unreachable — no discount is ever applied` },
+                        {
+                            text: `The discounted amount is what Stripe charges`,
+                            verdict: `unverified`,
+                            note: `unreachable — no discount is ever applied`,
+                        },
                     ],
                     defects: [
                         {
@@ -250,11 +260,17 @@ export const acceptanceFiles = (now: number): [string, string][] => {
                     title: `Sign up for an account`,
                     verdict: `blocked`,
                     criteria: [
-                        { text: `The signup form rejects an address that is already registered`, verdict: `unverified`, note: `the form never rendered` },
+                        {
+                            text: `The signup form rejects an address that is already registered`,
+                            verdict: `unverified`,
+                            note: `the form never rendered`,
+                        },
                         { text: `A confirmation email arrives within a minute`, verdict: `unverified` },
                         { text: `Following the link in it signs the visitor in and opens the dashboard`, verdict: `unverified` },
                     ],
-                    defects: [{ severity: `high`, summary: `GET /signup answers 500 before the form renders`, repro: `Open /signup on a cold server.` }],
+                    defects: [
+                        { severity: `high`, summary: `GET /signup answers 500 before the form renders`, repro: `Open /signup on a cold server.` },
+                    ],
                 },
                 undefined,
                 2,

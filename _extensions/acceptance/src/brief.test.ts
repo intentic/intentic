@@ -48,16 +48,16 @@ describe(`briefFor`, () => {
 
     it(`states the screenshot redirect and the per-shot copy out of the shared output directory`, () => {
         const text = brief();
-        expect(text).toContain(`/work/.intentic/browser/output`);
-        expect(text).toContain(`cp /work/.intentic/browser/output/`);
-        expect(text).toContain(`/work/.intentic/acceptance/rabc/01-sign-in/shots`);
+        expect(text).toContain(`/work/.intentic/artifacts/browser`);
+        expect(text).toContain(`cp /work/.intentic/artifacts/browser/`);
+        expect(text).toContain(`/work/.intentic/artifacts/acceptance/rabc/01-sign-in/shots`);
         expect(text).toMatch(/not in a batch at the end/);
     });
 
     it(`points both output files at this story's own run directory`, () => {
         const text = brief();
-        expect(text).toContain(`/work/.intentic/acceptance/rabc/01-sign-in/report.md`);
-        expect(text).toContain(`/work/.intentic/acceptance/rabc/01-sign-in/result.json`);
+        expect(text).toContain(`/work/.intentic/artifacts/acceptance/rabc/01-sign-in/report.md`);
+        expect(text).toContain(`/work/.intentic/artifacts/acceptance/rabc/01-sign-in/result.json`);
     });
 
     it(`carries the result.json shape the runs list reads back`, () => {

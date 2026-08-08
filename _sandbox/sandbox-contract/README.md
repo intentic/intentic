@@ -22,9 +22,10 @@ mismatch is a type error rather than a runtime surprise.
 - [src/schemas.ts](src/schemas.ts) — the shared shapes; the biggest file here, and the one most changes touch.
 - [src/events.ts](src/events.ts) — what the daemon pushes, and when.
 - [src/workspace-state.ts](src/workspace-state.ts) and [src/runtime-state.ts](src/runtime-state.ts) — which
-  changed file, and which moved runtime thing, makes which browser view stale. Two tables, one rule: the daemon
-  publishes the cause and the browser derives the consequence, so neither side keeps its own copy of the other's
-  list. Between them they are why no view of the workspace or of a running process polls.
+  changed file, and which moved runtime thing, makes which browser view stale. The workspace table also assigns
+  each daemon-owned path its export lifecycle (`carry`, `secret`, `identity`, or `derived`), including the
+  auth/session/cache/artifact roots. The daemon publishes the cause and the browser derives the consequence, so
+  neither side keeps its own copy of the other's list.
 - [src/chores](src/chores) — the chore book: definitions, applicability gates and verdicts, shared because the
   daemon computes the signals and the browser renders the judgement.
 - [src/publish-drafts.ts](src/publish-drafts.ts) — the drafts publisher automation, shared for the chore book's

@@ -1,5 +1,6 @@
 import { mkdir, writeFile } from "node:fs/promises";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
+import { RETIRED_WORKSPACE_STATE_DIRS } from "@intentic/sandbox-contract";
 import { afterAll, beforeAll, expect, test } from "vitest";
 import { makeFixtureWorkspace } from "../testing.js";
 import { filterScope, langOf } from "./scan.js";
@@ -31,13 +32,13 @@ test("sweep enforces .gitignore + junk dirs (incl. .git) by default and always s
     // No security floor: a non-gitignore'd secret is indexed like any other file (role-based gating comes later).
     expect(paths()).toContain(".env");
     expect(paths()).toContain(".env.example");
-    expect(paths().some((path) => path.startsWith(".intentic/iq"))).toBe(false); // index self-exclusion
+    expect(paths().some((path) => path.startsWith(".intentic/cache/iq"))).toBe(false); // index self-exclusion
 
     const full = await sweep(root, true);
     const fullPaths = full.map((entry) => entry.path);
     expect(fullPaths).toContain("alpha/dist/decoy.js"); // --ignored lifts .gitignore + junk dirs…
     expect(fullPaths.some((path) => path.includes(".git/"))).toBe(true); // …including .git now
-    expect(fullPaths.some((path) => path.startsWith(".intentic/iq"))).toBe(false); // …but never the index dir
+    expect(fullPaths.some((path) => path.startsWith(".intentic/cache/iq"))).toBe(false); // …but never the index dir
 });
 
 test("the reference shelf is skipped by default and reachable via --ignored, like the junk layer", async () => {
@@ -53,22 +54,34 @@ test("the reference shelf is skipped by default and reachable via --ignored, lik
 
 test("the agent plane's byproducts are excluded, its manifests are not", async () => {
     await writeFile(join(root, ".intentic/settings.json"), '{ "theme": "dark" }\n');
-    await mkdir(join(root, ".intentic/claude/projects"), { recursive: true });
-    await writeFile(join(root, ".intentic/claude/projects/session.jsonl"), '{"type":"user","text":"createWidget"}\n');
-    // A workspace can contain checkouts that are themselves intentic workspaces — their byproducts are no more
-    // searchable than the root's own.
-    await mkdir(join(root, "alpha/.intentic/iq"), { recursive: true });
-    await writeFile(join(root, "alpha/.intentic/iq/index.db"), "binary index\n");
+    const excluded = [
+        ".intentic/auth/codex/default/auth.json",
+        ".intentic/sessions/claude/projects/session.jsonl",
+        ".intentic/artifacts/attachments/u1/brief.md",
+        ".intentic/runtime/extensions/whatsapp/gateway.url",
+        ".intentic/browser/reddit/Default/Cookies",
+        ...Object.values(RETIRED_WORKSPACE_STATE_DIRS).flatMap((dirs) => dirs.map((dir) => `.intentic/${dir}/retired-state`)),
+        // A workspace can contain checkouts that are themselves intentic workspaces — their byproducts are no
+        // more searchable than the root's own.
+        "alpha/.intentic/cache/iq/index.db",
+    ];
+    await Promise.all(
+        excluded.map(async (path) => {
+            await mkdir(dirname(join(root, path)), { recursive: true });
+            await writeFile(join(root, path), "private state\n");
+        }),
+    );
     const swept = (await sweep(root, false)).map((entry) => entry.path);
-    // Transcripts are the agent's own past conversations — they were outranking source in real results.
-    expect(swept).not.toContain(".intentic/claude/projects/session.jsonl");
-    expect(swept).not.toContain("alpha/.intentic/iq/index.db");
+    for (const path of excluded) {
+        expect(swept).not.toContain(path);
+    }
     // Manifests are user-authored config an agent is routinely asked to find and edit.
     expect(swept).toContain(".intentic/settings.json");
     // …and the floor holds with --ignored too, which lifts only the gitignore/junk layers.
     const full = (await sweep(root, true)).map((entry) => entry.path);
-    expect(full).not.toContain("alpha/.intentic/iq/index.db");
-    expect(full).not.toContain(".intentic/claude/projects/session.jsonl");
+    for (const path of excluded) {
+        expect(full).not.toContain(path);
+    }
 });
 
 test("sweep tags files with their enclosing git repo", () => {

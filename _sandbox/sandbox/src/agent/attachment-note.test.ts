@@ -1,7 +1,7 @@
 import { expect, test } from "vitest";
 import { stripAttachmentNote, withAttachmentNote } from "./attachment-note.js";
 
-const paths = ["/work/.intentic/attachments/uuid-1/image.png", "/work/.intentic/attachments/uuid-2/notes.pdf"];
+const paths = ["/work/.intentic/artifacts/attachments/uuid-1/image.png", "/work/.intentic/artifacts/attachments/uuid-2/notes.pdf"];
 
 test("strip is the builder's inverse", () => {
     expect(stripAttachmentNote(withAttachmentNote("fix the bug", paths))).toEqual({ text: "fix the bug", attachments: paths });

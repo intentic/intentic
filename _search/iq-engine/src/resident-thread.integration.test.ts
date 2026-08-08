@@ -65,7 +65,7 @@ test("the index builds while the host thread is blocked solid", () => {
          * wait, and it is the same arrangement the engine itself runs on (host reads, worker writes). Reading it
          * is synchronous like the spin around it, so the block is unbroken across the whole loop: no timer, no
          * microtask, no I/O callback of this thread's has run between construction and the count below. */
-        const db = openIndex(join(root, ".intentic/iq"), "write");
+        const db = openIndex(join(root, ".intentic/cache/iq"), "write");
         indexed = Number(db.get("SELECT COUNT(*) AS n FROM files")?.["n"] ?? 0);
         db.close();
     }

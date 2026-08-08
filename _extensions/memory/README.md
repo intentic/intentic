@@ -15,7 +15,7 @@ What the agent has chosen to remember, as notes you can read and edit.
 - [src/server/server.ts](src/server/server.ts) — the backend half (`activateServer`), built to `dist/server.js`
   (`pnpm build`) and run by the daemon's backend host.
 - [src/server/memory-files.ts](src/server/memory-files.ts) — the note tree, scoped hard to
-  `.intentic/claude/projects/<project>/memory/**` (the rest of that tree is transcripts and credentials).
+  `.intentic/sessions/claude/projects/<project>/memory/**` (the rest of that tree is provider-native conversation state).
 - [src/memoryNote.ts](src/memoryNote.ts) — what a note is, and its total parser.
 - [src/useMemory.ts](src/useMemory.ts) — reading and writing the note set, via the extension's own namespace
   (no `permissions.sandbox` entry: an extension's own backend needs no grant).

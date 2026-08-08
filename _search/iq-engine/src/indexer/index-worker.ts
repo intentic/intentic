@@ -2,7 +2,7 @@ import { parentPort, workerData } from "node:worker_threads";
 import type { Embedder } from "../embed/embedder.js";
 import { loadEmbedder } from "../embed/embedder.js";
 import { embedPending } from "../engines/semantic.js";
-import { openIndex } from "../store/db.js";
+import { compactIndex, openIndex } from "../store/db.js";
 import { readIndexStatus } from "../store/index-store.js";
 import type { FileEntry, IndexStatus } from "../types.js";
 import { sweep } from "../workspace/scan.js";
@@ -89,6 +89,7 @@ const pass = async (target: number): Promise<void> => {
     if (embedder !== undefined) {
         await embedPending(db, embedder, Number.MAX_SAFE_INTEGER, Number.MAX_SAFE_INTEGER);
     }
+    compactIndex(db);
     if (!warmed) {
         warmed = true;
         post({ type: "warmed", status: readIndexStatus(db, generation) });

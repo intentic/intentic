@@ -1,15 +1,16 @@
 # @intentic/workspace-ignore
 
-What the workspace refuses to show, index or sync — a security floor first, tidiness second.
+The workspace attention filter: what the tree grays and lazy-loads, and what ordinary workspace search skips.
 
-Three layers, in order of authority: a **security floor** that cannot be turned off (secrets, `.git` internals,
-browser profiles), a **junk denylist** for the things nobody wants to see (`node_modules`, build output), and the
-accumulated `.gitignore` rules the repos themselves declare.
+It combines a conservative junk denylist (`node_modules`, `.git`, build output), dedicated predicates for
+Chromium login profiles, agent worktrees and the reference shelf, and the accumulated `.gitignore` rules the
+repos themselves declare. Durable browser artifacts live separately at `.intentic/artifacts/browser/`, so they
+remain ordinary visible files rather than being mistaken for profile churn.
 
 ## Responsibilities
 
-- Answer "is this path ignored, and by which layer" for the file tree, the search index and the sync agent.
-- Keep the security floor non-negotiable, whatever a `.gitignore` says.
+- Answer whether a path is ignored for the file tree and ordinary workspace content search.
+- Keep machine-generated subtrees out of eager recursive walks without turning the filter into an access rule.
 
 ## Key files
 
@@ -19,10 +20,10 @@ accumulated `.gitignore` rules the repos themselves declare.
 
 ## How it fits
 
-Depended on by the daemon (file tree, sync) and by `iq` (what gets indexed). A single answer, so a file hidden
-from the tree is also absent from search results and never leaves the box.
+Depended on by the daemon and by `iq`. It is not a security boundary: protected file routes and IQ's own
+credential/session/artifact exclusion floor enforce those concerns independently.
 
 ## Conventions & gotchas
 
-- **A `.gitignore` cannot un-ignore the floor.** A repo that lists `!.env` does not get its secrets served. That
-  ordering is the reason this is a package instead of a call to a gitignore library.
+- Browser profiles and agent worktrees stay ignored even when a nested `.gitignore` would otherwise include
+  them. The files remain readable on demand; ignored means out of focus, not inaccessible.

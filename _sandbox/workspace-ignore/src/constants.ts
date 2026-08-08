@@ -5,7 +5,7 @@
 // Kept conservative on purpose: dirs that are essentially never browsed as source AND rarely committed, so the
 // static list can't wrongly gray a dir some project actually tracks. Ambiguous ones (build, target, vendor,
 // coverage, out) are intentionally absent — .gitignore catches those accurately. `.tmp` is a scratch dir (e.g.
-// .intentic/codex/.tmp) that can hold thousands of files. `.git` lives here too: a dir you browse as history, not
+// .intentic/auth/codex/.tmp) that can hold thousands of files. `.git` lives here too: a dir you browse as history, not
 // source, so it grays and lazy-loads like node_modules (its contents stay readable on demand).
 export const IGNORED_DIRS = new Set([
     "node_modules",
@@ -62,15 +62,10 @@ export const isPublicPath = (relPath: string): boolean => firstSegment(relPath) 
 // constantly-rewritten files (Cookies, Login Data, …). Treated as ignored so the tree grays + lazy-loads the
 // subtree instead of eagerly walking it, and the file watcher skips its churn. Not a read block — its files are
 // served on demand like any other ignored path.
-//
-// `output` is the one child that is NOT profile churn: it holds what the agent's browsing PRODUCED —
-// screenshots, page snapshots, downloads — which is the opposite kind of file. Written deliberately, one at a
-// time, and meant to be looked at: the chat renders those screenshots inline and offers to open them here. It
-// was only ever caught by this rule because it happened to live under the same directory.
 export const isBrowserProfilePath = (path: string): boolean => {
     const segments = path.split(/[\\/]/).filter((segment) => segment.length > 0);
     const i = segments.indexOf(".intentic");
-    return i !== -1 && segments[i + 1] === "browser" && segments[i + 2] !== "output";
+    return i !== -1 && segments[i + 1] === "browser";
 };
 
 // Agent worktrees (<repo>/.claude/worktrees/<name>) are throwaway full checkouts of their repo. Not junk by

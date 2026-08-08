@@ -2,14 +2,14 @@ import { mkdir, readdir, readFile, rm, stat, writeFile } from "node:fs/promises"
 import { dirname, join, relative, resolve, sep } from "node:path";
 import type { MemoryFileEntry } from "../contract.js";
 
-/* The agent's persistent memory notes: <workspace>/.intentic/claude/projects/<project>/memory/*.md — MEMORY.md
+/* The agent's persistent memory notes: <workspace>/.intentic/sessions/claude/projects/<project>/memory/*.md — MEMORY.md
  * (the index) plus one markdown file per fact, written by the agent across sessions (~/.claude/projects is a
- * symlink to that tree). The tree's other contents (session transcripts, provider state) are control-plane
- * (the daemon's generic file API denies them), so everything here is scoped hard: only `<project>/memory/**`
+ * symlink to that tree). The tree's other contents are provider-native conversation state, denied by the
+ * daemon's generic file API, so everything here is scoped hard: only `<project>/memory/**`
  * is ever listed, read, written, or deleted, and only .md files can be written. This runs in the extension's
  * BACKEND half (server.ts) with plain fs — full trust, same container, same rules as when it was core. */
 
-export const memoryRoot = (workspaceRoot: string): string => join(workspaceRoot, ".intentic/claude/projects");
+export const memoryRoot = (workspaceRoot: string): string => join(workspaceRoot, ".intentic/sessions/claude/projects");
 
 // A caller-supplied relative path resolved inside `dir`, or undefined when it escapes (the daemon's
 // resolveWithin, carried along with the code that depends on it).

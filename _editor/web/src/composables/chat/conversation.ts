@@ -40,7 +40,7 @@ import { mentionPaths } from "./useMentions";
 export interface PendingAttachment {
     readonly id: string;
     readonly name: string;
-    // Workspace-relative destination: .intentic/attachments/<uuid>/<name>.
+    // Workspace-relative destination: .intentic/artifacts/attachments/<uuid>/<name>.
     readonly path: string;
     // Object URL for image thumbnails; revoked on remove, handed to the sent message on submit.
     readonly previewUrl?: string;
@@ -263,9 +263,7 @@ export class Conversation {
      * three surfaces read this one flag to say so: the retention sweep refuses to close such a tab, the fleet
      * board keeps its card on screen (it is why an ARCHIVED session comes back to the board), and both
      * finished lanes hold it in front of their fold. */
-    readonly unsent = computed<boolean>(
-        () => this.draft.value.trim() !== `` || this.attachments.value.length > 0 || this.queued.value.length > 0,
-    );
+    readonly unsent = computed<boolean>(() => this.draft.value.trim() !== `` || this.attachments.value.length > 0 || this.queued.value.length > 0);
 
     /* The harness retrying INSIDE the live turn (provider_retry). Distinct from a failure in the way that
      * matters most to a waiting user: nothing has failed and nothing has been lost — this turn is still running.

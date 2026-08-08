@@ -53,11 +53,11 @@ export const createPublicRoutes = (services: PublicRoutesDeps) => {
             if (source === undefined) {
                 throw new ORPCError("BAD_REQUEST", { message: `"${input.path}" is not a path inside the workspace` });
             }
-            // The control plane holds owner.json, members.json and the provider tokens. Publishing is the one
-            // gesture that would put them on the open internet, so it is refused here as flatly as the generic
-            // file API refuses to read them.
+            // The control plane holds identity, provider tokens, private conversations, and logged-in browser
+            // sessions. Publishing is the one gesture that would put them on the open internet, so it is refused
+            // here as flatly as the generic file API refuses to read them.
             if (isControlPlanePath(services.workspace.root, source)) {
-                throw new ORPCError("FORBIDDEN", { message: `"${input.path}" is sandbox credential state and can never be published` });
+                throw new ORPCError("FORBIDDEN", { message: `"${input.path}" is sandbox-private state and can never be published` });
             }
             if (isPublicPath(toRelPath(services.workspace.root, source))) {
                 throw new ORPCError("BAD_REQUEST", { message: `"${input.path}" is already published` });

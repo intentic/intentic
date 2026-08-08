@@ -216,32 +216,44 @@ const STATE_FILES = [
     },
 
     // ---- daemon-owned, nothing derives from watching them ----
+    /* Keep credentials and conversation state in disjoint top-level trees. Provider homes are intentionally
+     * classified as a single secret unit: several CLIs mix OAuth, config, and provider-native thread metadata,
+     * and no generic export can safely distinguish those files. The broad root also makes a newly-added provider
+     * secret by construction instead of relying on another hand-maintained provider-name list. */
+    {
+        path: ".intentic/auth/",
+        invalidates: [],
+        why: "AI-provider credentials and runtime homes; each account is rendered through owner-gated provider routes.",
+        portability: "secret",
+        note: "Sign the agent's AI accounts in again on the Agent tab.",
+    },
     /* Agent session transcripts, rewritten on every streamed token.
      *
      * The memory notes under it (`projects/<slug>/memory/**`) ARE user-facing and the /memory view polls them
      * every 30s, which is the one place in this table where a poll survives a real change feed being available.
      * It stays a poll deliberately: the watcher's exclusion is a DESCENT filter, so reaching those notes means
-     * letting it walk `.intentic/claude` → `projects` → every project slug. Measured on the live workspace that
-     * is +119 watched directories against ~593 today (a fifth more), with 314 continuously-rewritten transcripts
-     * inside the newly-watched set, to make ONE memory directory live. Notes change at agent-turn cadence, so the
-     * poll costs a request a minute and the alternative costs a permanent 20% on the watcher. */
-    /* THE STORE THAT IS TWO THINGS, hence two entries — this is the case stateFileFor's longest-match rule
-     * exists for. `.intentic/claude/` is where linkClaudeState parks the Claude CLI's per-conversation state,
-     * and (when AGENT_AUTH_DIR is unset, which is the production layout) it is ALSO the provider credential
-     * root. The subtree under `projects/` is the half a bundle exists to carry — the agent's memory notes and
-     * every conversation's transcript — while its siblings hold the OAuth that must not leave the sandbox. */
+     * letting it walk `.intentic/sessions/claude` → `projects` → every project slug. Measured on the live
+     * workspace that is +119 watched directories against ~593 today (a fifth more), with 314 continuously-
+     * rewritten transcripts inside the newly-watched set, to make ONE memory directory live. Notes change at
+     * agent-turn cadence, so the poll costs a request a minute and the alternative costs a permanent 20% on the
+     * watcher. */
     {
-        path: ".intentic/claude/",
+        path: ".intentic/sessions/claude/",
         invalidates: [],
         why: "Agent session transcripts — see the note above on why the memory notes under it stay polled.",
-        portability: "secret",
-        note: "Sign the agent's AI accounts in again on the Agent tab.",
+        portability: "carry",
     },
     {
-        path: ".intentic/claude/projects/",
+        path: ".intentic/artifacts/",
         invalidates: [],
-        why: "Same store as the entry above; split from it for portability, not for invalidation.",
+        why: "Durable outputs owned by conversations and extension runs: attachments, browser captures, acceptance reports, and loop ledgers.",
         portability: "carry",
+    },
+    {
+        path: ".intentic/cache/",
+        invalidates: [],
+        why: "Rebuildable indexes and caches; ignored by the watcher and recreated from carried workspace content.",
+        portability: "derived",
     },
     {
         path: ".intentic/verify.json",
@@ -304,6 +316,16 @@ const STATE_FILES = [
 ] as const satisfies readonly WorkspaceStateFile[];
 
 export const WORKSPACE_STATE_FILES: readonly WorkspaceStateFile[] = STATE_FILES;
+
+/* Old directory names are never read or migrated, but persistent workspaces can retain them until an owner
+ * removes them manually. Keep that finite set in one quarantine record so access, export, and search cannot
+ * reinterpret abandoned machine state as ordinary workspace content after a rename. `artifacts` still carry;
+ * the distinction here tells portability only which retired roots are secrets or derived. */
+export const RETIRED_WORKSPACE_STATE_DIRS = {
+    secret: ["claude", "codex", "kimi", "opencode", "cliproxy"],
+    derived: ["iq", "extensions-runtime"],
+    artifacts: ["attachments", "acceptance", "loops"],
+} as const;
 
 /* Every path this table declares, as a type. `as const` above is what makes it one, and it is what finally makes
  * the first sentence of this file's header TRUE rather than aspirational.

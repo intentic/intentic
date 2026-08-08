@@ -45,8 +45,8 @@ export const extractTarToWorkspace = async (root: string, body: ReadableStream<U
         if (target === undefined) {
             throw new PathEscapeError();
         }
-        // The daemon's credential + auth state is not writable through the generic upload (see
-        // isControlPlanePath). Skip the entry rather than abort the extraction: a drop that happens to carry one
+        // The daemon's private state is not writable through the generic upload (see isControlPlanePath). Skip
+        // the entry rather than abort the extraction: a drop that happens to carry one
         // must not cost the other ten thousand files.
         if (isControlPlanePath(root, target)) {
             await drain(stream);

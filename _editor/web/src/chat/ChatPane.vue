@@ -420,7 +420,7 @@ const speechErrorMessage = computed(() => {
 
 // --- Attachments ------------------------------------------------------------------------------
 // Files staged for the next turn, per-tab like the draft (`attachments` forwards to this pane's conversation).
-// ponytail: abandoned drafts orphan their uploads in .intentic/attachments (visible/deletable in the
+// ponytail: abandoned drafts orphan their uploads in .intentic/artifacts/attachments (visible/deletable in the
 // workspace tree); a daemon-side sweep of stale dirs is the upgrade path if they pile up.
 
 const attach = (file: File): void => {
@@ -431,7 +431,7 @@ const attach = (file: File): void => {
     const entry = reactive<PendingAttachment>({
         id: crypto.randomUUID(),
         name: file.name,
-        path: `.intentic/attachments/${crypto.randomUUID()}/${file.name}`,
+        path: `.intentic/artifacts/attachments/${crypto.randomUUID()}/${file.name}`,
         controller,
         status: `uploading`,
         progress: 0,

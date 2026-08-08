@@ -1,7 +1,7 @@
 import { chmod, mkdir, mkdtemp, readFile, rm, stat, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { Capability } from "@intentic/sandbox-contract";
+import { RETIRED_WORKSPACE_STATE_DIRS, type Capability } from "@intentic/sandbox-contract";
 import { expect, test } from "vitest";
 import type { Services } from "../composition.js";
 import { fakeFiles, memoryCapabilitiesStore, services } from "../route-testing.js";
@@ -151,19 +151,46 @@ test("secrets obey the owner's export choice, in both directions", async () => {
     await cleanup();
 });
 
-test("memory notes travel while the provider credentials beside them do not", async () => {
-    // The split that a single `.intentic/claude/` entry could not express: the SDK parks conversation state and
-    // the agent's memory under the same directory that holds the Claude OAuth.
+test("conversation state travels while every provider runtime home stays secret", async () => {
     const source = await makeRoots();
-    await mkdir(join(source.work, ".intentic/claude/projects/-history-gits-root/memory"), { recursive: true });
-    await writeFile(join(source.work, ".intentic/claude/projects/-history-gits-root/memory/MEMORY.md"), "# what I learned\n");
-    await writeFile(join(source.work, ".intentic/claude/.credentials.json"), `{"oauth":"secret"}`);
+    await mkdir(join(source.work, ".intentic/sessions/claude/projects/-history-gits-root/memory"), { recursive: true });
+    await writeFile(join(source.work, ".intentic/sessions/claude/projects/-history-gits-root/memory/MEMORY.md"), "# what I learned\n");
+    const providerFiles = [
+        ["claude", "default.json"],
+        ["codex", "auth.json"],
+        ["opencode", "auth.json"],
+        ["cliproxy", "config.yaml"],
+    ] as const;
+    for (const [provider, file] of providerFiles) {
+        await mkdir(join(source.work, ".intentic/auth", provider), { recursive: true });
+        await writeFile(join(source.work, ".intentic/auth", provider, file), "secret");
+    }
+    for (const provider of RETIRED_WORKSPACE_STATE_DIRS.secret) {
+        await mkdir(join(source.work, ".intentic", provider), { recursive: true });
+        await writeFile(join(source.work, ".intentic", provider, "retired-secret.json"), "retired secret");
+    }
 
     const target = await makeRoots();
     await restoreBundle(await bundleOf(source, false), { workspaceRoot: target.work, historyRoot: target.history }, LIMIT);
 
-    expect(await readFile(join(target.work, ".intentic/claude/projects/-history-gits-root/memory/MEMORY.md"), "utf8")).toBe("# what I learned\n");
-    await expect(readFile(join(target.work, ".intentic/claude/.credentials.json"), "utf8")).rejects.toThrow();
+    expect(await readFile(join(target.work, ".intentic/sessions/claude/projects/-history-gits-root/memory/MEMORY.md"), "utf8")).toBe(
+        "# what I learned\n",
+    );
+    for (const [provider, file] of providerFiles) {
+        await expect(readFile(join(target.work, ".intentic/auth", provider, file), "utf8")).rejects.toThrow();
+    }
+    for (const provider of RETIRED_WORKSPACE_STATE_DIRS.secret) {
+        await expect(readFile(join(target.work, ".intentic", provider, "retired-secret.json"), "utf8")).rejects.toThrow();
+    }
+
+    const secretTarget = await makeRoots();
+    await restoreBundle(await bundleOf(source, true), { workspaceRoot: secretTarget.work, historyRoot: secretTarget.history }, LIMIT);
+    for (const [provider, file] of providerFiles) {
+        expect(await readFile(join(secretTarget.work, ".intentic/auth", provider, file), "utf8")).toBe("secret");
+    }
+    for (const provider of RETIRED_WORKSPACE_STATE_DIRS.secret) {
+        expect(await readFile(join(secretTarget.work, ".intentic", provider, "retired-secret.json"), "utf8")).toBe("retired secret");
+    }
     await cleanup();
 });
 
@@ -200,12 +227,22 @@ test("the report names the capabilities a no-secrets bundle left behind", async 
     await cleanup();
 });
 
-test("derived trees are left out — the iq index, browser profiles and agent worktrees", async () => {
+test("derived trees are left out while durable artifacts travel", async () => {
     const source = await makeRoots();
-    await mkdir(join(source.work, ".intentic/iq"), { recursive: true });
-    await writeFile(join(source.work, ".intentic/iq/index.bin"), "cache");
+    await mkdir(join(source.work, ".intentic/cache/iq"), { recursive: true });
+    await writeFile(join(source.work, ".intentic/cache/iq/index.bin"), "cache");
     await mkdir(join(source.work, ".intentic/browser/chromium"), { recursive: true });
     await writeFile(join(source.work, ".intentic/browser/chromium/Cookies"), "cookies");
+    await mkdir(join(source.work, ".intentic/artifacts/attachments/u1"), { recursive: true });
+    await writeFile(join(source.work, ".intentic/artifacts/attachments/u1/shot.png"), "attachment");
+    await mkdir(join(source.work, ".intentic/artifacts/browser"), { recursive: true });
+    await writeFile(join(source.work, ".intentic/artifacts/browser/viewport.png"), "screenshot");
+    await mkdir(join(source.work, ".intentic/runtime/extensions/whatsapp"), { recursive: true });
+    await writeFile(join(source.work, ".intentic/runtime/extensions/whatsapp/gateway.url"), "http://127.0.0.1:1");
+    for (const dir of RETIRED_WORKSPACE_STATE_DIRS.derived) {
+        await mkdir(join(source.work, ".intentic", dir), { recursive: true });
+        await writeFile(join(source.work, ".intentic", dir, "retired-cache.bin"), "retired cache");
+    }
     await mkdir(join(source.history, "worktrees/abc/repo"), { recursive: true });
     await writeFile(join(source.history, "worktrees/abc/repo/file.ts"), "checkout");
     await mkdir(join(source.work, "repo/node_modules/pkg"), { recursive: true });
@@ -214,8 +251,14 @@ test("derived trees are left out — the iq index, browser profiles and agent wo
     const target = await makeRoots();
     await restoreBundle(await bundleOf(source, true), { workspaceRoot: target.work, historyRoot: target.history }, LIMIT);
 
-    await expect(readFile(join(target.work, ".intentic/iq/index.bin"), "utf8")).rejects.toThrow();
+    await expect(readFile(join(target.work, ".intentic/cache/iq/index.bin"), "utf8")).rejects.toThrow();
     await expect(readFile(join(target.work, ".intentic/browser/chromium/Cookies"), "utf8")).rejects.toThrow();
+    expect(await readFile(join(target.work, ".intentic/artifacts/attachments/u1/shot.png"), "utf8")).toBe("attachment");
+    expect(await readFile(join(target.work, ".intentic/artifacts/browser/viewport.png"), "utf8")).toBe("screenshot");
+    await expect(readFile(join(target.work, ".intentic/runtime/extensions/whatsapp/gateway.url"), "utf8")).rejects.toThrow();
+    for (const dir of RETIRED_WORKSPACE_STATE_DIRS.derived) {
+        await expect(readFile(join(target.work, ".intentic", dir, "retired-cache.bin"), "utf8")).rejects.toThrow();
+    }
     await expect(readFile(join(target.history, "worktrees/abc/repo/file.ts"), "utf8")).rejects.toThrow();
     await expect(readFile(join(target.work, "repo/node_modules/pkg/index.js"), "utf8")).rejects.toThrow();
     await cleanup();

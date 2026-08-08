@@ -104,7 +104,7 @@ export type ToolCallLocation = z.infer<typeof ToolCallLocationSchema>;
 // previous content. Sides are capped daemon-side; `truncated` marks a clipped side.
 //
 // `image` is a PICTURE THE TOOL PRODUCED, carried as a workspace path rather than as bytes: a browser
-// screenshot is already on disk under .intentic/browser/output (the artifact hook put it there), so the client
+// screenshot is already on disk under .intentic/artifacts/browser (the artifact hook put it there), so the client
 // fetches it from /workspace/raw like any other file. Base64 on the wire would push a third of a megabyte
 // through the event stream and into the stored transcript for every screenshot, to show something the
 // workspace can already serve — and the path is what keeps the picture openable afterwards, which the inlined

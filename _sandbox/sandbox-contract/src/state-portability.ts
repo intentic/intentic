@@ -40,15 +40,15 @@ export interface StateFile {
 
 /* The entry that owns a path, LONGEST PREFIX FIRST.
  *
- * Manifests deliberately nest: `.intentic/claude/` is a provider credential store that also contains
- * `.intentic/claude/projects/`, the agent's memory notes and transcripts, which are the single most valuable
- * thing in a bundle. First-match resolution would classify the notes by whichever entry happened to be listed
- * first, so the specific entry has to win over the general one by construction rather than by list order —
- * the same reason a .gitignore consults its deepest matcher first.
+ * Manifests may deliberately nest when one subtree has a different lifecycle. First-match resolution would
+ * classify the child by whichever entry happened to be listed first, so the specific entry has to win over the
+ * general one by construction rather than by list order — the same reason a .gitignore consults its deepest
+ * matcher first.
  *
- * Undefined for a path no entry claims. Callers decide what that means: the bundler treats an unclaimed
- * `.intentic` path as a bug (the coverage test is what makes that safe to assume) and unclaimed ordinary
- * workspace files as `carry`, which is what they are.
+ * Undefined for a path no entry claims. Callers decide what that means: workspace content (including an
+ * extension's undeclared output) defaults to `carry`, while unclaimed history machinery defaults to `derived`.
+ * The daemon's state-path coverage guard is what prevents one of its own credential stores from relying on the
+ * workspace default.
  */
 export const stateFileFor = <T extends StateFile>(path: string, files: readonly T[]): T | undefined =>
     files

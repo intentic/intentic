@@ -5,6 +5,7 @@ import { dirname, extname, relative, resolve, sep } from "node:path";
 import { Readable, Transform } from "node:stream";
 import { pipeline } from "node:stream/promises";
 import type { ReadableStream as NodeReadableStream } from "node:stream/web";
+import { RETIRED_WORKSPACE_STATE_DIRS } from "@intentic/sandbox-contract";
 
 // Resolve a repo-relative path to an absolute one, guarding against escaping the repo dir: the daemon serves
 // file reads/writes for the workspace repos, so a `../` or absolute path must not reach outside them. Returns
@@ -19,24 +20,27 @@ export const resolveWithin = (dir: string, relPath: string): string | undefined 
     return target;
 };
 
-// The daemon's own credential and authorization state, all of it directly under the WORKSPACE ROOT's .intentic/.
+// The daemon's own credential, authorization, and private runtime state, all of it directly under the
+// WORKSPACE ROOT's .intentic/.
 // owner.json and members.json ARE the answer to "who may drive this sandbox" — re-read from disk on every
 // request — capabilities.json carries the capability manifest's secrets, ci.json the CI webhook secret, and
-// claude/ codex/ opencode/ and cliproxy/ hold agent-provider tokens (AGENT_AUTH_DIR moves that set out of /work
-// entirely, and then none of this is reachable to begin with). `kimi` remains protected because sandboxes made
-// before Kimi Code moved into cliproxy may still contain an inert API key there; generic file access must never
-// turn a retired credential path into a readable one.
+// auth/ holds every agent-provider runtime home (AGENT_AUTH_DIR moves that tree out of /work entirely, and then
+// none of it is reachable to begin with). sessions/ holds provider-native conversation state, and browser/ holds
+// logged-in Chromium profiles. Protecting whole lifecycle roots keeps a new provider or session artifact from
+// becoming readable merely because this lower-level guard was not updated with its leaf name.
+//
+// Retired provider roots remain denied even though no producer reads them. This is quarantine, not migration or
+// compatibility: an abandoned credential must not become downloadable merely because its active path moved.
 const CONTROL_PLANE_ENTRIES = new Set([
     "owner.json",
     "members.json",
     "capabilities.json",
     "ci.json",
     "claude.json",
-    "claude",
-    "codex",
-    "kimi",
-    "opencode",
-    "cliproxy",
+    "auth",
+    "sessions",
+    "browser",
+    ...RETIRED_WORKSPACE_STATE_DIRS.secret,
 ]);
 
 // Whether an absolute path lands in that control plane. Every one of those files has a purpose-built, owner-gated
@@ -47,8 +51,9 @@ const CONTROL_PLANE_ENTRIES = new Set([
 //
 // Scoped deliberately tight. Only the ROOT .intentic is the control plane — a repo's own nested .intentic is
 // ordinary workspace content — and only these entries within it, because the root's other subtrees are real
-// features the browser drives through this same API (chat attachments under attachments/, a directory's own UI
-// under ui/). A new credential store added under .intentic/ belongs in the set above.
+// features the browser drives through this same API (chat attachments under artifacts/, a directory's own UI
+// under ui/). A new provider belongs beneath auth/, and native conversation state beneath sessions/, where this
+// guard covers them automatically.
 //
 // The ROOT's own .git joins them, subtree included. It is the --separate-git-dir pointer to /history/gits/root —
 // the handle to the shadow history repo, which lives off /work precisely so the agent can't tamper with it (see

@@ -242,7 +242,7 @@ const subagentFacts = computed<string[]>(() => {
                 <ChatToolCard v-for="child in tool.children" :key="child.id" :tool="child" :live="live" />
             </div>
             <!-- What the agent actually looked at. The bytes are already in the workspace (the artifact hook
-                 put them under .intentic/browser/output), so this is a path fetched through the same cache the
+                 put them under .intentic/artifacts/browser), so this is a path fetched through the same cache the
                  attachment chips use — and a click opens the file itself, full size, in the workspace. -->
             <button
                 v-for="image in view.images"

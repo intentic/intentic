@@ -5,7 +5,7 @@ import { statePath } from "../workspace/state-paths.js";
 
 // The one directory every browser artifact belongs in. It sits outside every repo of the workspace (the root
 // repo excludes `/.intentic/`), so nothing written here can reach the user's Changes panel or a commit.
-export const browserOutputDir = (root: string): string => statePath(root, ".intentic/browser/", "output");
+export const browserOutputDir = (root: string): string => statePath(root, ".intentic/artifacts/", "browser");
 
 // Its inverse, so the two can't drift. A screenshot has to be named in the WORKSPACE-ROOT-relative route space
 // for the web to fetch it (/workspace/raw), and the output dir is the only thing the turn carries that knows
@@ -47,7 +47,7 @@ const inOutputDir = (outputDir: string, filename: string): string => {
 /* THE SCREENSHOT THE USER NEVER SAW.
  *
  * @playwright/mcp answers a screenshot with a markdown link to the file it wrote — `- [Screenshot of
- * viewport](../../.intentic/browser/output/page-….png)`, relative to the AGENT'S cwd — and, when the model
+ * viewport](../../.intentic/artifacts/browser/page-….png)`, relative to the AGENT'S cwd — and, when the model
  * named no file, an image block besides. The chat rendered neither: non-text result blocks collapse to the
  * literal string "[image]" (resultText), and a relative path climbing out of a repo is not something the
  * client can fetch. So a turn that screenshotted the user's own app showed them a card that said `[image]`.

@@ -5,6 +5,10 @@ The search engine behind the [`iq`](../../_search/iq) CLI, and the heavy lib of 
 A disk index (`node:sqlite`) fused across **lexical** (ripgrep), **structural** (ast-grep), **semantic** (local
 embed + rerank) and **git** engines, with rank fusion and a token-budget renderer.
 
+The rebuildable index lives at `.intentic/cache/iq/`. Fresh databases use SQLite incremental auto-vacuum; a
+completed writer pass compacts when at least 25% of the file is freelist pages, so delete-heavy reindexes do not
+leave a gigabyte-scale sparse cache behind.
+
 Two engines answer "orient me" rather than "find X", and read the index rather than searching it:
 [engines/map.ts](src/engines/map.ts) PageRanks files over the import graph — specifiers captured by
 [indexer/imports.ts](src/indexer/imports.ts) at index time, resolved against the indexed file set at query

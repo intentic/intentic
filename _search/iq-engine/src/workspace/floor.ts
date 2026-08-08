@@ -1,16 +1,20 @@
+import { RETIRED_WORKSPACE_STATE_DIRS } from "@intentic/sandbox-contract";
+
 // Where the index lives, root-relative. Excluded from every view so the index can never surface itself.
-export const IQ_DIR = ".intentic/iq";
+export const IQ_DIR = ".intentic/cache/iq";
 
 /* The agent plane's own byproducts, root-relative — never the code a search is about.
  *
- * The index (self-exclusion: it must not surface itself), the session transcripts, the attachment blobs, and
- * the Chromium login profile. Transcript mining showed `.intentic/claude/**.jsonl` outranking source in refs
- * and ask results — an agent's own past conversations answering a question about the codebase.
+ * The index (self-exclusion: it must not surface itself), provider runtime homes, session transcripts, durable
+ * artifacts, connector runtime, and Chromium login profiles. Transcript mining showed conversation JSONL
+ * outranking source in refs and ask results — an agent's own past conversations answering a question about the
+ * codebase. Excluding auth is also a safety boundary for the index: no token should be copied into search text.
  *
  * Deliberately NOT the whole `.intentic/` dir: its manifests (settings.json, capabilities.json, the
  * environment Dockerfiles, automations, approvals, drafts) are things a user writes and an agent is regularly
  * asked to find and edit. Excluding those would trade one silent blind spot for another. */
-const DENIED_DIRS = [IQ_DIR, ".intentic/claude", ".intentic/attachments", ".intentic/browser"];
+const retiredDirs = Object.values(RETIRED_WORKSPACE_STATE_DIRS).flatMap((dirs) => dirs.map((dir) => `.intentic/${dir}`));
+const DENIED_DIRS = [IQ_DIR, ".intentic/auth", ".intentic/sessions", ".intentic/artifacts", ".intentic/runtime", ".intentic/browser", ...retiredDirs];
 
 // The engine's always-on floor — every engine (sweep, ripgrep, git, cursor replay) filters emitted paths
 // through it, and `--ignored` never lifts it.

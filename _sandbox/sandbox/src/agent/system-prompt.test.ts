@@ -48,7 +48,13 @@ test("custom replaces everything — nothing is appended to it", () => {
 });
 
 test("intentic ships its own prompt as the base, with the harness guidance after it", () => {
-    const prompt = sdkSystemPrompt({ ...BASE, mode: "intentic", custom: undefined, append: "extra", browserOutputDir: "/work/.intentic/browser/output" });
+    const prompt = sdkSystemPrompt({
+        ...BASE,
+        mode: "intentic",
+        custom: undefined,
+        append: "extra",
+        browserOutputDir: "/work/.intentic/artifacts/browser",
+    });
     // A string, because Intentic's prompt is not the CLI's preset — the SDK has to be told to drop that.
     expect(typeof prompt).toBe("string");
     const text = prompt as string;
@@ -77,7 +83,7 @@ test("claude keeps the CLI's preset and hands the same guidance to its append", 
         mode: "claude",
         custom: undefined,
         append: "extra",
-        browserOutputDir: "/work/.intentic/browser/output",
+        browserOutputDir: "/work/.intentic/artifacts/browser",
     });
     expect(preset).toMatchObject({ type: "preset", preset: "claude_code" });
     const { append } = preset as { append: string };
@@ -87,7 +93,7 @@ test("claude keeps the CLI's preset and hands the same guidance to its append", 
     expect(append).toContain("`refs/`");
     // The browser guidance names the directory the redirect hook actually enforces, so the agent is told a fact
     // rather than a convention — a turn whose screenshots land elsewhere costs it a failed Read and a `find /`.
-    expect(append).toContain("/work/.intentic/browser/output");
+    expect(append).toContain("/work/.intentic/artifacts/browser");
     expect(append.endsWith("extra")).toBe(true);
 });
 

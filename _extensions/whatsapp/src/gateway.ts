@@ -47,7 +47,7 @@ void runConnectorGateway<WhatsAppConnectorConfig, WhatsAppConnection>({
     statusMs: 5_000,
     publishGatewayUrl: true,
     create: (ctx) => {
-        const runtimeDir = join(ctx.workspaceRoot, ".intentic", "extensions-runtime", "whatsapp");
+        const runtimeDir = join(ctx.workspaceRoot, ".intentic", "runtime", "extensions", "whatsapp");
         const sessionDirOf = (capabilityId: string): string => join(runtimeDir, `session-${capabilityId}`);
         const mediaDir = join(runtimeDir, "media");
         const listener = createWhatsAppListener(ctx, whatsappConnections);

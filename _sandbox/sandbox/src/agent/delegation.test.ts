@@ -6,7 +6,7 @@ test("no connected provider means no note", () => {
 });
 
 test("codex-only note documents codex exec and resume, and no opencode", () => {
-    const note = delegationNote({ codexHome: "/work/.intentic/codex/a1" });
+    const note = delegationNote({ codexHome: "/work/.intentic/auth/codex/a1" });
     expect(note).toContain("codex exec --sandbox danger-full-access --skip-git-repo-check");
     expect(note).toContain("resume <threadId>");
     expect(note).toContain("CODEX_HOME");

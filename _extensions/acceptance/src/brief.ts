@@ -23,7 +23,7 @@ import { reportPath, resultPath, type RunStory, storyDir } from "./runs";
  *    client-rendered, or installs its own Playwright.
  *
  * 4. SCREENSHOTS DO NOT GO WHERE THE MODEL ASKS. The daemon's PreToolUse hook rewrites every screenshot's
- *    filename into the shared, FLAT `.intentic/browser/output` — model-chosen names and all — and every agent in
+ *    filename into the shared, FLAT `.intentic/artifacts/browser` — model-chosen names and all — and every agent in
  *    a run shares that directory. So names must be namespaced by story, and each shot copied into the story's
  *    own `shots/` immediately: copying at the end means reconstructing which step each file belonged to, and
  *    that is exactly the information a report exists to carry.
@@ -104,11 +104,11 @@ const tooling = (shots: string): string =>
         ``,
         `### Screenshots — read this before you take the first one`,
         ``,
-        `Every screenshot lands in \`/work/.intentic/browser/output\` whatever filename you pass; the harness rewrites ` +
+        `Every screenshot lands in \`/work/.intentic/artifacts/browser\` whatever filename you pass; the harness rewrites ` +
             `it and that directory is SHARED with the other tests running right now. So:`,
         ``,
         `- Name each shot \`${"<NN>"}-${"<short-step>"}.png\` — \`01-signin-form.png\`, \`02-validation-error.png\`. Numbers in the order you took them.`,
-        `- Immediately after each shot, copy it into your own directory: \`cp /work/.intentic/browser/output/${"<name>"}.png ${shots}/${"<name>"}.png\`. Do it per shot, not in a batch at the end — after the fact you cannot tell which step a file belonged to.`,
+        `- Immediately after each shot, copy it into your own directory: \`cp /work/.intentic/artifacts/browser/${"<name>"}.png ${shots}/${"<name>"}.png\`. Do it per shot, not in a batch at the end — after the fact you cannot tell which step a file belonged to.`,
         `- Reference shots in your report by the path relative to your report file: \`![](shots/01-signin-form.png)\`.`,
     ].join(`\n`);
 

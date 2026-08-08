@@ -1,6 +1,7 @@
 import type { AgentSummary } from "@intentic/sandbox-contract";
 import type { Logger } from "pino";
 import type { AgentsRegistry } from "./agents-registry.js";
+import type { PersistedAgent } from "./agents-store.js";
 import type { AgentWorktrees } from "./worktrees.js";
 
 // ARCHIVING — the board's only exit that isn't a deletion.
@@ -54,6 +55,7 @@ export interface AgentArchiveDeps {
     readonly agents: AgentsRegistry;
     readonly agentWorktrees: AgentWorktrees;
     readonly logger: Logger;
+    readonly purgeConversationState?: (removed: readonly PersistedAgent[], retained: readonly PersistedAgent[]) => Promise<void>;
 }
 
 // How many agents are torn down at once — by the archive's retire, and by the purge's outright removal. Each
@@ -151,6 +153,16 @@ export const purgeArchived = async (deps: AgentArchiveDeps): Promise<string[]> =
     });
     const removed = done.filter((id) => id !== undefined);
     if (removed.length > 0) {
+        const removedSet = new Set(removed);
+        const removedEntries = targets.filter((entry) => removedSet.has(entry.id));
+        const retainedEntries = deps.agents
+            .ids()
+            .filter((id) => !removedSet.has(id))
+            .map((id) => deps.agents.entry(id))
+            .filter((entry) => entry !== undefined);
+        await deps
+            .purgeConversationState?.(removedEntries, retainedEntries)
+            .catch((error: unknown) => deps.logger.warn({ err: error, count: removed.length }, "agents: purge left some conversation state behind"));
         await deps.agents.remove(removed);
         deps.logger.info({ count: removed.length }, "agents: purged archived agents");
     }

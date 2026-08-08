@@ -26,8 +26,10 @@ test("isWatchIgnored skips junk dirs (incl. .git) + browser profiles, but not so
     expect(watchIgnored(at("app", ".claude", "settings.json"))).toBe(false);
     // The daemon's own state: the iq index's WAL churns for minutes through a rebuild's re-embed, and the agent
     // transcripts churn through every turn — watching either feeds the daemon (and every browser) its own noise.
-    expect(watchIgnored(at(".intentic", "iq", "index.db-wal"))).toBe(true);
-    expect(watchIgnored(at(".intentic", "claude", "projects", "-work", "session.jsonl"))).toBe(true);
+    expect(watchIgnored(at(".intentic", "cache", "iq", "index.db-wal"))).toBe(true);
+    expect(watchIgnored(at(".intentic", "sessions", "claude", "projects", "-work", "session.jsonl"))).toBe(true);
+    expect(watchIgnored(at(".intentic", "auth", "codex", "default", "auth.json"))).toBe(true);
+    expect(watchIgnored(at(".intentic", "runtime", "extensions", "whatsapp", "gateway.url"))).toBe(true);
     // The manifests next to them still push: that's how another member's capability write reaches this browser.
     expect(watchIgnored(at(".intentic", "capabilities.json"))).toBe(false);
     expect(watchIgnored(at(".intentic", "environment.Dockerfile"))).toBe(false);

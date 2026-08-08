@@ -11,7 +11,7 @@ import { indexLag, revalidate, syncModel } from "./indexer/indexer.js";
 import { parseEntry } from "./indexer/parse-entry.js";
 import { inThreadScorer } from "./query/scorer.js";
 import { workerScorer } from "./query/worker-scorer.js";
-import { type IndexDb, isIndexBusy, openIndex } from "./store/db.js";
+import { compactIndex, type IndexDb, isIndexBusy, openIndex } from "./store/db.js";
 import { generationOf, readIndexStatus } from "./store/index-store.js";
 import { claimIndexer, indexerAlive, releaseIndexer } from "./store/indexer-lock.js";
 import type { FileEntry, IndexStatus, QueryOutcome, QueryRequest } from "./types.js";
@@ -147,6 +147,7 @@ export const createEngine = (options: EngineOptions): Engine => {
             db = openIndex(indexDir, "write");
             const { generation } = await revalidate(db, entries, parseEntry);
             syncModel(db, options.modelDir);
+            compactIndex(db);
             return { db, generation, sweepStart, entries, indexed: true };
         } catch (error) {
             if (!isIndexBusy(error)) {

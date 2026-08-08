@@ -57,7 +57,7 @@ const indexed = (entry: FileEntry, previous: StoredFile | undefined): boolean =>
     previous !== undefined && Math.round(entry.mtimeMs) === previous.mtimeMs && entry.size === previous.size;
 
 // What a READER may honestly call stale, and deliberately not the writer's test. One index serves every agent
-// worktree of a repo — they share `.intentic/iq` — and `git worktree add` stamps a fresh mtime on every file it
+// worktree of a repo — they share `.intentic/cache/iq` — and `git worktree add` stamps a fresh mtime on every file it
 // checks out. Under the writer's test that reads as "nothing is indexed" in a tree that is byte-identical to
 // the indexed one, so every answer an agent ever saw opened with "index 2253 files behind": a permanent alarm
 // about a correct result, which is the thing that sends a model back to grep. Size is the half of the cheap

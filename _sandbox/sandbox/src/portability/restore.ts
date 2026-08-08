@@ -152,7 +152,7 @@ export const restoreBundle = async (
         /* Re-derived, never trusted: `secrets: true` here means "this daemon would carry it under SOME export
          * choice", so a hand-added identity file is refused whatever the bundle claims about itself.
          *
-         * A directory entry is judged by the descent rule instead — an empty `.intentic/claude/projects/` is a
+         * A directory entry is judged by the descent rule instead — an empty `.intentic/sessions/claude/projects/` is a
          * legitimate carried directory even though the store above it is a credential root. */
         const allowed =
             header.type === "directory"

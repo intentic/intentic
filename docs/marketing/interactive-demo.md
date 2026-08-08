@@ -155,7 +155,7 @@ missing: an extension that detects nothing contributes nothing, silently. `web` 
 repos carry `docs/user-stories`, which is the evidence those three areas activate on.
 
 **Three of those areas are backed by files rather than by routes**, which is what makes them fixturable at all:
-a story is markdown in a repo, an acceptance run is a directory under `.intentic/acceptance/`, a document set is
+a story is markdown in a repo, an acceptance run is a directory under `.intentic/artifacts/acceptance/`, a document set is
 `docs/architecture/` (published) mirrored by `.intentic/docs/` (staged). So they are fixtured by adding paths to
 `fixture/workspace.ts`, and the extensions walk exactly what they would walk against a real daemon — no route
 was invented for them and none of their code knows the difference. What the demo does refuse is STARTING one:

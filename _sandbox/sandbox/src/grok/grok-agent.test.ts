@@ -118,14 +118,14 @@ test("a build turn resumes the session on the xai provider, passes the model, an
         ...request,
         sessionId: "s9",
         model: "grok-4.20-0309-non-reasoning",
-        attachments: ["/work/.intentic/attachments/a/report.pdf"],
+        attachments: ["/work/.intentic/artifacts/attachments/a/report.pdf"],
     });
     expect(calls).toHaveLength(1);
     const turn = calls[0]!;
     expect(turn.sessionId).toBe("s9");
     expect(turn.model).toBe("grok-4.20-0309-non-reasoning");
     expect(turn.agent).toBe("build");
-    expect(turn.prompt).toContain("/work/.intentic/attachments/a/report.pdf");
+    expect(turn.prompt).toContain("/work/.intentic/artifacts/attachments/a/report.pdf");
 });
 
 test("a failing tool first seen at its error state arrives as one whole failed tool_call", async () => {

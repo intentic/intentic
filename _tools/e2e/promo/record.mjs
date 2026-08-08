@@ -25,7 +25,7 @@ import { writeDroppedRepo } from "./dropped-repo.mjs";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const DEMO = process.env.DEMO_URL ?? "http://127.0.0.1:47146/demo";
-const OUT = process.env.PROMO_OUT ?? "/work/.intentic/promo";
+const OUT = process.env.PROMO_OUT ?? "/tmp/intentic-promo";
 const DROP_SOURCE = "/tmp/promo-drop/checkout-worker";
 
 /* CAPTURE SIZE MUST EQUAL THE VIEWPORT, and the device scale must be 1. Every other combination measured here

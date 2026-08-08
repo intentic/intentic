@@ -122,7 +122,7 @@ const open = (dbPath: string): RecallDb => {
 };
 
 // Open the recall db, treating any failure (corruption, schema drift) as cache loss. Only the db's own files
-// are removed — it shares .intentic/iq with index.db, whose openIndex wipes the whole dir on ITS failures;
+// are removed — it shares .intentic/cache/iq with index.db, whose openIndex wipes the whole dir on ITS failures;
 // recall re-ingests from transcripts either way.
 export const openRecallDb = (dbPath: string): RecallDb => {
     try {

@@ -76,7 +76,7 @@ test("secrets.inventory merges artifact requirements, .env keys, credentialed ca
             label: "Claude · Claude",
             status: "connected",
             requiredBy: [],
-            storedAt: ".intentic/claude/default.json",
+            storedAt: ".intentic/auth/claude/default.json",
             revealable: false,
         },
     ]);
@@ -98,7 +98,12 @@ test("secrets.reveal returns env and generated values, 404s unknown keys, and is
 
     // A verified member who is not the owner is refused the value (the rest of the secrets surface stays open).
     const memberClient = clientFor(
-        createApp(services({ workspace, auth: { authorize: async () => ({ email: "m@example.com", role: "maintainer" as const }), authorizeOwner: rejectForbidden } })),
+        createApp(
+            services({
+                workspace,
+                auth: { authorize: async () => ({ email: "m@example.com", role: "maintainer" as const }), authorizeOwner: rejectForbidden },
+            }),
+        ),
     );
     expect(await errorCode(memberClient.secrets.reveal({ key: "HOST_SSH_KEY" }))).toBe("FORBIDDEN");
 });

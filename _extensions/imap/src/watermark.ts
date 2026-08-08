@@ -12,9 +12,9 @@ export interface Watermark {
 }
 
 // Plain node:fs under the workspace (extensions can't import daemon internals); the discord gateway already
-// writes this extensions-runtime tree. Capability ids are validated slugs, the replace is defense in depth.
+// writes this runtime/extensions tree. Capability ids are validated slugs, the replace is defense in depth.
 export const watermarkPath = (workspaceRoot: string, capabilityId: string): string =>
-    join(workspaceRoot, ".intentic", "extensions-runtime", "imap", `${capabilityId.replace(/[^a-zA-Z0-9._-]/g, "_")}.json`);
+    join(workspaceRoot, ".intentic", "runtime", "extensions", "imap", `${capabilityId.replace(/[^a-zA-Z0-9._-]/g, "_")}.json`);
 
 // Missing or corrupt file reads as "no watermark" — the caller re-baselines; a broken file must never crash
 // the gateway or replay history.

@@ -7,7 +7,7 @@ the shot list its beats sit on, for voice and music to be cut over.
 
 ```sh
 pnpm -C _site/demo dev                     # the fixture app on :47146 — must be up first
-cd _tools/e2e && node promo/record.mjs     # ~95s take → /work/.intentic/promo/
+cd _tools/e2e && node promo/record.mjs     # ~95s take → /tmp/intentic-promo/
 ```
 
 `DEMO_URL` and `PROMO_OUT` override the address and the output directory.

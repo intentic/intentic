@@ -4,7 +4,13 @@ import { DatabaseSync } from "node:sqlite";
 
 // Bumped on any table/column change OR extraction-logic change that must reindex — mismatch drops and recreates
 // everything (the index is a pure cache).
-const SCHEMA_VERSION = "5";
+const SCHEMA_VERSION = "6";
+
+// Reclaim only when fragmentation is material. Incremental auto-vacuum moves live pages and truncates the file,
+// so running it after every small delete would turn ordinary indexing into needless page churn. The audited
+// production index had 72% of its pages on the freelist; 25% keeps that failure mode bounded without polishing
+// tiny databases after every pass.
+const COMPACT_FREELIST_RATIO = 0.25;
 
 const DDL = `
 CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);
@@ -75,6 +81,19 @@ export interface IndexDb {
     close(): void;
 }
 
+const pragmaNumber = (db: IndexDb, name: "freelist_count" | "page_count"): number => Number(db.get(`PRAGMA ${name}`)?.[name] ?? 0);
+
+/** Reclaim SQLite freelist pages after a completed writer pass when fragmentation exceeds the threshold. */
+export const compactIndex = (db: IndexDb): boolean => {
+    const pageCount = pragmaNumber(db, "page_count");
+    const freePages = pragmaNumber(db, "freelist_count");
+    if (pageCount === 0 || freePages / pageCount < COMPACT_FREELIST_RATIO) {
+        return false;
+    }
+    db.run("PRAGMA incremental_vacuum");
+    return true;
+};
+
 // How this handle intends to use the index. "read" is a genuinely read-only SQLite connection — not a promise
 // to behave — so a caller that is not the index's writer (see indexer-lock.ts) cannot contend for the write
 // lock even by accident, and a stray write is a loud error here rather than a lost race in production.
@@ -115,6 +134,13 @@ const open = (dir: string, mode: IndexMode): IndexDb => {
     // DDL takes a schema lock), and until the timeout is set the default is zero — so an index another process
     // is mid-write on failed the OPEN instantly, before any of the contention handling below could apply.
     db.exec("PRAGMA busy_timeout = 5000;");
+    // Must be configured before the first table is created. Do not write this pragma on every open: diagnostic
+    // handles may arrive while the indexer is mid-transaction, and reasserting an already-persisted header mode
+    // would contend with that writer. Schema v6 forces older non-empty indexes through the normal cache rebuild.
+    const pageCount = Number((db.prepare("PRAGMA page_count").get() as Row | undefined)?.["page_count"] ?? 0);
+    if (pageCount === 0) {
+        db.exec("PRAGMA auto_vacuum = INCREMENTAL;");
+    }
     db.exec("PRAGMA journal_mode = WAL; PRAGMA synchronous = NORMAL; PRAGMA foreign_keys = ON;");
     db.exec(DDL);
     const wrapped = wrap(db);

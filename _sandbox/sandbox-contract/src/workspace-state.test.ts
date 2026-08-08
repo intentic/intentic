@@ -32,7 +32,7 @@ describe(`staleQueryKeys`, () => {
     it(`ignores unrelated churn under .intentic/`, () => {
         // The amplification that turned an iq index rebuild into an endless request storm: a prefix test on
         // `.intentic/` alone would invalidate every one of these queries for each index write.
-        expect(staleQueryKeys([`.intentic/iq/index.db`, `.intentic/claude/projects/p/session.jsonl`], [])).toEqual([]);
+        expect(staleQueryKeys([`.intentic/cache/iq/index.db`, `.intentic/sessions/claude/projects/p/session.jsonl`], [])).toEqual([]);
     });
 
     it(`ignores a store's own temp file while it is mid-swap`, () => {
@@ -71,10 +71,10 @@ describe(`staleQueryKeys`, () => {
         // The two lists are unioned flat, not layered: a narrow extension entry under a broad core entry that
         // invalidates nothing must still fire. Without this, every path beneath one of the daemon's
         // machine-state prefixes would be unreachable to extensions.
-        const nested: readonly FileContribution[] = [{ path: `.intentic/claude/projects/p/memory/`, invalidates: [`memory`] }];
-        expect(staleQueryKeys([`.intentic/claude/projects/p/memory/note.md`], nested)).toEqual([`memory`]);
+        const nested: readonly FileContribution[] = [{ path: `.intentic/sessions/claude/projects/p/memory/`, invalidates: [`memory`] }];
+        expect(staleQueryKeys([`.intentic/sessions/claude/projects/p/memory/note.md`], nested)).toEqual([`memory`]);
         // …and a sibling under the same core prefix stays ignored.
-        expect(staleQueryKeys([`.intentic/claude/projects/p/session.jsonl`], nested)).toEqual([]);
+        expect(staleQueryKeys([`.intentic/sessions/claude/projects/p/session.jsonl`], nested)).toEqual([]);
     });
 
     it(`dedupes a key two extensions both claim`, () => {
@@ -118,9 +118,8 @@ describe(`WORKSPACE_STATE_FILES`, () => {
     });
 
     it(`only nests under an entry that invalidates nothing, so one write can't be billed twice`, () => {
-        // Entries nest when one store answers PORTABILITY in two halves (`.intentic/claude/` is a credential
-        // root whose `projects/` subtree is the thing a bundle exists to carry) — stateFileFor's longest match
-        // is what keeps that unambiguous. Invalidation has no longest-match rule: staleQueryKeys unions every
+        // Entries may nest when a subtree needs a different portability class — stateFileFor's longest match
+        // keeps that unambiguous. Invalidation has no longest-match rule: staleQueryKeys unions every
         // matching entry, so a nest under an entry that DOES invalidate would bill the outer view's queries for
         // a write that belongs to the inner one. Nesting is therefore only legal beneath an empty `invalidates`.
         for (const file of WORKSPACE_STATE_FILES.filter((entry) => entry.invalidates.length > 0)) {

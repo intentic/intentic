@@ -154,13 +154,15 @@ describe("purgeArchived", () => {
         const { worktrees, remove } = stubWorktrees();
         await archiveAgents({ agents, agentWorktrees: worktrees, logger }, ["filed"], 9_000);
         const repos = agents.entry("filed")?.repos;
+        const purgeConversationState = vi.fn(async () => {});
 
-        const removed = await purgeArchived({ agents, agentWorktrees: worktrees, logger });
+        const removed = await purgeArchived({ agents, agentWorktrees: worktrees, logger, purgeConversationState });
 
         expect(removed).toEqual(["filed"]);
         // The worktree remnants AND the branch go — that is what makes this the destructive one, and it is the
         // entry's recorded composition that says which repos to tear down in.
         expect(remove).toHaveBeenCalledWith("filed", repos);
+        expect(purgeConversationState).toHaveBeenCalledWith([expect.objectContaining({ id: "filed" })], [expect.objectContaining({ id: "onboard" })]);
         expect(agents.get("filed")).toBeUndefined();
         expect(agents.listArchived()).toEqual([]);
         expect(agents.list().map((agent) => agent.id)).toEqual(["onboard"]);

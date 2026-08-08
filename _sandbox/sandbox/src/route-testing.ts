@@ -429,7 +429,7 @@ export const services = (overrides: ServiceOverrides = {}): Services => {
             turnLimit: async () => ({ spent: 0, withHeadroom: 0 }),
             ...cliProxy,
         }),
-        codexHome: "/work/.intentic/codex",
+        codexHome: "/work/.intentic/auth/codex",
         codexThreadExists: async () => true,
         providerCatalogs: testProviderCatalogs,
         // Held directly too, exactly as in composition — the native Codex turn's model resolution and its
@@ -617,6 +617,7 @@ export const services = (overrides: ServiceOverrides = {}): Services => {
             // have dropped, so a rewind test can assert on the count without standing up a transcript file.
             truncate: async (agent, keep) => Math.max(0, (await merged.transcripts.read(agent)).length - keep),
         },
+        purgeConversationState: async () => {},
         ...rest,
     });
     return merged;
