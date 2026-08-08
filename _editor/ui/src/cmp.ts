@@ -68,6 +68,22 @@ const alertInfo = (...twClasses: string[]) => twMerge(`rounded-lg border border-
 const emptyState = (...twClasses: string[]) =>
     twMerge(`rounded-lg border border-dashed border-line px-3 py-4 text-center text-xs text-muted`, ...twClasses);
 
+/* The CLICKABLE dashed affordance — "add one", "show the rest", "back to the default". `emptyState` above is
+ * the passive half of the same visual idea (a dashed outline says "a thing could be here"), and having only
+ * that half is why this one got spelled out by hand six times, at three different radii and two text sizes,
+ * in the fleet board, the chat rail, the icon rail, the terminal panel twice and the automations view.
+ *
+ * IT CARRIES THE HOVER, which is the part that makes it read as a control rather than as a placeholder: the
+ * dash firms up and the text comes forward together. Geometry is the caller's — a rail tile is a square, a
+ * lane's tail is a full-width row, a colour swatch is a circle — so only the radius has a default here, and
+ * twMerge lets `cmp.addTile('h-7 w-7 rounded-full')` replace it. */
+const addTile = (...twClasses: string[]) =>
+    twMerge(
+        `inline-flex cursor-pointer items-center justify-center gap-1.5 rounded-md border border-dashed border-line`,
+        `text-xs text-muted transition-colors hover:border-line-strong hover:text-content`,
+        ...twClasses,
+    );
+
 /** Uppercase section heading label (e.g. "CONNECTIONS", "YOUR APPS"). */
 const sectionLabel = (...twClasses: string[]) => twMerge(`text-xs font-semibold uppercase tracking-wide text-subtle`, ...twClasses);
 
@@ -79,5 +95,6 @@ export const cmp = {
     alertWarning,
     alertInfo,
     emptyState,
+    addTile,
     sectionLabel,
 };

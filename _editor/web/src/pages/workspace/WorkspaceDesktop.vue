@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { cmp, ConfirmDialog, ContextMenu, type IconName, Segmented } from "@intentic/ui";
+import { clipboardOf, cmp, ConfirmDialog, ContextMenu, type IconName, Segmented } from "@intentic/ui";
 import type { Disposable } from "@intentic/extension-api";
 import Button from "primevue/button";
 import type { MenuItem } from "primevue/menuitem";
@@ -256,6 +256,9 @@ const filtersActive = computed(() => (contentMode.value ? search.includeIgnored.
 
 // Right-click tab menu (VSCode-style). It acts on the right-clicked tab (`menuTabId`), which "Close Others"/"Close to
 // the Right" keep. `pendingClose` holds the set awaiting the unsaved-changes confirm; its dirty paths feed the dialog.
+// This view's root — the element a clipboard write is reached through, so it lands in the window the user is
+// looking at rather than the opener's (see clipboardOf).
+const rootEl = ref<HTMLElement>();
 const tabMenu = ref<{ show: (event: Event) => void }>();
 const menuTabId = ref<string>();
 const pendingClose = ref<ReadonlySet<string>>();
@@ -337,11 +340,19 @@ const tabMenuItems = computed<MenuItem[]>(() => {
         { separator: true },
         ...stripItems.value, // Close All — the one row the empty-space menu shows on its own
         // Only file/diff tabs have a filesystem path to copy (a plan preview and a directory panel don't).
-        // Clipboard may be unavailable (insecure context) — swallow, matching CopyButton.
+        // Reached through this view's root so a popped-out panel writes to the focused window (see clipboardOf);
+        // the clipboard may still be unavailable (insecure context) — swallow, matching CopyButton.
         ...(menuTab.kind === `file` || menuTab.kind === `diff`
             ? [
                   { separator: true },
-                  { label: `Copy Path`, icon: `copy`, command: () => void navigator.clipboard.writeText(menuTab.path).catch(() => undefined) },
+                  {
+                      label: `Copy Path`,
+                      icon: `copy`,
+                      command: () =>
+                          void clipboardOf(rootEl.value)
+                              .writeText(menuTab.path)
+                              .catch(() => undefined),
+                  },
               ]
             : []),
     ];
@@ -651,6 +662,7 @@ const endResize = (event: PointerEvent): void => {
     <!-- Swallow drops that miss the explorer so the browser doesn't navigate to the file (which would wipe
          unsaved editor buffers). The explorer/rows still handle their own drops before this bubbles up. -->
     <div
+        ref="rootEl"
         class="ws flex h-full min-h-0 flex-col overflow-hidden bg-canvas text-content"
         :class="{ 'is-resizing': resizing }"
         @dragover.prevent

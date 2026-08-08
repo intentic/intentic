@@ -5,7 +5,7 @@
      staleness counts, publishing — to a strip and a sidebar. Everything shown here is a file that exists; there is
      no documentation service and no server-side state to be out of step with. -->
 <script setup lang="ts">
-import { Button, cmp, Icon, PageAction, Segmented, Select, SplitView } from "@intentic/extension-ui";
+import { Button, cmp, Icon, PageAction, Picker, type PickerOption, Segmented, SplitView } from "@intentic/extension-ui";
 import { computed, ref, watch } from "vue";
 import { acknowledgeStaged } from "./attention.js";
 import { documentAt, refreshDocumentPresence } from "./docPresence.js";
@@ -25,6 +25,8 @@ const { repo: pinned } = defineProps<{ repo?: string }>();
 const api = host();
 
 const repos = computed(() => api.workspace.repos().map((facts) => facts.repo));
+// Repo names are paths, so they read as machine names rather than prose — `mono` is what the kit's row uses to say so.
+const repoOptions = computed<PickerOption[]>(() => repos.value.map((name) => ({ value: name, label: name, mono: true })));
 
 /* WHICH DOCUMENT IS OPEN LIVES IN THE URL, so a page can be linked to.
  *
@@ -168,13 +170,14 @@ const openAgent = (id: string): void => api.navigate(`/agents/${id}`);
         :detail-open="page !== undefined"
     >
         <template #actions>
-            <Select
+            <Picker
                 v-if="pinned === undefined && repos.length > 1"
                 :model-value="repo"
-                :options="repos"
-                size="small"
-                :placeholder="`Repository`"
-                @update:model-value="chooseRepo"
+                :options="repoOptions"
+                variant="ghost"
+                aria-label="Repository"
+                placeholder="Repository"
+                @update:model-value="(next) => next !== undefined && chooseRepo(next)"
             />
             <Segmented v-if="hasStaged" v-model="source" :options="SOURCES" />
             <PageAction icon="sparkles" label="Generate" primary @click="generateOpen = true" />

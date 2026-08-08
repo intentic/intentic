@@ -97,19 +97,30 @@ export const formatTime = (at: number): string => TIME.format(at);
 /** A weekday and time, for instants within the coming week: "Tue 15:45". */
 export const formatWeekdayTime = (at: number): string => WEEKDAY_TIME.format(at);
 
-// Coarse "time since" for activity/log/history rows: "just now" under a minute, "Nm ago"/"Nh ago" within a
-// day, else the absolute local timestamp. Distinct on purpose from chat's compact `relativeTime` (no "ago",
-// adds a day tier) — different surfaces want different formats.
-export const timeAgo = (at: number): string => {
-    const minutes = Math.round((Date.now() - at) / 60_000);
+/* Coarse "time since": "just now" under a minute, then "Nm ago" and "Nh ago". PAST A DAY THE TWO CALLERS WANT
+ * DIFFERENT THINGS, which is the whole of `days` — a log or history row wants the absolute local timestamp
+ * (three days out, "Jul 28, 2026, 15:45" is the useful answer and "3d ago" is not), while a reading whose age is
+ * the point ("measured 3d ago") wants to keep counting. One function with a switch rather than two functions:
+ * the second one drifted on every tier BELOW the day — it rounded down where this rounded up and called two
+ * minutes "just now" — so the same gap read differently on two screens that sit one click apart.
+ *
+ * IT ROUNDS DOWN, everywhere. An age is a floor — "1h ago" for something 119 minutes old is true and "2h ago"
+ * is not, and for the usage readings this labels it is doubly so: utilization only climbs inside a window, so
+ * the figure is already a lower bound and its age must not overstate how fresh it is.
+ *
+ * `now` is injectable for the callers that format a list against one clock (and for tests). Distinct on purpose
+ * from chat's compact `relativeTime`, which drops the "ago" — different surfaces want different formats. */
+export const timeAgo = (at: number, { now = Date.now(), days = false }: { now?: number; days?: boolean } = {}): string => {
+    const minutes = Math.floor((now - at) / 60_000);
     if (minutes < 1) {
         return `just now`;
     }
     if (minutes < 60) {
         return `${minutes}m ago`;
     }
-    if (minutes < 60 * 24) {
-        return `${Math.round(minutes / 60)}h ago`;
+    const hours = Math.floor(minutes / 60);
+    if (hours < 24) {
+        return `${hours}h ago`;
     }
-    return formatDateTime(at);
+    return days ? `${Math.floor(hours / 24)}d ago` : formatDateTime(at);
 };

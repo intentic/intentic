@@ -35,8 +35,12 @@ const PROVIDER_LABEL: Record<VpnLink["provider"], string> = {
     ipsec: `IPsec`,
 };
 
-// "14m" / "3h 20m" / "2d 4h" — an uptime read at a glance.
-const ago = (since: number | undefined): string | undefined => {
+/* "14m" / "3h 20m" / "2d 4h" — HOW LONG THIS TUNNEL HAS BEEN UP, read at a glance. A duration, not an age: it
+ * carries two units so the answer is precise at every scale, and no "ago", because the number describes a span
+ * the tunnel has been holding rather than a moment that has passed. Named for what it measures — it was `ago`,
+ * which is the kit's `timeAgo` vocabulary for a different question, and the collision invited exactly the
+ * substitution that would be wrong here. */
+const uptime = (since: number | undefined): string | undefined => {
     if (since === undefined) {
         return undefined;
     }
@@ -55,7 +59,7 @@ const factsOf = (link: VpnLink): string[] =>
         link.address,
         link.routes.includes(`0.0.0.0/0`) ? `all traffic` : link.routes.length > 0 ? link.routes.join(`, `) : undefined,
         link.interface,
-        ago(link.since),
+        uptime(link.since),
     ].filter((fact): fact is string => fact !== undefined && fact !== ``);
 
 const run = async (id: string, action: () => Promise<void>): Promise<void> => {

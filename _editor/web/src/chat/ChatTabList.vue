@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ContextMenu, type IconName } from "@intentic/ui";
+import { cmp, ContextMenu, type IconName, SearchBar } from "@intentic/ui";
 import type { MenuItem } from "primevue/menuitem";
 import { computed, nextTick, ref, watch } from "vue";
 import { createTitleEdit } from "../composables/agents/titleEdit";
@@ -17,7 +17,6 @@ import { sessionCategory } from "../composables/sessionCategory";
 import { useNow } from "../composables/useNow";
 import { useAgentFilter } from "../composables/agents/useAgentFilter";
 import { FINISHED_WINDOW, type FleetAgent, useAgents, windowFinished } from "../composables/agents/useAgents";
-import FilterField from "../components/FilterField.vue";
 import HoverCard from "../components/HoverCard.vue";
 import OriginMark from "../components/OriginMark.vue";
 import RailCard from "../components/RailCard.vue";
@@ -625,10 +624,12 @@ const closeTab = (event: Event, id: string): void => {
     <div class="flex min-h-0 flex-col gap-1.5">
         <!-- Pinned above the list: narrow it (filter) → pick one (the lanes) → and, when the query reaches
              past what is open, the "Not open" group at the foot. -->
-        <FilterField
+        <SearchBar
             v-model="filterQuery"
+            variant="field"
+            clearable
             :busy="searching"
-            label="Filter chats by your messages"
+            aria-label="Filter chats by your messages"
             placeholder="Filter by your messages…"
             class="shrink-0"
         />
@@ -826,7 +827,7 @@ const closeTab = (event: Event, id: string): void => {
                 <button
                     v-if="lane.key === 'finished' && !filtering && hiddenFinished > 0"
                     type="button"
-                    class="mt-1.5 inline-flex items-center justify-center gap-1 rounded-lg border border-dashed border-line py-1.5 text-2xs text-muted transition-colors hover:border-line-strong hover:text-content"
+                    :class="cmp.addTile(`mt-1.5 gap-1 rounded-lg py-1.5 text-2xs`)"
                     @click="showAllFinished = !showAllFinished"
                 >
                     <Icon :name="showAllFinished ? 'chevron-up' : 'chevron-down'" class="text-2xs" />

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { cmp, Icon, InputText, Popover } from "@intentic/extension-ui";
+import { cmp, Icon, Popover } from "@intentic/extension-ui";
 import { ref } from "vue";
 import type { useTargets } from "./useTargets";
 
@@ -115,11 +115,12 @@ const app = (): string | undefined => targets.serversOf(repo).find((server) => s
             <!-- Typed straight into the aiming state, so the chip, the gate and the run's manifest all read one
                  value. Clearing it is meaningful: on a repo with a dev server it hands the group back, and on one
                  without it leaves the group with nowhere to point, which the header then says out loud. -->
-            <InputText
-                :model-value="targets.addressOf(repo, group) ?? ``"
+            <input
+                :value="targets.addressOf(repo, group) ?? ``"
+                type="text"
                 placeholder="http://localhost:5173"
-                class="w-full text-sm"
-                @update:model-value="targets.aimAt(repo, group, $event ?? ``)"
+                :class="cmp.input(`w-full`)"
+                @input="targets.aimAt(repo, group, ($event.target as HTMLInputElement).value)"
             />
             <p v-if="targets.stateOf(repo) === `none`" class="text-2xs text-subtle">
                 The daemon runs no dev server for <span class="font-mono">{{ repo }}</span> — start the app yourself in a terminal, or point at a

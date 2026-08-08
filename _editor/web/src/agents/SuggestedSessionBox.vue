@@ -1,11 +1,10 @@
 <script setup lang="ts">
-import { AnchoredOverlay, BottomSheet, useDevice } from "@intentic/ui";
+import { ResponsiveOverlay, useDevice } from "@intentic/ui";
 import { computed, nextTick, onMounted, ref } from "vue";
 import ChatModelPicker from "../chat/ChatModelPicker.vue";
-import ProviderLogo from "../chat/ProviderLogo.vue";
+import ComposerEffort from "../chat/ComposerEffort.vue";
+import ComposerModelPill from "../chat/ComposerModelPill.vue";
 import type { Conversation } from "../composables/chat/conversation";
-import { effortsFor } from "../composables/chat/effortScale";
-import { modelLabelFor } from "../composables/chat/providerCatalog";
 
 /* THE COMPOSER, LIFTED OUT OF THE CHAT — the box a suggested session is edited in before it is started.
  *
@@ -23,30 +22,17 @@ import { modelLabelFor } from "../composables/chat/providerCatalog";
 const { conversation, action, busy = false } = defineProps<{ conversation: Conversation; action: string; busy?: boolean }>();
 const emit = defineEmits<{ start: [] }>();
 
-const { provider, model, thinking, effort, capabilities } = conversation;
 const { mobile } = useDevice();
 
 const input = ref<HTMLTextAreaElement | null>(null);
-// The pill IS the anchor: AnchoredOverlay derives the document it teleports into, the viewport it measures the
-// room against, and the click that never dismisses it, all from this element — so this box works unchanged
-// wherever it is mounted (the app-wide dialog, the push dialog, a popped-out window).
-const modelPill = ref<HTMLElement>();
+// The pill IS the anchor, which is why the component hands its element back: the overlay derives the document
+// it teleports into, the viewport it measures the room against, and the click that never dismisses it, all from
+// that element — so this box works unchanged wherever it is mounted (the app-wide dialog, the push dialog, a
+// popped-out window).
+const modelPill = ref<InstanceType<typeof ComposerModelPill>>();
+// ONE flag for both hosts. It was two — one for the sheet, one for the panel — which is the shape a
+// hand-written pair grows into and the reason the swap is a component now.
 const modelOpen = ref(false);
-const modelSheetOpen = ref(false);
-
-const modelLabelText = computed(() => modelLabelFor(provider.value, model.value));
-
-// The scale is offered only where the runtime forwards it — the same guard the chat composer applies, for the
-// same reason: an ACP agent owns its own reasoning settings, so segments there would be buttons that change
-// nothing.
-const efforts = computed(() => (capabilities.value.effort ? effortsFor(provider.value, model.value, thinking.value) : []));
-const effortIndex = computed(() => efforts.value.findIndex((e) => e.value === effort.value));
-const effortLabel = computed(() => efforts.value.find((e) => e.value === effort.value)?.label ?? effort.value);
-const effortFill = (i: number): string => {
-    const top = Math.max(1, efforts.value.length - 1);
-    const pct = 50 + (i / top) * 45; // Low ≈ 50% brand → top level ≈ 95% brand
-    return `color-mix(in oklab, var(--color-primary-500) ${pct}%, transparent)`;
-};
 
 // Manual auto-grow, the composer's own: reset to one line, then size to content up to the max-height. The box
 // opens on a composed prompt rather than an empty line, so this runs once at mount or it opens one row tall
@@ -105,34 +91,9 @@ onMounted(() => {
         ></textarea>
 
         <div class="flex items-center gap-1 px-2 pb-2">
-            <button
-                ref="modelPill"
-                type="button"
-                class="composer-ghost h-8 min-w-0 gap-1.5 px-2.5 text-2xs font-medium max-md:h-11"
-                @click="mobile ? (modelSheetOpen = true) : (modelOpen = !modelOpen)"
-                :aria-expanded="modelOpen"
-                :aria-label="`Model: ${modelLabelText}`"
-            >
-                <ProviderLogo :provider="provider" class="shrink-0 text-2xs text-link" />
-                <span class="truncate">{{ modelLabelText }}</span>
-                <Icon name="chevron-down" class="shrink-0 text-2xs text-subtle" />
-            </button>
+            <ComposerModelPill ref="modelPill" :conversation="conversation" :expanded="modelOpen" @click="modelOpen = !modelOpen" />
 
-            <div v-if="efforts.length > 0" class="flex shrink-0 items-center gap-1.5" role="group" aria-label="Reasoning effort">
-                <div class="flex items-center">
-                    <button
-                        v-for="(e, i) in efforts"
-                        :key="e.value"
-                        type="button"
-                        class="composer-effort-seg"
-                        :style="i <= effortIndex ? { backgroundColor: effortFill(i) } : undefined"
-                        @click="conversation.setEffort(e.value)"
-                        :aria-label="e.label"
-                        :aria-pressed="effort === e.value"
-                    ></button>
-                </div>
-                <span class="text-2xs text-subtle">{{ effortLabel }}</span>
-            </div>
+            <ComposerEffort :conversation="conversation" />
 
             <button
                 type="button"
@@ -147,16 +108,11 @@ onMounted(() => {
         </div>
 
         <!-- The same picker body the chat composer raises, over THIS conversation, in the same overlay — no
-             height cap, because AnchoredOverlay measures the room its side of the pill actually has and the
-             `min-h-0` column passes that cap down to the picker's list. Remounted per open, which is what lets
-             ChatModelPicker bind its conversation's refs once. -->
-        <BottomSheet v-if="mobile" v-model="modelSheetOpen" header="Model">
-            <ChatModelPicker :conversation="conversation" @selected="modelSheetOpen = false" />
-        </BottomSheet>
-        <AnchoredOverlay v-else v-model="modelOpen" :anchor="modelPill">
-            <div class="flex min-h-0 w-[26rem] flex-col">
-                <ChatModelPicker :conversation="conversation" @selected="modelOpen = false" />
-            </div>
-        </AnchoredOverlay>
+             height cap, because the overlay measures the room its side of the pill actually has and passes that
+             cap down to the picker's list. Remounted per open, which is what lets ChatModelPicker bind its
+             conversation's refs once. -->
+        <ResponsiveOverlay v-model="modelOpen" :anchor="modelPill?.el" header="Model" panel-class="w-[26rem]">
+            <ChatModelPicker :conversation="conversation" @selected="modelOpen = false" />
+        </ResponsiveOverlay>
     </div>
 </template>

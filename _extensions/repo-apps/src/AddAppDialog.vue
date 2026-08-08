@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Button, Card, Checkbox, Dialog, Icon, InputText } from "@intentic/extension-ui";
+import { Button, Card, Checkbox, cmp, Dialog, Icon } from "@intentic/extension-ui";
 import type { RepoApp, TemplateSummary } from "@intentic/sandbox-contract";
 import { computed, ref } from "vue";
 
@@ -116,7 +116,12 @@ const submit = (): void => {
                 <!-- Name input shown when this template is checked. -->
                 <div v-if="selected.includes(template.key)" class="ml-8 flex items-center gap-2">
                     <label class="text-xs text-muted">Name:</label>
-                    <InputText v-model="instanceNames[template.key]" size="small" class="flex-1" placeholder="e.g. shop-api" />
+                    <input
+                        v-model="instanceNames[template.key]"
+                        type="text"
+                        :class="cmp.input(`flex-1 px-2 py-1 text-xs`)"
+                        placeholder="e.g. shop-api"
+                    />
                 </div>
             </Card>
             <div class="flex justify-end">

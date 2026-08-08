@@ -7,7 +7,7 @@ import {
     type TranslatorAccounts,
     type UsageWindow,
 } from "@intentic/sandbox-contract";
-import { formatWeekdayTime } from "@intentic/ui/format";
+import { formatWeekdayTime, timeAgo } from "@intentic/ui/format";
 import { ref } from "vue";
 import { providerAccounts, translatorAccounts } from "./providerAccounts";
 
@@ -204,19 +204,15 @@ export const formatWait = (epochSeconds: number, now: number = Date.now()): stri
     return `about ${Math.round(seconds / 60)} min`;
 };
 
-// How old a snapshot is, coarsely. A reading is taken at the end of a turn, so an idle sandbox's is as old as
-// its last turn — and utilization only ever climbs within a window, so the number is a floor, not a live figure.
-export const formatAge = (measuredAt: number, now: number = Date.now()): string => {
-    const minutes = Math.floor((now - measuredAt) / 60_000);
-    if (minutes < 2) {
-        return `just now`;
-    }
-    if (minutes < 60) {
-        return `${minutes}m ago`;
-    }
-    const hours = Math.floor(minutes / 60);
-    return hours < 24 ? `${hours}h ago` : `${Math.floor(hours / 24)}d ago`;
-};
+/* How old a reading is — the KIT'S age words (timeAgo), asked to keep counting in days rather than handing over
+ * to an absolute date the way a log row does: how stale a snapshot is stays the question at any distance, and a
+ * date would make the reader do the subtraction. This is a name, not a second implementation; it used to be the
+ * latter, and the copy had drifted on every tier below the day — rounding down where the kit rounded up, calling
+ * two minutes "just now" — so one gap read differently on two screens a click apart.
+ *
+ * A reading is taken at the end of a turn, so an idle sandbox's is as old as its last turn — and utilization
+ * only ever climbs within a window, so the number it dates is a floor, not a live figure. */
+export const formatAge = (measuredAt: number, now: number = Date.now()): string => timeAgo(measuredAt, { now, days: true });
 
 /* Past this, a reading stops being a figure and becomes a FLOOR. Two reasons it can only ever climb away from
  * us: utilization never falls inside a window, and these pools are ACCOUNT-wide — another Claude Code, the

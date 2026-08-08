@@ -2,7 +2,7 @@
 import type { Disposable, ViewBadge } from "@intentic/extension-api";
 // `initialsOf` is the rail tile's glyph for a repository (my-shop-api → MS), so repositories stay
 // distinguishable instead of all sharing one icon — the same monogram <Avatar> and <BrandMark> fall back to.
-import { type IconName, initialsOf } from "@intentic/ui";
+import { cmp, type IconName, initialsOf } from "@intentic/ui";
 import { computed, onMounted, onUnmounted } from "vue";
 import { RouterView, useRoute, useRouter } from "vue-router";
 import { useAgents } from "../composables/agents/useAgents";
@@ -541,8 +541,10 @@ useKeybindings();
                  is a write to the sandbox's deploy.config.ts or a clone into /work, never platform storage. -->
             <RouterLink
                 to="/capabilities"
-                class="icon-rail-tile flex items-center justify-center rounded-lg border border-dashed border-line text-muted transition-colors hover:border-line-strong hover:bg-overlay hover:text-content"
-                :class="{ 'pointer-events-none opacity-40': !reachable, 'border-line-strong bg-overlay text-content': isNavActive('/capabilities') }"
+                :class="[
+                    cmp.addTile(`icon-rail-tile rounded-lg hover:bg-overlay`),
+                    { 'pointer-events-none opacity-40': !reachable, 'border-line-strong bg-overlay text-content': isNavActive('/capabilities') },
+                ]"
                 :tabindex="reachable ? undefined : -1"
                 :aria-disabled="!reachable"
                 aria-label="Add a capability"

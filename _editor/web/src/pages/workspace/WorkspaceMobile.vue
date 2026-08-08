@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { WorkspaceTreeEntry } from "@intentic-app/api-contract";
-import { BottomSheet, ConfirmDialog, PullToRefresh, Segmented } from "@intentic/ui";
+import { BottomSheet, clipboardOf, ConfirmDialog, PullToRefresh, Segmented } from "@intentic/ui";
 import Button from "primevue/button";
 import Dialog from "primevue/dialog";
 import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
@@ -203,6 +203,9 @@ const dirHidden = computed(() => (dir.value === `` ? rootHidden.value : (lazyHid
 const filterSheet = ref(false);
 
 // --- Long-press row actions (the ContextMenu equivalents) --------------------------------------
+// This view's root — the element a clipboard write is reached through, so it lands in the window the user is
+// looking at rather than the opener's (see clipboardOf).
+const rootEl = ref<HTMLElement>();
 const sheetEntry = ref<WorkspaceTreeEntry | undefined>(undefined);
 const renameTarget = ref<WorkspaceTreeEntry | undefined>(undefined);
 const renameValue = ref(``);
@@ -232,8 +235,11 @@ const confirmDelete = (): void => {
 };
 const copyPath = (target: WorkspaceTreeEntry): void => {
     sheetEntry.value = undefined;
-    // Clipboard may be unavailable (insecure context) — swallow, matching CopyButton.
-    void navigator.clipboard.writeText(target.path).catch(() => undefined);
+    // Reached through this view's root so a popped-out panel writes to the focused window (see clipboardOf).
+    // Clipboard may still be unavailable (insecure context) — swallow, matching CopyButton.
+    void clipboardOf(rootEl.value)
+        .writeText(target.path)
+        .catch(() => undefined);
 };
 const download = (target: WorkspaceTreeEntry): void => {
     sheetEntry.value = undefined;
@@ -260,7 +266,7 @@ const onPick = (event: Event): void => {
 </script>
 
 <template>
-    <div class="relative flex h-full min-h-0 flex-col bg-canvas text-content">
+    <div ref="rootEl" class="relative flex h-full min-h-0 flex-col bg-canvas text-content">
         <!-- Whose copy of the workspace this is, whenever it isn't the shared one (see WorkspaceScopeBanner).
              Above the viewer as well as the list: a phone shows one at a time, and both need the answer. -->
         <WorkspaceScopeBanner />

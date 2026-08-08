@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { AnchoredOverlay, BottomSheet, Icon, useDevice } from "@intentic/ui";
+import { Icon, ResponsiveOverlay, useDevice } from "@intentic/ui";
 import { computed, nextTick, onBeforeUnmount, provide, reactive, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { type AgentCommand, providerLabel, type Workflow } from "@intentic/sandbox-contract";
@@ -9,7 +9,6 @@ import { useWorkflowRuns } from "../composables/agents/useWorkflowRuns";
 import { openRunInChat } from "../composables/chat/openRun";
 import { modeMeta } from "../composables/chat/catalog";
 import type { Conversation, PendingAttachment } from "../composables/chat/conversation";
-import { effortsFor } from "../composables/chat/effortScale";
 import { effectiveAccount } from "../composables/chat/providerAccounts";
 import { modelLabelFor } from "../composables/chat/providerCatalog";
 import { type ChatAttachment, type ChatMessage, turnsOf } from "../composables/chat/transcript";
@@ -45,7 +44,8 @@ import LoopDialog from "../agents/LoopDialog.vue";
 import { stopLoop } from "../composables/agents/useLoops";
 import ChatTranscriptSkeleton from "./ChatTranscriptSkeleton.vue";
 import { formatTokens, ProgressRing } from "@intentic/ui";
-import ProviderLogo from "./ProviderLogo.vue";
+import ComposerEffort from "./ComposerEffort.vue";
+import ComposerModelPill from "./ComposerModelPill.vue";
 import UsageRing from "../components/UsageRing.vue";
 
 /* ONE CHAT ON SCREEN — the transcript, the composer that writes into it, and the pickers and banners that
@@ -117,14 +117,11 @@ const {
     awaitingDecision,
     pendingPlanMessage,
     contextUsage,
-    capabilities,
     mode,
     provider,
     account,
     accounts,
     model,
-    effort,
-    thinking,
     draft,
     attachments,
     connected,
@@ -160,26 +157,19 @@ const modelLabelText = computed(() => modelLabelFor(provider.value, model.value)
  * What the model's hint alone could say is gone with it: a turn RUNNING a different model than the one
  * selected (a fallback, or a provider alias) had no other home. That belongs on the turn, not on a hover of a
  * control that describes the NEXT one. */
-// The scale is offered only where the runtime forwards it. An ACP agent owns its own reasoning settings, which
-// effortsFor already knows; the record adds the case it can't see — OpenCode takes a model id and a prompt and
-// nothing else, so a Grok turn dropped the effort it was sent and the segments were four buttons that changed
-// nothing. Either way the segments hide.
-const efforts = computed(() => (capabilities.value.effort ? effortsFor(provider.value, model.value, thinking.value) : []));
-
 const scroller = ref<HTMLElement>();
 const content = ref<HTMLElement>();
 const input = ref<HTMLTextAreaElement>();
 // The pickers: ONE open flag per menu, whichever surface renders it — an anchored panel on desktop, a bottom
-// sheet on mobile (the v-if="mobile" split where they mount). One flag, not one per surface: the pair drifted
-// apart once already, with the close-on-disconnect watch below reaching only the desktop half. The PILL is what
-// says which window a desktop panel opens in — it is the anchor, and AnchoredOverlay derives the document, the
-// viewport it measures against and the dismissal listeners from it. That is the whole reason this panel can be
-// popped out into a real window and still have overlays that land in the right place and close when clicked
-// away from.
+// sheet on mobile, which ResponsiveOverlay picks between. One flag, not one per surface: the pair drifted apart
+// once already, with the close-on-disconnect watch below reaching only the desktop half. The PILL is what says
+// which window a desktop panel opens in — it is the anchor, and the overlay derives the document, the viewport
+// it measures against and the dismissal listeners from it. That is the whole reason this panel can be popped
+// out into a real window and still have overlays that land in the right place and close when clicked away from.
 const modelOpen = ref(false);
 const modeOpen = ref(false);
 const workflowOpen = ref(false);
-const modelPill = ref<HTMLElement>();
+const modelPill = ref<InstanceType<typeof ComposerModelPill>>();
 const modePill = ref<HTMLElement>();
 const workflowPill = ref<HTMLElement>();
 
@@ -376,13 +366,6 @@ const turns = computed(() => turnsOf(messages.value));
 const cuts = computed(() => new Map(messages.value.map((message, index) => [message.id, index])));
 
 // --- Composer --------------------------------------------------------------------------------
-const effortIndex = computed(() => efforts.value.findIndex((e) => e.value === effort.value));
-const effortLabel = computed(() => efforts.value.find((e) => e.value === effort.value)?.label ?? effort.value);
-const effortFill = (i: number) => {
-    const top = Math.max(1, efforts.value.length - 1);
-    const pct = 50 + (i / top) * 45; // Low ≈ 50% brand → top level ≈ 95% brand
-    return `color-mix(in oklab, var(--color-primary-500) ${pct}%, transparent)`;
-};
 const modeLabel = computed(() => modeMeta(mode.value).label);
 const modeIcon = computed(() => modeMeta(mode.value).icon);
 
@@ -1441,43 +1424,23 @@ watch(
                                          line under the box says whose they are instead, and the badge is one press
                                          from handing them back — a control that vanished would take that offer with
                                          it. -->
-                                    <button
+                                    <ComposerModelPill
                                         ref="modelPill"
-                                        type="button"
-                                        class="composer-ghost h-8 min-w-0 gap-1.5 px-2.5 text-2xs font-medium max-md:h-11"
+                                        :conversation="conversation"
                                         :class="{ 'composer-steered': pickedWorkflow !== undefined }"
                                         :disabled="pickedWorkflow !== undefined"
-                                        @click="modelOpen = !modelOpen"
-                                        :aria-expanded="modelOpen"
+                                        :expanded="modelOpen"
                                         :aria-label="`Provider and model: ${providerName} · ${modelLabelText}`"
-                                    >
-                                        <ProviderLogo :provider="provider" class="shrink-0 text-2xs text-link" />
-                                        <span class="truncate @max-xs:hidden">{{ modelLabelText }}</span>
-                                        <Icon name="chevron-down" class="shrink-0 text-2xs text-subtle" />
-                                    </button>
+                                        label-class="@max-xs:hidden"
+                                        @click="modelOpen = !modelOpen"
+                                    />
 
-                                    <div
-                                        v-if="efforts.length > 0"
-                                        class="flex shrink-0 items-center gap-1.5"
+                                    <ComposerEffort
+                                        :conversation="conversation"
                                         :class="{ 'composer-steered': pickedWorkflow !== undefined }"
-                                        role="group"
-                                        aria-label="Reasoning effort"
-                                    >
-                                        <div class="flex items-center">
-                                            <button
-                                                v-for="(e, i) in efforts"
-                                                :key="e.value"
-                                                type="button"
-                                                class="composer-effort-seg"
-                                                :style="i <= effortIndex ? { backgroundColor: effortFill(i) } : undefined"
-                                                :disabled="pickedWorkflow !== undefined"
-                                                @click="effort = e.value"
-                                                :aria-label="e.label"
-                                                :aria-pressed="effort === e.value"
-                                            ></button>
-                                        </div>
-                                        <span class="text-2xs text-subtle @max-sm:hidden">{{ effortLabel }}</span>
-                                    </div>
+                                        :disabled="pickedWorkflow !== undefined"
+                                        label-class="@max-sm:hidden"
+                                    />
 
                                     <button
                                         ref="modePill"
@@ -1660,42 +1623,30 @@ watch(
             </div>
         </div>
 
-        <!-- The pickers: anchored popovers on desktop, bottom sheets on mobile — same menu bodies. -->
-        <template v-if="mobile">
-            <BottomSheet v-model="modelOpen" header="Model">
-                <ChatModelPicker :conversation="conversation" @selected="modelOpen = false" />
-            </BottomSheet>
-            <BottomSheet v-model="modeOpen" header="Agent mode">
-                <ChatModeMenu @selected="modeOpen = false" />
-            </BottomSheet>
-            <BottomSheet v-model="workflowOpen" header="Run through a workflow">
-                <ChatWorkflowMenu :picked="conversation.workflowId.value" @picked="pickWorkflow($event)" />
-            </BottomSheet>
-            <!-- Mounted here rather than app-wide: a loop belongs to the conversation whose composer opened it,
-                 and the dialog takes that conversation's id as a prop precisely so it can never be started
-                 against whichever agent happened to be active when a global dialog was raised. -->
-            <LoopDialog v-model="loopDialogOpen" :conversation-id="conversation.conversationId" :isolated="loopIsolated" />
-        </template>
-        <template v-else>
-            <!-- No height cap here any more: AnchoredOverlay measures the room its side of the pill actually has
-                 IN THE PILL'S OWN WINDOW and caps itself to it, so the picker fits whether the panel is docked in
-                 a column or floating in a window the user has since made short. The `min-h-0` column is what
-                 passes that cap down to the picker's scrolling list (see ChatModelPicker). -->
-            <AnchoredOverlay v-model="modelOpen" :anchor="modelPill">
-                <div class="flex min-h-0 w-[26rem] flex-col">
-                    <ChatModelPicker :conversation="conversation" @selected="modelOpen = false" />
-                </div>
-            </AnchoredOverlay>
-            <AnchoredOverlay v-model="modeOpen" :anchor="modePill" cross="end">
-                <div class="w-56 p-1">
-                    <ChatModeMenu @selected="modeOpen = false" />
-                </div>
-            </AnchoredOverlay>
-            <AnchoredOverlay v-model="workflowOpen" :anchor="workflowPill" cross="end">
-                <div class="w-80 p-1">
-                    <ChatWorkflowMenu :picked="conversation.workflowId.value" @picked="pickWorkflow($event)" />
-                </div>
-            </AnchoredOverlay>
-        </template>
+        <!-- The three composer menus, each in the app's standard touch swap (ResponsiveOverlay): an anchored
+             panel on desktop, a bottom sheet on a phone, one open flag either way. No height cap on any of them
+             — the overlay measures the room its side of the pill actually has IN THE PILL'S OWN WINDOW and caps
+             itself to it, so a picker fits whether this panel is docked in a column or floating in a window the
+             user has since made short, and the `min-h-0` column passes that cap down to the scrolling list
+             inside (see ChatModelPicker). -->
+        <ResponsiveOverlay v-model="modelOpen" :anchor="modelPill?.el" header="Model" panel-class="w-[26rem]">
+            <ChatModelPicker :conversation="conversation" @selected="modelOpen = false" />
+        </ResponsiveOverlay>
+        <ResponsiveOverlay v-model="modeOpen" :anchor="modePill" cross="end" header="Agent mode" panel-class="w-56 p-1">
+            <ChatModeMenu @selected="modeOpen = false" />
+        </ResponsiveOverlay>
+        <ResponsiveOverlay v-model="workflowOpen" :anchor="workflowPill" cross="end" header="Run through a workflow" panel-class="w-80 p-1">
+            <ChatWorkflowMenu :picked="conversation.workflowId.value" @picked="pickWorkflow($event)" />
+        </ResponsiveOverlay>
+        <!-- Mounted here rather than app-wide: a loop belongs to the conversation whose composer opened it, and
+             the dialog takes that conversation's id as a prop precisely so it can never be started against
+             whichever agent happened to be active when a global dialog was raised.
+
+             ON BOTH DEVICES, which it was not: it sat inside the mobile half of a `v-if="mobile"` / `v-else`
+             fork around the three pickers, though it is an ordinary centred dialog with no touch variant. The
+             loop pill is drawn unconditionally, so on a DESKTOP pressing it set the flag and nothing opened.
+             That fork is gone now (the pickers each own their own device swap), and with it the only reason a
+             device-agnostic dialog was ever filed under one. -->
+        <LoopDialog v-model="loopDialogOpen" :conversation-id="conversation.conversationId" :isolated="loopIsolated" />
     </div>
 </template>

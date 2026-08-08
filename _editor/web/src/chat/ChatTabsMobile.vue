@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { BottomSheet } from "@intentic/ui";
+import { BottomSheet, SearchBar } from "@intentic/ui";
 import { computed, onBeforeUnmount, ref, watch } from "vue";
 import { startAgent } from "../composables/agents/agentActions";
 import { useAgents } from "../composables/agents/useAgents";
@@ -105,19 +105,7 @@ const openFromHistory = (id: string): void => {
                     </span>
                 </button>
 
-                <div class="relative mx-1 mb-1 mt-2">
-                    <Icon
-                        name="search"
-                        aria-hidden="true"
-                        class="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-2xs text-subtle"
-                    />
-                    <input
-                        v-model="query"
-                        type="search"
-                        placeholder="Search chats…"
-                        class="h-10 w-full min-w-0 rounded-lg border border-line bg-canvas pl-8 pr-3 text-base text-content placeholder:text-subtle focus:border-line-strong focus:outline-none"
-                    />
-                </div>
+                <SearchBar v-model="query" variant="field" clearable aria-label="Search chats" placeholder="Search chats…" class="mx-1 mb-1 mt-2" />
                 <PastChatList :sessions="sessions" :query="query" touch @open="openFromHistory" />
             </div>
         </BottomSheet>

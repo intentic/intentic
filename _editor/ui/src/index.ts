@@ -75,6 +75,9 @@ export { default as PullToRefresh } from "./components/PullToRefresh.vue";
 // The drag strip between two panes. Four screens had written it by hand before this existed, and the fifth
 // caller was an extension, which could not have reached any of the four.
 export { default as ResizeSeam } from "./components/ResizeSeam.vue";
+// The app's standard touch swap — anchored panel on desktop, bottom sheet on a phone — behind one open flag.
+// <Picker> had encapsulated it internally without exposing it, so five other menus wrote the pair out by hand.
+export { default as ResponsiveOverlay } from "./components/ResponsiveOverlay.vue";
 export { default as Row } from "./components/Row.vue";
 export { default as RowGroup } from "./components/RowGroup.vue";
 export { default as SearchBar } from "./components/SearchBar.vue";

@@ -94,9 +94,14 @@ test(`repeats the hostname only when the row is called something else`, () => {
 
 /* "Last seen" is the one thing an asleep machine can still say, and it is the difference between a lid closed an
  * hour ago and a computer nobody has switched on since April — which wear the same grey badge. On a machine that
- * is here right now it is noise the badge already carries. */
+ * is here right now it is noise the badge already carries.
+ *
+ * 90 minutes reads "1h ago", not "2h": timeAgo rounds DOWN at every tier, so "1h ago" spans the whole hour after
+ * the first and never claims more time has passed than has. It rounded to nearest here until the two age
+ * formatters this app had were made one — the other floored, so the same lid closed at the same moment read an
+ * hour apart on two screens. */
 test(`ages a machine that is not here, and stays quiet about one that is`, () => {
     const lastSeen = Date.now() - 90 * 60_000;
-    expect(lastSeenNote(computer({ hostId: `my-pc`, online: false, lastSeen }))).toBe(`last seen 2h ago`);
+    expect(lastSeenNote(computer({ hostId: `my-pc`, online: false, lastSeen }))).toBe(`last seen 1h ago`);
     expect(lastSeenNote(computer({ hostId: `my-pc`, online: true, lastSeen }))).toBeUndefined();
 });

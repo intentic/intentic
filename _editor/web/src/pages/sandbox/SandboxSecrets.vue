@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { SecretInventoryEntry } from "@intentic/sandbox-contract";
-import { cmp, RowGroup, Segmented, StatusBadge } from "@intentic/ui";
+import { cmp, RowGroup, SearchBar, Segmented, StatusBadge } from "@intentic/ui";
 import Button from "primevue/button";
 import { computed, ref } from "vue";
 import { useRouter } from "vue-router";
@@ -129,32 +129,16 @@ const pushToCi = async (): Promise<void> => {
 
             <!-- Toolbar: filter by key, scope to missing, and push the whole set to CI. -->
             <div class="mb-3 flex flex-wrap items-center gap-2">
-                <div class="relative min-w-0 flex-1">
-                    <Icon
-                        name="search"
-                        aria-hidden="true"
-                        class="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-2xs text-subtle"
-                    />
-                    <input
-                        v-model="filter"
-                        type="text"
-                        placeholder="Filter secrets…"
-                        autocapitalize="off"
-                        spellcheck="false"
-                        :class="cmp.input('w-full min-w-0 py-1.5 pl-8 pr-8')"
-                        @keydown.esc="filter = ``"
-                    />
-                    <button
-                        v-if="filter"
-                        type="button"
-                        aria-label="Clear filter"
-                        v-tooltip.bottom="'Clear (Esc)'"
-                        class="absolute right-2 top-1/2 -translate-y-1/2 rounded text-2xs text-subtle transition-colors hover:text-content"
-                        @click="filter = ``"
-                    >
-                        <Icon name="times" />
-                    </button>
-                </div>
+                <SearchBar
+                    v-model="filter"
+                    variant="field"
+                    clearable
+                    aria-label="Filter secrets"
+                    placeholder="Filter secrets…"
+                    autocapitalize="off"
+                    spellcheck="false"
+                    class="min-w-0 flex-1"
+                />
                 <Segmented v-model="scope" :options="scopeOptions" />
                 <Button
                     v-if="ciKnown"

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { AutomationSummary } from "@intentic/sandbox-contract";
-import { Button, cmp, ConfirmDialog, Icon, InfoHint, Page, PageAction, PageHeader, RowGroup, Segmented } from "@intentic/extension-ui";
+import { Button, cmp, ConfirmDialog, Icon, InfoHint, Page, PageAction, PageHeader, RowGroup, SearchBar, Segmented } from "@intentic/extension-ui";
 import { computed, onUnmounted, reactive, ref } from "vue";
 import AutomationComposer from "./AutomationComposer.vue";
 import AutomationRow from "./AutomationRow.vue";
@@ -315,26 +315,14 @@ const toggleDetail = (id: string): void => {
             <!-- Filter bar: one line that answers "how many, how many on, is anything broken" before a single row
                  is read. Only once the list is long enough to need it. -->
             <div v-if="automations.length >= FILTER_FROM" class="flex flex-wrap items-center gap-x-3 gap-y-2">
-                <label
-                    class="flex min-w-56 max-w-sm flex-1 items-center gap-2 rounded-md border border-line bg-canvas px-2.5 py-1.5 focus-within:border-line-strong"
-                >
-                    <Icon name="search" class="shrink-0 text-2xs text-subtle" />
-                    <input
-                        v-model="search"
-                        placeholder="Filter by name or prompt…"
-                        aria-label="Filter automations"
-                        class="min-w-0 flex-1 bg-transparent text-xs text-content placeholder:text-subtle focus:outline-none"
-                    />
-                    <button
-                        v-if="search !== ''"
-                        type="button"
-                        class="shrink-0 cursor-pointer text-2xs text-subtle hover:text-content"
-                        aria-label="Clear filter"
-                        @click="search = ''"
-                    >
-                        <Icon name="times" />
-                    </button>
-                </label>
+                <SearchBar
+                    v-model="search"
+                    variant="field"
+                    clearable
+                    aria-label="Filter automations"
+                    placeholder="Filter by name or prompt…"
+                    class="min-w-56 max-w-sm flex-1"
+                />
                 <Segmented v-model="view" :options="viewOptions" class="ml-auto" />
             </div>
 
@@ -400,7 +388,7 @@ const toggleDetail = (id: string): void => {
                         v-for="recipe in availableSuggestions"
                         :key="recipe.id"
                         type="button"
-                        class="inline-flex cursor-pointer items-center gap-1.5 rounded-md border border-dashed border-line bg-card px-2.5 py-1.5 text-xs text-muted transition-colors hover:border-line-strong hover:text-content"
+                        :class="cmp.addTile(`bg-card px-2.5 py-1.5`)"
                         v-tooltip.top="recipe.description"
                         @click="openFromSuggestion(recipe)"
                     >
@@ -424,7 +412,7 @@ const toggleDetail = (id: string): void => {
                         v-for="recipe in availableChores"
                         :key="recipe.id"
                         type="button"
-                        class="inline-flex cursor-pointer items-center gap-1.5 rounded-md border border-dashed border-line bg-card px-2.5 py-1.5 text-xs text-muted transition-colors hover:border-line-strong hover:text-content disabled:cursor-default disabled:opacity-50"
+                        :class="cmp.addTile(`bg-card px-2.5 py-1.5 disabled:cursor-default disabled:opacity-50`)"
                         :disabled="enabling !== undefined"
                         v-tooltip.top="recipe.description"
                         @click="enableChore(recipe)"

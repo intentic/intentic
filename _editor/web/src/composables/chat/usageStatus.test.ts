@@ -110,6 +110,11 @@ describe(`formatAge`, () => {
         expect(formatAge(now - 3 * 3_600_000, now)).toBe(`3h ago`);
         expect(formatAge(now - 2 * 86_400_000, now)).toBe(`2d ago`);
     });
+    // Rounds DOWN at every tier: an age is a floor, and these readings are floors themselves.
+    it(`never overstates how fresh a reading is`, () => {
+        expect(formatAge(now - 119 * 60_000, now)).toBe(`1h ago`);
+        expect(formatAge(now - 59_000, now)).toBe(`just now`);
+    });
 });
 
 describe(`isStale / formatUtilization`, () => {

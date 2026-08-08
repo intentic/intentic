@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Button, Checkbox, cmp, Icon, ProseField, Segmented, Select } from "@intentic/extension-ui";
+import { Button, Checkbox, cmp, Icon, Picker, ProseField, Segmented } from "@intentic/extension-ui";
 import { HARNESSES, type OutputField, providerLabel, type WorkflowStep } from "@intentic/sandbox-contract";
 import { computed, ref } from "vue";
 import { host } from "./host";
@@ -319,13 +319,11 @@ const advancedSummary = computed(() => {
                                 placeholder="name"
                                 @input="patchField(index, { name: ($event.target as HTMLInputElement).value })"
                             />
-                            <Select
+                            <Picker
                                 :model-value="field.type"
                                 :options="TYPE_OPTIONS"
-                                option-label="label"
-                                option-value="value"
-                                size="small"
-                                class="w-28"
+                                aria-label="Field type"
+                                class="w-28 px-2 py-1 text-2xs"
                                 @update:model-value="patchField(index, { type: $event })"
                             />
                             <input

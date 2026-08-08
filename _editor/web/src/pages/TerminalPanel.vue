@@ -1127,7 +1127,7 @@ const endResize = (event: PointerEvent): void => {
                 <div v-if="customize.mode === 'color'" class="flex flex-wrap items-center gap-2">
                     <button
                         type="button"
-                        class="flex h-7 w-7 items-center justify-center rounded-full border border-dashed border-line text-subtle transition-colors hover:border-line-strong hover:text-content"
+                        :class="cmp.addTile(`h-7 w-7 rounded-full text-subtle`)"
                         v-tooltip.top="'Default'"
                         aria-label="Default color"
                         @click="applyColor(undefined)"
@@ -1149,7 +1149,7 @@ const endResize = (event: PointerEvent): void => {
                 <div v-else class="grid grid-cols-8 gap-1.5">
                     <button
                         type="button"
-                        class="flex h-8 w-8 items-center justify-center rounded-md border border-dashed border-line text-subtle transition-colors hover:border-line-strong hover:text-content"
+                        :class="cmp.addTile(`h-8 w-8 text-subtle`)"
                         v-tooltip.top="'Default'"
                         aria-label="Default icon"
                         @click="applyIcon(undefined)"

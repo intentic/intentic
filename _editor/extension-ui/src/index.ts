@@ -14,10 +14,20 @@
  * <SplitView> is here for exactly the same reason one level up: five screens are an index beside a body, and the
  * one implementation that had solved it (HubLayout) sat in the web app where no extension could import it. */
 export {
+    /* <AnchoredOverlay> ships because the alternative on this surface is PrimeVue's <Popover>, and six extension
+     * views had already reached for it. Popover measures and dismisses against the OPENER's window, so in a
+     * popped-out panel it opens off the bottom edge, over its own trigger, and cannot be clicked shut — the
+     * failure the kit's own tooltip directive exists to avoid. */
+    AnchoredOverlay,
     Avatar,
     BarChart,
     BottomSheet,
     Card,
+    /* The window a copy has to go through. Missing from this surface is why git-history called
+     * `navigator.clipboard` directly and copying a commit SHA out of a POPPED-OUT panel silently did nothing:
+     * the module-global navigator belongs to the opener, whose document isn't focused, so the write rejects
+     * and every call site swallows it. */
+    clipboardOf,
     /* The two halves of a changed-file row ship together because they are always drawn together, and they ship
      * at all for the reason <SplitView> did: the git-history extension is the seventh surface to draw one, and
      * the six that had solved it all sat in the web app where no extension could import them. <ChangeStatusMark>
@@ -45,7 +55,13 @@ export {
     Icon,
     type IconName,
     ImageView,
+    /* <InfoDialog> and <InfoTable> ship beside <ConfirmDialog> and <Row> for the reason everything else here
+     * does: an extension with something to EXPLAIN rather than confirm, or a block of label→value facts to lay
+     * out, would otherwise hand-roll a dialog shell and a two-column grid — and the grid is where a hand-roll
+     * drifts, because keeping the value column aligned across rows is the whole of it. */
+    InfoDialog,
     InfoHint,
+    InfoTable,
     isRenderableImage,
     Markdown,
     MarkdownFigure,
@@ -69,6 +85,10 @@ export {
      * that is invisible until it is in front of somebody. */
     ProseField,
     ResizeSeam,
+    /* <ResponsiveOverlay> is the one to reach for over <AnchoredOverlay> above whenever the panel is a MENU: it
+     * is the same anchored box on desktop and a thumb-reachable sheet on a phone, behind one open flag. Extension
+     * views are read on both, and a popover pinned to a 24px trigger is not usable on a touch screen. */
+    ResponsiveOverlay,
     Row,
     RowGroup,
     SearchBar,
@@ -84,6 +104,10 @@ export {
     type TimeWindow,
     timeWindowWords,
     useDevice,
+    /* Arrow keys / Home / End / Enter over a list, with the wrap-around and the scroll-into-view already
+     * decided. Ships because a keyboard-navigable list is the shape half these views are, and the parts a
+     * hand-roll leaves out (wrapping at the ends, keeping the active row in view) are invisible on a mouse. */
+    useListNavigation,
     useTheme,
 } from "@intentic/ui";
 // Also reachable as `@intentic/extension-ui/format` — see the note there for why an extension's pure logic
@@ -104,11 +128,16 @@ export type {
     StatsFigure,
     StatsFigureItem,
 } from "@intentic/ui/markdown";
+/* The raw primitives, kept deliberately short. Handing out a primitive the KIT already wraps is how an
+ * extension screen ends up wearing OS chrome next to the app's own: `Select` and `InputText` used to ship here
+ * and four views took them, so a dropdown with a different focus ring sat beside <Picker> and a text field with
+ * different padding beside `cmp.input`. Those two are gone — <Picker> and `cmp.input()` are the spellings.
+ * <Dialog> stays until the kit has a general dialog shell: <ConfirmDialog> and <InfoDialog> are both narrower
+ * than the five views using it need. <Popover> stays for the same reason, but <AnchoredOverlay> above is the
+ * one to reach for — it is the only one of the two that opens in the right window when a panel is popped out. */
 export { default as Button } from "primevue/button";
 export { default as Checkbox } from "primevue/checkbox";
 export { default as Dialog } from "primevue/dialog";
-export { default as InputText } from "primevue/inputtext";
 export type { MenuItem } from "primevue/menuitem";
 export { default as Popover } from "primevue/popover";
-export { default as Select } from "primevue/select";
 export { default as ToggleSwitch } from "primevue/toggleswitch";

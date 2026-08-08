@@ -1,5 +1,17 @@
 <script setup lang="ts">
-import { Button, ChangeStatusMark, ContextMenu, DiffStat, Dialog, Icon, type MenuItem, SearchBar, Segmented, timeAgo } from "@intentic/extension-ui";
+import {
+    Button,
+    ChangeStatusMark,
+    clipboardOf,
+    ContextMenu,
+    DiffStat,
+    Dialog,
+    Icon,
+    type MenuItem,
+    SearchBar,
+    Segmented,
+    timeAgo,
+} from "@intentic/extension-ui";
 import type { GitActionResult, GitChange, GitCommit, GitDiffSide } from "@intentic/sandbox-contract";
 import { computed, onScopeDispose, ref, watch } from "vue";
 import BranchSwitcher from "./BranchSwitcher.vue";
@@ -32,6 +44,9 @@ const { path } = defineProps<{ path: string }>();
 // practice — it exists so a tab restored against a repo that has since been deleted degrades to the root's
 // history rather than to a broken request.
 const repoRef = computed(() => repoAt(path) ?? `root`);
+// This tab's root — the element a clipboard write is reached through, so it lands in the window the reader is
+// actually looking at rather than the opener's (see clipboardOf).
+const rootEl = ref<HTMLElement>();
 const log = useGitLog(repoRef);
 const { commits, branch, loading, error, hasMore, fetchingMore, loadMore, commitFiles, commitFileDiff, workingFileDiff } = log;
 // A merge/rebase/cherry-pick/revert a TERMINAL left halted. Nothing this tab starts can cause one — every write
@@ -328,7 +343,13 @@ const openFileDiff = (commit: GitCommit, change: GitChange): void => {
     });
 };
 
-const copy = (text: string): void => void navigator.clipboard.writeText(text).catch(() => undefined);
+/* Reached through this tab's root, not the module's `navigator`: a POPPED-OUT panel keeps its JS in the opener's
+ * realm, whose document isn't focused, so an async clipboard write from there rejects and this catch swallowed
+ * it — copying a SHA out of a popped-out history did nothing at all. See clipboardOf. */
+const copy = (text: string): void =>
+    void clipboardOf(rootEl.value)
+        .writeText(text)
+        .catch(() => undefined);
 
 // --- commit context menu + write actions (VSCode "Git Graph" parity) -----------------------------------------
 type ActionKind = "branch" | "tag" | "checkout" | "cherry-pick" | "revert" | "drop" | "merge" | "rebase" | "reset";
@@ -558,7 +579,7 @@ const runPending = async (): Promise<void> => {
 </script>
 
 <template>
-    <div class="flex h-full min-h-0 flex-col bg-canvas text-content">
+    <div ref="rootEl" class="flex h-full min-h-0 flex-col bg-canvas text-content">
         <!-- Header: which repository this is · its checked-out branch · how many commits are drawn. The repo is
              a LABEL, not a control — this tab belongs to one directory, and the tree row beside the next repo is
              how you reach its history. -->

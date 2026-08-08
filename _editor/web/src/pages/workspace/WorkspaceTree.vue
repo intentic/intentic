@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { WorkspaceTreeEntry } from "@intentic-app/api-contract";
-import { ConfirmDialog, ContextMenu, type IconName, useExplorerStyle } from "@intentic/ui";
+import { clipboardOf, ConfirmDialog, ContextMenu, type IconName, useExplorerStyle } from "@intentic/ui";
 import Button from "primevue/button";
 import type { MenuItem } from "primevue/menuitem";
 import { computed, nextTick, ref, type VNode, watch } from "vue";
@@ -511,7 +511,8 @@ const cancelDelete = (): void => {
 };
 // Stage the selection on the clipboard. `system` publishes the same paths as text to the OS clipboard — the
 // menu path has no clipboard event to write through, so it asks the async API (best effort: it needs a secure
-// context, and CopyButton swallows the same failure).
+// context, and CopyButton swallows the same failure). Reached through the tree element so a POPPED-OUT
+// explorer writes to the window the user is actually looking at — see clipboardOf.
 const stage = (mode: "copy" | "cut", system: "async" | "event"): readonly string[] => {
     const paths = clipPaths();
     if (paths.length === 0) {
@@ -519,7 +520,9 @@ const stage = (mode: "copy" | "cut", system: "async" | "event"): readonly string
     }
     clipboard.value = { mode, paths };
     if (system === `async`) {
-        void navigator.clipboard.writeText(paths.join(`\n`)).catch(() => undefined);
+        void clipboardOf(treeEl.value)
+            .writeText(paths.join(`\n`))
+            .catch(() => undefined);
     }
     return paths;
 };

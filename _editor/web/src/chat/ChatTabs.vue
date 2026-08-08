@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import Button from "primevue/button";
-import { AnchoredOverlay, ContextMenu } from "@intentic/ui";
+import { AnchoredOverlay, ContextMenu, SearchBar } from "@intentic/ui";
 import type { Disposable } from "@intentic/extension-api";
 import type { MenuItem } from "primevue/menuitem";
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
@@ -217,7 +217,7 @@ const endRailResize = (event: PointerEvent): void => {
  * pop-out window, the header's in the app. */
 const historyOpen = ref(false);
 const historyAnchor = ref<HTMLElement>();
-const searchInput = ref<HTMLInputElement | null>(null);
+const searchInput = ref<InstanceType<typeof SearchBar> | null>(null);
 
 // The history search box. Filters the list by chat title or content (content scanned server-side over recent
 // sessions). Debounced so a keystroke burst becomes one request; the list binds directly to `sessions`.
@@ -622,31 +622,15 @@ const openHistory = (event: Event): void => {
              whatever the user has dragged it to. The session list gives way; the search box holds its size. -->
         <AnchoredOverlay v-model="historyOpen" :anchor="historyAnchor" side="bottom">
             <div class="flex min-h-0 w-72 flex-col">
-                <div class="relative shrink-0 p-1">
-                    <Icon
-                        name="search"
-                        aria-hidden="true"
-                        class="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-2xs text-subtle"
-                    />
-                    <input
-                        ref="searchInput"
-                        v-model="query"
-                        type="text"
-                        placeholder="Search chats…"
-                        class="w-full min-w-0 rounded-md border border-line bg-canvas py-1 pl-7 pr-7 text-xs text-content placeholder:text-subtle focus:border-line-strong focus:outline-none"
-                        @keydown.esc="query = ``"
-                    />
-                    <button
-                        v-if="query"
-                        type="button"
-                        class="absolute right-3 top-1/2 flex -translate-y-1/2 items-center rounded text-2xs text-subtle transition-colors hover:text-content"
-                        v-tooltip.bottom="'Clear (Esc)'"
-                        aria-label="Clear search"
-                        @click="query = ``"
-                    >
-                        <Icon name="times" />
-                    </button>
-                </div>
+                <SearchBar
+                    ref="searchInput"
+                    v-model="query"
+                    variant="field"
+                    clearable
+                    aria-label="Search chats"
+                    placeholder="Search chats…"
+                    class="m-1 shrink-0"
+                />
                 <div class="scrollbar-thin flex min-h-0 max-h-80 flex-col gap-0.5 overflow-auto p-1 pt-0">
                     <PastChatList
                         :sessions="sessions"

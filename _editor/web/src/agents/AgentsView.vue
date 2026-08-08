@@ -2,7 +2,7 @@
 import Button from "primevue/button";
 import type { Disposable } from "@intentic/extension-api";
 import type { WorkflowRun } from "@intentic/sandbox-contract";
-import { clipboardOf, ContextMenu, useDevice } from "@intentic/ui";
+import { clipboardOf, cmp, ContextMenu, SearchBar, useDevice } from "@intentic/ui";
 import Dialog from "primevue/dialog";
 import type { MenuItem } from "primevue/menuitem";
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from "vue";
@@ -23,7 +23,6 @@ import { useChat } from "../composables/chat/useChat";
 import { useChatPopout } from "../composables/chat/useChatPopout";
 import { useNow } from "../composables/useNow";
 import { commandShortcut, registerCommand } from "../composables/commands/useCommands";
-import FilterField from "../components/FilterField.vue";
 import AgentCard from "./AgentCard.vue";
 import HeldWakeCard from "./HeldWakeCard.vue";
 import WorkflowRunCard from "./WorkflowRunCard.vue";
@@ -156,7 +155,7 @@ const pendingFor = (agent: FleetAgent): PendingAction | undefined => {
  * chat panel's drag handle produces (see NARROW_BOARD_PX below), so the bar is a .view-header-wrap. The field
  * keeps a useful, capped width on a roomy board and wraps rather than being crushed when the board narrows. */
 const { query, needle, active: filtering, matches, snippetOf, archivedMatches, sessionMatches, searching } = useAgentFilter();
-const filterField = ref<InstanceType<typeof FilterField> | undefined>(undefined);
+const filterField = ref<InstanceType<typeof SearchBar> | undefined>(undefined);
 // The Finished lane's two extra states. Both live here rather than in the store: they are how this ONE board
 // is being looked at, and a second surface opening the fleet should not inherit a scroll-position-like choice.
 const showAllFinished = ref(false);
@@ -561,7 +560,9 @@ onMounted(() => {
             command: `agents.filter`,
             title: `Filter Agents…`,
             icon: `search`,
-            handler: () => filterField.value?.focus(),
+            // Focus AND select: the chord is pressed with whatever was last typed still in the box, and starting
+            // a new query by typing beats having to clear the old one first (VS Code's find flow).
+            handler: () => filterField.value?.focus(true),
         }),
     ];
 });
@@ -889,11 +890,13 @@ const grabCard = (event: PointerEvent, agent: FleetAgent, card: HTMLElement): vo
                     <Icon name="check" class="text-2xs" />{{ unread }} unread
                 </button>
             </div>
-            <FilterField
+            <SearchBar
                 ref="filterField"
                 v-model="query"
+                variant="field"
+                clearable
                 :busy="searching"
-                label="Filter agents by your messages"
+                aria-label="Filter agents by your messages"
                 placeholder="Filter by your messages…"
                 class="mx-auto max-w-full shrink-0"
                 :class="narrow ? 'order-last basis-full' : 'w-72'"
@@ -1148,7 +1151,7 @@ const grabCard = (event: PointerEvent, agent: FleetAgent, card: HTMLElement): vo
                     <button
                         v-if="lane.key === 'finished' && !archiveOpen && !filtering && hiddenFinished > 0"
                         type="button"
-                        class="mx-2 mb-2 inline-flex items-center justify-center gap-1 rounded-lg border border-dashed border-line py-1.5 text-2xs text-muted transition-colors hover:border-line-strong hover:text-content"
+                        :class="cmp.addTile(`mx-2 mb-2 gap-1 rounded-lg py-1.5 text-2xs`)"
                         @click="showAllFinished = !showAllFinished"
                     >
                         <Icon :name="showAllFinished ? 'chevron-up' : 'chevron-down'" class="text-2xs" />
