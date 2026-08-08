@@ -605,7 +605,7 @@ const runPending = async (): Promise<void> => {
                 :disabled="undo.busy.value"
                 @click="runUndo"
                 v-tooltip.bottom="
-                    `${undo.action.value?.description ?? ''} — moves ${undo.action.value?.branch ?? 'the branch'} back. A checkpoint is saved first.`
+                    `${undo.action.value?.description ?? ''} — moves ${undo.action.value?.branch ?? 'the branch'} back. A restore point is saved first.`
                 "
             >
                 <Icon name="undo" class="mr-0.5 text-[0.6rem]" />{{ undo.label.value }}
@@ -640,7 +640,7 @@ const runPending = async (): Promise<void> => {
                 class="shrink-0 rounded border border-warning/50 px-1.5 py-0.5 text-2xs text-warning transition-colors hover:bg-warning/10 disabled:opacity-40"
                 :disabled="operation.busy.value"
                 @click="operation.abort()"
-                v-tooltip.bottom="'A checkpoint is saved first, so this is reversible from Checkpoints'"
+                v-tooltip.bottom="'A restore point is saved first, so this is reversible from Restore points'"
             >
                 Abort
             </button>
@@ -741,7 +741,7 @@ const runPending = async (): Promise<void> => {
                             v-for="verb in [
                                 { label: 'Pop', title: 'Put this work back and remove the stash', run: () => stashes.apply(stashBySha.get(commit.sha)!.ref, true) },
                                 { label: 'Apply', title: 'Put this work back and keep the stash', run: () => stashes.apply(stashBySha.get(commit.sha)!.ref, false) },
-                                { label: 'Drop', title: 'Discard this stash — a checkpoint is saved first', run: () => stashes.drop(stashBySha.get(commit.sha)!.ref) },
+                                { label: 'Drop', title: 'Discard this stash — a restore point is saved first', run: () => stashes.drop(stashBySha.get(commit.sha)!.ref) },
                             ]"
                             :key="verb.label"
                             class="shrink-0 cursor-pointer rounded px-1 text-2xs text-subtle transition-colors hover:bg-overlay hover:text-content"
@@ -892,7 +892,7 @@ const runPending = async (): Promise<void> => {
                 </div>
 
                 <p v-if="ACTIONS[pending.kind].danger" class="mt-3 text-2xs text-subtle">
-                    <Icon name="shield" class="mr-0.5 text-[0.6rem]" />A checkpoint is saved first, so this is reversible from Checkpoints.
+                    <Icon name="shield" class="mr-0.5 text-[0.6rem]" />A restore point is saved first, so this is reversible from Restore points.
                 </p>
                 <p v-if="actionError" class="mt-2 text-2xs text-danger">{{ actionError }}</p>
             </template>

@@ -38,7 +38,7 @@ import WorkspaceScopeBanner from "./WorkspaceScopeBanner.vue";
 import WorkspaceSearchResults from "./WorkspaceSearchResults.vue";
 import { parentDir } from "@intentic/ui/path";
 
-/* The mobile Workspace: a drill-down file browser — one directory per screen — plus the Changes / History
+/* The mobile Workspace: a drill-down file browser — one directory per screen — plus the Changes / Restore Points
  * panels, with a full-screen read-only viewer. All navigation state (segment aside) lives in the ROUTE
  * (`?dir=`, `?file=`, `?diff=`), so the OS back gesture is the up/close navigation and deep links work.
  * Desktop affordances (drag-drop, multi-select, tab strip, edit mode) have no mobile equivalents: uploads go
@@ -134,11 +134,11 @@ const changesMark = computed(() => {
     return changes.count.value > 0 || work === undefined ? {} : { mark: outgoingMark(work), markTitle: outgoingSummary(work) };
 });
 const segmentOptions = computed(() => [
-    // Touch has no hover, so no hint here says anything a finger can reach — see the desktop twin. The mark
-    // spread stays: `markTitle` is inert on this form factor, but the CHIP is what the tab is here for.
+    // Files and Changes are the everyday views; restore history is the quieter icon beside this control. Touch
+    // has no hover, so no hint here says anything a finger can reach — see the desktop twin. The mark spread
+    // stays: `markTitle` is inert on this form factor, but the CHIP is what the tab is here for.
     { label: `Files`, value: `files` as const },
     { label: `Changes`, value: `changes` as const, badge: changes.count.value, ...changesMark.value },
-    { label: `Checkpoints`, value: `history` as const },
 ]);
 
 const filter = ref(``);
@@ -337,6 +337,16 @@ const onPick = (event: Event): void => {
             <div class="flex shrink-0 items-center gap-2 border-b border-line bg-card px-2 py-1.5">
                 <Segmented v-model="segment" size="sm" :options="segmentOptions" />
                 <span class="flex-1"></span>
+                <button
+                    type="button"
+                    class="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg transition-colors active:bg-overlay"
+                    :class="segment === 'history' ? 'bg-overlay text-content' : 'text-muted'"
+                    :aria-pressed="segment === 'history'"
+                    aria-label="Restore points"
+                    @click="segment = 'history'"
+                >
+                    <Icon name="history" class="text-base" />
+                </button>
                 <!-- What the listing leaves out — the desktop toolbar's funnel, thumb-sized, opening a sheet
                      instead of a menu. Drill-down only: during a content search the row under the field carries
                      its own Ignored chip, and two controls for one idea on one screen is one too many. -->

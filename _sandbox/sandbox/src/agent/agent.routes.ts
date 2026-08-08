@@ -1277,7 +1277,7 @@ export const createAgentRoutes = (services: Services) => {
                 throw new ORPCError("CONFLICT", { message: "This agent is running a turn — stop it before going back." });
             }
             if (outcome === "no-checkpoint") {
-                throw new ORPCError("NOT_FOUND", { message: "That message has no checkpoint to go back to." });
+                throw new ORPCError("NOT_FOUND", { message: "That message has no saved file state to go back to." });
             }
             return outcome;
         }),

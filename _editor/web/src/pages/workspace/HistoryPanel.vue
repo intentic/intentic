@@ -7,8 +7,8 @@ import { ChangeStatusMark, cmp, type IconName, timeAgo } from "@intentic/ui";
 import type { DiffPayload } from "@intentic/extension-api";
 import type { OpenMode } from "./workspaceTabs";
 
-/* The checkpoint timeline — a mode of the workspace's ONE left sidebar (Workspace.vue owns the aside, the
- * resize handle, and the Files|Changes|Checkpoints mode switch): the daemon's checkpoints of /work, NOT git
+/* The restore-point timeline — a quieter mode of the workspace's ONE left sidebar (Workspace.vue owns the
+ * aside, resize handle, Files|Changes switch and history button): the daemon's checkpoints of /work, NOT git
  * history — agent turns (titled with the turn's prompt), user changes, and restore markers; hidden interval
  * captures dissolve into the next checkpoint's diff. Selecting a checkpoint lazy-loads everything it changed
  * since the previous one; a changed file opens a side-by-side diff as a tab in the main editor area (emitted up
@@ -32,7 +32,7 @@ const TRIGGER_META: Record<SnapshotTrigger, { title: string; icon: IconName }> =
     turn: { title: `Agent turn`, icon: `sparkles` },
     user: { title: `Your changes`, icon: `user` },
     "pre-restore": { title: `Before restore`, icon: `shield` },
-    restore: { title: `Restore point`, icon: `undo` },
+    restore: { title: `Files restored`, icon: `undo` },
     interval: { title: `Auto capture`, icon: `clock` },
 };
 
@@ -86,10 +86,10 @@ const confirmRestore = (id: string): void => {
 <template>
     <div class="flex min-h-0 flex-1 flex-col">
         <div class="flex shrink-0 items-center gap-1 border-b border-line px-2 py-1.5">
-            <span class="text-2xs font-medium uppercase tracking-wide text-subtle">Checkpoints</span>
+            <span class="text-2xs font-medium uppercase tracking-wide text-subtle">Restore points</span>
             <span class="flex-1"></span>
             <Icon name="spinner" v-if="busy" class="text-xs text-muted" spin aria-label="Working" />
-            <button type="button" :class="cmp.iconButton()" @click="refetch()" v-tooltip.right="'Refresh'" aria-label="Refresh checkpoints">
+            <button type="button" :class="cmp.iconButton()" @click="refetch()" v-tooltip.right="'Refresh'" aria-label="Refresh restore points">
                 <Icon name="refresh" class="text-xs" :spin="isLoading" />
             </button>
         </div>
@@ -99,7 +99,7 @@ const confirmRestore = (id: string): void => {
 
         <div class="scrollbar-thin min-h-0 flex-1 overflow-auto py-1">
             <p v-if="snapshots.length === 0" class="px-3 py-2 text-2xs text-subtle">
-                No checkpoints yet — one is saved after each agent turn and whenever you change files.
+                No restore points yet — file history is saved automatically as you and your agents work.
             </p>
             <div v-for="snapshot in snapshots" :key="snapshot.id" class="cv-row border-b border-line/50">
                 <button
@@ -140,7 +140,7 @@ const confirmRestore = (id: string): void => {
                                  files this is about to move, and until it was told, the only symptom was its
                                  next turn behaving as though edits existed that no longer did. -->
                             <span class="flex-1 text-2xs text-warning"
-                                >Rewrite all files to this checkpoint? Files created after it are removed; git branches and secrets are untouched.
+                                >Rewrite all files to this restore point? Files created after it are removed; git branches and secrets are untouched.
                                 Open chats working here are told the files moved.</span
                             >
                             <button
@@ -158,7 +158,9 @@ const confirmRestore = (id: string): void => {
                             class="rounded border border-line px-2 py-0.5 text-2xs text-muted transition-colors hover:bg-overlay hover:text-content max-md:min-h-11 max-md:px-3 max-md:text-xs"
                             :disabled="busy"
                             @click="confirmRestoreId = snapshot.id"
-                            v-tooltip.right="'Files only — secrets and branches untouched. A safety checkpoint is saved first, and open chats are told.'"
+                            v-tooltip.right="
+                                'Files only — secrets and branches untouched. A safety restore point is saved first, and open chats are told.'
+                            "
                         >
                             <Icon name="history" class="mr-1 text-2xs" />Restore
                         </button>

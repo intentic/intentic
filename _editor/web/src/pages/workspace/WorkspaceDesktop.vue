@@ -77,17 +77,17 @@ const changesMark = computed(() => {
     return changes.count.value > 0 || work === undefined ? {} : { mark: outgoingMark(work), markTitle: outgoingSummary(work) };
 });
 
-// The sidebar's mode switch lives ON the sidebar (proximity — the control sits with what it changes). The
-// Changes tab carries the uncommitted count so pending work is visible from any mode — and, once that count is
-// zero, the outgoing mark, so the tab does not read as "nothing here" over a panel holding a Push button.
+// The sidebar's primary mode switch lives ON the sidebar (proximity — the control sits with what it changes).
+// Files and Changes are the everyday views; restore history is the quieter icon beside them. The Changes tab
+// carries the uncommitted count so pending work is visible from any mode — and, once that count is zero, the
+// outgoing mark, so the tab does not read as "nothing here" over a panel holding a Push button.
 const sidebarMode = computed<SidebarPanel>({ get: () => layout.sidebarPanel.value, set: (value) => layout.setSidebarPanel(value) });
 const sidebarModeOptions = computed(() => [
     // No hint on Files/Changes: "Browse the workspace files" under a pill reading "Files" is the label again in
-    // a smaller font. Checkpoints keeps one because the word alone doesn't say what it restores, and Changes
-    // gets one only while the mark is up — there the chip is a glyph, and the amount has nowhere else to go.
+    // a smaller font. Changes gets one only while the mark is up — there the chip is a glyph, and the amount has
+    // nowhere else to go.
     { label: `Files`, value: `files` as const },
     { label: `Changes`, value: `changes` as const, badge: changes.count.value, ...changesMark.value },
-    { label: `Checkpoints`, value: `history` as const, title: `Restore files to any earlier point` },
 ]);
 
 const filter = ref(``);
@@ -386,7 +386,7 @@ const openTabMenu = (id: string | undefined, event: Event): void => {
 // terminal (terminalSession's key hook), so a bare-Ctrl chord would steal a readline/tmux key; Mod+B (VSCode's
 // sidebar toggle) IS the tmux prefix so the explorer toggles on Ctrl+Shift+B instead, and everything else
 // stays in the Ctrl+Shift family the terminal panel's commands established. Changes opens on Ctrl+Shift+D
-// (D = diff; VSCode's Ctrl+Shift+G is terminal.join's "G = group"); Show Files / Checkpoints / Refresh / the two
+// (D = diff; VSCode's Ctrl+Shift+G is terminal.join's "G = group"); Show Files / Restore Points / Refresh / the two
 // explorer filters ship unbound (palette-only), as VSCode leaves rarely-chorded views.
 const closeActiveTab = (): void => {
     if (activeId.value !== null) {
@@ -456,7 +456,7 @@ const WORKSPACE_COMMANDS: readonly Omit<RegisteredCommand, `owner`>[] = [
     },
     { command: `workspace.showChanges`, title: `Show Changes`, icon: `check-square`, keybinding: `Ctrl+Shift+D`, handler: openReview },
     { command: `workspace.showFiles`, title: `Show Files`, icon: `folder`, handler: () => focusSearch() },
-    { command: `workspace.showHistory`, title: `Show Checkpoints`, icon: `history`, handler: () => layout.setSidebarPanel(`history`) },
+    { command: `workspace.showHistory`, title: `Show Restore Points`, icon: `history`, handler: () => layout.setSidebarPanel(`history`) },
     // The root repo's health report — the palette route to what a nested repo opens from its own tree row.
     { command: `workspace.codebaseHealth`, title: `Show Codebase Health`, icon: `wave-pulse`, handler: () => openHealth(`root`) },
     { command: `workspace.toggleSidebar`, title: `Toggle Explorer`, icon: `bars`, keybinding: `Ctrl+Shift+B`, handler: () => layout.toggleSidebar() },
@@ -688,12 +688,22 @@ const endResize = (event: PointerEvent): void => {
                 class="relative flex min-h-0 shrink-0 flex-col border-r border-line bg-card"
                 :style="{ width: uiLength(layout.sidebarWidth.value) }"
             >
-                <!-- The sidebar's three modes (VSCode SCM pattern): the file explorer, the agent-changes review, or
-                     the snapshot timeline. One column, one resize handle — review/history never steal width from
-                     the diff view in the main area. The mode switch sits ON the sidebar it switches. -->
+                <!-- Files and Changes are the primary modes; automatic restore history is deliberately quieter.
+                     One column, one resize handle — review/history never steal width from the diff view in the
+                     main area. The controls sit ON the sidebar they switch. -->
                 <div class="view-header flex items-center gap-1 border-b border-line px-1.5">
                     <Segmented v-model="sidebarMode" size="xs" :options="sidebarModeOptions" />
                     <span class="flex-1"></span>
+                    <button
+                        type="button"
+                        :class="cmp.iconButton(layout.sidebarPanel.value === 'history' ? 'bg-overlay text-content' : '')"
+                        @click="layout.setSidebarPanel('history')"
+                        v-tooltip.bottom="'Restore points — automatic file history'"
+                        :aria-pressed="layout.sidebarPanel.value === 'history'"
+                        aria-label="Restore points"
+                    >
+                        <Icon name="history" class="text-xs" />
+                    </button>
                     <!-- Changes' panel-wide actions ride the switch's row rather than a header row of their own:
                          the switch's "Changes" tab already titles the panel and carries its count, so a second
                          line below it spent height restating both before a single file was named. -->

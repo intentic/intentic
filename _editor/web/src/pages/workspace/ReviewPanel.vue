@@ -1372,7 +1372,7 @@ const WARNING = `flex items-start gap-1.5 rounded-md border border-warning/40 bg
                         class="shrink-0 rounded border border-warning/50 px-1.5 py-0.5 text-2xs text-warning transition-colors hover:bg-warning/10 disabled:opacity-40"
                         :disabled="changes.actionBusy.value"
                         @click="changes.abortOperation(group.repo)"
-                        v-tooltip.top="'A checkpoint is saved first, so this is reversible from Checkpoints'"
+                        v-tooltip.top="'A restore point is saved first, so this is reversible from Restore points'"
                     >
                         Abort
                     </button>
@@ -1608,7 +1608,7 @@ const WARNING = `flex items-start gap-1.5 rounded-md border border-warning/40 bg
                     </ul>
                 </div>
                 <p class="mt-3 text-2xs text-subtle">
-                    <Icon name="shield" class="mr-0.5 text-[0.6rem]" />A checkpoint is saved first, so this is reversible from Checkpoints.
+                    <Icon name="shield" class="mr-0.5 text-[0.6rem]" />A restore point is saved first, so this is reversible from Restore points.
                 </p>
             </template>
             <template #footer>

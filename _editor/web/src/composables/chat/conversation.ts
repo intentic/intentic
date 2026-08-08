@@ -626,7 +626,7 @@ export class Conversation {
      * problem (the transcript is intact, only the disk moved), which is exactly why it is a notice and not a
      * truncation — what the reader needs is to know that the next turn starts somewhere else. */
     noteWorkspaceRestored(): void {
-        this.transcript.append({ role: `notice`, text: `The workspace was restored to an earlier checkpoint — the files below this line have changed.` });
+        this.transcript.append({ role: `notice`, text: `The workspace was restored to an earlier point — the files below this line have changed.` });
         this.persist(true);
     }
 
