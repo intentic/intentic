@@ -95,11 +95,25 @@ export const showingRunGraph = (run: WorkflowRun | undefined, view: ChatRunView 
  * either pane mode the answer is to change nothing: the panes are already showing the run, and a focus moving
  * between the columns of a band it is following is not a decision to stop following it.
  *
+ * A RUN NOBODY CAN SHOW US IS A RUN WE LET GO OF, which is why this takes an optional run rather than being
+ * skipped when the ledger has no reading. The ledger is a cache with real gaps — it is emptied and refetched
+ * whenever the daemon is rebuilt or the workspace replaced, and a read can simply not have landed yet — and
+ * the caller used to return early through every one of them, dropping the release on the floor. What that
+ * cost was not a missed frame: the run stayed held at `live`, so the next ledger push moved the panes back to
+ * its step, and the one after that did it again. Every click the reader made afterwards was undone within the
+ * second, by a run whose bar they could not see, and the only ways out were popping the panel out or
+ * reloading. "The chat window is stuck on one session" is this, and nothing else in the panel can produce it.
+ *
+ * So the answer with no run in hand is the SAFE one rather than the silent one: we cannot show that this chat
+ * belongs to the run, so the run stops driving what is on screen. The cost of being wrong that way is one
+ * reader who has to press the run's card again; the cost of the other way is a panel that will not stay where
+ * it is put.
+ *
  * A function rather than eight lines inside a watcher because this is the whole rule, and a rule that only
  * exists inside an SFC is one no test can reach.
  */
-export const runOnFocus = (run: WorkflowRun, conversationId: string, mode: ChatRunMode): ChatRunView | undefined =>
-    runHolds(run, conversationId) ? { runId: run.runId, mode: mode === `graph` ? `pinned` : mode } : undefined;
+export const runOnFocus = (run: WorkflowRun | undefined, conversationId: string, mode: ChatRunMode): ChatRunView | undefined =>
+    run !== undefined && runHolds(run, conversationId) ? { runId: run.runId, mode: mode === `graph` ? `pinned` : mode } : undefined;
 
 /* THE NODE GEOMETRY, here rather than in the component, because two things have to agree about it: the graph
  * the user clicks and the columns this file computes from the same layout. A node size passed to one and not

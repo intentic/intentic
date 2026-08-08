@@ -64,19 +64,32 @@ const paneIds = computed(() => {
     }
     return poppedOut.value || layout.chatWidth.value >= dockedRoom(panes.value.length) ? panes.value : [activeId.value];
 });
-const split = computed(() => paneIds.value.length > 1);
-// The conversations behind those ids, in column order. The find always hits — setConversations reconciles the
-// pane set with every list it writes — and `active` is the floor that keeps a slip a wrong chat rather than a
-// crashed panel, the same bargain `active` itself makes.
-const shown = computed<Conversation[]>(() =>
-    paneIds.value.map((id) => conversations.value.find((conversation) => conversation.conversationId === id) ?? active.value),
-);
+/* The conversations behind those ids, in column order — and an id naming no open chat is DROPPED rather than
+ * filled in with the focused one, which is what it used to do.
+ *
+ * The find does not always hit. setConversations reconciles the pane set with every list it writes, but
+ * `openBeside` deliberately claims a column for an id that need not be a tab yet (the board's cards open
+ * second), and nothing reconciles that claim until the next list write. Substituting `active` there did not
+ * degrade gracefully: it drew the focused chat TWICE, in two columns keyed by the same conversation, which is
+ * a duplicate key in a keyed list — from which Vue's diff has no defined way back, and the panel stops
+ * answering to what is picked. A column with nothing in it is not a column; the floor is only reached when
+ * NOTHING resolves, which is the case `active` was always for. */
+const shown = computed<Conversation[]>(() => {
+    const held = paneIds.value.flatMap((id) => {
+        const conversation = conversations.value.find((candidate) => candidate.conversationId === id);
+        return conversation === undefined ? [] : [conversation];
+    });
+    return held.length > 0 ? held : [active.value];
+});
+// A split is what is DRAWN, not what was asked for — a claimed column nobody filled must not make a
+// single-pane panel wear a split's accents or offer its per-column ×.
+const split = computed(() => shown.value.length > 1);
 
 // Past the width floor the panes stop shrinking and the row scrolls, so the focused one has to be brought back
 // into view — the same courtesy the rail does for the focused tab. `nearest` is a no-op on a pane already on
 // screen, so this costs nothing in the ordinary case.
 const paneRow = ref<HTMLElement>();
-watch([() => activeId.value, paneIds], () => {
+watch([() => activeId.value, shown], () => {
     void nextTick(() => {
         paneRow.value?.querySelector(`.chat-pane-on`)?.scrollIntoView({ block: `nearest`, inline: `nearest` });
     });
@@ -95,7 +108,15 @@ const { runs } = useWorkflowRuns();
 // question ("is the run's UI on screen"), and gating the exit on THAT was the bug: docked, it never held, so
 // a run picked on the board stayed `chatRun` — and wore the card's ring — through every session opened after.
 const trackedRun = computed(() => runs.value.find((run) => run.runId === chatRun.value?.runId));
+// Where the DIAGRAM can be drawn: it takes the whole pane area, and that is a trade only a window has the room
+// to make.
 const shownRun = computed(() => (poppedOut.value && !mobile.value ? trackedRun.value : undefined));
+/* THE BAR IS DRAWN WHEREVER THE RUN IS DRIVING, which is not the same question and used to be answered as if
+ * it were. Following a run moves the panes on its own, and docked — where the diagram cannot be shown — the
+ * bar went with the diagram: the reader got a panel that reseated itself every few seconds, with nothing on
+ * screen naming the cause and no × to press, because the one control that ends it lived in a bar only the
+ * pop-out ever saw. A thing that moves the panes by itself has to say so wherever it does it. */
+const barRun = computed(() => trackedRun.value);
 /* WHEN THE DIAGRAM IS WHAT IS ON SCREEN, and `live` is the mode that answers this two different ways over its
  * own lifetime. Asked for outright (`graph`) it is the diagram, full stop. Following the run, it is the diagram
  * only while there is nothing to follow — the seconds between a start and the first step opening its
@@ -113,10 +134,14 @@ const showingGraph = computed(() => showingRunGraph(shownRun.value, chatRun.valu
  * click is as much "show me this chat" as any other. And it runs on `trackedRun`, whatever the panel's form —
  * gated on the popped-out `shownRun` it was dead while docked, which left `chatRun` (and the board ring it
  * draws) latched to a run the user had long since clicked away from.
+ *
+ * It also runs when the ledger has NO reading for the run, which is the second half of the same lesson: a
+ * missing run is handed to runOnFocus rather than being a reason to skip it, and comes back as a release. See
+ * runOnFocus for why an unconfirmable run must let go of the panes.
  */
 watch([activeId, tabReveal], () => {
     const held = chatRun.value;
-    if (trackedRun.value === undefined || held === undefined) {
+    if (held === undefined) {
         return;
     }
     const next = runOnFocus(trackedRun.value, activeId.value, held.mode);
@@ -195,7 +220,7 @@ const openRunColumn = (sessions: readonly RunSession[]): void => {
 // (usePopout.fit only ever grows it, and only as far as the screen allows). Docked, there is no window of ours
 // to resize — the panel is a column in the app's own.
 watch(
-    () => paneIds.value.length,
+    () => shown.value.length,
     (count, before) => {
         if (count > before) {
             fit(count * MIN_PANE_PX + RAIL_PX);
@@ -271,13 +296,16 @@ const endResize = (event: PointerEvent): void => {
         <ChatTabs v-else @select="setActive" @close="closeTabs" @open="openConversation" />
 
         <div class="flex min-h-0 min-w-0 flex-1 flex-col">
-            <!-- THE RUN BAR, and the back arrow is the whole of it. Sessions ⇄ diagram is a there-and-back,
-                 not a place in a history, so it is one arrow that points at the map and is absent once you
-                 are on it — the folder/file relationship, drawn the way every file manager draws it. Above
-                 the panes rather than inside one: the run owns all of the columns, not the focused one. -->
-            <div v-if="shownRun" class="flex shrink-0 items-center gap-2 border-b border-line px-2 py-1">
+            <!-- THE RUN BAR — drawn wherever a run is driving the panes (barRun), not only where its diagram
+                 can be. The back arrow is the whole of it where the diagram exists: sessions ⇄ diagram is a
+                 there-and-back, not a place in a history, so it is one arrow that points at the map and is
+                 absent once you are on it — the folder/file relationship, drawn the way every file manager
+                 draws it. Docked there is no map to point at, so the run wears its glyph and the bar is what
+                 it always had to be: the panel saying what is moving it, and the × that ends it. Above the
+                 panes rather than inside one: the run owns all of the columns, not the focused one. -->
+            <div v-if="barRun" class="flex shrink-0 items-center gap-2 border-b border-line px-2 py-1">
                 <button
-                    v-if="!showingGraph"
+                    v-if="shownRun && !showingGraph"
                     type="button"
                     class="flex h-6 shrink-0 cursor-pointer items-center gap-1.5 rounded px-1.5 text-2xs text-muted transition-colors hover:bg-overlay hover:text-content"
                     v-tooltip.bottom="`Back to the diagram — every step of this run`"
@@ -287,9 +315,9 @@ const endResize = (event: PointerEvent): void => {
                     <Icon name="arrow-left" class="text-2xs" />
                 </button>
                 <Icon v-else name="sitemap" class="shrink-0 text-2xs text-link" />
-                <span class="min-w-0 flex-1 truncate text-2xs font-medium text-content">{{ shownRun.workflow.name }}</span>
+                <span class="min-w-0 flex-1 truncate text-2xs font-medium text-content">{{ barRun.workflow.name }}</span>
                 <span class="shrink-0 text-2xs text-subtle"
-                    >{{ shownRun.steps.filter((step) => step.state === `done`).length }}/{{ shownRun.steps.length }}</span
+                    >{{ barRun.steps.filter((step) => step.state === `done`).length }}/{{ barRun.steps.length }}</span
                 >
                 <button
                     type="button"
@@ -314,10 +342,10 @@ const endResize = (event: PointerEvent): void => {
                      The panel answers the press, the way it answers `focus` — which chats are on screen is
                      the frame's state, not any one pane's. -->
                 <ChatPane
-                    v-for="(conversation, at) in shown"
+                    v-for="conversation in shown"
                     :key="conversation.conversationId"
                     :conversation="conversation"
-                    :focused="paneIds[at] === activeId"
+                    :focused="conversation.conversationId === activeId"
                     :closable="split"
                     @focus="setActive(conversation.conversationId)"
                     @close="closePane(conversation.conversationId)"
