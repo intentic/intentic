@@ -48,7 +48,15 @@ const model = defineModel<T>({ required: true });
                 model === option.value ? `bg-overlay text-content` : `text-muted hover:text-content`,
                 stretch
                     ? `flex min-h-9 flex-1 items-center justify-center px-2 text-center text-xs`
-                    : [`py-0.5 text-2xs`, size === `xs` ? `px-1.5` : `px-2.5`],
+                    : // A compact pill is ONE line, always. It rides fixed-height toolbar rows (.view-header is
+                      // 2.25rem), so a pill that breaks doesn't merely look wrong — it stands taller than the bar
+                      // holding it and than every bar beside it. Only the MARK chip could do this: an icon is an
+                      // atomic inline box, so a line may break before it, where a numeric badge is plain text
+                      // welded to the label with no space to break at. Nowrap also fixes the cause rather than the
+                      // symptom — an unbreakable pill's min-content IS its full width, so the flex row can no
+                      // longer squeeze it narrower than its own label and chip. The stretch variant keeps
+                      // wrapping: it owns a full-width track with room to grow, and its labels are sentences.
+                      [`whitespace-nowrap py-0.5 text-2xs`, size === `xs` ? `px-1.5` : `px-2.5`],
             ]"
             @click="model = option.value"
         >

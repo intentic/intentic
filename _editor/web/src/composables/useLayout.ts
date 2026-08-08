@@ -17,10 +17,17 @@ const MIN_CHAT_WIDTH = 288;
 const MAX_CHAT_WIDTH = 4000;
 
 // Workspace explorer sidebar — the file-tree column inside the /workspace view. Persisted like the chat width.
+//
+// The floor is set by what the column must SHOW, not by how thin a file tree can be squeezed: this sidebar wears
+// the Files|Changes|Checkpoints switch, and in Changes mode that switch carries a chip plus the panel's two
+// actions — 269px of content at its widest (a "99+" count). The old 180px floor predates the switch moving onto
+// the sidebar, and every width under it pushed those actions out past the sidebar's own edge; the old 256px
+// default sat a few pixels short too, which is why the Changes chip kept dropping onto a second line. So the
+// minimum is the header's own width, and the default clears it with room to spare.
 const SIDEBAR_WIDTH_KEY = `ui-workspace-sidebar-width`;
 const SIDEBAR_COLLAPSED_KEY = `ui-workspace-sidebar-collapsed`;
-const DEFAULT_SIDEBAR_WIDTH = 256;
-const MIN_SIDEBAR_WIDTH = 180;
+const DEFAULT_SIDEBAR_WIDTH = 288;
+const MIN_SIDEBAR_WIDTH = 272;
 const MAX_SIDEBAR_WIDTH = 600;
 
 // The agent review panel's file list — the left column in /agents/:id. Its own width, not the workspace
