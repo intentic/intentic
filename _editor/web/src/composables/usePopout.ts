@@ -84,14 +84,19 @@ const CLONE_ATTR = `data-intentic-clone`;
 // no longer a deadline the window has to beat to survive (see stopWaiting).
 const RECLAIM_GRACE_MS = 2500;
 
-// What the design system keys off <html>: the color scheme (the PrimeVue dark preset and the role tokens) and
-// the brand theme (themes.css token overrides). The pop-out page ships a static guess at the scheme for its
-// first paint and nothing else, so both are mirrored from the live root here and re-mirrored on every change.
-const THEME_ATTRIBUTES = [`data-mode`, `data-theme`];
+// What the design system keys off <html>: the color scheme (the PrimeVue dark preset and the role tokens), the
+// brand theme (themes.css token overrides), and the base text size (tokens.css's root font-size, which every
+// rem in the window is a multiple of). The pop-out page ships a static guess at the first two for its first
+// paint and nothing else, so all three are mirrored from the live root here and re-mirrored on every change.
+//
+// The size has to be on THIS list rather than left to the pop-out page's own restore script: that script runs
+// once, at load, so a window opened before the reader changed the setting would sit at the old size for as long
+// as it stayed open — the whole panel, a size out of step with the app it was torn off.
+const ROOT_ATTRIBUTES = [`data-mode`, `data-theme`, `data-text-size`];
 
 const mirrorRoot = (doc: Document): void => {
     doc.documentElement.className = document.documentElement.className;
-    for (const attribute of THEME_ATTRIBUTES) {
+    for (const attribute of ROOT_ATTRIBUTES) {
         const value = document.documentElement.getAttribute(attribute);
         if (value === null) {
             doc.documentElement.removeAttribute(attribute);
@@ -351,7 +356,7 @@ export const createPopout = (name: string, title: string, size: () => { width: n
     const poppedOut = ref(false);
     const body = shallowRef<HTMLElement>();
     let popoutWindow: Window | undefined;
-    let themeObserver: MutationObserver | undefined;
+    let rootObserver: MutationObserver | undefined;
 
     /* "This TAB had the panel floating when it went away" — the note the fresh page reads to know a window is
      * on its way back, so it can hold the panel's docked slot shut instead of flashing it open. sessionStorage
@@ -462,8 +467,8 @@ export const createPopout = (name: string, title: string, size: () => { width: n
         // is the backstop for the paths that skip it.
         win.addEventListener(`beforeunload`, released);
         win.addEventListener(`pagehide`, released);
-        themeObserver = new MutationObserver(() => mirrorRoot(win.document));
-        themeObserver.observe(document.documentElement, { attributes: true, attributeFilter: [...THEME_ATTRIBUTES, `class`] });
+        rootObserver = new MutationObserver(() => mirrorRoot(win.document));
+        rootObserver.observe(document.documentElement, { attributes: true, attributeFilter: [...ROOT_ATTRIBUTES, `class`] });
     };
 
     /* The keeper's question, answered for this store's window. It arrives from the moment the window's page
@@ -505,8 +510,8 @@ export const createPopout = (name: string, title: string, size: () => { width: n
         traceFocus(`popout-released`, { panel: name, closed: popoutWindow?.closed === true });
         const win = popoutWindow;
         popoutWindow = undefined;
-        themeObserver?.disconnect();
-        themeObserver = undefined;
+        rootObserver?.disconnect();
+        rootObserver = undefined;
         if (win) {
             // Before anything else: this runs from `beforeunload` / `pagehide`, while the window is still whole
             // and its frame still readable. A moment later it is a closed window reporting zeros.

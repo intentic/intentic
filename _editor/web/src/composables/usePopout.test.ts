@@ -424,4 +424,29 @@ describe(`createPopout`, () => {
 
         dynamicStyle.remove();
     });
+
+    /* A popped-out panel is drawn by THIS realm into another window, so everything the design system reads off
+     * <html> has to be put there by hand — and kept there. The text size is the one that changes the layout
+     * rather than the colours, so a window left behind on the old size is the most visible way for the two
+     * windows to disagree: a chat set a step smaller than the app it was torn off. */
+    it(`carries the base text size out to a pop-out window, and follows it when the reader changes it`, async () => {
+        createPopout(`text-size-panel`, `Panel`, size);
+        const win = fakeWindow(`text-size-panel`);
+
+        document.documentElement.setAttribute(`data-text-size`, `large`);
+        adopt(`text-size-panel`, win);
+        expect(win.document.documentElement.getAttribute(`data-text-size`)).toBe(`large`);
+
+        // Changed while the window is open — the pop-out page's own restore script ran once, at load, so this
+        // is the only thing that can move it.
+        document.documentElement.setAttribute(`data-text-size`, `compact`);
+        await vi.advanceTimersByTimeAsync(10);
+        expect(win.document.documentElement.getAttribute(`data-text-size`)).toBe(`compact`);
+
+        // And back to the default, which is the ABSENCE of the attribute — a stale `compact` left behind here
+        // would strand the window one size below the app for as long as it stayed open.
+        document.documentElement.removeAttribute(`data-text-size`);
+        await vi.advanceTimersByTimeAsync(10);
+        expect(win.document.documentElement.hasAttribute(`data-text-size`)).toBe(false);
+    });
 });
