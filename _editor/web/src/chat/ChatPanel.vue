@@ -10,6 +10,7 @@ import { useChat } from "../composables/chat/useChat";
 import { useChatPopout } from "../composables/chat/useChatPopout";
 import { useWorkflowRuns } from "../composables/agents/useWorkflowRuns";
 import { useLayout } from "../composables/useLayout";
+import { toAppPx } from "../composables/uiScale";
 import ChatPane from "./ChatPane.vue";
 import ChatRunGraph from "./ChatRunGraph.vue";
 import ChatTabs from "./ChatTabs.vue";
@@ -259,7 +260,7 @@ const onResize = (event: PointerEvent): void => {
     if (!resizing.value) {
         return;
     }
-    layout.setChatWidth(globalThis.innerWidth - event.clientX);
+    layout.setChatWidth(toAppPx(globalThis.innerWidth - event.clientX));
 };
 const endResize = (event: PointerEvent): void => {
     if (!resizing.value) {

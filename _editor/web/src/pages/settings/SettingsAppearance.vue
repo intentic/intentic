@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Row, RowGroup, Segmented, useExplorerStyle, useTheme } from "@intentic/ui";
+import { Row, RowGroup, Segmented, useExplorerStyle, useTextSize, useTheme } from "@intentic/ui";
 import { explorerTreatment } from "@intentic/ui";
 import ToggleSwitch from "primevue/toggleswitch";
 import { computed, ref } from "vue";
@@ -18,6 +18,7 @@ import { useIconRailSize } from "../../composables/useIconRailSize";
  * Segmented control and the Explorer preview flush in the row's #below. */
 
 const { scheme, set: setScheme, theme, setTheme, themes } = useTheme();
+const { textSize, setTextSize } = useTextSize();
 const { explorerStyle, explorerStyles } = useExplorerStyle();
 const { iconRailSize } = useIconRailSize();
 const { fileNesting } = useFileNesting();
@@ -55,6 +56,14 @@ const iconRailOptions = [
     { label: `Compact`, value: `compact` as const },
     { label: `Comfortable`, value: `comfortable` as const },
 ];
+// Named for what they do to the reading, not for the percentages behind them (useTextSize owns those): "110%"
+// is the browser control this setting exists to replace, and repeating its number here would invite someone to
+// set both.
+const textSizeOptions = [
+    { label: `Compact`, value: `compact` as const },
+    { label: `Default`, value: `default` as const },
+    { label: `Large`, value: `large` as const },
+];
 
 // A few representative rows so the Explorer setup is visible here without opening the workspace.
 const explorerPreview: { name: string; type: "file" | "dir" }[] = [
@@ -77,6 +86,10 @@ const treatPreview = (entry: { name: string; type: "file" | "dir" }) =>
             </Row>
             <Row icon="palette" title="Style" description="Colors, type and shape of the workspace.">
                 <template #control><Segmented :model-value="theme" :options="themeOptions" @update:model-value="setTheme" /></template>
+            </Row>
+            <!-- Above the rail row on purpose: this one moves the whole workspace, that one moves a column of it. -->
+            <Row icon="expand" title="Text size" description="How large everything reads — text, spacing and controls together.">
+                <template #control><Segmented :model-value="textSize" :options="textSizeOptions" @update:model-value="setTextSize" /></template>
             </Row>
             <Row icon="sliders-h" title="Icon rail" description="Width and spacing of the desktop navigation rail.">
                 <template #control>

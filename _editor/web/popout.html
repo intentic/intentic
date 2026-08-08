@@ -44,6 +44,8 @@
         <script>
             try {
                 if (localStorage.getItem("ui-color-scheme") === "light") document.documentElement.removeAttribute("data-mode");
+                var uiTextSize = localStorage.getItem("ui-text-size");
+                if (["compact", "large"].indexOf(uiTextSize) !== -1) document.documentElement.setAttribute("data-text-size", uiTextSize);
             } catch (e) {}
         </script>
         <script type="module" src="/src/popout/keeper.ts"></script>

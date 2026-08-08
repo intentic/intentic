@@ -54,6 +54,10 @@ export const sourceAliases = (): Record<string, string> => ({
     // from a manifest is an open string, and the tests that check our own extensions name real glyphs read
     // JSON off disk — no components, no DOM, and nothing to gain from booting Picker.vue to get there.
     "@intentic/ui/icons": here("../../_editor/ui/src/icons/iconSets.ts"),
+    // And again, for the app's base text size: it is the knob that column widths, editor font sizes and the
+    // terminal's grid all convert against (uiScale.ts), so it is reached from plain modules the shell loads on
+    // every boot — and through the barrel, asking a column how wide it should be would boot Picker.vue.
+    "@intentic/ui/text-size": here("../../_editor/ui/src/composables/useTextSize.ts"),
     "@intentic/ui": here("../../_editor/ui/src/index.ts"),
     "@intentic-app/api-contract": here("../../_platform/api-contract/src/index.ts"),
     // The "+" grid's card and category data. It was the ONE first-party lib missing from this map, and the

@@ -8,8 +8,10 @@ import {
     mountTerminalSession,
     parkTerminalSession,
     persistScrollback,
+    retypeTerminalSession,
     type TerminalSession,
 } from "./terminalSession";
+import { useTextSize } from "@intentic/ui/text-size";
 
 /* Multi-tab terminal state for the terminal panel (pages/TerminalPanel.vue): an instance (createTerminalTabs)
  * over ONE module-level session cache, so a session's xterm/socket/scrollback survives unmount, collapse, and
@@ -93,6 +95,15 @@ const epoch = ref(0);
 window.addEventListener(`pagehide`, () => {
     for (const session of cache.values()) {
         persistScrollback(session);
+    }
+});
+
+// The app's text size reaches everything drawn in CSS by itself; a terminal draws its own glyphs, so the cache
+// is the one place that knows every session there is to re-type. Parked sessions included — they are streaming
+// and will be looked at again.
+watch(useTextSize().scale, () => {
+    for (const session of cache.values()) {
+        retypeTerminalSession(session);
     }
 });
 

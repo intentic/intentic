@@ -33,13 +33,18 @@
                 }
             }
         </script>
-        <!-- Anti-flash: restore the saved brand theme before first paint (same idea as the static
-             data-mode above, but a per-user choice can't be static). useTheme.ts stays the source of truth. -->
+        <!-- Anti-flash: restore the saved brand theme and text size before first paint (same idea as the static
+             data-mode above, but a per-user choice can't be static). A text size arriving late is worse than a
+             late colour — the whole layout reflows — so it is restored here rather than only in useTextSize.ts,
+             which stays the source of truth for both. The default size carries no attribute. -->
         <script>
             try {
                 var uiTheme = localStorage.getItem("ui-theme");
                 if (["carbon", "meadow", "honey"].indexOf(uiTheme) !== -1)
                     document.documentElement.setAttribute("data-theme", uiTheme);
+                var uiTextSize = localStorage.getItem("ui-text-size");
+                if (["compact", "large"].indexOf(uiTextSize) !== -1)
+                    document.documentElement.setAttribute("data-text-size", uiTextSize);
             } catch (e) {}
         </script>
         <!-- Google Identity Services — browser-side sign-in for the direct-to-sandbox ID token. Loads async;

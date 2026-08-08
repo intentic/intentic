@@ -15,6 +15,7 @@ import { useChat } from "../composables/chat/useChat";
 import { useChatPopout } from "../composables/chat/useChatPopout";
 import { inTabSurface } from "../composables/commands/tabSurface";
 import { commandShortcut, registerCommand, type RegisteredCommand, withShortcut } from "../composables/commands/useCommands";
+import { toAppPx, uiLength } from "../composables/uiScale";
 import { viewersOfSession } from "../composables/usePresence";
 import PresenceAvatars from "../presence/PresenceAvatars.vue";
 import ChatTabList from "./ChatTabList.vue";
@@ -165,7 +166,8 @@ watch(
 
 // --- Rail width ---------------------------------------------------------------------------------
 // The rail resizes off its right edge (pointer capture, double-click resets) and persists like the panel
-// widths in useLayout — but locally, because it exists only in the pop-out window.
+// widths in useLayout — but locally, because it exists only in the pop-out window. In app pixels for the same
+// reason as those: the rail holds chat cards, so the width that fits their titles moves with the text size.
 const RAIL_WIDTH_KEY = `ui-chat-rail-width`;
 const DEFAULT_RAIL_WIDTH = 240;
 const clampRailWidth = (px: number): number => Math.round(Math.max(176, Math.min(px, 480)));
@@ -195,7 +197,7 @@ const startRailResize = (event: PointerEvent): void => {
 // The rail is flush with the pop-out window's left edge, so its width IS the pointer's x in that window.
 const onRailResize = (event: PointerEvent): void => {
     if (railResizing.value) {
-        setRailWidth(event.clientX);
+        setRailWidth(toAppPx(event.clientX));
     }
 };
 const endRailResize = (event: PointerEvent): void => {
@@ -446,7 +448,7 @@ const openHistory = (event: Event): void => {
             vertical ? 'h-full shrink-0 flex-col items-stretch p-1.5' : 'view-header items-center border-b px-1.5',
             { 'rail-resizing': railResizing },
         ]"
-        :style="vertical ? { width: `${railWidth}px` } : undefined"
+        :style="vertical ? { width: uiLength(railWidth) } : undefined"
         @contextmenu="onBarContextMenu"
     >
         <div

@@ -5,7 +5,7 @@ import { computed, onBeforeUnmount, onMounted, ref, shallowRef, watch } from "vu
 import { useLayout } from "../../../composables/useLayout";
 import { stripComments } from "../../../composables/workspace/codeComments";
 import { firstChangeBeyondImports, importLines } from "../../../composables/workspace/codeImports";
-import { useMonaco } from "../../../composables/workspace/useMonaco";
+import { editorType, useMonaco, watchEditorType } from "../../../composables/workspace/useMonaco";
 import { highlightLangFor } from "../fileType";
 
 /* Diff of one file across a snapshot (before = parent, after = the snapshot) on Monaco's diff editor — the
@@ -154,8 +154,7 @@ onMounted(async () => {
         scrollBeyondLastLine: false,
         renderMarginRevertIcon: false,
         fontFamily: mono,
-        fontSize: 13,
-        lineHeight: 20,
+        ...editorType(),
     });
     diff.value = editor;
     // Empty models first: `render` owns what goes in them, so the toggle and the first paint take one path.
@@ -177,6 +176,10 @@ onMounted(async () => {
 // Crossing the breakpoint (rotation, split-screen) or flipping the toolbar's toggle swaps side-by-side ↔
 // unified in place — no rebuild.
 watch(split, (on) => diff.value?.updateOptions({ renderSideBySide: on }));
+
+// The app's text size, in place: the diff is the surface most worth resizing and the least willing to do it on
+// its own (see editorType).
+watchEditorType((type) => diff.value?.updateOptions(type));
 
 watch(showComments, async () => {
     if (diff.value === undefined) {

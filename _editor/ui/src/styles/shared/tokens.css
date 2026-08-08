@@ -62,3 +62,32 @@
     --ui-tooltip-max-width: 17rem;
     --ui-tooltip-max-lines: 5;
 }
+
+/* ── BASE TEXT SIZE ────────────────────────────────────────────────────────────────────────────────────────
+ * The interface is drawn at what a browser calls 110%, and until this rule existed everyone got there by
+ * zooming the browser. Setting it here instead makes it what the app opens at — and because every size above is
+ * a rem, ONE declaration moves type, spacing, control heights, radii and page widths together, in the same
+ * proportions the zoom did.
+ *
+ * A percentage, not a pixel count: it multiplies whatever the reader's browser calls normal text, so raising
+ * that for readability still works.
+ *
+ * `--ui-scale` is the same number for code that has to think in pixels — a column width the reader dragged, an
+ * editor's font size, a pop-out window's dimensions. Anything that must NOT take the app's bump divides by it,
+ * which is how the navigation rail keeps today's footprint (see ShellDesktop) while everything beside it grows.
+ *
+ * Unlayered on purpose, like the theme blocks: these must beat the `base` layer's html rules.
+ * The size is chosen in Appearance and restored before first paint by the inline script in index.html;
+ * useTextSize.ts is the source of truth for which attribute goes on. */
+:root {
+    font-size: 110%;
+    --ui-scale: 1.1;
+}
+[data-text-size="compact"] {
+    font-size: 100%;
+    --ui-scale: 1;
+}
+[data-text-size="large"] {
+    font-size: 120%;
+    --ui-scale: 1.2;
+}

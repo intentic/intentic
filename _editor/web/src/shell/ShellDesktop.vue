@@ -20,6 +20,7 @@ import { useChatPopout } from "../composables/chat/useChatPopout";
 import { useShellCommands } from "../composables/commands/useShellCommands";
 import { useKeybindings } from "../composables/commands/useKeybindings";
 import { useLayout } from "../composables/useLayout";
+import { uiLength } from "../composables/uiScale";
 import { useIconRailSize } from "../composables/useIconRailSize";
 import { presenceOthers } from "../composables/usePresence";
 import { usePanels } from "../composables/extensions/usePanels";
@@ -349,16 +350,24 @@ onUnmounted(() => {
 // way back, so a refresh doesn't flash the column open for a few frames. The rail variables flow into its child
 // controls too, keeping every tile on one density without threading a presentation-only prop through the
 // switcher and account components.
+// THE RAIL DOES NOT TAKE THE APP'S TEXT SIZE. Everything else on screen grows with it — that is the point of
+// the setting — but the rail is chrome, not content: it carries no prose to read, its tiles are already at a
+// comfortable hit size, and every pixel it gains is a pixel taken from the work beside it. So each of its
+// measures divides the bump back out (--ui-scale, see tokens.css), which holds the column at exactly the
+// footprint it has today while still tracking a reader who has raised their browser's own base font. The
+// glyphs inside the tiles are the one part that does grow, by a pixel or two, so the rail's icons stay in
+// proportion with the app's type instead of shrinking away from it.
+const rail = (value: string): string => `calc(${value} / var(--ui-scale))`;
 const gridStyle = computed(() => {
     const compact = iconRailSize.value === `compact`;
     return {
-        "--chat-width": poppedOut.value || chatRestoring.value ? `0px` : `${layout.chatWidth.value}px`,
-        "--icon-rail-width": compact ? `3.5rem` : `4rem`,
-        "--icon-rail-tile-size": compact ? `2.5rem` : `2.75rem`,
-        "--icon-rail-account-size": compact ? `2rem` : `2.25rem`,
-        "--icon-rail-divider-width": compact ? `1.75rem` : `2rem`,
-        "--icon-rail-gap": compact ? `0.375rem` : `0.5rem`,
-        "--icon-rail-padding": compact ? `0.5rem` : `0.75rem`,
+        "--chat-width": poppedOut.value || chatRestoring.value ? `0px` : uiLength(layout.chatWidth.value),
+        "--icon-rail-width": rail(compact ? `3.5rem` : `4rem`),
+        "--icon-rail-tile-size": rail(compact ? `2.5rem` : `2.75rem`),
+        "--icon-rail-account-size": rail(compact ? `2rem` : `2.25rem`),
+        "--icon-rail-divider-width": rail(compact ? `1.75rem` : `2rem`),
+        "--icon-rail-gap": rail(compact ? `0.375rem` : `0.5rem`),
+        "--icon-rail-padding": rail(compact ? `0.5rem` : `0.75rem`),
     };
 });
 

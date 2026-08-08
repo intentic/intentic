@@ -344,8 +344,10 @@ const confirmRemove = async (): Promise<void> => {
 </template>
 
 <style scoped>
+/* The fallback matches the rail's own arithmetic (ShellDesktop): outside the desktop shell there is no rail to
+ * belong to, but the chip is still chrome, so it holds its size across text sizes rather than growing. */
 .sandbox-switcher {
-    width: var(--icon-rail-tile-size, 2.75rem);
-    height: var(--icon-rail-tile-size, 2.75rem);
+    width: var(--icon-rail-tile-size, calc(2.75rem / var(--ui-scale)));
+    height: var(--icon-rail-tile-size, calc(2.75rem / var(--ui-scale)));
 }
 </style>

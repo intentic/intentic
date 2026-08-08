@@ -10,6 +10,7 @@ import { type AgentReviewFile, useAgentChanges } from "../composables/agents/use
 import { sandboxKey } from "../composables/sandbox/useSandbox";
 import { useSandboxQuery } from "../composables/sandbox/useSandboxQuery";
 import { useLayout } from "../composables/useLayout";
+import { toAppPx, uiLength } from "../composables/uiScale";
 import { diffRawUrls } from "../composables/workspace/diffRaw";
 import { useWorkspaceTabs } from "../composables/workspace/useWorkspaceTabs";
 import BinaryDiffView from "../pages/workspace/viewers/BinaryDiffView.vue";
@@ -505,7 +506,7 @@ const startResize = (event: PointerEvent): void => {
 
 const onResize = (event: PointerEvent): void => {
     if (resizing.value) {
-        shell.setReviewListWidth(event.clientX - listLeft);
+        shell.setReviewListWidth(toAppPx(event.clientX - listLeft));
     }
 };
 
@@ -581,7 +582,7 @@ const endResize = (event: PointerEvent): void => {
                 ref="listEl"
                 class="flex min-h-0 min-w-0 flex-col"
                 :class="mobile ? 'flex-1' : 'shrink-0 border-r border-line'"
-                :style="mobile ? undefined : { width: `${shell.reviewListWidth.value}px` }"
+                :style="mobile ? undefined : { width: uiLength(shell.reviewListWidth.value) }"
             >
                 <!-- The list's own header — everything on it is about the FILES: how many, which of them, how
                      far the pass got. Exactly as tall as the diff's toolbar beside it (h-8), so the two column

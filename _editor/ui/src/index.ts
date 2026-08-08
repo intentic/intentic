@@ -142,3 +142,4 @@ export { commandLang, type CommandOs, OS_OPTIONS, useOsPreference } from "./comp
 export { type Device, useDevice } from "./composables/useDevice.js";
 export { useListNavigation } from "./composables/useListNavigation.js";
 export { type ColorScheme, useTheme } from "./composables/useTheme.js";
+export { type TextSize, useTextSize } from "./composables/useTextSize.js";

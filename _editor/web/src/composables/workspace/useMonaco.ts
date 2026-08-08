@@ -1,6 +1,8 @@
 import { useHighlighter, useTheme } from "@intentic/ui";
+import { useTextSize } from "@intentic/ui/text-size";
 import type * as Monaco from "monaco-editor-core";
 import { watch } from "vue";
+import { toScreenPx } from "../uiScale";
 import { useImportedTheme } from "../theme/useImportedTheme";
 
 /* Single Monaco integration point for the workspace code surface (CodeView + DiffView). Monaco is VSCode's
@@ -162,6 +164,24 @@ const ensureLanguage = async (monaco: typeof Monaco, lang: string | undefined): 
     } catch {
         return undefined;
     }
+};
+
+/* THE CODE SURFACE'S TYPE, in one place because both surfaces are the same surface to a reader: a file and its
+ * diff must not be set in different sizes. Monaco paints its own text from numbers, so unlike the rest of the
+ * app it does not follow the base text size on its own — these are stated AT that size and converted, and an
+ * editor already on screen re-reads them through `watchEditorType`. Without that, choosing a bigger text size
+ * left the one surface made entirely of text at the old one. */
+const EDITOR_FONT_PX = 13;
+const EDITOR_LINE_PX = 20;
+
+export const editorType = (): { fontSize: number; lineHeight: number } => ({
+    fontSize: toScreenPx(EDITOR_FONT_PX),
+    lineHeight: toScreenPx(EDITOR_LINE_PX),
+});
+
+/** Keep an editor's type current for as long as the component holding it lives. */
+export const watchEditorType = (apply: (type: { fontSize: number; lineHeight: number }) => void): void => {
+    watch(useTextSize().scale, () => apply(editorType()));
 };
 
 export function useMonaco() {

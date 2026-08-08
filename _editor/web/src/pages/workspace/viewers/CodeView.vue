@@ -11,7 +11,7 @@ import { onBeforeUnmount, onMounted, ref, shallowRef, watch } from "vue";
 import { modelLineOf, stripComments } from "../../../composables/workspace/codeComments";
 import { normalizationEdits } from "../../../composables/workspace/normalizeOnSave";
 import { useEditorSelection } from "../../../composables/workspace/useEditorSelection";
-import { useMonaco } from "../../../composables/workspace/useMonaco";
+import { editorType, useMonaco, watchEditorType } from "../../../composables/workspace/useMonaco";
 import type { LineJump } from "../workspaceTabs";
 
 /* The workspace code surface — a single Monaco editor for BOTH the read-only preview and (with `editable`) the
@@ -203,8 +203,7 @@ onMounted(async () => {
         hideCursorInOverviewRuler: true,
         scrollBeyondLastLine: false,
         fontFamily: mono,
-        fontSize: 13,
-        lineHeight: 20,
+        ...editorType(),
         padding: { top: 12, bottom: 12 },
         smoothScrolling: true,
         fixedOverflowWidgets: true,
@@ -281,6 +280,9 @@ watch(
     () => hideComments,
     () => void render(code),
 );
+
+// Same for the app's text size — the open file re-types rather than waiting to be reopened (see editorType).
+watchEditorType((type) => editor.value?.updateOptions(type));
 
 onBeforeUnmount(() => {
     disposed = true;

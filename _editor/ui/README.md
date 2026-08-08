@@ -6,14 +6,15 @@ Shared **Vue UI primitives + theme** for the platform web app. A small, reusable
 
 - Provide primitives: `Page` (centered, width-constrained shell), `Card`, `Code` (Shiki-highlighted block), `CodeField` (the same colours with a caret in them — the editable source surface), and `InfoHint` (hover/focus info card).
 - Own theming: `useTheme` (dark/light `ColorScheme`, persisted) + `installUi(app)` (the single design-system plugin: PrimeVue preset + cssLayer order + tooltip directive) + the `Theme` preset.
+- Own how large the app reads: `useTextSize` (persisted, `compact`/`default`/`large`). Because every size in the tokens is a rem, this one knob moves type, spacing, control heights and radii together — `default` is the 110% the interface is drawn at, so a fresh window needs no browser zoom. It also publishes `--ui-scale`, which anything that must NOT grow divides by (the web app's navigation rail) and anything that paints its own text multiplies by (Monaco, xterm).
 - Provide `vTw` (the `v-tw` Tailwind class-merge directive) and `useHighlighter` (the shared Shiki highlighter).
 - It is **presentational/shared only** — no app state or data fetching.
 
 ## Key files / exports
 
-- [src/index.ts](src/index.ts) — public surface: `Card`, `Page`, `Code`, `CodeField`, `InfoHint`, `installUi`, `vTw`, `useTheme`/`ColorScheme`, `useHighlighter`, `Theme`.
+- [src/index.ts](src/index.ts) — public surface: `Card`, `Page`, `Code`, `CodeField`, `InfoHint`, `installUi`, `vTw`, `useTheme`/`ColorScheme`, `useTextSize`/`TextSize`, `useHighlighter`, `Theme`.
 - [src/components/](src/components) — `Card.vue`, `Page.vue`, `Code.vue`, `CodeField.vue`, `InfoHint.vue`.
-- [src/plugin.ts](src/plugin.ts) (`installUi`) and [src/composables](src/composables) — `useTheme` (theme ref + persistence), `vTw`, `useHighlighter` (lazy Shiki core).
+- [src/plugin.ts](src/plugin.ts) (`installUi`) and [src/composables](src/composables) — `useTheme` (theme ref + persistence), `useTextSize` (base text size + persistence; also on the `@intentic/ui/text-size` subpath, so plain modules can ask how large the app is without booting the component graph), `vTw`, `useHighlighter` (lazy Shiki core).
 - [src/styles/](src/styles) — design tokens + `theme.ts` (the `Theme` preset that bridges Tailwind vars ↔ PrimeVue `--p-*`), PrimeVue overrides (`@layer primeng`), semantic colors.
 
 ## How it fits

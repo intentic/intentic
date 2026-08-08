@@ -13,6 +13,7 @@ import { useEditBuffers } from "../../composables/workspace/useEditBuffers";
 import { useMonaco } from "../../composables/workspace/useMonaco";
 import { useLoadingReveal } from "../../composables/loadingReveal";
 import { type SidebarPanel, useLayout } from "../../composables/useLayout";
+import { toAppPx, uiLength } from "../../composables/uiScale";
 import { reportOpenPath } from "../../composables/usePresence";
 import { outgoingMark, outgoingSummary } from "../../composables/workspace/outgoingWork";
 import { useChangeGrouping } from "../../composables/workspace/useChangeGrouping";
@@ -628,7 +629,7 @@ const onResize = (event: PointerEvent): void => {
     if (!resizing.value) {
         return;
     }
-    layout.setSidebarWidth(event.clientX - sidebarLeft);
+    layout.setSidebarWidth(toAppPx(event.clientX - sidebarLeft));
 };
 
 const endResize = (event: PointerEvent): void => {
@@ -670,7 +671,7 @@ const endResize = (event: PointerEvent): void => {
                 v-if="!layout.sidebarCollapsed.value"
                 ref="sidebar"
                 class="relative flex min-h-0 shrink-0 flex-col border-r border-line bg-card"
-                :style="{ width: `${layout.sidebarWidth.value}px` }"
+                :style="{ width: uiLength(layout.sidebarWidth.value) }"
             >
                 <!-- The sidebar's three modes (VSCode SCM pattern): the file explorer, the agent-changes review, or
                      the snapshot timeline. One column, one resize handle — review/history never steal width from

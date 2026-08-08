@@ -5,6 +5,7 @@ import type { TerminalClientMessage, TerminalServerMessage } from "@intentic/san
 import { clipboardOf, useDevice } from "@intentic/ui";
 import { boundCommand } from "../commands/useCommands";
 import { isApplePlatform } from "../commands/keybindings";
+import { toScreenPx } from "../uiScale";
 import { useSandbox } from "../sandbox/useSandbox";
 import { socketUrl as wsSocketUrl } from "../sandbox/wsTicket";
 import { registerFilePathLinks } from "./terminalFileLinks";
@@ -322,12 +323,21 @@ const observeHost = (s: TerminalSession): void => {
     };
 };
 
+// The terminal's type, stated at the app's base text size and converted on use — xterm paints its own glyphs
+// from a number, so it is one of the few things CSS does not carry along when that size changes.
+const FONT_PX = 13;
+
 // Pre-measurement cell estimate (fontSize 13 JetBrains Mono ≈ 7.8×17 css px) for the SPAWN grid only — the
 // first real fit corrects it by at most a row or two. Without it the PTY spawns at xterm's 80x24 default and
 // the immediate shrink to the panel's real grid banks the difference as BLANK lines in tmux's pane history;
-// every later grow (the pop-out) then resurrects them as junk rows above the prompt.
+// every later grow (the pop-out) then resurrects them as junk rows above the prompt. Scaled with the font it
+// is an estimate OF, or the guess is wrong by the text size on every spawn.
 const EST_CELL_W = 7.8;
 const EST_CELL_H = 17;
+const estCell = (): { width: number; height: number } => {
+    const factor = toScreenPx(FONT_PX) / FONT_PX;
+    return { width: EST_CELL_W * factor, height: EST_CELL_H * factor };
+};
 
 // Re-dispatch a mouse event the drag gate below held back. The constructor reads coords, button, buttons,
 // detail and modifiers off the source instance; the clone is synthetic (isTrusted false), which is what stops
@@ -338,6 +348,20 @@ const replayMouse = (event: MouseEvent, forceShift: boolean): void => {
         Object.defineProperty(clone, `shiftKey`, { value: true });
     }
     event.target?.dispatchEvent(clone);
+};
+
+// Re-type a LIVE session after the app's text size changed. A terminal's font size is a number it was built
+// with, so an open shell would otherwise keep yesterday's type until it was killed and reopened — and because
+// the glyphs change size, the grid that fits the same box changes with them: refit, then tell the PTY, or tmux
+// keeps redrawing for a pane that is no longer that many columns wide.
+export const retypeTerminalSession = (s: TerminalSession): void => {
+    const size = toScreenPx(FONT_PX);
+    if (s.term.options.fontSize === size) {
+        return;
+    }
+    s.term.options.fontSize = size;
+    fitSession(s);
+    scheduleResizeFrame(s);
 };
 
 // The two clipboard verbs, both routed through the TERMINAL's own window (clipboardOf) for the same reason the
@@ -372,7 +396,7 @@ export const createTerminalSession = (name: string, onExit: (name: string) => vo
         cursorBlink: !readOnly,
         disableStdin: readOnly,
         fontFamily: `'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace`,
-        fontSize: 13,
+        fontSize: toScreenPx(FONT_PX),
         // OSC 8 hyperlinks (CLIs that emit explicit link escapes) — without this, xterm falls back to a
         // blocking confirm() dialog on activation.
         linkHandler: { activate: openLink },
@@ -505,9 +529,10 @@ export const createTerminalSession = (name: string, onExit: (name: string) => vo
         return true;
     });
     if (spawnWithin !== undefined && spawnWithin.clientWidth > 0 && spawnWithin.clientHeight > 0) {
+        const cell = estCell();
         term.resize(
-            Math.max(2, Math.floor((spawnWithin.clientWidth - SCROLLBAR_PX) / EST_CELL_W)),
-            Math.max(1, Math.floor(spawnWithin.clientHeight / EST_CELL_H)),
+            Math.max(2, Math.floor((spawnWithin.clientWidth - SCROLLBAR_PX) / cell.width)),
+            Math.max(1, Math.floor(spawnWithin.clientHeight / cell.height)),
         );
     }
     const s: TerminalSession = {

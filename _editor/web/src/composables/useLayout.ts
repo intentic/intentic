@@ -1,4 +1,5 @@
 import { ref } from "vue";
+import { toAppPx } from "./uiScale";
 
 export type ChatPosition = "left" | "right";
 // What the ONE workspace sidebar shows: the file explorer, the agent-changes review, or the snapshot timeline
@@ -10,7 +11,13 @@ export type DiffLayout = "split" | "unified";
 const STORAGE_KEY = `ui-chat-position`;
 const WIDTH_KEY = `ui-chat-width`;
 
-// Chat panel width bounds (px). Default matches the original fixed 22rem column. The max is effectively
+// EVERY WIDTH IN THIS FILE IS IN APP PIXELS — pixels at the app's base text size, which is what all of the
+// measurements below were taken at. They are not screen pixels: the base size is a setting, so a column asked
+// to hold a header or a path has to grow with the type inside it or the thing it was measured against stops
+// fitting. uiScale.ts owns the conversion and names the two edges where it happens (the pointer, and the
+// pop-out window); nothing in between converts, and nothing here needs to know the current size.
+//
+// Chat panel width bounds. Default matches the original fixed 22rem column. The max is effectively
 // unlimited — capped only just shy of the viewport so a sliver of workspace always remains.
 const DEFAULT_CHAT_WIDTH = 352;
 const MIN_CHAT_WIDTH = 288;
@@ -96,8 +103,9 @@ const SKIP_IMPORTS_KEY = `ui-diff-skip-imports`;
  * application layout concepts, not generic @intentic/ui primitives. */
 
 // Clamp chat width to a floor and to ~95% of the viewport (leaving a sliver of workspace); otherwise unlimited.
+// The viewport is the one bound that arrives in screen pixels, so it converts before it is compared.
 const clampWidth = (px: number): number => {
-    const viewportMax = window.innerWidth * 0.95;
+    const viewportMax = toAppPx(window.innerWidth * 0.95);
     const max = Math.min(MAX_CHAT_WIDTH, viewportMax);
     return Math.round(Math.max(MIN_CHAT_WIDTH, Math.min(px, max)));
 };
