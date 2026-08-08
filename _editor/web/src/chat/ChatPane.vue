@@ -1186,12 +1186,20 @@ watch(
                              does. A bare "continue" and an app errand both fold into the turn they serve
                              (see foldsIntoTurn), so the question that defines the work stays pinned through
                              the continued answer. -->
-                        <template v-for="turn in turns" :key="turn.id">
-                            <!-- The fork point, in the gap ABOVE each turn: everything over the line is what a
-                                 fork here keeps. Not above the FIRST turn — a fork that inherits nothing is a
-                                 new chat, which the strip above already offers. -->
-                            <ChatForkCut v-if="(cuts.get(turn.id) ?? 0) > 0" :cut="cuts.get(turn.id) ?? 0" />
-                            <section class="flex flex-col gap-1">
+                        <template v-for="(turn, index) in turns" :key="turn.id">
+                            <!-- The fork point, in the MARGIN beside each turn: everything above that turn is
+                                 what a fork here keeps. It is drawn inside the section so it can hang off the
+                                 turn's own hover and stand level with it — and so the transcript keeps the
+                                 height the old cut line between turns used to spend.
+                                 The first turn has no cut of its own (a fork inheriting nothing is a new chat,
+                                 which the strip above already offers), so it carries a mark only when it is
+                                 also the last — the one offer left there being the whole conversation. -->
+                            <section class="group/turn relative flex flex-col gap-1">
+                                <ChatForkCut
+                                    v-if="(cuts.get(turn.id) ?? 0) > 0 || index === turns.length - 1"
+                                    :cut="cuts.get(turn.id) ?? 0"
+                                    :last="index === turns.length - 1"
+                                />
                                 <!-- v-memo skips the vnode entirely for a row whose inputs are unchanged, which
                                      during a streaming turn is every row but the one being written: `turns` is
                                      rebuilt on each paint, so without it the whole transcript is re-created to
@@ -1208,8 +1216,6 @@ watch(
                                 />
                             </section>
                         </template>
-                        <!-- And one past the end: the whole conversation, carried on somewhere else. -->
-                        <ChatForkCut :cut="messages.length" />
                     </template>
                     <!-- The transcript is on its way (a history open, a restored tab whose local mirror was
                          empty). Without this state the round-trip wears the "Start a conversation" text

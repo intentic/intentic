@@ -512,7 +512,16 @@ export const conversationView = (conversation: ComputedRef<Conversation>) => ({
      * opposite on both counts. */
     forkAt: (cut: number, files: "then" | "now"): void => {
         const source = conversation.value;
-        if (cut < 0 || cut > source.messages.value.length || source.streaming.value) {
+        if (cut < 0 || cut > source.messages.value.length) {
+            return;
+        }
+        /* A RUNNING TURN DOES NOT BLOCK THE CHAT HALF OF THIS. Copying the turns above the cut into a new tab
+         * takes nothing away from the run still writing below it, and a turn that has been going twenty
+         * minutes is exactly when a second line of attack is worth opening — refusing then made the control
+         * useless at the one moment it was wanted. What a running turn does block is the FILES: putting a
+         * checkpoint back underneath an agent writing to those same files is a different act, so that half
+         * waits for the turn to end. */
+        if (files === `then` && source.streaming.value) {
             return;
         }
         const fork = new Conversation();

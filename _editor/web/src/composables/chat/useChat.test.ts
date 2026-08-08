@@ -1380,16 +1380,27 @@ describe(`forking at a cut`, () => {
         expect(chat.active.value.isolated.value).toBe(true);
     });
 
-    // A cut nobody could have made — past the end of a transcript that has since shrunk, or into a chat whose
-    // turn started while the menu sat open — opens no tab at all.
-    it(`refuses a cut out of range, and any cut while a turn runs`, () => {
+    // A cut nobody could have made — past the end of a transcript that has since shrunk — opens no tab at all.
+    it(`refuses a cut out of range`, () => {
         const chat = seed();
 
         chat.forkAt(9, `now`);
         expect(chat.conversations.value).toHaveLength(1);
+    });
 
+    /* A RUNNING TURN SPLITS THIS IN TWO. The turns above the cut are settled and copying them costs the run
+     * below nothing, so branching off mid-turn — the moment a long answer is going somewhere you don't want
+     * is exactly when a second attempt is worth having — opens its tab. Asking for the FILES as they were is
+     * refused until the turn ends: restoring a checkpoint under an agent writing to those same files is a
+     * different act, and one no menu row should perform by surprise. */
+    it(`forks the chat while a turn runs, and refuses to move files under it`, () => {
+        const chat = seed();
         chat.active.value.streaming.value = true;
-        chat.forkAt(2, `now`);
+
+        chat.forkAt(2, `then`);
         expect(chat.conversations.value).toHaveLength(1);
+
+        chat.forkAt(2, `now`);
+        expect(chat.conversations.value).toHaveLength(2);
     });
 });

@@ -200,9 +200,29 @@
    measure and quietly set the transcript two characters narrower than the number above says. */
 .chat-turns {
     width: 100%;
-    max-width: calc(48rem + 2rem);
-    padding-inline: 1rem;
+    max-width: calc(48rem + 2 * var(--chat-gutter));
+    padding-inline: var(--chat-gutter);
     margin-inline: auto;
+}
+/* The margin the fork mark stands in (ChatForkCut). It is the column's OWN inset rather than space borrowed
+   off the scroller: an absolute element hung outside the column would be clipped in a narrow panel — or drag a
+   horizontal scrollbar across the transcript — whereas padding is width the column already owns at every size.
+   Wider wherever the pane can spare it, so the mark stands clear of the words instead of hard against them.
+   The threshold is exactly the width the WIDENED column needs (48 + 2 × 2.25 = 52.5rem, plus a hair): the
+   reading measure is 48rem on both sides of it, so past that point the extra inset costs the text nothing at
+   all and there is no reason to withhold it. Under it the gutter thins back to the plain inset and the mark
+   tucks in beside the words, which is the right trade in a panel narrow enough to have no margin to give.
+   @container, so it answers to a dragged panel edge and a pop-out window rather than to the screen — and note
+   the root here is 17.6px, so this breakpoint lands near 930px rather than the 848 the number reads as. */
+.chat-turns {
+    --chat-gutter: 1rem;
+}
+@container (min-width: 53rem) {
+    /* Scoped to the pane on purpose: .chat-turns is borrowed by the subagent view for the same reading
+       measure, and that one has no mark in its margin to make room for. */
+    .chat-pane .chat-turns {
+        --chat-gutter: 2.25rem;
+    }
 }
 /* A streamed assistant body is split across two .md-part wrappers (settled + still-writing). display:contents
    removes them from layout so the prose inside still behaves as direct children of .chat-markdown — but

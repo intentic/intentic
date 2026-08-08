@@ -86,10 +86,10 @@ const { default: ChatForkCut } = await import("./ChatForkCut.vue");
 
 let app: App | undefined;
 
-const mount = (cut: number): HTMLElement => {
+const mount = (cut: number, last = false): HTMLElement => {
     const element = document.createElement(`div`);
     document.body.append(element);
-    app = createApp({ render: () => h(ChatForkCut, { cut }) });
+    app = createApp({ render: () => h(ChatForkCut, { cut, last }) });
     app.use(VueQueryPlugin, { queryClient: new QueryClient() });
     app.component(`Icon`, defineComponent({ render: () => h(`i`) }));
     app.directive(`tooltip`, {});
@@ -164,18 +164,34 @@ describe(`the fork cut`, () => {
         expect(forkAt).toHaveBeenLastCalledWith(2, `now`);
     });
 
-    /* The cut past the last message forks the whole conversation. There is no turn below it, so there is no
-     * state filed under it either — which leaves exactly one honest offer, and it is the one that promises
-     * nothing about old files. */
-    it(`forks the whole conversation past the end, chat only`, async () => {
-        const element = mount(state.messages.length);
+    /* THE WHOLE CONVERSATION rides the LAST turn's mark. It has no boundary of its own — there is no turn past
+     * the end, and so no state filed under it either — which leaves exactly one honest offer, the one that
+     * promises nothing about old files. It used to be a cut line of its own drawn past the final message,
+     * which is to say a full-width row sitting on top of the composer. */
+    it(`offers the whole conversation on the last turn's mark`, async () => {
+        const element = mount(2, true);
         await openMenu(element);
 
-        expect(row(`Fork chat only`)?.disabled).toBe(false);
-        expect(row(`Fork`)?.disabled).toBe(true);
-
-        row(`Fork chat only`)?.command?.({ originalEvent: new Event(`click`), item: {} });
+        expect(row(`Fork the whole conversation`)?.disabled).toBe(false);
+        row(`Fork the whole conversation`)?.command?.({ originalEvent: new Event(`click`), item: {} });
         expect(forkAt).toHaveBeenCalledWith(4, `now`);
+    });
+
+    // Anywhere else that row would be a second name for the cut below it, which has a mark of its own.
+    it(`keeps the whole-conversation row off the turns that are not last`, async () => {
+        const element = mount(2);
+        await openMenu(element);
+
+        expect(row(`Fork the whole conversation`)).toBeUndefined();
+    });
+
+    // A one-turn chat has no boundary inside it — a fork above its first turn would inherit nothing — so its
+    // mark carries the single offer that still means something rather than a menu of dead rows.
+    it(`offers only the whole conversation on a lone first turn`, async () => {
+        const element = mount(0, true);
+        await openMenu(element);
+
+        expect(shown.model.map((item) => item.label)).toEqual([`Fork the whole conversation`]);
     });
 
     // The one row that destroys anything: the first press only arms, and says what the second one would cost.
@@ -208,15 +224,32 @@ describe(`the fork cut`, () => {
         expect(row(`Rewind`)?.disabled).toBe(false);
     });
 
-    // A turn in flight owns the transcript and the workspace both; every row is refused while one runs.
-    it(`refuses every row while a turn is running`, async () => {
+    /* A TURN IN FLIGHT OWNS THE FILES, NOT THE TRANSCRIPT ABOVE IT. Copying the turns above the cut into a new
+     * chat takes nothing away from the run still writing below, and a turn that has been going twenty minutes
+     * is exactly when a second line of attack is worth opening — so the chat fork stands. The two rows that
+     * would put files back where they were wait, and say why rather than going quietly grey. */
+    it(`forks the chat while a turn is running, and holds back the rows that move files`, async () => {
         state.streaming = true;
         const element = mount(2);
         await openMenu(element);
 
+        expect(row(`Fork chat only`)?.disabled).toBe(false);
         expect(row(`Fork`)?.disabled).toBe(true);
-        expect(row(`Fork chat only`)?.disabled).toBe(true);
+        expect(row(`Fork`)?.[`hint`]).toBe(`Old files have to wait for the turn to finish`);
         expect(row(`Rewind`)?.disabled).toBe(true);
+
+        row(`Fork chat only`)?.command?.({ originalEvent: new Event(`click`), item: {} });
+        expect(forkAt).toHaveBeenCalledWith(2, `now`);
+    });
+
+    // A shared-workspace chat's one fork IS the chat fork, so a running turn leaves it alone entirely.
+    it(`still forks a shared-workspace chat while a turn is running`, async () => {
+        state.isolated = false;
+        state.streaming = true;
+        const element = mount(2);
+        await openMenu(element);
+
+        expect(row(`Fork`)?.disabled).toBe(false);
     });
 
     /* A chat working in the SHARED workspace has one fork to give — its files are everyone else's too, so
@@ -242,6 +275,8 @@ describe(`the fork cut`, () => {
  * shows at the point it was cut — because the reason to fork is to compare, and a path you cannot reach from
  * where it left is one you will not compare. */
 describe(`a cut that has been forked`, () => {
+    // In the MENU, by name — out in the margin they were a row of chips, which is the width this control gave
+    // back. The menu costs a click and keeps every branch findable from the point it left.
     it(`names the forks taken from exactly this point, and opens them`, async () => {
         state.fleet = [
             { id: `fork-a`, title: `Without the cache`, forkedFrom: { conversationId: `c1`, index: 2 } },
@@ -249,23 +284,46 @@ describe(`a cut that has been forked`, () => {
             { id: `stranger`, title: `Unrelated`, forkedFrom: { conversationId: `other`, index: 2 } },
         ];
         const element = mount(2);
-        await nextTick();
+        await openMenu(element);
 
-        // Only this cut's fork — the one taken four messages down belongs to a different gap, and an unrelated
-        // conversation's fork belongs to a different chat.
-        expect(element.textContent).toContain(`Without the cache`);
-        expect(element.textContent).not.toContain(`Somewhere else entirely`);
-        expect(element.textContent).not.toContain(`Unrelated`);
+        // Only this cut's fork — the one taken four messages down belongs to a different point, and an
+        // unrelated conversation's fork belongs to a different chat.
+        const labels = shown.model.map((item) => String(item.label ?? ``));
+        expect(labels).toContain(`Without the cache`);
+        expect(labels).not.toContain(`Somewhere else entirely`);
+        expect(labels).not.toContain(`Unrelated`);
 
-        [...element.querySelectorAll(`button`)].at(-1)?.click();
+        row(`Without the cache`)?.command?.({ originalEvent: new Event(`click`), item: {} });
         expect(opened.ids).toEqual([`fork-a`]);
     });
 
-    // An untaken cut stays an empty gap: nothing is drawn until the pointer arrives.
-    it(`says nothing at a cut nobody has forked`, async () => {
+    // A junction is worth seeing without hunting for it, so its mark stands lit and permanent.
+    it(`stands lit where a fork was taken`, async () => {
+        state.fleet = [{ id: `fork-a`, title: `Without the cache`, forkedFrom: { conversationId: `c1`, index: 2 } }];
         const element = mount(2);
         await nextTick();
 
-        expect(element.querySelectorAll(`button`)).toHaveLength(1);
+        expect(element.querySelector(`button`)?.className).toContain(`text-link`);
+    });
+
+    // An untaken cut stays out of the way: the mark is in the margin but invisible until a pointer arrives.
+    it(`stays dim at a cut nobody has forked`, async () => {
+        const element = mount(2);
+        await nextTick();
+
+        const className = element.querySelector(`button`)?.className ?? ``;
+        expect(className).toContain(`opacity-0`);
+        expect(className).not.toContain(`text-link`);
+    });
+
+    /* AND IT DOES NOT APPEAR JUST BECAUSE SOMETHING IS RUNNING. The chip this replaced did exactly that — it
+     * was visible only while a turn was in flight, which was the one state in which it refused to be pressed,
+     * so the only version of the control most people ever saw was a greyed-out one that did nothing. */
+    it(`does not light up merely because a turn is running`, async () => {
+        state.streaming = true;
+        const element = mount(2);
+        await nextTick();
+
+        expect(element.querySelector(`button`)?.className).toContain(`opacity-0`);
     });
 });
