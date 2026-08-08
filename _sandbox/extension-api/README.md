@@ -33,6 +33,13 @@ forbidden — the contract imported the manifest schema from here, so depending 
   Identity is derived, never declared — `extensionIdOf(manifest) = ${publisher}.${name}`.
 - **[facts.ts](src/facts.ts)** — the stable **detection** vocabulary (`RepoFacts`, `CapabilityFacts`) a
   view's `detect()` reads to decide when to activate. This is *not* the data plane.
+- **[server.ts](src/server.ts)** — `ExtensionServerApi`, the BACKEND half's surface. A manifest `server`
+  bundle exports `activateServer(api, context)` and runs in the daemon's backend host (one separate
+  supervised process shared by every enabled backend); `api.routes.mount` serves the extension's own
+  `/x/<id>/…` namespace, `api.daemon.request/json` reaches the daemon's routes under the manifest's
+  `permissions.daemon` allowlist, and workspace files are plain `node:fs` under `api.workspaceRoot` — full
+  trust, so paths rather than a file service. The extension's own namespace needs no `permissions.sandbox`
+  entry on the UI side: its backend is its own.
 
 Three surfaces, at three different grains, and the grain is what picks one. A **view** activates per *repo*
 off the facts (`rail`, `directory`, `sandbox`). A **viewer** takes over a *file extension*. A **document**
@@ -43,7 +50,9 @@ packages, which is exactly the case a per-repo `detect()` cannot express.
   version (`engines.intentic` is checked against it before activation).
 
 Version 2 makes listener contributions self-describing (`events` + `automation`); version 1 listeners only
-declared bare event ids and cannot describe a generic editor.
+declared bare event ids and cannot describe a generic editor. Version 2.1 adds the backend half — the
+manifest `server` bundle and `permissions.daemon` — additively: a 2.0 manifest is a 2.1 manifest that ships
+no backend.
 
 ## The data plane
 

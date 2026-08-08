@@ -299,6 +299,19 @@ export const services = (overrides: ServiceOverrides = {}): Services => {
         // Real too, for the same reason: the path binding IS what /workspace/media checks, and a fake would
         // only restate it.
         mediaTickets: createMediaTickets(),
+        /* A backend host that is simply not running — the honest default for route tests: the extensions list
+         * reads statusOf per row (undefined ⇒ the host's own state answers), the /x proxy answers 503, and no
+         * extension token verifies. The supervisor's real behaviour is covered by its own integration suite,
+         * which spawns the actual host process. */
+        extensionBackend: {
+            start: async () => {},
+            restart: () => {},
+            stop: () => {},
+            status: () => ({ state: "stopped", extensions: [] }),
+            statusOf: () => undefined,
+            proxyTarget: () => undefined,
+            verifyExtensionToken: () => undefined,
+        },
         panelToken: "panel-secret",
         // The /vpn-scoped secret the in-container CLI presents. A fixed value here so a route test can present
         // it; production mints one per boot.

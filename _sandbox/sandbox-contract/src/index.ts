@@ -22,7 +22,6 @@ import { kimiContract } from "./contracts/kimi.contract.js";
 import { komodoContract } from "./contracts/komodo.contract.js";
 import { logsContract } from "./contracts/logs.contract.js";
 import { loopsContract } from "./contracts/loops.contract.js";
-import { memoryContract } from "./contracts/memory.contract.js";
 import { panelsContract } from "./contracts/panels.contract.js";
 import { portsContract } from "./contracts/ports.contract.js";
 import { publicContract } from "./contracts/public.contract.js";
@@ -63,7 +62,6 @@ export { kimiContract } from "./contracts/kimi.contract.js";
 export { komodoContract } from "./contracts/komodo.contract.js";
 export { logsContract } from "./contracts/logs.contract.js";
 export { loopsContract } from "./contracts/loops.contract.js";
-export { memoryContract } from "./contracts/memory.contract.js";
 export { panelsContract } from "./contracts/panels.contract.js";
 export { portsContract } from "./contracts/ports.contract.js";
 export { publicContract } from "./contracts/public.contract.js";
@@ -128,7 +126,6 @@ export const sandboxContract = {
     inventory: inventoryContract,
     logs: logsContract,
     loops: loopsContract,
-    memory: memoryContract,
     panels: panelsContract,
     ports: portsContract,
     public: publicContract,

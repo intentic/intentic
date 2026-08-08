@@ -399,17 +399,34 @@ export const ExtensionManifestSchema = z.object({
     // Semver range over the host's extension API version (extensionApiVersion) — checked before activation.
     engines: z.object({ intentic: z.string().min(1) }),
     // Repo-relative path of the prebuilt single-file ESM bundle (built with `vue` and `@intentic/extension-api`
-    // as externals); absent ⇒ an agent-only extension with no UI entry.
+    // as externals); absent ⇒ an extension with no UI entry.
     entry: z
         .string()
         .min(1)
         .refine((value) => !value.split("/").includes(".."), { message: "entry must stay inside the checkout" })
         .optional(),
-    // The daemon routes this extension may call through api.sandbox.request/json — each "<METHOD> <path-glob>"
-    // where `*` matches one path segment (e.g. "GET /panels", "POST /panels/*/start"). The host refuses any
-    // api.sandbox call whose method+path isn't declared here, so an extension's backend reach is explicit and
-    // reviewable instead of an ambient client to the whole daemon. Absent ⇒ the extension makes no api.sandbox calls.
-    permissions: z.object({ sandbox: z.array(z.string()) }).optional(),
+    /* Repo-relative path of the prebuilt single-file node ESM SERVER bundle — the extension's BACKEND half,
+     * exporting `activateServer(api, context)`. Loaded by the daemon's backend host (a separate supervised
+     * process, so a toggle or a live edit is a host restart rather than a daemon death) and served under the
+     * extension's own route namespace `/x/<id>/…`, which the daemon proxies. Self-contained by construction:
+     * the host provides no import map and the baked checkout has no node_modules, so everything but node
+     * builtins must be bundled in. Absent ⇒ the extension has no backend. */
+    server: z
+        .string()
+        .min(1)
+        .refine((value) => !value.split("/").includes(".."), { message: "server must stay inside the checkout" })
+        .optional(),
+    // Declared reach, both halves in one grammar — "<METHOD> <path-glob>" where `*` matches one path segment
+    // (e.g. "GET /panels", "POST /panels/*/start") — so the install dialog, the gate and the usage ledger read
+    // one vocabulary.
+    //   sandbox — the daemon routes the UI half may call through api.sandbox (the host refuses undeclared
+    //             ones). An extension's OWN namespace `/x/<its id>/…` needs no entry: its backend is its own.
+    //   daemon  — the daemon routes the SERVER half may call through api.daemon, enforced by the daemon's
+    //             extension-token grant. Separate from `sandbox` because the halves run as different
+    //             principals: the UI acts with the owner's session, the backend with a minted per-extension
+    //             token, and a grant to one must never quietly widen the other.
+    // Absent (or an absent key) ⇒ that half makes no daemon calls.
+    permissions: z.object({ sandbox: z.array(z.string()).optional(), daemon: z.array(z.string()).optional() }).optional(),
     contributes: z
         .object({
             views: z.array(ViewContributionSchema).optional(),

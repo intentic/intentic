@@ -161,6 +161,7 @@ import { panePids } from "./terminal/terminal-session.js";
 import { version } from "./version.js";
 import { type AgentTool, internalTools } from "./agent/agent-tools.js";
 import { type UsageStore, fileUsageStore } from "./usage/usage-store.js";
+import { createExtensionBackend, type ExtensionBackend } from "./extensions/backend/backend-supervisor.js";
 import { type WorkspacePaths, workspacePaths } from "./workspace/workspace.js";
 import {
     copyWorkspacePath,
@@ -214,6 +215,10 @@ export interface Services {
     // Per-repository operator panels: the in-memory process manager the /panels routes and the preview proxy
     // drive (discovery of which repo has a panel is convention-only — see panels/panels.ts).
     readonly processes: ManagedProcesses;
+    // The extension backend host's supervisor: one separate node process running every enabled extension's
+    // `server` bundle, proxied under /x/<id>/ and restarted on any change to the enabled set or a workspace
+    // extension's files (see extensions/backend/backend-supervisor.ts).
+    readonly extensionBackend: ExtensionBackend;
     // The forwarded-port slot table the /ports routes drive and the preview proxy resolves port-<slot> hosts
     // against (see ports/port-forwards.ts).
     readonly portForwards: PortForwards;
@@ -727,7 +732,11 @@ export const createServices = (config: Config, logger: Logger): Services => {
         readClaudeSession: readWorkspaceSession,
     };
 
-    return {
+    /* The backend supervisor enumerates extensions through the finished services object (the same
+     * ExtensionHost seam every other consumer uses), which does not exist until the literal below is built —
+     * so it takes a thunk bound afterwards. Nothing calls it before main() starts the boot chain. */
+    const servicesHolder: { current?: Services } = {};
+    const services: Services = {
         config,
         logger,
         perf,
@@ -737,6 +746,16 @@ export const createServices = (config: Config, logger: Logger): Services => {
         announcer: createAnnouncer(config, logger),
         workspace,
         processes: createManagedProcesses(),
+        extensionBackend: createExtensionBackend(
+            () => {
+                if (servicesHolder.current === undefined) {
+                    throw new Error("extension backend used before services finished composing");
+                }
+                return servicesHolder.current;
+            },
+            config.sandbox.port,
+            logger,
+        ),
         // Slot names are salted with the connect token, so a forwarded port's public hostname can't be guessed
         // from the sandbox id alone (tunnel-ids.ts). The daemon and the platform derive the same eight.
         portForwards: createPortForwards(portSlotsFromToken(config.connectToken)),
@@ -917,4 +936,6 @@ export const createServices = (config: Config, logger: Logger): Services => {
         members,
         auth,
     };
+    servicesHolder.current = services;
+    return services;
 };

@@ -50,7 +50,11 @@ export const linkClaudeState = async (workspaceRoot: string, home = homedir()): 
     // session data. Converge every other entry first, then report the refusals in one throw.
     const refused: string[] = [];
     for (const name of SESSION_STATE) {
-        const target = join(store, name);
+        /* "projects" is also a WORKSPACE_STATE_FILES entry of its own — split from `.intentic/claude/` so
+         * portability can carry the memory notes and transcripts under it while the credential siblings stay
+         * behind. Built through statePath so the table's path provably has a builder (the coverage test),
+         * now that the memory feature reading it lives in ext-memory's backend rather than the core. */
+        const target = name === "projects" ? statePath(workspaceRoot, ".intentic/claude/projects/") : join(store, name);
         const link = join(claudeHome, name);
         await mkdir(target, { recursive: true });
         const existing = await lstat(link).catch(() => undefined);

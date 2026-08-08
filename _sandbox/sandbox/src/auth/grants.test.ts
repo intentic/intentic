@@ -11,6 +11,7 @@ test("the agent grant reaches /vpn and the otp mint, and nothing that reveals a 
         agentToken: "agent",
         controlTokens: { scopeOf: async () => undefined } as unknown as ControlTokens,
         verifySync: async () => false,
+        verifyExtension: () => undefined,
     });
     const agent = grants.find((grant) => grant.header === "x-intentic-agent");
     if (agent === undefined) {
@@ -27,4 +28,29 @@ test("the agent grant reaches /vpn and the otp mint, and nothing that reveals a 
     expect(await agent.authorize("agent", "GET", "/secrets")).toBe("out-of-scope");
     // A wrong secret on an in-scope route is 401, never a fall-through.
     expect(await agent.authorize("intruder", "GET", "/capabilities/npm/otp")).toBe("unauthorized");
+});
+
+// The extension grant is the backend half's whole reach into the daemon: resolve the minted token to its
+// manifest-declared permissions.daemon, then the same glob check the UI half's gate runs. Pinned like the
+// agent grant above — an extension backend must never inherit the panel token's everything.
+test("the extension grant reaches exactly the declared daemon routes", async () => {
+    const grants = grantsOf({
+        panelToken: "panel",
+        agentToken: "agent",
+        controlTokens: { scopeOf: async () => undefined } as unknown as ControlTokens,
+        verifySync: async () => false,
+        verifyExtension: (presented) => (presented === "ext-token" ? { permissions: ["GET /workspace/file", "POST /agents"] } : undefined),
+    });
+    const extension = grants.find((grant) => grant.header === "x-intentic-extension");
+    if (extension === undefined) {
+        throw new Error("no extension grant in the table");
+    }
+    expect(await extension.authorize("ext-token", "GET", "/workspace/file")).toBe("ok");
+    expect(await extension.authorize("ext-token", "GET", "/workspace/file?path=notes.md")).toBe("ok");
+    expect(await extension.authorize("ext-token", "POST", "/agents")).toBe("ok");
+    // Undeclared reach is refused as out-of-scope — the readable "this may not go there", not a bare 401.
+    expect(await extension.authorize("ext-token", "GET", "/secrets")).toBe("out-of-scope");
+    expect(await extension.authorize("ext-token", "DELETE", "/workspace/file")).toBe("out-of-scope");
+    // An unknown token is 401 whatever it asked for: there is no scope to speak of until the token resolves.
+    expect(await extension.authorize("intruder", "GET", "/workspace/file")).toBe("unauthorized");
 });

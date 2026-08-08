@@ -1,16 +1,27 @@
 import { mkdir, readdir, readFile, rm, stat, writeFile } from "node:fs/promises";
-import { dirname, join, relative, sep } from "node:path";
-import type { MemoryFileEntry } from "@intentic/sandbox-contract";
-import { resolveWithin } from "../workspace/workspace-files.js";
-import { statePath } from "../workspace/state-paths.js";
+import { dirname, join, relative, resolve, sep } from "node:path";
+import type { MemoryFileEntry } from "../contract.js";
 
 /* The agent's persistent memory notes: <workspace>/.intentic/claude/projects/<project>/memory/*.md — MEMORY.md
  * (the index) plus one markdown file per fact, written by the agent across sessions (~/.claude/projects is a
- * symlink to that tree; see main.ts). The tree's other contents (session transcripts, provider state) are
- * control-plane (workspace-files.ts denies them to the generic file API), so everything here is scoped hard:
- * only `<project>/memory/**` is ever listed, read, written, or deleted, and only .md files can be written. */
+ * symlink to that tree). The tree's other contents (session transcripts, provider state) are control-plane
+ * (the daemon's generic file API denies them), so everything here is scoped hard: only `<project>/memory/**`
+ * is ever listed, read, written, or deleted, and only .md files can be written. This runs in the extension's
+ * BACKEND half (server.ts) with plain fs — full trust, same container, same rules as when it was core. */
 
-export const memoryRoot = (workspaceRoot: string): string => statePath(workspaceRoot, ".intentic/claude/projects/");
+export const memoryRoot = (workspaceRoot: string): string => join(workspaceRoot, ".intentic/claude/projects");
+
+// A caller-supplied relative path resolved inside `dir`, or undefined when it escapes (the daemon's
+// resolveWithin, carried along with the code that depends on it).
+const resolveWithin = (dir: string, relPath: string): string | undefined => {
+    const base = resolve(dir);
+    const target = resolve(base, relPath);
+    const rel = relative(base, target);
+    if (rel === "" || rel === ".." || rel.startsWith(`..${sep}`)) {
+        return undefined;
+    }
+    return target;
+};
 
 // A project slug is a single path segment (the agent's cwd with separators dashed, e.g. "-history-gits-root").
 const isValidProject = (project: string): boolean => /^[A-Za-z0-9][A-Za-z0-9._-]*$/.test(project) || /^-[A-Za-z0-9._-]+$/.test(project);

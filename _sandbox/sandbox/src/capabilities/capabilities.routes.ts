@@ -80,6 +80,9 @@ export const createCapabilitiesRoutes = (services: Services) => {
                     if (installed !== undefined) {
                         await startAutoStartProcesses(services, installed);
                     }
+                    // …and its `server` bundle joins the backend host — a restart, because loaded code
+                    // cannot be joined by, only replaced with, a process that loads the new set.
+                    services.extensionBackend.restart();
                 }
                 // A connector add/remove flips whether its provider's gateway process is wanted (a cli discord
                 // entry is what makes ext-discord run) — converge listener extensions on the new manifest.
@@ -157,6 +160,11 @@ export const createCapabilitiesRoutes = (services: Services) => {
             }
             await composeEnvironment(services);
             void reconcileListenerProcesses(services);
+            // A removed extension's backend retires with it (no-op for every other kind — the supervisor
+            // re-enumerates and finds the same set).
+            if (capability.kind === "extension") {
+                services.extensionBackend.restart();
+            }
             return { ok: true } as const;
         }),
         status: i.status.handler(async ({ input }) => {

@@ -1,7 +1,7 @@
 {
     "name": "@intentic/ext-memory",
     "version": "1.0.0",
-    "description": "Memory — the agent's persistent memory notes, reviewable and editable, as a first-party intentic extension",
+    "description": "Memory \u2014 the agent's persistent memory notes, reviewable and editable, as a first-party intentic extension",
     "license": "MIT",
     "private": true,
     "type": "module",
@@ -14,6 +14,7 @@
         }
     },
     "scripts": {
+        "build": "vite build --config vite.server.config.ts",
         "typecheck": "vue-tsc --noEmit",
         "test": "vitest run"
     },
@@ -21,13 +22,17 @@
         "@intentic/extension-api": "workspace:*",
         "@intentic/extension-manifest": "workspace:*",
         "@intentic/extension-ui": "workspace:*",
-        "@intentic/sandbox-contract": "workspace:*",
-        "@tanstack/vue-query": "catalog:"
+        "@orpc/contract": "catalog:",
+        "@orpc/openapi": "catalog:",
+        "@orpc/server": "catalog:",
+        "@tanstack/vue-query": "catalog:",
+        "zod": "catalog:"
     },
     "devDependencies": {
         "@intentic/tsconfig": "workspace:*",
         "jsdom": "catalog:",
         "typescript": "catalog:",
+        "vite": "catalog:",
         "vitest": "catalog:",
         "vue": "catalog:",
         "vue-tsc": "catalog:"

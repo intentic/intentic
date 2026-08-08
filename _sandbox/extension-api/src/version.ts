@@ -10,4 +10,7 @@
 // 2.0.0 makes listener contributions self-describing: the former `eventTypes` array became labelled `events`
 // plus the automation-editor vocabulary the provider owns. That is intentionally breaking — a 1.x listener
 // manifest cannot honestly promise that a generic host can configure it.
-export const extensionApiVersion = "2.0.0";
+// 2.1.0 adds the backend half: a manifest `server` bundle (activateServer, run by the daemon's backend host
+// under /x/<id>/…) and `permissions.daemon` beside `permissions.sandbox`. Additive — a 2.0 manifest is a 2.1
+// manifest that ships no backend.
+export const extensionApiVersion = "2.1.0";

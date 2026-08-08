@@ -220,7 +220,10 @@ const main = async (): Promise<void> => {
         void seedSetupHost(services, { token: config.hostPairToken, platform: config.hostPlatform, label: config.hostLabel })
             .then(({ armed, id }) => {
                 if (armed) {
-                    logger.info({ host: id }, "setup computer armed — it may manage this machine's sandboxes; widen or revoke on its capability card");
+                    logger.info(
+                        { host: id },
+                        "setup computer armed — it may manage this machine's sandboxes; widen or revoke on its capability card",
+                    );
                 }
             })
             .catch((error: unknown) =>
@@ -589,6 +592,10 @@ const main = async (): Promise<void> => {
     })().catch((error: unknown) => logger.warn({ err: error }, "translator: start gate failed"));
     // Installed extensions' declared autoStart processes come back the same way (manifests on /work).
     void startAllExtensionProcesses(services);
+    // Extension BACKENDS (manifest `server` bundles) come up in their own supervised host process, proxied
+    // under /x/<id>/ — see extensions/backend/. Best-effort like the processes: a failure is the host's row
+    // on the Extensions tab, never a boot failure.
+    services.extensionBackend.start().catch((error: unknown) => logger.warn({ err: error }, "extension backend host failed to start"));
 
     // Debug-log upkeep: re-arm the tmux pipe-pane hooks on a tmux server that outlived a daemon restart
     // (best-effort; the image's tmux.conf covers server start) and sweep historyRoot/logs at boot + hourly.
@@ -676,6 +683,20 @@ const main = async (): Promise<void> => {
     // The resident search engine revalidates on the same watch stream, so a query never pays re-indexing for
     // the agent's latest writes inline — it serves the current index and the refresh happens between queries.
     subscribeWorkspaceChanges(() => services.iq.markDirty());
+    /* Extension backends converge on the same stream: an edit to a workspace extension (an agent authoring one
+     * with its own file tools — the whole point of that load path), a fresh git-installed checkout, or a flip
+     * of the enablement file restarts the backend host so the new code is what serves. Loaded code cannot be
+     * unloaded, so the restart IS the reload — debounced in the supervisor, and a no-op while no extension
+     * ships a backend. */
+    subscribeWorkspaceChanges((paths) => {
+        const extensionSource = (path: string): boolean =>
+            path.startsWith(".intentic/workspace-extensions/") ||
+            path.startsWith(".intentic/extensions/") ||
+            path === ".intentic/extension-enablement.json";
+        if (paths.some(extensionSource)) {
+            services.extensionBackend.restart();
+        }
+    });
     // Repo-set change push riding the same watcher: a repo cloned/deleted anywhere under /work re-frames the
     // discovered repo list on /events (the watcher itself never sees .git paths).
     startRepoWatch(services.workspace.root, logger);
@@ -744,6 +765,8 @@ const main = async (): Promise<void> => {
         // Stops the extension gateway processes too (tmux kill-session ⇒ SIGHUP) — each flushes its own
         // in-flight voice transcript on the way down.
         services.processes.stopAll();
+        // The backend host is a direct child, not a tmux session — stopped here or it outlives the daemon.
+        services.extensionBackend.stop();
         previewProxy.close();
         localServer.close();
         server.close();

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import type { MemoryFileEntry } from "@intentic/sandbox-contract";
+import type { MemoryFileEntry } from "./contract";
 import {
     Button,
     CodeField,

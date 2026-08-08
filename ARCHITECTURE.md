@@ -520,10 +520,38 @@ up iterates, so it contributes no agent plugin dir, PATH entry, listener provide
 autoStart process; the web loader retires its activation in place. `agent` and `bin` are composed per turn and
 `environment` only at image rebuild, so those three apply later — the tab states which per extension.
 
-Note the current split is a **UI veneer**: an extension is mostly where its
-Vue lives, while its backend (activity, automations, logs, panels…) still sits in the daemon core — moving
-those behind a daemon-side extension runtime is a deliberately deferred, marketplace-phase step, not a
-gap to close now.
+**The backend half.** An extension is no longer only where its Vue lives: a manifest `server` entry names a
+prebuilt, self-contained node ESM bundle exporting `activateServer(api, context)`
+([server.ts](_sandbox/extension-api/src/server.ts)), and the daemon runs every enabled one inside a single
+**backend host** — a separate supervised node process
+([backend-supervisor.ts](_sandbox/sandbox/src/extensions/backend/backend-supervisor.ts),
+[backend-host.ts](_sandbox/sandbox/src/extensions/backend/backend-host.ts)). A separate process because loaded
+code cannot be unloaded: the off switch, an install at a new sha and a live-edited workspace extension all
+require the process holding the old code to die, and that process must never be the daemon — so every
+lifecycle moment is a debounced host **restart** (a couple of seconds of readable 503s), converged from the
+toggle route, the capability install/remove, and the workspace watcher noticing an extension source change.
+One shared process, not one per extension: install is owner-only and sha-pinned (full trust), so isolation
+between extensions would buy robustness nobody is billed for; a throwing activation is contained to its row
+exactly as in the web loader, and the row rides `GET /extensions` (`backend` on the summary).
+
+Each backend owns a **route namespace**: the daemon proxies `/x/<id>/*` to the host — through its ordinary
+auth and role floors, minus the caller's credentials — and the host dispatches with the prefix stripped, so
+an extension's handler sees the same paths its own contract declares. Both halves of an extension import that
+contract from the extension's own package (ext-memory's [contract.ts](_extensions/memory/src/contract.ts)),
+which keeps the compiled-together guarantee at the right grain while the CORE contract shrinks by every
+feature that moves out. An extension's UI calls its own namespace with **no `permissions.sandbox` entry**
+(its backend is its own code from the same approved checkout); any other namespace conforms like a core
+route. The backend's reach back into the daemon is `permissions.daemon` — same glob grammar, enforced by a
+minted per-extension token (the `x-intentic-extension` grant in [grants.ts](_sandbox/sandbox/src/auth/grants.ts)),
+deliberately NOT the all-routes panel token. Workspace files it touches directly with `node:fs` under
+`api.workspaceRoot` — full trust means no file service in between.
+
+The first extracted feature is **memory**: its routes, file layer and schemas now live entirely in
+`_extensions/memory` (UI half compiled into the web bundle as before; backend baked as `dist/server.js`), and
+the daemon core carries no memory feature at all. That is the intended trajectory — feature backends
+(activity, automations, logs, CI…) migrating out one by one, each migration deleting its core routes, until
+the daemon is the kernel: files/git/watcher, terminals and processes, the agent runtime, capabilities and
+their privileged handlers, auth, and the extension system itself.
 
 ### Capabilities
 

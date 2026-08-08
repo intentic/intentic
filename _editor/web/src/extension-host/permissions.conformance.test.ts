@@ -124,19 +124,34 @@ const scanTypedCalls = (text: string): Call[] =>
         return route === undefined ? { method: "UNKNOWN", path: `<no contract route named ${name}>` } : { method: route.method, path: route.path };
     });
 
+/* SCREAMING_CASE string constants defined anywhere in the extension's src — `const MEMORY_BASE =
+ * "/x/intentic.memory"`. An extension calling its OWN backend interpolates its namespace prefix from one
+ * (contract.ts keeps it a literal for exactly this scanner), and resolving it is what lets the own-namespace
+ * exemption below match on the real prefix instead of a wildcard that would excuse anything. Gathered across
+ * files, unlike the per-file helpers: the constant lives in the contract module, the calls in the data layer. */
+const scanStringConstants = (texts: readonly string[]): Map<string, string> => {
+    const constants = new Map<string, string>();
+    for (const text of texts) {
+        for (const match of text.matchAll(/(?:const|let|var)\s+([A-Z][A-Z0-9_]*)\s*=\s*[`'"]([^`'"$]+)[`'"]/g)) {
+            constants.set(match[1] ?? "", match[2] ?? "");
+        }
+    }
+    return constants;
+};
+
 // Every api.sandbox.request/json (or host().sandbox.*) call in a source file: its first string/template-literal
-// path arg (normalized — query stripped, `${…}` → `*`) and its method — a literal `method:` in the options
-// object, else a method-producing helper passed as the options, else GET. A call whose path interpolates a
-// route helper's parameter yields one entry per literal that helper is called with.
-const scanCalls = (text: string, helpers: Map<string, string>, segments: Map<string, readonly string[]>): Call[] => {
+// path arg (normalized — known constants resolved, query stripped, remaining `${…}` → `*`) and its method — a
+// literal `method:` in the options object, else a method-producing helper passed as the options, else GET. A
+// call whose path interpolates a route helper's parameter yields one entry per literal that helper is called with.
+const scanCalls = (text: string, helpers: Map<string, string>, segments: Map<string, readonly string[]>, constants: Map<string, string>): Call[] => {
     const calls: Call[] = [];
     const re = /sandbox\.(?:json|request)(?:<[^>]*>)?\(\s*[`'"]([^`'"]*)/g;
     let match: RegExpExecArray | null;
     while ((match = re.exec(text)) !== null) {
-        const raw = match[1] ?? "";
+        const raw = (match[1] ?? "").replace(/\$\{([A-Z][A-Z0-9_]*)\}/g, (whole, name: string) => constants.get(name) ?? whole);
         // The call's opening `(` sits just before the path's quote (regex allows only `\s*` between them). Anchor
         // there rather than lastIndexOf("(") — a path like `/x/${encodeURIComponent(id)}` carries its own parens.
-        let paren = match[0].length - raw.length - 2;
+        let paren = match[0].length - (match[1] ?? "").length - 2;
         while (paren > 0 && /\s/.test(match[0][paren] ?? "")) paren--;
         const args = callArgs(text, match.index + paren);
         const literal = /method:\s*[`'"]([A-Za-z]+)/.exec(args)?.[1];
@@ -172,10 +187,23 @@ const callsOf = (name: string): Call[] => {
     if (!existsSync(dir)) {
         return [];
     }
-    return sourceFiles(dir).flatMap((file) => {
-        const text = readFileSync(file, "utf8");
-        return scanTypedCalls(text).concat(scanCalls(text, scanMethodHelpers(text), scanRouteSegments(text)));
-    });
+    const texts = sourceFiles(dir).map((file) => readFileSync(file, "utf8"));
+    const constants = scanStringConstants(texts);
+    return texts.flatMap((text) => scanTypedCalls(text).concat(scanCalls(text, scanMethodHelpers(text), scanRouteSegments(text), constants)));
+};
+
+/* An extension's calls into its OWN /x namespace — exempt from declaration, mirroring the host (apiImpl.ts):
+ * its backend is its own code from the same approved checkout, so there is no grant to conform to. Only the
+ * extension's exact namespace is exempt; a call into another extension's namespace conforms like any core
+ * route. The prefix is derived from the manifest the same way the host derives it (a baked/workspace
+ * extension's routing id is publisher.name). */
+const ownNamespaceOf = (name: string): string => {
+    const manifest = ExtensionManifestSchema.parse(JSON.parse(readFileSync(join(extensionsRoot, name, "intentic-extension.json"), "utf8")));
+    return `/x/${manifest.publisher}.${manifest.name}/`;
+};
+const declarableCallsOf = (name: string): Call[] => {
+    const own = ownNamespaceOf(name);
+    return callsOf(name).filter((call) => !call.path.startsWith(own));
 };
 
 describe.each(everyExtension)("%s reads models and accounts through api.models, not the daemon", (name) => {
@@ -219,9 +247,13 @@ test("the scanner finds calls in every extension that declares sandbox routes", 
     expect(declaring.filter((name) => !callers.includes(name))).toEqual([]);
 });
 
-describe.each(callers)("%s declares every sandbox route it calls", (name) => {
+// Callers with at least one call OUTSIDE their own namespace — an extension that only talks to its own
+// backend (memory) has nothing left to declare, and an empty test.each is a vitest error, not a pass.
+const declaringCallers = callers.filter((name) => declarableCallsOf(name).length > 0);
+
+describe.each(declaringCallers)("%s declares every sandbox route it calls", (name) => {
     const permissions = sandboxPermissionsOf(name);
-    test.each(callsOf(name).map((call) => [`${call.method} ${call.path}`, call] as const))("declares %s", (_label, call) => {
+    test.each(declarableCallsOf(name).map((call) => [`${call.method} ${call.path}`, call] as const))("declares %s", (_label, call) => {
         expect(sandboxRouteAllowed(permissions, call.method, call.path)).toBe(true);
     });
 });

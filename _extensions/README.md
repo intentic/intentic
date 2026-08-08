@@ -13,6 +13,14 @@ context)` that registers contributions — `views`, `viewers`, `commands`, `sett
 is the approval + gating surface: the host refuses any registration the approved manifest never declared, and
 the extension may reach only the daemon routes its `permissions.sandbox` allowlist declares.
 
+An extension may also ship a **backend**: a manifest `server` entry naming a prebuilt self-contained node ESM
+bundle exporting `activateServer(api, context)`. Every enabled backend runs in the daemon's ONE supervised
+backend host process and serves its own route namespace, `/x/<id>/…`, proxied by the daemon through its
+ordinary auth. The extension's UI calls its own namespace with no `permissions.sandbox` entry (its backend is
+its own code from the same approved checkout); the backend's reach back into the daemon's routes is the
+`permissions.daemon` allowlist, enforced with a minted per-extension token. A toggle, an install, or an edit
+to a workspace extension restarts the host — loaded code cannot be unloaded, so the restart IS the reload.
+
 Every manifest here also declares a **mark** — a `logo` (simple-icons slug) or an `icon` (a glyph from
 `@intentic/ui`'s set) — which is what the extension is drawn as wherever it is *listed* rather than used: the
 Extensions tab, a registry being browsed, the public gallery. It is on the manifest rather than on a view
@@ -54,7 +62,7 @@ fails any extension that reaches `/{provider}/models` or `/{provider}/accounts` 
 | `git-history` | UI document | Every repository's commit graph, as an icon on its Workspace tree row: lanes and merges, a commit's changed files, and the write actions on one (branch, tag, checkout, cherry-pick, revert, drop, merge, rebase, reset) — plus the branch switcher. The uncommitted half of the same story stays in the app's Changes panel. |
 | `logs` | UI view | Workspace log tail. |
 | `maintenance` | UI view | The chore book against this workspace: what routine upkeep each repository is owed (outdated deps, advisories, dead code, duplication, undocumented packages, tangled files, periodic surveys), the daemon-measured evidence behind each verdict, and an isolated fleet turn per chore. |
-| `memory` | UI view | The agent's persistent memory notes: review, edit, delete. |
+| `memory` | UI view + backend | The agent's persistent memory notes: review, edit, delete. The first extracted feature backend — its routes, file layer and wire contract live here (`src/contract.ts`, `src/server/`), not in the daemon core. |
 | `pipelines` | UI view | CI runs: status, rerun/cancel, agent-driven fixes. |
 | `preview` | UI view | Per-repo dev-server preview panels. |
 | `viewers` | UI viewers | **Every file format the app can show that isn't source code** — images, SVG (picture + source), PDF, audio/video (a streaming player over `/workspace/media`), docx, xlsx — via `contributes.viewers`. The core resolves a path to text or to opaque bytes and stops there; switch this off and those files fall back to a download. |
@@ -119,6 +127,8 @@ Not everything converges at the same moment, and the tab says which per extensio
 composed per agent turn, so they apply from the next one; an `environment` fragment only changes on the next
 image rebuild.
 
-The current split is a **UI veneer**: an extension is mostly where its Vue lives, while feature backends
-still sit in the daemon core. Moving those behind a daemon-side extension runtime is a deliberately deferred,
-marketplace-phase step.
+The split is no longer a UI veneer: the backend host gives an extension a server half of its own, and
+`memory` is the first feature whose backend lives entirely in its package — own contract, own routes, no
+daemon-core feature code. The rest (activity, automations, logs, CI…) migrate the same way, each migration
+deleting its core routes, until the daemon is the kernel: files/git/watcher, terminals and processes, the
+agent runtime, capabilities and their privileged handlers, auth, and the extension system itself.

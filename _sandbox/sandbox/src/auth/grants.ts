@@ -1,3 +1,4 @@
+import { sandboxRouteAllowed } from "@intentic/extension-manifest";
 import { tokenEquals } from "./auth.js";
 import { type ControlTokens, controlScoped } from "./control-tokens.js";
 
@@ -83,11 +84,30 @@ export interface GrantSources {
     // Passed in rather than imported so this module stays free of platform/ and every grant is testable with
     // a one-line fake.
     readonly verifySync: (presented: string) => Promise<boolean>;
+    // An extension backend's minted per-extension token → the manifest's declared `permissions.daemon`
+    // (extensions/backend/backend-supervisor.ts). Unknown token ⇒ undefined ⇒ 401.
+    readonly verifyExtension: (presented: string) => { readonly permissions: readonly string[] } | undefined;
 }
 
-export const grantsOf = ({ panelToken, agentToken, controlTokens, verifySync }: GrantSources): readonly Grant[] => [
+export const grantsOf = ({ panelToken, agentToken, controlTokens, verifySync, verifyExtension }: GrantSources): readonly Grant[] => [
     fixedSecretGrant("x-intentic-panel", "panel token", panelReach, panelToken),
     fixedSecretGrant("x-intentic-agent", "agent token", agentReach, agentToken),
+    {
+        /* An extension BACKEND's daemon reach — the minted per-extension token its api.daemon presents
+         * (extensions/backend/). Scoped to the manifest's `permissions.daemon` in the same glob grammar the
+         * UI half's `permissions.sandbox` uses, so a backend's reach into the core is a declared, reviewable
+         * list rather than the all-routes grant the panel token gives a panel. Resolve-then-scope like the
+         * control grant, and for the same reason: which routes are in reach is stored with the token. */
+        header: "x-intentic-extension",
+        name: "extension token",
+        authorize: async (presented, method, path) => {
+            const grant = verifyExtension(presented);
+            if (grant === undefined) {
+                return "unauthorized";
+            }
+            return sandboxRouteAllowed(grant.permissions, method, path) ? "ok" : "out-of-scope";
+        },
+    },
     {
         header: "x-intentic-control",
         name: "control token",

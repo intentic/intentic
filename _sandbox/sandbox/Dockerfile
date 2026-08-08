@@ -321,6 +321,9 @@ COPY _extensions/git-history/intentic-extension.json /opt/extensions/git-history
 COPY _extensions/logs/intentic-extension.json /opt/extensions/logs/
 COPY _extensions/maintenance/intentic-extension.json /opt/extensions/maintenance/
 COPY _extensions/memory/intentic-extension.json /opt/extensions/memory/
+# …except memory, whose BACKEND half ships as a prebuilt server bundle the daemon's backend host loads
+# (manifest `server`) — the first extracted feature backend; its UI stays compiled into the web bundle.
+COPY _extensions/memory/dist /opt/extensions/memory/dist
 COPY _extensions/pipelines/intentic-extension.json /opt/extensions/pipelines/
 COPY _extensions/preview/intentic-extension.json /opt/extensions/preview/
 COPY _extensions/repo-apps/intentic-extension.json /opt/extensions/repo-apps/

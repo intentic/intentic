@@ -33,6 +33,24 @@ export const createExtensionsRoutes = (services: Services) => {
         }
         return extension;
     };
+    /* One row's `backend` field — only for a manifest that ships a server bundle. The per-extension answer
+     * (running / activation error / absent / incompatible) comes from the supervisor when it has one; while
+     * the host itself is between states (starting, restarting after an edit, stopped) the host's own state IS
+     * the row's answer, because "your backend is restarting" is the sentence the author needs. A disabled
+     * extension reports nothing: its switch is the explanation. */
+    const backendStateOf = (extension: InstalledExtension): Pick<ExtensionSummary, "backend"> => {
+        if (extension.manifest.server === undefined || !extension.enabled) {
+            return {};
+        }
+        const own = services.extensionBackend.statusOf(extension.id);
+        if (own !== undefined) {
+            return { backend: { state: own.state, ...(own.detail !== undefined ? { detail: own.detail } : {}) } };
+        }
+        const host = services.extensionBackend.status();
+        return {
+            backend: { state: host.state === "running" ? "stopped" : host.state, ...(host.detail !== undefined ? { detail: host.detail } : {}) },
+        };
+    };
     // The extension + declared process a process route addresses; an undeclared name is NOT_FOUND (the
     // manifest-honesty rule).
     const processOf = async (id: string, name: string): Promise<{ extension: InstalledExtension; process: ProcessContribution }> => {
@@ -67,6 +85,7 @@ export const createExtensionsRoutes = (services: Services) => {
                     // Absent rather than empty when nothing has been observed: the row must be able to tell
                     // "never exercised" from "exercised and uses none of these".
                     ...(observed !== undefined && Object.keys(observed).length > 0 ? { usage: observed } : {}),
+                    ...backendStateOf(extension),
                 });
             }
             return { extensions, invalid: inventory.invalid };
@@ -180,6 +199,9 @@ export const createExtensionsRoutes = (services: Services) => {
             // A listener extension's gateway is wanted only while its provider is (an enabled automation + a
             // connected capability); the flip changes that answer in both directions.
             void reconcileListenerProcesses(services);
+            // The backend half converges the same way: the host restarts on the new enabled set, so a
+            // switched-off extension's /x namespace stops answering now rather than at the next boot.
+            services.extensionBackend.restart();
             return { ok: true } as const;
         }),
         processStatus: i.processStatus.handler(async ({ input }) => {

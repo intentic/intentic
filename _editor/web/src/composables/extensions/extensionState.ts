@@ -42,3 +42,25 @@ const STATES: Record<ExtensionHostStatus["state"], ExtensionState> = {
 const UNLOADED: ExtensionState = { label: `reload to load`, variant: `neutral`, badge: false, attention: false };
 
 export const extensionState = (status: ExtensionHostStatus | undefined): ExtensionState => (status === undefined ? UNLOADED : STATES[status.state]);
+
+/* THE BACKEND HALF'S READING, same silence rule: a running backend is nothing (the row being unremarkable is
+ * the message), a mid-restart one is muted words (expected, self-healing — the host restarts on every toggle,
+ * install and workspace edit), and only a backend that CANNOT serve gets colour and the pinned group. Returns
+ * undefined when there is nothing worth saying, so the UI half's state stands. */
+export const backendState = (backend: { state: string; detail?: string } | undefined): ExtensionState | undefined => {
+    switch (backend?.state) {
+        case `error`:
+            return { label: `backend failed`, variant: `danger`, badge: true, attention: true };
+        case `incompatible`:
+            return { label: `incompatible`, variant: `warning`, badge: true, attention: true };
+        // Not runnable here (a core image without the tree) — the same wording rule the readiness check uses:
+        // a fact about this image, not a fault of the extension's.
+        case `absent`:
+            return { label: `backend not in this image`, variant: `warning`, badge: false, attention: false };
+        case `starting`:
+        case `stopped`:
+            return { label: `backend ${backend.state}`, variant: `neutral`, badge: false, attention: false };
+        default:
+            return undefined;
+    }
+};

@@ -3,7 +3,7 @@ import type { ExtensionSummary } from "@intentic/sandbox-contract";
 import { computed } from "vue";
 import { extensionStatuses } from "../../extension-host/loader";
 import { type ExtensionFacet, facetsOf, searchTextOf } from "./extensionFacets";
-import { type ExtensionState, extensionState } from "./extensionState";
+import { backendState, type ExtensionState, extensionState } from "./extensionState";
 import { useCapabilities } from "./useCapabilities";
 import { useExtensions } from "./useExtensions";
 
@@ -40,11 +40,18 @@ export function useExtensionList() {
                 const status = statuses.get(extension.id);
                 const facets = facetsOf(extension.manifest);
                 const providers = new Set((extension.manifest.contributes?.capabilities ?? []).map((contribution) => contribution.id));
+                /* The UI half's state, unless the BACKEND half has something worse to say — a row whose view
+                 * renders fine while its backend failed to activate is a broken feature wearing a green row.
+                 * The daemon only reports `backend` for an enabled extension that ships one, so this never
+                 * overrides a disabled row's silence. */
+                const uiState = extensionState(status);
+                const backend = backendState(extension.backend);
+                const escalated = backend !== undefined && !uiState.attention;
                 return {
                     extension,
                     facets,
-                    state: extensionState(status),
-                    detail: status?.detail,
+                    state: escalated ? backend : uiState,
+                    detail: (escalated ? extension.backend?.detail : undefined) ?? status?.detail ?? extension.backend?.detail,
                     dependents: capabilities.value.filter(
                         (capability) => capability.kind === `cli` && providers.has(String(capability.config[`provider`] ?? ``)),
                     ),

@@ -1,12 +1,13 @@
-import { type MemoryFile, type MemoryFileEntry, MemoryFileSchema, MemoryListSchema } from "@intentic/sandbox-contract";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/vue-query";
 import { computed, type Ref } from "vue";
+import { MEMORY_BASE, type MemoryFile, type MemoryFileEntry, MemoryFileSchema, MemoryListSchema } from "./contract";
 import { host } from "./host";
 
-/* The agent's persistent memory notes, via the daemon's /memory routes: every project's memory dir
- * (MEMORY.md + one markdown file per fact), readable, editable, and deletable — the owner's window into (and
- * red pen over) what the agent carries across sessions. Plain polling; memory changes at agent-turn cadence.
- * All daemon access goes through the host api (auth + per-sandbox cache scoping injected host-side). */
+/* The agent's persistent memory notes, via this extension's OWN backend (src/server/) at its /x namespace:
+ * every project's memory dir (MEMORY.md + one markdown file per fact), readable, editable, and deletable —
+ * the owner's window into (and red pen over) what the agent carries across sessions. Plain polling; memory
+ * changes at agent-turn cadence. All daemon access goes through the host api (auth + per-sandbox cache
+ * scoping injected host-side); an extension's own namespace passes the gate with no permissions entry. */
 
 const POLL_MS = 30_000;
 
@@ -16,7 +17,7 @@ export function useMemory() {
     const api = host();
     const files = useQuery({
         queryKey: api.sandbox.key(`memory`),
-        queryFn: async () => MemoryListSchema.parse(await api.sandbox.json(`/memory`)).files,
+        queryFn: async () => MemoryListSchema.parse(await api.sandbox.json(`${MEMORY_BASE}/memory`)).files,
         enabled: computed(() => api.sandbox.reachable()),
         refetchInterval: POLL_MS,
     });
@@ -31,7 +32,8 @@ export function useMemoryFile(selected: Ref<{ project: string; name: string } | 
     const api = host();
     const note = useQuery({
         queryKey: computed(() => api.sandbox.key(`memory-file`, selected.value?.project ?? ``, selected.value?.name ?? ``)),
-        queryFn: async () => MemoryFileSchema.parse(await api.sandbox.json(`/memory/file?${fileQuery(selected.value!.project, selected.value!.name)}`)),
+        queryFn: async () =>
+            MemoryFileSchema.parse(await api.sandbox.json(`${MEMORY_BASE}/memory/file?${fileQuery(selected.value!.project, selected.value!.name)}`)),
         enabled: computed(() => api.sandbox.reachable() && selected.value !== undefined),
     });
     return {
@@ -52,7 +54,7 @@ export function useMemoryMutations() {
 
     const save = useMutation({
         mutationFn: ({ project, name, content }: { project: string; name: string; content: string }) =>
-            api.sandbox.json(`/memory/file`, {
+            api.sandbox.json(`${MEMORY_BASE}/memory/file`, {
                 method: `PUT`,
                 headers: { "content-type": `application/json` },
                 body: JSON.stringify({ project, name, content }),
@@ -64,7 +66,7 @@ export function useMemoryMutations() {
     });
     const remove = useMutation({
         mutationFn: ({ project, name }: { project: string; name: string }) =>
-            api.sandbox.json(`/memory/file`, {
+            api.sandbox.json(`${MEMORY_BASE}/memory/file`, {
                 method: `DELETE`,
                 headers: { "content-type": `application/json` },
                 body: JSON.stringify({ project, name }),

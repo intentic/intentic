@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import type { MemoryFileEntry } from "@intentic/sandbox-contract";
+import type { MemoryFileEntry } from "./contract";
 import { cmp, formatBytes, Icon, InfoHint, Picker, type PickerOptions } from "@intentic/extension-ui";
 import { computed, ref, watch } from "vue";
 import { INDEX_NAME, noteTitle, projectLabel } from "./memoryNote";

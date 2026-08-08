@@ -253,6 +253,7 @@ export const createApp = (services: Services): Hono<AppEnv> => {
             agentToken: services.agentToken,
             controlTokens: services.controlTokens,
             verifySync: (presented) => verifySyncToken(services.config.historyRoot, presented),
+            verifyExtension: (presented) => services.extensionBackend.verifyExtensionToken(presented),
         });
         app.use(
             "*",
@@ -968,6 +969,32 @@ export const createApp = (services: Services): Hono<AppEnv> => {
             return c.body(null, 304);
         }
         return c.body(source, 200, { "content-type": "text/javascript; charset=utf-8", etag });
+    });
+
+    /* Extension backend namespaces — /x/<id>/* proxied verbatim to the backend host (extensions/backend/).
+     * The request has already been through everything above: the boot gate, CORS, and the bearer middleware
+     * with its role floor (an unlisted GET floors at viewer, an unlisted mutation at maintainer — the same
+     * defaults every unclassified core route gets). What is forwarded is the request MINUS its credentials:
+     * the backend acts on the daemon through its own scoped token, and handing it the owner's bearer would
+     * quietly re-grant everything the token model just took away. A host mid-restart answers 503 with the
+     * supervisor's own words, which is the web's cue to retry rather than to render an error state. */
+    app.all("/x/*", async (c) => {
+        const target = services.extensionBackend.proxyTarget();
+        if (target === undefined) {
+            const backend = services.extensionBackend.status();
+            return c.json({ error: `extension backends are ${backend.state}${backend.detail !== undefined ? ` — ${backend.detail}` : ""}` }, 503);
+        }
+        const url = new URL(c.req.url);
+        const headers = new Headers(c.req.raw.headers);
+        headers.delete("authorization");
+        headers.set("x-intentic-backend", target.hostToken);
+        const body = c.req.method === "GET" || c.req.method === "HEAD" ? undefined : c.req.raw.body;
+        const upstream = await fetch(`http://127.0.0.1:${target.port}${url.pathname}${url.search}`, {
+            method: c.req.method,
+            headers,
+            ...(body !== undefined && body !== null ? { body, duplex: "half" } : {}),
+        } as RequestInit);
+        return new Response(upstream.body, { status: upstream.status, headers: upstream.headers });
     });
 
     // The realtime-listener control surface for an extension's gateway process (ext-discord): it reconciles via

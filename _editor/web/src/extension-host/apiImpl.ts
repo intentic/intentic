@@ -138,7 +138,15 @@ export const createExtensionApi = (
     // method+path throws, so a bundle can only reach the daemon routes the owner approved at install — not the
     // whole daemon.
     const sandboxPermissions = summary.manifest.permissions?.sandbox ?? [];
+    /* The extension's OWN backend namespace (/x/<its id>/…) passes with no declaration and no usage record:
+     * its backend is its own code from the same approved checkout, so "may this extension talk to itself" is
+     * not a grant the owner needs to weigh, and the usage ledger exists to test DECLARED reach. Any other
+     * extension's namespace is exactly as foreign as a core route and stays declared. */
+    const ownNamespace = `/x/${summary.id}/`;
     const guardSandbox = (path: string, init?: RequestInit): void => {
+        if (path.startsWith(ownNamespace) || path.split(`?`)[0] === ownNamespace.slice(0, -1)) {
+            return;
+        }
         const method = init?.method ?? `GET`;
         if (!sandboxRouteAllowed(sandboxPermissions, method, path)) {
             throw new Error(
@@ -160,7 +168,9 @@ export const createExtensionApi = (
     const rpc = gatedSandboxRpc((procedure, input) => {
         const request = sandboxRequestFor(procedure, input);
         if (request === undefined) {
-            throw new Error(`extension "${extensionId}" called sandbox procedure ${procedure.join(`.`)}, which this build's contract does not declare`);
+            throw new Error(
+                `extension "${extensionId}" called sandbox procedure ${procedure.join(`.`)}, which this build's contract does not declare`,
+            );
         }
         guardSandbox(request.path, { method: request.method });
     });
