@@ -529,6 +529,20 @@ const marketEntries = computed<RegistryEntry[]>(() =>
     selected.value === undefined ? [] : (market.value?.plugins.filter((entry) => entry.kind === selected.value?.kind) ?? []),
 );
 
+/* What the nightly scan found at the row's pinned commit, folded to the one question a browser has: will it
+ * load? Absent checks say nothing (a registry with no scanner, or a listing repointed since last night) — the
+ * row renders as it always did, claiming nothing. "none" is a daemon-only extension, which loads fine. */
+const checksProblem = (entry: RegistryEntry): string | undefined => {
+    if (entry.checks === undefined) {
+        return undefined;
+    }
+    if (entry.checks.manifest !== `ok`) {
+        return `At the pinned commit, ${entry.checks.manifest}`;
+    }
+    return entry.checks.bundle === `ok` || entry.checks.bundle === `none` ? undefined : `At the pinned commit, the bundle ${entry.checks.bundle}`;
+};
+const checksOk = (entry: RegistryEntry): boolean => entry.checks !== undefined && checksProblem(entry) === undefined;
+
 /* Why a row can't be clicked, in the words the reader needs — the button is disabled either way, and a
  * disabled row with no reason reads as a broken page. Blocked leads: it is the one case where the entry is
  * fine mechanically and the answer is still no. The sha rule bites only extensions (their code runs trusted
@@ -1332,6 +1346,21 @@ const submitLabel = computed(() =>
                                             <Icon v-if="entry.trust === 'verified'" name="shield" class="shrink-0 text-success" title="Verified" />
                                             <span class="font-medium text-content">{{ entry.name }}</span>
                                             <span v-if="entry.version" class="text-2xs text-subtle">{{ entry.version }}</span>
+                                            <!-- Evidence, not endorsement: the nightly scan re-read this row's pinned
+                                             commit and found (or didn't) a thing that loads. Silent when there are no
+                                             checks at all — absence of evidence is not a warning. -->
+                                            <Icon
+                                                v-if="checksOk(entry)"
+                                                name="check"
+                                                class="shrink-0 text-success"
+                                                v-tooltip.top="`Loads — re-checked at the pinned commit by the registry's nightly scan`"
+                                            />
+                                            <Icon
+                                                v-else-if="checksProblem(entry)"
+                                                name="exclamation-triangle"
+                                                class="shrink-0 text-warning"
+                                                v-tooltip.top="checksProblem(entry)"
+                                            />
                                             <span
                                                 v-if="entry.stars !== undefined"
                                                 class="inline-flex shrink-0 items-center gap-0.5 text-2xs text-subtle"

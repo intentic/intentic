@@ -4,6 +4,7 @@ import { APP_URL } from "@intentic-dev/site-content/site";
 import BaseLayout from "../../layouts/BaseLayout.astro";
 import Footer from "../../components/Footer.astro";
 import Nav from "../../components/Nav.astro";
+import type { RegistryEntry } from "@intentic/registry";
 import { loadGallery, markInitials, markLogoUrl, sourceHref } from "../../lib/registry";
 
 /* The extension gallery: the official registry repository, rendered. Built from its two JSON files at build
@@ -23,6 +24,17 @@ const groups = [
     { key: "verified", heading: "Verified", blurb: "Somebody here read the source at the listed commit.", entries: verified },
     { key: "listed", heading: "Listed", blurb: "The pointer resolves and the manifest parses. Nobody has read the code.", entries: listed },
 ].filter((group) => group.entries.length > 0);
+
+/* The nightly scan's cold answer at the pinned commit, folded to a browser's one question: will it load?
+ * Absent checks say nothing — a listing repointed since last night, or a registry with no scanner — and the
+ * card renders as it always did. This is evidence, not endorsement: "loads" and "somebody read it" are
+ * different claims, made by different parties, and the page keeps them apart. */
+const loadsProblem = (entry: RegistryEntry): string | undefined => {
+    if (entry.checks === undefined) return undefined;
+    if (entry.checks.manifest !== "ok") return `At the pinned commit, ${entry.checks.manifest}`;
+    return entry.checks.bundle === "ok" || entry.checks.bundle === "none" ? undefined : `At the pinned commit, the bundle ${entry.checks.bundle}`;
+};
+const loadsOk = (entry: RegistryEntry): boolean => entry.checks !== undefined && loadsProblem(entry) === undefined;
 
 // Built as one string rather than interpolated across template lines, where the newlines become stray spaces.
 const scannedNote =
@@ -109,6 +121,12 @@ const scannedNote =
                                     </div>
                                     {entry.description && <p class="text-sm leading-relaxed text-muted">{entry.description}</p>}
                                     <div class="mt-auto flex flex-wrap items-center gap-x-3 gap-y-1 pt-1 text-2xs">
+                                        {loadsOk(entry) && (
+                                            <span class="text-success" title="Re-checked at the pinned commit by the registry's nightly scan">
+                                                ✓ loads
+                                            </span>
+                                        )}
+                                        {loadsProblem(entry) && <span class="text-warning">{loadsProblem(entry)}</span>}
                                         {entry.category && <span class="text-subtle">{entry.category}</span>}
                                         {sourceHref(entry) && (
                                             <a class="text-link hover:underline" href={sourceHref(entry)} rel="noopener nofollow">
