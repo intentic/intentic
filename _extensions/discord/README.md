@@ -13,9 +13,7 @@ Discord as a place the agent works: it reads channels, replies, and can join a v
 
 - [src/gateway.ts](src/gateway.ts) — the connection, and staying on it.
 - [src/listener.ts](src/listener.ts) — which Discord events become a turn, and which are ignored.
-- [src/daemon.ts](src/daemon.ts) — the long-lived process this extension contributes.
 - [src/voice.ts](src/voice.ts) / [src/audio.ts](src/audio.ts) — joining voice, and the audio path in both directions.
-- [src/stream.ts](src/stream.ts) — streaming a reply as it is generated rather than after it is finished.
 
 ## How it fits
 

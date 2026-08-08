@@ -1,7 +1,7 @@
 import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { basename, extname, join } from "node:path";
 import makeWASocket, { DisconnectReason, downloadMediaMessage, jidNormalizedUser, useMultiFileAuthState } from "baileys";
-import type { Logger } from "./log.js";
+import type { Logger } from "@intentic/connector-runtime";
 import type { WaRawMessage } from "./types.js";
 
 /* The gateway's WhatsApp connections — one multi-device socket per configured capability, paired as a linked

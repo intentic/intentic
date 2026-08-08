@@ -1,6 +1,6 @@
 import { expect, test, vi } from "vitest";
 import type { SlackConnection } from "./client.js";
-import type { GatewayCtx } from "./context.js";
+import type { GatewayCtx } from "@intentic/connector-runtime";
 import { createSlackListener, type SlackEnvelope, type SlackMessage, toHistory, tsToIso } from "./listener.js";
 
 const SELF = "U0BOT";
@@ -28,6 +28,7 @@ const fakeCtx = (): { ctx: GatewayCtx; dispatched: object[]; streamed: object[] 
         streamed,
         ctx: {
             log: { info: () => {}, warn: () => {}, error: () => {} },
+            workspaceRoot: "/work",
             daemon: {
                 state: async () => ({ automations: [], connectors: [] }),
                 dispatch: async (message) => void dispatched.push(message),
@@ -171,7 +172,13 @@ test("a reaction dispatches with the message it points at as its content", async
     });
     createSlackListener(ctx, () => new Map([["app", connection]])).onEvent(
         connection,
-        envelope({ type: "reaction_added", user: "U2", reaction: "robot_face", item: { type: "message", channel: "C1", ts: "5.0" }, event_ts: "6.0" }),
+        envelope({
+            type: "reaction_added",
+            user: "U2",
+            reaction: "robot_face",
+            item: { type: "message", channel: "C1", ts: "5.0" },
+            event_ts: "6.0",
+        }),
     );
     await vi.waitFor(() => expect(dispatched).toHaveLength(1));
     expect(dispatched[0]).toMatchObject({

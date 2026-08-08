@@ -79,6 +79,7 @@ export * from "./state-portability.js";
 export * from "./history-state.js";
 export * from "./agent-catalog.js";
 export * from "./host-protocol.js";
+export * from "./listener-protocol.js";
 export * from "./hostnames.js";
 export * from "./model-order.js";
 export * from "./path-refs.js";

@@ -1,17 +1,10 @@
-import { ActivityStatusSchema } from "@intentic/sandbox-contract";
-import { z } from "zod";
+import { type ListenerStatus, ListenerStatusSchema } from "@intentic/sandbox-contract";
 
 // Push-based listener status: an extension's gateway process POSTs its live connection/voice snapshot to
 // /listeners/<provider>/status, and the activity route reads it here — the daemon holds no provider connection
-// of its own to probe. The body IS the ActivityStatus the /activity/status probe used to build from in-process
-// discord singletons, plus the per-gateway extras that ride the same channel: whether whisper is present
-// (discord's voice-pending signal) and live pairing codes by capability id (whatsapp's link-a-device
-// ceremony — the capability card renders the code as its pending detail).
-export const ListenerStatusSchema = ActivityStatusSchema.extend({
-    whisperReady: z.boolean().optional(),
-    pairing: z.record(z.string(), z.string()).optional(),
-});
-export type ListenerStatus = z.infer<typeof ListenerStatusSchema>;
+// of its own to probe. The schema lives in the contract (listener-protocol.ts) so the gateways type the
+// snapshot they POST against the declaration this module parses with.
+export { type ListenerStatus, ListenerStatusSchema };
 
 // A module singleton (like listeners' batchers) with a TTL, so a crashed or stopped gateway ages out to "no
 // status" instead of showing a stale "connected"; the reconcile cadence is ~30s, so 90s is three missed posts.

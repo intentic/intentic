@@ -12,19 +12,19 @@ Telegram as a place the agent works: it reads chats and groups, replies in them,
 ## Key files
 
 - [src/client.ts](src/client.ts) — the Bot API, the connection pool, and the poll loop.
-- [src/listener.ts](src/listener.ts) — which messages become a turn, and which are ignored.
-- [src/daemon.ts](src/daemon.ts) — the long-lived process this extension contributes.
-- [src/stream.ts](src/stream.ts) — streaming a reply as it is generated rather than after it is finished.
+- [src/listener.ts](src/listener.ts) — which messages become a turn, which are ignored, and how the reply is painted.
+- [src/gateway.ts](src/gateway.ts) — what Telegram plugs into the shared connector runtime: open/close a bot's poll loop, and when a failure is fatal.
 
 ## How it fits
 
 A **daemon-side** extension: a listener, a process and capabilities, no views. It runs inside the sandbox
 alongside the agent, and the browser never talks to Telegram.
 
-Its shape deliberately mirrors `ext-slack` and `ext-discord` — same file names, same responsibilities — because
-they are the same problem against three APIs, and a reader who has understood one should not have to relearn the
-others. It carries **no dependencies at all**: the Bot API is HTTPS and JSON, and `getUpdates` in a loop is the
-whole connection, so an SDK would buy a wrapper around `fetch` and cost a deploy tree.
+The process shell — reconcile loop, daemon client, status posts, streaming reply painter — is
+`@intentic/connector-runtime`, shared with `ext-slack`, `ext-discord`, `ext-whatsapp` and `ext-imap`; what lives
+here is only what Telegram is. It carries **no vendor dependency**: the Bot API is HTTPS and JSON, and
+`getUpdates` in a loop is the whole connection, so an SDK would buy a wrapper around `fetch` and cost a deploy
+tree.
 
 ## Conventions & gotchas
 

@@ -1,11 +1,24 @@
+import { createStreamingPainter, framePainter, type GatewayCtx, type ListenerMessage } from "@intentic/connector-runtime";
 import type { Client, Message } from "discord.js";
-import type { GatewayCtx } from "./context.js";
-import { createDiscordStream, type Painter, type StreamChannel } from "./stream.js";
 
 // The text side of the gateway: for every human-authored message a subscribed bot sees, build a normalized
 // listener message and POST it to the daemon's dispatch route. On a mention we hold the streaming response and
 // paint the model's reply back into the channel live (one painter per matched automation, keyed by automationId).
 
+// The slice of the discord.js channel API the painter uses — structural so this file stays decoupled from
+// discord.js message classes. `channel.send(...)` returns a Message; `message.edit(...)` edits it in place.
+export interface EditableMessage {
+    readonly edit: (content: string) => Promise<unknown>;
+}
+export interface StreamChannel {
+    readonly send: (content: string) => Promise<EditableMessage>;
+}
+
+// Discord's per-message content limit; a longer reply spills into follow-up messages.
+const DISCORD_MAX = 2_000;
+// Min gap between edits of the growing message — Discord rate-limits edits (~5/5s per channel) and we don't need
+// to repaint on every token. The typing indicator covers the gap until the first paint.
+const EDIT_INTERVAL_MS = 1_200;
 // Recent message ids, to drop the duplicate delivery when two of our bots share a channel and both receive the
 // same human message. ponytail: best-effort in-memory cap; a restart forgets it — at worst one duplicate wake.
 const RECENT_MAX = 500;
@@ -124,7 +137,7 @@ export const createDiscordListener = (ctx: GatewayCtx, subscribed: Map<string, C
                       return undefined;
                   })
                 : undefined;
-            const payload = {
+            const payload: ListenerMessage = {
                 provider: "discord",
                 type: "message",
                 id: message.id,
@@ -143,22 +156,16 @@ export const createDiscordListener = (ctx: GatewayCtx, subscribed: Map<string, C
                 await ctx.daemon.dispatch(payload);
                 return;
             }
-            const painters = new Map<string, Painter>();
             const onError = (error: unknown): void => ctx.log.warn({ err: error }, "discord stream paint failed");
+            const poster = {
+                post: (content: string) => (channel as StreamChannel).send(content),
+                update: (handle: EditableMessage, content: string) => handle.edit(content),
+            };
             try {
-                await ctx.daemon.dispatchStreaming(payload, (frame) => {
-                    let painter = painters.get(frame.automationId);
-                    if (painter === undefined) {
-                        painter = createDiscordStream(channel as StreamChannel, onError);
-                        painters.set(frame.automationId, painter);
-                    }
-                    if (frame.delta !== undefined) {
-                        painter.delta(frame.delta);
-                    }
-                    if (frame.end === true) {
-                        painter.end();
-                    }
-                });
+                await ctx.daemon.dispatchStreaming(
+                    payload,
+                    framePainter(() => createStreamingPainter(poster, onError, { maxChars: DISCORD_MAX, editIntervalMs: EDIT_INTERVAL_MS })),
+                );
             } finally {
                 // The turn(s) ended (or the stream broke) — drop the typing heartbeat if our own reply didn't
                 // already clear it.

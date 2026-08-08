@@ -17,8 +17,8 @@ export interface SseTurnStream {
  * automation's row and in the activity feed, which is where they can act on it. */
 const VISITOR_FAILURE = "Sorry — I couldn't answer that just now. Please try again in a moment.";
 
-// A TurnStream that forwards the agent's text to a web-chat widget as SSE frames — the SSE analogue of
-// createDiscordStream. No rate-limited repaint (SSE appends rather than edits): each delta is one `delta` frame,
+// A TurnStream that forwards the agent's text to a web-chat widget as SSE frames — the SSE analogue of the
+// connector runtime's streaming painter. No rate-limited repaint (SSE appends rather than edits): each delta is one `delta` frame,
 // failed() emits an `error` frame and end() emits a terminal `done` frame. writeSSE is async, so frames are
 // chained on a serial tail to keep their order; a write failure (the widget vanished) is swallowed so a dropped
 // client never crashes the turn.

@@ -1,7 +1,6 @@
+import type { ConnectorEntry, GatewayCtx, ListenerMessage } from "@intentic/connector-runtime";
 import { ImapFlow, type FetchMessageObject } from "imapflow";
 import { simpleParser } from "mailparser";
-import type { GatewayCtx } from "./context.js";
-import type { DaemonState, ImapConnectorConfig } from "./daemon.js";
 import { expungeMessage, flagsMessage, htmlText, mailMessage } from "./normalize.js";
 import { readWatermark, resumePoint, watermarkPath, writeWatermark } from "./watermark.js";
 
@@ -12,6 +11,15 @@ import { readWatermark, resumePoint, watermarkPath, writeWatermark } from "./wat
 // Cap on the fetched raw MIME per message: enough for headers + the text parts of real mail, small enough
 // that a 40MB attachment mail costs nothing (attachments are listed from BODYSTRUCTURE, not the source).
 const SOURCE_MAX = 512 * 1024;
+
+export interface ImapConnectorConfig {
+    readonly provider: string;
+    readonly host: string;
+    readonly port: string;
+    readonly username: string;
+    readonly password: string;
+    readonly mailbox?: string;
+}
 // A long outage on a busy inbox must not fetch a thousand bodies on reconnect: deliver the newest batch,
 // advance the watermark past the rest (logged) — the agent can still read the skipped ones over the skill.
 export const CATCH_UP_MAX = 50;
@@ -24,12 +32,10 @@ export const mailboxOf = (config: ImapConnectorConfig): string => (config.mailbo
 export const configKeyOf = (config: ImapConnectorConfig): string =>
     JSON.stringify([config.host, config.port, config.username, config.password, mailboxOf(config)]);
 
-// Hold a connection only while an enabled imap listener automation exists (the state route already filtered
-// to those) and the connector has enough config to try; no automations ⇒ release everything.
-export const desiredAccounts = (state: DaemonState): { id: string; config: ImapConnectorConfig }[] =>
-    state.automations.length === 0
-        ? []
-        : state.connectors.filter(({ config }) => config.host !== "" && config.username !== "" && config.password !== "");
+// The accounts with enough config to try connecting (the shell already gates on an enabled imap listener
+// automation existing — no automations ⇒ it asks for nothing).
+export const desiredAccounts = (connectors: ReadonlyArray<ConnectorEntry<ImapConnectorConfig>>): ReadonlyArray<ConnectorEntry<ImapConnectorConfig>> =>
+    connectors.filter(({ config }) => config.host !== "" && config.username !== "" && config.password !== "");
 
 // A connect failure the reconcile backoff treats as fatal (bad credential / bad mailbox): retrying every tick
 // can't help until the owner fixes the config, and providers lock accounts on repeated failed logins.
@@ -43,8 +49,8 @@ export interface SyncSource {
 
 export interface SyncOptions {
     readonly capabilityId: string;
-    readonly payloadOf: (msg: FetchMessageObject) => Promise<Record<string, unknown>>;
-    readonly dispatch: (payload: Record<string, unknown>) => Promise<void>;
+    readonly payloadOf: (msg: FetchMessageObject) => Promise<ListenerMessage>;
+    readonly dispatch: (payload: ListenerMessage) => Promise<void>;
     readonly save: (lastUid: number) => Promise<void>;
     readonly warn: (fields: object, msg: string) => void;
 }

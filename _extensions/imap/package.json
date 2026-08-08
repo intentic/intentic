@@ -11,6 +11,7 @@
         "test": "vitest run"
     },
     "dependencies": {
+        "@intentic/connector-runtime": "workspace:*",
         "imapflow": "catalog:",
         "mailparser": "catalog:"
     },

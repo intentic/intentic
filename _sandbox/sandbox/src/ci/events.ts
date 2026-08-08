@@ -1,5 +1,6 @@
 import type { PipelineRun } from "@intentic/sandbox-contract";
-import { dispatchListenerMessage, type ListenerMessage } from "../automations/listeners.js";
+import type { ListenerMessage } from "@intentic/sandbox-contract";
+import { dispatchListenerMessage } from "../automations/listeners.js";
 import type { WakeFn } from "../automations/scheduler.js";
 import type { Services } from "../composition.js";
 

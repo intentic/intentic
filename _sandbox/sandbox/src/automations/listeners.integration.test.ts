@@ -9,7 +9,8 @@ import type { Services } from "../composition.js";
 import { CHANNEL_SESSION_TTL_MS, fileThreadSessionsStore, threadKey } from "../sessions/thread-sessions.js";
 import { unstubbed } from "@intentic/testing";
 import { fileAutomationsStore } from "./automations-store.js";
-import { createMessageBatcher, dispatchListenerMessage, type ListenerMessage, type MessageContext, reportListenerFailure } from "./listeners.js";
+import type { ListenerMessage } from "@intentic/sandbox-contract";
+import { createMessageBatcher, dispatchListenerMessage, type MessageContext, reportListenerFailure } from "./listeners.js";
 import { PAYLOAD_MAX, type TurnStream, type WakeFn } from "./scheduler.js";
 
 // The listener paths touch automations/capabilities/activity/workspace/logger; `unstubbed` keeps the fake small.

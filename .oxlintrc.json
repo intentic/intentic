@@ -69,12 +69,13 @@
                             {
                                 "group": [
                                     "@intentic/*",
+                                    "!@intentic/connector-runtime",
                                     "!@intentic/extension-api",
                                     "!@intentic/extension-manifest",
                                     "!@intentic/extension-ui",
                                     "!@intentic/sandbox-contract"
                                 ],
-                                "message": "Extensions may depend only on @intentic/extension-api, @intentic/extension-manifest, @intentic/extension-ui, and @intentic/sandbox-contract — the extension SDK, what it declares, and the shared wire contract. Reaching any other @intentic/* package couples the extension to app/engine internals. See _extensions/README.md."
+                                "message": "Extensions may depend only on @intentic/extension-api, @intentic/extension-manifest, @intentic/extension-ui, @intentic/connector-runtime, and @intentic/sandbox-contract — the extension SDK (browser and gateway halves), what it declares, and the shared wire contract. Reaching any other @intentic/* package couples the extension to app/engine internals. See _extensions/README.md."
                             },
                             {
                                 "group": [

@@ -1,0 +1,15 @@
+/* The connector gateways consume this as a real built package (their dist runs as `node dist/gateway.js`
+ * with default-condition resolution), so this is an emitting build: `tsgo` → dist/, tests excluded. */
+{
+    "compilerOptions": {
+        "types": ["node"],
+        "outDir": "./dist",
+        "rootDir": "./src",
+        "tsBuildInfoFile": "./.cache/tsbuildinfo",
+        "skipLibCheck": true
+    },
+    "include": ["./src/**/*"],
+    "exclude": ["./src/**/*.test.ts"],
+    "references": [{ "path": "../sandbox-contract" }],
+    "extends": "@intentic/tsconfig/tsconfig.base.json"
+}

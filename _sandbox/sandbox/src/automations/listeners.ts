@@ -1,5 +1,4 @@
-import type { AgentOrigin } from "@intentic/sandbox-contract";
-import { z } from "zod";
+import type { AgentOrigin, ListenerMessage } from "@intentic/sandbox-contract";
 import { streamAgent } from "../agent/agent.routes.js";
 import type { Services } from "../composition.js";
 import { CHANNEL_SESSION_TTL_MS, threadKey } from "../sessions/thread-sessions.js";
@@ -28,42 +27,9 @@ import { fireAutomation, mintConversationId, PAYLOAD_MAX, TITLE_MAX, type TurnSt
 // ponytail: 750ms floor tuned for snappy single mentions; raise if real bursts start firing mid-typing.
 export const DEBOUNCE_MS = 750;
 
-// One normalized inbound event — serialized as a JSON line in the automation's payload, and the JSON body a
-// realtime source POSTs to /listeners/<provider>/dispatch. A zod schema (not a bare interface) because it's
-// parsed from an extension gateway's request; `provider` and `type` are open strings — the source is now
-// extension-declared (contributes.listener), not a core enum.
-export const ListenerMessageSchema = z.object({
-    provider: z.string().min(1),
-    type: z.string().min(1),
-    id: z.string(),
-    channelId: z.string(),
-    author: z.object({ id: z.string(), name: z.string() }),
-    content: z.string(),
-    // Discord message: it @mentions one of our bots or replies to a bot's message. Voice events never set it.
-    mentioned: z.boolean().optional(),
-    // CI pipeline event: the ref it ran on. Top-level rather than inside `extra` for the same reason
-    // `mentioned` is — the dispatcher below MATCHES on it, and a narrowing axis the trigger can name has to be
-    // a field of the message rather than a key in a provider's opaque bag.
-    branch: z.string().optional(),
-    // Prior channel messages (chronological) fetched when a bot is tagged, so the agent can reason about why.
-    // Kept a top-level field (not in `extra`) so it reaches the model's payload but stays out of the activity
-    // feed, which logs only content/extra.
-    history: z
-        .array(
-            z.object({
-                author: z.object({ id: z.string(), name: z.string() }),
-                content: z.string(),
-                timestamp: z.string(),
-                self: z.boolean().optional(),
-            }),
-        )
-        .optional(),
-    timestamp: z.string(),
-    // Provider-specific fields (discord message: guildId, attachments; voice_utterance: path;
-    // voice_transcript: path, participants, durationSeconds).
-    extra: z.record(z.string(), z.unknown()).optional(),
-});
-export type ListenerMessage = z.infer<typeof ListenerMessageSchema>;
+// The normalized inbound event (ListenerMessage) and its schema live in the contract now
+// (listener-protocol.ts), so the gateway processes compile against the same declaration the dispatch route
+// parses with.
 
 // What the message that triggers a fire contributes to the conversation that fire opens or CONTINUES: where it
 // came from, what to call it on the board, which thread it belongs to, and (when the source wants the turn

@@ -14,8 +14,7 @@ groups, replies in them, and wakes when it is addressed.
 
 - [src/client.ts](src/client.ts) — the baileys socket, the session store, pairing, and staying connected.
 - [src/listener.ts](src/listener.ts) — which messages become a turn, and which are ignored.
-- [src/stream.ts](src/stream.ts) — why the reply is deliberately NOT streamed (sent once, complete).
-- [src/gateway.ts](src/gateway.ts) — the long-lived process, its status posts, and the control surface.
+- [src/gateway.ts](src/gateway.ts) — what WhatsApp plugs into the shared connector runtime, its pairing-code status, and the control surface. Also why the reply is deliberately NOT streamed (sent once, complete — in [src/listener.ts](src/listener.ts)).
 - [bin/whatsapp](bin/whatsapp) — the agent's CLI, forwarding to the gateway over loopback.
 - [src/types.ts](src/types.ts) — the structural message shapes everything except client.ts works on.
 

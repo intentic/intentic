@@ -16,13 +16,13 @@ test("configKeyOf changes when any connection-relevant field changes", () => {
     expect(configKeyOf(config)).not.toBe(configKeyOf({ ...config, mailbox: "Archive" }));
 });
 
-test("desiredAccounts is empty without automations and filters unconfigured connectors", () => {
+test("desiredAccounts filters unconfigured connectors", () => {
     const connectors = [
         { id: "work", config },
         { id: "blank", config: { ...config, password: "" } },
     ];
-    expect(desiredAccounts({ automations: [], connectors })).toEqual([]);
-    expect(desiredAccounts({ automations: [{ id: "a", enabled: true }], connectors })).toEqual([{ id: "work", config }]);
+    // The no-automations gate lives in the shared gateway shell now — this only judges config completeness.
+    expect(desiredAccounts(connectors)).toEqual([{ id: "work", config }]);
 });
 
 interface Fake {
@@ -48,9 +48,19 @@ const fake = (uids: number[], overrides: Partial<SyncOptions> = {}): Fake => {
     };
     const opts: SyncOptions = {
         capabilityId: "work",
-        payloadOf: async (msg) => ({ uid: msg.uid }),
+        // A minimal conforming envelope: syncNewMail only threads it through, and the uid rides in extra.
+        payloadOf: async (msg) => ({
+            provider: "imap",
+            type: "message",
+            id: String(msg.uid),
+            channelId: "INBOX",
+            author: { id: "a", name: "a" },
+            content: "",
+            timestamp: "2026-01-01T00:00:00.000Z",
+            extra: { uid: msg.uid },
+        }),
         dispatch: async (payload) => {
-            dispatched.push(payload["uid"] as number);
+            dispatched.push(payload.extra?.["uid"] as number);
         },
         save: async (lastUid) => {
             saved.push(lastUid);
@@ -85,7 +95,7 @@ test("syncNewMail drops the already-seen top message a `N:*` search always retur
 test("syncNewMail aborts without advancing when a dispatch fails", async () => {
     const { source, dispatched, saved, opts } = fake([11, 12, 13], {
         dispatch: async (payload) => {
-            if (payload["uid"] === 12) {
+            if (payload.extra?.["uid"] === 12) {
                 throw new Error("daemon down");
             }
         },

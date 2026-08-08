@@ -1,7 +1,9 @@
-// Pure mapping from IMAP happenings to the daemon's normalized listener-message envelope (ListenerMessageSchema
-// in the daemon's automations/listeners.ts): provider "imap", type message/flags/expunge, channelId = the
-// watched mailbox so a trigger's channelId filter selects a folder. Structural input slices (not imapflow's
-// types) keep this module pure and directly fakeable in tests.
+import type { ListenerMessage } from "@intentic/connector-runtime";
+
+// Pure mapping from IMAP happenings to the daemon's normalized listener-message envelope (the contract's
+// ListenerMessageSchema): provider "imap", type message/flags/expunge, channelId = the watched mailbox so a
+// trigger's channelId filter selects a folder. Structural input slices (not imapflow's types) keep this module
+// pure and directly fakeable in tests.
 
 export interface MailAddress {
     readonly name?: string;
@@ -76,7 +78,7 @@ export interface MailMessageInput {
     readonly text: string | undefined;
 }
 
-export const mailMessage = (input: MailMessageInput): Record<string, unknown> => {
+export const mailMessage = (input: MailMessageInput): ListenerMessage => {
     const from = input.envelope?.from?.[0];
     const address = from?.address ?? "unknown";
     const subject = input.envelope?.subject ?? "(no subject)";
@@ -121,7 +123,7 @@ export interface FlagsMessageInput {
     readonly flags: readonly string[];
 }
 
-export const flagsMessage = (input: FlagsMessageInput): Record<string, unknown> => ({
+export const flagsMessage = (input: FlagsMessageInput): ListenerMessage => ({
     provider: "imap",
     type: "flags",
     id: `${input.capabilityId}:${input.uidValidity}:flags:${input.uid ?? `seq${input.seq}`}:${Date.now()}`,
@@ -147,7 +149,7 @@ export interface ExpungeMessageInput {
     readonly vanished: boolean;
 }
 
-export const expungeMessage = (input: ExpungeMessageInput): Record<string, unknown> => ({
+export const expungeMessage = (input: ExpungeMessageInput): ListenerMessage => ({
     provider: "imap",
     type: "expunge",
     id: `${input.capabilityId}:${input.uidValidity}:expunge:${input.uid ?? `seq${input.seq ?? 0}`}:${Date.now()}`,

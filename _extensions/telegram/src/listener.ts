@@ -1,6 +1,5 @@
+import { createStreamingPainter, framePainter, type GatewayCtx, type ListenerMessage, type StreamPoster } from "@intentic/connector-runtime";
 import { type TelegramConnection, TelegramApiError, type TelegramMessage, type TelegramUpdate } from "./client.js";
-import type { GatewayCtx } from "./context.js";
-import { createTelegramStream, type Painter, type TelegramPoster } from "./stream.js";
 
 /* The inbound half of the gateway: every update a connected bot long-polls becomes a normalized listener
  * message POSTed to the daemon's dispatch route. On a mention we hold the streaming response and paint the
@@ -15,6 +14,13 @@ import { createTelegramStream, type Painter, type TelegramPoster } from "./strea
  * bot. Our own replies are not in it either — bots do not receive their own messages — but they do not need to
  * be: a chat is one continuing conversation (thread-sessions), so the agent already remembers what it said. */
 
+// Telegram refuses a sendMessage over 4096 characters outright (400, nothing posted), so a longer reply spills
+// into follow-up messages in the same chat. Below the ceiling to leave room for the "…" placeholder.
+const TELEGRAM_MAX = 3_900;
+// Min gap between edits of the growing message. Telegram's per-chat budget is about one message a second (20 a
+// minute in groups) and edits spend it too, so this is slower than Slack's — the typing indicator covers the
+// gap until the first paint.
+const EDIT_INTERVAL_MS = 2_500;
 // Recent `chat:message` keys, to drop the duplicate delivery when two of our bots are in one group and both
 // receive the same human message. ponytail: best-effort in-memory cap; a restart forgets it — at worst one
 // duplicate wake.
@@ -160,7 +166,7 @@ export const createTelegramListener = (ctx: GatewayCtx, connections: () => Reado
      * whose text is unchanged is a no-op Telegram reports as a 400, and a 429 is a request to wait, which we do
      * once (Telegram tells us how long) before giving up on the paint. Everything else reaches the painter,
      * which kills the stream rather than scribbling half a reply. */
-    const posterFor = (connection: TelegramConnection, message: TelegramMessage): TelegramPoster => {
+    const posterFor = (connection: TelegramConnection, message: TelegramMessage): StreamPoster<number> => {
         const base = {
             chat_id: message.chat.id,
             ...(message.message_thread_id === undefined ? {} : { message_thread_id: message.message_thread_id }),
@@ -228,7 +234,7 @@ export const createTelegramListener = (ctx: GatewayCtx, connections: () => Reado
         const usernames = new Set(live.map((each) => each.username));
         const mentioned = message.chat.type === "private" || addressesUs(message, usernames, selfIds);
         const attachments = attachmentsOf(message);
-        const payload = {
+        const payload: ListenerMessage = {
             provider: "telegram",
             type: "message",
             id: String(message.message_id),
@@ -253,25 +259,15 @@ export const createTelegramListener = (ctx: GatewayCtx, connections: () => Reado
         }
         // Immediate feedback: show "typing…" the moment we're tagged, before the (debounced) turn spins up.
         startTyping(connection, message);
-        // Paint the reply into the chat live. Each matched automation gets its own painter, so two automations
-        // answering one mention don't scribble over each other's message.
+        // Paint the reply into the chat live: one painter per matched automation (framePainter), so two
+        // automations answering one mention don't scribble over each other's message.
         const poster = posterFor(connection, message);
-        const painters = new Map<string, Painter>();
         const onError = (error: unknown): void => ctx.log.warn({ err: error }, "telegram stream paint failed");
         try {
-            await ctx.daemon.dispatchStreaming(payload, (frame) => {
-                let painter = painters.get(frame.automationId);
-                if (painter === undefined) {
-                    painter = createTelegramStream(poster, onError);
-                    painters.set(frame.automationId, painter);
-                }
-                if (frame.delta !== undefined) {
-                    painter.delta(frame.delta);
-                }
-                if (frame.end === true) {
-                    painter.end();
-                }
-            });
+            await ctx.daemon.dispatchStreaming(
+                payload,
+                framePainter(() => createStreamingPainter(poster, onError, { maxChars: TELEGRAM_MAX, editIntervalMs: EDIT_INTERVAL_MS })),
+            );
         } finally {
             // The turn(s) ended (or the stream broke) — the reply is there, so retire the indicator.
             stopTyping(chatId);

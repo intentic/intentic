@@ -11,6 +11,7 @@
         "test": "vitest run"
     },
     "dependencies": {
+        "@intentic/connector-runtime": "workspace:*",
         "baileys": "7.0.0-rc14"
     },
     "devDependencies": {

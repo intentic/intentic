@@ -1,7 +1,13 @@
+import { createBufferedPainter, framePainter, type GatewayCtx, type ListenerMessage } from "@intentic/connector-runtime";
 import type { WhatsAppConnection } from "./client.js";
-import type { GatewayCtx } from "./context.js";
-import { createWhatsAppStream, type Painter } from "./stream.js";
 import type { WaMessageContent, WaRawMessage } from "./types.js";
+
+/* WhatsApp's reply is deliberately NOT streamed (createBufferedPainter): the other chat gateways grow a
+ * message with edits as the model types, but here a message being rewritten twice a second is exactly the
+ * automation fingerprint that gets numbers flagged, and every edit wears a visible "edited" label. The reply
+ * buffers and lands once on turn end; the ceiling is a safety net, not a pagination scheme (WhatsApp takes
+ * 65,536 chars). */
+const WHATSAPP_MAX = 60_000;
 
 /* The inbound half of the gateway: every live message a paired session receives becomes a normalized listener
  * message POSTed to the daemon's dispatch route. On a mention we hold the streaming response, show "typing…"
@@ -227,7 +233,7 @@ export const createWhatsAppListener = (ctx: GatewayCtx, connections: () => Reado
                 .flatMap((jid) => (jid === undefined ? [] : [jidUser(jid)])),
         );
         const mentioned = addressesUs(chat, content, selves);
-        const payload = {
+        const payload: ListenerMessage = {
             provider: "whatsapp",
             type: "message",
             id,
@@ -250,28 +256,14 @@ export const createWhatsAppListener = (ctx: GatewayCtx, connections: () => Reado
         // Immediate feedback: "typing…" the moment we're addressed, held for the whole (debounced) turn. The
         // reply itself lands once, complete, when the turn ends — see stream.ts for why.
         startTyping(connection, chat);
-        const painters = new Map<string, Painter>();
         const onError = (error: unknown): void => ctx.log.warn({ err: error }, "whatsapp reply send failed");
+        // In a group the answer points at what it answers; in a DM that is just noise.
+        const send = (body: string): Promise<void> => connection.sendText(chat, body, chat.endsWith("@g.us") ? id : undefined);
         try {
-            await ctx.daemon.dispatchStreaming(payload, (frame) => {
-                let painter = painters.get(frame.automationId);
-                if (painter === undefined) {
-                    painter = createWhatsAppStream(
-                        {
-                            // In a group the answer points at what it answers; in a DM that is just noise.
-                            send: (body) => connection.sendText(chat, body, chat.endsWith("@g.us") ? id : undefined),
-                        },
-                        onError,
-                    );
-                    painters.set(frame.automationId, painter);
-                }
-                if (frame.delta !== undefined) {
-                    painter.delta(frame.delta);
-                }
-                if (frame.end === true) {
-                    painter.end();
-                }
-            });
+            await ctx.daemon.dispatchStreaming(
+                payload,
+                framePainter(() => createBufferedPainter(send, onError, WHATSAPP_MAX)),
+            );
         } finally {
             stopTyping(connection, chat);
         }

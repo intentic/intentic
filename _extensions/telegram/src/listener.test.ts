@@ -1,6 +1,6 @@
 import { expect, test, vi } from "vitest";
 import type { TelegramConnection, TelegramMessage } from "./client.js";
-import type { GatewayCtx } from "./context.js";
+import type { GatewayCtx } from "@intentic/connector-runtime";
 import { addressesUs, attachmentsOf, authorNameOf, contentOf, createTelegramListener } from "./listener.js";
 
 const SELF_ID = 777;
@@ -26,6 +26,7 @@ const fakeCtx = (): { ctx: GatewayCtx; dispatched: Record<string, unknown>[]; st
         streamed,
         ctx: {
             log: { info: () => {}, warn: () => {}, error: () => {} },
+            workspaceRoot: "/work",
             daemon: {
                 state: async () => ({ automations: [], connectors: [] }),
                 dispatch: async (message) => void dispatched.push(message as Record<string, unknown>),

@@ -10,6 +10,9 @@
         "typecheck": "tsgo --noEmit -p tsconfig.test.json",
         "test": "vitest run"
     },
+    "dependencies": {
+        "@intentic/connector-runtime": "workspace:*"
+    },
     "devDependencies": {
         "@intentic/tsconfig": "workspace:*",
         "@types/node": "catalog:",

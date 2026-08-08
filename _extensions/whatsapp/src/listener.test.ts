@@ -1,6 +1,6 @@
 import { expect, test, vi } from "vitest";
 import type { WhatsAppConnection } from "./client.js";
-import type { GatewayCtx } from "./context.js";
+import type { GatewayCtx } from "@intentic/connector-runtime";
 import { addressesUs, contentOf, createWhatsAppListener, hasMedia, jidUser, timestampOf, unwrap } from "./listener.js";
 import type { WaMessageContent, WaRawMessage } from "./types.js";
 
@@ -30,6 +30,7 @@ const fakeCtx = (): { ctx: GatewayCtx; dispatched: Record<string, unknown>[]; st
         streamed,
         ctx: {
             log: { info: () => {}, warn: () => {}, error: () => {} },
+            workspaceRoot: "/work",
             daemon: {
                 state: async () => ({ automations: [], connectors: [] }),
                 dispatch: async (message) => void dispatched.push(message as Record<string, unknown>),

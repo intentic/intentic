@@ -1,0 +1,46 @@
+{
+    "name": "@intentic/connector-runtime",
+    "version": "0.0.0",
+    "description": "The shared gateway runtime for realtime-connector extensions — daemon client, reconcile shell, reply painters and logger, written once instead of per channel",
+    "license": "MIT",
+    "type": "module",
+    "private": true,
+    "repository": {
+        "type": "git",
+        "url": "git+https://github.com/intentic/intentic.git",
+        "directory": "_sandbox/connector-runtime"
+    },
+    "files": [
+        "dist",
+        "src"
+    ],
+    "exports": {
+        ".": {
+            "types": "./dist/index.d.ts",
+            "import": {
+                "@intentic/src": "./src/index.ts",
+                "default": "./dist/index.js"
+            },
+            "require": {
+                "@intentic/src": "./src/index.ts",
+                "default": "./dist/index.js"
+            }
+        }
+    },
+    "scripts": {
+        "build": "tsgo",
+        "typecheck": "tsgo --noEmit -p tsconfig.test.json",
+        "test": "vitest run",
+        "watch": "tsgo --build --watch"
+    },
+    "dependencies": {
+        "@intentic/sandbox-contract": "workspace:*",
+        "tslib": "catalog:"
+    },
+    "devDependencies": {
+        "@intentic/tsconfig": "workspace:*",
+        "@types/node": "catalog:",
+        "@typescript/native-preview": "catalog:",
+        "vitest": "catalog:"
+    }
+}

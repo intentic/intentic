@@ -14,6 +14,9 @@
         "@slack/socket-mode": "catalog:",
         "@slack/web-api": "catalog:"
     },
+    "dependencies": {
+        "@intentic/connector-runtime": "workspace:*"
+    },
     "devDependencies": {
         "@intentic/tsconfig": "workspace:*",
         "@types/node": "catalog:",

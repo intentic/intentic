@@ -30,7 +30,8 @@ its initials; `extensionMarks.test.ts` in the web app keeps that from happening 
 glyph names are real.
 
 Dependencies are limited **by lint** (`.oxlintrc.json`, scoped to `_extensions/**`) to
-`@intentic/extension-api`, `@intentic/extension-manifest`, `@intentic/extension-ui`, and
+`@intentic/extension-api`, `@intentic/extension-manifest`, `@intentic/extension-ui`,
+`@intentic/connector-runtime` (the gateway-process half of the SDK, for the messaging connectors), and
 `@intentic/sandbox-contract`. Reaching into `@intentic-app/*` or the app internals is a boundary violation and
 fails the build.
 

@@ -10,8 +10,8 @@ import { downloadFile } from "@huggingface/hub";
 import type { Client, VoiceBasedChannel, VoiceState } from "discord.js";
 import { createTranscriber, MIN_UTTERANCE_BYTES, type Transcriber, WHISPER_MISSING, whisperCliMissing } from "./audio.js";
 import { ensureDiscordClient, releaseDiscordClient } from "./client.js";
-import type { GatewayCtx } from "./context.js";
-import type { DiscordConnectorConfig } from "./daemon.js";
+import type { GatewayCtx } from "@intentic/connector-runtime";
+import type { DiscordConnectorConfig } from "./client.js";
 
 /* On-demand voice transcription living IN this gateway process (so a session outlives any single agent turn):
  * the agent joins a voice channel via the `discord-voice` CLI (→ this process's HTTP control server), we capture

@@ -1,6 +1,5 @@
-import type { GatewayCtx } from "./context.js";
+import { createStreamingPainter, framePainter, type GatewayCtx, type ListenerMessage } from "@intentic/connector-runtime";
 import type { SlackConnection } from "./client.js";
-import { createSlackStream, type Painter } from "./stream.js";
 
 /* The inbound half of the gateway: every Socket Mode envelope a connected app receives becomes a normalized
  * listener message POSTed to the daemon's dispatch route. On a mention we hold the streaming response and paint
@@ -10,6 +9,12 @@ import { createSlackStream, type Painter } from "./stream.js";
  * added the moment we're tagged and removed when the turn ends — the same job ext-discord's typing heartbeat
  * does, in the gesture Slack actually has. */
 
+// Slack renders a message beyond ~4000 chars as a truncated blob with a "show more"; a longer reply spills into
+// follow-up messages in the same thread instead.
+const SLACK_MAX = 3_800;
+// Min gap between edits of the growing message. chat.update is Tier 3 (~50/min per workspace) and we don't need
+// to repaint on every token; the :eyes: reaction covers the gap until the first paint.
+const EDIT_INTERVAL_MS = 1_500;
 // Recent `channel:ts` keys, to drop the duplicate delivery when two of our apps share a channel, and the
 // message/app_mention double-delivery Slack sends when a manifest subscribes to both.
 // ponytail: best-effort in-memory cap; a restart forgets it — at worst one duplicate wake.
@@ -189,7 +194,7 @@ export const createSlackListener = (ctx: GatewayCtx, connections: () => Readonly
         }
 
         const author = message.user !== undefined ? { id: message.user, name: await resolveName(connection, message.user) } : undefined;
-        const payload = {
+        const payload: ListenerMessage = {
             provider: "slack",
             type: "message",
             id: message.ts,
@@ -213,38 +218,26 @@ export const createSlackListener = (ctx: GatewayCtx, connections: () => Readonly
             await ctx.daemon.dispatch(payload);
             return;
         }
-        // Paint the reply into the thread live. Each matched automation gets its own painter, so two automations
-        // answering one mention don't scribble over each other's message.
+        // Paint the reply into the thread live: one painter per matched automation (framePainter), so two
+        // automations answering one mention don't scribble over each other's message.
         const threadTs = message.thread_ts ?? message.ts;
-        const painters = new Map<string, Painter>();
         const onError = (error: unknown): void => ctx.log.warn({ err: error }, "slack stream paint failed");
+        const poster = {
+            post: async (body: string): Promise<string> => {
+                // oxlint-disable-next-line unicorn/require-post-message-target-origin -- Slack's chat.postMessage, not window.postMessage; there is no targetOrigin to pass
+                const posted = await connection.web.chat.postMessage({ channel, thread_ts: threadTs, text: body });
+                if (posted.ts === undefined) {
+                    throw new Error("slack chat.postMessage returned no ts");
+                }
+                return posted.ts;
+            },
+            update: (ts: string, body: string) => connection.web.chat.update({ channel, ts, text: body }),
+        };
         try {
-            await ctx.daemon.dispatchStreaming(payload, (frame) => {
-                let painter = painters.get(frame.automationId);
-                if (painter === undefined) {
-                    painter = createSlackStream(
-                        {
-                            post: async (body) => {
-                                // oxlint-disable-next-line unicorn/require-post-message-target-origin -- Slack's chat.postMessage, not window.postMessage; there is no targetOrigin to pass
-                                const posted = await connection.web.chat.postMessage({ channel, thread_ts: threadTs, text: body });
-                                if (posted.ts === undefined) {
-                                    throw new Error("slack chat.postMessage returned no ts");
-                                }
-                                return posted.ts;
-                            },
-                            update: (ts, body) => connection.web.chat.update({ channel, ts, text: body }),
-                        },
-                        onError,
-                    );
-                    painters.set(frame.automationId, painter);
-                }
-                if (frame.delta !== undefined) {
-                    painter.delta(frame.delta);
-                }
-                if (frame.end === true) {
-                    painter.end();
-                }
-            });
+            await ctx.daemon.dispatchStreaming(
+                payload,
+                framePainter(() => createStreamingPainter(poster, onError, { maxChars: SLACK_MAX, editIntervalMs: EDIT_INTERVAL_MS })),
+            );
         } finally {
             // The turn(s) ended (or the stream broke) — the reply is there, so retire the acknowledgement.
             await react(connection, channel, message.ts, false);

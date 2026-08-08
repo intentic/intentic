@@ -1,13 +1,13 @@
+import { type ListenerDispatchFrame, type ListenerMessage, ListenerMessageSchema, type ListenerStatus, ListenerStatusSchema } from "@intentic/sandbox-contract";
 import type { Context } from "hono";
 import { stream } from "hono/streaming";
-import type { z } from "zod";
 import { streamAgent } from "../agent/agent.routes.js";
-import { DEBOUNCE_MS, dispatchListenerMessage, ListenerMessageSchema, reportListenerFailure } from "../automations/listeners.js";
+import { DEBOUNCE_MS, dispatchListenerMessage, reportListenerFailure } from "../automations/listeners.js";
 import { PAYLOAD_MAX, type TurnStream, type WakeFn } from "../automations/scheduler.js";
 import type { Services } from "../composition.js";
 import type { AppEnv } from "../context.js";
 import { listenerState } from "./listener-state.js";
-import { ListenerStatusSchema, setListenerStatus } from "./listener-status.js";
+import { setListenerStatus } from "./listener-status.js";
 
 // The control surface for an extension's realtime-listener gateway process (e.g. ext-discord). The daemon holds
 // no provider connection itself — the gateway does — so these four routes are the seam: the gateway reconciles
@@ -32,7 +32,7 @@ export const createListenerRoutes = (services: Services, wake: WakeFn = streamAg
         if (Number.isFinite(declared) && declared > PAYLOAD_MAX) {
             return c.json({ error: "payload too large" }, 413);
         }
-        let message: z.infer<typeof ListenerMessageSchema>;
+        let message: ListenerMessage;
         try {
             message = ListenerMessageSchema.parse(await c.req.json());
         } catch {
@@ -52,7 +52,7 @@ export const createListenerRoutes = (services: Services, wake: WakeFn = streamAg
                 const gate = Promise.withResolvers<void>();
                 sinks.set(automationId, gate.promise);
                 let tail: Promise<unknown> = Promise.resolve();
-                const write = (frame: Record<string, unknown>): void => {
+                const write = (frame: ListenerDispatchFrame): void => {
                     tail = tail.then(() => ndjson.writeln(JSON.stringify(frame))).catch(() => {});
                 };
                 return {
@@ -89,7 +89,7 @@ export const createListenerRoutes = (services: Services, wake: WakeFn = streamAg
     // the connection to probe directly).
     status: async (c: Context<AppEnv, "/listeners/:provider">): Promise<Response> => {
         const provider = c.req.param("provider");
-        let body: z.infer<typeof ListenerStatusSchema>;
+        let body: ListenerStatus;
         try {
             body = ListenerStatusSchema.parse(await c.req.json());
         } catch {

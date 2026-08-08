@@ -12,6 +12,7 @@
     },
     "dependencies": {
         "@discordjs/opus": "catalog:",
+        "@intentic/connector-runtime": "workspace:*",
         "@huggingface/hub": "catalog:",
         "@discordjs/voice": "catalog:",
         "discord.js": "catalog:"

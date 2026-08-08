@@ -1,5 +1,12 @@
 import { Client, GatewayIntentBits, Partials } from "discord.js";
 
+export interface DiscordConnectorConfig {
+    readonly provider: string;
+    readonly botToken: string;
+    readonly voiceModel?: string;
+    readonly voiceLanguage?: string;
+}
+
 // The gateway's discord.js clients — one connection per bot token, shared by the text listener and the voice
 // session manager, each alive only while at least one consumer needs it. A module singleton map: both consumers
 // reach it directly. discord.js owns resume/backoff for a live session; a failed login clears that token's slot
