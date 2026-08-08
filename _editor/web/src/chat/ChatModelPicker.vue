@@ -108,7 +108,11 @@ const footerVisible = computed(() => hasContent.value || provider.value === `cla
                  like a crop rather than a margin. The row groups below take that padding back with `-mx-3`
                  so their tint spans the panel exactly as a model row's does — bleed is the LIST's idiom, and
                  the text still lands on the 12px line. -->
-            <div v-if="footerVisible" class="flex shrink-0 flex-col gap-2 border-t border-line px-3 py-2">
+            <!-- It SHRINKS AND SCROLLS rather than holding its natural height, which is the backstop behind the
+                 model list's floor (ModelPicker): the two together mean a tall footer and a short window can
+                 shorten each other but neither can erase the other. Nothing scrolls here until the window is
+                 genuinely too short — the account lists fold themselves long before that (PickerAccounts). -->
+            <div v-if="footerVisible" class="scrollbar-thin flex min-h-0 shrink flex-col gap-2 overflow-y-auto border-t border-line px-3 py-2">
                 <!-- WHO SERVES THE NEXT TURN — the account list and the harness axis, shared verbatim with the
                      shell's own picker (PickerAccounts). Bound to the conversation here: each row writes
                      straight through and the panel stays open, because these are settings of the session you

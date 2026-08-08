@@ -368,9 +368,12 @@ export const planLimitRows = (native: Record<string, readonly OauthAccount[]>, r
 export const PLAN_LIMIT_BANDS = [`spent`, `tight`, `room`, `unread`, `none`] as const;
 export type PlanLimitBand = (typeof PLAN_LIMIT_BANDS)[number];
 
-// `none` is not a degree of fullness — it is a plan that publishes no limits at all (SuperGrok), and it
-// stays out of the capacity bar for that reason: an account whose headroom is unknowable is not headroom.
-export const planLimitBand = (row: PlanLimitRow): PlanLimitBand => {
+/* `none` is not a degree of fullness — it is a plan that publishes no limits at all (SuperGrok), and it
+ * stays out of the capacity bar for that reason: an account whose headroom is unknowable is not headroom.
+ *
+ * Asked for the two fields it actually reads rather than a whole row, so the model picker's footer can band the
+ * rings it has already drawn (see pickerAccounts.capacityCounts) without first rebuilding them as roster rows. */
+export const planLimitBand = (row: Pick<PlanLimitRow, `percent` | `readable`>): PlanLimitBand => {
     if (row.percent === undefined) {
         return row.readable ? `unread` : `none`;
     }

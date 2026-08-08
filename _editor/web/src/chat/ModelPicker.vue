@@ -266,9 +266,16 @@ onMounted(() => {
         <!-- Fixed height on desktop so the panel's overall size never changes as the rail filters between
              sparse and dense providers — a variable height makes a bottom-anchored popover grow upward and the
              rail icons jump under the cursor. It lives on the row rather than the list so the rail is bounded by
-             the same height, and `min-h-0` lets the row give way when the host is shorter than that. Mobile
-             keeps its flexible height inside the sheet. -->
-        <div class="flex h-80 min-h-0 max-md:h-auto max-md:flex-col">
+             the same height. Mobile keeps its flexible height inside the sheet.
+
+             THE FLOOR IS WHY THIS IS `min-h-32` AND NOT `min-h-0`. The row gives way when the host is shorter
+             than 320px — that part is unchanged and is what lets the panel fit above its own pill on a short
+             window — but it may no longer give way to NOTHING. It could: the footer below is a session panel
+             whose height belongs to whatever the provider happens to have connected, and a sandbox holding
+             thirty-four sign-ins drew them all, took the whole column, and left the model catalog at zero rows.
+             A picker with no models in it is not a degraded picker, it is a different panel, so four rows of
+             catalog are reserved before the footer gets any of the height at all. -->
+        <div class="flex h-80 min-h-32 max-md:h-auto max-md:flex-col">
             <!-- Provider rail: a filter, never a switcher — scoping the list to one provider must stay a
                  safe exploratory glance, so switching only ever happens by picking a model row. -->
             <div
