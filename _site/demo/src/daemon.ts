@@ -372,11 +372,9 @@ const ROUTES: readonly (readonly [string, string, Handler])[] = [
     // Codex authenticates ONLY through the translator (see access.ts), so this — not an oauth account — is what
     // makes the fleet's two Codex agents legible: a connected ChatGPT subscription their turns ran on.
     [`GET`, `/translator/accounts`, () => json(DEMO_TRANSLATOR_ACCOUNTS)],
-    [`GET`, `/claude/models`, () => json({ models: CLAUDE_MODELS, default: `claude-sonnet-5` })],
-    [`GET`, `/codex/models`, () => json({ models: CODEX_MODELS, default: `gpt-5.2-codex` })],
-    [`GET`, `/grok/models`, () => json({ models: [], default: `` })],
-    [`GET`, `/kimi/models`, () => json({ models: [], default: `` })],
-    [`GET`, `/gemini/models`, () => json({ models: [], default: `` })],
+    // One route for every provider's catalog, as the daemon serves it. A provider the demo has not connected
+    // answers empty, which is exactly what an unconnected provider looks like against the real daemon too.
+    [`GET`, `/providers/{provider}/models`, ({ param }) => json(DEMO_CATALOGS[param(`provider`)] ?? { models: [], default: `` })],
 
     [`GET`, `/settings`, () => json(DEMO_SETTINGS)],
     [`GET`, `/settings/savings`, () => json(DEMO_SAVINGS)],
@@ -500,6 +498,14 @@ const CODEX_MODELS: Model[] = [
     { id: `gpt-5.2-codex`, label: `GPT-5.2 Codex`, efforts: [`low`, `medium`, `high`], badges: [`reasoning`] },
     { id: `gpt-5.2`, label: `GPT-5.2`, efforts: [`low`, `medium`, `high`] },
 ];
+
+// What each provider's catalog route answers. Claude and Codex are the two this demo has connected; every other
+// provider is absent rather than listed empty, so the route's own fallback is the single place "nothing
+// connected" is spelled.
+const DEMO_CATALOGS: Record<string, { models: Model[]; default: string }> = {
+    claude: { models: CLAUDE_MODELS, default: `claude-sonnet-5` },
+    codex: { models: CODEX_MODELS, default: `gpt-5.2-codex` },
+};
 
 // The sandbox-wide agent settings the chat and the hub read. An EMPTY rule table is what puts a finished agent
 // in "Ready to land" — with no rule saying otherwise, work waits on its branch, which is the state the demo's

@@ -10,7 +10,7 @@ import {
 
 /* The provider / harness / model catalog every picker shares (the chat menu, the automations dialog) — pure
  * data keyed by the wire vocabulary in schemas.ts, so the surfaces can't drift. Live state stays with the
- * consumer (native Grok's model list is the daemon's /grok/models catalog, layered on top of modelsFor by the
+ * consumer (native Grok's model list is the daemon's own catalog for it, layered on top of modelsFor by the
  * web; ACP providers are merged in from the installed `agent` capabilities). */
 
 export interface CatalogOption {
@@ -318,7 +318,7 @@ export const CLAUDE_SEED_MODELS: readonly Model[] = [
 ];
 
 // The STATIC floor of the model catalog, harness-independent: every provider's real list is the daemon's live
-// catalog (/claude/models · /codex/models · /grok/models — discovery with a persisted/seed floor, never empty),
+// catalog (/providers/{provider}/models — discovery with a persisted/seed floor, never empty),
 // which consumers layer on top. Codex/grok are empty here (nothing sensible to offer before the live load — and
 // under the Claude Code harness they route through the translator, which serves the SAME subscription model ids
 // as the native catalog, so the harness no longer changes the list).

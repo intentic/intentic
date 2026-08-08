@@ -8,23 +8,21 @@ import { capabilitiesContract } from "./contracts/capabilities.contract.js";
 import { choresContract } from "./contracts/chores.contract.js";
 import { ciContract } from "./contracts/ci.contract.js";
 import { claudeContract } from "./contracts/claude.contract.js";
-import { codexContract } from "./contracts/codex.contract.js";
 import { draftsContract } from "./contracts/drafts.contract.js";
 import { endpointsContract } from "./contracts/endpoints.contract.js";
 import { extensionsContract } from "./contracts/extensions.contract.js";
-import { geminiContract } from "./contracts/gemini.contract.js";
 import { gitContract } from "./contracts/git.contract.js";
 import { grokContract } from "./contracts/grok.contract.js";
 import { historyContract } from "./contracts/history.contract.js";
 import { intenticContract } from "./contracts/intentic.contract.js";
 import { inventoryContract } from "./contracts/inventory.contract.js";
-import { kimiContract } from "./contracts/kimi.contract.js";
 import { logsContract } from "./contracts/logs.contract.js";
 import { loopsContract } from "./contracts/loops.contract.js";
 import { panelsContract } from "./contracts/panels.contract.js";
 import { portsContract } from "./contracts/ports.contract.js";
 import { publicContract } from "./contracts/public.contract.js";
 import { prepushContract } from "./contracts/prepush.contract.js";
+import { providersContract } from "./contracts/providers.contract.js";
 import { pushContract } from "./contracts/push.contract.js";
 import { secretsContract } from "./contracts/secrets.contract.js";
 import { sessionsContract } from "./contracts/sessions.contract.js";
@@ -44,11 +42,9 @@ export { capabilitiesContract } from "./contracts/capabilities.contract.js";
 export { choresContract } from "./contracts/chores.contract.js";
 export { ciContract } from "./contracts/ci.contract.js";
 export { claudeContract } from "./contracts/claude.contract.js";
-export { codexContract } from "./contracts/codex.contract.js";
 export { draftsContract } from "./contracts/drafts.contract.js";
 export { endpointsContract } from "./contracts/endpoints.contract.js";
 export { extensionsContract } from "./contracts/extensions.contract.js";
-export { geminiContract } from "./contracts/gemini.contract.js";
 export { gitContract } from "./contracts/git.contract.js";
 export { grokContract } from "./contracts/grok.contract.js";
 export { historyContract } from "./contracts/history.contract.js";
@@ -57,13 +53,13 @@ export { historyContract } from "./contracts/history.contract.js";
 export { hostContract } from "./contracts/host.contract.js";
 export { intenticContract } from "./contracts/intentic.contract.js";
 export { inventoryContract } from "./contracts/inventory.contract.js";
-export { kimiContract } from "./contracts/kimi.contract.js";
 export { logsContract } from "./contracts/logs.contract.js";
 export { loopsContract } from "./contracts/loops.contract.js";
 export { panelsContract } from "./contracts/panels.contract.js";
 export { portsContract } from "./contracts/ports.contract.js";
 export { publicContract } from "./contracts/public.contract.js";
 export { prepushContract } from "./contracts/prepush.contract.js";
+export { providersContract } from "./contracts/providers.contract.js";
 export { pushContract } from "./contracts/push.contract.js";
 export { secretsContract } from "./contracts/secrets.contract.js";
 export { sessionsContract } from "./contracts/sessions.contract.js";
@@ -107,17 +103,14 @@ export const sandboxContract = {
     chores: choresContract,
     ci: ciContract,
     claude: claudeContract,
-    codex: codexContract,
     drafts: draftsContract,
     endpoints: endpointsContract,
     extensions: extensionsContract,
     sessions: sessionsContract,
     settings: settingsContract,
     intentic: intenticContract,
-    gemini: geminiContract,
     git: gitContract,
     grok: grokContract,
-    kimi: kimiContract,
     history: historyContract,
     workspace: workspaceContract,
     inventory: inventoryContract,
@@ -127,6 +120,7 @@ export const sandboxContract = {
     ports: portsContract,
     public: publicContract,
     prepush: prepushContract,
+    providers: providersContract,
     push: pushContract,
     secrets: secretsContract,
     system: systemContract,

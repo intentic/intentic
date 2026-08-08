@@ -39,8 +39,8 @@ export interface ModelOption extends CatalogOption {
 export const perProvider = <T>(seed: (provider: NativeProvider) => T): Record<AgentProvider, T> =>
     Object.fromEntries(NATIVE_PROVIDERS.map((provider) => [provider, seed(provider)] as const));
 
-// Every provider's model catalog is daemon-owned (/claude/models · /codex/models · /grok/models · /kimi/models ·
-// /gemini/models — live discovery with a persisted/seed floor, never empty) and loaded into these records, so
+// Every provider's model catalog is daemon-owned (one route, /providers/{provider}/models — live discovery
+// with a persisted/seed floor, never empty) and loaded into these records, so
 // the pickers track provider renames and new releases without a static list. useChat.loadProviderModels fills
 // them when a daemon is reachable; resetChat clears. Empty only until the first load.
 export const providerModels = ref<Record<AgentProvider, ModelOption[]>>(perProvider<ModelOption[]>(() => []));

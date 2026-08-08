@@ -19,7 +19,7 @@ const withUsage = (account: OauthAccount, usage: AccountUsage | undefined): Oaut
 const withSeat = (account: OauthAccount, seat: SeatRefusal | undefined): OauthAccount =>
     seat === undefined || account.needsReauth === true ? account : { ...account, detail: seat.reason };
 
-export type ClaudeRoutesDeps = Pick<Services, "accountUsage" | "claudeModels" | "claudeSeats" | "claudeStore" | "claudeUsage">;
+export type ClaudeRoutesDeps = Pick<Services, "accountUsage" | "claudeSeats" | "claudeStore" | "claudeUsage">;
 
 /* How long the account list will wait for a fresh plan-limit reading before answering with what is on file.
  *
@@ -80,7 +80,6 @@ export const createClaudeRoutes = (services: ClaudeRoutesDeps) => {
             ]);
             return { accounts: accounts.map((account) => withUsage(withSeat(account, seats[account.id]), usage[account.id])) };
         }),
-        models: i.models.handler(() => services.claudeModels.models()),
         // Forget the credential AND everything filed against it: a reconnect mints a fresh account id, so a
         // snapshot or a seat refusal left behind here is orphaned for good.
         disconnect: i.disconnect.handler(async ({ input }) => {

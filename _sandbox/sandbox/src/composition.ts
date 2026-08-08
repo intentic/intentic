@@ -10,6 +10,7 @@ import type {
     GitRemoteBranch,
     GitRemoteState,
     IntenticLine,
+    NativeProvider,
     RestoredMessage,
     StashEntry,
     WorkspaceChildren,
@@ -39,6 +40,7 @@ import { createMediaTickets, type MediaTickets } from "./auth/media-tickets.js";
 import { createWsTickets, type WsTickets } from "./auth/ws-tickets.js";
 import { type ActivityStore, fileActivityStore } from "./activity/activity-store.js";
 import { type AgentRequest, runAgent } from "./agent/agent.js";
+import { createProviderCatalogs, type ProviderCatalog } from "./agent/provider-catalogs.js";
 import { type CliProxyClient, cliProxyConfigPath, cliProxyManagementUrl, createCliProxyClient } from "./agent/translator.js";
 import { type ApprovalsStore, fileApprovalsStore } from "./automations/approvals-store.js";
 import { type AutomationsStore, fileAutomationsStore } from "./automations/automations-store.js";
@@ -64,7 +66,7 @@ import {
 import { fileBrowserAccess } from "./auth/browser-access.js";
 import { createAuthConnections, type AuthConnections } from "./auth/connections.js";
 import { createSessions, type MintedSession } from "./auth/session.js";
-import { type ClaudeCatalog, createClaudeCatalog } from "./claude/claude-models.js";
+import { createClaudeCatalog } from "./claude/claude-models.js";
 import { type ClaudeStore, fileClaudeStore } from "./claude/claude-credentials.js";
 import { type ClaudeSeatStore, fileClaudeSeatStore } from "./claude/claude-seats.js";
 import { type AccountUsageStore, fileAccountUsageStore } from "./usage/account-usage.js";
@@ -120,10 +122,10 @@ import { type UndoableAction, undoableAction, undoLastAction } from "./git/undo.
 import { stashApply, stashChanges, stashDrop, stashList, stashPush } from "./git/stash.js";
 import { fetchRemote, pullRemote, pushBranch, remoteState } from "./git/remote.js";
 import { type EndpointCatalog, createEndpointCatalog } from "./endpoints/endpoint-catalog.js";
-import { type GeminiCatalog, createGeminiCatalog } from "./gemini/gemini-catalog.js";
+import { createGeminiCatalog } from "./gemini/gemini-catalog.js";
 import { createGrokAgent, createGrokRunner } from "./grok/grok-agent.js";
 import { createOpenCodeService, type OpenCodeService } from "./grok/opencode.js";
-import { type KimiCatalog, createKimiCatalog } from "./kimi/kimi-catalog.js";
+import { createKimiCatalog } from "./kimi/kimi-catalog.js";
 import { createWorkspaceHistory, type WorkspaceHistory } from "./history/history.js";
 import { type IntenticRun, runIntentic } from "./intentic/intentic-runner.js";
 import { type ManagedProcesses, createManagedProcesses } from "./processes/managed-processes.js";
@@ -361,24 +363,19 @@ export interface Services {
     // records it from the turn that was refused, and /agent/refusals serves it to the account surfaces, which
     // read the two together (a healthy meter beside a fresh refusal means the meter is stale).
     readonly providerRefusals: ProviderRefusalStore;
-    // Claude's live model catalog from the Agent SDK's supportedModels() (alias fallback, never empty). Serves
-    // /claude/models for the picker so new tiers + effort levels need no code change.
-    readonly claudeModels: ClaudeCatalog;
-    // OpenAI/Codex's live model catalog (discovery → persisted → seed floor, never empty). A Codex turn resolves
-    // its model here so it never sends the SDK's rejected gpt-5-codex default; /codex/models serves the picker;
-    // a turn's self-heal `record`s the ids the subscription proved valid.
+    // Every native provider's live model catalog, keyed by provider — what /providers/{provider}/models serves
+    // the picker, what the quick model compares over, and what a routed turn validates its pick against. One
+    // table rather than a field per provider, so those three readers do a lookup instead of each growing its own
+    // chain over the five; see provider-catalogs.ts for what a catalog owes and what stays provider-specific.
+    readonly providerCatalogs: Record<NativeProvider, ProviderCatalog>;
+    // OpenAI/Codex's catalog is ALSO held directly, unlike the other four: a native Codex turn resolves its model
+    // here so it never sends the SDK's rejected gpt-5-codex default, and a turn's self-heal `record`s the ids the
+    // subscription proved valid. Neither is a question the shared table asks.
     readonly codexModels: CodexCatalog;
-    // Kimi Code's model catalog from CLIProxyAPI's provider-scoped definitions (seed floor, never empty).
-    // The same translator owns the subscription and executes each Kimi turn; /kimi/models serves the picker.
-    readonly kimiModels: KimiCatalog;
-    // Gemini's live model catalog, read from the translator's /v1/models (persisted → seed floor, never empty).
-    // A Gemini turn resolves its model here; /gemini/models serves the picker. There is no geminiStore twin:
-    // Gemini is routed-only, so the translator owns the credential.
-    readonly geminiModels: GeminiCatalog;
     // What each `endpoint` capability's own server publishes — the user's model APIs, wherever they run. Keyed by
-    // capability id because these are user-created and unbounded, unlike the four fixed catalogs above, and there
-    // is no seed floor: only the server can say what it serves. Read by the picker route, by the capability card,
-    // and by the translator reconciler that turns each one into a routable provider.
+    // capability id because these are user-created and unbounded, unlike the fixed native catalogs above, and
+    // there is no seed floor: only the server can say what it serves. Read by the picker route, by the capability
+    // card, and by the translator reconciler that turns each one into a routable provider.
     readonly endpointModels: EndpointCatalog;
     // The bundled translator (CLIProxyAPI): connects/lists/disconnects the routed providers' SUBSCRIPTION OAuth
     // (codex → ChatGPT, grok → SuperGrok, kimi → Kimi Code, gemini → Google). Codex, Kimi and Gemini have no
@@ -671,6 +668,18 @@ export const createServices = (config: Config, logger: Logger): Services => {
     // /claude/accounts waits on a sweep before answering, and main.ts keeps one running on a timer.
     const claudeUsage = createClaudeUsageRefresher({ store: claudeStore, usage: accountUsage });
 
+    // Hoisted because it is BOTH a row in the provider table below and a member in its own right: a native Codex
+    // turn resolves its model from it, and a turn's self-heal records the ids the subscription proved valid.
+    // Claude's, Kimi's and Gemini's are locals — the table is the only thing that reads them.
+    const codexModels = createCodexCatalog(config, join(codexBase, "models.json"));
+    const providerCatalogs = createProviderCatalogs({
+        claude: createClaudeCatalog(claudeStore, config, workspace.root, join(authRoot, "claude", "models.json")),
+        codex: codexModels,
+        gemini: createGeminiCatalog(config, join(authRoot, "gemini", "models.json")),
+        kimi: createKimiCatalog(cliProxy),
+        openCode,
+    });
+
     // Hoisted: the members below that measure themselves (the worktree op chains, the git routes' Changes scan)
     // must file into the SAME tracker the summary line reads, or each would rank its own slice in isolation.
     const perf = createPerfTracker(logger);
@@ -802,10 +811,8 @@ export const createServices = (config: Config, logger: Logger): Services => {
         accountUsage,
         claudeUsage,
         providerRefusals: fileProviderRefusalStore(join(config.historyRoot, "provider-refusals.json")),
-        claudeModels: createClaudeCatalog(claudeStore, config, workspace.root, join(authRoot, "claude", "models.json")),
-        codexModels: createCodexCatalog(config, join(codexBase, "models.json")),
-        kimiModels: createKimiCatalog(cliProxy),
-        geminiModels: createGeminiCatalog(config, join(authRoot, "gemini", "models.json")),
+        providerCatalogs,
+        codexModels,
         endpointModels: createEndpointCatalog(join(authRoot, "endpoints")),
         cliProxy,
         codexHome: codexBase,

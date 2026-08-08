@@ -44,9 +44,9 @@ const connectAll = async (page: import("@playwright/test").Page): Promise<void> 
     await page.route("**/claude/accounts", (route) => route.fulfill({ json: { accounts: [{ id: "claude-1", label: "Claude" }] } }));
     await page.route("**/codex/accounts", (route) => route.fulfill({ json: { accounts: [{ id: "codex-1", label: "ChatGPT" }] } }));
     await page.route("**/grok/accounts", (route) => route.fulfill({ json: { accounts: [{ id: "grok-1", label: "Grok" }] } }));
-    await page.route("**/claude/models", (route) => route.fulfill({ json: CLAUDE_CATALOG }));
-    await page.route("**/codex/models", (route) => route.fulfill({ json: CODEX_CATALOG }));
-    await page.route("**/grok/models", (route) => route.fulfill({ json: GROK_CATALOG }));
+    await page.route("**/providers/claude/models", (route) => route.fulfill({ json: CLAUDE_CATALOG }));
+    await page.route("**/providers/codex/models", (route) => route.fulfill({ json: CODEX_CATALOG }));
+    await page.route("**/providers/grok/models", (route) => route.fulfill({ json: GROK_CATALOG }));
 };
 
 const openPicker = async (page: import("@playwright/test").Page): Promise<void> => {

@@ -20,7 +20,7 @@ const EFFORT_SCALE: readonly string[] = [`minimal`, `low`, `medium`, `high`, `xh
 const STATIC_EFFORTS: readonly string[] = [`low`, `medium`, `high`, `xhigh`, `max`];
 
 // Reasoning effort levels for a provider+model: the live catalog's per-model tiers when the daemon reported
-// them (/claude/models · /kimi/models carry each model's supported levels), else the static scale above.
+// them (Claude's and Kimi's catalogs carry each model's supported levels), else the static scale above.
 // Model-aware so a release with a different scale adjusts the picker with no code change. `thinking` filters
 // the top tier the same way effortAllowed does — the daemon reports a model's tiers without knowing this turn's
 // thinking setting, so the filter applies to BOTH the live list and the static fallback. Empty only for an ACP

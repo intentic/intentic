@@ -616,15 +616,21 @@ export const accountsOf = (target: AgentProvider): readonly OauthAccount[] => pr
 // The manage card's accounts, which follow the card's own provider rather than any conversation's.
 const managedAccounts = computed<readonly OauthAccount[]>(() => accountsOf(managedProvider.value));
 
-// The route prefix each provider's daemon routes live under.
-// An endpoint's catalog route carries its capability id, since there is one route per configured endpoint
-// rather than one per provider — every other provider is a singleton with a fixed base.
-const providerBase = (p: AgentProvider): string => {
+// The route prefix a provider's ACCOUNT routes live under — and only Claude and Grok have any. Every other
+// provider authenticates through the subscription the translator holds, which is why refreshConnections filters
+// them out (subscriptionOnly) before anything here is reached.
+// Catalogs are deliberately NOT here: they are the one question every provider answers identically, so they
+// come off a single parameterized route (modelsPath below).
+const providerBase = (p: AgentProvider): string => (p === `grok` ? `/grok` : `/claude`);
+
+// Where a provider's model catalog is read from. Two shapes, because there are two kinds of subject: a native
+// provider is one of a closed set the daemon holds a catalog for, so it rides the shared route as a parameter;
+// an endpoint is a capability the user created, so its id names the one route configured for it.
+const modelsPath = (p: AgentProvider): string => {
     const endpointId = endpointIdOf(p);
-    if (endpointId !== undefined) {
-        return `/endpoints/${encodeURIComponent(endpointId)}`;
-    }
-    return p === `codex` ? `/codex` : p === `grok` ? `/grok` : p === `kimi` ? `/kimi` : p === `gemini` ? `/gemini` : `/claude`;
+    return endpointId !== undefined
+        ? `/endpoints/${encodeURIComponent(endpointId)}/models`
+        : `/providers/${encodeURIComponent(p)}/models`;
 };
 // Providers whose ONLY credential is the translator subscription: they have no native account handshake, so the
 // card shows the routed row alone and there is nothing for `startConnect` to arm. Grok is deliberately absent —
@@ -978,7 +984,7 @@ const loadProviderModelsOnce = async (target: AgentProvider): Promise<void> => {
     providerModelsState.value = { ...providerModelsState.value, [target]: `loading` };
     let body: { models: Model[]; default: string };
     try {
-        const response = await sandboxRequest(`${providerBase(target)}/models`);
+        const response = await sandboxRequest(modelsPath(target));
         if (!response.ok) {
             providerModelsState.value = { ...providerModelsState.value, [target]: `error` };
             return;

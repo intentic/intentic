@@ -175,21 +175,6 @@ const ROUTED_REQUIREMENT: Record<KeyedProvider, string> = {
 const routedModel = (catalog: { models: readonly { id: string }[]; default: string }, model: string | undefined): string =>
     model !== undefined && model !== "" && catalog.models.some((entry) => entry.id === model) ? model : catalog.default;
 
-// Each routed provider resolves against its OWN live catalog — the same catalogs the native paths use, so a
-// pick is validated identically whichever harness runs it.
-const routedCatalog = async (services: Services, provider: KeyedProvider) => {
-    if (provider === "codex") {
-        return services.codexModels.models();
-    }
-    if (provider === "grok") {
-        return services.openCode.xaiModels();
-    }
-    if (provider === "kimi") {
-        return services.kimiModels.models();
-    }
-    return services.geminiModels.models();
-};
-
 /* WHICH PROVIDERS THIS HARNESS COULD ACTUALLY RUN RIGHT NOW — the cheap predicate mirroring the resolution
  * below, one entry per native provider in a single pass. It exists because a caller choosing BETWEEN providers
  * (the quick model) has to know all five before it picks one, and resolving credentials five times to find out
@@ -298,7 +283,9 @@ export const resolveHarnessCredentials = async (
                 message: `Connect your ${ROUTED_REQUIREMENT[input.agent]} in Sandbox ▸ Agent to run ${input.agent} under the Claude Code harness.`,
             };
         }
-        const catalog = await routedCatalog(services, input.agent);
+        // The routed pick is validated against the provider's OWN live catalog — the same table the native paths
+        // and the picker read, so a pick is validated identically whichever harness runs it.
+        const catalog = await services.providerCatalogs[input.agent].models();
         // Narrowed here rather than read off `input` inside the closure: the limit lookup outlives this call by
         // a whole turn, and `input.agent` is an open provider vocabulary everywhere else in the file.
         const routed = input.agent;

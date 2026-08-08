@@ -252,6 +252,17 @@ export interface WideSeamOverrides {
 }
 export type ServiceOverrides = Partial<Omit<Services, keyof WideSeamOverrides>> & WideSeamOverrides;
 
+// Never-empty catalog fakes matching the daemon's contract, so a native turn always resolves a model. Exported
+// because `providerCatalogs` is one field holding five rows: a test that needs ONE provider to answer
+// differently spreads this and replaces its row, rather than restating four it does not care about.
+export const testProviderCatalogs: Services["providerCatalogs"] = {
+    claude: { models: async () => ({ models: [{ id: "opus", label: "Opus" }], default: "opus" }) },
+    codex: { models: async () => ({ models: [{ id: "gpt-5.1", label: "GPT 5.1" }], default: "gpt-5.1" }) },
+    grok: { models: async () => ({ models: [{ id: "grok-4", label: "Grok 4" }], default: "grok-4" }) },
+    kimi: { models: async () => ({ models: [{ id: "kimi-k3", label: "Kimi K3" }], default: "kimi-k3" }) },
+    gemini: { models: async () => ({ models: [{ id: "gemini-pro-agent", label: "Gemini Pro Agent" }], default: "gemini-pro-agent" }) },
+};
+
 export const services = (overrides: ServiceOverrides = {}): Services => {
     const { auth, git, usage, claudeStore, cliProxy, sandboxSettings, ...rest } = overrides;
     /* A real registry over a memory store (cheap, and /events' roster subscription needs the real seam);
@@ -396,11 +407,10 @@ export const services = (overrides: ServiceOverrides = {}): Services => {
         }),
         codexHome: "/work/.intentic/codex",
         codexThreadExists: async () => true,
-        // Never-empty catalog fakes matching the daemon's contract, so a native turn always resolves a model.
-        claudeModels: { models: async () => ({ models: [{ id: "opus", label: "Opus" }], default: "opus" }) },
+        providerCatalogs: testProviderCatalogs,
+        // Held directly too, exactly as in composition — the native Codex turn's model resolution and its
+        // self-heal both read it, and neither goes through the table above.
         codexModels: { models: async () => ({ models: [{ id: "gpt-5.1", label: "GPT 5.1" }], default: "gpt-5.1" }), record: async () => {} },
-        kimiModels: { models: async () => ({ models: [{ id: "kimi-k3", label: "Kimi K3" }], default: "kimi-k3" }) },
-        geminiModels: { models: async () => ({ models: [{ id: "gemini-pro-agent", label: "Gemini Pro Agent" }], default: "gemini-pro-agent" }) },
         history: fakeHistory(),
         agent: async function* () {
             yield { kind: "done" };

@@ -6,7 +6,7 @@ import { expect, test } from "@playwright/test";
 // a fetch succeeds. The regression this guards: a catalog that loaded empty at startup showed NO Grok models
 // until a reload; the unified picker refetches every provider's catalog on open (loadAllProviderModels), so the
 // list heals on the very next open. The daemon is fully mocked here (no real xAI account); we drive the real
-// Vue app + real picker wiring. /claude/models and /codex/models are left unmocked — their failed fetches must
+// Vue app + real picker wiring. Claude's and Codex's catalog routes are left unmocked — their failed fetches must
 // degrade to the static floor (Claude's aliases) without breaking the page.
 
 // The Grok "swirl" mark's path starts with this; the old placeholder was a diagonal bar "M6 3h4l8 18h-4z".
@@ -39,7 +39,7 @@ test("the model picker lists Grok's live catalog and shows the real Grok logo", 
 
     // Only Grok connected, with a live catalog; the other providers empty so the composer auto-selects Grok.
     await page.route("**/grok/accounts", (route) => route.fulfill({ json: { accounts: [{ id: "grok-1", label: "Grok" }] } }));
-    await page.route("**/grok/models", (route) => route.fulfill({ json: CATALOG }));
+    await page.route("**/providers/grok/models", (route) => route.fulfill({ json: CATALOG }));
     await page.route("**/claude/accounts", (route) => route.fulfill({ json: { accounts: [] } }));
     await page.route("**/codex/accounts", (route) => route.fulfill({ json: { accounts: [] } }));
 
@@ -75,7 +75,7 @@ test("opening the picker refetches the catalogs, self-healing an empty Grok list
     // Grok catalog is withheld until `grokReady` flips — so it can ONLY appear via the picker's on-open refetch.
     // Without loadAllProviderModels on mount, grokModels stays [] (loaded empty at startup) and this fails.
     let grokReady = false;
-    await page.route("**/grok/models", (route) => route.fulfill({ json: grokReady ? CATALOG : { models: [] } }));
+    await page.route("**/providers/grok/models", (route) => route.fulfill({ json: grokReady ? CATALOG : { models: [] } }));
     await page.route("**/grok/accounts", (route) => route.fulfill({ json: { accounts: [{ id: "grok-1", label: "Grok" }] } }));
     await page.route("**/claude/accounts", (route) => route.fulfill({ json: { accounts: [{ id: "claude-1", label: "Claude" }] } }));
     await page.route("**/codex/accounts", (route) => route.fulfill({ json: { accounts: [] } }));

@@ -36,6 +36,7 @@ import {
     rejectForbidden,
     runAgentTurn,
     services,
+    testProviderCatalogs,
     withTranslator,
 } from "./route-testing.js";
 
@@ -721,7 +722,10 @@ test("agent.run keeps a pinned Gemini model the catalog still offers, and drops 
                 services({
                     config: withTranslator,
                     cliProxy: geminiConnected,
-                    geminiModels: { models: async () => ({ models: models.map((id) => ({ id, label: id })), default: models[0]! }) },
+                    providerCatalogs: {
+                        ...testProviderCatalogs,
+                        gemini: { models: async () => ({ models: models.map((id) => ({ id, label: id })), default: models[0]! }) },
+                    },
                     agent: async function* (request) {
                         seen = request;
                         yield { kind: "done" };

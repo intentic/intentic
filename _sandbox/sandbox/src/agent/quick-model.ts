@@ -19,21 +19,11 @@ import { runOneShot } from "./one-shot.js";
  * Every catalog here is a cached read (discovery → persisted → seed floor, never empty), so asking all five is
  * cheap after the first turn — and asking all five is required, since the whole point is to compare them. */
 
-// One provider's catalog, by the same service the picker's own /…/models route serves from. Failures degrade to
-// an empty list rather than taking the resolution down: a provider whose catalog is momentarily unreachable
-// simply doesn't compete, and one of the others answers.
+// One provider's catalog, from the same table the picker's own /providers/{provider}/models route serves from.
+// Failures degrade to an empty list rather than taking the resolution down: a provider whose catalog is
+// momentarily unreachable simply doesn't compete, and one of the others answers.
 const catalogOf = async (services: Services, provider: NativeProvider): Promise<readonly string[]> => {
-    const catalog = await (
-        provider === "claude"
-            ? services.claudeModels.models()
-            : provider === "codex"
-              ? services.codexModels.models()
-              : provider === "grok"
-                ? services.openCode.xaiModels()
-                : provider === "kimi"
-                  ? services.kimiModels.models()
-                  : services.geminiModels.models()
-    ).catch(() => undefined);
+    const catalog = await services.providerCatalogs[provider].models().catch(() => undefined);
     return catalog?.models.map((model) => model.id) ?? [];
 };
 

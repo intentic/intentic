@@ -1,5 +1,6 @@
 import { createActivityRoutes } from "./activity/activity.routes.js";
 import { createAgentRoutes } from "./agent/agent.routes.js";
+import { createProvidersRoutes } from "./agent/providers.routes.js";
 import { createAgentsRoutes } from "./agents/agents.routes.js";
 import { createTranslatorRoutes } from "./agent/translator.routes.js";
 import { createAutomationsRoutes } from "./automations/automations.routes.js";
@@ -7,18 +8,15 @@ import { createCapabilitiesRoutes } from "./capabilities/capabilities.routes.js"
 import { createChoresRoutes } from "./chores/chores.routes.js";
 import { createCiRoutes } from "./ci/ci.routes.js";
 import { createClaudeRoutes } from "./claude/claude.routes.js";
-import { createCodexRoutes } from "./codex/codex.routes.js";
 import type { Services } from "./composition.js";
 import { createDraftsRoutes } from "./drafts/drafts.routes.js";
 import { createExtensionsRoutes } from "./extensions/extensions.routes.js";
 import { createEndpointsRoutes } from "./endpoints/endpoints.routes.js";
-import { createGeminiRoutes } from "./gemini/gemini.routes.js";
 import { createGitRoutes } from "./git/git.routes.js";
 import { createGrokRoutes } from "./grok/grok.routes.js";
 import { createHistoryRoutes } from "./history/history.routes.js";
 import { createIntenticRoutes } from "./intentic/intentic.routes.js";
 import { createInventoryRoutes } from "./inventory/inventory.routes.js";
-import { createKimiRoutes } from "./kimi/kimi.routes.js";
 import { createLogsRoutes } from "./logs/logs.routes.js";
 import { createLoopsRoutes } from "./loops/loops.routes.js";
 import { createWorkflowsRoutes } from "./workflows/workflows.routes.js";
@@ -46,17 +44,14 @@ export const createRouter = (services: Services) => ({
     chores: createChoresRoutes(services),
     ci: createCiRoutes(services),
     claude: createClaudeRoutes(services),
-    codex: createCodexRoutes(services),
     drafts: createDraftsRoutes(services),
     extensions: createExtensionsRoutes(services),
     sessions: createSessionsRoutes(services),
     settings: createSettingsRoutes(services),
     intentic: createIntenticRoutes(services),
     endpoints: createEndpointsRoutes(services),
-    gemini: createGeminiRoutes(services),
     git: createGitRoutes(services),
     grok: createGrokRoutes(services),
-    kimi: createKimiRoutes(services),
     history: createHistoryRoutes(services),
     workspace: createWorkspaceRoutes(services),
     inventory: createInventoryRoutes(services),
@@ -67,6 +62,7 @@ export const createRouter = (services: Services) => ({
     ports: createPortsRoutes(services),
     public: createPublicRoutes(services),
     prepush: createPrepushRoutes(services),
+    providers: createProvidersRoutes(services),
     push: createPushRoutes(services),
     translator: createTranslatorRoutes(services),
     secrets: createSecretsRoutes(services),

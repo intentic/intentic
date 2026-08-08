@@ -73,7 +73,6 @@ export const createGrokRoutes = (services: GrokRoutesDeps) => {
             const code = new URL(authorization.url).searchParams.get("user_code") ?? authorization.instructions;
             return { url: authorization.url, code };
         }),
-        models: i.models.handler(() => services.openCode.xaiModels()),
         accounts: i.accounts.handler(async () => ({ accounts: (await services.openCode.connected(XAI)) ? [grokAccount] : [] })),
         disconnect: i.disconnect.handler(async () => {
             await services.openCode.disconnect(XAI);

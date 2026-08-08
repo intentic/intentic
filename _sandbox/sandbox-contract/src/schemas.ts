@@ -48,6 +48,13 @@ export type NativeProvider = (typeof NATIVE_PROVIDERS)[number];
 export const AgentProviderSchema = z.string().min(1);
 export type AgentProvider = z.infer<typeof AgentProviderSchema>;
 
+// The provider naming a catalog in the one route every native provider shares (providers.contract.ts). An ENUM
+// rather than the bare-string schema above, and deliberately so: the open vocabulary exists because an ACP agent
+// or an endpoint can be added without a contract change, but neither has a daemon-held catalog — this route's
+// subjects are exactly the five the daemon keeps one for. Closing it here is what makes an unknown id a 400 from
+// the contract instead of a registry lookup that reads back `undefined` and serves an empty list.
+export const NativeProviderParamSchema = z.object({ provider: z.enum(NATIVE_PROVIDERS) });
+
 // The harness (agentic loop) a turn runs on, orthogonal to the provider. See AgentTurnSchema.harness.
 export const AgentHarnessSchema = z.enum(["native", "claude-code"]);
 export type AgentHarness = z.infer<typeof AgentHarnessSchema>;
@@ -1069,8 +1076,8 @@ export const TranslatorCompleteSchema = z.object({
 // A provider's model catalog, resolved daemon-side from live discovery with a persisted last-known-good list and
 // a seed floor (Grok via opencode.ts xaiModels, Codex via codex-models.ts, Claude via the Agent SDK's
 // supportedModels) — never empty, so the picker is never blank. `label` is the provider's display name; `default`
-// is the model a fresh chat on that provider seeds (always present). Shared by /grok/models, /codex/models,
-// /claude/models. `efforts` is the reasoning-effort tiers the model accepts (Claude reports them per model);
+// is the model a fresh chat on that provider seeds (always present). Served by the one catalog route every
+// provider shares. `efforts` is the reasoning-effort tiers the model accepts (Claude reports them per model);
 // empty ⇒ the client's default tiers.
 //
 // EVERY field here is provider-reported — nothing about a model is curated in this repo, so a new release or a
