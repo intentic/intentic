@@ -247,30 +247,32 @@ const open = (event: Event): void => {
 </script>
 
 <template>
-    <!-- A full-height strip of the column's own margin, so the mark is reachable wherever the eye happens to be
-         in a long turn: the button STICKS to the top of whatever part of the turn is on screen instead of
-         scrolling away with its first line. Zero height in the transcript by construction — the strip is
-         absolute, and the width it occupies is padding the column was already carrying.
+    <!-- A full-height strip of the column's RIGHT margin, with the mark centred in it — level with the middle
+         of the turn it cuts above, which is what makes it read as belonging to that turn rather than to the
+         boundary line above it. Zero height in the transcript by construction: the strip is absolute, and the
+         width it occupies is padding the column was already carrying.
          Revealed by hovering the TURN, not the strip, so there is nothing to hunt for with the pointer. On
          touch there is no hover to reveal anything, so it stands at low opacity the way the message actions
          already do there. A cut that HAS been forked shows permanently and in the link colour — it is no longer
          an empty margin but a junction, and the branches taken from it are the thing worth seeing without
          hunting. Notably it does NOT light up for a running turn: the old chip did exactly that, appearing only
-         while it was refusing to be pressed. -->
+         while it was refusing to be pressed.
+         The tooltip opens to the LEFT, back over the transcript: on the right there is a panel edge a few
+         pixels away and nowhere for it to go. -->
     <!-- The armed rewind is NOT disarmed by the pointer leaving this strip, which is a rule the old full-width
          row could afford and a mark two characters wide cannot: the menu opens beside it, so the very first
          move toward the row you just armed would leave the strip and cancel it. What guards the second press
          is the four-second decay and the disarm on every reopen, both of which are about time rather than
          about where the pointer happens to be. -->
-    <div class="absolute inset-y-0 left-[calc(-1*var(--chat-gutter))] z-[6] w-[var(--chat-gutter)]">
+    <div class="absolute inset-y-0 right-[calc(-1*var(--chat-gutter))] z-[6] flex w-[var(--chat-gutter)] items-center">
         <button
             type="button"
-            class="sticky top-2 flex h-7 w-full cursor-pointer items-center justify-center rounded-md transition-opacity hover:bg-overlay hover:text-content"
+            class="flex h-7 w-full cursor-pointer items-center justify-center rounded-md transition-opacity hover:bg-overlay hover:text-content"
             :class="[
                 forks.length > 0 ? `text-link opacity-100` : `text-subtle`,
                 forks.length > 0 ? `` : mobile ? `opacity-40` : `opacity-0 focus-visible:opacity-100 group-hover/turn:opacity-100`,
             ]"
-            v-tooltip.right="tip"
+            v-tooltip.left="tip"
             :aria-label="tip"
             @click.stop="open"
         >
