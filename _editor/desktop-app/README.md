@@ -132,18 +132,20 @@ So the app never asks Google for anything. It opens the platform's own page in t
 picks the result up over the deep link it already intercepts:
 
 ```
-app      opener    →  app.intentic.dev/desktop-auth?state=<nonce>     (in the real browser)
-browser  signs in  →  platform parks {one-time token, Google ID token} for ONE pickup
+app      opener    →  app.intentic.dev/desktop-auth?state=<nonce>&challenge=<hash>  (real browser)
+browser  signs in  →  platform parks {one-time token, Google ID token, challenge} for ONE pickup
 browser  redirect  →  intentic://auth?handoff=<id>&state=<nonce>
-app      navigate  →  app.intentic.dev/desktop-auth/complete?handoff=<id>   (in the webview)
+app      navigate  →  app.intentic.dev/desktop-auth/complete?handoff=<id>&verifier=<secret>  (webview)
 ```
 
 The last step is why nothing is injected from Rust: the webview fetches that URL itself, redeems the row, and
 spends the Better Auth one-time token at `/api/auth/one-time-token/verify` — whose `Set-Cookie` lands in the
 webview's own jar exactly as it would in a browser. The Google ID token is spent once at the daemon's
 `system.session` for a daemon session that renews silently, so Google reappears only when that cannot renew.
-Credentials never ride the deep link: a deep link is delivered as a process argument, readable by anything
-else on the machine, so only the row's id travels that way.
+Credentials and the verifier never ride the deep link: a deep link is delivered as a process argument,
+readable by anything else on the machine, so only the row's id travels that way. The browser receives only a
+hash of the verifier; the desktop process retains the secret until the webview redeems the handoff. Racing the
+public id therefore cannot collect or consume the credentials intended for the app.
 
 ## The link surface
 

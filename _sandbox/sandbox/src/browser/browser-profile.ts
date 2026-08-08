@@ -38,6 +38,7 @@ export const createBrowserProfileRoute = (services: Services) =>
         let context: BrowserContext | undefined;
         let screencast: Screencast | undefined;
         let closed = false;
+        let unregisterAccess: (() => void) | undefined;
         // Whether finishing means "this account is now connected" (login) or just "close the window" (browse).
         let signingIn = true;
 
@@ -46,6 +47,8 @@ export const createBrowserProfileRoute = (services: Services) =>
                 return;
             }
             closed = true;
+            unregisterAccess?.();
+            unregisterAccess = undefined;
             await screencast?.stop();
             screencast = undefined;
             try {
@@ -65,7 +68,10 @@ export const createBrowserProfileRoute = (services: Services) =>
                     // Signing a live Chromium into a service ADDS a credential, and browsing it is acting AS the
                     // owner in their own account — the owner's tier alone, like everything else on the
                     // capabilities surface.
-                    redeemTicket(services, url, "owner");
+                    const caller = redeemTicket(services, url, "owner");
+                    if (caller !== undefined) {
+                        unregisterAccess = services.auth?.connections.register(caller, () => ws.close(1008, "authorization revoked"));
+                    }
                 } catch (err) {
                     services.logger.warn({ err }, "browser-profile ticket rejected");
                     ws.close(1008, "unauthorized");

@@ -1,6 +1,7 @@
 import type { SandboxSummary } from "@intentic-app/api-contract";
 import { hashKey } from "@tanstack/vue-query";
 import { computed, ref } from "vue";
+import { removeStoredValue, storedValue, storeValue } from "../browserStorage";
 import { queryClient } from "../queryPersistence";
 import { apiClient } from "../useApi";
 import { withConcurrency } from "../concurrency";
@@ -53,7 +54,7 @@ queryClient.getQueryCache().subscribe((event) => {
     }
 });
 // Which sandbox the workspace is pointed at right now.
-const activeSandboxId = ref<string | undefined>(localStorage.getItem(ACTIVE_KEY) ?? undefined);
+const activeSandboxId = ref<string | undefined>(storedValue(ACTIVE_KEY));
 
 // The ACTIVE daemon's connection, as one state machine value (see connection.ts) rather than a set of
 // booleans. Browser-owned: the platform's registry knows a sandbox exists and when it last announced itself,
@@ -94,10 +95,10 @@ export const sandboxKey = (...parts: readonly unknown[]): unknown[] => [...parts
 const persistActive = (id: string | undefined): void => {
     activeSandboxId.value = id;
     if (id === undefined) {
-        localStorage.removeItem(ACTIVE_KEY);
+        removeStoredValue(ACTIVE_KEY);
         return;
     }
-    localStorage.setItem(ACTIVE_KEY, id);
+    storeValue(ACTIVE_KEY, id);
 };
 
 // Keep the active selection if it still exists, else fall back to the first sandbox. Shared by list/refresh.

@@ -21,6 +21,7 @@ import { afterEach, expect, vi } from "vitest";
 import { createAgentsRegistry } from "./agents/agents-registry.js";
 
 import { ForbiddenError } from "./auth/auth.js";
+import { createAuthConnections } from "./auth/connections.js";
 
 import type { AppEnv, OrpcContext } from "./context.js";
 import type { AutomationRecord, AutomationsStore } from "./automations/automations-store.js";
@@ -522,12 +523,17 @@ export const services = (overrides: ServiceOverrides = {}): Services => {
                 : {
                       authorize: rejectAuth,
                       authorizeOwner: rejectAuth,
+                      authorizeRetirement: rejectAuth,
                       mintSession: async () => ({ token: "sess-token", expiresAt: 0 }),
                       // Owner-only and destructive: a suite that reaches it without saying so is asserting on a
                       // rotation that never happened, so the default names itself rather than answering 200.
                       rotateSessions: async () => {
                           throw new Error("auth.rotateSessions was called, and this test did not stub it");
                       },
+                      disableBrowserAccess: async () => {
+                          throw new Error("auth.disableBrowserAccess was called, and this test did not stub it");
+                      },
+                      connections: createAuthConnections(),
                       allowOrigins: [],
                       ...auth,
                   },

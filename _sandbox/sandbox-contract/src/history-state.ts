@@ -98,6 +98,11 @@ export const HISTORY_STATE_FILES: readonly StateFile[] = [
      * target — an export becomes a credential — and the target minting its own costs exactly one sign-in. */
     { path: "session-secret", portability: "identity", note: "Sign in again — the target signs its own sessions." },
     {
+        path: "browser-access-disabled",
+        portability: "identity",
+        note: "Account-deletion retirement belongs to the source sandbox; the imported copy starts with fresh browser access.",
+    },
+    {
         path: "push.json",
         portability: "identity",
         note: "Re-enable notifications in the browsers you use — a push subscription is bound to the sandbox that minted it.",

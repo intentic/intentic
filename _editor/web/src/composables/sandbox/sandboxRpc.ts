@@ -2,10 +2,9 @@ import { sandboxContract } from "@intentic/sandbox-contract";
 import { createORPCClient, ORPCError } from "@orpc/client";
 import type { ContractRouterClient } from "@orpc/contract";
 import { OpenAPILink, type OpenAPILinkOptions } from "@orpc/openapi-client/fetch";
-import { useSandboxSession } from "./sandboxSession";
 import { useEndpoint } from "./useEndpoint";
-import { useSandbox } from "./useSandbox";
 import { trackPerf } from "../perf";
+import { sandboxAuthenticatedFetch, SandboxUnaddressedError } from "./sandboxAuthFetch";
 
 /* The TYPED client for the active sandbox daemon, derived from the same `sandboxContract` the daemon
  * implements — the daemon-side twin of useApi's platform client.
@@ -25,18 +24,8 @@ import { trackPerf } from "../perf";
  * routes (/health, /workspace/raw), the chunked XHR upload path, and the extension host's deliberately
  * path-based data plane (an extension bundle cannot import our contract). */
 
-const { active } = useSandbox();
 const { daemonBase } = useEndpoint();
-const { getSessionToken } = useSandboxSession();
-
-// The active sandbox has no address yet (setup unfinished, or the daemon has not announced itself). Its own
-// class because the connection supervisor treats it as a distinct, non-retryable-by-reconnect condition —
-// there is nothing to reconnect TO until the platform hands us a URL.
-export class SandboxUnaddressedError extends Error {
-    constructor() {
-        super(`Your sandbox isn't reachable yet — finish setup so it registers its address.`);
-    }
-}
+export { SandboxUnaddressedError } from "./sandboxAuthFetch";
 
 // Everything about reaching the daemon that does NOT depend on who is asking: the base, the credentials, the
 // clock. Shared by every client built below, which is what makes an extension's reach identical to the app's
@@ -59,7 +48,7 @@ const linkOptions: OpenAPILinkOptions<Record<never, never>> = {
                 return request.url;
             }
         })();
-        return trackPerf(`rpc.request`, { path, method: request.method }, () => globalThis.fetch(request));
+        return trackPerf(`rpc.request`, { path, method: request.method }, () => sandboxAuthenticatedFetch(request));
     },
     // Read per request, not captured: a sandbox switch (or a daemon that re-announced a new URL after a
     // restart) must be picked up by the very next call, with no client rebuild. Same reason the loopback
@@ -71,19 +60,8 @@ const linkOptions: OpenAPILinkOptions<Record<never, never>> = {
         }
         return base;
     },
-    headers: async () => {
-        const token = await getSessionToken();
-        if (token === undefined) {
-            throw new Error(`Sign in with Google to reach your sandbox.`);
-        }
-        const connectToken = active.value?.token;
-        return {
-            authorization: `Bearer ${token}`,
-            // The daemon binds its owner on the FIRST authenticated request (TOFU) only if it carries the
-            // sandbox's connect token; it ignores the header once bound, so sending it always is harmless.
-            ...(connectToken !== undefined ? { "x-intentic-connect": connectToken } : {}),
-        };
-    },
+    // sandboxAuthenticatedFetch adds both credentials from one immutable target snapshot.
+    headers: () => ({}),
 };
 
 // The app's own client — ungated, because the app IS the host.
@@ -114,7 +92,15 @@ export const gatedSandboxRpc = (gate: (procedure: readonly string[], input: unkn
 // The HTTP status behind a failed daemon call, or undefined when the call never got an answer (DNS, TLS, a
 // dead tunnel, an abort). oRPC maps every non-2xx to an ORPCError carrying the status — including the daemon's
 // hand-written `{ error }` bodies, which are not oRPC-shaped and land in the malformed-response branch.
-export const daemonErrorStatus = (error: unknown): number | undefined => (error instanceof ORPCError ? error.status : undefined);
+export const daemonErrorStatus = (error: unknown): number | undefined => {
+    if (error instanceof ORPCError) {
+        return error.status;
+    }
+    if (typeof error === `object` && error !== null && `status` in error && typeof error.status === `number`) {
+        return error.status;
+    }
+    return undefined;
+};
 
 // The daemon's user-facing text for a failed call. oRPC handlers put it on the error's own `message`; the
 // hand-written routes answer `{ error }`, which arrives as the undecoded body under `data`.

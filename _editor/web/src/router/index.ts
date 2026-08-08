@@ -1,5 +1,5 @@
 import { useDevice } from "@intentic/ui";
-import { createRouter, createWebHistory, type RouteLocationRaw, type RouteRecordRaw } from "vue-router";
+import { createRouter, createWebHistory, type RouteLocationNormalized, type RouteLocationRaw, type RouteRecordRaw } from "vue-router";
 import { restorePersistedQueries } from "../composables/queryPersistence";
 import { useAuth } from "../composables/useAuth";
 import { useSandbox } from "../composables/sandbox/useSandbox";
@@ -11,13 +11,21 @@ declare module "vue-router" {
     }
 }
 
-// Resolve the session once (Better Auth cookie) and redirect to /login if none — an unreachable API counts
-// as signed-out (a rejected guard would abort navigation and leave a blank screen). With a user in hand,
+// Resolve the session once (Better Auth cookie) and redirect to /login only when the platform AUTHORITATIVELY
+// says none. An unavailable platform gets its own retry screen; it is not evidence that the user signed out.
+// With a user in hand,
 // hydrate the query cache from IndexedDB (per-user buster) before any route mounts — a reload paints the
 // last-known workspace instead of blocking on the daemon.
-const requireAuth = async (): Promise<boolean | RouteLocationRaw> => {
+const requireAuth = async (to: RouteLocationNormalized): Promise<boolean | RouteLocationRaw> => {
     const { user, refresh } = useAuth();
-    const current = user.value ?? (await refresh().catch(() => null));
+    let current = user.value;
+    if (current === null) {
+        try {
+            current = await refresh();
+        } catch {
+            return { path: `/platform-unavailable`, query: { returnTo: to.fullPath } };
+        }
+    }
     if (!current) {
         return `/login`;
     }
@@ -41,6 +49,12 @@ const routes: RouteRecordRaw[] = [
         name: `login`,
         meta: { title: `Login` },
         component: () => import(`../pages/Login.vue`),
+    },
+    {
+        path: `/platform-unavailable`,
+        name: `platform-unavailable`,
+        meta: { title: `Can't reach Intentic` },
+        component: () => import(`../pages/PlatformUnavailable.vue`),
     },
     {
         /* The desktop app's sign-in, in the user's REAL browser. The app can't run Google's flow in its own

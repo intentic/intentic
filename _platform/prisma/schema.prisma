@@ -181,6 +181,7 @@ model DesktopHandoff {
     id        String   @id @default(cuid())
     ott       String
     idToken   String
+    challenge String
     expiresAt DateTime
     createdAt DateTime @default(now())
 

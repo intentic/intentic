@@ -1,5 +1,12 @@
 import { join } from "node:path";
-import { type EnrollHostInput, EnrollHostInputSchema, type GrantedRole, GrantedRoleSchema, MachineReportSchema, roleAtLeast } from "@intentic/sandbox-contract";
+import {
+    type EnrollHostInput,
+    EnrollHostInputSchema,
+    type GrantedRole,
+    GrantedRoleSchema,
+    MachineReportSchema,
+    roleAtLeast,
+} from "@intentic/sandbox-contract";
 import { sandboxIdFromToken } from "@intentic/sandbox-contract/tunnel-ids";
 import { OpenAPIHandler } from "@orpc/openapi/fetch";
 import { ORPCError } from "@orpc/server";
@@ -293,6 +300,9 @@ export const createApp = (services: Services): Hono<AppEnv> => {
                 c.req.path === "/workspace/media" ||
                 c.req.path === "/enroll" ||
                 c.req.path === "/system/authorized-key" ||
+                // Account deletion must be repeatable after a partial attempt already disabled this daemon.
+                // Its handler performs the one owner check allowed through the permanent retirement marker.
+                c.req.path === "/system/access/disable" ||
                 eventFirePath.test(c.req.path) ||
                 webchatPublicPath(c.req.path) ||
                 ciWebhookPath.test(c.req.path) ||
@@ -379,7 +389,10 @@ export const createApp = (services: Services): Hono<AppEnv> => {
      * (workspace/workspace-scope.ts) and it signals through ORPCError, because every other caller is an oRPC
      * handler; here the throw is translated once rather than at each of the two call sites, and an unexpected
      * error still propagates as an error rather than being flattened into a 404. */
-    const scopedFileTarget = async (path: string, agent: string | undefined): Promise<{ target: string } | { error: string; status: 400 | 404 | 412 }> => {
+    const scopedFileTarget = async (
+        path: string,
+        agent: string | undefined,
+    ): Promise<{ target: string } | { error: string; status: 400 | 404 | 412 }> => {
         try {
             return { target: (await scopedTarget(services.workspaceScope, agent, path)).target };
         } catch (error) {
@@ -740,6 +753,10 @@ export const createApp = (services: Services): Hono<AppEnv> => {
             return c.json({ error: "email and role required" }, 400);
         }
         await services.members.add(grant.email, grant.role);
+        // A role is frozen into an already-open socket/ticket. Close both so the next transport re-enters the
+        // authorizer and picks up the new tier (especially a downgrade).
+        services.auth?.connections.revoke(grant.email);
+        services.wsTickets.revoke(grant.email);
         return c.json({ members: await services.members.list() });
     });
     app.delete("/members", async (c) => {
@@ -752,7 +769,22 @@ export const createApp = (services: Services): Hono<AppEnv> => {
             return c.json({ error: "email required" }, 400);
         }
         await services.members.remove(email);
+        services.auth?.connections.revoke(email);
+        services.wsTickets.revoke(email);
         return c.json({ members: await services.members.list() });
+    });
+    app.delete("/members/self", async (c) => {
+        const identity = c.get("identity");
+        if (identity === undefined) {
+            return c.json({ error: "verified member required" }, 401);
+        }
+        if (identity.role === "owner") {
+            return c.json({ error: "the owner must retire the sandbox instead" }, 400);
+        }
+        await services.members.remove(identity.email);
+        services.auth?.connections.revoke(identity.email);
+        services.wsTickets.revoke(identity.email);
+        return c.json({ ok: true });
     });
 
     // The agent-proposed overlay Dockerfile (.intentic/environment.Dockerfile). Members see the state; only the
@@ -1058,6 +1090,25 @@ export const createApp = (services: Services): Hono<AppEnv> => {
             return denied;
         }
         await services.auth?.rotateSessions();
+        services.auth?.connections.revoke();
+        services.wsTickets.revoke();
+        return c.json({ ok: true });
+    });
+    // Account deletion, stronger than sign-out-everywhere: permanently refuse future browser authorization
+    // before rotating sessions and closing every live transport. A surviving Google proof/connect token can no
+    // longer re-establish. Local/control credentials remain available for machine-owner cleanup.
+    app.post("/system/access/disable", async (c) => {
+        if (services.auth !== undefined) {
+            try {
+                await services.auth.authorizeRetirement(bearerFrom(c.req.header("authorization")));
+            } catch (error) {
+                return error instanceof ForbiddenError ? c.json({ error: error.message }, 403) : c.json({ error: "unauthorized" }, 401);
+            }
+        }
+        await services.auth?.disableBrowserAccess();
+        await services.auth?.rotateSessions();
+        services.auth?.connections.revoke();
+        services.wsTickets.revoke();
         return c.json({ ok: true });
     });
     app.post("/system/authorized-key", async (c) => {

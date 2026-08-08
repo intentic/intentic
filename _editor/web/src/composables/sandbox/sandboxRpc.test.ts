@@ -1,7 +1,16 @@
 import type { SystemEvent } from "@intentic/sandbox-contract";
 import { afterEach, expect, it, vi } from "vitest";
 
-vi.mock("./sandboxSession", () => ({ useSandboxSession: () => ({ getSessionToken: async () => `session-token` }) }));
+const authState = vi.hoisted(() => ({ token: `session-token`, rejected: [] as string[] }));
+vi.mock("./sandboxSession", () => ({
+    useSandboxSession: () => ({
+        getSessionToken: async () => authState.token,
+        rejectSessionToken: (_target: unknown, token: string) => {
+            authState.rejected.push(token);
+            authState.token = `replacement-token`;
+        },
+    }),
+}));
 // The real useEndpoint rides on top of this mock: with no loopback shortcut resolved for the sandbox, its
 // daemonBase falls through to daemonUrl — which is what keeps every call below aimed at the tunnel.
 vi.mock("./useSandbox", () => ({
@@ -43,6 +52,8 @@ it(`decodes the daemon's event stream into typed contract frames`, async () => {
 });
 
 it(`sends the session bearer and the TOFU connect token on the stream request`, async () => {
+    authState.token = `session-token`;
+    authState.rejected = [];
     const fetchMock = vi.fn(async (_request: Request) => eventStream([{ kind: `heartbeat` }]));
     vi.stubGlobal(`fetch`, fetchMock);
     // One pull is all it takes: what this asserts on is the request that goes out, not the frames that come back.
@@ -54,6 +65,24 @@ it(`sends the session bearer and the TOFU connect token on the stream request`, 
     // The daemon keys this tab's presence roster entry by clientId, so a GET's input has to survive as a query
     // param — the one thing a typed client could plausibly have changed about this route's wire shape.
     expect(new URL(request.url).searchParams.get(`clientId`)).toBe(`c1`);
+});
+
+it(`invalidates and retries exactly once when daemon middleware rejects a session`, async () => {
+    authState.token = `session-token`;
+    authState.rejected = [];
+    const fetchMock = vi
+        .fn<(request: Request) => Promise<Response>>()
+        .mockResolvedValueOnce(
+            new Response(JSON.stringify({ error: `unauthorized` }), { status: 401, headers: { "content-type": `application/json` } }),
+        )
+        .mockResolvedValueOnce(eventStream([{ kind: `heartbeat` }]));
+    vi.stubGlobal(`fetch`, fetchMock);
+
+    await (await sandboxRpc.system.events({ clientId: `c1` }))[Symbol.asyncIterator]().next();
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(fetchMock.mock.calls[0]?.[0].headers.get(`authorization`)).toBe(`Bearer session-token`);
+    expect(fetchMock.mock.calls[1]?.[0].headers.get(`authorization`)).toBe(`Bearer replacement-token`);
+    expect(authState.rejected).toEqual([`session-token`]);
 });
 
 it(`surfaces the daemon's status so a refusal can be told from a failure to connect`, async () => {

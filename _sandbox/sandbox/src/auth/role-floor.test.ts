@@ -14,6 +14,7 @@ describe("routeFloor", () => {
         expect(routeFloor("POST", "/system/session")).toBe("viewer");
         expect(routeFloor("POST", "/system/presence")).toBe("viewer");
         expect(routeFloor("POST", "/workspace/media-ticket")).toBe("viewer");
+        expect(routeFloor("DELETE", "/members/self")).toBe("viewer");
     });
 
     test("driving agents is the collaborator tier", () => {

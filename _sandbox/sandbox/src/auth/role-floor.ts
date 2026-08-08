@@ -70,6 +70,9 @@ const PATH_FLOORS: Readonly<Record<string, MemberRole>> = {
     // Minting is deliberately cheap: each WebSocket upgrade floors its OWN redemption (ws-tickets.ts) —
     // the terminal at maintainer, the sign-in browser at owner.
     "/system/ws-ticket": "collaborator",
+    // Giving up one's own grant must be reachable by every granted tier. The handler can remove only the
+    // verified caller, never another member or the owner.
+    "/members/self": "viewer",
 };
 
 const methodFloor = (method: string): MemberRole => (method === "GET" || method === "HEAD" ? "viewer" : "maintainer");

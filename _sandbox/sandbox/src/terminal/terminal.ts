@@ -73,6 +73,7 @@ export const createTerminalRoute = (services: Services) =>
         let drain: NodeJS.Timeout | undefined;
         let liveness: NodeJS.Timeout | undefined;
         let counted = false;
+        let unregisterAccess: (() => void) | undefined;
 
         const handle = (message: TerminalClientMessage, ws: WSContext<WebSocketLike>): void => {
             if (message.type === "input") {
@@ -97,6 +98,8 @@ export const createTerminalRoute = (services: Services) =>
                 active -= 1;
             }
             pty?.kill();
+            unregisterAccess?.();
+            unregisterAccess = undefined;
         };
 
         return {
@@ -104,7 +107,10 @@ export const createTerminalRoute = (services: Services) =>
                 const url = new URL(c.req.url);
                 try {
                     // A PTY is a shell over the whole sandbox — the ship-and-operate tier, not the driving one.
-                    redeemTicket(services, url, "maintainer");
+                    const caller = redeemTicket(services, url, "maintainer");
+                    if (caller !== undefined) {
+                        unregisterAccess = services.auth?.connections.register(caller, () => ws.close(1008, "authorization revoked"));
+                    }
                 } catch (err) {
                     // The close frame only says "unauthorized"; whether the ticket was unknown, already spent or
                     // expired is only visible here.

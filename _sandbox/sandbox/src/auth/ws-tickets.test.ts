@@ -73,3 +73,16 @@ test("redeemTicket holds the ticket to the socket's floor, and a refused ticket 
 test("redeemTicket is a no-op without an authorizer", () => {
     expect(() => redeemTicket({ auth: undefined, wsTickets: createWsTickets() }, urlWith(""), "owner")).not.toThrow();
 });
+
+test("revocation drops matching unspent tickets, or every ticket for the sandbox", () => {
+    const tickets = createWsTickets();
+    const member = tickets.mint({ email: "member@example.com", role: "maintainer" });
+    const other = tickets.mint({ email: "other@example.com", role: "maintainer" });
+    tickets.revoke("MEMBER@example.com");
+    expect(tickets.redeem(member)).toBeUndefined();
+    expect(tickets.redeem(other)?.email).toBe("other@example.com");
+
+    const owner = tickets.mint(IDENTITY);
+    tickets.revoke();
+    expect(tickets.redeem(owner)).toBeUndefined();
+});

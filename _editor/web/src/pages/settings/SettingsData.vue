@@ -6,10 +6,12 @@ import { useRouter } from "vue-router";
 import { apiClient } from "../../composables/useApi";
 import { errorMessage } from "../../composables/useAsyncAction";
 import { useAuth } from "../../composables/useAuth";
+import { useSandbox } from "../../composables/sandbox/useSandbox";
 
 /* Data & privacy: GDPR self-service — export everything the platform stores about the account, or delete it. */
 
 const { deleteAccount } = useAuth();
+const { sandboxes } = useSandbox();
 const router = useRouter();
 
 // GDPR data export: download everything the platform stores about the account as JSON (me.export).
@@ -38,7 +40,7 @@ const confirmDelete = async (): Promise<void> => {
     deleting.value = true;
     deleteError.value = undefined;
     try {
-        await deleteAccount();
+        await deleteAccount(sandboxes.value);
         await router.push(`/login`);
     } catch (error) {
         deleteError.value = errorMessage(error, `Account deletion failed.`);
@@ -60,7 +62,7 @@ const confirmDelete = async (): Promise<void> => {
                 icon="trash"
                 tone="danger"
                 title="Delete account"
-                description="Permanently removes your account, sandboxes and shared access. Cannot be undone."
+                description="Signs out every sandbox, then permanently removes your account and shared access. Keep your sandboxes online."
             >
                 <template #control>
                     <Button
@@ -74,7 +76,7 @@ const confirmDelete = async (): Promise<void> => {
                 </template>
                 <template v-if="confirmingDelete || deleteError" #below>
                     <div v-if="confirmingDelete" class="flex items-center justify-end gap-2">
-                        <span class="mr-auto text-2xs text-subtle">Are you sure? This deletes everything immediately.</span>
+                        <span class="mr-auto text-2xs text-subtle">Are you sure? Access is revoked before anything is deleted.</span>
                         <Button label="Cancel" severity="secondary" text size="small" :disabled="deleting" @click="confirmingDelete = false" />
                         <Button label="Delete my account" severity="danger" size="small" :loading="deleting" @click="confirmDelete" />
                     </div>

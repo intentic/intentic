@@ -10,6 +10,7 @@ import { sandboxIdFromToken, sha256Hex } from "@intentic/sandbox-contract/tunnel
 import { expect, test, vi } from "vitest";
 
 import { createApp } from "./app.js";
+import { createAuthConnections } from "./auth/connections.js";
 
 import { createLogger } from "./logger.js";
 
@@ -129,7 +130,9 @@ test("system.session in loopback mode (no auth, no identity) answers 401 — the
  * URL gets a ticket. This route is the reason no bearer appears in a query string any more, which means it has
  * to be gated exactly like every other authenticated route — by the middleware, on a header. */
 test("POST /system/ws-ticket mints a one-shot ticket for the verified caller, and 401s an unauthenticated one", async () => {
-    const app = createApp(services({ auth: { authorize: async () => ({ email: "o@x.com", role: "owner" as const }), authorizeOwner: rejectForbidden } }));
+    const app = createApp(
+        services({ auth: { authorize: async () => ({ email: "o@x.com", role: "owner" as const }), authorizeOwner: rejectForbidden } }),
+    );
     const response = await postJson(app, "/system/ws-ticket");
     expect(response.status).toBe(200);
     const { ticket } = (await response.json()) as { ticket: string };
@@ -144,23 +147,93 @@ test("/system/ws-ticket 404s in loopback mode — no identity to bind, and the u
     expect((await postJson(createApp(services({})), "/system/ws-ticket")).status).toBe(404);
 });
 
-/* Sign-out-everywhere. A session is a signed claim with nothing stored per session, so re-keying the signer is
- * the only revocation there is — and it is the owner's alone: a member who could rotate it would be able to
- * sign the owner out of their own sandbox. */
-test("POST /system/sessions/revoke re-keys the session signer, and only the owner may ask", async () => {
+/* Sign-out-everywhere rotates future request credentials AND ends transports which have no future middleware
+ * pass. It is the owner's alone: a member who could rotate it would be able to sign the owner out. */
+test("POST /system/sessions/revoke re-keys sessions, closes live access, drops tickets, and is owner-only", async () => {
     let rotations = 0;
+    const close = vi.fn();
+    const connections = createAuthConnections();
+    connections.register({ email: "owner@x.com", role: "owner" }, close);
     const auth = {
         authorize: async () => ({ email: "member@x.com", role: "maintainer" as const }),
         authorizeOwner: rejectForbidden,
         rotateSessions: async () => void (rotations += 1),
+        connections,
     };
     // A verified non-owner is a 403 (the browser's "no access" shape), and nothing rotates.
     expect((await postJson(createApp(services({ auth })), "/system/sessions/revoke")).status).toBe(403);
     expect(rotations).toBe(0);
 
-    const owner = createApp(services({ auth: { ...auth, authorizeOwner: async () => {} } }));
+    const ownerServices = services({ auth: { ...auth, authorizeOwner: async () => {} } });
+    const ticket = ownerServices.wsTickets.mint({ email: "owner@x.com", role: "owner" });
+    const owner = createApp(ownerServices);
     expect((await postJson(owner, "/system/sessions/revoke")).status).toBe(200);
     expect(rotations).toBe(1);
+    expect(close).toHaveBeenCalledOnce();
+    expect(ownerServices.wsTickets.redeem(ticket)).toBeUndefined();
+});
+
+test("account deletion can retire owner access permanently, and a member can remove only self", async () => {
+    const ownerClose = vi.fn();
+    const ownerConnections = createAuthConnections();
+    ownerConnections.register({ email: "owner@x.com", role: "owner" }, ownerClose);
+    const disable = vi.fn(async () => {});
+    const rotate = vi.fn(async () => {});
+    const ownerServices = services({
+        auth: {
+            authorize: async () => ({ email: "owner@x.com", role: "owner" as const }),
+            authorizeOwner: async () => {},
+            authorizeRetirement: async () => {},
+            disableBrowserAccess: disable,
+            rotateSessions: rotate,
+            connections: ownerConnections,
+        },
+    });
+    const ownerTicket = ownerServices.wsTickets.mint({ email: "owner@x.com", role: "owner" });
+    expect((await postJson(createApp(ownerServices), "/system/access/disable")).status).toBe(200);
+    expect(disable).toHaveBeenCalledOnce();
+    expect(rotate).toHaveBeenCalledOnce();
+    expect(ownerClose).toHaveBeenCalledOnce();
+    expect(ownerServices.wsTickets.redeem(ownerTicket)).toBeUndefined();
+
+    // A prior partial account-deletion attempt has already disabled ordinary authorize(). The retirement
+    // endpoint bypasses only that gate and re-verifies the owner, so retrying after another sandbox comes back
+    // online can finish instead of being locked out by the successful first attempt.
+    const retiredServices = services({
+        auth: {
+            authorize: async () => {
+                throw new Error("browser access has been removed");
+            },
+            authorizeRetirement: async () => {},
+            disableBrowserAccess: disable,
+            rotateSessions: rotate,
+        },
+    });
+    expect((await postJson(createApp(retiredServices), "/system/access/disable")).status).toBe(200);
+    expect(disable).toHaveBeenCalledTimes(2);
+
+    const removed: string[] = [];
+    const memberClose = vi.fn();
+    const memberConnections = createAuthConnections();
+    memberConnections.register({ email: "member@x.com", role: "viewer" }, memberClose);
+    const memberServices = services({
+        auth: {
+            authorize: async () => ({ email: "member@x.com", role: "viewer" as const }),
+            authorizeOwner: rejectForbidden,
+            connections: memberConnections,
+        },
+        members: { list: async () => [], add: async () => {}, remove: async (email) => void removed.push(email) },
+    });
+    const memberTicket = memberServices.wsTickets.mint({ email: "member@x.com", role: "viewer" });
+    expect((await createApp(memberServices).request("/members/self", { method: "DELETE" })).status).toBe(200);
+    expect(removed).toEqual(["member@x.com"]);
+    expect(memberClose).toHaveBeenCalledOnce();
+    expect(memberServices.wsTickets.redeem(memberTicket)).toBeUndefined();
+
+    const ownerCannotSelfRemove = createApp(
+        services({ auth: { authorize: async () => ({ email: "owner@x.com", role: "owner" as const }), authorizeOwner: async () => {} } }),
+    );
+    expect((await ownerCannotSelfRemove.request("/members/self", { method: "DELETE" })).status).toBe(400);
 });
 
 test("an editor-scoped control token reaches the agent-conversation surface and NOTHING else", async () => {
@@ -972,7 +1045,10 @@ test("environment: members read the state, approve/reject are owner-gated, appro
     // A member (bearer passes, owner check refuses as Forbidden) sees the state but can't approve or reject —
     // a verified non-owner is 403, not 401.
     const memberApp = createApp(
-        services({ files: memoryFiles, auth: { authorize: async () => ({ email: "member@example.com", role: "maintainer" as const }), authorizeOwner: rejectForbidden } }),
+        services({
+            files: memoryFiles,
+            auth: { authorize: async () => ({ email: "member@example.com", role: "maintainer" as const }), authorizeOwner: rejectForbidden },
+        }),
     );
     const seen = await memberApp.request("/environment");
     expect(seen.status).toBe(200);

@@ -1,9 +1,9 @@
-import { useSandboxSession } from "./sandboxSession";
 import { staleDaemonReason } from "./useDaemonRoutes";
-import { useEndpoint } from "./useEndpoint";
-import { useSandbox } from "./useSandbox";
 import { trackPerf } from "../perf";
 import { CHUNK_BYTES } from "../workspace/uploadChunking";
+import { sandboxAuthenticatedFetch } from "./sandboxAuthFetch";
+import { useSandboxSession } from "./sandboxSession";
+import { currentSandboxTarget } from "./sandboxTarget";
 
 // Calls the ACTIVE sandbox's daemon DIRECTLY (browser → https://sandbox-<id>.<zone>, or its loopback shortcut
 // when the sandbox turns out to be on this machine — see useEndpoint), authenticated by a daemon-session
@@ -11,9 +11,7 @@ import { CHUNK_BYTES } from "../workspace/uploadChunking";
 // endpoint and the connection token from the active sandbox (useSandbox, populated by sandbox.list).
 // Returns the raw Response so callers read `.json()` or stream `.body` themselves.
 
-const { active } = useSandbox();
-const { daemonBase } = useEndpoint();
-const { getSessionToken } = useSandboxSession();
+const { getSessionToken, rejectSessionToken } = useSandboxSession();
 
 /* Timed from the caller's first instruction to the response headers — which deliberately INCLUDES
  * `getSessionToken`, because a session renewal round-trip is time the caller waited and every previous account
@@ -23,24 +21,11 @@ const { getSessionToken } = useSandboxSession();
  */
 export async function sandboxRequest(path: string, init?: RequestInit): Promise<Response> {
     return trackPerf(`rpc.request`, { path: path.split(`?`)[0] ?? path, method: init?.method ?? `GET` }, async () => {
-        const base = daemonBase.value;
-        if (base === undefined || base === ``) {
+        const target = currentSandboxTarget();
+        if (target === undefined) {
             throw new Error(`Your sandbox isn't reachable yet — finish setup so it registers its address.`);
         }
-        const token = await getSessionToken();
-        if (token === undefined) {
-            throw new Error(`Sign in with Google to reach your sandbox.`);
-        }
-        const headers = new Headers(init?.headers);
-        headers.set(`authorization`, `Bearer ${token}`);
-        // The daemon binds its owner on the FIRST authenticated request (TOFU), but only if it carries the sandbox's
-        // connection token as `x-intentic-connect`. We send the active sandbox's token on every call (the daemon
-        // ignores it once the owner is bound; members' tokens are harmless post-bind).
-        const connectToken = active.value?.token;
-        if (connectToken !== undefined) {
-            headers.set(`x-intentic-connect`, connectToken);
-        }
-        return fetch(`${base}${path}`, { ...init, headers });
+        return sandboxAuthenticatedFetch(new Request(`${target.base}${path}`, init), target);
     });
 }
 
@@ -114,22 +99,35 @@ const UPLOAD_STALL_MS = 60_000;
 // fresh stall watchdog, and a failed part rejects the whole call — the caller's retry re-sends from part 0,
 // which is idempotent because offset writes just overwrite.
 export async function sandboxUpload(path: string, body: Blob, opts?: { onProgress?: (loaded: number) => void; signal?: AbortSignal }): Promise<void> {
-    const base = daemonBase.value;
-    if (base === undefined || base === ``) {
+    const target = currentSandboxTarget();
+    if (target === undefined) {
         throw new Error(`Your sandbox isn't reachable yet — finish setup so it registers its address.`);
     }
-    const connectToken = active.value?.token;
     const signal = opts?.signal;
     for (let offset = 0; offset === 0 || offset < body.size; offset += CHUNK_BYTES) {
         if (signal?.aborted) {
             throw new DOMException(`Upload canceled`, `AbortError`);
         }
         // Per part, so a token can't expire mid-way through a huge multi-part file (getSessionToken caches/renews).
-        const token = await getSessionToken();
+        let token = await getSessionToken(target);
         if (token === undefined) {
             throw new Error(`Sign in with Google to reach your sandbox.`);
         }
-        await sendPart(`${base}${path}&offset=${offset}`, body.slice(offset, offset + CHUNK_BYTES), offset, token, connectToken, opts);
+        const url = `${target.base}${path}&offset=${offset}`;
+        const part = body.slice(offset, offset + CHUNK_BYTES);
+        try {
+            await sendPart(url, part, offset, token, target.connectToken, opts);
+        } catch (error) {
+            if (!(error instanceof SandboxHttpError) || error.status !== 401) {
+                throw error;
+            }
+            rejectSessionToken(target, token);
+            token = await getSessionToken(target);
+            if (token === undefined) {
+                throw error;
+            }
+            await sendPart(url, part, offset, token, target.connectToken, opts);
+        }
     }
 }
 
@@ -182,7 +180,7 @@ const sendPart = (
                     return undefined;
                 }
             })();
-            reject(new Error(detail?.error ?? `Request failed (${xhr.status}).`));
+            reject(new SandboxHttpError(xhr.status, detail?.error ?? `Request failed (${xhr.status}).`));
         });
         xhr.addEventListener(`error`, () => reject(new Error(`Upload failed — the sandbox was unreachable.`)));
         // Aborted either by the caller's signal (cancel) or by the stall watchdog. If the watchdog already rejected

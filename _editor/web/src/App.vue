@@ -12,6 +12,8 @@
      and with no sandbox selected there is nothing to connect to yet. -->
 <script setup lang="ts">
 import HostModelPicker from "./chat/HostModelPicker.vue";
+import { watch } from "vue";
+import { useRouter } from "vue-router";
 import { useAuth } from "./composables/useAuth";
 import { useSandbox } from "./composables/sandbox/useSandbox";
 import GoogleSigninGate from "./sandbox-gates/GoogleSigninGate.vue";
@@ -19,6 +21,15 @@ import WorkspaceRuntime from "./shell/WorkspaceRuntime.vue";
 
 const { user } = useAuth();
 const { activeSandboxId } = useSandbox();
+const router = useRouter();
+
+// A confirmed platform 401, server-side expiry, or another tab signing out clears the shared user ref. The
+// runtime above the route unmounts immediately; move the stale shell itself to login as the same global event.
+watch(user, (current, previous) => {
+    if (current === null && previous !== null) {
+        void router.replace(`/login`);
+    }
+});
 </script>
 
 <template>

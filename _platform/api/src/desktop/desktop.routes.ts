@@ -1,5 +1,6 @@
 import { apiContract } from "@intentic-app/api-contract";
 import { implement, ORPCError } from "@orpc/server";
+import { createHash, timingSafeEqual } from "node:crypto";
 import type { OrpcContext } from "../context.js";
 import { decryptSecret, encryptSecret } from "../crypto.js";
 import { requireUser } from "../guards.js";
@@ -28,6 +29,13 @@ const os = implement(apiContract).$context<OrpcContext>();
 // minutes, so a longer window here would only be a row outliving what it holds.
 const HANDOFF_TTL_MS = 3 * 60_000;
 
+const challengeOf = (verifier: string): string => createHash("sha256").update(verifier).digest("base64url");
+const challengesMatch = (left: string, right: string): boolean => {
+    const a = Buffer.from(left);
+    const b = Buffer.from(right);
+    return a.length === b.length && timingSafeEqual(a, b);
+};
+
 export const desktopRoutes = {
     // Session required — this is the browser that just signed in, and the token it mints is FOR that session.
     handoff: os.desktop.handoff.handler(async ({ input, context }) => {
@@ -40,6 +48,7 @@ export const desktopRoutes = {
             data: {
                 ott: encryptSecret(context.config, minted.token),
                 idToken: encryptSecret(context.config, input.idToken),
+                challenge: input.challenge,
                 expiresAt: new Date(Date.now() + HANDOFF_TTL_MS),
             },
         });
@@ -47,16 +56,17 @@ export const desktopRoutes = {
     }),
 
     /* SESSIONLESS, and that is the whole point: the caller is the webview, which has no session yet. The id is
-     * a cuid the app received over a link it asked for, and the row is deleted here — so a replayed link, a
-     * second window, or a link recovered from a log finds nothing. Expired and unknown are the same answer
-     * (no oracle), and the delete runs before either credential is returned so a crash mid-response cannot
-     * leave a second pickup behind. */
+     * public in the deep link; the verifier is retained by the app and proves this is the process that started
+     * it. Expired, unknown, raced, and wrong-verifier attempts share one answer (no oracle). */
     redeem: os.desktop.redeem.handler(async ({ input, context }) => {
         const row = await context.prisma.desktopHandoff.findUnique({ where: { id: input.handoff } });
-        if (row !== null) {
-            await context.prisma.desktopHandoff.delete({ where: { id: row.id } });
+        if (row === null || row.expiresAt < new Date() || !challengesMatch(row.challenge, challengeOf(input.verifier))) {
+            throw new ORPCError(`NOT_FOUND`, { message: `this sign-in link has already been used or expired` });
         }
-        if (row === null || row.expiresAt < new Date()) {
+        // The conditional delete is the single-use claim. Two correct redeemers may both read the row, but
+        // only one sees count=1. A wrong verifier never consumes the real app's pending attempt.
+        const spent = await context.prisma.desktopHandoff.deleteMany({ where: { id: row.id, challenge: row.challenge } });
+        if (spent.count !== 1) {
             throw new ORPCError(`NOT_FOUND`, { message: `this sign-in link has already been used or expired` });
         }
         return { ott: decryptSecret(context.config, row.ott), idToken: decryptSecret(context.config, row.idToken) };

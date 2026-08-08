@@ -53,7 +53,17 @@ import { fileVerifyStore, type VerifyStore } from "./workspace/verify-store.js";
 import { type CiHookReconciler, createCiHookReconciler } from "./ci/hooks.js";
 import { createRunsCache, type RunsCache } from "./ci/runs-cache.js";
 import { fileKomodoStore, type KomodoStore } from "./komodo/komodo-store.js";
-import { type Caller, createAuthorizer, createGoogleVerifier, fileMembersStore, fileOwnerStore, type MembersStore, type VerifiedIdentity } from "./auth/auth.js";
+import {
+    type Caller,
+    createAuthorizer,
+    createGoogleVerifier,
+    fileMembersStore,
+    fileOwnerStore,
+    type MembersStore,
+    type VerifiedIdentity,
+} from "./auth/auth.js";
+import { fileBrowserAccess } from "./auth/browser-access.js";
+import { createAuthConnections, type AuthConnections } from "./auth/connections.js";
 import { createSessions, type MintedSession } from "./auth/session.js";
 import { type ClaudeCatalog, createClaudeCatalog } from "./claude/claude-models.js";
 import { type ClaudeStore, fileClaudeStore } from "./claude/claude-credentials.js";
@@ -562,10 +572,13 @@ export interface Services {
         | {
               readonly authorize: (bearer: string, firstBind: string | undefined) => Promise<Caller>;
               readonly authorizeOwner: (bearer: string) => Promise<void>;
+              readonly authorizeRetirement: (bearer: string) => Promise<void>;
               readonly mintSession: (identity: VerifiedIdentity) => Promise<MintedSession>;
               // Re-key the session signer: every browser holding a session for this sandbox is signed out at
               // once (auth/session.ts rotate). Backs the owner-only "sign out everywhere" route.
               readonly rotateSessions: () => Promise<void>;
+              readonly disableBrowserAccess: () => Promise<void>;
+              readonly connections: AuthConnections;
               // The browser origins CORS is emitted for (config.webOrigin, split on commas). Never a wildcard:
               // /health answers without a credential, so this is the only gate in front of it.
               readonly allowOrigins: readonly string[];
@@ -614,6 +627,8 @@ export const createServices = (config: Config, logger: Logger): Services => {
     // The session secret lives under historyRoot (like the activity/usage ledgers) — daemon-private, outside
     // the workspace, and persistent, so a daemon restart doesn't sign every browser out.
     const sessions = createSessions(join(config.historyRoot, "session-secret"));
+    const authConnections = createAuthConnections();
+    const browserAccess = fileBrowserAccess(join(config.historyRoot, "browser-access-disabled"));
     const authorizer =
         config.google.clientId !== ""
             ? createAuthorizer({
@@ -621,6 +636,7 @@ export const createServices = (config: Config, logger: Logger): Services => {
                   session: sessions.verify,
                   owner: fileOwnerStore(statePath(workspace.root, ".intentic/owner.json")),
                   members,
+                  browserAccess,
                   ...(config.connectToken !== "" ? { connectToken: config.connectToken } : {}),
                   ...(config.owner.email !== "" ? { expectedOwner: config.owner.email } : {}),
               })
@@ -629,8 +645,11 @@ export const createServices = (config: Config, logger: Logger): Services => {
         ? {
               authorize: authorizer.authorize,
               authorizeOwner: authorizer.authorizeOwner,
+              authorizeRetirement: authorizer.authorizeRetirement,
               mintSession: sessions.mint,
               rotateSessions: sessions.rotate,
+              disableBrowserAccess: browserAccess.disable,
+              connections: authConnections,
               // Comma-separated so one sandbox can serve the hosted SPA and a local dev origin at once. Never
               // empty in practice — env.config collapses a blank WEB_ORIGIN onto the hosted default.
               allowOrigins: config.webOrigin

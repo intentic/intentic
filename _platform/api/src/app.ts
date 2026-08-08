@@ -415,7 +415,19 @@ export const createApp = (config: Config, prisma: PrismaClient, logger: Logger):
         const context = await buildOrpcContext({ auth, prisma, config, logger: c.get(`logger`) }, c.req.raw.headers);
         const result = await orpcHandler.handle(c.req.raw, { context, prefix: API_BASE_PATH });
         if (result.matched) {
-            return result.response;
+            const cookies = context.sessionHeaders.getSetCookie();
+            if (cookies.length === 0) {
+                return result.response;
+            }
+            const headers = new Headers(result.response.headers);
+            for (const cookie of cookies) {
+                headers.append(`set-cookie`, cookie);
+            }
+            return new Response(result.response.body, {
+                status: result.response.status,
+                statusText: result.response.statusText,
+                headers,
+            });
         }
         return c.notFound();
     });

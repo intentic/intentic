@@ -24,6 +24,7 @@ export const createBrowserViewRoute = (services: Services) =>
     upgradeWebSocket((c) => {
         let screencast: Screencast | undefined;
         let closed = false;
+        let unregisterAccess: (() => void) | undefined;
         // The session this socket watches, read once in onOpen and needed again by every `bind` frame.
         let session = "";
 
@@ -32,6 +33,8 @@ export const createBrowserViewRoute = (services: Services) =>
                 return;
             }
             closed = true;
+            unregisterAccess?.();
+            unregisterAccess = undefined;
             await screencast?.stop();
             screencast = undefined;
         };
@@ -42,7 +45,10 @@ export const createBrowserViewRoute = (services: Services) =>
                 try {
                     // The agent's browser may sit signed in as the owner — taking its wheel is operating,
                     // not watching (a collaborator still sees the agent's own screenshots in the chat).
-                    redeemTicket(services, url, "maintainer");
+                    const caller = redeemTicket(services, url, "maintainer");
+                    if (caller !== undefined) {
+                        unregisterAccess = services.auth?.connections.register(caller, () => ws.close(1008, "authorization revoked"));
+                    }
                 } catch (err) {
                     services.logger.warn({ err }, "browser-view ticket rejected");
                     ws.close(1008, "unauthorized");

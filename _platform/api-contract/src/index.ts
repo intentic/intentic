@@ -117,8 +117,8 @@ export const inviteContract = {
  * Google refuses OAuth from an embedded webview and GIS is FedCM-based, which the Linux webview does not
  * implement — so the app opens /desktop-auth in the DEFAULT browser instead. That page (session required, so
  * this is the ordinary sign-in flow) parks two credentials for exactly one pickup and hands the app a link
- * carrying only the row's id: `handoff` is the app's whole payload, because a deep link is passed as a process
- * argument and is readable by anything on the machine.
+ * carrying only the row's id. The app also sends a one-way challenge when it starts; redeem requires the
+ * verifier retained inside that process, so stealing/racing the deep link cannot collect the credentials.
  *
  * `redeem` is the mirror, and deliberately SESSIONLESS — the webview has no session yet; that is the point.
  * It answers with the Better Auth one-time token (which the webview spends at /api/auth/one-time-token/verify
@@ -128,11 +128,11 @@ export const inviteContract = {
 export const desktopContract = {
     handoff: oc
         .route({ method: "POST", path: "/desktop/handoff" })
-        .input(z.object({ idToken: z.string().min(1) }))
+        .input(z.object({ idToken: z.string().min(1), challenge: z.string().min(43).max(64) }))
         .output(z.object({ handoff: z.string() })),
     redeem: oc
         .route({ method: "POST", path: "/desktop/redeem" })
-        .input(z.object({ handoff: z.string().min(1) }))
+        .input(z.object({ handoff: z.string().min(1), verifier: z.string().min(43).max(128) }))
         .output(z.object({ ott: z.string(), idToken: z.string() })),
 };
 

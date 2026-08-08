@@ -19,6 +19,7 @@ vi.mock("../useGoogleIdentity", () => ({
             return state.idToken;
         },
         signedInEmail: { value: `google@x.com` },
+        clearCredential: vi.fn(),
     }),
 }));
 vi.mock("./useSandbox", () => ({
@@ -131,6 +132,15 @@ it(`falls back to the raw ID token on a 404 exchange and stops probing — until
     expect(fetchMock).toHaveBeenCalledTimes(2);
 });
 
+it(`does not fall back to the raw Google token when session exchange fails`, async () => {
+    vi.stubGlobal(
+        `fetch`,
+        vi.fn(async () => new Response(`broken`, { status: 500 })),
+    );
+    const { useSandboxSession } = await load();
+    await expect(useSandboxSession().getSessionToken()).rejects.toThrow(/refused its session exchange/);
+});
+
 it(`skips the exchange entirely when the daemon positively advertises no session route`, async () => {
     state.advertised = false;
     const fetchMock = vi.fn();
@@ -177,6 +187,27 @@ it(`clearSessions forgets every sandbox's session and nothing else`, async () =>
     expect(localStorage.getItem(`intentic.session.sb-1`)).toBeNull();
     expect(localStorage.getItem(`intentic.session.sb-2`)).toBeNull();
     expect(localStorage.getItem(`intentic.activeSandboxId`)).toBe(`sb-1`);
+});
+
+it(`a late establishment cannot repopulate credentials after clearSessions`, async () => {
+    let answer: ((response: Response) => void) | undefined;
+    vi.stubGlobal(
+        `fetch`,
+        vi.fn(
+            () =>
+                new Promise<Response>((resolve) => {
+                    answer = resolve;
+                }),
+        ),
+    );
+    const { useSandboxSession } = await load();
+    const { getSessionToken, clearSessions } = useSandboxSession();
+    const pending = getSessionToken();
+    await vi.waitFor(() => expect(answer).toBeTypeOf(`function`));
+    clearSessions();
+    answer?.(sessionResponse(`late-session`));
+    await expect(pending).resolves.toBeUndefined();
+    expect(localStorage.getItem(`intentic.session.sb-1`)).toBeNull();
 });
 
 it(`resolves undefined when the user dismisses the sign-in gate — nothing to exchange`, async () => {

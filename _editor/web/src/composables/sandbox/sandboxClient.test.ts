@@ -13,9 +13,9 @@ const { sandboxJson } = await import("./sandboxClient");
 // real fetch. Guards the contract ConnectHost's mint timeout relies on: a signal in the init reaches
 // fetch through sandboxRequest, and its expiry rejects the hung call with a TimeoutError.
 const fetchMock = vi.fn(
-    (_url: string, init?: RequestInit) =>
+    (request: Request) =>
         new Promise<Response>((_resolve, reject) => {
-            init?.signal?.addEventListener(`abort`, () => reject(init.signal?.reason as Error));
+            request.signal.addEventListener(`abort`, () => reject(request.signal.reason as Error));
         }),
 );
 vi.stubGlobal(`fetch`, fetchMock);

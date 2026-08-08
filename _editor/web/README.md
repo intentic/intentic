@@ -1,21 +1,22 @@
 # @intentic-app/web
 
-The **Vue 3 SPA** (Vite + PrimeVue) — the platform's workspace UI. A user signs in with Google, connects a sandbox, and then drives that sandbox's daemon **directly** over its own Cloudflare tunnel (authenticated by a Google ID token): chat with the Claude agent, browse the workspace, edit inventory, run infra plan/provision, and view topology + deployments. The platform API it talks to is thin — only sign-in (Better Auth) + the `setup.*` handshake (mint token, store the sandbox's URL); everything else is browser→sandbox-direct. Talks to [`@intentic-app/api`](../../_platform/api) via the oRPC client + to the sandbox daemon via `sandboxRequest`; shares types through [`@intentic-app/api-contract`](../../_platform/api-contract) and primitives through [`@intentic/ui`](../../_editor/ui). Dev server (Vite) on :47145; the SPA calls the API directly at `API_URL` (`https://localhost:6480` in dev, CORS-enabled) — the base URL comes from the runtime `window.env` in [src/environments](src/environments), not relative paths.
+The **Vue 3 SPA** (Vite + PrimeVue) — the platform's workspace UI. A user signs in with Google, connects a sandbox, and then drives that sandbox's daemon **directly** over its own Cloudflare tunnel (authenticated by a renewable daemon session established from Google identity): chat with the Claude agent, browse the workspace, edit inventory, run infra plan/provision, and view topology + deployments. The platform API it talks to is thin — only sign-in (Better Auth) + the `setup.*` handshake (mint token, store the sandbox's URL); everything else is browser→sandbox-direct. Talks to [`@intentic-app/api`](../../_platform/api) via the oRPC client + to the sandbox daemon via `sandboxRequest`; shares types through [`@intentic-app/api-contract`](../../_platform/api-contract) and primitives through [`@intentic/ui`](../../_editor/ui). Dev server (Vite) on :47145; the SPA calls the API directly at `API_URL` (`https://localhost:6480` in dev, CORS-enabled) — the base URL comes from the runtime `window.env` in [src/environments](src/environments), not relative paths.
 
 ## Responsibilities
 
 - Render the post-login workspace shell, the page areas, and the persistent chat panel.
-- Hold client state in composables (module-level `ref` singletons); fetch request/response data via **TanStack `@tanstack/vue-query`**; talk to the **platform** via the typed oRPC client (sign-in + `setup.connect`) and to the **sandbox daemon directly** via `sandboxRequest` (a Bearer Google ID token, no cookies); consume the daemon's SSE/ndjson streams manually.
+- Hold client state in composables (module-level `ref` singletons); fetch request/response data via **TanStack `@tanstack/vue-query`**; talk to the **platform** via the typed oRPC client (sign-in + `setup.connect`) and to the **sandbox daemon directly** via `sandboxRequest` (a Bearer daemon session, no cookies); consume the daemon's SSE/ndjson streams manually.
 - Drive auth (Google sign-in via Better Auth), the setup gate, and the browser-direct workspace surface (chat, infra, inventory, deployments).
 
 ## Layout
 
 - **[src/composables/](src/composables)** — module-level singletons + vue-query wrappers:
-  - `useAuth.ts` — Better Auth session, Google sign-in/out, profile + account deletion. Guards live in the router.
+  - `useAuth.ts` — the reactive Better Auth session, cross-tab sign-in/out, profile + account deletion. Guards live in the router.
   - `useApi.ts` — the oRPC `ContractRouterClient` singleton; the platform surface is just `setup.*` (+ `me`).
   - `sandbox/useSandbox.ts` — the browser's sandbox state: `daemonUrl` (from `setup.binding`) + `reachable` (the live SSE probe in `useSandboxLiveness.ts`); the browser alone judges liveness.
-  - `useGoogleIdentity.ts` — Google Identity Services: mints/caches the ID token the daemon verifies.
-  - `sandbox/sandboxClient.ts` — the browser→daemon-direct client (`sandboxRequest`/`sandboxJson`/`sandboxBlob`): calls `${daemonUrl}${path}` with `Authorization: Bearer <Google ID token>`.
+  - `useGoogleIdentity.ts` — Google Identity Services: acquires a fresh ID token only when an explicit daemon authorization needs one.
+  - `sandbox/sandboxSession.ts` + `sandbox/sandboxAuthFetch.ts` — establish and renew the per-daemon bearer session, synchronize it across tabs, and give every client the same one-retry recovery after an authoritative 401.
+  - `sandbox/sandboxClient.ts` — the browser→daemon-direct client (`sandboxRequest`/`sandboxJson`/`sandboxBlob`): snapshots one sandbox target and uses the shared authenticated-fetch policy for `${daemonUrl}${path}`.
   - `useChat.ts` + `conversation.ts` — the Claude agent, daemon-direct (`/agent`, `/agent/decision`, `/agent/answer`, `/sessions`, `/claude/*`).
   - `useDeployments.ts` / `useWorkspaceState.ts` (+ `workspaceStateProjection.ts`) / `useInventory.ts` / `useWorkspaceTree.ts` — the read-model + inventory as **vue-query** queries/mutations against the daemon; `intenticStream.ts` is the shared `/intentic` ndjson reader; `renderMarkdown.ts` sanitizes marked output (DOMPurify) for `v-html`.
   - `useLayout.ts` — chat panel + explorer sidebar width/side.

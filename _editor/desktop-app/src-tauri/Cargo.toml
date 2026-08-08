@@ -32,6 +32,8 @@ url = "2"
 # The sign-in handoff's nonce (auth.rs). Tauri already pulls uuid in transitively; naming it here is what makes
 # "the state a handoff must echo" something this crate generates rather than something it improvises.
 uuid = { version = "1", features = ["v4"] }
+base64 = "0.22"
+sha2 = "0.10"
 
 [target.'cfg(any(target_os = "linux", target_os = "windows"))'.dependencies]
 tauri-plugin-single-instance = { version = "2", features = ["deep-link"] }

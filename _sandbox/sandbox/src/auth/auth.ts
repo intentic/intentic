@@ -116,7 +116,10 @@ export const fileMembersStore = (path: string): MembersStore => ({
         await writeMembers(path, [...members.filter((member) => member.email !== email), { email, role }]);
     },
     remove: async (email) => {
-        await writeMembers(path, (await readMembers(path)).filter((member) => member.email !== email));
+        await writeMembers(
+            path,
+            (await readMembers(path)).filter((member) => member.email !== email),
+        );
     },
 });
 
@@ -153,6 +156,9 @@ export interface Authorizer {
     // Verify the bearer AND assert the caller is the bound owner (not merely a member) — the gate for the
     // owner-only member-management routes. Throws on any failure.
     authorizeOwner(bearer: string): Promise<void>;
+    // The account-deletion endpoint's idempotent owner check. This deliberately remains usable after browser
+    // access is disabled, but only to disable it again; every ordinary route stays behind authorize().
+    authorizeRetirement(bearer: string): Promise<void>;
 }
 
 export const createAuthorizer = (deps: {
@@ -167,7 +173,14 @@ export const createAuthorizer = (deps: {
     // must be THIS identity — so daemon ownership always matches the intentic account, not just whoever holds
     // the connect token first. Undefined ⇒ plain TOFU (headless/direct connect with no setup code).
     readonly expectedOwner?: string;
+    // Permanent account-deletion marker. Optional for direct/test compositions; production always supplies it.
+    readonly browserAccess?: { readonly enabled: () => Promise<boolean> };
 }): Authorizer => {
+    const requireBrowserAccess = async (): Promise<void> => {
+        if (deps.browserAccess !== undefined && !(await deps.browserAccess.enabled())) {
+            throw new Error("browser access has been removed");
+        }
+    };
     // The bearer's verified identity once the daemon is bound: its own session when the token parses as one,
     // otherwise a Google ID token against the JWKS. Session first — it is every call after sign-in.
     const identify = async (bearer: string): Promise<VerifiedIdentity> => {
@@ -186,6 +199,7 @@ export const createAuthorizer = (deps: {
     };
     return {
         authorize: async (bearer, firstBind) => {
+            await requireBrowserAccess();
             if (bearer === "") {
                 throw new Error("missing bearer token");
             }
@@ -209,6 +223,16 @@ export const createAuthorizer = (deps: {
             return { ...identity, role: "owner" };
         },
         authorizeOwner: async (bearer) => {
+            await requireBrowserAccess();
+            if (bearer === "") {
+                throw new Error("missing bearer token");
+            }
+            const { email } = await identify(bearer);
+            if (email !== (await deps.owner.read())) {
+                throw new ForbiddenError("not the sandbox owner");
+            }
+        },
+        authorizeRetirement: async (bearer) => {
             if (bearer === "") {
                 throw new Error("missing bearer token");
             }

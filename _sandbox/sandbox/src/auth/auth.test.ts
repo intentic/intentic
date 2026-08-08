@@ -67,7 +67,12 @@ describe("createAuthorizer (owner TOFU + shared access)", () => {
             owner: memOwner("a@x.com"),
             members: memMembers(),
         });
-        await expect(authz.authorize("tok-a", undefined)).resolves.toEqual({ email: "a@x.com", name: "Ada", picture: "https://p/a.png", role: "owner" });
+        await expect(authz.authorize("tok-a", undefined)).resolves.toEqual({
+            email: "a@x.com",
+            name: "Ada",
+            picture: "https://p/a.png",
+            role: "owner",
+        });
     });
 
     test("rejects a missing bearer as an authentication failure, not Forbidden", async () => {
@@ -140,6 +145,20 @@ describe("createAuthorizer (owner TOFU + shared access)", () => {
         await expect(authz.authorizeOwner("")).rejects.toSatisfy(
             (error) => error instanceof Error && !(error instanceof ForbiddenError) && /missing bearer/.test(error.message),
         );
+    });
+
+    test("permanently disabled browser access refuses ordinary calls but lets the owner repeat retirement", async () => {
+        const authz = createAuthorizer({
+            verify: verifierFor({ "tok-a": "a@x.com", "tok-m": "m@x.com" }),
+            owner: memOwner("a@x.com"),
+            members: memMembers(granted("m@x.com")),
+            browserAccess: { enabled: async () => false },
+        });
+        await expect(authz.authorize("tok-a", undefined)).rejects.toThrow(/browser access has been removed/);
+        await expect(authz.authorize("tok-m", undefined)).rejects.toThrow(/browser access has been removed/);
+        await expect(authz.authorizeOwner("tok-a")).rejects.toThrow(/browser access has been removed/);
+        await expect(authz.authorizeRetirement("tok-a")).resolves.toBeUndefined();
+        await expect(authz.authorizeRetirement("tok-m")).rejects.toBeInstanceOf(ForbiddenError);
     });
 });
 

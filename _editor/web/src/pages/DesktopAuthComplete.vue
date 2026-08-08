@@ -32,12 +32,13 @@ const error = ref<string | undefined>(undefined);
 
 const complete = async (): Promise<void> => {
     const handoff = route.query[`handoff`];
-    if (typeof handoff !== `string` || handoff === ``) {
+    const verifier = route.query[`verifier`];
+    if (typeof handoff !== `string` || handoff === `` || typeof verifier !== `string` || verifier === ``) {
         error.value = `This sign-in link is incomplete.`;
         return;
     }
     try {
-        const { ott, idToken } = await apiClient.desktop.redeem({ handoff });
+        const { ott, idToken } = await apiClient.desktop.redeem({ handoff, verifier });
         // Better Auth's own endpoint, called directly rather than through the oRPC client: it lives under
         // /api/auth (not the contract), and what we are after is its Set-Cookie, not its body.
         const verified = await globalThis.fetch(`${environment.api.url}/api/auth/one-time-token/verify`, {

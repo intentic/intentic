@@ -80,10 +80,19 @@ export const paneStates = (stdout: string): Map<string, PaneState> => {
 async function* systemEvents(
     services: Services,
     signal: AbortSignal | undefined,
-    member: { clientId: string; identity: Caller } | undefined,
+    identity: Caller | undefined,
+    clientId: string | undefined,
 ): AsyncGenerator<SystemEvent> {
-    const abort = signal ?? new AbortController().signal;
+    const controller = new AbortController();
+    const abort = controller.signal;
     if (abort.aborted) {
+        return;
+    }
+    const abortFromCaller = (): void => controller.abort();
+    signal?.addEventListener("abort", abortFromCaller);
+    if (signal?.aborted === true) {
+        controller.abort();
+        signal.removeEventListener("abort", abortFromCaller);
         return;
     }
     /* First frame: the workspace's identity, so the browser can drop its persisted cache for a workspace that
@@ -125,7 +134,7 @@ async function* systemEvents(
     };
     // Register BEFORE subscribing: the register broadcast reaches the already-connected members, and the
     // subscribe's immediate snapshot then paints the full roster (self included) onto this connection.
-    const unregisterPresence = member !== undefined ? registerPresence(member.clientId, member.identity) : undefined;
+    const unregisterPresence = identity !== undefined && clientId !== undefined ? registerPresence(clientId, identity) : undefined;
     const unsubscribePresence = subscribePresence((users) => {
         enqueue({ kind: "presence", users });
         onWake();
@@ -168,6 +177,9 @@ async function* systemEvents(
         enqueue({ kind: "runtimeChanged", domains });
         onWake();
     });
+    // Authentication middleware ran only for the opening request. Register after every setup step that could
+    // throw and immediately before the protected loop, so a failed/closed iterator cannot leak a dead entry.
+    const unregisterAccess = identity === undefined ? undefined : services.auth?.connections.register(identity, () => controller.abort());
     abort.addEventListener("abort", onWake);
     try {
         while (!abort.aborted) {
@@ -208,6 +220,8 @@ async function* systemEvents(
         unsubscribeBoot();
         unsubscribePresence();
         unregisterPresence?.();
+        unregisterAccess?.();
+        signal?.removeEventListener("abort", abortFromCaller);
     }
 }
 
@@ -241,13 +255,7 @@ export const createSystemRoutes = (services: Services) => {
             const { token, expiresAt } = await services.auth.mintSession(context.identity);
             return { token, expiresAt, email: context.identity.email };
         }),
-        events: i.events.handler(({ input, context, signal }) =>
-            systemEvents(
-                services,
-                signal,
-                context.identity !== undefined && input.clientId !== undefined ? { clientId: input.clientId, identity: context.identity } : undefined,
-            ),
-        ),
+        events: i.events.handler(({ input, context, signal }) => systemEvents(services, signal, context.identity, input.clientId)),
         // A tab's activity self-report. Accepted only for the caller's own live connection (see updatePresence);
         // identity-less callers (loopback) have no roster entry to update — still ok, the report is just moot.
         presence: i.presence.handler(({ input, context }) => {
@@ -429,7 +437,11 @@ export const createSystemRoutes = (services: Services) => {
                     throw new ORPCError("FORBIDDEN", { message: "only the sandbox owner can act on their computers' sandboxes" });
                 }
             }
-            yield* manageMachineSandbox(services, input.id, { op: input.op, slug: input.slug, ...(input.hash === undefined ? {} : { hash: input.hash }) });
+            yield* manageMachineSandbox(services, input.id, {
+                op: input.op,
+                slug: input.slug,
+                ...(input.hash === undefined ? {} : { hash: input.hash }),
+            });
         }),
         // Destroy one session (its tab's close button). Validate the name before it reaches the `kill-session`
         // argv — the security guard against a name like `-C` being read as a flag. Killing a session that already

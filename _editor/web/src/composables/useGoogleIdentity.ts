@@ -1,5 +1,7 @@
 import { ref } from "vue";
 import { environment } from "../environments/environment";
+import { removeStoredValue, storedValue, storeValue } from "./browserStorage";
+import { idTokenClaims } from "./googleToken";
 
 // The slim slice of Google Identity Services (accounts.google.com/gsi/client) we use to mint an ID token in
 // the browser. The token is a Google-signed JWT (audience = our web client id) — the sandbox daemon verifies
@@ -38,28 +40,6 @@ declare global {
     }
 }
 
-// Read a JWT's `exp` (epoch ms); falls back to a conservative 30-minute window if it can't be parsed.
-const idTokenExpiry = (jwt: string): number => {
-    try {
-        const payload = jwt.split(`.`)[1] ?? ``;
-        const decoded = JSON.parse(atob(payload.replace(/-/g, `+`).replace(/_/g, `/`))) as { exp?: number };
-        return typeof decoded.exp === `number` ? decoded.exp * 1000 : Date.now() + 30 * 60_000;
-    } catch {
-        return Date.now() + 30 * 60_000;
-    }
-};
-
-// Read a JWT's `email` claim, or undefined when absent/unparsable.
-const idTokenEmail = (jwt: string): string | undefined => {
-    try {
-        const payload = jwt.split(`.`)[1] ?? ``;
-        const decoded = JSON.parse(atob(payload.replace(/-/g, `+`).replace(/_/g, `/`))) as { email?: unknown };
-        return typeof decoded.email === `string` ? decoded.email : undefined;
-    } catch {
-        return undefined;
-    }
-};
-
 // Persisted in localStorage so the credential survives tab close and reopen (like intentic.activeSandboxId).
 // The exposure is bounded: it's a ~1h Google-signed JWT whose expiry the daemon re-verifies, so a stale entry
 // is just dead weight. Keyed by client id so a client-id change can't surface a stale token.
@@ -72,10 +52,8 @@ const storageKey = (clientId: string): string => `intentic.gid.${clientId}`;
  * rendered "Sign in with Google" button, the surface for first-ever sign-ins and fallback. Both surfaces feed
  * the same credential callback. The sandbox daemon is the verifier; this never touches the platform.
  *
- * `warmIdToken` is that same first step with the fallback deliberately cut off — a prefetch for a screen that
- * would LIKE the credential but has no standing to demand it. Raising a full-screen gate is an answer to the
- * user asking for something; a prefetch is nobody asking, so it takes a silent renewal if Google offers one
- * and otherwise leaves the sign-in to whichever call actually needs it. */
+ * `warmIdToken` only hydrates the persisted fast-path. Google `prompt()` can display One Tap/FedCM UI and is
+ * reserved for a real caller waiting on access, never a screen the user is merely reading. */
 
 // True when a token is needed — the workspace shell shows the sign-in gate (a rendered Google button) in
 // response, and flips back once the credential arrives.
@@ -92,22 +70,39 @@ let inflight: Promise<string | undefined> | undefined;
 // Resolves the in-flight mint — called by the credential callback (rendered button) and by cancelSignIn (with
 // undefined when the user dismisses the gate).
 let settle: ((token: string | undefined) => void) | undefined;
+// The shared GIS callback is installed once. It accepts credentials only while a real mint is waiting; a
+// callback already queued when sign-out cancels GIS cannot repopulate the cache afterwards.
+let acceptingCredential = false;
+
+const acceptCredential = (credential: string): boolean => {
+    const claims = idTokenClaims(credential);
+    if (claims === undefined || Date.now() >= claims.expiresAt - 60_000) {
+        return false;
+    }
+    token = credential;
+    expiresAt = claims.expiresAt;
+    signedInEmail.value = claims.email;
+    storeValue(storageKey(environment.auth.googleClientId), credential);
+    needsSignIn.value = false;
+    return true;
+};
 
 // Hydrate the cached token from localStorage (after a refresh, a reopened tab, or a renewal in another tab).
 // Returns undefined and clears the slot if the stored token is missing or already past its near-expiry guard,
 // so callers mint anew.
 const restore = (): string | undefined => {
     const key = storageKey(environment.auth.googleClientId);
-    const stored = localStorage.getItem(key) ?? undefined;
+    const stored = storedValue(key);
     if (stored === undefined) {
         return undefined;
     }
-    expiresAt = idTokenExpiry(stored);
-    if (Date.now() >= expiresAt - 60_000) {
-        localStorage.removeItem(key);
+    const claims = idTokenClaims(stored);
+    if (claims === undefined || Date.now() >= claims.expiresAt - 60_000) {
+        removeStoredValue(key);
         return undefined;
     }
-    signedInEmail.value = idTokenEmail(stored);
+    expiresAt = claims.expiresAt;
+    signedInEmail.value = claims.email;
     return stored;
 };
 
@@ -130,16 +125,11 @@ const ensureInitialized = async (): Promise<void> => {
             client_id: environment.auth.googleClientId,
             auto_select: true,
             callback: (response) => {
-                token = response.credential;
-                expiresAt = idTokenExpiry(response.credential);
-                signedInEmail.value = idTokenEmail(response.credential);
-                try {
-                    localStorage.setItem(storageKey(environment.auth.googleClientId), response.credential);
-                } catch {
-                    // Storage may be unavailable (private mode); the in-memory token still serves this session.
+                if (!acceptingCredential) {
+                    return;
                 }
-                needsSignIn.value = false;
-                settle?.(response.credential);
+                const accepted = acceptCredential(response.credential);
+                settle?.(accepted ? response.credential : undefined);
             },
         });
         initialized = true;
@@ -182,10 +172,12 @@ const mint = async (): Promise<string | undefined> => {
     const minted = new Promise<string | undefined>((resolve) => {
         settle = resolve;
     });
+    acceptingCredential = true;
     const guard = trySilent();
     const result = await minted;
     clearTimeout(guard);
     settle = undefined;
+    acceptingCredential = false;
     inflight = undefined;
     needsSignIn.value = false;
     return result;
@@ -211,28 +203,16 @@ const getIdToken = async (): Promise<string | undefined> => {
     return inflight;
 };
 
-// Prefetch the credential: fire the silent prompt and let the shared callback cache whatever comes back. No
-// `settle`, no guard timer and nothing to await — a returning Google session renews in the background, and a
-// browser that would need UI for it is simply left alone. That absence is the point: with no caller waiting
-// there is nothing for a gate to unblock, so the gate would only be interrupting the screen.
-// A mint already in flight has a real caller behind it and will populate the same cache — leave it to it.
+// Prefetch means storage hydration only. GIS `prompt()` is a request to show One Tap/FedCM UI, even when
+// auto_select sometimes makes it silent; a screen the user is merely reading has no standing to make it.
 const warmIdToken = async (): Promise<void> => {
-    if (cached() !== undefined || inflight !== undefined) {
-        return;
-    }
-    try {
-        await ensureInitialized();
-    } catch {
-        // GIS never loaded. A prefetch has nobody to report that to; the next real mint surfaces it.
-        return;
-    }
-    window.google?.accounts?.id?.prompt();
+    cached();
 };
 
 // Platform sign-out must also forget the browser→sandbox Google credential. This keeps the sandbox URL binding
 // intact while making the next signed-in platform session pass through the sandbox Google gate again.
 const clearCredential = (): void => {
-    localStorage.removeItem(storageKey(environment.auth.googleClientId));
+    removeStoredValue(storageKey(environment.auth.googleClientId));
     token = undefined;
     expiresAt = 0;
     signedInEmail.value = undefined;
@@ -240,6 +220,7 @@ const clearCredential = (): void => {
     settle?.(undefined);
     settle = undefined;
     inflight = undefined;
+    acceptingCredential = false;
     // Kill a pending silent prompt (a late credential must not repopulate the cache) and stop auto_select from
     // silently re-signing the account the user just signed out of — the next mint shows a chooser or the gate.
     window.google?.accounts?.id?.cancel?.();
@@ -276,20 +257,7 @@ const cancelSignIn = (): void => {
  * spends it once for a daemon session that renews without Google. A malformed or already-expired JWT is
  * refused rather than cached, because a cached dead token is a sign-in gate that never resolves. */
 const adoptIdToken = (credential: string): boolean => {
-    const expiry = idTokenExpiry(credential);
-    if (Date.now() >= expiry - 60_000) {
-        return false;
-    }
-    token = credential;
-    expiresAt = expiry;
-    signedInEmail.value = idTokenEmail(credential);
-    try {
-        localStorage.setItem(storageKey(environment.auth.googleClientId), credential);
-    } catch {
-        // Storage may be unavailable (private mode); the in-memory token still serves this session.
-    }
-    needsSignIn.value = false;
-    return true;
+    return acceptCredential(credential);
 };
 
 export function useGoogleIdentity() {

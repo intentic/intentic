@@ -1,4 +1,5 @@
 import { call, ORPCError } from "@orpc/server";
+import { createHash } from "node:crypto";
 import { describe, expect, it, vi } from "vitest";
 import type { OrpcContext } from "../context.js";
 import { desktopRoutes } from "./desktop.routes.js";
@@ -23,7 +24,9 @@ const context = (overrides?: Partial<OrpcContext>): OrpcContext =>
         ...overrides,
     }) as OrpcContext;
 
-const row = (expiresAt: Date) => ({ id: `h1`, ott: `ott-1`, idToken: `google-jwt`, expiresAt, createdAt: new Date() });
+const verifier = `v`.repeat(64);
+const challenge = createHash(`sha256`).update(verifier).digest(`base64url`);
+const row = (expiresAt: Date) => ({ id: `h1`, ott: `ott-1`, idToken: `google-jwt`, challenge, expiresAt, createdAt: new Date() });
 
 describe(`desktop handoff`, () => {
     it(`mints a one-time token for the caller's own session`, async () => {
@@ -36,45 +39,61 @@ describe(`desktop handoff`, () => {
             headers,
         });
 
-        await expect(call(desktopRoutes.handoff, { idToken: `google-jwt` }, { context: ctx })).resolves.toEqual({ handoff: `h1` });
+        await expect(call(desktopRoutes.handoff, { idToken: `google-jwt`, challenge }, { context: ctx })).resolves.toEqual({ handoff: `h1` });
         // The caller's OWN headers, not a fresh request: the token has to belong to the session that asked.
         expect(generateOneTimeToken).toHaveBeenCalledWith({ headers });
-        expect(create.mock.calls[0]?.[0]?.data).toMatchObject({ ott: `ott-1`, idToken: `google-jwt` });
+        expect(create.mock.calls[0]?.[0]?.data).toMatchObject({ ott: `ott-1`, idToken: `google-jwt`, challenge });
     });
 
     it(`refuses to mint without a session`, async () => {
-        await expect(call(desktopRoutes.handoff, { idToken: `x` }, { context: context({ user: null }) })).rejects.toBeInstanceOf(ORPCError);
+        await expect(call(desktopRoutes.handoff, { idToken: `x`, challenge }, { context: context({ user: null }) })).rejects.toBeInstanceOf(
+            ORPCError,
+        );
     });
 
     it(`returns both credentials and deletes the row in the same call`, async () => {
-        const remove = vi.fn().mockResolvedValue({});
+        const remove = vi.fn().mockResolvedValue({ count: 1 });
         const ctx = context({
             prisma: fakePrisma({
-                desktopHandoff: { findUnique: vi.fn().mockResolvedValue(row(new Date(Date.now() + 60_000))), delete: remove },
+                desktopHandoff: { findUnique: vi.fn().mockResolvedValue(row(new Date(Date.now() + 60_000))), deleteMany: remove },
             }),
             user: null, // sessionless on purpose — the webview has no session yet; that is what this route is for
         });
 
-        await expect(call(desktopRoutes.redeem, { handoff: `h1` }, { context: ctx })).resolves.toEqual({
+        await expect(call(desktopRoutes.redeem, { handoff: `h1`, verifier }, { context: ctx })).resolves.toEqual({
             ott: `ott-1`,
             idToken: `google-jwt`,
         });
-        expect(remove).toHaveBeenCalledWith({ where: { id: `h1` } });
+        expect(remove).toHaveBeenCalledWith({ where: { id: `h1`, challenge } });
     });
 
-    it(`gives an expired row the same answer as an unknown one, and still spends it`, async () => {
-        const remove = vi.fn().mockResolvedValue({});
+    it(`gives an expired row the same answer as an unknown one without exposing credentials`, async () => {
+        const remove = vi.fn().mockResolvedValue({ count: 1 });
         const expired = context({
             prisma: fakePrisma({
-                desktopHandoff: { findUnique: vi.fn().mockResolvedValue(row(new Date(Date.now() - 1))), delete: remove },
+                desktopHandoff: { findUnique: vi.fn().mockResolvedValue(row(new Date(Date.now() - 1))), deleteMany: remove },
             }),
         });
         const unknown = context({
-            prisma: fakePrisma({ desktopHandoff: { findUnique: vi.fn().mockResolvedValue(null), delete: vi.fn() } }),
+            prisma: fakePrisma({ desktopHandoff: { findUnique: vi.fn().mockResolvedValue(null), deleteMany: vi.fn() } }),
         });
 
-        await expect(call(desktopRoutes.redeem, { handoff: `h1` }, { context: expired })).rejects.toBeInstanceOf(ORPCError);
-        await expect(call(desktopRoutes.redeem, { handoff: `h1` }, { context: unknown })).rejects.toBeInstanceOf(ORPCError);
-        expect(remove).toHaveBeenCalledWith({ where: { id: `h1` } });
+        await expect(call(desktopRoutes.redeem, { handoff: `h1`, verifier }, { context: expired })).rejects.toBeInstanceOf(ORPCError);
+        await expect(call(desktopRoutes.redeem, { handoff: `h1`, verifier }, { context: unknown })).rejects.toBeInstanceOf(ORPCError);
+        expect(remove).not.toHaveBeenCalled();
+    });
+
+    it(`a wrong verifier neither returns credentials nor consumes the app's attempt`, async () => {
+        const remove = vi.fn().mockResolvedValue({ count: 1 });
+        const ctx = context({
+            prisma: fakePrisma({
+                desktopHandoff: { findUnique: vi.fn().mockResolvedValue(row(new Date(Date.now() + 60_000))), deleteMany: remove },
+            }),
+            user: null,
+        });
+        await expect(call(desktopRoutes.redeem, { handoff: `h1`, verifier: `wrong-${verifier}` }, { context: ctx })).rejects.toBeInstanceOf(
+            ORPCError,
+        );
+        expect(remove).not.toHaveBeenCalled();
     });
 });

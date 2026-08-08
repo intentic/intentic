@@ -32,7 +32,8 @@ const working = ref(false);
 
 const hand = async (): Promise<void> => {
     const state = route.query[`state`];
-    if (typeof state !== `string` || state === ``) {
+    const challenge = route.query[`challenge`];
+    if (typeof state !== `string` || state === `` || typeof challenge !== `string` || challenge === ``) {
         error.value = `This link is missing the value that ties it to your app — open Intentic and sign in from there.`;
         return;
     }
@@ -46,7 +47,7 @@ const hand = async (): Promise<void> => {
             error.value = `Intentic needs your Google sign-in to reach your sandbox.`;
             return;
         }
-        const { handoff } = await apiClient.desktop.handoff({ idToken });
+        const { handoff } = await apiClient.desktop.handoff({ idToken, challenge });
         handedOff.value = true;
         globalThis.location.href = `intentic://auth?handoff=${encodeURIComponent(handoff)}&state=${encodeURIComponent(state)}`;
     } catch (err) {

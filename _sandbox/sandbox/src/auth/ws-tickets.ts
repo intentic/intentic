@@ -27,6 +27,9 @@ export interface WsTickets {
     readonly mint: (caller: Caller) => string;
     // The caller this ticket was minted for, consuming it; undefined when unknown, spent, or expired.
     readonly redeem: (ticket: string) => Caller | undefined;
+    // Drop every outstanding ticket, or only those minted by one member. Already-open sockets are closed by
+    // auth/connections.ts; this closes the short race between ticket mint and upgrade.
+    readonly revoke: (email?: string) => void;
 }
 
 /* The gate the three upgrade handlers share: redeem the `?ticket=` on this URL — and hold it to this socket's
@@ -41,9 +44,13 @@ export interface WsTickets {
  * sign-in browser adds credentials (owner). A ticket carries the role it was minted under, so the check here is
  * against the same resolved tier every HTTP route sees. The identity is then dropped: none of the three shows
  * presence or attributes anything to a caller — redemption is the authorization. */
-export const redeemTicket = (services: { readonly auth: unknown; readonly wsTickets: WsTickets }, url: URL, floor: MemberRole): void => {
+export const redeemTicket = (
+    services: { readonly auth: unknown; readonly wsTickets: WsTickets },
+    url: URL,
+    floor: MemberRole,
+): Caller | undefined => {
     if (services.auth === undefined) {
-        return;
+        return undefined;
     }
     const caller = services.wsTickets.redeem(url.searchParams.get("ticket") ?? "");
     if (caller === undefined) {
@@ -52,6 +59,7 @@ export const redeemTicket = (services: { readonly auth: unknown; readonly wsTick
     if (!roleAtLeast(caller.role, floor)) {
         throw new Error(`${floor} access required`);
     }
+    return caller;
 };
 
 export const createWsTickets = (): WsTickets => {
@@ -78,6 +86,14 @@ export const createWsTickets = (): WsTickets => {
             // still-valid ticket finds nothing even if it arrives a millisecond later.
             tickets.delete(ticket);
             return entry.expiresAt < Date.now() ? undefined : entry.identity;
+        },
+        revoke: (email) => {
+            const target = email?.toLowerCase();
+            for (const [ticket, entry] of tickets) {
+                if (target === undefined || entry.identity.email.toLowerCase() === target) {
+                    tickets.delete(ticket);
+                }
+            }
         },
     };
 };

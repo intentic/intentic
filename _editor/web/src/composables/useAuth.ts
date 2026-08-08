@@ -1,10 +1,11 @@
-import type { User } from "@intentic-app/api-contract";
+import type { SandboxSummary, User } from "@intentic-app/api-contract";
 import { createAuthClient } from "better-auth/client";
 import { ref } from "vue";
 import { environment } from "../environments/environment";
 import { clearPersistedQueries } from "./queryPersistence";
 import { useSandboxSession } from "./sandbox/sandboxSession";
 import { useGoogleIdentity } from "./useGoogleIdentity";
+import { invalidatePlatformAuth, onPlatformAuthInvalidated } from "./authLifecycle";
 
 /* Better Auth browser client + session, as a module-level singleton. The browser calls the API directly;
  * point Better Auth at the API origin (the client appends its /api/auth basePath).
@@ -12,14 +13,36 @@ import { useGoogleIdentity } from "./useGoogleIdentity";
 const client = createAuthClient({ baseURL: environment.api.url });
 
 const { clearCredential } = useGoogleIdentity();
-const { clearSessions } = useSandboxSession();
+const { clearSessions, retireAccountAccess } = useSandboxSession();
 
 const user = ref<User | null>(null);
+let refreshing: Promise<User | null> | undefined;
+
+onPlatformAuthInvalidated(async () => {
+    // Stop the signed-in runtime first; storage/cache cleanup follows without leaving a live daemon stream in
+    // the window meanwhile. Every storage operation beneath these calls is safe when persistence is blocked.
+    user.value = null;
+    clearCredential();
+    clearSessions();
+    await clearPersistedQueries();
+});
 
 const refresh = async (): Promise<User | null> => {
-    const { data } = await client.getSession();
-    user.value = data?.user ? { id: data.user.id, email: data.user.email, name: data.user.name, image: data.user.image ?? null } : null;
-    return user.value;
+    const pending = (refreshing ??= (async () => {
+        const { data, error } = await client.getSession();
+        if (error) {
+            throw new Error(error.message ?? `Couldn't check your session.`);
+        }
+        if (data?.user === undefined) {
+            await invalidatePlatformAuth();
+            return null;
+        }
+        user.value = { id: data.user.id, email: data.user.email, name: data.user.name, image: data.user.image ?? null };
+        return user.value;
+    })().finally(() => {
+        refreshing = undefined;
+    }));
+    return pending;
 };
 
 // Kicks off Google OAuth, returning to `callbackPath` on the SPA origin afterwards (any path is allowed — the
@@ -30,11 +53,12 @@ const signInWithGoogle = async (callbackPath = `/`): Promise<void> => {
 };
 
 const signOut = async (): Promise<void> => {
-    clearCredential();
-    clearSessions();
-    await clearPersistedQueries();
-    await client.signOut();
-    user.value = null;
+    // The server session goes first. Local storage being blocked must never prevent the authoritative logout.
+    const { error } = await client.signOut();
+    if (error) {
+        throw new Error(error.message ?? `Sign out failed.`);
+    }
+    await invalidatePlatformAuth();
 };
 
 // Settings → profile: display name + avatar (a small data URL) via Better Auth's built-in update-user
@@ -51,16 +75,30 @@ const updateProfile = async (input: { name?: string; image?: string }): Promise<
 // GDPR account deletion (Settings → danger zone). Prisma cascades remove sessions/accounts/sandboxes/grants
 // with the user row. Better Auth requires a fresh session for password-less users — a stale one surfaces as
 // the returned error.
-const deleteAccount = async (): Promise<void> => {
+const deleteAccount = async (sandboxes: readonly SandboxSummary[]): Promise<void> => {
+    await retireAccountAccess(sandboxes);
     const { error } = await client.deleteUser();
     if (error) {
         throw new Error(error.message ?? `Account deletion failed.`);
     }
-    clearCredential();
-    clearSessions();
-    await clearPersistedQueries();
-    user.value = null;
+    await invalidatePlatformAuth();
 };
+
+// Better Auth's cookie can refresh, expire, or be revoked while this SPA stays open for days. Focus/online are
+// the moments a background tab becomes actionable again; protected platform RPCs provide the immediate 401
+// path while it remains active (useApi.ts).
+const revalidateIfSignedIn = (): void => {
+    if (user.value !== null) {
+        void refresh().catch(() => undefined);
+    }
+};
+globalThis.addEventListener?.(`focus`, revalidateIfSignedIn);
+globalThis.addEventListener?.(`online`, revalidateIfSignedIn);
+globalThis.document?.addEventListener(`visibilitychange`, () => {
+    if (document.visibilityState === `visible`) {
+        revalidateIfSignedIn();
+    }
+});
 
 export function useAuth() {
     return { user, refresh, signInWithGoogle, signOut, updateProfile, deleteAccount };
