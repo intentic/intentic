@@ -464,13 +464,24 @@ const watcherCameUp = async (): Promise<boolean> => {
  * restarts one background process. Everything that can fail is checked before the swap, and the one thing that
  * cannot be checked in advance — whether the new agent stays up on THIS machine — is rolled back automatically
  * (upgrade.ts). */
-const upgrade = buildCommand({
+interface UpgradeFlags {
+    readonly force: boolean;
+}
+
+const upgrade = buildCommand<UpgradeFlags>({
     docs: { brief: "Download and install the current agent, then restart the background watcher" },
-    parameters: {},
-    async func(this: CommandContext) {
+    parameters: {
+        flags: {
+            force: {
+                kind: "boolean",
+                brief: "Install the published agent even over one built from source (which is otherwise left alone)",
+            },
+        },
+    },
+    async func(this: CommandContext, flags: UpgradeFlags) {
         const out = (message: string): void => void this.process.stdout.write(`${message}\n`);
         const exec = realUpgradeExec(stopWatcher, async () => await enableMirroring(() => undefined), watcherCameUp);
-        out(upgradeMessage(await runUpgrade(exec, assetUrl(), SYNC_VERSION, out)));
+        out(upgradeMessage(await runUpgrade(exec, assetUrl(), SYNC_VERSION, flags.force, out)));
     },
 });
 
