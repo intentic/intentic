@@ -8,7 +8,8 @@ const viewStates = new Map<string, Monaco.editor.ICodeEditorViewState>();
 
 <script setup lang="ts">
 import { onBeforeUnmount, onMounted, ref, shallowRef, watch } from "vue";
-import { modelLineOf, stripComments } from "../../../composables/workspace/codeComments";
+import { modelLineOf } from "../../../composables/workspace/codeAnalysis";
+import { requestCodeAnalysis } from "../../../composables/workspace/codeAnalysisClient";
 import { normalizationEdits } from "../../../composables/workspace/normalizeOnSave";
 import { useEditorSelection } from "../../../composables/workspace/useEditorSelection";
 import { editorType, useMonaco, watchEditorType } from "../../../composables/workspace/useMonaco";
@@ -18,7 +19,7 @@ import type { LineJump } from "../workspaceTabs";
  * editor, so the two are the same rendering with a VSCode minimap. `lang === undefined` (unknown extension or a
  * file over the highlight cap) opens as plaintext (no tokenizer). Colored by Shiki via @shikijs/monaco.
  *
- * With `hideComments` the reader gets the code alone: the same strip the diff surface uses (codeComments.ts), so
+ * With `hideComments` the reader gets the code alone: the same analysis the diff surface uses (codeAnalysis.ts), so
  * a file reads the same whether it is being reviewed or read. The comments are REMOVED rather than folded — a
  * folded comment still spends a line saying it is there — which shortens the model, so the file's own numbering
  * is carried alongside and used for everything the reader or the app can see: the gutter, a search jump, the
@@ -61,11 +62,11 @@ const display = async (text: string): Promise<{ text: string; lines?: number[] }
     if (editable === true || hideComments !== true) {
         return { text };
     }
-    const stripped = await stripComments(text, modelLang);
-    if (stripped === undefined || stripped.text.trim() === ``) {
+    const analysis = await requestCodeAnalysis(text, modelLang);
+    if (analysis === undefined || analysis.code.text.trim() === ``) {
         return { text };
     }
-    return { text: stripped.text, lines: stripped.lines };
+    return analysis.code;
 };
 
 // Land a content-search jump: cursor on the line (keyboard nav continues from the hit), centered scroll, and a

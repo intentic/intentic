@@ -3,9 +3,10 @@ import { useDevice } from "@intentic/ui";
 import type * as Monaco from "monaco-editor-core";
 import { computed, onBeforeUnmount, onMounted, ref, shallowRef, watch } from "vue";
 import { useLayout } from "../../../composables/useLayout";
-import { stripComments } from "../../../composables/workspace/codeComments";
+import type { CodeAnalysis } from "../../../composables/workspace/codeAnalysis";
+import { requestCodeAnalysis } from "../../../composables/workspace/codeAnalysisClient";
 import { lineStat, type LineStat } from "../../../composables/workspace/codeStat";
-import { firstChangeBeyondImports, importLines } from "../../../composables/workspace/codeImports";
+import { firstChangeBeyondImports, type ImportSide } from "../../../composables/workspace/codeImports";
 import { editorType, useMonaco, watchEditorType } from "../../../composables/workspace/useMonaco";
 import { highlightLangFor } from "../fileType";
 
@@ -40,6 +41,10 @@ let original: Monaco.editor.ITextModel | undefined;
 let modified: Monaco.editor.ITextModel | undefined;
 let lang: string | undefined;
 let disposed = false;
+let importSides: readonly [ImportSide, ImportSide] = [
+    { lines: [], imports: new Set() },
+    { lines: [], imports: new Set() },
+];
 /* WHY THERE IS NOTHING TO LOOK AT, when there is nothing to look at. A diff with no hunks renders as either an
  * unmarked file or — once stripping empties both models — two blank panes, and neither says which of the two
  * reasons it is. `comments` has a way out and offers it; `identical` does not, and saying so is the whole fix:
@@ -56,12 +61,37 @@ const step = (forward: boolean): void => diff.value?.goToDiff(forward ? `next` :
 
 // One side as its pane should show it. Stripping shortens the model, so the gutter has to render the source line
 // each kept line came from — Monaco's own numbering would be off by every comment above it.
-const side = async (text: string): Promise<{ text: string; lineNumbers: Monaco.editor.LineNumbersType; stripped: boolean }> => {
-    const stripped = showComments.value ? undefined : await stripComments(text, lang);
-    if (stripped === undefined) {
-        return { text, lineNumbers: `on`, stripped: false };
+interface DisplaySide {
+    readonly text: string;
+    readonly lineNumbers: Monaco.editor.LineNumbersType;
+    readonly stripped: boolean;
+    readonly imports: ReadonlySet<number>;
+}
+
+const modelImports = (analysis: CodeAnalysis): ReadonlySet<number> => {
+    const sourceImports = new Set(analysis.imports);
+    const imports = new Set<number>();
+    for (const [index, source] of analysis.code.lines.entries()) {
+        if (sourceImports.has(source)) {
+            imports.add(index + 1);
+        }
     }
-    return { text: stripped.text, lineNumbers: (line) => String(stripped.lines[line - 1] ?? ``), stripped: true };
+    return imports;
+};
+
+const side = async (text: string): Promise<DisplaySide> => {
+    // Hiding comments needs the analysis; showing them only needs it when import skipping will consume the other
+    // half of the same result. In either case a warmed review normally answers from the client cache.
+    const analysis = !showComments.value || skipImports.value ? await requestCodeAnalysis(text, lang) : undefined;
+    if (showComments.value || analysis === undefined) {
+        return { text, lineNumbers: `on`, stripped: false, imports: new Set(analysis?.imports ?? []) };
+    }
+    return {
+        text: analysis.code.text,
+        lineNumbers: (line) => String(analysis.code.lines[line - 1] ?? ``),
+        stripped: true,
+        imports: modelImports(analysis),
+    };
 };
 
 // Load both sides into the panes. Also the toggle's whole effect: same editor, same file, comments in or out.
@@ -74,6 +104,10 @@ const render = async (editor: Monaco.editor.IStandaloneDiffEditor): Promise<void
     modified?.setValue(right.text);
     editor.getOriginalEditor().updateOptions({ lineNumbers: left.lineNumbers });
     editor.getModifiedEditor().updateOptions({ lineNumbers: right.lineNumbers });
+    importSides = [
+        { lines: left.text.split(`\n`), imports: left.imports },
+        { lines: right.text.split(`\n`), imports: right.imports },
+    ];
     changeless.value = (before ?? ``) === (after ?? ``) ? `identical` : left.text === right.text ? `comments` : undefined;
     // Unstripped means the reader asked for the comments back, or the file has no grammar — either way what is
     // on screen is the whole file, which is what git already counted.
@@ -96,23 +130,12 @@ const reveal = async (editor: Monaco.editor.IStandaloneDiffEditor): Promise<void
             resolve();
         });
     });
-    // Only the skipping reader pays for the import scan — a tokenize pass over each side.
-    const scan = skipImports.value
-        ? await Promise.all([importLines(original?.getValue() ?? ``, lang), importLines(modified?.getValue() ?? ``, lang)])
-        : undefined;
     await recomputed;
     if (disposed) {
         return; // unmounted (fast file-switch) while the sides were scanned
     }
     const changes = editor.getLineChanges() ?? [];
-    const target =
-        scan === undefined
-            ? changes[0]
-            : firstChangeBeyondImports(
-                  changes,
-                  { lines: original?.getLinesContent() ?? [], imports: scan[0] },
-                  { lines: modified?.getLinesContent() ?? [], imports: scan[1] },
-              );
+    const target = !skipImports.value ? changes[0] : firstChangeBeyondImports(changes, importSides[0], importSides[1]);
     if (target === undefined) {
         return;
     }

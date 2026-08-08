@@ -1,65 +1,114 @@
 <script setup lang="ts">
 import { Icon, Segmented } from "@intentic/extension-ui";
 import DOMPurify from "dompurify";
-import { computed, onMounted, ref, watch } from "vue";
+import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
+import { createSheetWorkerClient } from "./sheetWorkerClient";
 
-/* XLSX preview: parses a workbook with SheetJS (lazy-imported — it's a heavy lib) and renders each sheet as an
- * HTML table. A workbook is untrusted (cells can hold arbitrary markup), so sheet_to_html output is
- * DOMPurify-sanitized before v-html. Multiple sheets get a tab switcher. The host (FileViewer) fetches the file's
- * bytes and passes them as `blob`; this component only renders. */
+/* XLSX preview: transfers a workbook to a dedicated worker, which parses it once and converts only the selected
+ * sheet to an HTML table. A workbook is untrusted, so the returned markup is DOMPurify-sanitized on the main
+ * thread before v-html. The host (FileViewer) fetches the file's bytes and passes them as `blob`. */
 
 const { blob } = defineProps<{ blob: Blob }>();
 
-const sheets = ref<{ name: string; html: string }[]>([]);
+const sheets = ref<readonly string[]>([]);
 const active = ref(``);
+const activeHtml = ref(``);
 const loading = ref(true);
 const error = ref<string>();
-// Drops a stale parse when the open file changes mid-flight.
+// Drops a stale parse when the open file changes, and a stale render when tabs are switched in quick succession.
 let seq = 0;
+let renderSeq = 0;
+let client: ReturnType<typeof createSheetWorkerClient> | undefined;
 
-const activeHtml = computed(() => sheets.value.find((sheet) => sheet.name === active.value)?.html ?? ``);
-const tabOptions = computed(() => sheets.value.map((sheet) => ({ label: sheet.name, value: sheet.name })));
+const tabOptions = computed(() => sheets.value.map((name) => ({ label: name, value: name })));
 
-const render = async (source: Blob): Promise<void> => {
-    const id = ++seq;
+const renderSheet = async (name: string, id: number, target: NonNullable<typeof client>): Promise<void> => {
+    const selected = ++renderSeq;
+    active.value = name;
+    activeHtml.value = ``;
     loading.value = true;
     error.value = undefined;
-    sheets.value = [];
     try {
-        const XLSX = await import("xlsx");
-        const workbook = XLSX.read(new Uint8Array(await source.arrayBuffer()), { type: `array` });
-        if (id !== seq) {
+        const html = await target.render(name);
+        if (id !== seq || selected !== renderSeq || target !== client) {
             return;
         }
-        sheets.value = workbook.SheetNames.flatMap((name) => {
-            const worksheet = workbook.Sheets[name];
-            return worksheet === undefined ? [] : [{ name, html: DOMPurify.sanitize(XLSX.utils.sheet_to_html(worksheet)) }];
-        });
-        active.value = sheets.value[0]?.name ?? ``;
-    } catch (err) {
-        if (id !== seq) {
+        activeHtml.value = DOMPurify.sanitize(html);
+    } catch (caught) {
+        if (id !== seq || selected !== renderSeq || target !== client) {
             return;
         }
-        error.value = err instanceof Error ? err.message : `Could not read this spreadsheet.`;
+        error.value = caught instanceof Error ? caught.message : `Could not read this spreadsheet.`;
     } finally {
-        if (id === seq) {
+        if (id === seq && selected === renderSeq && target === client) {
             loading.value = false;
         }
     }
 };
 
-// Parses on the main thread; bounded by the viewer's 25 MiB raw cap. Move to a ?worker if a big sheet janks.
+const select = (name: string): void => {
+    if (client !== undefined) {
+        void renderSheet(name, seq, client);
+    }
+};
+
+const render = async (source: Blob): Promise<void> => {
+    const id = ++seq;
+    renderSeq += 1;
+    client?.close();
+    client = undefined;
+    loading.value = true;
+    error.value = undefined;
+    sheets.value = [];
+    active.value = ``;
+    activeHtml.value = ``;
+    try {
+        const buffer = await source.arrayBuffer();
+        if (id !== seq) {
+            return;
+        }
+        const { default: SheetWorker } = await import(`./sheetWorker?worker`);
+        if (id !== seq) {
+            return;
+        }
+        const next = createSheetWorkerClient(new SheetWorker());
+        client = next;
+        const names = await next.load(buffer);
+        if (id !== seq || next !== client) {
+            return;
+        }
+        sheets.value = names;
+        const first = names[0];
+        if (first === undefined) {
+            loading.value = false;
+            return;
+        }
+        await renderSheet(first, id, next);
+    } catch (caught) {
+        if (id !== seq) {
+            return;
+        }
+        error.value = caught instanceof Error ? caught.message : `Could not read this spreadsheet.`;
+        loading.value = false;
+    }
+};
+
 onMounted(() => void render(blob));
 watch(
     () => blob,
     (next) => void render(next),
 );
+onBeforeUnmount(() => {
+    seq += 1;
+    renderSeq += 1;
+    client?.close();
+});
 </script>
 
 <template>
     <div class="flex h-full min-h-0 flex-col">
         <div v-if="sheets.length > 1" class="flex shrink-0 items-center overflow-x-auto border-b border-line px-2 py-1.5">
-            <Segmented v-model="active" size="xs" :options="tabOptions" />
+            <Segmented v-model="active" size="xs" :options="tabOptions" @update:model-value="select" />
         </div>
         <div class="min-h-0 flex-1">
             <div v-if="loading" class="flex h-full items-center justify-center text-muted"><Icon name="spinner" class="text-xl" spin /></div>

@@ -1,5 +1,5 @@
 import { highlightLangFor } from "../../pages/workspace/fileType";
-import { stripComments } from "./codeComments";
+import { requestCodeAnalysis } from "./codeAnalysisClient";
 
 /* HOW BIG A CHANGE IS ONCE THE COMMENTS ARE OUT OF IT — the +/− a review shows while its diffs are showing code
  * alone, which (useLayout.showComments being off by default) is what a reader sees before they touch anything.
@@ -9,9 +9,9 @@ import { stripComments } from "./codeComments";
  * and a file whose 40 added lines were 38 lines of comment was triaged as a big read and turned out to be
  * nothing. The rule this restores is that a number sits next to the thing it counts.
  *
- * The count comes off the SAME stripped text the diff editor is handed (codeComments), so the row and the pane
- * cannot disagree about what a comment is. What it costs is a tokenize pass per side, which is why nothing here
- * runs on its own: callers feed it diffs they were already reading (see useCodeStats).
+ * The count comes off the SAME analysis the diff editor consumes, so the row and pane cannot disagree about what
+ * a comment is. That worker-backed result is cached per text/language: review warming pays for each side once,
+ * and opening the warmed diff reuses it.
  */
 
 export interface LineStat {
@@ -76,10 +76,10 @@ export const codeLineStat = async (before: string, after: string, path: string):
     // The grammar the diff surface would tokenize this file with, resolved exactly as it resolves it — over the
     // highlight cap there is none, and the pane shows the file whole.
     const lang = highlightLangFor(path, Math.max(before.length, after.length), after === `` ? before : after);
-    const [old, now] = await Promise.all([stripComments(before, lang), stripComments(after, lang)]);
+    const [old, now] = await Promise.all([requestCodeAnalysis(before, lang), requestCodeAnalysis(after, lang)]);
     // Undefined is the pane's own fallback (it renders the file verbatim), so git's numbers are the true ones.
     if (old === undefined || now === undefined) {
         return undefined;
     }
-    return lineStat(old.text, now.text);
+    return lineStat(old.code.text, now.code.text);
 };

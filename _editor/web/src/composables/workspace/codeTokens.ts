@@ -1,7 +1,7 @@
-import { useHighlighter } from "@intentic/ui";
+import { useHighlighter } from "@intentic/ui/highlighter";
 
 /* One line-by-line walk of a file's TextMate tokens — the pass both of the diff surface's readings of a file
- * are built on: which lines are comments (codeComments) and which are imports (codeImports).
+ * are built on: which lines are comments and which are imports (codeAnalysis).
  *
  * The tokens come from the same grammar Shiki already loaded to COLOR the file, so every language we ship
  * highlighting for is covered by both readings for free and there is no per-language table to drift. Types are

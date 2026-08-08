@@ -1,21 +1,8 @@
-// @vitest-environment jsdom
-import { useHighlighter } from "@intentic/ui";
+import { useHighlighter } from "@intentic/ui/highlighter";
 import type * as Monaco from "monaco-editor-core";
-import { describe, expect, it, vi } from "vitest";
-import { firstChangeBeyondImports, type ImportSide, importLines } from "./codeImports";
-
-// The @intentic/ui barrel that carries useHighlighter reaches window.matchMedia (useDevice) at import — hence
-// jsdom plus the stub jsdom itself doesn't ship. Nothing under test touches the DOM.
-vi.hoisted(() => {
-    globalThis.matchMedia ??= ((query: string) => ({
-        matches: false,
-        media: query,
-        onchange: null,
-        addEventListener: () => {},
-        removeEventListener: () => {},
-        dispatchEvent: () => false,
-    })) as unknown as typeof globalThis.matchMedia;
-});
+import { describe, expect, it } from "vitest";
+import { analyzeCode } from "./codeAnalysis";
+import { firstChangeBeyondImports, type ImportSide } from "./codeImports";
 
 // Against the real grammars — the point of reading TextMate scopes is that the answer is the tokenizer's, so a
 // test with a hand-rolled fake grammar would be testing nothing. The languages below are the ones whose import
@@ -38,10 +25,10 @@ const lines = async (source: readonly string[], lang: string): Promise<ReadonlyS
             stack = grammar.tokenizeLine(line, stack, 0).ruleStack;
         }
     }
-    return importLines(source.join(`\n`), lang);
+    return new Set((await analyzeCode(source.join(`\n`), lang))?.imports ?? []);
 };
 
-describe(`importLines`, () => {
+describe(`import analysis`, () => {
     it(`takes a multi-line import whole, and stops at the code below it`, async () => {
         const source = [
             `import { ref, type Ref, watch } from "vue";`, // 1
@@ -99,7 +86,7 @@ describe(`importLines`, () => {
 
     it(`finds nothing to skip in a language we ship no grammar for`, async () => {
         expect(await lines([`import os`], `not-a-language`)).toEqual(new Set());
-        expect(await importLines(`import os`, undefined)).toEqual(new Set());
+        expect((await analyzeCode(`import os`, undefined))?.imports ?? []).toEqual([]);
     });
 });
 

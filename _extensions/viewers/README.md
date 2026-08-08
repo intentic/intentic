@@ -11,7 +11,7 @@ Every file format the app can show that is not source code — images, PDFs, vid
 
 - [src/manifest.ts](src/manifest.ts) — which extensions each viewer claims, and how it wants its content delivered.
 - [src/MediaViewer.vue](src/MediaViewer.vue) — audio and video, streamed rather than held.
-- [src/SheetViewer.vue](src/SheetViewer.vue) — spreadsheets, parsed whole.
+- [src/SheetViewer.vue](src/SheetViewer.vue) — spreadsheet tabs, with parsing and selected-sheet conversion delegated to a worker.
 - [src/mediaControls.ts](src/mediaControls.ts) — the playback state the media viewers share.
 - [src/extension.ts](src/extension.ts) — the registration, and the floor this extension sits on.
 
@@ -24,6 +24,10 @@ floor, and the reason none of these ever needed a branch in the core.
 The host resolves an open file to a viewer, gets the content the way its MANIFEST entry declares, and passes it
 in: `text` for the SVG's markup, `blob` for formats that must be parsed whole, `src` (a streaming
 `/workspace/media` URL) for audio and video, which are read a window at a time and never held.
+
+Spreadsheet bytes are transferred into a viewer-owned worker. It keeps the parsed workbook alive and returns
+sheet names first, then converts a sheet only when selected; the component sanitizes that returned HTML before
+putting it in the document. Changing files or closing the viewer terminates the worker.
 
 ## Conventions & gotchas
 

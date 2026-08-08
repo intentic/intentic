@@ -1,19 +1,5 @@
-// @vitest-environment jsdom
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it } from "vitest";
 import { codeLineStat, lineStat } from "./codeStat";
-
-// Same reason as codeComments.test: the @intentic/ui barrel reaches window.matchMedia at import. Nothing under
-// test touches the DOM.
-vi.hoisted(() => {
-    globalThis.matchMedia ??= ((query: string) => ({
-        matches: false,
-        media: query,
-        onchange: null,
-        addEventListener: () => {},
-        removeEventListener: () => {},
-        dispatchEvent: () => false,
-    })) as unknown as typeof globalThis.matchMedia;
-});
 
 describe(`lineStat`, () => {
     it(`counts the lines a minimal diff would report`, () => {
@@ -49,7 +35,7 @@ describe(`lineStat`, () => {
     });
 });
 
-// Against the real TypeScript grammar, for the same reason codeComments is: the whole point of going through
+// Against the real TypeScript grammar, for the same reason codeAnalysis is: the whole point of going through
 // Shiki is that the comment spans are the tokenizer's.
 describe(`codeLineStat`, () => {
     it(`reports nothing at all for a change that is only comments — the row's whole reason to say so`, async () => {

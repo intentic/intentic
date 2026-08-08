@@ -42,6 +42,10 @@
             "types": "./src/composables/shikiLangs.ts",
             "default": "./src/composables/shikiLangs.ts"
         },
+        "./highlighter": {
+            "types": "./src/composables/useHighlighter.ts",
+            "default": "./src/composables/useHighlighter.ts"
+        },
         "./series": {
             "types": "./src/components/seriesAccent.ts",
             "default": "./src/components/seriesAccent.ts"

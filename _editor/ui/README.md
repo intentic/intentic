@@ -14,7 +14,7 @@ Shared **Vue UI primitives + theme** for the platform web app. A small, reusable
 
 - [src/index.ts](src/index.ts) — public surface: `Card`, `Page`, `Code`, `CodeField`, `InfoHint`, `installUi`, `vTw`, `useTheme`/`ColorScheme`, `useTextSize`/`TextSize`, `useHighlighter`, `Theme`.
 - [src/components/](src/components) — `Card.vue`, `Page.vue`, `Code.vue`, `CodeField.vue`, `InfoHint.vue`.
-- [src/plugin.ts](src/plugin.ts) (`installUi`) and [src/composables](src/composables) — `useTheme` (theme ref + persistence), `useTextSize` (base text size + persistence; also on the `@intentic/ui/text-size` subpath, so plain modules can ask how large the app is without booting the component graph), `vTw`, `useHighlighter` (lazy Shiki core).
+- [src/plugin.ts](src/plugin.ts) (`installUi`) and [src/composables](src/composables) — `useTheme` (theme ref + persistence), `useTextSize` (base text size + persistence; also on the `@intentic/ui/text-size` subpath, so plain modules can ask how large the app is without booting the component graph), `vTw`, `useHighlighter` (lazy Shiki core; also on `@intentic/ui/highlighter` so worker and plain-TypeScript consumers do not load the component graph).
 - [src/styles/](src/styles) — design tokens + `theme.ts` (the `Theme` preset that bridges Tailwind vars ↔ PrimeVue `--p-*`), PrimeVue overrides (`@layer primeng`), semantic colors.
 
 ## How it fits

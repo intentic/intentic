@@ -7,6 +7,7 @@
         // the live contract/UI code, so a change in _libs reflects here with no rebuild.
         "paths": {
             "@intentic/ui": ["../../_editor/ui/src/index.ts"],
+            "@intentic/ui/highlighter": ["../../_editor/ui/src/composables/useHighlighter.ts"],
             "@intentic/ui/markdown": ["../../_editor/ui/src/markdown/index.ts"],
             "@intentic/ui/path": ["../../_editor/ui/src/path.ts"],
             "@intentic/ui/series": ["../../_editor/ui/src/components/seriesAccent.ts"],

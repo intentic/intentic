@@ -40,6 +40,9 @@ export const sourceAliases = (): Record<string, string> => ({
     // grammar table is what that mapping is type-checked against. A plain map of dynamic-import thunks — nothing
     // from shiki/core is loaded by naming it.
     "@intentic/ui/langs": here("../../_editor/ui/src/composables/shikiLangs.ts"),
+    // And the highlighter itself: the review analyzer runs inside a dedicated worker, where pulling the UI
+    // barrel's Vue components and browser-device composables would be both wasteful and invalid.
+    "@intentic/ui/highlighter": here("../../_editor/ui/src/composables/useHighlighter.ts"),
     // Same again: the chart palette's slot→colour lookup is called by the usage/savings PROJECTIONS, which are
     // pure functions with their own unit tests — reaching it through the barrel boots Picker.vue and wants a DOM.
     "@intentic/ui/series": here("../../_editor/ui/src/components/seriesAccent.ts"),
