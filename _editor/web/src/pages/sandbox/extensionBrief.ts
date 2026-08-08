@@ -129,3 +129,71 @@ export const publishBrief = ({ id, dir, name }: PublishBrief): string =>
         invariants: PUBLISH_INVARIANTS,
         done: `Done when the repository exists with the topic set and you have reported the pushed commit sha — that sha is the extension's identity: what a registry lists, what an installer pins, and what the next publish replaces.`,
     });
+
+/* READING AN EXTENSION BEFORE IT IS INSTALLED — the adoption side's half of the trust story.
+ *
+ * Everything else in this pipeline serves the author; this serves the stranger about to run their code. The
+ * install dialog already shows what the manifest DECLARES, and the registry's checks already say the thing
+ * LOADS — what neither can say is whether the code does what the description claims and nothing else, and the
+ * one party with perfect incentives to answer that is the owner's own agent, reading the exact commit cold.
+ *
+ * The gate does not move. This turn reads and reports; installing stays the same manifest approval it always
+ * was, made by the same person — now with an account of the code in front of them instead of a description
+ * written by the person selling it. */
+const AUDIT_INVARIANTS =
+    `This turn reads and reports; it changes nothing. Clone into a scratch directory outside the workspace, at ` +
+    `that exact commit — the branch may have moved and is not what would be installed. Do not install it, do not ` +
+    `add a capability, and do not run its code; read it. Go permission by permission through the manifest's ` +
+    `\`permissions.sandbox\` and say what in the code calls each route, quoting file and line — reach nothing in ` +
+    `the code uses is worth saying too. Report in the owner's terms (what it draws, what it reads, where anything ` +
+    `it reads could go), and if anything in the code does not match the extension's own description, lead with that.`;
+
+export interface AuditBrief {
+    // The listing's display name, or the repository when it is being installed straight from a URL.
+    readonly label: string;
+    readonly url: string;
+    // The full commit sha the install would pin — the audit's whole subject.
+    readonly ref: string;
+    // Subdirectory inside the repository, for a monorepo source. Empty for a repo of its own.
+    readonly path: string;
+}
+
+export const auditBrief = ({ label, url, ref, path }: AuditBrief): string =>
+    composeAsk({
+        subject: `Read the ${label} extension before it is installed here: ${url} at commit ${ref}${path === `` ? `` : `, in ${path}`}.`,
+        why: `The owner is about to install it. Installed, its bundle runs in their browser and may call every daemon route its manifest declares — so the question is not whether it loads, but whether the code does what its description says and nothing else.`,
+        diagnosis: `The manifest (intentic-extension.json at the extension root) is the whole contract: contributions the host will accept, and the daemon routes the code may reach. Everything else is ordinary source to read.`,
+        goal: `Clone it at that commit, read the manifest and every source file, and write the account the install dialog cannot: what it actually does, route by route and contribution by contribution.`,
+        invariants: AUDIT_INVARIANTS,
+        done: `Done when you end on a recommendation the owner can act on — install it, install it and keep an eye on something named, or do not — with the code that decided it cited by file and line.`,
+    });
+
+/* AN UPDATE, READ AS A DIFF. The commit that is installed was approved once already — re-reading all of it
+ * would bury the one question an update asks: what is different, and did any of it change the deal? So the
+ * turn's subject is the diff between the two commits, and the manifest's delta leads, because a new entry in
+ * `permissions.sandbox` is reach the owner never approved, arriving dressed as an update. */
+const UPDATE_INVARIANTS =
+    `This turn reads and reports; it changes nothing and installs nothing. Clone into a scratch directory ` +
+    `outside the workspace and read the diff between the two commits — the installed code was approved once ` +
+    `already, so what is between them is the whole subject. Lead with the manifest's delta: any route added to ` +
+    `\`permissions.sandbox\` is reach the owner never approved and the headline whatever else changed. Then the ` +
+    `code: what behaviour changed, in the owner's terms, citing file and line.`;
+
+export interface UpdateBrief {
+    readonly label: string;
+    readonly url: string;
+    // What is installed and what the update proposes — both full shas, both facts, neither a branch.
+    readonly fromRef: string;
+    readonly toRef: string;
+    readonly path: string;
+}
+
+export const updateBrief = ({ label, url, fromRef, toRef, path }: UpdateBrief): string =>
+    composeAsk({
+        subject: `Read what changed in the ${label} extension before it is updated here: ${url}, from ${fromRef} to ${toRef}${path === `` ? `` : `, in ${path}`}.`,
+        why: `The installed commit was approved once already; the update replaces it wholesale, because the sha is the identity and there is no build step between the pushed bytes and the code that runs.`,
+        diagnosis: `The manifest (intentic-extension.json at the extension root) is the contract on both sides of the diff, so its delta is readable exactly like the code's.`,
+        goal: `Read the diff and say what the update actually is: the manifest delta first, then what the code now does that it did not, and what it stopped doing.`,
+        invariants: UPDATE_INVARIANTS,
+        done: `Done when you end on a recommendation the owner can act on — update, update and watch something named, or stay on ${fromRef.slice(0, 7)} — with the change that decided it cited by file and line.`,
+    });

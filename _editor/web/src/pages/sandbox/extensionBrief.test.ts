@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import { extensionBrief, publishBrief, tightenBrief } from "./extensionBrief";
+import { auditBrief, extensionBrief, publishBrief, tightenBrief, updateBrief } from "./extensionBrief";
 
 /* What the brief must not lose. These are not assertions about wording — they are the four things an agent
  * cannot recover on its own, each of which produced a directory that stopped loading when it was missing. */
@@ -89,5 +89,56 @@ describe(`the brief for publishing`, () => {
 
     test(`ends on the sha, because the sha is the identity`, () => {
         expect(publish).toContain(`reported the pushed commit sha`);
+    });
+});
+
+describe(`the brief for reading before installing`, () => {
+    const audit = auditBrief({ label: `acme.incidents`, url: `https://github.com/acme/incidents.git`, ref: `a`.repeat(40), path: `` });
+
+    test(`pins the audit to the exact commit the install would pin`, () => {
+        // The branch may have moved since the listing; auditing it would be an account of code nobody is about
+        // to run, delivered with full confidence.
+        expect(audit).toContain(`a`.repeat(40));
+        expect(audit).toContain(`the branch may have moved`);
+    });
+
+    test(`is read-only, and says so as a rule rather than a tendency`, () => {
+        expect(audit).toContain(`reads and reports; it changes nothing`);
+        expect(audit).toContain(`Do not install it`);
+    });
+
+    test(`walks the permissions, which are the part worth a stranger's scrutiny`, () => {
+        // The manifest names reach; only the code says what uses it. Route-by-route with citations is what
+        // makes this an account rather than an impression.
+        expect(audit).toContain(`permission by permission`);
+        expect(audit).toContain(`quoting file and line`);
+    });
+
+    test(`ends on a recommendation, not a summary`, () => {
+        expect(audit).toContain(`install it, install it and keep an eye on something named, or do not`);
+    });
+});
+
+describe(`the brief for reading an update`, () => {
+    const update = updateBrief({
+        label: `acme.incidents`,
+        url: `https://github.com/acme/incidents.git`,
+        fromRef: `a`.repeat(40),
+        toRef: `b`.repeat(40),
+        path: ``,
+    });
+
+    test(`reads the diff, not the tree — the installed commit was already approved`, () => {
+        expect(update).toContain(`read the diff between the two commits`);
+        expect(update).toContain(`what is between them is the whole subject`);
+    });
+
+    test(`leads with the manifest delta, because new reach arrives dressed as an update`, () => {
+        expect(update).toContain(`reach the owner never approved`);
+    });
+
+    test(`staying put is a first-class outcome`, () => {
+        // An update review that can only ever say yes is a ritual, not a review.
+        expect(update).toContain(`or stay on ${`a`.repeat(40).slice(0, 7)}`);
     });
 });

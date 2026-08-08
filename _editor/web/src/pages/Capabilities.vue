@@ -23,8 +23,10 @@ import HostConnectDialog from "../components/HostConnectDialog.vue";
 import CapabilityEffects from "../components/CapabilityEffects.vue";
 import CapabilityRail, { type CapabilityScope } from "../components/CapabilityRail.vue";
 import CredentialGuide from "../components/CredentialGuide.vue";
+import { startAgent } from "../composables/agents/agentActions";
 import { devFillGet, devFillSet } from "../composables/devFill";
 import { sandboxJson } from "../composables/sandbox/sandboxClient";
+import { auditBrief, updateBrief } from "./sandbox/extensionBrief";
 import { errorMessage } from "../composables/useAsyncAction";
 import { browseMarketplace, useCapabilities } from "../composables/extensions/useCapabilities";
 import { useExtensions } from "../composables/extensions/useExtensions";
@@ -542,6 +544,42 @@ const checksProblem = (entry: RegistryEntry): string | undefined => {
     return entry.checks.bundle === `ok` || entry.checks.bundle === `none` ? undefined : `At the pinned commit, the bundle ${entry.checks.bundle}`;
 };
 const checksOk = (entry: RegistryEntry): boolean => entry.checks !== undefined && checksProblem(entry) === undefined;
+
+/* THE PRE-INSTALL READ. The install dialog shows what the manifest declares and the registry's checks say the
+ * thing loads; what neither can say is whether the code does what the description claims and nothing else. The
+ * one party with perfect incentives to answer that is the owner's own agent, reading the exact commit cold —
+ * so an extension form holding a pinned commit offers to start that read as an ordinary chat.
+ *
+ * Offered exactly when there is a commit to read: the audit's whole subject is the sha the install would pin,
+ * and reading a branch instead would produce a confident account of code nobody is about to run. The gate does
+ * not move — installing stays the same approval, made by the same person, with an account of the code in front
+ * of them instead of a description written by the person selling it. */
+const auditable = computed(
+    () =>
+        selected.value?.kind === `extension` &&
+        typeof values[`url`] === `string` &&
+        values[`url`] !== `` &&
+        /^[0-9a-f]{40}$/u.test(String(values[`ref`] ?? ``)),
+);
+/* When the form is about to REPLACE an installed commit rather than add a first one, the sharper read is the
+ * diff: the installed sha was approved once already, and what an update asks the owner to judge is what sits
+ * between the two. Known from the same collision that flips the submit button to "Update". */
+const updateFrom = computed<string | undefined>(() => {
+    if (!auditable.value || !nameCollision.value) {
+        return undefined;
+    }
+    const installed = selectedInstances.value.find((instance) => instance.id === name.value.trim())?.config[`ref`];
+    return typeof installed === `string` && /^[0-9a-f]{40}$/u.test(installed) && installed !== String(values[`ref`]) ? installed : undefined;
+});
+const startAudit = (): void => {
+    const label = name.value.trim() === `` ? String(values[`url`]) : name.value.trim();
+    const shared = { label, url: String(values[`url`]), path: String(values[`path`] ?? ``) };
+    startAgent(
+        updateFrom.value !== undefined
+            ? updateBrief({ ...shared, fromRef: updateFrom.value, toRef: String(values[`ref`]) })
+            : auditBrief({ ...shared, ref: String(values[`ref`]) }),
+    );
+};
 
 /* Why a row can't be clicked, in the words the reader needs — the button is disabled either way, and a
  * disabled row with no reason reads as a broken page. Blocked leads: it is the one case where the entry is
@@ -1501,7 +1539,20 @@ const submitLabel = computed(() =>
                             </div>
                             <p v-if="selected.hint" class="text-xs text-muted">{{ selected.hint }}</p>
 
-                            <div :class="['flex justify-end', shaking ? 'ui-shake' : '']" @animationend="shaking = false">
+                            <div
+                                :class="['flex items-center gap-3', auditable ? 'justify-between' : 'justify-end', shaking ? 'ui-shake' : '']"
+                                @animationend="shaking = false"
+                            >
+                                <!-- The read is beside the approval because that is when it matters: before the
+                                     click, not after. It starts an ordinary chat and the form stays as it is —
+                                     the account arrives, and installing remains this same button. -->
+                                <button v-if="auditable" type="button" :class="cmp.linkButton(`text-2xs`)" @click="startAudit">
+                                    {{
+                                        updateFrom !== undefined
+                                            ? `Have an agent read what changed first — the manifest delta leads`
+                                            : `Have an agent read it first — what the code does, route by route`
+                                    }}
+                                </button>
                                 <Button type="submit" :label="submitLabel" :loading="submitting">
                                     <template #icon><Icon name="check" /></template>
                                 </Button>
