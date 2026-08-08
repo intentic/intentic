@@ -3,6 +3,7 @@ import type { HookCallbackMatcher, HookEvent } from "@anthropic-ai/claude-agent-
 import type { BrowserPage, BrowserSession } from "@intentic/sandbox-contract";
 import { browserSessionName } from "@intentic/sandbox-contract/session-names";
 import type { Browser, BrowserContext, Page } from "playwright";
+import { publishRuntimeChange } from "../system/runtime-watch.js";
 import { armPasskeys } from "./passkeys.js";
 
 /* THE AGENT'S BROWSER, AS A THING THE DAEMON CAN NAME.
@@ -124,6 +125,9 @@ const notePage = async (record: BrowserSessionRecord, entry: PageRecord): Promis
     // labelled with its host, so it falls through the same ladder.
     const title = await entry.page.title().catch(() => undefined);
     entry.title = title === undefined || title === "" ? undefined : title;
+    // The tile and the tab strip both draw the ACTIVE page's title — so the agent navigating IS the roster
+    // changing, and it is the change most worth watching happen. Rate-limited on the bus, not here.
+    publishRuntimeChange("browsers");
 };
 
 const watchPage = (record: BrowserSessionRecord, page: Page): void => {
@@ -162,6 +166,7 @@ const finish = (record: BrowserSessionRecord): void => {
     record.browser = undefined;
     record.context = undefined;
     record.attaching = undefined;
+    publishRuntimeChange("browsers");
 };
 
 // Wait for Chromium's DevTools HTTP endpoint, then attach. Deliberately tolerant: an attach that never lands
@@ -235,6 +240,8 @@ export const openBrowserSession = (input: {
         attaching: undefined,
     };
     sessions.set(name, record);
+    // A browser the agent just minted — the rail tile should count it now, not at the end of somebody's poll.
+    publishRuntimeChange("browsers");
     record.attaching = attach(record).then((context) => {
         record.attaching = undefined;
         if (context === undefined) {

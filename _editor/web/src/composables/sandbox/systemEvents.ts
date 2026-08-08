@@ -1,4 +1,4 @@
-import { fileBoundQueryKeys, staleQueryKeys, type SystemEvent } from "@intentic/sandbox-contract";
+import { fileBoundQueryKeys, runtimeBoundQueryKeys, staleQueryKeys, staleRuntimeQueryKeys, type SystemEvent } from "@intentic/sandbox-contract";
 import { contributedFileBindings } from "../../extension-host/fileBindings";
 import { emitRefsChanged } from "../../extension-host/refEvents";
 import { resetEditBuffers } from "../workspace/useEditBuffers";
@@ -69,6 +69,13 @@ export const applySystemEvent = (event: SystemEvent, sandboxId: string): void =>
             for (const key of fileBoundQueryKeys(contributedFileBindings())) {
                 void queryClient.invalidateQueries({ queryKey: [key] });
             }
+            /* And every RUNTIME-bound view, for the same reason and with more of it to miss: a panel that
+             * finished starting, a session that exited, a port that closed while this browser was away were all
+             * pushed once, to a stream that had already ended. These views carry no poll to catch up on their
+             * own any more, so the reconnect is the catch-up. */
+            for (const key of runtimeBoundQueryKeys()) {
+                void queryClient.invalidateQueries({ queryKey: [key] });
+            }
             return;
         }
         case `heartbeat`:
@@ -87,6 +94,15 @@ export const applySystemEvent = (event: SystemEvent, sandboxId: string): void =>
             // GET /agents and this browser's own optimistic archive/restore, so the store needs to know when
             // each snapshot was true rather than which one arrived last. See useAgents.ts.
             setAgents(event.agents, event.rev);
+            return;
+        case `runtimeChanged`:
+            /* Something RUNNING moved — the daemon says which domain, this table says which views. The frame
+             * carries no roster on purpose: invalidation only reaches a query something is observing, so a tab
+             * showing none of these pays the frame and no request, while the tab with the terminal panel open
+             * refetches exactly the one list it draws. */
+            for (const key of staleRuntimeQueryKeys(event.domains)) {
+                void queryClient.invalidateQueries({ queryKey: [key] });
+            }
             return;
         case `reposChanged`:
             // The rail's panel list is derived from the repo set. The watcher never sees .git paths, so no

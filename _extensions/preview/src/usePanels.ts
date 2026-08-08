@@ -4,10 +4,11 @@ import { computed } from "vue";
 import { host } from "./host";
 
 /* The workspace repositories' dev-server panels, via the daemon's /panels routes — runtime status
- * (running/healthy/previewUrl/port) plus start/stop. Polls while anything runs so `start → healthy` flips
- * without a reload. All daemon access goes through the host api. */
-
-const POLL_MS = 4000;
+ * (running/healthy/previewUrl/port) plus start/stop. All daemon access goes through the host api.
+ *
+ * Unpolled, under the same key core's panel list uses: the process manager pushes when it launches or reaps a
+ * session, and the daemon's port sampler pushes when the dev server actually binds — which is `start → healthy`
+ * flipping, the thing this used to poll four seconds at a time to catch. */
 
 export function usePanels() {
     const api = host();
@@ -18,7 +19,6 @@ export function usePanels() {
         queryKey,
         queryFn: async () => PanelsListSchema.parse(await api.sandbox.json(`/panels`)),
         enabled: computed(() => api.sandbox.reachable()),
-        refetchInterval: (state) => (state.state.data?.panels.some((panel) => panel.running) ? POLL_MS : false),
     });
 
     const invalidate = (): Promise<void> => queryClient.invalidateQueries({ queryKey });

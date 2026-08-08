@@ -25,11 +25,9 @@ import { relativeTime } from "../composables/chat/catalog";
  * which is the answer to the only question left about a browser that has stopped. So the stage below becomes
  * that record rather than a socket dialling something that isn't there. */
 
-const POLL_MS = 3000;
-
 const route = useRoute();
 const router = useRouter();
-const { sessions } = useBrowsersQuery(POLL_MS);
+const { sessions } = useBrowsersQuery();
 
 // The session in the URL, so a reload (or a shared link) reopens the same browser. Falls back to the first
 // listed, which the query already sorts live-first — "show me what is happening now" with no click.

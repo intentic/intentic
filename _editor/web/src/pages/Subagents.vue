@@ -41,15 +41,15 @@ import { renderMarkdown } from "../composables/renderMarkdown";
  * shell are the same fact from out here — another agent, working, that you did not start. What differs is only
  * how you watch it live, and a delegation says so by offering its terminal. */
 
-const LIST_POLL_MS = 3000;
-// The transcript is re-read on a slower beat than the roster: a running child's frames arrive in bursts, and the
-// list above is what answers "is it still going" between them.
+// The transcript is the one thing here still read on a clock: a running child's frames arrive in bursts, and
+// nothing announces a line of transcript the way the registry announces the child itself. The roster beside it
+// is pushed, and is what answers "is it still going" between reads.
 const TRANSCRIPT_POLL_MS = 4000;
 
 const route = useRoute();
 const router = useRouter();
 const { mobile } = useDevice();
-const { sessions } = useSubagentsQuery(LIST_POLL_MS);
+const { sessions } = useSubagentsQuery();
 const { agentById, open: openAgent } = useAgents();
 
 /* ONE AGENT'S CHILDREN, when the card's chip is what opened this. The chip is a fact about ONE agent — "this

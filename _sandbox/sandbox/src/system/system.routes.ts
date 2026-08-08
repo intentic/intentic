@@ -23,6 +23,7 @@ import { PANEL_SESSION_PREFIX, SHELL } from "../processes/managed-processes.js";
 import { subscribeRepoChanges } from "../workspace/repo-watch.js";
 import { subscribeRefChanges } from "../git/ref-watch.js";
 import { subscribeWorkspaceChanges } from "../workspace/workspace-watch.js";
+import { publishRuntimeChange, subscribeRuntimeChanges } from "./runtime-watch.js";
 import { registerPresence, subscribePresence, updatePresence } from "./presence.js";
 import { captureScrollback, isValidSessionName } from "../terminal/terminal-session.js";
 import { isNewer, latestVersion } from "../platform/version-check.js";
@@ -159,6 +160,14 @@ async function* systemEvents(
         enqueue({ kind: "refsChanged", repos });
         onWake();
     });
+    // Which RUNNING things just moved — a session opened or exited, a dev server bound its port, a browser
+    // closed, a subagent reported in. None of it is on disk, so none of the three feeds above can carry it, and
+    // every view of it used to poll. Subscribing here is also what starts the daemon's sampler: no browser
+    // connected, nothing looked at (see runtime-watch.ts).
+    const unsubscribeRuntime = subscribeRuntimeChanges((domains) => {
+        enqueue({ kind: "runtimeChanged", domains });
+        onWake();
+    });
     abort.addEventListener("abort", onWake);
     try {
         while (!abort.aborted) {
@@ -194,6 +203,7 @@ async function* systemEvents(
         unsubscribe();
         unsubscribeRepos();
         unsubscribeRefs();
+        unsubscribeRuntime();
         unsubscribeAgents();
         unsubscribeBoot();
         unsubscribePresence();
@@ -436,6 +446,10 @@ export const createSystemRoutes = (services: Services) => {
             }
             // `=` forces an exact target match — a bare `-t web-a` would prefix-match `web-ab` once `web-a` is gone.
             await execFileAsync("tmux", ["kill-session", "-t", `=${input.name}`]).catch(() => undefined);
+            // Announced rather than left to the sampler, which would find it within a couple of seconds anyway:
+            // this is somebody deliberately destroying a session, and the OTHER tabs (and the other members)
+            // should stop showing a tab that no longer exists at the moment it stops existing.
+            publishRuntimeChange("terminals");
             return { ok: true };
         }),
         // The pane's whole history as text (the panel's "Full scrollback"). Same name guard as the kill above,

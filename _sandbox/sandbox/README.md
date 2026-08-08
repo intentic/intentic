@@ -33,6 +33,14 @@ The **per-project AI-agent dev daemon** — a Docker image that runs as the proj
 - [src/agents](src/agents) — **plural**: the fleet. The registry, `worktrees.ts`, `isolation.ts`, `land.ts`, `origins.ts`, `landed-presence.ts`.
 - [src/git/git.routes.ts](src/git/git.routes.ts) — status/commit/push over the wire; [src/workspace](src/workspace) — the repo layout the daemon serves. [src/workspace/workspace-scope.ts](src/workspace/workspace-scope.ts) decides WHOSE copy a file read means: the shared `/work` tree, or one conversation's own checkout when the request names it (`?agent=`). Reads only — no write route can name a checkout — and a request naming one that was archived away says so specifically instead of reporting a missing file.
 - [src/composition.ts](src/composition.ts) — what is wired to what; [src/main.ts](src/main.ts) — the entrypoint that builds it and serves.
+- The four change feeds that keep the browser fresh without it ever asking twice, all riding the one `/events`
+  stream: [src/workspace/workspace-watch.ts](src/workspace/workspace-watch.ts) (files),
+  [src/workspace/repo-watch.ts](src/workspace/repo-watch.ts) (the repo set),
+  [src/git/ref-watch.ts](src/git/ref-watch.ts) (refs), and
+  [src/system/runtime-watch.ts](src/system/runtime-watch.ts) — everything that is RUNNING rather than written:
+  tmux sessions, panel dev servers, listening sockets, the agent's browsers and its subagents. The first three
+  start from a file; the fourth cannot, which is why it is half announcements from the subsystems that do the
+  thing and half one shared sampler that runs only while a browser is connected.
 - [src/hosts](src/hosts) — the user's own computers: the socket each one holds open, the Computers view's data
   (`machine-reports.ts`), and `host-seed.ts` — the card the setup flow creates for the machine that installed
   this sandbox, granted its sandboxes and nothing else. Acting on one of those sandboxes STREAMS, because the

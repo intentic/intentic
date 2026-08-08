@@ -15,6 +15,7 @@ import {
     type PresenceUser,
     SANDBOX_ROUTE_NAMES,
     type SavingsReport,
+    type SubagentsList,
     type SystemEvent,
     type TerminalsList,
     type TranslatorAccounts,
@@ -121,6 +122,15 @@ const TEAMMATE: PresenceUser = { clientId: `demo-mate`, email: `grace@acme.dev`,
  * so the count in the UI is honest about how much surface this fixture stands in for.) */
 const HEARTBEAT_MS = 2_000;
 
+/* How often the fixture claims its running things moved.
+ *
+ * The real daemon watches its own tmux, sockets and registries and pushes `runtimeChanged` when what it sees
+ * changes; those views hold no timer of their own any more. This fixture's rosters are CONSTANTS built against
+ * the moment they are read (`activityAt: now - 4_000`), so with nothing pushing they would freeze — a browser
+ * the demo shows as running, last active five minutes ago. Standing in for the real feed keeps the recording
+ * honest and costs one small frame every few seconds. */
+const RUNTIME_TICK_MS = 10_000;
+
 const events = (request: Request): Response =>
     eventStream(request, (sink) => {
         const listener = (event: SystemEvent): void => sink.emit(event);
@@ -132,8 +142,13 @@ const events = (request: Request): Response =>
         sink.emit({ kind: `presence`, users: demoMode.teammate ? [OWNER, TEAMMATE] : [OWNER] });
 
         const beat = setInterval(() => sink.emit({ kind: `heartbeat` }), HEARTBEAT_MS);
+        const runtime = setInterval(
+            () => sink.emit({ kind: `runtimeChanged`, domains: [`terminals`, `browsers`, `panels`, `ports`, `subagents`] }),
+            RUNTIME_TICK_MS,
+        );
         return () => {
             clearInterval(beat);
+            clearInterval(runtime);
             listeners.delete(listener);
         };
     });
@@ -269,7 +284,10 @@ const ROUTES: readonly (readonly [string, string, Handler])[] = [
         `/system/browsers/{name}`,
         () => refuse(`This is the demo workspace — the browser you are watching is a recording, so there is nothing to close.`),
     ],
-    [`GET`, `/system/subagents`, () => json({ subagents: [] })],
+    // `sessions`, not `subagents` — SubagentsListSchema's field, which the client parses and the rail counts.
+    // Under the wrong key every read threw and vue-query retried it, so the one roster the demo has nothing to
+    // show for was also the busiest thing on its network tab.
+    [`GET`, `/system/subagents`, () => json({ sessions: [] } satisfies SubagentsList)],
 
     // `held` is the same approvals queue /automations/pending serves, projected onto the board — so the demo's
     // "needs you" wake sits beside the running cards, as it does in the real fleet.

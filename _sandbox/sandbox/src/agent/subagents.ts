@@ -2,6 +2,7 @@ import { readdir, readFile } from "node:fs/promises";
 import { basename, dirname, join } from "node:path";
 import type { HookCallbackMatcher, HookEvent } from "@anthropic-ai/claude-agent-sdk";
 import type { AgentEvent, SubagentKind, SubagentSession, SubagentStatus } from "@intentic/sandbox-contract";
+import { publishRuntimeChange } from "../system/runtime-watch.js";
 
 /* THE AGENTS AN AGENT STARTS, AS THINGS THE DAEMON CAN NAME.
  *
@@ -231,6 +232,10 @@ const open = (turn: SubagentTurn, id: string, kind: SubagentKind, fields: Partia
         ...fields,
     };
     records.set(id, record);
+    // A child was born. The rail's count and the Subagents area both read the roster, and neither should learn
+    // about it on its own clock — this is the same roster the AgentEvent stream carries, for the surfaces that
+    // are not watching a conversation.
+    publishRuntimeChange("subagents");
     return record;
 };
 
@@ -263,6 +268,10 @@ const patch = (id: string, fields: Partial<SubagentRecord>): AgentEvent | undefi
     if (record.endedAt === undefined && !subagentRunning(record)) {
         record.endedAt = record.activityAt;
     }
+    // Every real move: a status, a token count, the tool it just used. This is the chattiest publisher in the
+    // daemon by a distance, which is exactly why the bus rate-limits per domain rather than asking each caller
+    // to decide what is worth a frame — a no-op patch has already returned above, so what reaches here changed.
+    publishRuntimeChange("subagents");
     const update: Extract<AgentEvent, { kind: "subagent_update" }> = { kind: "subagent_update", id };
     return {
         ...update,

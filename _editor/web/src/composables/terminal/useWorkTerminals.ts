@@ -71,11 +71,6 @@ export interface WorkTerminalRow {
     readonly activityAt: number;
 }
 
-// Tighter than the rail badge's poll, looser than the process rows': the popover is read while a turn runs, so
-// a shell that appears mid-turn should show up without a long wait, but nothing here has a button whose state
-// the user is watching for confirmation.
-const POLL_MS = 5000;
-
 // Reveal a work terminal as a focused tab, whatever the preference says — the explicit user action the
 // hidden-by-default rule exists to be overridden by (the chat's Bash card, the popover's rows, the Capabilities
 // page's running install). Plain action rather than composable state, so a surface with no tab machinery can
@@ -89,7 +84,7 @@ export const openWorkTerminal = (session: string): void => {
 };
 
 export function useWorkTerminals(): { rows: ComputedRef<WorkTerminalRow[]>; showWorkTerminals: Ref<boolean> } {
-    const { sessions } = useTerminalsQuery(POLL_MS);
+    const { sessions } = useTerminalsQuery();
     const rows = computed<WorkTerminalRow[]>(() =>
         sessions.value
             .filter(

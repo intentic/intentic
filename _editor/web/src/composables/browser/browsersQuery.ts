@@ -12,14 +12,19 @@ import { useSandboxQuery } from "../sandbox/useSandboxQuery";
  * There is no pending-claim half here, unlike the terminals. A `web-*` shell exists because THIS browser asked
  * for it, so the client knows about it before the daemon does; an agent browser is the opposite — the daemon
  * mints it from a hook on the agent's own tool call, and the client's first knowledge of it is this list. There
- * is simply no window to paper over. */
+ * is simply no window to paper over.
+ *
+ * Which is also why nothing here polls: the daemon owns every one of these records, so it knows the roster
+ * changed before this browser could have asked. It pushes the `browsers` domain from the same lines that mint,
+ * navigate and finish a session (runtime-watch.ts), and the agent opening a page repaints the tile as it
+ * happens rather than up to ten seconds later. */
 
 const QUERY_KEY = sandboxKey(`browsers`);
 
 const fetchBrowsers = async (): Promise<BrowserSession[]> => BrowsersListSchema.parse(await sandboxJson(`/system/browsers`)).sessions;
 
-export const useBrowsersQuery = (pollMs: number): { sessions: ComputedRef<BrowserSession[]>; refetch: () => Promise<unknown> } => {
-    const { query } = useSandboxQuery({ queryKey: QUERY_KEY, queryFn: fetchBrowsers, refetchInterval: pollMs });
+export const useBrowsersQuery = (): { sessions: ComputedRef<BrowserSession[]>; refetch: () => Promise<unknown> } => {
+    const { query } = useSandboxQuery({ queryKey: QUERY_KEY, queryFn: fetchBrowsers });
     // Live browsers first — a running one is what someone opening this came for — then the most recently
     // finished, because a record is read newest-first.
     const sessions = computed(() =>

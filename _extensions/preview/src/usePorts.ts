@@ -5,10 +5,13 @@ import { host } from "./host";
 
 /* The sandbox's listening TCP ports, via the daemon's /ports routes — the generic complement to panels:
  * anything run in a terminal (a turbo TUI's dev servers, an ad-hoc `python -m http.server`) shows up here,
- * and `forward` exposes one at its port-<slot> preview hostname. Polls while the view is open: ports come and
- * go with whatever the terminals are running. All daemon access goes through the host api. */
-
-const POLL_MS = 4000;
+ * and `forward` exposes one at its port-<slot> preview hostname. All daemon access goes through the host api.
+ *
+ * Unpolled: the daemon watches its own listening sockets and pushes the `ports` domain when the set changes, and
+ * this query asks under the key that push names (api.sandbox.key("ports") IS the core shell's key), so the open
+ * view and the shell's forwarded-port indicator refresh together off one frame. A port appearing as a dev server
+ * boots now shows up in about two seconds instead of up to four, while a view left open on a quiet sandbox costs
+ * nothing at all. */
 
 const jsonPost = (body: unknown): RequestInit => ({ method: `POST`, headers: { "content-type": `application/json` }, body: JSON.stringify(body) });
 
@@ -21,7 +24,6 @@ export function usePorts() {
         queryKey,
         queryFn: async () => PortsListSchema.parse(await api.sandbox.json(`/ports`)),
         enabled: computed(() => api.sandbox.reachable()),
-        refetchInterval: POLL_MS,
     });
 
     const invalidate = (): Promise<void> => queryClient.invalidateQueries({ queryKey });

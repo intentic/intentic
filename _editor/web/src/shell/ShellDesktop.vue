@@ -71,10 +71,10 @@ const { capabilities } = useCapabilities();
 const { owed: draftsOwed, broken: draftsBroken } = useDrafts();
 // The agent's browsers, on the same appear-on-content terms. Polled loosely: this is the always-on read that
 // makes the tile show up mid-turn, and the view itself polls tighter once it is on screen.
-const { sessions: browsers } = useBrowsersQuery(10_000);
+const { sessions: browsers } = useBrowsersQuery();
 // The agents this sandbox's agents started, on the same loose beat and for the same reason: this is the always-on
 // read that makes the tile appear the moment a turn delegates; the area polls tighter once it is on screen.
-const { sessions: subagents, running: runningSubagents } = useSubagentsQuery(10_000);
+const { sessions: subagents, running: runningSubagents } = useSubagentsQuery();
 const { reachable } = useSandbox();
 // Uncommitted workspace changes surface as a count badge on the Workspace rail tile, visible from any area.
 const changes = useChanges();

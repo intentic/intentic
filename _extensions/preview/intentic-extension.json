@@ -23,6 +23,7 @@
             { "id": "preview", "label": "Preview", "surface": "directory" },
             { "id": "ports", "label": "Ports", "surface": "sandbox" },
             { "id": "public", "label": "Public", "surface": "sandbox" }
-        ]
+        ],
+        "files": [{ "path": "public/", "invalidates": ["public"] }]
     }
 }

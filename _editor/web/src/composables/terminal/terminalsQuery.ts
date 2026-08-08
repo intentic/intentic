@@ -9,10 +9,14 @@ import { useSandboxQuery } from "../sandbox/useSandboxQuery";
 /* The ONE session list every surface reads — the rail's activity badge, the background-process rows, AND the
  * terminal panel's tab strip. One cache entry, so however many surfaces are mounted they share a single
  * in-flight request; and, because the panel's own relists go through `listTerminals` (which writes that entry),
- * the badge moves WITH the strip instead of trailing it by up to a poll interval. `pollMs` is per-OBSERVER
- * (vue-query refetches on each observer's own interval into the shared entry), so a surface needing tighter
- * feedback after a start/stop tightens its own without making the always-on rail badge poll harder.
+ * the badge moves WITH the strip instead of trailing it.
  *
+ * UNPOLLED. Three surfaces each held their own 10s timer over the tunnel, asking a question the daemon could
+ * always answer better: tmux tells nobody when a pane's command exits, so the daemon watches its own tmux and
+ * pushes the `terminals` domain when what it sees changes (runtime-watch.ts). One look, in the sandbox, shared
+ * by every tab — instead of one round trip per surface per tab per 10s, almost always answering "no change".
+ *
+
  * PENDING sessions are the other half of the truth. A `web-*` shell exists in tmux only once its socket connects
  * and runs `tmux new-session -A`, so from the click until that handshake the daemon does not list it. Held
  * nowhere, that gap costs both symptoms at once: the badge lags every new tab, and a list taken inside the
@@ -56,12 +60,8 @@ const withPending = (listed: TerminalSession[]): TerminalSession[] => {
     return [...listed, ...pending.value.filter((entry) => !known.has(entry.name))];
 };
 
-export const useTerminalsQuery = (pollMs: number): { sessions: ComputedRef<TerminalSession[]>; refetch: () => Promise<unknown> } => {
-    const { query } = useSandboxQuery({
-        queryKey: QUERY_KEY,
-        queryFn: fetchTerminals,
-        refetchInterval: pollMs,
-    });
+export const useTerminalsQuery = (): { sessions: ComputedRef<TerminalSession[]>; refetch: () => Promise<unknown> } => {
+    const { query } = useSandboxQuery({ queryKey: QUERY_KEY, queryFn: fetchTerminals });
     return { sessions: computed(() => withPending(query.data.value ?? [])), refetch: () => query.refetch() };
 };
 

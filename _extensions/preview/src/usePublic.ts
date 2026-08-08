@@ -7,11 +7,11 @@ import { host } from "./host";
  * exposed by forwarding a running server; a file is exposed by being in `public/`, which needs no process at
  * all and is why this list can be non-empty while nothing is running.
  *
- * Polled rather than pushed, and for a sharper reason than the Ports view has: the outbox is an ORDINARY
- * directory, so an agent that writes a build output into it publishes it without going through `publish` at
- * all. The poll is what makes the view an observation of the filesystem instead of a log of this UI's actions. */
-
-const POLL_MS = 4000;
+ * The outbox is an ORDINARY directory, so an agent that writes a build output into it publishes it without
+ * going through `publish` at all — which is exactly why this view must observe the filesystem rather than log
+ * this UI's actions. It used to do that by polling. It does it now by SAYING SO: the manifest's
+ * `contributes.files` binds `public/` to this query key, and the daemon's file watcher — the same push that
+ * refreshes the tree when the agent writes anything else — carries it. Same observation, no clock. */
 
 const jsonPost = (body: unknown): RequestInit => ({ method: `POST`, headers: { "content-type": `application/json` }, body: JSON.stringify(body) });
 
@@ -24,7 +24,6 @@ export function usePublic() {
         queryKey,
         queryFn: async () => PublicListSchema.parse(await api.sandbox.json(`/public`)),
         enabled: computed(() => api.sandbox.reachable()),
-        refetchInterval: POLL_MS,
     });
 
     const invalidate = (): Promise<void> => queryClient.invalidateQueries({ queryKey });

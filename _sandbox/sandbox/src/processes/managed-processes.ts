@@ -3,6 +3,7 @@ import net from "node:net";
 import { join } from "node:path";
 import { promisify } from "node:util";
 import { AGENT_SESSION_PREFIX, JOB_SESSION_PREFIX } from "@intentic/sandbox-contract/session-names";
+import { publishRuntimeChange } from "../system/runtime-watch.js";
 
 const execFileAsync = promisify(execFile);
 
@@ -190,12 +191,21 @@ export const createManagedProcesses = (runner: ProcessRunner = defaultRunner): M
     // grace would still read as a false completion; widen the grace if that ever materializes.
     const ONE_SHOT_GRACE_MS = 10_000;
 
+    /* Untrack a key and say so. `running` is what /panels draws a repo's dev server from and what the terminals
+     * list reports each panel row's status from, so both go stale together — a dev server that died and a
+     * one-shot that finished are the two ways a panel stops without anybody clicking Stop, and until this push
+     * existed they were only ever discovered by the browser asking again. */
+    const untrack = (key: string): void => {
+        current.delete(key);
+        publishRuntimeChange("panels", "terminals");
+    };
+
     const sweep = async (): Promise<void> => {
         const states = await runner.states();
         for (const [key, entry] of current) {
             const command = states.get(panelSession(key));
             if (command === undefined) {
-                current.delete(key);
+                untrack(key);
                 continue;
             }
             if (entry.oneShot === undefined) {
@@ -210,7 +220,7 @@ export const createManagedProcesses = (runner: ProcessRunner = defaultRunner): M
             // commands of a `&&` chain (job pgroups hand the tty back to the shell between forks).
             entry.promptStreak += 1;
             if (entry.promptStreak >= 2 && (entry.sawJob || Date.now() - entry.startedAt > ONE_SHOT_GRACE_MS)) {
-                current.delete(key);
+                untrack(key);
             }
         }
         if (current.size === 0 && timer !== undefined) {
@@ -231,6 +241,9 @@ export const createManagedProcesses = (runner: ProcessRunner = defaultRunner): M
             }
             await runner.launch(panelSession(key), { ...spec, port });
             current.set(key, { port, oneShot: spec.oneShot, startedAt: Date.now(), sawJob: false, promptStreak: 0 });
+            // The session exists now; it is not SERVING yet. This frame draws the row as starting, and the port
+            // sampler's frame — seconds later, when the dev server actually binds — is what turns it healthy.
+            publishRuntimeChange("panels", "terminals");
             timer ??= setInterval(() => void sweep(), POLL_MS);
         },
         adopt: async (key, spec) => {
@@ -242,13 +255,14 @@ export const createManagedProcesses = (runner: ProcessRunner = defaultRunner): M
                 // sawJob from the live pane: a job currently in the foreground counts as observed, so a
                 // shell-at-prompt sighting after it finishes completes the one-shot without the boot grace.
                 current.set(key, { port: 0, oneShot: spec.oneShot, startedAt: Date.now(), sawJob: command !== SHELL, promptStreak: 0 });
+                publishRuntimeChange("panels", "terminals");
                 timer ??= setInterval(() => void sweep(), POLL_MS);
             }
             return true;
         },
         stop: (key) => {
             runner.kill(panelSession(key));
-            current.delete(key);
+            untrack(key);
         },
         running: (key) => current.has(key),
         portOf: (key) => current.get(key)?.port,
@@ -256,7 +270,11 @@ export const createManagedProcesses = (runner: ProcessRunner = defaultRunner): M
             for (const key of current.keys()) {
                 runner.kill(panelSession(key));
             }
+            const stopped = current.size > 0;
             current.clear();
+            if (stopped) {
+                publishRuntimeChange("panels", "terminals");
+            }
             if (timer !== undefined) {
                 clearInterval(timer);
                 timer = undefined;

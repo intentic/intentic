@@ -31,10 +31,6 @@ export interface BackgroundProcessRow {
 // The daemon reports a just-started process as stopped until its shell consumes the buffered command
 // (pane_current_command is still the shell) — one delayed relist settles the row.
 const SETTLE_MS = 1500;
-// Tighter than the rail badge's poll: these rows carry start/stop buttons, so the state next to a button the
-// user just pressed has to catch up in about the time they'd wait before pressing it again.
-const POLL_MS = 4000;
-
 const processRoute = (row: BackgroundProcessRow, action: string): string =>
     `/extensions/${encodeURIComponent(row.extensionId ?? ``)}/processes/${encodeURIComponent(row.processName ?? ``)}/${action}`;
 
@@ -55,7 +51,7 @@ export function useBackgroundProcesses(): {
     stop: (row: BackgroundProcessRow) => Promise<void>;
 } {
     const { extensions } = useExtensions();
-    const { sessions, refetch } = useTerminalsQuery(POLL_MS);
+    const { sessions, refetch } = useTerminalsQuery();
     const busy = ref<string | undefined>(undefined);
 
     const rows = computed<BackgroundProcessRow[]>(() => {

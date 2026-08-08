@@ -1,3 +1,4 @@
+import { publishRuntimeChange } from "../system/runtime-watch.js";
 import { detectScheme, type PortScheme } from "./port-probe.js";
 import type { LoopbackHost } from "./port-scan.js";
 
@@ -57,6 +58,12 @@ export const createPortForwards = (
                 scheme: assigned.get(slot)?.port === port ? assigned.get(slot)!.scheme : "http",
                 lastUsedAt: Date.now(),
             });
+            /* A forwarded port is reachable by anyone with the hostname until it is stopped, which is why the
+             * shell rail shows it from every view. The forwarder's own tab learns this from the response; every
+             * OTHER tab — and every other member — used to wait out a 15s poll for a fact about who can reach
+             * this sandbox. Published here, at the table, so an eviction (the slot pool is fixed, so forwarding
+             * can un-forward someone else's port) is announced by the same line that causes it. */
+            publishRuntimeChange("ports");
             // Nothing answering — a server still booting, or WebSocket-only — forwards as http; the proxy 502s
             // until the server responds anyway, and the next forward re-probes.
             const scheme = (await probe(port, host)) ?? "http";
@@ -71,6 +78,7 @@ export const createPortForwards = (
             const slot = slotOf(port);
             if (slot !== undefined) {
                 assigned.delete(slot);
+                publishRuntimeChange("ports");
             }
         },
         slotOf,

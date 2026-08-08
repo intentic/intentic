@@ -7,12 +7,16 @@ import { useSandboxQuery } from "../sandbox/useSandboxQuery";
 
 /* The workspace's repositories: runtime status (running/healthy/previewUrl) + the content facts the extension
  * registry detects on, read via the daemon's /panels routes. Discovery is convention-only — no manifest — so
- * there are just list, start, and stop; a panel's lifecycle lives in the daemon and the list poll reflects it.
- * This is the source for the rail's extension activations and every extension view. */
+ * there are just list, start, and stop; a panel's lifecycle lives in the daemon, which is also why this holds no
+ * clock. This is the source for the rail's extension activations and every extension view.
+ *
+ * Both halves of "start → healthy" are pushed, from the two places that actually know. The process manager says
+ * so when it launches or reaps a session; the daemon's port sampler says so when the dev server finally binds,
+ * which is the moment `starting` becomes `healthy` (panel health is read off the listening sockets). A dev
+ * server left running for a week used to keep every open tab asking every four seconds for that flip long after
+ * it had happened. */
 
 const QUERY_KEY = sandboxKey(`panels`);
-// While any panel is running, keep the status fresh (start → healthy flips without a reload).
-const POLL_MS = 4000;
 
 export function usePanels() {
     const queryClient = useQueryClient();
@@ -20,7 +24,6 @@ export function usePanels() {
     const { query, error } = useSandboxQuery({
         queryKey: QUERY_KEY,
         queryFn: async () => PanelsListSchema.parse(await sandboxJson(`/panels`)),
-        refetchInterval: (state) => (state.state.data?.panels.some((panel) => panel.running) ? POLL_MS : false),
     });
 
     const invalidate = async (): Promise<void> => {

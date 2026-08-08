@@ -10,7 +10,10 @@ import { useSandboxQuery } from "../sandbox/useSandboxQuery";
  *
  * Like the browsers and unlike the terminals, there is no pending-claim half: a subagent exists because an
  * AGENT started it, so the daemon knows before this browser does and the list is the client's first knowledge of
- * it. There is nothing to paper over. */
+ * it. There is nothing to paper over — and, for the same reason, nothing to poll: the registry pushes the
+ * `subagents` domain as children are born, report and finish. It is the chattiest feed in the sandbox, so the
+ * daemon rate-limits it to roughly the interval this used to poll on; what changes is that a quiet sandbox now
+ * asks nothing at all, and a busy one repaints on the child's clock rather than on ours. */
 
 const QUERY_KEY = sandboxKey(`subagents`);
 
@@ -22,10 +25,12 @@ const fetchSubagents = async (): Promise<SubagentSession[]> => SubagentsListSche
 const LIVE = new Set<SubagentSession["status"]>([`pending`, `running`, `paused`]);
 export const subagentLive = (session: SubagentSession): boolean => LIVE.has(session.status);
 
-export const useSubagentsQuery = (
-    pollMs: number,
-): { sessions: ComputedRef<SubagentSession[]>; running: ComputedRef<SubagentSession[]>; refetch: () => Promise<unknown> } => {
-    const { query } = useSandboxQuery({ queryKey: QUERY_KEY, queryFn: fetchSubagents, refetchInterval: pollMs });
+export const useSubagentsQuery = (): {
+    sessions: ComputedRef<SubagentSession[]>;
+    running: ComputedRef<SubagentSession[]>;
+    refetch: () => Promise<unknown>;
+} => {
+    const { query } = useSandboxQuery({ queryKey: QUERY_KEY, queryFn: fetchSubagents });
     // The daemon already sorts live-first then newest-active; the client keeps that order rather than imposing a
     // second one, so a row cannot move between the tile's count and the list under it.
     const sessions = computed(() => query.data.value ?? []);

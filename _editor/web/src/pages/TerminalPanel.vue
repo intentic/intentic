@@ -86,9 +86,9 @@ watch(
 // supplies the missing edge. Relisting only when the daemon's session set actually changes keeps it to one
 // reconcile per real change, and that relist is served from the cache it just reacted to rather than costing a
 // second request.
-const polled = useTerminalsQuery(10_000);
+const listed = useTerminalsQuery();
 watch(
-    () => polled.sessions.value.map((session) => `${session.name}:${session.running}`).join(`\n`),
+    () => listed.sessions.value.map((session) => `${session.name}:${session.running}`).join(`\n`),
     () => void tabs.refresh(),
 );
 

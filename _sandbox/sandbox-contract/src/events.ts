@@ -670,6 +670,21 @@ export type WorkspaceChanged = z.infer<typeof WorkspaceChangedSchema>;
 export const RefsChangedSchema = z.object({ kind: z.literal("refsChanged"), repos: z.array(z.string()) });
 export type RefsChanged = z.infer<typeof RefsChangedSchema>;
 
+/* WHICH RUNNING THINGS JUST MOVED — a session opened or exited, a dev server bound its port, a browser closed,
+ * a subagent reported in.
+ *
+ * The fourth push, and the one that covers what the other three structurally cannot: none of this state is on
+ * disk, so no `workspaceChanged` path can name it, and none of it is a ref or a repo. Before it, every view of a
+ * running thing polled on its own timer — which is to say each browser asked, forever, a question only the
+ * daemon could answer and almost always answered "no change".
+ *
+ * Diff-not-snapshot, and deliberately thin: the frame carries the DOMAIN that moved, never the roster itself.
+ * Invalidation only reaches a query something is observing, so a tab showing none of these pays a frame and no
+ * request — whereas a roster on the wire would bill every connected browser the full list whether or not
+ * anything on screen renders it. Which query keys a domain stands for is runtime-state.ts's table. */
+export const RuntimeChangedSchema = z.object({ kind: z.literal("runtimeChanged"), domains: z.array(z.string()) });
+export type RuntimeChanged = z.infer<typeof RuntimeChangedSchema>;
+
 // One connected browser tab of a sandbox member. Identity fields come from the caller's verified Google ID
 // token; activity fields from the tab's own /system/presence reports. No timestamps on the wire — an entry's
 // lifetime IS its /events connection's lifetime, so there is nothing to age out or compare clocks over.
@@ -707,8 +722,8 @@ export const AgentsSchema = z.object({ kind: z.literal("agents"), agents: z.arra
 export type Agents = z.infer<typeof AgentsSchema>;
 
 // The /events stream union: the hello identity frame, then liveness heartbeats interleaved with boot progress,
-// workspace-change batches, repo-set snapshots, ref-move batches, and presence + fleet roster snapshots. oRPC
-// validates every yielded frame against this, so all kinds must live here.
+// workspace-change batches, repo-set snapshots, ref-move batches, runtime-domain nudges, and presence + fleet
+// roster snapshots. oRPC validates every yielded frame against this, so all kinds must live here.
 export const SystemEventSchema = z.discriminatedUnion("kind", [
     HelloSchema,
     HeartbeatSchema,
@@ -716,6 +731,7 @@ export const SystemEventSchema = z.discriminatedUnion("kind", [
     WorkspaceChangedSchema,
     ReposChangedSchema,
     RefsChangedSchema,
+    RuntimeChangedSchema,
     PresenceSchema,
     AgentsSchema,
 ]);

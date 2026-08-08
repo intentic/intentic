@@ -5,9 +5,12 @@ import { host } from "./host";
 
 /* One monorepo's apps, via the daemon's per-repo apps routes (/workspace/repos/{repo}/apps...): the apps
  * present (each with per-app preview URL + live status), the addable kinds from the source repo's
- * templates.json, and add/start/stop. Polls while any app runs, like the preview panels. */
-
-const POLL_MS = 4000;
+ * templates.json, and add/start/stop.
+ *
+ * Unpolled, like the preview panels and for the same reason: an app preview IS a managed process, so the daemon
+ * announces it starting and reaps it dying, and its port sampler catches the moment the dev server binds. The
+ * `apps` key is what the runtime table's `panels` domain names alongside its own, because there is one fact
+ * underneath both lists. */
 
 export function useApps(repo: Ref<string>) {
     const api = host();
@@ -19,7 +22,6 @@ export function useApps(repo: Ref<string>) {
         queryKey: appsKey,
         queryFn: async () => AppsListSchema.parse(await api.sandbox.json(`/workspace/repos/${encodeURIComponent(repo.value)}/apps`)),
         enabled,
-        refetchInterval: (state) => (state.state.data?.apps.some((app) => app.running) ? POLL_MS : false),
     });
     const templatesQuery = useQuery({
         queryKey: api.sandbox.key(`templates`),
@@ -38,8 +40,8 @@ export function useApps(repo: Ref<string>) {
         });
     };
     const startApp = async (app: string): Promise<void> => {
-        // Optimistically flip the row to running so the Start→Stop button + status update instantly AND the
-        // poll kicks in (refetchInterval keys off `running`), instead of gating the terminal open on a refetch.
+        // Optimistically flip the row to running so the Start→Stop button + status update instantly, instead of
+        // gating the terminal open on a refetch. The daemon's own frame reconciles it a moment later.
         queryClient.setQueryData<AppsList>(appsKey.value, (prev) =>
             prev === undefined ? prev : { apps: prev.apps.map((entry) => (entry.app === app ? { ...entry, running: true } : entry)) },
         );

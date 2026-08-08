@@ -22,8 +22,8 @@ import { useTerminalsQuery } from "./terminalsQuery";
  * a rail area of its own (ShellDesktop's browserTile, counted off browsersQuery). */
 
 // Sessions come and go through paths the browser never sees (the agent's Bash, an extension's Start, a tmux
-// exit), so the badge polls rather than waiting for an invalidation that no client action would fire.
-const POLL_MS = 10_000;
+// exit) — which is why this badge used to poll. The daemon now pushes the `terminals` domain when its own view
+// of tmux changes, so the badge is fed by the shared list's invalidation and holds no clock of its own.
 
 interface TerminalActivity {
     // Live, user-facing sessions: shells, dev-server panels, agent shells, daemon jobs.
@@ -39,7 +39,7 @@ const plural = (n: number, one: string, many: string): string => `${n} ${n === 1
 const WORK_KINDS = new Set([`agent`, `job`]);
 
 export function useTerminalActivity(): TerminalActivity {
-    const { sessions } = useTerminalsQuery(POLL_MS);
+    const { sessions } = useTerminalsQuery();
 
     const live = computed(() =>
         sessions.value.filter(

@@ -115,11 +115,11 @@ test("a kill drops off the badge when it is issued, not a daemon round-trip late
 
 test("the panel's relists share the badge's cache entry rather than re-asking the daemon per surface", async () => {
     daemonLists([shell(`web-a`)]);
-    const activity = mounted(() => useTerminalsQuery(10_000));
+    const activity = mounted(() => useTerminalsQuery());
     await vi.waitFor(() => expect(activity.sessions.value).toHaveLength(1));
     expect(reads).toBe(1);
 
-    // The strip relisting off the poll it just reacted to is served from that poll, not echoed at the daemon.
+    // The strip relisting off the read it just reacted to is served from that read, not echoed at the daemon.
     await listTerminals();
     expect(reads).toBe(1);
 

@@ -15,6 +15,7 @@ import { mintPairing } from "../platform/sync.js";
 import { testConfig } from "../testing.js";
 
 import { clientFor, fakeFiles, fakeProcesses, rejectAuth, rejectForbidden, services } from "../route-testing.js";
+import { publishRuntimeChange } from "./runtime-watch.js";
 
 /* The system routes, driven over the daemon's HTTP surface exactly as the browser drives them.
  * Split out of app.integration.test.ts, which had grown to 116 tests across every route in the daemon —
@@ -401,4 +402,41 @@ test("DELETE /system/authorized-key: a sync token self-revokes just its own enro
     expect(await (await app.request("/system/sync")).json()).toMatchObject({ mirroredBy: ["laptop-b"] });
     // A stale token that matches nothing is a 404.
     expect((await app.request("/system/authorized-key", { method: "DELETE", headers: { "x-intentic-sync": tokenA } })).status).toBe(404);
+});
+
+test("events: every runtime domain that moves reaches the browser's stream", async () => {
+    /* THE FEED THAT REPLACED THE POLLS, over the wire the browser actually reads.
+     *
+     * Terminals, panels, ports, browsers and subagents each used to carry their own timer because none of them
+     * has a file for the watcher to see. They have no timer now, so this frame is their whole live feed — which
+     * makes "the frame arrives" the property the whole change rests on. */
+    const client = clientFor(createApp(services()));
+    const controller = new AbortController();
+    const frames = (await client.system.events({ clientId: "runtime-1" }, { signal: controller.signal }))[Symbol.asyncIterator]();
+
+    /* Read until the wanted domains have all been seen. Deliberately not "the next frame carries both": the bus
+     * rate-limits PER DOMAIN, so a domain still inside its window rides the following frame instead of holding
+     * the other one back — which is the property that keeps a panel starting from feeling as slow as the
+     * chattiest thing in the sandbox, and would make a single-frame assertion flaky against the sampler running
+     * beside it. What must hold is that everything published arrives. */
+    const awaitDomains = async (wanted: readonly string[]): Promise<void> => {
+        const outstanding = new Set(wanted);
+        while (outstanding.size > 0) {
+            const { value, done } = await frames.next();
+            if (done === true) {
+                throw new Error(`the stream ended still owing ${[...outstanding].join(", ")}`);
+            }
+            if (value.kind === "runtimeChanged") {
+                for (const domain of value.domains) {
+                    outstanding.delete(domain);
+                }
+            }
+        }
+    };
+
+    // The announced half: a subsystem doing the thing and saying so on the way past.
+    publishRuntimeChange("panels", "terminals");
+    await awaitDomains(["panels", "terminals"]);
+
+    controller.abort();
 });
