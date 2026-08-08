@@ -1,164 +1,103 @@
 <script setup lang="ts">
-import type { Rule, RuleMoment } from "@intentic-app/api-contract";
-import { Icon, Row, RowGroup, timeAgo } from "@intentic/ui";
-import Button from "primevue/button";
-import InputText from "primevue/inputtext";
-import Select from "primevue/select";
+import type { Rule } from "@intentic-app/api-contract";
+import { cmp, ContextMenu, Icon, Row, RowGroup, timeAgo } from "@intentic/ui";
+import type { MenuItem } from "primevue/menuitem";
 import ToggleSwitch from "primevue/toggleswitch";
 import { computed, ref } from "vue";
 import { useRules } from "../../../composables/sandbox/useRules";
+import RuleForm from "./RuleForm.vue";
 import RulesInfo from "./RulesInfo.vue";
+import { momentOf, type RuleDraft } from "./ruleWords";
 
 /* EVERY OTHER STANDING INSTRUCTION — the rules that don't have a row of their own further up this tab.
  *
- * The bet this whole group makes is that a rule is a SENTENCE: at this moment, if this is true, do this. So the
- * add flow asks for those three things in that order and nothing else, and each row below reads back as the
- * sentence that was written. The moment a form here needs a fourth concept, the answer is an agent — which is
- * already one of the things a rule can do — rather than another field.
+ * The bet this whole group makes is that a rule is a SENTENCE: at this moment, if this is true, do this. The
+ * form (RuleForm.vue) asks for those three things in that order and nothing else, and a row here is that same
+ * sentence read back — out of the same vocabulary (ruleWords.ts), not out of a second table that agrees with
+ * the first until the day it doesn't. The moment a form here needs a fourth concept, the answer is an agent —
+ * which is already one of the things a rule can do — rather than another field.
  *
- * WHAT A MOMENT COSTS is said at the point of choosing rather than in documentation. Today all three are cheap
- * (once a turn, once a push, once an agent), but the whole point of this table is that moments get added, and
- * the first hot one would otherwise arrive as a foot-gun with a friendly picker in front of it.
+ * A ROW IS SCANNED, NOT READ. What used to be one grey run-on sentence per rule is now typeset: the moment as
+ * a chip, the command in the type a command is written in, the paths as the globs they are. A list of ten is
+ * something you look down for the one you meant; a list of ten identical grey paragraphs is something you
+ * read, and nobody does.
  *
- * WHICH ACTIONS FIT WHICH MOMENT is not a matter of taste — a verdict at a turn's end has nothing to decide,
- * and the daemon refuses the pair. The picker only ever offers what will actually save, because a form that
- * accepts a rule the daemon then rejects is a worse teacher than one that never offered it. */
+ * ONE FORM, TWO JOBS. Editing a rule opens the same form in the row's place, keeping its id — which is what
+ * the activity feed names and what the firing stamps are keyed by, so renaming a rule does not orphan its
+ * history. Before this, changing a command meant deleting the rule and typing all of it again. */
 
 const { settings, listed, firings, upsert, remove, setEnabled, move, freeId } = useRules();
 
-const MOMENTS: { value: RuleMoment; label: string; when: string; cost: string }[] = [
-    {
-        value: `turn.ending`,
-        label: `Before the assistant finishes`,
-        when: `Runs when a turn is about to end — and it is the only moment that can send the assistant back to work.`,
-        cost: `Once per turn.`,
-    },
-    {
-        value: `push.starting`,
-        label: `Before you push`,
-        when: `Runs when a push is about to go out. Pass and the push goes; fail and it does not.`,
-        cost: `Once per push.`,
-    },
-    {
-        value: `agent.finished`,
-        label: `When an agent finishes`,
-        when: `Decides whether that agent's work lands in your workspace or waits on its branch.`,
-        cost: `Once per finished agent.`,
-    },
-];
-
-// What a rule at each moment can be told to do. Named for the effect rather than for the schema's action kinds
-// — "hold" and "allow" are one kind with two verdicts, and nobody choosing between them is thinking that.
-type Choice = `instruct` | `command` | `hold` | `allow`;
-
-// The daemon enforces the same pairing; offering anything else here would just move the refusal to after the
-// user had typed.
-const ACTIONS: Record<RuleMoment, { value: Choice; label: string }[]> = {
-    "turn.ending": [
-        { value: `instruct`, label: `Tell the assistant something` },
-        { value: `command`, label: `Run a command it has to pass` },
-    ],
-    "push.starting": [{ value: `command`, label: `Run a command` }],
-    "agent.finished": [
-        { value: `hold`, label: `Hold the work on its branch` },
-        { value: `allow`, label: `Land the work` },
-    ],
-};
-
+// Which row is a form right now: a rule's id while editing it, `undefined` otherwise. `adding` is its own flag
+// rather than a sentinel id, because a rule may legitimately be called anything.
+const editingId = ref<string | undefined>();
 const adding = ref(false);
-const label = ref(``);
-const moment = ref<RuleMoment>(`turn.ending`);
-const action = ref<Choice>(`instruct`);
-const command = ref(``);
-const text = ref(``);
-const paths = ref(``);
+const editing = computed(() => listed.value.find((rule) => rule.id === editingId.value));
 
-const chosenMoment = computed(() => MOMENTS.find((entry) => entry.value === moment.value));
-const actionOptions = computed(() => ACTIONS[moment.value]);
-
-const reset = (): void => {
+const close = (): void => {
+    editingId.value = undefined;
     adding.value = false;
-    label.value = ``;
-    moment.value = `turn.ending`;
-    action.value = `instruct`;
-    command.value = ``;
-    text.value = ``;
-    paths.value = ``;
 };
 
-// A moment change can strand an action that moment doesn't take (switching to a push leaves "tell the
-// assistant" selected), so the action follows its moment to that moment's first option.
-const pickMoment = (next: RuleMoment): void => {
-    moment.value = next;
-    const first = ACTIONS[next][0];
-    if (first !== undefined) {
-        action.value = first.value;
-    }
+const startAdd = (): void => {
+    editingId.value = undefined;
+    adding.value = true;
 };
 
-// Every field the chosen action needs, filled. Guarding here rather than letting the daemon refuse keeps the
-// disabled Add button as the explanation.
-const complete = computed(() => {
-    if (label.value.trim() === ``) {
-        return false;
+const startEdit = (id: string): void => {
+    adding.value = false;
+    editingId.value = id;
+};
+
+/* The form writes the words; identity and the switch stay here. A rule being edited keeps BOTH — a relabel
+ * that minted a new id would hand the feed a new name for the same rule and leave its firing history behind,
+ * and one that reset `enabled` would quietly turn a rule back on that the owner had turned off. */
+const saveDraft = (draft: RuleDraft): void => {
+    const existing = editing.value;
+    upsert({ id: existing?.id ?? freeId(draft.label), enabled: existing?.enabled ?? true, ...draft });
+    close();
+};
+
+// The row's own menu. One instance for the list rather than one per row: they differ only in which rule they
+// are pointed at, and forty teleported overlays to show one is forty too many.
+const menu = ref<InstanceType<typeof ContextMenu>>();
+const menuFor = ref<Rule | undefined>();
+
+const openMenu = (event: Event, rule: Rule): void => {
+    menuFor.value = rule;
+    menu.value?.show(event);
+};
+
+/* Order is the priority at a deciding moment, so it has to be movable from the list that shows it. The two
+ * moves are DISABLED at the ends rather than dropped from the menu: an item that vanishes reads as a bug, and
+ * the ends are exactly where someone checks whether they can go further. */
+const menuModel = computed<MenuItem[]>(() => {
+    const rule = menuFor.value;
+    if (rule === undefined) {
+        return [];
     }
-    if (action.value === `command`) {
-        return command.value.trim() !== ``;
-    }
-    if (action.value === `instruct`) {
-        return text.value.trim() !== ``;
-    }
-    return true;
+    const at = listed.value.findIndex((entry) => entry.id === rule.id);
+    return [
+        { label: `Edit`, icon: `pencil`, command: () => startEdit(rule.id) },
+        { label: `Move up`, icon: `chevron-up`, disabled: at <= 0, command: () => move(rule.id, -1) },
+        { label: `Move down`, icon: `chevron-down`, disabled: at === listed.value.length - 1, command: () => move(rule.id, 1) },
+        { separator: true },
+        { label: `Delete`, icon: `trash`, danger: true, command: () => remove(rule.id) },
+    ];
 });
 
-const actionOf = (): Rule["action"] => {
-    if (action.value === `command`) {
-        return { kind: `command`, command: command.value.trim(), timeoutMs: 900_000 };
-    }
-    if (action.value === `instruct`) {
-        return { kind: `instruct`, text: text.value.trim() };
-    }
-    return { kind: `verdict`, verdict: action.value === `allow` ? `allow` : `hold` };
-};
-
-const add = (): void => {
-    const globs = paths.value
-        .split(`,`)
-        .map((glob) => glob.trim())
-        .filter((glob) => glob !== ``);
-    upsert({
-        id: freeId(label.value),
-        label: label.value.trim(),
-        moment: moment.value,
-        ...(globs.length > 0 ? { when: { paths: globs } } : {}),
-        action: actionOf(),
-        enabled: true,
-    });
-    reset();
-};
-
-// The sentence a saved rule reads back as. Deliberately the same words the add flow used to ask for it — a row
-// that describes itself differently from the form that made it is a row nobody trusts.
-const sentenceOf = (rule: Rule): string => {
-    const at = MOMENTS.find((entry) => entry.value === rule.moment)?.label ?? rule.moment;
-    const narrowed = (rule.when?.paths?.length ?? 0) > 0 ? ` touching ${rule.when?.paths?.join(`, `)}` : ``;
-    if (rule.action.kind === `command`) {
-        return `${at}${narrowed} — run ${rule.action.command}`;
-    }
-    if (rule.action.kind === `instruct`) {
-        return `${at}${narrowed} — say: ${rule.action.text}`;
-    }
-    if (rule.action.kind === `verdict`) {
-        return `${at}${narrowed} — ${rule.action.verdict === `allow` ? `land the work` : `hold the work on its branch`}`;
-    }
-    return `${at}${narrowed}`;
-};
+// The three halves of the sentence's tail, each asked for separately so the row can typeset them differently —
+// a command is read as a command, an instruction is read as words.
+const commandOf = (rule: Rule): string | undefined => (rule.action.kind === `command` ? rule.action.command : undefined);
+const textOf = (rule: Rule): string | undefined => (rule.action.kind === `instruct` ? rule.action.text : undefined);
+const verdictOf = (rule: Rule): string | undefined =>
+    rule.action.kind === `verdict` ? (rule.action.verdict === `allow` ? `land the work` : `hold the work on its branch`) : undefined;
 
 // "Never" is a real answer and the one worth reading: a rule that has never done anything since it was written
 // is either wrong or aimed at something that has not happened yet, and both are worth a second look.
 const firedOf = (rule: Rule): string => {
     const at = firings.value[rule.id];
-    return at === undefined ? `Never fired` : `Last fired ${timeAgo(at)}`;
+    return at === undefined ? `Never fired` : `Fired ${timeAgo(at, { days: true })}`;
 };
 </script>
 
@@ -166,102 +105,72 @@ const firedOf = (rule: Rule): string => {
     <RowGroup label="Rules">
         <template #info><RulesInfo /></template>
 
-        <Row v-for="(rule, index) in listed" :key="rule.id" icon="shield" :title="rule.label" :description="sentenceOf(rule)" density="compact">
-            <template #control>
-                <div class="flex items-center gap-1">
-                    <!-- Order is the priority at a deciding moment, so it has to be movable from the list that
-                         shows it. Disabled at the ends rather than hidden: a control that vanishes reads as a
-                         bug, and the ends are exactly where someone checks whether they can go further. -->
-                    <Button text rounded size="small" aria-label="Move up" :disabled="index === 0" @click="move(rule.id, -1)">
-                        <Icon name="chevron-up" />
-                    </Button>
-                    <Button text rounded size="small" aria-label="Move down" :disabled="index === listed.length - 1" @click="move(rule.id, 1)">
-                        <Icon name="chevron-down" />
-                    </Button>
-                    <Button text rounded size="small" aria-label="Delete rule" @click="remove(rule.id)">
-                        <Icon name="trash" />
-                    </Button>
-                    <ToggleSwitch
-                        :model-value="rule.enabled"
-                        :disabled="settings === undefined"
-                        @update:model-value="(value: boolean) => setEnabled(rule.id, value)"
-                    />
-                </div>
-            </template>
-            <template #below>
-                <p class="text-2xs" :class="firings[rule.id] === undefined ? 'text-subtle' : 'text-muted'">{{ firedOf(rule) }}</p>
-            </template>
-        </Row>
+        <template v-for="rule in listed" :key="rule.id">
+            <!-- Editing happens where the rule sits, so the list never loses the place you were looking at. -->
+            <Row v-if="editingId === rule.id" icon="pencil" density="compact" :title="rule.label">
+                <template #below>
+                    <RuleForm :rule="rule" :disabled="settings === undefined" @save="saveDraft" @cancel="close" />
+                </template>
+            </Row>
+
+            <Row v-else :icon="momentOf(rule.moment).icon" :title="rule.label" density="compact" :class="{ 'opacity-60': !rule.enabled }">
+                <template #description>
+                    <span class="flex flex-wrap items-center gap-x-1.5 gap-y-1">
+                        <span class="shrink-0 rounded bg-overlay px-1.5 py-0.5 text-2xs text-muted">{{ momentOf(rule.moment).label }}</span>
+                        <span v-if="commandOf(rule) !== undefined" class="min-w-0 max-w-full truncate">
+                            run <span class="font-mono text-content">{{ commandOf(rule) }}</span>
+                        </span>
+                        <span v-else-if="textOf(rule) !== undefined" class="min-w-0 max-w-full truncate">say: {{ textOf(rule) }}</span>
+                        <span v-else-if="verdictOf(rule) !== undefined" class="min-w-0 max-w-full truncate">{{ verdictOf(rule) }}</span>
+                        <!-- The narrowing, as the globs it is. Written out rather than summarised as "2 paths":
+                             which paths is the whole question a reader has about a rule that has one. -->
+                        <span v-if="(rule.when?.paths?.length ?? 0) > 0" class="flex min-w-0 flex-wrap items-center gap-1">
+                            <span class="shrink-0">only when touching</span>
+                            <span v-for="glob in rule.when?.paths" :key="glob" class="rounded bg-overlay px-1 py-px font-mono text-content">{{
+                                glob
+                            }}</span>
+                        </span>
+                    </span>
+                </template>
+                <template #meta>{{ firedOf(rule) }}</template>
+                <template #control>
+                    <div class="flex items-center gap-1">
+                        <button
+                            type="button"
+                            :class="cmp.iconButton()"
+                            v-tooltip.bottom="`Rule actions`"
+                            aria-label="Rule actions"
+                            @click="openMenu($event, rule)"
+                        >
+                            <Icon name="bars" class="text-xs" />
+                        </button>
+                        <ToggleSwitch
+                            :model-value="rule.enabled"
+                            :disabled="settings === undefined"
+                            :aria-label="`Enable ${rule.label}`"
+                            @update:model-value="(value: boolean) => setEnabled(rule.id, value)"
+                        />
+                    </div>
+                </template>
+            </Row>
+        </template>
 
         <Row
             v-if="listed.length === 0 && !adding"
             icon="shield"
             density="compact"
-            description="No rules yet — the three above are the common ones."
+            description="No rules yet — the three above are the common ones, written the same way."
         />
 
-        <!-- The add flow, in the order the sentence reads: when, if, do. -->
         <Row v-if="adding" icon="plus" density="compact" title="New rule">
             <template #below>
-                <div class="flex flex-col gap-3 pt-1">
-                    <InputText v-model="label" placeholder="What is this rule called?" size="small" aria-label="Rule name" />
-
-                    <div class="flex flex-col gap-1">
-                        <Select
-                            :model-value="moment"
-                            :options="MOMENTS"
-                            option-label="label"
-                            option-value="value"
-                            size="small"
-                            aria-label="When this rule runs"
-                            @update:model-value="pickMoment"
-                        />
-                        <p class="text-2xs text-muted">{{ chosenMoment?.when }} {{ chosenMoment?.cost }}</p>
-                    </div>
-
-                    <div class="flex flex-col gap-1">
-                        <InputText
-                            v-model="paths"
-                            placeholder="Only when it touches… (docs/**, **/*.sql — optional)"
-                            size="small"
-                            aria-label="Paths"
-                        />
-                        <p class="text-2xs text-muted">Leave empty and the rule always applies at its moment.</p>
-                    </div>
-
-                    <Select
-                        v-model="action"
-                        :options="actionOptions"
-                        option-label="label"
-                        option-value="value"
-                        size="small"
-                        aria-label="What this rule does"
-                    />
-
-                    <InputText
-                        v-if="action === `command`"
-                        v-model="command"
-                        placeholder="pnpm lint"
-                        size="small"
-                        class="font-mono"
-                        aria-label="Command to run"
-                    />
-                    <InputText
-                        v-if="action === `instruct`"
-                        v-model="text"
-                        placeholder="Update the changelog before you finish."
-                        size="small"
-                        aria-label="What to tell the assistant"
-                    />
-
-                    <div class="flex items-center gap-2">
-                        <Button size="small" label="Add rule" :disabled="!complete || settings === undefined" @click="add" />
-                        <Button size="small" text label="Cancel" @click="reset" />
-                    </div>
-                </div>
+                <RuleForm :disabled="settings === undefined" @save="saveDraft" @cancel="close" />
             </template>
         </Row>
 
-        <Row v-else as="button" icon="plus" density="compact" interactive title="Add a rule" @click="adding = true" />
+        <!-- Hidden while a form is open, so there is only ever one rule being written at a time. -->
+        <Row v-else-if="editingId === undefined" as="button" icon="plus" density="compact" interactive title="Add a rule" @click="startAdd" />
     </RowGroup>
+
+    <ContextMenu ref="menu" :model="menuModel" :min-width="11" />
 </template>
