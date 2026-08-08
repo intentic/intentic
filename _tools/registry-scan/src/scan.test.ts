@@ -18,17 +18,27 @@ const repo = (fullName: string, over: Partial<GithubRepo> = {}): GithubRepo => (
 const manifest = (publisher: string, name: string, version = "1.0.0"): string =>
     JSON.stringify({ publisher, name, version, engines: { intentic: "^1.0.0" }, entry: "dist/extension.js" });
 
-// A reader over in-memory fixtures: what the topic search returns, plus each repo's manifest and head sha.
+/* A reader over in-memory fixtures. `manifests` is each repo's manifest AT ITS DEFAULT BRANCH (what discovery
+ * reads); `files` is exact content at `${fullName}@${ref}:${path}` (what the pinned-sha checks read). The fake
+ * distinguishes them because the scan now genuinely reads at two different refs, and a fake that answered any
+ * ref with the branch's file would hide exactly the staleness the checks exist to notice. */
 const fakeGithub = (config: {
     found?: GithubRepo[];
     repos?: Record<string, GithubRepo>;
     manifests?: Record<string, string>;
     shas?: Record<string, string>;
+    files?: Record<string, string>;
 }): GithubReader => ({
     searchByTopic: async () => config.found ?? [],
     getRepo: async (fullName) => config.repos?.[fullName] ?? config.found?.find((candidate) => candidate.fullName === fullName),
     headSha: async (fullName) => config.shas?.[fullName],
-    readFile: async (fullName) => config.manifests?.[fullName],
+    readFile: async (fullName, ref, path) => {
+        const exact = config.files?.[`${fullName}@${ref}:${path}`];
+        if (exact !== undefined) {
+            return exact;
+        }
+        return ref === `main` && path === `intentic-extension.json` ? config.manifests?.[fullName] : undefined;
+    },
 });
 
 const file = (plugins: unknown[]): RegistryFile => RegistryFileSchema.parse({ name: "intentic", plugins });
@@ -68,7 +78,19 @@ describe(`scanRegistry`, () => {
         );
 
         expect(result.proposals).toEqual([]);
-        expect(result.facts).toEqual({ scannedAt: SCANNED_AT, entries: [{ name: `acme.incidents`, stars: 40, pushedAt: `2026-07-29T00:00:00Z` }] });
+        expect(result.facts).toEqual({
+            scannedAt: SCANNED_AT,
+            entries: [
+                {
+                    name: `acme.incidents`,
+                    stars: 40,
+                    pushedAt: `2026-07-29T00:00:00Z`,
+                    // The pinned commit holds no manifest in this fixture, and the fact says so instead of
+                    // borrowing the branch's copy — the checks describe what an installer would get.
+                    checks: { sha: sha(`a`), manifest: `no intentic-extension.json at the pinned commit`, bundle: `unchecked` },
+                },
+            ],
+        });
     });
 
     // A listing that arrived by pull request has no obligation to carry the topic; its stars still count.
@@ -79,7 +101,14 @@ describe(`scanRegistry`, () => {
             SCANNED_AT,
         );
 
-        expect(result.facts.entries).toEqual([{ name: `acme.quiet`, stars: 7, pushedAt: `2026-07-01T00:00:00Z` }]);
+        expect(result.facts.entries).toEqual([
+            {
+                name: `acme.quiet`,
+                stars: 7,
+                pushedAt: `2026-07-01T00:00:00Z`,
+                checks: { sha: sha(`b`), manifest: `no intentic-extension.json at the pinned commit`, bundle: `unchecked` },
+            },
+        ]);
     });
 
     // The anti-squat rule: identity comes from the manifest, and a copied manifest collides with the listing
@@ -118,6 +147,59 @@ describe(`scanRegistry`, () => {
             expect.stringContaining(`x/old: archived`),
             expect.stringContaining(`x/empty: no commit found on main`),
         ]);
+    });
+
+    it(`re-derives the publishability checks at the PINNED sha, not at the branch`, async () => {
+        // The branch has moved on to a broken manifest; the pinned commit is fine. The checks must describe the
+        // commit installs follow — reading the branch here would report a working listing as broken.
+        const result = await scanRegistry(
+            file([{ name: `acme.incidents`, kind: `extension`, source: { source: `github`, repo: `acme/incidents`, sha: sha(`a`) } }]),
+            fakeGithub({
+                found: [repo(`acme/incidents`)],
+                manifests: { "acme/incidents": `{ broken` },
+                files: {
+                    [`acme/incidents@${sha(`a`)}:intentic-extension.json`]: manifest(`acme`, `incidents`),
+                    [`acme/incidents@${sha(`a`)}:dist/extension.js`]: `import { h } from "vue";\nexport const activate = () => {};\n`,
+                },
+            }),
+            SCANNED_AT,
+        );
+
+        expect(result.facts.entries[0]?.checks).toEqual({ sha: sha(`a`), manifest: `ok`, bundle: `ok`, engines: `^1.0.0` });
+    });
+
+    it(`reports a pinned bundle that cannot load where it is installed`, async () => {
+        // The failure that is invisible to the author (their workspace loads the directory live) and fatal to
+        // every installer: a second file the blob-URL import can never resolve. Re-derived cold by the shared
+        // rule in @intentic/extension-manifest, so this judge and the daemon's readiness check cannot drift.
+        const result = await scanRegistry(
+            file([{ name: `acme.incidents`, kind: `extension`, source: { source: `github`, repo: `acme/incidents`, sha: sha(`a`) } }]),
+            fakeGithub({
+                found: [repo(`acme/incidents`)],
+                files: {
+                    [`acme/incidents@${sha(`a`)}:intentic-extension.json`]: manifest(`acme`, `incidents`),
+                    [`acme/incidents@${sha(`a`)}:dist/extension.js`]: `import { helper } from "./chunk.js";\nexport const activate = () => {};\n`,
+                },
+            }),
+            SCANNED_AT,
+        );
+
+        const checks = result.facts.entries[0]?.checks;
+        expect(checks?.manifest).toBe(`ok`);
+        expect(checks?.bundle).toContain(`./chunk.js`);
+    });
+
+    it(`says when the pinned manifest promises an entry file the commit does not hold`, async () => {
+        const result = await scanRegistry(
+            file([{ name: `acme.incidents`, kind: `extension`, source: { source: `github`, repo: `acme/incidents`, sha: sha(`a`) } }]),
+            fakeGithub({
+                found: [repo(`acme/incidents`)],
+                files: { [`acme/incidents@${sha(`a`)}:intentic-extension.json`]: manifest(`acme`, `incidents`) },
+            }),
+            SCANNED_AT,
+        );
+
+        expect(result.facts.entries[0]?.checks?.bundle).toContain(`dist/extension.js, which is not at the pinned commit`);
     });
 
     // Never acted on automatically: a repo that went briefly private should come back to its listing.

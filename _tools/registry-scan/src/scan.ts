@@ -1,5 +1,5 @@
-import { ExtensionManifestSchema, extensionIdOf } from "@intentic/extension-manifest";
-import { githubRepoOf, type RegistryFacts, type RegistryFile, REGISTRY_TOPIC, resolveSource } from "@intentic/registry";
+import { bundleProblem, ExtensionManifestSchema, extensionIdOf } from "@intentic/extension-manifest";
+import { githubRepoOf, type RegistryChecks, type RegistryFacts, type RegistryFile, REGISTRY_TOPIC, resolveSource } from "@intentic/registry";
 import type { GithubReader, GithubRepo } from "./github.js";
 
 /* THE SCAN: discovery on one side, a decision on the other, and a pull request in between.
@@ -44,13 +44,23 @@ export interface ScanResult {
     warnings: string[];
 }
 
-// owner/repo → the curated entry that already points at it, so a second scan doesn't re-propose a listing.
-const listedRepos = (file: RegistryFile): Map<string, string> => {
-    const byRepo = new Map<string, string>();
+// owner/repo → the curated entry that already points at it (so a second scan doesn't re-propose a listing) and
+// the sha it pins (so the facts pass can re-derive its checks at exactly the commit installs follow).
+interface ListedEntry {
+    readonly name: string;
+    readonly ref: string | undefined;
+    // Where the extension sits inside the pinned tree — "" for a repo of its own, the subdir for a monorepo
+    // source. The checks must read the manifest where an install would, or a valid listing reads as broken.
+    readonly path: string;
+}
+
+const listedRepos = (file: RegistryFile): Map<string, ListedEntry> => {
+    const byRepo = new Map<string, ListedEntry>();
     for (const plugin of file.plugins) {
-        const repo = githubRepoOf(resolveSource(plugin.source, "", file.metadata?.pluginRoot));
+        const install = resolveSource(plugin.source, "", file.metadata?.pluginRoot);
+        const repo = githubRepoOf(install);
         if (repo !== undefined) {
-            byRepo.set(repo.toLowerCase(), plugin.name);
+            byRepo.set(repo.toLowerCase(), { name: plugin.name, ref: install?.ref, path: install?.path ?? "" });
         }
     }
     return byRepo;
@@ -62,7 +72,7 @@ const listedRepos = (file: RegistryFile): Map<string, string> => {
  * Keying the registry by it rather than by a free-text label is what makes squatting a non-event: two
  * publishers can both ship an "incidents" extension without colliding, and a repo that copies somebody
  * else's manifest wholesale collides with the existing listing and gets refused here instead of proposed. */
-const propose = async (repo: GithubRepo, github: GithubReader, listed: Map<string, string>): Promise<ListingProposal | string> => {
+const propose = async (repo: GithubRepo, github: GithubReader, listed: Map<string, ListedEntry>): Promise<ListingProposal | string> => {
     if (repo.archived) {
         return `${repo.fullName}: archived`;
     }
@@ -75,7 +85,7 @@ const propose = async (repo: GithubRepo, github: GithubReader, listed: Map<strin
         return `${repo.fullName}: ${MANIFEST_PATH} does not parse — ${parsed.error.issues.map((issue) => `${issue.path.join(".")} ${issue.message}`).join("; ")}`;
     }
     const id = extensionIdOf(parsed.data);
-    const claimedBy = [...listed.entries()].find(([, name]) => name === id);
+    const claimedBy = [...listed.entries()].find(([, entry]) => entry.name === id);
     if (claimedBy !== undefined) {
         return `${repo.fullName}: claims ${id}, which is already listed from ${claimedBy[0]}`;
     }
@@ -104,6 +114,42 @@ const propose = async (repo: GithubRepo, github: GithubReader, listed: Map<strin
     };
 };
 
+/* Re-derive, at the PINNED sha, what an installer would find there — the same questions the daemon's readiness
+ * check answers for an author before publishing, asked cold by a stranger holding nothing but the pointer. The
+ * bundle rule is shared code (@intentic/extension-manifest), so the two judges cannot drift; what differs is
+ * the vantage: the author's check describes the directory they ran it in, this describes the commit installs
+ * actually follow. Nothing here is a verdict on trust — it is whether the thing at the pointer can load. */
+const checkAtSha = async (fullName: string, entry: ListedEntry, github: GithubReader): Promise<RegistryChecks | undefined> => {
+    const sha = entry.ref ?? "";
+    const prefix = entry.path === "" ? "" : `${entry.path.replace(/\/$/u, "")}/`;
+    const raw = await github.readFile(fullName, sha, `${prefix}${MANIFEST_PATH}`);
+    if (raw === undefined) {
+        return { sha, manifest: `no ${MANIFEST_PATH} at the pinned commit`, bundle: "unchecked" };
+    }
+    let parsed;
+    try {
+        parsed = ExtensionManifestSchema.safeParse(JSON.parse(raw));
+    } catch {
+        return { sha, manifest: `${MANIFEST_PATH} is not JSON at the pinned commit`, bundle: "unchecked" };
+    }
+    if (!parsed.success) {
+        return {
+            sha,
+            manifest: `does not parse — ${parsed.error.issues.map((issue) => `${issue.path.join(".")} ${issue.message}`).join("; ")}`,
+            bundle: "unchecked",
+        };
+    }
+    const engines = parsed.data.engines.intentic;
+    if (parsed.data.entry === undefined) {
+        return { sha, manifest: "ok", bundle: "none", engines };
+    }
+    const source = await github.readFile(fullName, sha, `${prefix}${parsed.data.entry}`);
+    if (source === undefined) {
+        return { sha, manifest: "ok", bundle: `the manifest promises ${parsed.data.entry}, which is not at the pinned commit`, engines };
+    }
+    return { sha, manifest: "ok", bundle: bundleProblem(source) ?? "ok", engines };
+};
+
 export const scanRegistry = async (file: RegistryFile, github: GithubReader, scannedAt: string): Promise<ScanResult> => {
     const listed = listedRepos(file);
     const warnings: string[] = [];
@@ -115,16 +161,26 @@ export const scanRegistry = async (file: RegistryFile, github: GithubReader, sca
      * has no obligation to carry the topic, and dropping its stars because of that would rank it below
      * newcomers for a reason that has nothing to do with it. */
     const entries: RegistryFacts["entries"] = [];
-    for (const [repoName, entryName] of listed) {
+    for (const [repoName, entry] of listed) {
         const repo = foundByRepo.get(repoName) ?? (await github.getRepo(repoName));
         if (repo === undefined) {
-            warnings.push(`${entryName}: source repo ${repoName} is gone or no longer readable — listing may need review`);
+            warnings.push(`${entry.name}: source repo ${repoName} is gone or no longer readable — listing may need review`);
             continue;
         }
         if (repo.archived) {
-            warnings.push(`${entryName}: source repo ${repoName} is archived`);
+            warnings.push(`${entry.name}: source repo ${repoName} is archived`);
         }
-        entries.push({ name: entryName, stars: repo.stars, pushedAt: repo.pushedAt });
+        const checks = entry.ref === undefined ? undefined : await checkAtSha(repo.fullName, entry, github);
+        /* A failing check is also a warning, because the facts file is read by browsers and the summary by the
+         * maintainer — and the maintainer is the one who can do something about a listing whose pinned commit
+         * no longer loads. "none" and "unchecked" are not failures: no bundle is a daemon-only extension, and
+         * unchecked means the manifest problem above it already says everything. */
+        if (checks !== undefined && checks.manifest !== "ok") {
+            warnings.push(`${entry.name}: at the pinned commit, ${checks.manifest}`);
+        } else if (checks !== undefined && checks.bundle !== "ok" && checks.bundle !== "none") {
+            warnings.push(`${entry.name}: at the pinned commit, the bundle ${checks.bundle}`);
+        }
+        entries.push({ name: entry.name, stars: repo.stars, pushedAt: repo.pushedAt, ...(checks !== undefined ? { checks } : {}) });
     }
 
     // Only what the topic turned up and the file doesn't already carry. Sequential on purpose: a nightly job

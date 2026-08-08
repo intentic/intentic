@@ -94,3 +94,38 @@ export const tightenBrief = ({ id, dir, unused, used }: TightenBrief): string =>
         invariants: TIGHTEN_INVARIANTS,
         done: `Done when every route in the list is either gone or has a one-line reason, and the extension still loads and works after reloading the extensions.`,
     });
+
+/* PUBLISHING, as a turn the author watches rather than a pipeline they trust.
+ *
+ * The mechanics are a git ritual the agent already knows how to perform — init, push, read the sha back — so the
+ * brief spends its words on the two things that make an extension publication different from pushing any other
+ * directory. First: THE BYTES ARE THE RELEASE. There is no build step at install, so whatever is in the
+ * directory at the pushed commit is literally the code that runs in every installer's browser, and "clean up
+ * before publishing" is the one instinct that must be suppressed — a tidy-up between the last test and the push
+ * ships code nobody ever ran. Second: THE SHA IS THE IDENTITY. A listing pins a commit, installs follow the
+ * pointer, and nothing about the repository after that commit matters — so the turn ends by reporting the sha,
+ * because that string is the thing the author does everything else with. */
+const PUBLISH_INVARIANTS =
+    `Publish the directory exactly as it is: no tidy-up, no reformat, no version bump, no regenerated files ` +
+    `between checking it and pushing it — the pushed bytes are the code every installer runs, so any change after ` +
+    `the check ships something nobody verified. Create the repository under the owner's account and push this one ` +
+    `directory as its root. Add the "intentic-extension" topic on GitHub — that is what the registry's nightly ` +
+    `scan discovers repositories by. Do not open a listing pull request yourself unless asked: the scan writes ` +
+    `one overnight, and a hand-written duplicate costs a maintainer two reviews of the same thing.`;
+
+export interface PublishBrief {
+    readonly id: string;
+    readonly dir: string;
+    // The extension's name — the conventional repository name is derived from it.
+    readonly name: string;
+}
+
+export const publishBrief = ({ id, dir, name }: PublishBrief): string =>
+    composeAsk({
+        subject: `Publish the ${id} extension, whose files are in ${dir} of this workspace.`,
+        why: `Its readiness checks pass here, and publishing is the step that makes those checks matter: a workspace extension runs only in this workspace, and a published one is a repository plus a commit sha that any sandbox can install.`,
+        diagnosis: `The workspace's git credentials are already connected, so git and the GitHub API both work from the shell. The conventional repository name is intentic-${name}.`,
+        goal: `Turn the directory into a public repository at a commit: initialise it if it is not a repository yet, commit everything as it stands, push, and confirm the pushed tree matches the directory byte for byte.`,
+        invariants: PUBLISH_INVARIANTS,
+        done: `Done when the repository exists with the topic set and you have reported the pushed commit sha — that sha is the extension's identity: what a registry lists, what an installer pins, and what the next publish replaces.`,
+    });

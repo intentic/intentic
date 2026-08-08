@@ -8,7 +8,7 @@ import { startAgent } from "../../composables/agents/agentActions";
 import { sandboxJson } from "../../composables/sandbox/sandboxClient";
 import { errorMessage } from "../../composables/useAsyncAction";
 import type { ExtensionEntry } from "../../composables/extensions/useExtensionList";
-import { tightenBrief } from "./extensionBrief";
+import { publishBrief, tightenBrief } from "./extensionBrief";
 import ExtensionSettingsForm from "./ExtensionSettingsForm.vue";
 
 /* ONE EXTENSION, on one line until asked otherwise.
@@ -104,6 +104,15 @@ watch(
     },
     { immediate: true },
 );
+
+// Publishable = the checks ran and none failed. Warnings stay the author's call: an unexercised permissions
+// list is worth a look, not a locked door — the brief's own invariants carry the rest.
+const publishable = computed(() => readiness.value !== undefined && !readiness.value.some((check) => check.status === `fail`));
+const publish = computed(() => ({
+    id: extensionIdOf(manifest.value),
+    dir: `.intentic/workspace-extensions/${manifest.value.name}`,
+    name: manifest.value.name,
+}));
 
 // The extension's own directory, which is where its manifest is. A workspace extension's name IS its directory
 // (the daemon enumerates one per subdirectory), so this needs no round trip to find out.
@@ -298,6 +307,14 @@ const tone = computed(() => TONE[entry.state.variant] ?? `text-muted`);
                         >
                     </li>
                 </ul>
+                <!-- Offered only when nothing FAILS — a warning is the author's judgement call and must not bar
+                     the door, but a failing check names something every installer would hit. The turn itself is
+                     an ordinary chat (see publishBrief): publishing is watched, not fired and forgotten. -->
+                <p v-if="publishable" class="mt-1.5 text-2xs text-subtle">
+                    <button type="button" :class="cmp.linkButton(`text-2xs`)" @click="startAgent(publishBrief(publish))">
+                        Publish it — an agent pushes these files and reports the commit
+                    </button>
+                </p>
             </div>
 
             <!-- Identity, on its own hairline: the full id the collapsed row leaves off a baked-in extension,

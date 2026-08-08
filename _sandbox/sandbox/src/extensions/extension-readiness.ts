@@ -1,7 +1,7 @@
 import { access } from "node:fs/promises";
 import { join } from "node:path";
 import { extensionApiVersion } from "@intentic/extension-api";
-import { type ExtensionManifest } from "@intentic/extension-manifest";
+import { bundleProblem, bundleSpecifiers, type ExtensionManifest } from "@intentic/extension-manifest";
 import { extensionRead } from "../capabilities/extension-dirs.js";
 import type { InstalledExtension } from "./installed-extensions.js";
 
@@ -29,18 +29,6 @@ export interface ReadinessCheck {
     // What was found. Always populated for warn/fail — a status with no stated reason is an opinion.
     readonly detail: string;
 }
-
-// What the shell's import map publishes to a bundle (hostModules.ts). An import of anything else resolves to
-// nothing at activation, and the extension is dead with a console error nobody reads.
-const PUBLISHED_SPECIFIERS = new Set(["vue", "@intentic/extension-api", "@intentic/extension-ui", "@tanstack/vue-query"]);
-
-// Every `import … from "x"` and `export … from "x"` in a module, plus dynamic `import("x")`. A bundle is one
-// file, so a regex over its text is the right instrument: there is no module graph to walk.
-const specifiersOf = (source: string): string[] => [
-    ...[...source.matchAll(/(?:^|\n)\s*(?:import|export)[^;\n]*?from\s*["'`]([^"'`]+)["'`]/gu)].map((match) => match[1] ?? ""),
-    ...[...source.matchAll(/\bimport\s*\(\s*["'`]([^"'`]+)["'`]\s*\)/gu)].map((match) => match[1] ?? ""),
-    ...[...source.matchAll(/(?:^|\n)\s*import\s*["'`]([^"'`]+)["'`]/gu)].map((match) => match[1] ?? ""),
-];
 
 const exists = async (path: string): Promise<boolean> =>
     access(path)
@@ -122,28 +110,14 @@ const bundleCheck = async (dir: string, manifest: ExtensionManifest): Promise<Re
     if (source === undefined) {
         return { id, label, status: "fail", detail: `${manifest.entry} could not be read.` };
     }
-    const specifiers = [...new Set(specifiersOf(source))];
-    /* A relative import is the sharpest edge here. The host fetches the bundle's bytes and imports them from a
-     * blob: URL, against which "./chunk.js" resolves to a blob: URL that was never created — so a build that
-     * emitted more than one chunk fails at activation with a 404 for a file that exists on disk. */
-    const relative = specifiers.filter((specifier) => specifier.startsWith(".") || specifier.startsWith("/"));
-    if (relative.length > 0) {
-        return {
-            id,
-            label,
-            status: "fail",
-            detail: `Imports a second file (${relative.join(", ")}). The bundle is imported from a blob URL, so nothing relative to it can resolve — it has to be one file.`,
-        };
+    /* The rule itself lives in @intentic/extension-manifest (bundleProblem) because a second judge applies it
+     * too: the registry scanner re-derives this exact answer cold, at each listed entry's pinned sha, every
+     * night. Two hand-rolled copies would drift the way the manifest schema and its published copy once did. */
+    const problem = bundleProblem(source);
+    if (problem !== undefined) {
+        return { id, label, status: "fail", detail: `It ${problem}.` };
     }
-    const unpublished = specifiers.filter((specifier) => !PUBLISHED_SPECIFIERS.has(specifier));
-    if (unpublished.length > 0) {
-        return {
-            id,
-            label,
-            status: "fail",
-            detail: `Imports ${unpublished.join(", ")}, which the host does not publish. Bundle it in, or use one of: ${[...PUBLISHED_SPECIFIERS].join(", ")}.`,
-        };
-    }
+    const specifiers = bundleSpecifiers(source);
     return { id, label, status: "pass", detail: specifiers.length === 0 ? "Imports nothing." : `Imports ${specifiers.join(", ")}.` };
 };
 

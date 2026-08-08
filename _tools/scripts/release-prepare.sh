@@ -19,6 +19,10 @@ DIR="$(cd "$(dirname "$0")" && pwd)"
 source "$DIR/packages.sh"
 cd "$DIR/../.."
 
+# Fail before anything builds if PUB has drifted from the dependency graph — a listed package depending on an
+# unlisted one publishes an unresolvable specifier, and finding that out mid-publish is a half-shipped release.
+node "$DIR/verify-publish-set.mjs" "${PUB[@]}"
+
 filters=()
 for d in "${PUB[@]}"; do
   filters+=("--filter=./$d")

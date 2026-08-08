@@ -9,7 +9,13 @@ const file = RegistryFileSchema.parse({
     plugins: [
         { name: `incidents`, kind: `extension`, trust: `verified`, source: { source: `github`, repo: `acme/incidents`, sha: SHA } },
         { name: `linear`, kind: `extension`, source: { source: `github`, repo: `acme/linear`, sha: SHA } },
-        { name: `evil`, kind: `extension`, trust: `blocked`, trustReason: `exfiltrates workspace secrets`, source: { source: `github`, repo: `bad/evil` } },
+        {
+            name: `evil`,
+            kind: `extension`,
+            trust: `blocked`,
+            trustReason: `exfiltrates workspace secrets`,
+            source: { source: `github`, repo: `bad/evil` },
+        },
     ],
 });
 
@@ -36,6 +42,22 @@ describe(`resolveRegistry`, () => {
     });
 
     // Blocked rows must survive the resolve — deleting them is what hides a warning from the people who
+    /* The staleness rule the checks ride on: a fact is bound to the sha it was derived from, and a listing
+     * repointed since the last scan renders no checks at all — the honest gap — rather than yesterday's verdict
+     * describing today's pointer. */
+    it(`joins checks only when they were derived from the sha the listing still pins`, () => {
+        const facts = RegistryFactsSchema.parse({
+            scannedAt: `2026-08-01T00:00:00.000Z`,
+            entries: [
+                { name: `linear`, checks: { sha: SHA, manifest: `ok`, bundle: `ok`, engines: `^2.0.0` } },
+                { name: `incidents`, checks: { sha: `b`.repeat(40), manifest: `ok`, bundle: `ok` } },
+            ],
+        });
+        const entries = resolveRegistry(file, facts, REGISTRY);
+        expect(entries.find((entry) => entry.name === `linear`)?.checks).toEqual({ sha: SHA, manifest: `ok`, bundle: `ok`, engines: `^2.0.0` });
+        expect(entries.find((entry) => entry.name === `incidents`)?.checks).toBeUndefined();
+    });
+
     // already installed the thing.
     it(`keeps a blocked entry, with its reason`, () => {
         const blocked = resolveRegistry(file, undefined, REGISTRY).find((entry) => entry.name === `evil`);

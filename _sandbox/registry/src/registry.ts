@@ -79,12 +79,31 @@ export type RegistryFile = z.infer<typeof RegistryFileSchema>;
 /* Facts read off the source host, keyed by the curated entry's name. Deliberately NOT the upstream head sha:
  * the approved sha is the one that runs, updating is a pull request, and a file that advertised "there's a
  * newer commit over there" would be inviting a click that skips the review the whole model rests on. */
+/* What the scan re-derived COLD at the listing's pinned sha — the same questions the daemon's readiness check
+ * answers for an author before publishing, asked again by a stranger with nothing but the pointer. That
+ * re-derivation is the whole value: an author's own checks describe the directory they ran them in, and these
+ * describe what an installer actually gets. `sha` binds the answers to the commit they were read from, so a
+ * listing repointed since the last scan renders no stale verdicts — the join drops checks whose sha no longer
+ * matches rather than letting yesterday's answer describe today's pointer. */
+const RegistryChecksSchema = z.object({
+    sha: z.string(),
+    // "ok", or the reason it is not, verbatim — a verdict with no stated reason is an opinion.
+    manifest: z.string(),
+    // "ok" / "none" (no UI bundle) / the reason the bundle cannot load where it is installed.
+    bundle: z.string(),
+    // The engines range the manifest declares at that sha. A raw fact rather than a verdict on purpose: the
+    // scan does not know which app version any particular reader runs, but every consumer of this file does.
+    engines: z.string().optional(),
+});
+export type RegistryChecks = z.infer<typeof RegistryChecksSchema>;
+
 const RegistryFactsEntrySchema = z.object({
     name: z.string(),
     stars: z.number().int().nonnegative().optional(),
     // ISO-8601, last push to the source repo's default branch — the tiebreaker that does the real work while
     // every listing still has single-digit stars.
     pushedAt: z.string().optional(),
+    checks: RegistryChecksSchema.optional(),
 });
 
 export const RegistryFactsSchema = z.object({
@@ -112,6 +131,7 @@ export const RegistryEntrySchema = z.object({
     install: RegistryInstallSchema.optional(),
     stars: z.number().int().nonnegative().optional(),
     pushedAt: z.string().optional(),
+    checks: RegistryChecksSchema.optional(),
 });
 export type RegistryEntry = z.infer<typeof RegistryEntrySchema>;
 
@@ -136,6 +156,9 @@ export const resolveRegistry = (file: RegistryFile, facts: RegistryFacts | undef
             ...(install !== undefined ? { install } : {}),
             ...(upstream?.stars !== undefined ? { stars: upstream.stars } : {}),
             ...(upstream?.pushedAt !== undefined ? { pushedAt: upstream.pushedAt } : {}),
+            // Only when derived from the sha this row still points at — a repointed listing renders no checks
+            // until the next scan, which is the honest gap rather than yesterday's verdict on today's pointer.
+            ...(upstream?.checks !== undefined && upstream.checks.sha === install?.ref ? { checks: upstream.checks } : {}),
         };
     });
 };

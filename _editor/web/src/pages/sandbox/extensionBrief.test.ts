@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import { extensionBrief, tightenBrief } from "./extensionBrief";
+import { extensionBrief, publishBrief, tightenBrief } from "./extensionBrief";
 
 /* What the brief must not lose. These are not assertions about wording — they are the four things an agent
  * cannot recover on its own, each of which produced a directory that stopped loading when it was missing. */
@@ -64,5 +64,30 @@ describe(`the brief for tightening permissions`, () => {
     test(`forbids the turn from widening into the code`, () => {
         // Behaviour changes are how a "tidy the manifest" turn becomes a diff nobody can review.
         expect(tighten).toContain(`edits \`permissions.sandbox\` and nothing else`);
+    });
+});
+
+describe(`the brief for publishing`, () => {
+    const publish = publishBrief({
+        id: `workspace.release-notes`,
+        dir: `.intentic/workspace-extensions/release-notes`,
+        name: `release-notes`,
+    });
+
+    test(`forbids any change between the check and the push`, () => {
+        // The one instinct that must be suppressed: a tidy-up between the last test and the push ships bytes
+        // nobody ever ran, in a system where the pushed bytes ARE the release.
+        expect(publish).toContain(`no tidy-up, no reformat, no version bump`);
+    });
+
+    test(`routes discovery through the scan, not a hand-written listing`, () => {
+        // The topic is the publish-side half of the nightly scan's contract; a hand-opened pull request beside
+        // it makes a maintainer review the same extension twice.
+        expect(publish).toContain(`intentic-extension`);
+        expect(publish).toContain(`Do not open a listing pull request yourself unless asked`);
+    });
+
+    test(`ends on the sha, because the sha is the identity`, () => {
+        expect(publish).toContain(`reported the pushed commit sha`);
     });
 });
