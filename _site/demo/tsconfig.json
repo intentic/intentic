@@ -24,6 +24,9 @@
             "@intentic-app/web/popout-keeper": ["../../_editor/web/src/popout/keeper.ts"]
         }
     },
-    "include": ["./src/**/*.ts", "./vite.config.ts"],
+    /* The app's ambient declarations, for the same reason as the path map above: this checks the app's source,
+     * and an import pulls in modules but never a `.d.ts` nobody references. Without it `import.meta.env.BUILD_ID`
+     * is only vite/client's index signature here, and the app's own typing of it is the one this must agree with. */
+    "include": ["./src/**/*.ts", "./vite.config.ts", "../../_editor/web/env.d.ts"],
     "extends": "@intentic/tsconfig/tsconfig.vue.json"
 }

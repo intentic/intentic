@@ -48,9 +48,9 @@ const SANDBOX = `sbx-1`;
 let invalidated: unknown[][];
 beforeEach(() => {
     invalidated = [];
-    vi.spyOn(queryClient, `invalidateQueries`).mockImplementation((filters?: { queryKey?: unknown[] }) => {
-        invalidated.push(filters?.queryKey ?? []);
-        return Promise.resolve();
+    vi.spyOn(queryClient, `invalidateQueries`).mockImplementation(async (filters) => {
+        const resolved = typeof filters === `function` ? filters() : filters;
+        invalidated.push([...(resolved?.queryKey ?? [])]);
     });
 });
 

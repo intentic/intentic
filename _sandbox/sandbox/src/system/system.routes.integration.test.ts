@@ -434,6 +434,20 @@ test("events: every runtime domain that moves reaches the browser's stream", asy
         }
     };
 
+    /* Wait for the stream to be LIVE before publishing anything. The route sends its hello frame before it
+     * subscribes to any feed, and a change published with nobody subscribed is dropped rather than queued
+     * (runtime-watch.ts) — so a publish issued between the two waits forever for a frame nobody made. A browser
+     * is never in that gap; it holds a pull open. The presence frame is the proof of arrival: the route enqueues
+     * it from inside the same block that registers the runtime listener. */
+    let live = false;
+    while (!live) {
+        const { value, done } = await frames.next();
+        if (done === true) {
+            throw new Error(`the stream ended before it subscribed to anything`);
+        }
+        live = value.kind === "presence";
+    }
+
     // The announced half: a subsystem doing the thing and saying so on the way past.
     publishRuntimeChange("panels", "terminals");
     await awaitDomains(["panels", "terminals"]);
