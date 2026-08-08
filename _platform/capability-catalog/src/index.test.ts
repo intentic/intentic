@@ -90,6 +90,30 @@ describe("contributionCard", () => {
         expect(keys).toEqual(["platform", "shell", "write", "screen", "control", "sandboxes", "sandboxRemove", "roots"]);
     });
 
+    /* THE GENERIC BROWSER CARD renders like any other: the pinned discriminator, then the three answers that
+     * replace what a site card pins in its manifest. Worth holding, because the whole point of this card is that
+     * the FORM carries the site — a card that lost its URL fields would be an unfillable one, and the failure
+     * would only show up as a login window opening on nothing. */
+    it("renders the generic browser card's own fields, since the site comes from the form", () => {
+        const generic: CapabilityContribution = {
+            id: "website",
+            kind: "browser",
+            catalog: { name: "Browser session", description: "Sign into any site", category: "extend", icon: "globe" },
+            fields: [
+                { key: "homeUrl", label: "Page to open" },
+                { key: "loginUrl", label: "Sign-in page", optional: true },
+                { key: "purpose", label: "What you will use it for" },
+            ],
+            skill: "skills/website/SKILL.md",
+        };
+        const card = contributionCard(generic);
+        expect(card.fields.map((field) => field.key)).toEqual(["platform", "homeUrl", "loginUrl", "purpose"]);
+        expect(card.fields[0]).toEqual({ key: "platform", label: "", value: "website" });
+        // No brand to borrow — it stands for whatever site the user points it at, so it carries a glyph instead.
+        expect(card.logo).toBeUndefined();
+        expect(card.icon).toBe("globe");
+    });
+
     it("pins no discriminator for a preset kind, whose cards differ only in their defaults", () => {
         const preset: CapabilityContribution = {
             id: "opencode",

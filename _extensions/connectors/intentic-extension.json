@@ -170,6 +170,39 @@
                 "skill": "skills/npmjs/SKILL.md"
             },
             {
+                "id": "website",
+                "kind": "browser",
+                "catalog": {
+                    "name": "Browser session",
+                    "icon": "globe",
+                    "description": "Sign into any site and let the agent act as you there.",
+                    "category": "extend",
+                    "hint": "The card for sites that have no card — an internal admin panel, a supplier portal, a client's CMS. Every other browser card is this one with the addresses filled in and a site cheatsheet attached, so use those where they exist: they teach the agent the site's own URLs and controls, which this one has to discover by reading the page. Add one session per account, named after the account."
+                },
+                "fields": [
+                    {
+                        "key": "homeUrl",
+                        "label": "Page to open",
+                        "placeholder": "https://admin.acme.com/dashboard",
+                        "hint": "Where this account lives once you are signed in — the page you would bookmark."
+                    },
+                    {
+                        "key": "loginUrl",
+                        "label": "Sign-in page",
+                        "placeholder": "https://admin.acme.com/login",
+                        "optional": true,
+                        "hint": "Only when signing in happens somewhere else (a separate identity provider). Otherwise the page above is where the login window opens."
+                    },
+                    {
+                        "key": "purpose",
+                        "label": "What you will use it for",
+                        "placeholder": "read and reply to supplier tickets",
+                        "hint": "One line, in your words. This is what tells the agent when to reach for this account instead of another."
+                    }
+                ],
+                "skill": "skills/website/SKILL.md"
+            },
+            {
                 "id": "sentry",
                 "kind": "cli",
                 "catalog": {

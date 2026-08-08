@@ -5,7 +5,7 @@ import { BROWSER_TOOLS_NOTE } from "../../browser/browser-skill.js";
 import { clearSession, hasSession } from "../../browser/session-store.js";
 import { packFragment } from "../../environment/packs.js";
 import type { CapabilityHandler } from "../capability.js";
-import { contributedSkill, contributionKey, contributionRegistry, hostOf } from "../contributions.js";
+import { browserUrls, contributedSkill, contributionKey, contributionRegistry, hostOf } from "../contributions.js";
 
 // A browser-automation connector: give the AGENT a real, logged-in browser for one platform whose API can't
 // cover "all the actions". The PLATFORM is data in an installed extension's `contributes.capabilities` (its card,
@@ -40,8 +40,23 @@ const browserPackInstalled = (): boolean => {
     }
 };
 
+// The site an account is on, as a person would say it — the host of wherever its browser opens. Used in the
+// messages the reader sees, because for a GENERIC session the `platform` slug is the card ("website") and says
+// nothing about which site was actually connected. Undefined for a value that isn't an http(s) URL at all, which
+// is what the add rejects rather than storing.
+const siteOf = (url: string): string | undefined => {
+    try {
+        const parsed = new URL(url);
+        return parsed.protocol === "http:" || parsed.protocol === "https:" ? parsed.host : undefined;
+    } catch {
+        return undefined;
+    }
+};
+
 export const browserHandler: CapabilityHandler = {
-    echo: (config) => ({ platform: (config as BrowserConfig).platform }),
+    // The whole config, not just the platform: a browser card holds no secret (its credential is the profile on
+    // disk), and a generic session's page and purpose are exactly what the card's row has to be able to show.
+    echo: (config) => ({ ...(config as BrowserConfig) }),
     fragment: () => packFragment("browser"),
     apply: async function* (ctx, id, config) {
         const { platform } = config as BrowserConfig;
@@ -49,14 +64,26 @@ export const browserHandler: CapabilityHandler = {
         if (contribution === undefined) {
             throw new Error(`no browser platform "${platform}" — install the extension that declares it`);
         }
-        const skill = await contributedSkill(contribution, id, BROWSER_TOOLS_NOTE);
+        /* WHERE THIS ACCOUNT'S BROWSER OPENS, settled HERE rather than when the login window is opened. A card
+         * pins it or the form answers it, and "neither" is a real possibility for the generic session — so it is
+         * caught at add-time, where the reader is still on the form that could fix it, instead of surfacing later
+         * as a sign-in window that comes up blank. */
+        const urls = browserUrls(contribution.spec, config as Record<string, string>);
+        if (urls === undefined) {
+            throw new Error(`"${platform}" needs a page to open — fill in the site's address`);
+        }
+        const site = siteOf(urls.homeUrl) ?? siteOf(urls.loginUrl);
+        if (site === undefined) {
+            throw new Error(`"${urls.homeUrl}" is not a web address — include https:// and the site's host`);
+        }
+        const skill = await contributedSkill(contribution, id, BROWSER_TOOLS_NOTE, config as Record<string, string>);
         if (skill === undefined) {
             throw new Error(`the extension declaring "${platform}" has no readable skill file — reinstall it`);
         }
         await ctx.files.write(skillPath(ctx.workspace.root, id), skill);
         yield {
             kind: "log",
-            message: `Connected the ${platform} browser. Rebuild the sandbox if prompted, then open "Log in" to sign in — the agent can then act as you on ${platform}.`,
+            message: `Connected "${id}" on ${site}. Rebuild the sandbox if prompted, then open "Log in" to sign in — the agent can then act as you there.`,
         };
     },
     // Two distinct pending states. The web UI (Capabilities.vue) routes the rebuild one to the Environment card

@@ -4,11 +4,12 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { Capability } from "@intentic/sandbox-contract";
 import { expect, test } from "vitest";
+import type { CapabilityContribution } from "@intentic/extension-manifest";
 import { hasSession, markConnected } from "../../browser/session-store.js";
 import { packFragment, readPack } from "../../environment/packs.js";
 import { readWorkspaceFile, removeWorkspacePath, writeWorkspaceFile } from "../../workspace/workspace-files.js";
 import type { CapabilityCtx } from "../capability.js";
-import { contributionRegistry } from "../contributions.js";
+import { browserUrls, contributionRegistry } from "../contributions.js";
 import type { ExtensionHost } from "../../extensions/installed-extensions.js";
 import { echoConfig, secretField } from "../summary.js";
 import { browserHandler } from "./browser.js";
@@ -38,6 +39,13 @@ const host: ExtensionHost = {
 
 const reddit: Capability = { id: "reddit", kind: "browser", config: { platform: "reddit" } };
 const skillPath = (root: string): string => join(root, ".claude", "skills", "reddit", "SKILL.md");
+
+// A generic session: the `website` card, with the answers a user would type on its form.
+const session = (id: string, homeUrl: string): Capability => ({
+    id,
+    kind: "browser",
+    config: { platform: "website", homeUrl, purpose: "read and reply to supplier tickets" },
+});
 
 const drain = async (gen: AsyncGenerator<unknown>): Promise<void> => {
     for await (const _ of gen) {
@@ -83,7 +91,11 @@ test("remove deletes the skill dir; status returns to inactive", async () => {
     expect(await browserHandler.status(ctx, "reddit", reddit.config)).toEqual({ state: "inactive" });
 });
 
-test("every contributed platform has a real login URL, a home to open on, and a skill that leaves room for the core tools note", async () => {
+/* EVERY BROWSER CARD CAN SAY WHERE IT OPENS — pinned, or asked for. A site card pins both pages; the generic
+ * session card pins neither and declares the fields that supply them. What no card may be is silent about both,
+ * because that is a card whose login window opens on nothing — and the failure would land on the user, in the
+ * one place they cannot fix it. */
+test("every contributed browser card can resolve a page to open, and has a skill that leaves room for the core tools note", async () => {
     const registry = await contributionRegistry(host);
     const browsers = [...registry.values()].filter((entry) => entry.spec.kind === "browser");
     expect(browsers.length).toBeGreaterThan(0);
@@ -91,12 +103,21 @@ test("every contributed platform has a real login URL, a home to open on, and a 
         if (spec.kind !== "browser") {
             continue;
         }
-        expect(spec.loginUrl, spec.id).toMatch(/^https:\/\//);
-        // Where the OWNER's own window opens once the account is connected. Its own field rather than the login
-        // page, which signed in only redirects, and rather than the login URL's origin, which for YouTube is
-        // accounts.google.com.
-        expect(spec.homeUrl, spec.id).toMatch(/^https:\/\//);
-        expect(spec.homeUrl, spec.id).not.toBe(spec.loginUrl);
+        const asks = new Set(spec.fields.map((field) => field.key));
+        if (spec.loginUrl === undefined && spec.homeUrl === undefined) {
+            // The generic card: it must ASK for the home page (the one answer it cannot do without) and offer the
+            // sign-in page as the optional second, which is exactly what browserUrls falls back through.
+            expect(asks.has("homeUrl"), spec.id).toBe(true);
+            expect(spec.fields.find((field) => field.key === "homeUrl")?.optional, spec.id).not.toBe(true);
+            expect(asks.has("loginUrl"), spec.id).toBe(true);
+        } else {
+            expect(spec.loginUrl, spec.id).toMatch(/^https:\/\//);
+            // Where the OWNER's own window opens once the account is connected. Its own field rather than the login
+            // page, which signed in only redirects, and rather than the login URL's origin, which for YouTube is
+            // accounts.google.com.
+            expect(spec.homeUrl, spec.id).toMatch(/^https:\/\//);
+            expect(spec.homeUrl, spec.id).not.toBe(spec.loginUrl);
+        }
         expect(spec.skill, spec.id).toMatch(/^skills\/.+\/SKILL\.md$/);
     }
 });
@@ -127,9 +148,70 @@ test("a browser platform contributed by another extension applies the same way",
     expect(skill).toContain("browser_snapshot");
 });
 
-test("echoConfig exposes only the platform; browser holds no manifest secret", () => {
+// The whole config echoes, because none of it is secret (the credential is the profile on disk) and a generic
+// session's row has to be able to say which site it points at.
+test("echoConfig exposes the config as it stands; browser holds no manifest secret", () => {
     expect(echoConfig(reddit, new Map())).toEqual({ platform: "reddit" });
+    expect(echoConfig(session("acme", "https://admin.acme.com/dashboard"), new Map())).toEqual({
+        platform: "website",
+        homeUrl: "https://admin.acme.com/dashboard",
+        purpose: "read and reply to supplier tickets",
+    });
     expect(secretField(reddit, new Map())).toBeUndefined();
+});
+
+/* THE GENERIC SESSION: a site nobody shipped a card for. Everything the four site cards get from their manifest,
+ * this one gets from the form — so what is asserted here is that the two paths converge: a cheatsheet that names
+ * the site and the purpose IN ITS FRONTMATTER (the agent routes on that line, and a generic skill silent about
+ * its site would never be picked for it), the shared tools note, and the same per-account identity. */
+test("a generic browser session connects a site that has no card of its own", async () => {
+    const { ctx, root } = tempCtx();
+    const acme = session("acme", "https://admin.acme.com/dashboard");
+
+    await drain(browserHandler.apply(ctx, "acme", acme.config));
+
+    const skill = await readWorkspaceFile(join(root, ".claude", "skills", "acme", "SKILL.md"));
+    expect(skill).toContain("name: acme");
+    // The routing line: the site and the user's own words for what the account is for.
+    expect(skill).toMatch(/^description: .*admin\.acme\.com.*supplier tickets/m);
+    expect(skill).toContain("https://admin.acme.com/dashboard");
+    // Nothing left unsubstituted, and the shared browser instructions landed.
+    expect(skill).not.toContain("${");
+    expect(skill).toContain("browser_snapshot");
+    expect(skill).toContain("THIS SKILL IS ONE ACCOUNT: `acme`");
+    // And it is a connection like any other: pending on its own login.
+    expect((await browserHandler.status(ctx, "acme", acme.config)).state).toBe("pending");
+});
+
+// The sign-in page is the optional second answer: given, it is where the login window goes; omitted, the page the
+// account lives on serves as both — because most sites sign in where they live, and asking for the same URL twice
+// to prove it would read as a broken form.
+test("a session's sign-in page falls back to the page it opens on", () => {
+    const card = { kind: "browser", id: "website", fields: [], skill: "s" } as unknown as CapabilityContribution;
+    expect(browserUrls(card, { platform: "website", homeUrl: "https://admin.acme.com/dashboard" })).toEqual({
+        homeUrl: "https://admin.acme.com/dashboard",
+        loginUrl: "https://admin.acme.com/dashboard",
+    });
+    expect(browserUrls(card, { platform: "website", homeUrl: "https://admin.acme.com/", loginUrl: "https://id.acme.com/signin" })).toEqual({
+        homeUrl: "https://admin.acme.com/",
+        loginUrl: "https://id.acme.com/signin",
+    });
+    // A site card's pinned pages still win where the form says nothing, and the form still overrides them — a
+    // preset pointed at a self-hosted instance of the same software.
+    const pinned = { kind: "browser", id: "npmjs", fields: [], skill: "s", loginUrl: "https://a/login", homeUrl: "https://a/" } as unknown as CapabilityContribution;
+    expect(browserUrls(pinned, { platform: "npmjs" })).toEqual({ loginUrl: "https://a/login", homeUrl: "https://a/" });
+    expect(browserUrls(pinned, { platform: "npmjs", homeUrl: "https://mine/" })?.homeUrl).toBe("https://mine/");
+    // Neither answered is the one case that cannot be papered over.
+    expect(browserUrls(card, { platform: "website" })).toBeUndefined();
+});
+
+// …and the add is where that surfaces, while the reader is still on the form that can fix it.
+test("a session with no page to open, or a page that is not a web address, fails the add", async () => {
+    const { ctx } = tempCtx();
+    await expect(drain(browserHandler.apply(ctx, "acme", { platform: "website", purpose: "x" }))).rejects.toThrow(/needs a page to open/);
+    await expect(drain(browserHandler.apply(ctx, "acme", { platform: "website", homeUrl: "admin.acme.com", purpose: "x" }))).rejects.toThrow(
+        /not a web address/,
+    );
 });
 
 /* SEVERAL ACCOUNTS OF ONE SITE. Two entries, one platform, and the identity keyed by the ENTRY: so the second
@@ -164,4 +246,24 @@ test("a second account of the same site is its own connection", async () => {
     expect(await readWorkspaceFile(skillOf("reddit-personal"))).toContain("name: reddit-personal");
     expect(hasSession(root, "reddit-work")).toBe(false);
     expect(hasSession(root, "reddit-personal")).toBe(true);
+});
+
+// The same guarantee for generic sessions, which is where a user is MOST likely to want two — one site, two
+// accounts, and only the form to tell them apart. Two sessions can even sit on one site at different pages.
+test("two generic sessions on one site stay separate accounts", async () => {
+    const { ctx, root } = tempCtx();
+    const support = session("acme-support", "https://admin.acme.com/tickets");
+    const billing = session("acme-billing", "https://admin.acme.com/invoices");
+
+    await drain(browserHandler.apply(ctx, support.id, support.config));
+    await drain(browserHandler.apply(ctx, billing.id, billing.config));
+    await markConnected(root, support.id);
+
+    expect(await readWorkspaceFile(join(root, ".claude", "skills", "acme-support", "SKILL.md"))).toContain("/tickets");
+    expect(await readWorkspaceFile(join(root, ".claude", "skills", "acme-billing", "SKILL.md"))).toContain("/invoices");
+    expect(hasSession(root, "acme-billing")).toBe(false);
+
+    await browserHandler.remove!(ctx, support.id, support.config);
+    expect(hasSession(root, "acme-support")).toBe(false);
+    expect(await readWorkspaceFile(join(root, ".claude", "skills", "acme-billing", "SKILL.md"))).toContain("name: acme-billing");
 });

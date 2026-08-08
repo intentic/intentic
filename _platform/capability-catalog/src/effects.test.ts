@@ -174,4 +174,39 @@ describe("capabilityEffects", () => {
             { kind: "profile", platform: "reddit" },
         ]);
     });
+
+    /* A GENERIC SESSION'S ROW NAMES THE SITE, not the card. "Keeps a logged-in website browser profile" would be
+     * true of nothing in particular, on the one row where the user decides whether to store a session and a
+     * passkey at all — so the address they typed is read down to its host and stands in. */
+    it("names the site a generic browser session points at", () => {
+        const [, , profile] = capabilityEffects({
+            kind: "browser",
+            id: "acme",
+            config: { platform: "website", homeUrl: "https://admin.acme.com/dashboard" },
+        });
+        expect(profile).toEqual({ kind: "profile", platform: "admin.acme.com" });
+    });
+
+    /* The row is live while the address is being typed, and the fallback is for what cannot be read as an address
+     * AT ALL — empty, or a host with no scheme. A partial host is deliberately NOT special-cased: the only rule
+     * that would catch "https://adm" is "a host needs a dot", and that would throw away `localhost:3000` and a
+     * LAN hostname — which are precisely the internal admin panels this card exists for. */
+    it("falls back to the card when the address cannot be read at all", () => {
+        const bare = capabilityEffects({ kind: "browser", id: "acme", config: { platform: "website", homeUrl: "admin.acme.com" } });
+        expect(bare[2]).toEqual({ kind: "profile", platform: "website" });
+        const empty = capabilityEffects({ kind: "browser", id: "acme", config: { platform: "website", homeUrl: "" } });
+        expect(empty[2]).toEqual({ kind: "profile", platform: "website" });
+    });
+
+    // A host with no dot is a real answer, not a typo — an internal panel on the sandbox's own machine.
+    it("keeps a schemeless-looking but valid host, port and all", () => {
+        const [, , profile] = capabilityEffects({ kind: "browser", id: "panel", config: { platform: "website", homeUrl: "http://localhost:3000/admin" } });
+        expect(profile).toEqual({ kind: "profile", platform: "localhost:3000" });
+    });
+
+    // The sign-in page answers it when that is the only address given.
+    it("reads the site off the sign-in page when that is all there is", () => {
+        const [, , profile] = capabilityEffects({ kind: "browser", id: "acme", config: { platform: "website", loginUrl: "https://id.acme.com/signin" } });
+        expect(profile).toEqual({ kind: "profile", platform: "id.acme.com" });
+    });
 });

@@ -2736,7 +2736,13 @@ export const DockerConfigSchema = z.object({
 // `platform` is an OPEN slug, not an enum, for the reason `cli`'s `provider` is: a platform is a card, a login URL
 // and a skill in an installed extension's `contributes.capabilities`, so the set of them is not a fact this
 // contract can know. The add route validates it against the contributed entry instead (see contributions.ts).
-export const BrowserConfigSchema = z.object({ platform: z.string().min(1) });
+//
+// `catchall`, the `cli` precedent, for the card that carries no site at all: a GENERIC browser session, where the
+// page to open and what the account is for are answered on the form instead of pinned in a manifest. A site card
+// pins its URLs and declares no fields; the generic one declares fields and pins nothing — one kind, because
+// nothing downstream of the URLs differs. Which keys are legal is the CARD's business, checked against its
+// declared fields at add-time (validateContributionConfig), not this schema's.
+export const BrowserConfigSchema = z.object({ platform: z.string().min(1) }).catchall(z.string());
 /* A connected COMPUTER of the user's own — the inverse of `ssh`, which reaches a server the sandbox can dial.
  * A machine behind NAT can't be dialled, so it dials US: the @intentic/host agent (installed by a one-liner,
  * enrolled with a single-use pairing token) holds one outbound WebSocket to this daemon and serves an MCP tool

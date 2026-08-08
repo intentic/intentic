@@ -91,28 +91,84 @@ export const contributionSecretFields = (spec: CapabilityContribution): Set<stri
 export const contributionSecretField = (spec: CapabilityContribution): string | undefined =>
     spec.fields.find((field) => field.secret === true)?.key;
 
+/* WHERE A CONNECTED BROWSER OPENS — the sign-in page for a login window, the home page for the owner's own
+ * visit — resolved for ONE instance, because the two kinds of browser card answer it in different places: a site
+ * card pins both in its manifest (Reddit knows where Reddit signs in), and the generic session card asks for them
+ * on its form, which is what lets a user connect a site nobody shipped a card for. Config wins over the manifest,
+ * so a preset can still be pointed at a different instance of the same software (a self-hosted GitLab).
+ *
+ * Either one alone is enough and each falls back to the other: most sites sign in on the page they live on, and
+ * asking a user to type the same URL twice to prove it would be a form that reads as broken. undefined means
+ * NEITHER was answered — the one case that cannot be papered over, since the login window would open on nothing;
+ * the browser handler turns it into a failed add so the reader sees it on the form they are still standing on. */
+export interface BrowserUrls {
+    readonly loginUrl: string;
+    readonly homeUrl: string;
+}
+
+export const browserUrls = (spec: CapabilityContribution, config: Record<string, string>): BrowserUrls | undefined => {
+    if (spec.kind !== "browser") {
+        return undefined;
+    }
+    const home = config["homeUrl"] ?? spec.homeUrl;
+    const login = config["loginUrl"] ?? spec.loginUrl;
+    return login === undefined && home === undefined ? undefined : { loginUrl: login ?? home!, homeUrl: home ?? login! };
+};
+
 // The checkout-relative fragment path as absolute — cli only, and only when it declares one.
 export const contributionFragmentPath = (contribution: ResolvedContribution): string | undefined =>
     contribution.spec.kind === "cli" && contribution.spec.fragment !== undefined
         ? join(contribution.extension.dir, contribution.spec.fragment)
         : undefined;
 
-/* THE CARD'S SKILL.md, read and rendered for ONE instance. Two substitutions, the same for every kind:
- *   `${tools}` → the kind's core tool-surface note (how to drive the shared browser, what a connected
- *                computer's tools are and what a refused scope means) — core because the tools are, and
- *                because a note duplicated across N platform packs is a note that drifts;
- *   `${id}`    → this instance's name, so the examples are copy-pasteable rather than illustrative.
+/* THE CARD'S SKILL.md, read and rendered for ONE instance. Three substitutions, the same for every kind:
+ *   `${tools}`   → the kind's core tool-surface note (how to drive the shared browser, what a connected
+ *                  computer's tools are and what a refused scope means) — core because the tools are, and
+ *                  because a note duplicated across N platform packs is a note that drifts;
+ *   `${id}`      → this instance's name, so the examples are copy-pasteable rather than illustrative;
+ *   `${<field>}` → whatever the user answered on the card's form, the same spelling cli's env templates use.
+ *
+ * The field pass is what lets ONE pack serve a card that knows nothing about its site: the generic browser
+ * session's cheatsheet names the page and the purpose the user typed, so the agent can tell which account it is
+ * holding and when to reach for it — facts a site pack hardcodes and a generic one cannot. Fields substitute
+ * into the FRONTMATTER too, which is the point: `description` is what the agent routes on, and a generic skill
+ * whose description said nothing about the site would never be picked for it. An unanswered optional field
+ * yields "" rather than the literal `${...}`, so a template can reference one without demanding it.
+ *
+ * A `secret` FIELD IS NEVER SUBSTITUTED. A skill file is plain text in the workspace that the agent reads every
+ * turn and that a `cli` pack could reference by name; copying a token into one would spread a credential from the
+ * one place it is guarded (the manifest, on the secret denylist) into a place nothing guards. Such a reference
+ * renders empty — visibly wrong in the pack, rather than quietly leaking.
+ *
  * The frontmatter `name:` becomes the (unique) instance id last, so two instances of one card never register
  * the same skill name. cli's extra `$VAR` → `$VAR_<SUFFIX>` pass is its own, and stays in its handler.
  *
  * Undefined means the file is missing from the checkout — a rotted install, which every caller turns into a
  * failed add rather than an empty skill the agent would silently read as "this tool does nothing". */
-export const contributedSkill = async (contribution: ResolvedContribution, id: string, tools: string): Promise<string | undefined> => {
+export const contributedSkill = async (
+    contribution: ResolvedContribution,
+    id: string,
+    tools: string,
+    config: Record<string, string> = {},
+): Promise<string | undefined> => {
     if (!("skill" in contribution.spec)) {
         return undefined;
     }
     const source = await extensionRead(join(contribution.extension.dir, contribution.spec.skill));
-    return source === undefined ? undefined : source.replaceAll("${tools}", tools).replaceAll("${id}", id).replace(/^name: .*$/m, `name: ${id}`);
+    if (source === undefined) {
+        return undefined;
+    }
+    // `${tools}` first, so a note may itself reference `${id}`; fields last, and only the ones the card DECLARED —
+    // a template can't reach a key the form never showed, and `${tools}`/`${id}` can't be shadowed by a field. A
+    // secret field is substituted with NOTHING rather than skipped: left as the literal `${token}` it would still
+    // be safe, but it would sit in the agent's context looking like a value it was supposed to find.
+    const secrets = contributionSecretFields(contribution.spec);
+    const fields = contribution.spec.fields.map((field) => field.key).filter((key) => key !== "tools" && key !== "id");
+    let rendered = source.replaceAll("${tools}", tools).replaceAll("${id}", id);
+    for (const key of fields) {
+        rendered = rendered.replaceAll(`\${${key}}`, secrets.has(key) ? "" : (config[key] ?? ""));
+    }
+    return rendered.replace(/^name: .*$/m, `name: ${id}`);
 };
 
 /* Validate a capability's config against the card's declared fields: required (non-optional, no `when` unmet)

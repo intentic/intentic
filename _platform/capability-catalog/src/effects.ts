@@ -83,6 +83,19 @@ const filled = (value: string | number | boolean | undefined): boolean => typeof
 // A token either typed into the form (`token`) or echoed as present on an installed instance (`hasToken`).
 const hasToken = (config: CapabilityEffectInput["config"]): boolean => filled(config["token"]) || config["hasToken"] === true;
 const cloneUrl = (config: CapabilityEffectInput["config"]): string | undefined => (filled(config["url"]) ? String(config["url"]) : undefined);
+// A typed-in address as the site a person would name — undefined until it is a whole http(s) URL, which is most
+// of the time while someone is still typing one, so the row this feeds falls back rather than flickering.
+const host = (value: string | number | boolean | undefined): string | undefined => {
+    if (!filled(value)) {
+        return undefined;
+    }
+    try {
+        const parsed = new URL(String(value));
+        return parsed.protocol === "http:" || parsed.protocol === "https:" ? parsed.host : undefined;
+    } catch {
+        return undefined;
+    }
+};
 // The docker config keys that live in daemon.json rather than the image (DockerConfigSchema's engine family) —
 // setting any of them is what makes an apply bounce dockerd.
 const ENGINE_OPTIONS = ["registryMirror", "insecureRegistries", "addressPool"] as const;
@@ -156,9 +169,14 @@ const KIND_EFFECTS: Record<CapabilityKind, (input: CapabilityEffectInput) => rea
     ],
     browser: (input) => {
         const effects: CapabilityEffect[] = [{ kind: "skill", name: input.id }, { kind: "image" }];
-        const platform = input.config["platform"];
-        if (typeof platform === "string") {
-            effects.push({ kind: "profile", platform });
+        /* WHICH SITE the stored session belongs to. A site card's `platform` slug IS the site (reddit, npmjs), but
+         * the generic session's is the card ("website") and would disclose "keeps a logged-in website browser
+         * profile" — true of nothing in particular, on the row where the user decides whether to store a session
+         * and a passkey at all. So the address they typed wins, read down to its host: the row names the site
+         * being connected while they are still typing it. */
+        const site = host(input.config["homeUrl"]) ?? host(input.config["loginUrl"]) ?? input.config["platform"];
+        if (typeof site === "string" && site !== "") {
+            effects.push({ kind: "profile", platform: site });
         }
         return effects;
     },

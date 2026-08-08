@@ -322,8 +322,20 @@ export const CapabilityContributionSchema = z
          * place to start (signed in, it only redirects). Two fields because for some platforms the login lives on
          * another site entirely (YouTube signs in at accounts.google.com), so one cannot be derived from the other.
          * No `env` and no `fragment`: the browser itself is core (one Chromium install serves every platform),
-         * only the identity is per-entry. */
-        z.object({ ...contributionBase, kind: z.literal("browser"), loginUrl: z.url(), homeUrl: z.url(), skill: z.string().min(1) }),
+         * only the identity is per-entry.
+         *
+         * BOTH URLs ARE OPTIONAL, so that one card can be the GENERIC one: a site card pins them (Reddit knows
+         * where Reddit signs in), and the generic "browser session" card asks for them on its form instead, which
+         * is what lets a user connect a site nobody shipped a card for. A card must do one or the other — pin a
+         * URL or declare a field that supplies it — and the daemon's apply says so on the form when neither does,
+         * because the alternative is a sign-in window that opens on nothing. */
+        z.object({
+            ...contributionBase,
+            kind: z.literal("browser"),
+            loginUrl: z.url().optional(),
+            homeUrl: z.url().optional(),
+            skill: z.string().min(1),
+        }),
         // An operating system a connected computer can run — the skill pack that teaches the agent THAT machine's
         // shell. The enrollment, the socket and the scope enforcement are core; only the pack varies.
         z.object({ ...contributionBase, kind: z.literal("host"), skill: z.string().min(1) }),

@@ -1,4 +1,4 @@
-import { existsSync, mkdtempSync, readFileSync, statSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -14,7 +14,7 @@ import type { CapabilitiesStore } from "../capabilities-store.js";
 import type { CapabilityCtx } from "../capability.js";
 import { echoConfig } from "../summary.js";
 import { cliEnvOf } from "../cli-env.js";
-import { contributionRegistry } from "../contributions.js";
+import { contributedSkill, contributionRegistry } from "../contributions.js";
 import { restoreConnectorHooks } from "../cli/connector-hooks.js";
 import { type GitAccessDeps, gitAccessWired, gitHostOf, restoreGitAccess, setupGitAccess, teardownGitAccess } from "../cli/git-access.js";
 import { stripNpmAuth, upsertNpmAuth } from "../cli/npm-access.js";
@@ -495,6 +495,41 @@ test("a cli contribution whose env references a totp field fails to parse", () =
     expect(leaking.success ? [] : leaking.error.issues.map((issue) => issue.message)).toEqual([
         'env must not reference the totp field "totpSecret" — the daemon mints codes from it instead',
     ]);
+});
+
+/* A SKILL TEMPLATE MAY QUOTE THE FORM, BUT NEVER A SECRET. The `${field}` pass exists so one pack can serve a
+ * card that knows nothing about its site (the generic browser session names the page and purpose the user typed).
+ * A skill file is plain text in the workspace that the agent reads every turn — so a pack referencing a secret
+ * field must render EMPTY rather than copy a token out of the one place that guards it. Same rule as the totp
+ * check above, at the other seam where a card's values leave the manifest. */
+test("a skill template's ${field} pass substitutes answers but never a secret", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "skill-sub-"));
+    mkdirSync(join(dir, "skills", "x"), { recursive: true });
+    writeFileSync(join(dir, "skills", "x", "SKILL.md"), "---\nname: x\ndescription: for ${label}\n---\ntoken=[${token}] label=[${label}] id=[${id}]\n");
+    const contribution = {
+        spec: {
+            id: "x",
+            kind: "cli",
+            catalog: { name: "X", description: "d", category: "code" },
+            fields: [
+                { key: "token", label: "Token", secret: true },
+                { key: "label", label: "Label" },
+            ],
+            env: {},
+            skill: "skills/x/SKILL.md",
+        },
+        extension: { dir },
+    } as unknown as Parameters<typeof contributedSkill>[0];
+
+    const skill = await contributedSkill(contribution, "mine", "", { token: "super-secret", label: "our staging box" });
+
+    expect(skill).toContain("label=[our staging box]");
+    expect(skill).toContain("id=[mine]");
+    expect(skill).toContain("token=[]");
+    expect(skill).not.toContain("super-secret");
+    // The frontmatter is substituted too — that line is what the agent routes on.
+    expect(skill).toContain("description: for our staging box");
+    expect(skill).toContain("name: mine");
 });
 
 test("npm: the totp seed reaches neither the echo nor the agent env", async () => {

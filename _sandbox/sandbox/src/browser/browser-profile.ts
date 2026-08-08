@@ -7,7 +7,7 @@ import { acquireProfileLock, markConnected, passkeyPath, releaseProfileLock, ses
 import { STEALTH_INIT } from "./stealth.js";
 import type { Services } from "../composition.js";
 import { redeemTicket } from "../auth/ws-tickets.js";
-import { contributionKey, contributionRegistry } from "../capabilities/contributions.js";
+import { browserUrls, contributionKey, contributionRegistry } from "../capabilities/contributions.js";
 
 /* The /system/browser-profile route: THE OWNER'S OWN HANDS ON ONE CONNECTED ACCOUNT'S BROWSER. Like
  * /system/terminal it's a WebSocket the header-less browser drives, so it authorizes token+connect from the
@@ -79,18 +79,26 @@ export const createBrowserProfileRoute = (services: Services) =>
                     ws.close(1008, "invalid capability");
                     return;
                 }
-                // Its SITE is where the sign-in and the home page live — real iff an enabled extension declares
-                // it, the same registry the browser handler resolves against.
+                // Its CARD is what knows where to open — real iff an enabled extension declares it, the same
+                // registry the browser handler resolves against.
                 const contribution = (await contributionRegistry(services)).get(contributionKey("browser", capability.config.platform));
                 if (contribution === undefined || contribution.spec.kind !== "browser") {
                     ws.close(1008, "invalid platform");
                     return;
                 }
+                // Pinned by a site card, answered on the form by a generic session (see browserUrls). Absent from
+                // both is impossible here — the add that wrote this entry would have failed — so a missing pair is
+                // a rotted install, and closing says so rather than opening a window on nothing.
+                const urls = browserUrls(contribution.spec, capability.config);
+                if (urls === undefined) {
+                    ws.close(1008, "this connection has no page to open — re-add it");
+                    return;
+                }
                 signingIn = url.searchParams.get("mode") !== "browse";
                 // Signed in, a login page only bounces to the feed — so a browse window starts where the owner
-                // means to be. The two are separate manifest fields because some platforms sign in on another
-                // site entirely (YouTube at accounts.google.com).
-                const startUrl = signingIn ? contribution.spec.loginUrl : contribution.spec.homeUrl;
+                // means to be. The two are separate answers because some sites sign in somewhere else entirely
+                // (YouTube at accounts.google.com).
+                const startUrl = signingIn ? urls.loginUrl : urls.homeUrl;
                 if (!acquireProfileLock(requested)) {
                     ws.close(1008, "this browser is already open in another window");
                     return;
