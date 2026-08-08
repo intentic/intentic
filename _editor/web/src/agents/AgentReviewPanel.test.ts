@@ -6,6 +6,7 @@
 // fix is entirely in what renders: a mark per blocked row, a count per repo heading, a filter that narrows to
 // them. None of that can be pinned by a unit test on the composable, only by looking at the rows.
 import type { AgentChangesResponse } from "@intentic-app/api-contract";
+import type { WorkspaceModules } from "@intentic/sandbox-contract";
 import { VueQueryPlugin } from "@tanstack/vue-query";
 import { afterEach, expect, it, vi } from "vitest";
 import { type App, createApp, defineComponent, h, nextTick, ref } from "vue";
@@ -79,14 +80,24 @@ const changes: AgentChangesResponse = {
     ],
 };
 
+/* The root repo's package layout, for the tests about PACKAGES. One package over the two auth files, and the
+ * two loose files nothing claims — which are also, deliberately, the two blocked ones: folding the bucket that
+ * holds a refusal is the case where a fold must not be able to hide anything. */
+const MODULES: WorkspaceModules = { repos: [{ repo: `root`, modules: [{ dir: `src/auth`, name: `@shop/auth` }] }] };
+
 let app: App | undefined;
 
 /* Seeded into the query cache rather than served over a stubbed fetch: the diff query is gated on the daemon
  * being reachable (useSandboxQuery), which no test drives, and the cache is where the real panel reads it from
  * anyway — this is the state a browser is in when it opens the review on a conflict it learned about from the
  * board. */
-const mount = async (): Promise<HTMLElement> => {
+const mount = async (modules?: WorkspaceModules): Promise<HTMLElement> => {
     queryClient.setQueryData(sandboxKey(`agents`, AGENT, `diff`), changes);
+    // Without this the repo has no packages to group by, so every path lands in one unnamed bucket and the list
+    // draws repo headings only — which is what the tests that aren't about packages want.
+    if (modules !== undefined) {
+        queryClient.setQueryData(sandboxKey(`workspace`, `modules`), modules);
+    }
     const el = document.createElement(`div`);
     document.body.append(el);
     // The review's state is created by AgentDetail in the real page and handed down, so one instance serves
@@ -128,6 +139,15 @@ afterEach(() => {
 const rows = (el: HTMLElement): HTMLElement[] => [...el.querySelectorAll<HTMLElement>(`[class*="group/file"]`)];
 const rowFor = (el: HTMLElement, path: string): HTMLElement =>
     rows(el).find((row) => row.textContent?.includes(path.slice(path.lastIndexOf(`/`) + 1)))!;
+// The rows on screen, top to bottom, by the file each one names — the reading the list gives a user.
+const NAMES = /session\.test\.ts|session\.ts|config\.ts|logo\.png|README\.md/;
+const rowNames = (el: HTMLElement): string[] => rows(el).map((row) => row.textContent?.match(NAMES)?.[0] ?? ``);
+// A PACKAGE heading's own control (the fold), told apart from its repo's by the module glyph it carries and
+// from the sweep beside it by the fact that it is the half with the name on it.
+const packageHeading = (el: HTMLElement, name: string): HTMLElement =>
+    [...el.querySelectorAll<HTMLElement>(`[class*="group/head"] > button`)].find(
+        (button) => button.querySelector(`[data-icon="box"], [data-icon="folder"]`) !== null && button.textContent?.trim().startsWith(name) === true,
+    )!;
 // The narrowing control's options, in the order it offers them.
 const filters = (el: HTMLElement): string[] =>
     [...el.querySelectorAll(`button`)]
@@ -172,6 +192,49 @@ it(`narrows to exactly the blocked files`, async () => {
     [...el.querySelectorAll(`button`)].find((button) => button.textContent?.trim() === `Blocked 2`)!.click();
     await nextTick();
     expect(rows(el).map((row) => row.textContent?.match(/config\.ts|logo\.png|session\.ts|README\.md/)?.[0])).toEqual([`config.ts`, `logo.png`]);
+});
+
+/* FOLDING A PACKAGE. A landing that spans four packages is one the reviewer cares about and three that are
+ * noise to them, and before this the only fold on offer was the whole repo — which in a monorepo is the entire
+ * review. These three pin the parts that are easy to get wrong: what disappears, what must not, and that the
+ * keyboard can't walk back into what you just folded. */
+it(`folds one package's rows away and leaves the rest of the review standing`, async () => {
+    const el = await mount(MODULES);
+    expect(rowNames(el)).toEqual([`session.ts`, `session.test.ts`, `config.ts`, `logo.png`, `README.md`]);
+    packageHeading(el, `@shop/auth`).click();
+    await nextTick();
+    expect(rowNames(el)).toEqual([`config.ts`, `logo.png`, `README.md`]);
+    // The same control both ways — a fold with no way back is a file hidden for good.
+    packageHeading(el, `@shop/auth`).click();
+    await nextTick();
+    expect(rowNames(el)).toEqual([`session.ts`, `session.test.ts`, `config.ts`, `logo.png`, `README.md`]);
+});
+
+it(`keeps a folded package saying how big it is and how much of it refused`, async () => {
+    const el = await mount(MODULES);
+    // The bucket of files no package claims — here, both blocked ones.
+    const loose = packageHeading(el, `root`);
+    loose.click();
+    await nextTick();
+    expect(rowNames(el)).toEqual([`session.ts`, `session.test.ts`, `README.md`]);
+    expect(packageHeading(el, `root`).querySelector(`[data-icon="exclamation-triangle"]`)).not.toBeNull();
+    expect(packageHeading(el, `root`).textContent).toContain(`2`);
+    // Its size stays legible while it is folded: +2 −1 (config.ts) with logo.png carrying no line counts.
+    expect(packageHeading(el, `@shop/auth`).textContent).toContain(`+20`);
+    expect(packageHeading(el, `root`).textContent).toContain(`+2`);
+});
+
+it(`steps past a folded package instead of landing inside it`, async () => {
+    const el = await mount(MODULES);
+    packageHeading(el, `@shop/auth`).click();
+    await nextTick();
+    // Folding is "give me back the space", not "close the file I'm reading" — the diff stays on session.ts.
+    expect(el.querySelector(`section > div`)?.textContent).toContain(`session.ts`);
+    window.dispatchEvent(new KeyboardEvent(`keydown`, { key: `j` }));
+    await nextTick();
+    await nextTick();
+    // The next row DOWN the list, not the folded package's second file.
+    expect(el.querySelector(`section > div`)?.textContent).toContain(`config.ts`);
 });
 
 it(`lands a path clicked in the report on its row, and says so in the diff header`, async () => {
