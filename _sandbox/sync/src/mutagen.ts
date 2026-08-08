@@ -241,7 +241,7 @@ export const retireOrphanSessions = (mutagen: string, pairings: readonly Pairing
     }
 };
 
-const osToken = (): "linux" | "darwin" | "windows" => {
+export const osToken = (): "linux" | "darwin" | "windows" => {
     if (process.platform === "linux" || process.platform === "darwin") {
         return process.platform;
     }
@@ -251,9 +251,9 @@ const osToken = (): "linux" | "darwin" | "windows" => {
     throw new Error(`auto-download isn't supported on ${process.platform} — install mutagen and cloudflared manually, then re-run.`);
 };
 
-const exe = process.platform === "win32" ? ".exe" : "";
+export const exe = process.platform === "win32" ? ".exe" : "";
 
-const archToken = (): "amd64" | "arm64" => {
+export const archToken = (): "amd64" | "arm64" => {
     if (process.arch === "x64") {
         return "amd64";
     }
@@ -278,7 +278,7 @@ const installedVersion = (binary: string, versionArgs: string[]): string | undef
     return /\d+\.\d+\.\d+/.exec(result.stdout)?.[0];
 };
 
-const download = async (url: string, dest: string): Promise<void> => {
+export const download = async (url: string, dest: string): Promise<void> => {
     const response = await fetch(url);
     if (!response.ok) {
         throw new Error(`download failed (${response.status}): ${url}`);

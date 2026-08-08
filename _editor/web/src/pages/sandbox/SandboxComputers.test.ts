@@ -45,6 +45,11 @@ vi.mock(`../../composables/sandbox/useSandbox`, () => ({
     useSandbox: () => ({ daemonUrl: ref(undefined) }),
     sandboxKey: (name: string) => [name],
 }));
+/* The release this sandbox knows about. Mocked rather than left to the real /info query for the same reason
+ * useComputers is: the subject is what a ROW says, and an agent's staleness is now part of that. A ref so a test
+ * can set it to undefined and pin the case where the yardstick is missing. */
+const latest = ref<string | undefined>(`1.183.0`);
+vi.mock(`../../composables/sandbox/useSandboxVersion`, () => ({ useSandboxVersion: () => ({ latest }) }));
 // The two cards below the list have their own daemon calls; this mounts the list and nothing else.
 vi.mock(`./DesktopSyncCard.vue`, () => ({ default: defineComponent({ render: () => null }) }));
 vi.mock(`./BridgeTokensCard.vue`, () => ({ default: defineComponent({ render: () => null }) }));
@@ -65,6 +70,7 @@ const mount = (rows: Computer[]): HTMLElement => {
 };
 
 afterEach(() => {
+    latest.value = `1.183.0`;
     app?.unmount();
     app = undefined;
     document.body.innerHTML = ``;
@@ -144,4 +150,49 @@ it(`names the image each sandbox on the machine is running`, () => {
         },
     ]);
     expect(el.textContent ?? ``).toContain(`ghcr.io/intentic/sandbox:2.3.1`);
+});
+
+/* THE SIGNAL THIS ROW WAS MISSING. A machine ran an agent five days behind a fix for the very bug it was hitting,
+ * and this line said "sync agent 0.1.0" throughout — true, and useless without the version it should have been.
+ * Both halves are asserted: the fact, in place among the other facts, and the one command that resolves it. */
+const behind = (): Computer => ({
+    key: `laptop`,
+    label: `laptop`,
+    syncEnrolled: true,
+    platform: `linux`,
+    report: {
+        hostname: `laptop`,
+        os: `linux`,
+        agents: { sync: `0.1.0` },
+        sandboxes: [],
+        pairings: [],
+        ports: [],
+        watcher: { running: true },
+        capturedAt: Date.now(),
+    },
+});
+
+it(`says when a computer's sync agent is behind, and what to run`, () => {
+    const text = mount([behind()]).textContent ?? ``;
+    expect(text).toContain(`sync agent 0.1.0 (1.183.0 available)`);
+    expect(text).toContain(`intentic-sync upgrade`);
+});
+
+// A current agent gets neither — a row that nags at a machine with nothing to do is how people learn to read past
+// the line entirely.
+it(`says nothing about updating a computer that is already current`, () => {
+    const row = behind();
+    const text = mount([{ ...row, report: { ...row.report!, agents: { sync: `1.183.0` } } }]).textContent ?? ``;
+    expect(text).toContain(`sync agent 1.183.0`);
+    expect(text).not.toContain(`available`);
+    expect(text).not.toContain(`intentic-sync upgrade`);
+});
+
+// And a sandbox that has never reached the registry has no yardstick, so it makes no claim about anyone's agent.
+it(`makes no claim when this sandbox doesn't know the latest release`, () => {
+    latest.value = undefined;
+    const text = mount([behind()]).textContent ?? ``;
+    expect(text).toContain(`sync agent 0.1.0`);
+    expect(text).not.toContain(`available`);
+    expect(text).not.toContain(`intentic-sync upgrade`);
 });

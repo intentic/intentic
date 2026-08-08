@@ -5,11 +5,12 @@ import Button from "primevue/button";
 import { computed, onMounted, ref } from "vue";
 import { useRoute } from "vue-router";
 import BridgeTokensCard from "./BridgeTokensCard.vue";
-import { computerDetails, osLabel, osTitle } from "./computerFacts";
+import { computerDetails, osLabel, osTitle, syncAgentBehind } from "./computerFacts";
 import DesktopSyncCard from "./DesktopSyncCard.vue";
 import MachineRunLog from "./MachineRunLog.vue";
 import { manageMachineSandbox, reportStale, useComputers } from "../../composables/sandbox/useComputers";
 import { useSandbox } from "../../composables/sandbox/useSandbox";
+import { useSandboxVersion } from "../../composables/sandbox/useSandboxVersion";
 import { useNow } from "../../composables/useNow";
 
 /* The Sandbox hub's "Computers" tab — what is on the other end of this sandbox.
@@ -33,6 +34,14 @@ const { computers, error, refetch } = useComputers();
 // One clock for the whole render, so every row's staleness is judged against the same instant rather than each
 // against the moment its own computed happened to run — and the app's one clock, so it stops with this tab.
 const now = useNow();
+
+/* The release this sandbox knows about — the SAME value behind its own update badge, because one release stamps
+ * the daemon, the image and both machine agents alike. It rides the shared /info query, so putting agent
+ * staleness on these rows costs no request: the answer is already in the cache this tab's chip reads.
+ *
+ * Undefined on a sandbox that has not reached the registry (or is a dev build and never will), which is what
+ * makes the version parts render exactly as they did before rather than guessing. */
+const { latest } = useSandboxVersion();
 onMounted(() => {
     if (route.query[`enable`] === `desktop-sync`) {
         highlight.value = true;
@@ -156,7 +165,17 @@ const act = async (computer: Computer, box: MachineSandbox, op: MachineSandboxOp
 
                 <!-- How this sandbox reaches it, what it runs on, and which agents are on it — one wrapping line,
                      because each part is a fact somebody occasionally needs and none of them is worth a row. -->
-                <p v-if="computerDetails(computer).length > 0" class="text-2xs text-subtle">{{ computerDetails(computer).join(` · `) }}</p>
+                <p v-if="computerDetails(computer, latest).length > 0" class="text-2xs text-subtle">
+                    {{ computerDetails(computer, latest).join(` · `) }}
+                </p>
+
+                <!-- The remedy, next to the machine it is about and only while it is true. An agent that has
+                     fallen behind is not an error — sync keeps working — so this is a quiet line rather than a
+                     warning, and it names the one command that fixes it instead of sending anyone to the browser
+                     for a pairing token. -->
+                <p v-if="syncAgentBehind(computer, latest)" class="text-2xs text-subtle">
+                    Run <span class="font-mono text-content">intentic-sync upgrade</span> on that computer to update its sync agent.
+                </p>
 
                 <!-- The reading's own age, not its arrival's: a report is a snapshot of a computer that may since
                      have closed its lid, so it is presented as of when the machine took it. -->

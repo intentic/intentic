@@ -1,4 +1,4 @@
-import type { Computer } from "@intentic/sandbox-contract";
+import { type Computer, isBehind } from "@intentic/sandbox-contract";
 import { timeAgo } from "@intentic/ui/format";
 
 /* WHAT A COMPUTERS ROW SAYS ABOUT THE MACHINE ITSELF, as opposed to what the machine is doing for this sandbox.
@@ -48,7 +48,30 @@ export const osTitle = (computer: Computer): string | undefined => (computer.fac
  * `last seen` appears only when the machine is NOT here now. On a live row it is noise the badge already carries;
  * on an offline one it is the single most useful thing left to say, because "asleep since this morning" and
  * "gone since April" are different situations wearing the same grey badge. */
-export const computerDetails = (computer: Computer): string[] => {
+/* An agent version, and whether a newer release has passed it — the two facts as one part, because they are one
+ * thought. "sync agent 0.1.0" was already on the row and was already the answer to a question nobody knew to ask:
+ * a machine ran a five-day-old agent through a bug that agent had a fix for, and this line said so the whole time,
+ * to a reader who had no way to know 0.1.0 was not current. A version is only a fact about staleness next to the
+ * version it should be.
+ *
+ * `latest` is the release this sandbox knows about (/info, the same value behind its own update badge) — every
+ * first-party build is stamped to it, so it is the right yardstick for an agent as much as for the daemon. When
+ * it is unknown, or the agent is a working-tree build, the part renders exactly as it always did: see isBehind,
+ * where every kind of not-knowing resolves to silence rather than to a nag somebody cannot act on. */
+const agentPart = (label: string, installed: string | undefined, latest: string | undefined): string | undefined => {
+    if (installed === undefined) {
+        return undefined;
+    }
+    return isBehind(installed, latest) ? `${label} ${installed} (${latest} available)` : `${label} ${installed}`;
+};
+
+/* Whether this computer's SYNC agent is one the user should replace — the one flag that earns a remedy on the
+ * row, because it is the one with a command behind it (`intentic-sync upgrade`). The computer agent's version is
+ * reported the same way and shown the same way, but nothing here should print an instruction for updating it that
+ * has not been built: a wrong command is worse than a fact with no command attached. */
+export const syncAgentBehind = (computer: Computer, latest?: string): boolean => isBehind(computer.report?.agents.sync, latest);
+
+export const computerDetails = (computer: Computer, latest?: string): string[] => {
     const parts: string[] = [];
     if (computer.syncEnrolled) {
         parts.push(`desktop sync`);
@@ -66,13 +89,13 @@ export const computerDetails = (computer: Computer): string[] => {
     if (hostname !== undefined && hostname.toLowerCase() !== computer.label.toLowerCase()) {
         parts.push(`hostname ${hostname}`);
     }
-    const sync = computer.report?.agents.sync;
+    const sync = agentPart(`sync agent`, computer.report?.agents.sync, latest);
     if (sync !== undefined) {
-        parts.push(`sync agent ${sync}`);
+        parts.push(sync);
     }
-    const computerAgent = computer.hostAgent ?? computer.report?.agents.host;
+    const computerAgent = agentPart(`computer agent`, computer.hostAgent ?? computer.report?.agents.host, latest);
     if (computerAgent !== undefined) {
-        parts.push(`computer agent ${computerAgent}`);
+        parts.push(computerAgent);
     }
     if (computer.online === false && computer.lastSeen !== undefined) {
         parts.push(`last seen ${timeAgo(computer.lastSeen)}`);

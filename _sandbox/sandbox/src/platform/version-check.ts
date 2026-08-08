@@ -11,6 +11,8 @@
 
 import { isDevBuild } from "../version.js";
 
+export { isNewer } from "@intentic/sandbox-contract";
+
 const LATEST_URL = "https://registry.npmjs.org/@intentic/sync/latest";
 // A moved release isn't urgent, so refresh cheaply: ~1 request/sandbox/hour to npm.
 const REFRESH_MS = 60 * 60_000;
@@ -18,20 +20,6 @@ const REFRESH_MS = 60 * 60_000;
 // The last successfully-fetched latest version, or undefined until the first success. A failed refresh leaves
 // the previous good value intact rather than clobbering it.
 let latest: string | undefined;
-
-// Compare dotted numeric versions (x.y.z). No semver dep in the repo, and release versions are plain numeric.
-export const isNewer = (a: string, b: string): boolean => {
-    const left = a.split(".").map(Number);
-    const right = b.split(".").map(Number);
-    for (let i = 0; i < Math.max(left.length, right.length); i++) {
-        const l = left[i] ?? 0;
-        const r = right[i] ?? 0;
-        if (l !== r) {
-            return l > r;
-        }
-    }
-    return false;
-};
 
 // A synchronous snapshot of the cache, for the /info handler. Undefined until the first refresh succeeds.
 export const latestVersion = (): string | undefined => latest;

@@ -90,6 +90,7 @@ export * from "./schemas.js";
 export * from "./search-globs.js";
 export * from "./terminal-protocol.js";
 export * from "./title.js";
+export * from "./versions.js";
 export * from "./workflow-faults.js";
 
 // The aggregated contract — implemented on the server by the per-domain route factories and consumed by the

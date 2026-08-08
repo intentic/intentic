@@ -9,9 +9,11 @@ import { buildCommand, type CommandContext } from "@stricli/core";
 import { MIRROR_AUTOSTART } from "./autostart.js";
 import { type Pairing, readState, removePairing, type SyncMode, type SyncState, upsertPairing } from "./config.js";
 import { realBridgeExec, runGitBridge } from "./git-bridge.js";
-import { retirePairingMirror, runMirrorWatch, startMirrorWatcher, stopMirror, stopWatcher } from "./mirror.js";
+import { readLiveWatcherPid, retirePairingMirror, runMirrorWatch, startMirrorWatcher, stopMirror, stopWatcher } from "./mirror.js";
 import { ensureCloudflared, ensureMutagen, ensureSyncSession, retireOrphanSessions, runMutagen, sessionName } from "./mutagen.js";
 import { machineReport } from "./report.js";
+import { assetUrl, realUpgradeExec, runUpgrade, upgradeMessage } from "./upgrade.js";
+import { SYNC_VERSION } from "./version.js";
 import {
     assertSshConfigVisible,
     ensureSshKey,
@@ -423,6 +425,55 @@ const fileSyncOnly = (brief: string, verb: "pause" | "resume") =>
 const pause = fileSyncOnly("Pause file syncing", "pause");
 const resume = fileSyncOnly("Resume file syncing", "resume");
 
+/* The build this agent is, on stdout, and nothing else on it. Deliberately bare rather than "intentic-sync
+ * x.y.z": it is read by a person asking one question, by the release build proving the version stamp reached the
+ * binary, and by `upgrade` vetting a freshly downloaded one before it installs it — and the last two want the
+ * string, not a sentence around it. */
+const version = buildCommand({
+    docs: { brief: "Print this agent's version" },
+    parameters: {},
+    func(this: CommandContext) {
+        this.process.stdout.write(`${SYNC_VERSION}\n`);
+        return Promise.resolve();
+    },
+});
+
+// How long to give a just-started watcher to claim its pidfile before calling the upgrade a failure and rolling
+// back. It writes the file as its first act, so this is bounded by process startup, not by any work it does.
+const WATCHER_START_TIMEOUT_MS = 10_000;
+const WATCHER_START_POLL_MS = 200;
+
+const watcherCameUp = async (): Promise<boolean> => {
+    for (let waited = 0; waited < WATCHER_START_TIMEOUT_MS; waited += WATCHER_START_POLL_MS) {
+        // oxlint-disable-next-line eslint/no-await-in-loop -- a bounded wait on one pidfile, by definition serial
+        if ((await readLiveWatcherPid()) !== undefined) {
+            return true;
+        }
+        // oxlint-disable-next-line eslint/no-await-in-loop -- same
+        await sleep(WATCHER_START_POLL_MS);
+    }
+    return false;
+};
+
+/* Move this machine onto the current agent — WITHOUT a pairing token, which is the entire point. Updating and
+ * enrolling had been the same command, so the cost of a version bump was a trip to the browser for a single-use
+ * token that expires in ten minutes; the predictable result was machines running whatever was current the day
+ * they were paired, indefinitely.
+ *
+ * Pairings, keys, ssh config, Mutagen sessions and mirrored ports are all untouched: this replaces one file and
+ * restarts one background process. Everything that can fail is checked before the swap, and the one thing that
+ * cannot be checked in advance — whether the new agent stays up on THIS machine — is rolled back automatically
+ * (upgrade.ts). */
+const upgrade = buildCommand({
+    docs: { brief: "Download and install the current agent, then restart the background watcher" },
+    parameters: {},
+    async func(this: CommandContext) {
+        const out = (message: string): void => void this.process.stdout.write(`${message}\n`);
+        const exec = realUpgradeExec(stopWatcher, async () => await enableMirroring(() => undefined), watcherCameUp);
+        out(upgradeMessage(await runUpgrade(exec, assetUrl(), SYNC_VERSION, out)));
+    },
+});
+
 /* Uninstall. With `--sandbox` it unpairs ONE sandbox and leaves the agent — and every other pairing — running;
  * bare, it removes the agent from this machine entirely. Either way the pairings it drops are self-revoked on
  * their sandboxes, so a machine walking away cleans up after itself. */
@@ -486,4 +537,4 @@ const uninstall = buildCommand<SandboxFlags>({
     },
 });
 
-export const commands = { setup, mirror, status, pause, resume, uninstall };
+export const commands = { setup, mirror, status, version, upgrade, pause, resume, uninstall };
