@@ -10,8 +10,14 @@ import { useSandboxQuery } from "../sandbox/useSandboxQuery";
  *
  * Held long: module layout changes when a package is added or renamed, which is rare next to a change list
  * that re-reads on every git action, and a review that re-fetched the package layout on each poll would be
- * paying a tree walk to be told the same thing. A package created mid-session is simply not a module until the
- * next read — its files group under the repo, which is what they did before it existed. */
+ * paying a tree walk to be told the same thing.
+ *
+ * Rare is not never, so the hold is ended by a PUSH rather than left to expire: a manifest landing on disk
+ * invalidates this query (useWorkspaceLive), and the layout is re-read once. That push is what makes a package
+ * created mid-session group under its own name straight away. Waiting out the hold instead was wrong at the one
+ * moment the panel had most to say — a new package's files are ALL changes, so every one of them sat in the
+ * repo's unclaimed bucket, and under a named bucket a row is drawn as its bare filename, so the list said
+ * "package.json, index.ts, README.md, loose in this repo" about a package that plainly existed. */
 const MODULES_STALE_MS = 5 * 60_000;
 
 export function useModules() {
