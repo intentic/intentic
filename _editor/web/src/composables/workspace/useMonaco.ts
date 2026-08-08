@@ -140,20 +140,28 @@ const init = async (): Promise<typeof Monaco> => {
 const ensureMonaco = (): Promise<typeof Monaco> => (ready ??= init());
 
 // Register `lang` with Monaco and load its Shiki grammar, then re-run the bridge so the newly loaded grammar
-// gets a tokens provider. undefined / unshipped languages fall through to Monaco's plaintext (no coloring).
-const ensureLanguage = async (monaco: typeof Monaco, lang: string | undefined): Promise<void> => {
+// gets a tokens provider. Returns the language Monaco can actually use: undefined / unshipped languages — and
+// a grammar chunk that failed to load — fall through to plaintext. Highlighting is an enhancement over readable
+// text, so a stale deploy chunk or an offline first-open must never stop a file's model from being created. The
+// failed grammar is not added to `bridged`, and useHighlighter drops its rejected load, so a later open retries.
+const ensureLanguage = async (monaco: typeof Monaco, lang: string | undefined): Promise<string | undefined> => {
     if (lang === undefined || bridged.has(lang)) {
-        return;
+        return lang;
     }
-    const core = await useHighlighter().ensureLang(lang);
-    if (core === undefined) {
-        return;
+    try {
+        const core = await useHighlighter().ensureLang(lang);
+        if (core === undefined) {
+            return undefined;
+        }
+        if (!monaco.languages.getLanguages().some((entry) => entry.id === lang)) {
+            monaco.languages.register({ id: lang });
+        }
+        applyBridge(monaco, core);
+        bridged.add(lang);
+        return lang;
+    } catch {
+        return undefined;
     }
-    if (!monaco.languages.getLanguages().some((entry) => entry.id === lang)) {
-        monaco.languages.register({ id: lang });
-    }
-    applyBridge(monaco, core);
-    bridged.add(lang);
 };
 
 export function useMonaco() {

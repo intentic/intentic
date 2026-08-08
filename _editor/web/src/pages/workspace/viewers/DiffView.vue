@@ -128,8 +128,7 @@ onMounted(async () => {
      * added or deleted file has only one). The cap sees the larger side, since both get tokenized; character
      * count stands in for the byte size it wants — these props are already-decoded text, and the cap is a guard
      * against tokenizing something enormous, not a byte-exact budget. */
-    lang = highlightLangFor(path, Math.max(before?.length ?? 0, after?.length ?? 0), after ?? before ?? ``);
-    await ensureLanguage(m, lang);
+    lang = await ensureLanguage(m, highlightLangFor(path, Math.max(before?.length ?? 0, after?.length ?? 0), after ?? before ?? ``));
     if (disposed || host.value === undefined) {
         return; // unmounted (fast file-switch) while Monaco/grammar loaded
     }

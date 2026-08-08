@@ -42,6 +42,9 @@ const host = ref<HTMLElement>();
 const editor = shallowRef<Monaco.editor.IStandaloneCodeEditor>();
 let monaco: typeof Monaco | undefined;
 let model: Monaco.editor.ITextModel | undefined;
+// The grammar Monaco actually loaded. A failed lazy chunk leaves this undefined, so both the editor and the
+// comment stripper use the same plaintext fallback instead of letting optional highlighting blank the file.
+let modelLang: string | undefined;
 let flashTimer: ReturnType<typeof setTimeout> | undefined;
 let disposed = false;
 // The file's line each model line came from, while the comments are out; undefined when the model IS the file.
@@ -58,7 +61,7 @@ const display = async (text: string): Promise<{ text: string; lines?: number[] }
     if (editable === true || hideComments !== true) {
         return { text };
     }
-    const stripped = await stripComments(text, lang);
+    const stripped = await stripComments(text, modelLang);
     if (stripped === undefined || stripped.text.trim() === ``) {
         return { text };
     }
@@ -159,7 +162,7 @@ defineExpose({ save: doSave, append: appendText, revealEnd });
 
 onMounted(async () => {
     const m = await ensureMonaco();
-    await ensureLanguage(m, lang);
+    modelLang = await ensureLanguage(m, lang);
     if (disposed || host.value === undefined) {
         return; // unmounted (fast file-switch) while Monaco/grammar loaded
     }
@@ -171,7 +174,7 @@ onMounted(async () => {
         return; // unmounted (fast file-switch) while the stripper tokenized
     }
     sourceLines = first.lines;
-    model = m.editor.createModel(first.text, lang);
+    model = m.editor.createModel(first.text, modelLang);
     if (editable) {
         model.updateOptions({ tabSize: 2, insertSpaces: true });
     }
