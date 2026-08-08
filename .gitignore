@@ -33,11 +33,11 @@ _site/site/public/demo
 # Benchmark output — every iq-bench run writes a timestamped dir here; the datasets are the input worth keeping.
 _search/iq-bench/results
 
-# env / secrets — everything but the checked-in examples, so hand-made copies
-# and backups (.env.bak, .env.old, …) can never be staged by accident.
+# env / secrets
 **/.env
-**/.env.*
-!**/.env.example
+**/.env.local
+**/.env.*.local
+**/.env.production
 
 # OS / editor
 .DS_Store
