@@ -7,7 +7,7 @@ import { PrismaPg } from "@prisma/adapter-pg";
 // The one place the e2e stack's shape lives: origins, credentials, the seeded rows, and the Better Auth
 // session-cookie recipe. global-setup boots everything against these; specs import the seeded values.
 
-// Mirrors dev exactly (.env.example): https API on :6480 with the committed localhost cert, https web on
+// Mirrors dev exactly (.env.example): https API on :6480 with this machine's localhost cert, https web on
 // :47145, compose postgres on :5440. SECRETS_KEY stays unset so the seeded sandbox token is stored plaintext.
 export const API_URL = `https://localhost:6480`;
 export const WEB_URL = `https://localhost:47145`;

@@ -27,7 +27,7 @@ const encryptAccountTokens = (config: Config, account: { accessToken?: string | 
 // directly at the API origin (apiUrl), so baseURL is the API origin. The SPA (webOrigin) is a
 // trusted origin so post-sign-in redirects back to it are allowed. localhost:47145 and the API's
 // :6480 are same-site, so the SameSite=Lax session cookie still rides cross-port. Both are https in dev
-// (the committed @intentic-app/localhost-https cert), which the Secure attribute on that cookie requires.
+// (the @intentic-app/localhost-https cert), which the Secure attribute on that cookie requires.
 export const createAuth = (config: Config, prisma: PrismaClient) =>
     betterAuth({
         secret: config.betterAuth.secret,

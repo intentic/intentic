@@ -29,7 +29,7 @@ const run = promisify(execFile);
 const repoRoot = resolve(import.meta.dirname, `../..`);
 const cacheDir = join(import.meta.dirname, `.cache`);
 
-// Every server in this stack rides the committed self-signed localhost cert.
+// Every server in this stack rides this machine's own localhost cert, whose root CI has no reason to trust.
 process.env[`NODE_TLS_REJECT_UNAUTHORIZED`] = `0`;
 
 const up = async (url: string): Promise<boolean> => {
@@ -97,7 +97,7 @@ export default async (): Promise<void> => {
         await waitUp(`${DAEMON_URL}/health`, `sandbox daemon (${DAEMON_IMAGE})`, `docker logs ${DAEMON_CONTAINER}`, 180_000);
     }
 
-    // The API (bun, https via the committed cert — the exact dev shape, so the session cookie is __Secure-).
+    // The API (bun, https via the minted cert — the exact dev shape, so the session cookie is __Secure-).
     if (!(await up(`${API_URL}/api/auth/ok`))) {
         state.apiPid = spawnServer(`api`, `bun`, [`./src/main.ts`], join(repoRoot, `_platform/api`), {
             DATABASE_URL,

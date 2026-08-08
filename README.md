@@ -178,13 +178,16 @@ into `src`). Copy the template and fill in Google credentials — everything els
 
 ```sh
 pnpm install
+pnpm cert:trust           # once per machine — approves this machine's dev root, so the browser shows a lock
 cp .env.example .env      # set GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET (each var is documented in .env.example)
 pnpm db:up                # Postgres on :5440 (docker-compose.yml) + prisma migrate
 pnpm dev                  # turbo: api on https://localhost:6480, web on https://localhost:47145
 ```
 
-Dev serves over HTTPS via the committed `@intentic-app/localhost-https` cert (Google FedCM One Tap refuses
-`http://localhost`).
+Dev serves over HTTPS via `@intentic-app/localhost-https` (Google FedCM One Tap refuses `http://localhost`).
+`pnpm install` mints a root for this machine and a certificate under it; `pnpm cert:trust` is what puts that
+root in your trust store, and you run it once per machine rather than once per clone. Skip it and everything
+still works behind a browser warning. See [_tools/localhost-https](_tools/localhost-https/README.md).
 
 **Sandbox daemon (optional).** To run the daemon outside its container, add its creds to the same root `.env` —
 see the `# Sandbox daemon` section of `.env.example` (`ANTHROPIC_API_KEY`, `CLOUDFLARE_API_TOKEN`, … all

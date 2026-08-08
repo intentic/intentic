@@ -5,7 +5,7 @@ import type { LoopbackHost } from "./port-scan.js";
 // Is anything answering on this port, and in which language? One primitive, because everything that asks about a
 // dev server in this sandbox asks the same two things and used to get different answers: the preview proxy
 // detected the scheme properly while the panel health check spoke plaintext HTTP through `fetch` with default TLS
-// verification — so a Vite dev server on its own https port (the committed dev cert, self-signed) read as DOWN
+// verification — so a Vite dev server on its own https port (a repo's own dev cert, locally signed) read as DOWN
 // and a repo's panel span "Starting…" for as long as it ran.
 
 export type PortScheme = "http" | "https";

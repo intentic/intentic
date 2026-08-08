@@ -16,7 +16,7 @@ export default defineConfig({
         strictPort: true,
         // The same machine-local dev cert is used by the API and Vite, so https:47145 -> https:6480 shares a
         // trust chain and the session cookie rides along with no mixed-content warnings. `pnpm install` mints
-        // it; see _tools/localhost-https for why it is not in the repository.
+        // it and `pnpm cert:trust` approves its root; see _tools/localhost-https for why neither is committed.
         https: {
             cert: readFileSync(here("./node_modules/@intentic-app/localhost-https/localhost.crt")),
             key: readFileSync(here("./node_modules/@intentic-app/localhost-https/localhost.key")),

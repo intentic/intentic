@@ -21,7 +21,7 @@ export default defineConfig({
     use: {
         baseURL: WEB_URL,
         storageState: `./.cache/storage-state.json`,
-        // Both dev servers ride the committed self-signed localhost cert.
+        // Both dev servers ride this machine's own localhost cert, whose root CI has no reason to trust.
         ignoreHTTPSErrors: true,
         // The loopback daemon emits no CORS headers (its cors middleware only mounts with auth on), so the
         // browser's cross-origin gate is lifted for the test context — the contract, not CORS, is under test.
