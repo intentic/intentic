@@ -2,6 +2,7 @@ import type { PersistedClient } from "@tanstack/query-persist-client-core";
 import { persistQueryClient } from "@tanstack/query-persist-client-core";
 import { defaultShouldDehydrateQuery, QueryClient } from "@tanstack/vue-query";
 import { del, get, set } from "idb-keyval";
+import { buildId } from "./buildEpoch";
 import { trackPerf } from "./perf";
 import { throttleTrailing } from "./throttleTrailing";
 
@@ -14,13 +15,6 @@ import { throttleTrailing } from "./throttleTrailing";
  * Session/auth state stays ref-only (useAuth), never in vue-query. */
 
 const IDB_KEY = `intentic-query-cache`;
-/* Bump when daemon response shapes change: a mismatched buster drops the old cache on restore.
- *
- * 2 — workspace/search became a PAGED query. Its cache entry is now `{ pages, pageParams }` where it used to be
- * one result object, and vue-query reads `data.pages.length` before any code of ours runs: a restored v1 entry
- * threw on the first render of the search panel rather than degrading to a refetch. Any change of a cached
- * value's SHAPE needs this, not just a change of its fields. */
-const SCHEMA_VERSION = 2;
 
 /* THE SEGMENT A QUERY KEY CARRIES WHEN ITS VALUE MUST STAY IN MEMORY. The mirror is structured-cloned WHOLE, on
  * the main thread, once per window (see the throttle below) — so its cost is set by everything the app has ever
@@ -60,7 +54,11 @@ const flushPersist = throttleTrailing(() => {
 }, PERSIST_WINDOW_MS);
 
 // Called from requireAuth AFTER the user resolves and BEFORE any route mounts, so hydration never races a
-// fetch. buster = user id: a different account on the same browser busts the previous user's cache.
+// fetch. buster = user id + build id: a different account on the same browser busts the previous user's cache,
+// and a new build of the app busts what the previous build shaped. The build half used to be a hand-bumped
+// SCHEMA_VERSION, which held exactly until someone changed a cached entry's shape (workspace/search becoming a
+// PAGED query — vue-query read `data.pages.length` off the old shape before any code of ours ran) and forgot
+// the bump; buildId() is that bump made automatic (see buildEpoch.ts).
 export const restorePersistedQueries = async (userId: string): Promise<void> => {
     if (uninstall !== undefined) {
         return;
@@ -75,7 +73,7 @@ export const restorePersistedQueries = async (userId: string): Promise<void> => 
             restoreClient: () => get<PersistedClient>(IDB_KEY),
             removeClient: () => del(IDB_KEY),
         },
-        buster: `${userId}:${SCHEMA_VERSION}`,
+        buster: `${userId}:${buildId()}`,
         // A Monday-morning open after Friday still paints; anything older restores as empty.
         maxAge: 7 * 24 * 60 * 60 * 1000,
         // Two exclusions, for opposite reasons: sandbox.list carries per-sandbox connect tokens (the tunnel

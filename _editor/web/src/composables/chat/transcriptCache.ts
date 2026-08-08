@@ -26,6 +26,17 @@ const KEPT_MESSAGES = 300;
 
 let connection: Promise<IDBDatabase | undefined> | undefined;
 
+// A web update may reshape ChatMessage itself, and a chat paints whatever blob it finds before the daemon
+// replaces it — so a build change drops the whole store (see buildEpoch). Called at boot, before any open
+// memoizes `connection`, so the delete never races a live transaction or sits blocked behind one.
+export const dropTranscriptStore = (): void => {
+    try {
+        indexedDB.deleteDatabase(DB_NAME);
+    } catch {
+        // Unavailable (private mode, disabled storage) — then nothing was mirrored to drop.
+    }
+};
+
 const openDb = (): Promise<IDBDatabase | undefined> => {
     connection ??= new Promise<IDBDatabase | undefined>((resolve) => {
         try {
@@ -35,7 +46,19 @@ const openDb = (): Promise<IDBDatabase | undefined> => {
                     request.result.createObjectStore(STORE);
                 }
             };
-            request.onsuccess = () => resolve(request.result);
+            request.onsuccess = () => {
+                /* Yield when another window asks for the database — which, with a fixed DB_VERSION, only ever
+                 * means a DELETE: an updated window dropping the store (dropTranscriptStore) while this one is
+                 * still open. A connection that holds on would leave that delete pending forever, and every
+                 * open queued BEHIND it — the updated window's first chat read would hang, not degrade. Closing
+                 * costs this window its mirror: the memo is cleared, so the next read reopens (recreating an
+                 * empty store) instead of transacting on a closed handle for the rest of the session. */
+                request.result.onversionchange = () => {
+                    request.result.close();
+                    connection = undefined;
+                };
+                resolve(request.result);
+            };
             // Blocked, denied, or version-clash: every caller degrades to the uncached path.
             request.addEventListener(`error`, () => resolve(undefined));
             request.onblocked = () => resolve(undefined);

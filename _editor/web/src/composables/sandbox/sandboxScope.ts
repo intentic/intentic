@@ -19,16 +19,25 @@ import { resetWorkspaceTreeState } from "../workspace/useWorkspaceTree";
 
 const { activeSandboxId, reachable } = useSandbox();
 
-watch(activeSandboxId, (id, previous) => {
-    if (id === previous) {
-        return;
-    }
+/* The /work-derived half of the reset — chat, edit buffers, tree, and the editor strip, everything whose
+ * content names paths or conversations in ONE workspace. Shared with the hello's workspace-replaced handling
+ * (systemEvents): a workspace wiped and recreated under the same sandbox id is, for this state, exactly a
+ * switch — what it remembers names things that no longer exist — except the id never changed, so the watch
+ * below can't be the one to notice. */
+export const resetWorkspaceScopedState = (): void => {
     resetChat();
     resetEditBuffers();
     resetWorkspaceTreeState();
     // The editor strip goes with the tree it browses: both are paths into ONE sandbox's /work, and each sandbox
     // has its own snapshot to come back to.
     resetWorkspaceTabs();
+};
+
+watch(activeSandboxId, (id, previous) => {
+    if (id === previous) {
+        return;
+    }
+    resetWorkspaceScopedState();
     // The roster belongs to the daemon it came from; the new sandbox's stream repaints it on connect.
     resetPresence();
     // Same for the fleet — and it can't be left to the liveness loop, which only clears it when a stream FAILS

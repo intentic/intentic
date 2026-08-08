@@ -8,9 +8,11 @@ import { queryClient } from "../queryPersistence";
 import { throttleTrailing } from "../throttleTrailing";
 import { setPresenceUsers } from "../usePresence";
 import { markWorkspaceChanged, worktreeMovedRecently } from "../workspace/useWorkspaceLive";
-import { daemonRebuilt, sandboxQueryPredicate, workspaceReplaced } from "./systemEventRouting";
+import { resetWorkspaceScopedState } from "./sandboxScope";
+import { daemonRebuilt, dropSandboxLocalState, sandboxQueryPredicate, workspaceReplaced } from "./systemEventRouting";
 import { setDaemonBoot } from "./useDaemonBoot";
 import { setDaemonRoutes } from "./useDaemonRoutes";
+import { useSandbox } from "./useSandbox";
 
 /* Where a daemon `/events` frame LANDS. Everything here is routing — which store takes a roster, which queries
  * a changed path invalidates — and none of it is about whether the connection is alive; that is connection.ts.
@@ -26,6 +28,10 @@ import { setDaemonRoutes } from "./useDaemonRoutes";
 const CHANGES_REFRESH_MS = 1000;
 
 const refreshChanges = throttleTrailing(() => void queryClient.invalidateQueries({ queryKey: [`git`, `changes`] }), CHANGES_REFRESH_MS);
+
+// Only to tell whether a workspace-replaced frame concerns the sandbox the user is LOOKING at — the storage
+// sweep is safe for any sandbox's frame, but the live re-scope must not blank the view of a different one.
+const { activeSandboxId } = useSandbox();
 
 /** Route one typed `/events` frame to whatever it makes stale. `sandboxId` is the sandbox the STREAM belongs
  *  to — passed in rather than read live, so a frame in flight during a switch can never be applied to the
@@ -55,11 +61,25 @@ export const applySystemEvent = (event: SystemEvent, sandboxId: string): void =>
             /* Two independent reasons the cache this browser persisted for the sandbox may describe something
              * that no longer exists — a workspace wiped and recreated under the same sandbox id, and a daemon
              * rebuilt into one that shapes its answers differently. Either one makes hydrating that cache a
-             * lie, and the remedy is the same, so they share it. Both RECORD on every hello, so only the first
-             * one after the change reports true. */
-            if (workspaceReplaced(sandboxId, event.workspaceId) || daemonRebuilt(sandboxId, event.build)) {
+             * lie, and the remedy is the same, so they share it. Both RECORD on every hello (evaluated as two
+             * statements so neither short-circuits the other's record), so only the first one after the change
+             * reports true. */
+            const replaced = workspaceReplaced(sandboxId, event.workspaceId);
+            const rebuilt = daemonRebuilt(sandboxId, event.build);
+            if (replaced || rebuilt) {
                 // Reset, not remove: active observers must refetch rather than render an empty cache.
                 void queryClient.resetQueries({ predicate: sandboxQueryPredicate(sandboxId) });
+            }
+            /* A REPLACED workspace goes further than the query cache: everything this browser remembers about
+             * it — tabs, open folders, terminal cosmetics, drafts — names things the new /work does not have.
+             * Storage is swept first, then the live view state re-scoped (it re-reads the now-empty snapshots),
+             * because a snapshot restored at boot has already painted by the time this frame arrives. A REBUILT
+             * daemon deliberately does not do this: /work survived, so the tabs are still true. */
+            if (replaced) {
+                dropSandboxLocalState(sandboxId);
+                if (activeSandboxId.value === sandboxId) {
+                    resetWorkspaceScopedState();
+                }
             }
             /* Every file-bound view re-asks on a new connection, because the file push is its ONLY live feed
              * and this stream's predecessor may have died holding frames: a workflow step that settled, a

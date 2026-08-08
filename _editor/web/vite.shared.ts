@@ -11,6 +11,11 @@ import { sourceAliases } from "./source-aliases.ts";
  * dev-server block with it — including a readFileSync of a certificate the demo has no use for. */
 export const shared = {
     plugins: [vue(), tailwindcss()],
+    // One fresh id per build (and per dev-server start), read via buildId() (composables/buildEpoch.ts). It is
+    // what invalidates everything the browser persisted under the PREVIOUS build — nobody has to remember to
+    // bump a schema number when a cached shape changes, because every deploy is its own bump. The cost is one
+    // stale-while-revalidate paint lost per update, which nothing waits on.
+    define: { "import.meta.env.BUILD_ID": JSON.stringify(String(Date.now())) },
     resolve: {
         // Source-first workspace aliases, shared with vitest.config.ts — see source-aliases.ts for why.
         alias: sourceAliases(),

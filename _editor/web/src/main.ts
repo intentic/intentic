@@ -3,8 +3,10 @@ import { VueQueryPlugin } from "@tanstack/vue-query";
 import { createApp } from "vue";
 import App from "./App.vue";
 import { initAnalytics } from "./composables/analytics";
+import { dropOutdatedMirrors } from "./composables/buildEpoch";
 import { installPerfConsole } from "./composables/perf";
 import { queryClient } from "./composables/queryPersistence";
+import { installSelfHeal, purgeIfMarked, reportStartupError } from "./composables/selfHeal";
 // Registers the module-level watch that re-scopes chat / editor / file-action state on sandbox switch.
 import "./composables/sandbox/sandboxScope";
 // …and the one that remembers each sandbox's screen, so a switch lands where that sandbox was left.
@@ -13,6 +15,14 @@ import "./composables/sandbox/sandboxScreen";
 import "./extension-host/hostModules";
 import { router } from "./router";
 import "./styles.css";
+
+// First: from here on, a startup crash wipes this origin's stored state and reloads once instead of leaving a
+// workspace only "clear site data" can fix (see selfHeal.ts). Then the two ordered steps a previous page may
+// have left for this one: the wipe it marked (awaited — every mirror below must find the deletes done), and
+// the build-change drop of mirrors no restore gate covers (buildEpoch.ts).
+installSelfHeal();
+await purgeIfMarked();
+dropOutdatedMirrors();
 
 initAnalytics();
 // Before anything mounts, so the spans of a slow first paint are in the ring buffer too. `__intenticPerf` in
@@ -25,9 +35,11 @@ installPerfConsole();
 const app = createApp(App);
 // A render/lifecycle error in one component must never white-screen the shell or vanish without a trace: log
 // it with Vue's context (info names the hook, e.g. "render function") so it's diagnosable. The offending
-// subtree stops updating; the rest of the app lives on.
+// subtree stops updating; the rest of the app lives on — unless this is still the startup window, where a
+// render error is how a poisoned hydrated blob first bites, and self-heal turns it into a wipe + one reload.
 app.config.errorHandler = (err, _instance, info) => {
     console.error(`[vue] ${info}:`, err);
+    reportStartupError(err);
 };
 app.use(router);
 // Our own client so requireAuth can hydrate it from IndexedDB (per-user) before any route mounts.

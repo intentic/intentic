@@ -2,7 +2,7 @@
  * @vitest-environment jsdom
  */
 import { beforeEach, describe, expect, it } from "vitest";
-import { daemonRebuilt, sandboxQueryPredicate, workspaceReplaced } from "./systemEventRouting";
+import { daemonRebuilt, dropSandboxLocalState, sandboxQueryPredicate, workspaceReplaced } from "./systemEventRouting";
 
 describe(`workspaceReplaced`, () => {
     beforeEach(() => localStorage.clear());
@@ -64,6 +64,45 @@ describe(`daemonRebuilt`, () => {
         // Two guards, two records: a rebuild must not read as a wipe, or a wipe as a rebuild.
         workspaceReplaced(`sbx-1`, `ws-a`);
         expect(daemonRebuilt(`sbx-1`, `ws-a`)).toBe(false);
+    });
+});
+
+describe(`dropSandboxLocalState`, () => {
+    beforeEach(() => {
+        localStorage.clear();
+        sessionStorage.clear();
+    });
+
+    it(`sweeps every key carrying the sandbox id, whatever module named it`, () => {
+        localStorage.setItem(`intentic.workspaceTabs.sbx-1`, `{}`);
+        localStorage.setItem(`ui-terminal-meta-sbx-1`, `{}`);
+        localStorage.setItem(`intentic.commitMessage.sbx-1`, `wip`);
+        dropSandboxLocalState(`sbx-1`);
+        expect(localStorage.length).toBe(0);
+    });
+
+    it(`leaves other sandboxes and unscoped preferences alone`, () => {
+        localStorage.setItem(`intentic.workspaceTabs.sbx-2`, `{}`);
+        localStorage.setItem(`ui-work-terminals`, `on`);
+        dropSandboxLocalState(`sbx-1`);
+        expect(localStorage.getItem(`intentic.workspaceTabs.sbx-2`)).toBe(`{}`);
+        expect(localStorage.getItem(`ui-work-terminals`)).toBe(`on`);
+    });
+
+    it(`sweeps the window's own sessionStorage copy too`, () => {
+        // windowStore reads sessionStorage FIRST — a sweep that missed it would restore the swept tabs anyway.
+        sessionStorage.setItem(`intentic.workspaceTabs.sbx-1`, `{}`);
+        dropSandboxLocalState(`sbx-1`);
+        expect(sessionStorage.getItem(`intentic.workspaceTabs.sbx-1`)).toBeNull();
+    });
+
+    it(`spares the identity records that were just rewritten with the new workspace`, () => {
+        workspaceReplaced(`sbx-1`, `ws-b`);
+        daemonRebuilt(`sbx-1`, `0.0.0:1000`);
+        dropSandboxLocalState(`sbx-1`);
+        // Swept identities would make the next hello read this change as a first-ever contact.
+        expect(workspaceReplaced(`sbx-1`, `ws-b`)).toBe(false);
+        expect(workspaceReplaced(`sbx-1`, `ws-c`)).toBe(true);
     });
 });
 

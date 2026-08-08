@@ -44,6 +44,34 @@ export const workspaceReplaced = (sandboxId: string, workspaceId: string): boole
  * the reconnect was already going to invalidate the tree. */
 export const daemonRebuilt = (sandboxId: string, build: string | undefined): boolean => changedSince(`daemonBuild`, sandboxId, build);
 
+/* Everything this browser REMEMBERS about one sandbox's workspace, dropped when the hello says the workspace
+ * was replaced: the editor tabs and open folders, the chat tab snapshot, terminal cosmetics, the commit draft,
+ * the input history — all of it names paths, sessions or conversations in a /work that no longer exists.
+ *
+ * Membership is the id in the key: every module that remembers per-sandbox state keys its blob with the
+ * sandbox id (`intentic.workspaceTabs.<id>`, `ui-terminal-meta-<id>`, …), so a substring sweep stays correct
+ * as new ones appear — the alternative was a hand-maintained key list, which is the SCHEMA_VERSION mistake
+ * with more entries. Both storages, because windowStore mirrors each blob into sessionStorage as this window's
+ * authoritative copy. The two identity records above are the exception: they were just rewritten with the NEW
+ * workspace's values, and sweeping them would make the next hello read this change as a first-ever contact. */
+const IDENTITY_PREFIXES = [`intentic.workspaceId.`, `intentic.daemonBuild.`];
+
+export const dropSandboxLocalState = (sandboxId: string): void => {
+    for (const storage of [(): Storage => localStorage, (): Storage => sessionStorage]) {
+        try {
+            const store = storage();
+            const doomed = Object.keys(store).filter(
+                (key) => key.includes(sandboxId) && !IDENTITY_PREFIXES.some((prefix) => key.startsWith(prefix)),
+            );
+            for (const key of doomed) {
+                store.removeItem(key);
+            }
+        } catch {
+            // Unavailable (private mode, site data off) — then nothing was remembered to drop.
+        }
+    }
+};
+
 // Every query cached for one sandbox. The sandbox id is the LAST key element (sandboxKey appends it), so
 // prefix matching cannot scope this — a predicate is the only way to reach exactly one sandbox's entries.
 export const sandboxQueryPredicate =
