@@ -197,9 +197,8 @@ describe("bridgeRepo", () => {
             {
                 "git remote get-url": `${ALIAS}:/history/gits/proj\n`,
                 "git ls-remote": SYMREF_MAIN,
-                // Before the fetch the ref still holds what this bridge last installed (= local HEAD); after it,
-                // the tip the sandbox rewound to.
-                "git rev-parse -q --verify refs/remotes/sandbox/main": [`${DIVERGED}\n`, `${TIP}\n`],
+                "git rev-parse -q --verify refs/remotes/sandbox/main": `${TIP}\n`, // where the sandbox rewound to
+                "git rev-parse -q --verify refs/intentic/bridged/main": `${DIVERGED}\n`, // the bridge put local HEAD here
                 "git rev-parse -q --verify HEAD": `${DIVERGED}\n`,
                 "git symbolic-ref --short -q HEAD": "main\n",
                 [`git merge-base --is-ancestor HEAD ${TIP}`]: undefined, // not a fast-forward
@@ -208,6 +207,7 @@ describe("bridgeRepo", () => {
         );
         bridgeRepo(exec, ALIAS, LOCAL, "proj", (message) => logs.push(message));
         expect(calls).toContain(`git reset -q ${TIP}`);
+        expect(calls).toContain(`git update-ref refs/intentic/bridged/main ${TIP}`);
         expect(logs.join("\n")).toContain("rewound");
     });
 
@@ -219,7 +219,8 @@ describe("bridgeRepo", () => {
             {
                 "git remote get-url": `${ALIAS}:/history/gits/proj\n`,
                 "git ls-remote": SYMREF_MAIN,
-                "git rev-parse -q --verify refs/remotes/sandbox/main": [`${OLD}\n`, `${TIP}\n`],
+                "git rev-parse -q --verify refs/remotes/sandbox/main": `${TIP}\n`,
+                "git rev-parse -q --verify refs/intentic/bridged/main": `${OLD}\n`,
                 "git rev-parse -q --verify HEAD": `${DIVERGED}\n`,
                 "git symbolic-ref --short -q HEAD": "main\n",
                 [`git merge-base --is-ancestor HEAD ${TIP}`]: undefined,
@@ -229,6 +230,69 @@ describe("bridgeRepo", () => {
         bridgeRepo(exec, ALIAS, LOCAL, "proj", (message) => logs.push(message));
         expect(calls.some((line) => line.startsWith("git reset"))).toBe(false);
         expect(logs.join("\n")).toContain("diverge");
+    });
+
+    /* The regression the marker exists for. The valve used to ask the REMOTE-TRACKING ref what the bridge had
+     * installed, and a fetch advances that ref whether or not HEAD follows — so the answer survived exactly one
+     * pass. Miss the rewind once (an agent too old to follow it, one tick with the sandbox unreachable, anything
+     * staged at the wrong moment) and the repo froze for good: hundreds of "changes" that grew with every later
+     * sandbox commit and that nothing but a hand-run reset could clear. Here the sandbox has committed many times
+     * since the bridge last moved HEAD, and it still recognises its own history. */
+    it("still recognises its own history long after passes that fetched without moving HEAD", () => {
+        const logs: string[] = [];
+        const { calls, exec } = scripted(
+            {
+                "git remote get-url": `${ALIAS}:/history/gits/proj\n`,
+                "git ls-remote": SYMREF_MAIN,
+                // Far past what the bridge installed: this ref has followed the sandbox through every pass since.
+                "git rev-parse -q --verify refs/remotes/sandbox/main": `${TIP}\n`,
+                "git rev-parse -q --verify refs/intentic/bridged/main": `${DIVERGED}\n`,
+                "git rev-parse -q --verify HEAD": `${DIVERGED}\n`,
+                "git symbolic-ref --short -q HEAD": "main\n",
+                [`git merge-base --is-ancestor HEAD ${TIP}`]: undefined,
+            },
+            [DIR, join(DIR, ".git")],
+        );
+        bridgeRepo(exec, ALIAS, LOCAL, "proj", (message) => logs.push(message));
+        expect(calls).toContain(`git reset -q ${TIP}`);
+        // And the decision owes nothing to the remote-tracking ref's value BEFORE the fetch — it is never read there.
+        const fetchAt = calls.findIndex((line) => line.startsWith("git fetch"));
+        expect(calls.slice(0, fetchAt).some((line) => line.includes("refs/remotes/sandbox/main"))).toBe(false);
+        expect(logs.join("\n")).toContain("rewound");
+    });
+
+    // Arming the valve costs no divergence: a repo that has never once fallen behind never reaches the reset
+    // that records a marker, so the quiet pass records one itself. This is also the state a hand-run recovery
+    // leaves behind — and it must not have to freeze a second time before the valve can help.
+    it("records what HEAD holds on a quiet pass, so an install that never falls behind still carries a marker", () => {
+        const { calls, exec } = scripted(
+            {
+                "git remote get-url": `${ALIAS}:/history/gits/proj\n`,
+                "git ls-remote": SYMREF_MAIN,
+                "git rev-parse -q --verify refs/intentic/bridged/main": undefined, // never recorded
+                "git rev-parse -q --verify HEAD": `${TIP}\n`, // already level with the sandbox
+                "git symbolic-ref --short -q HEAD": "main\n",
+            },
+            [DIR, join(DIR, ".git")],
+        );
+        bridgeRepo(exec, ALIAS, LOCAL, "proj", () => undefined);
+        expect(calls).toContain(`git update-ref refs/intentic/bridged/main ${TIP}`);
+        expect(calls.some((line) => line.startsWith("git fetch"))).toBe(false);
+    });
+
+    it("leaves an already-current marker alone rather than rewriting it every tick", () => {
+        const { calls, exec } = scripted(
+            {
+                "git remote get-url": `${ALIAS}:/history/gits/proj\n`,
+                "git ls-remote": SYMREF_MAIN,
+                "git rev-parse -q --verify refs/intentic/bridged/main": `${TIP}\n`,
+                "git rev-parse -q --verify HEAD": `${TIP}\n`,
+                "git symbolic-ref --short -q HEAD": "main\n",
+            },
+            [DIR, join(DIR, ".git")],
+        );
+        bridgeRepo(exec, ALIAS, LOCAL, "proj", () => undefined);
+        expect(calls.some((line) => line.startsWith("git update-ref"))).toBe(false);
     });
 });
 

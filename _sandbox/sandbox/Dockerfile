@@ -318,14 +318,17 @@ COPY _extensions/activity/intentic-extension.json /opt/extensions/activity/
 COPY _extensions/automations/intentic-extension.json /opt/extensions/automations/
 COPY _extensions/deployments/intentic-extension.json /opt/extensions/deployments/
 # …deployments ships a BACKEND bundle too (manifest `server`, run by the daemon's backend host), like memory below.
-COPY _extensions/deployments/dist /opt/extensions/deployments/dist
+# From the trees context, like every other compiled artifact: the root context excludes **/dist, so the bundle is
+# invisible to a COPY that reads the repo tree — however plainly it sits beside the manifest in the checkout.
+COPY --from=trees extensions/deployments/dist /opt/extensions/deployments/dist
 COPY _extensions/git-history/intentic-extension.json /opt/extensions/git-history/
 COPY _extensions/logs/intentic-extension.json /opt/extensions/logs/
 COPY _extensions/maintenance/intentic-extension.json /opt/extensions/maintenance/
 COPY _extensions/memory/intentic-extension.json /opt/extensions/memory/
 # …except memory, whose BACKEND half ships as a prebuilt server bundle the daemon's backend host loads
-# (manifest `server`) — the first extracted feature backend; its UI stays compiled into the web bundle.
-COPY _extensions/memory/dist /opt/extensions/memory/dist
+# (manifest `server`) — the first extracted feature backend; its UI stays compiled into the web bundle. From the
+# trees context for the same reason as deployments above.
+COPY --from=trees extensions/memory/dist /opt/extensions/memory/dist
 COPY _extensions/pipelines/intentic-extension.json /opt/extensions/pipelines/
 COPY _extensions/preview/intentic-extension.json /opt/extensions/preview/
 COPY _extensions/repo-apps/intentic-extension.json /opt/extensions/repo-apps/

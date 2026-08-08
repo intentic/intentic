@@ -8,9 +8,8 @@
 set -euo pipefail
 cd "$(dirname "$0")/../.."
 
-# ext-memory and ext-deployments build their BACKEND bundles (dist/server.js) here — the Dockerfile COPYs
-# them from the repo tree beside the manifest (no deploy tree: the bundles are self-contained, so shipping
-# node_modules would be waste).
+# ext-memory and ext-deployments build their BACKEND bundles (dist/server.js) here; they are staged into the
+# trees context below (no deploy tree: the bundles are self-contained, so shipping node_modules would be waste).
 pnpm turbo run build --filter=@intentic/sandbox --filter=@intentic/cli \
     --filter=@intentic/ext-discord --filter=@intentic/ext-imap --filter=@intentic/ext-slack --filter=@intentic/ext-telegram --filter=@intentic/ext-whatsapp \
     --filter=@intentic/ext-memory --filter=@intentic/ext-deployments
@@ -43,6 +42,18 @@ for pid in "${pids[@]}"; do
     wait "$pid" || failed=1
 done
 [ "$failed" -eq 0 ] || { echo "one or more deploy trees failed to build" >&2; exit 1; }
+
+# The two feature backends the daemon's backend host loads (manifest `server`). A single self-contained bundle
+# each, so they get no deploy tree — but they are COMPILED OUTPUT, and compiled output reaches the image only
+# through this context. The root build context excludes **/dist (.dockerignore, since the first commit), so a
+# COPY of these straight from the repo tree resolves to nothing: docker fails the build with "not found" on a
+# path that is sitting right there in the checkout, which is exactly how this shipped broken.
+for ext in memory deployments; do
+    src="_extensions/$ext/dist"
+    [ -d "$src" ] || { echo "$src is missing — the turbo build above did not produce ext-$ext's bundle" >&2; exit 1; }
+    mkdir -p "$out/extensions/$ext"
+    cp -R "$src" "$out/extensions/$ext/dist"
+done
 
 # onnxruntime-web is @huggingface/transformers' BROWSER backend (WebAssembly/WebGPU) — ~129 MiB that can never
 # load in the image: the node dist the daemon and iq resolve (dist/transformers.node.{mjs,cjs}) requires only

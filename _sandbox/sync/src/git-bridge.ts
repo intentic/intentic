@@ -126,13 +126,31 @@ export const bridgeRepo = (exec: BridgeExec, alias: string, localDir: string, re
     // Both local, both free. Read here rather than after the fetch so the quiet case can be decided without one.
     const head = exec.run("git", ["rev-parse", "-q", "--verify", "HEAD"], dir)?.trim();
     const localBranch = exec.run("git", ["symbolic-ref", "--short", "-q", "HEAD"], dir)?.trim();
+    /* What this bridge itself last installed into this branch — the one fact that tells the user's own commits
+     * apart from history the bridge put here, and therefore what makes a sandbox REWIND recoverable below.
+     *
+     * It is the bridge's OWN ref, written only where HEAD is written. Reading the remote-tracking ref for this
+     * (as this did) conflates two different questions, because a FETCH advances that ref whether or not HEAD
+     * followed: the answer stayed true for exactly one pass. Every path that returns between the fetch and the
+     * reset — anything staged, a tip that won't resolve, the refusal itself — left the marker one commit ahead
+     * of a HEAD that never moved, and the NEXT pass could no longer recognise its own history. So a rewind the
+     * bridge missed even once (an agent too old to follow it, a sandbox unreachable for that one tick) became
+     * permanent: HEAD pinned to discarded history, file sync still delivering every later commit's files, and a
+     * local `git status` growing without bound until someone reset it by hand. This ref moves when, and only
+     * when, HEAD moves, so the answer keeps for as long as it takes. */
+    const bridged = `refs/intentic/bridged/${branch}`;
+    const installed = exec.run("git", ["rev-parse", "-q", "--verify", bridged], dir)?.trim();
     if (head === remoteTip && localBranch === branch) {
-        return; // nothing moved since the last pass — the overwhelmingly common case, and it ends here
+        // Level with the sandbox: nothing moved since the last pass — the overwhelmingly common case, and it
+        // ends here. The marker is converged first, because a repo that STAYS level never reaches the reset that
+        // writes it: without this, an install that has never once fallen behind carries no marker at all, and so
+        // would meet its first rewind defenceless. That is also the state a hand-run recovery leaves behind, and
+        // arming the valve must not cost the user a second freeze.
+        if (head !== undefined && installed !== head) {
+            exec.run("git", ["update-ref", bridged, head], dir);
+        }
+        return;
     }
-    // Where the bridge itself last left this branch, read BEFORE the fetch overwrites the ref. It is the one
-    // fact that tells the user's own commits apart from history this bridge installed — which is what makes a
-    // sandbox REWIND recoverable below.
-    const lastBridged = exec.run("git", ["rev-parse", "-q", "--verify", `refs/remotes/sandbox/${branch}`], dir)?.trim();
     if (exec.run("git", ["fetch", "-q", "sandbox", `+refs/heads/${branch}:refs/remotes/sandbox/${branch}`], dir) === undefined) {
         log(`  ${repo}: fetch from the sandbox failed — will retry next pass`);
         return;
@@ -155,7 +173,7 @@ export const bridgeRepo = (exec: BridgeExec, alias: string, localDir: string, re
      * grows without bound — hundreds of "changes" the user cannot commit, revert or explain, with nothing short
      * of a hand-run `git reset` to clear them. So follow the rewind; the worktree is untouched either way. */
     if (head !== undefined && head !== tip && exec.run("git", ["merge-base", "--is-ancestor", "HEAD", tip], dir) === undefined) {
-        if (head !== lastBridged) {
+        if (head !== installed) {
             log(`  ${repo}: local commits diverge from the sandbox — leaving it alone`);
             return;
         }
@@ -170,6 +188,10 @@ export const bridgeRepo = (exec: BridgeExec, alias: string, localDir: string, re
             existing !== undefined &&
             existing !== "" &&
             existing !== tip &&
+            // The marker answers for a branch the bridge is not standing on just as well as for the one it is:
+            // a branch it installed and the sandbox has since rewound holds no local work either, and freezing
+            // on it strands the same way — just out of sight, on a branch nobody is looking at.
+            existing !== installed &&
             exec.run("git", ["merge-base", "--is-ancestor", existing, tip], dir) === undefined
         ) {
             log(`  ${repo}: local branch ${branch} diverges from the sandbox — leaving it alone`);
@@ -180,6 +202,10 @@ export const bridgeRepo = (exec: BridgeExec, alias: string, localDir: string, re
         return; // already there
     }
     if (exec.run("git", ["reset", "-q", tip], dir) !== undefined) {
+        // Record what was just installed, in the same breath as installing it. This is the whole memory the
+        // valve has: everything above is a read, and a reset whose marker never landed is a rewind this bridge
+        // will refuse to follow however many passes it gets.
+        exec.run("git", ["update-ref", bridged, tip], dir);
         log(`  ${repo}: fast-forwarded ${branch} to ${tip.slice(0, 8)}`);
     }
 };
