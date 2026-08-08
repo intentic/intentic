@@ -215,7 +215,7 @@ RUN apt-get update \
 # here: python3 is baked for node-gyp, but Debian's interpreter ships no PyYAML, so an agent editing a compose
 # file, a CI pipeline or a k8s manifest had to hand-patch it with sed. Debian's own `yq` package is a
 # DIFFERENT program (a Python wrapper around jq) whose write syntax is not the one every model has learned, so
-# this is upstream's Go binary — pinned and version-checked like cloudflared/rtk, same rationale.
+# this is upstream's Go binary — pinned and version-checked like cloudflared, same rationale.
 ARG YQ_VERSION=4.53.3
 RUN arch="$(dpkg --print-architecture)" \
     && curl -fsSL "https://github.com/mikefarah/yq/releases/download/v${YQ_VERSION}/yq_linux_${arch}" -o /usr/local/bin/yq \
@@ -355,25 +355,11 @@ COPY --chmod=755 _sandbox/sandbox/bin/agent-output-filter.mjs /usr/local/bin/age
 COPY --chmod=755 _sandbox/sandbox/bin/cleaners.mjs /usr/local/bin/cleaners.mjs
 # retrieve-output on PATH — the reversible half of the filter (fetch back elided output; the footer names it).
 COPY --chmod=755 _sandbox/sandbox/bin/retrieve-output.mjs /usr/local/bin/retrieve-output
-# rtk (rtk-ai/rtk, Apache-2.0) — the alternate cleaner backend the `filterBackend` setting switches to (the
-# PreToolUse hook rewrites each Bash command to `rtk <cmd>` and turns the native filter off). Baked, not shipped
-# as an installable extension's fragment: the setting is a plain toggle with no capability behind it, so an
-# extension-gated binary meant flipping it silently broke EVERY Bash command with `rtk: command not found`
-# until the owner happened to install an extension and rebuild. A ~10 MiB static binary is far cheaper than a
-# switch that can only be used wrong. Pin RTK_VERSION deliberately — an image build fails loudly on a bad asset.
-ENV RTK_VERSION=0.44.0
-RUN set -eux; \
-    arch="$(uname -m)"; \
-    case "$arch" in \
-      x86_64) target="x86_64-unknown-linux-musl" ;; \
-      aarch64) target="aarch64-unknown-linux-gnu" ;; \
-      *) echo "rtk: unsupported arch $arch" >&2; exit 1 ;; \
-    esac; \
-    curl -fsSL "https://github.com/rtk-ai/rtk/releases/download/v${RTK_VERSION}/rtk-${target}.tar.gz" -o /tmp/rtk.tar.gz; \
-    tar -xzf /tmp/rtk.tar.gz -C /usr/local/bin rtk; \
-    rm /tmp/rtk.tar.gz; \
-    chmod +x /usr/local/bin/rtk; \
-    rtk --version
+# rtk is NOT baked. It was the alternate cleaner backend behind a `filterBackend` setting; that setting was
+# removed after measurement (docs/output-cleaners.md, "Why there is one filter and not a choice of backend")
+# and the behaviours worth keeping were ported into the native cleaners. What remains is a benchmarking tool,
+# so it ships the way every other opt-in tool does — the git-installed `rtk` extension's environment fragment
+# composes it into the overlay for an owner who asks. Nothing on this image execs it.
 # The VPN command the agent's vpn skill teaches and an owner can run in a terminal. It calls the daemon's /vpn
 # routes (never a VPN client directly), so agent-initiated and UI-initiated connects are the same operation.
 # The clients themselves are NOT baked — they ride the vpn capability's environment fragment, like WireGuard
