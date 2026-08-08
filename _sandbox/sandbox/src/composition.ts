@@ -151,6 +151,7 @@ import {
 } from "./sessions/agent-transcript.js";
 import { fileTranscriptRecord } from "./sessions/transcript-record.js";
 import { type SandboxSettingsStore, fileSandboxSettingsStore } from "./settings/settings-store.js";
+import { type RuleFiringsStore, fileRuleFiringsStore } from "./rules/rule-firings.js";
 import { type Announcer, createAnnouncer } from "./platform/announce.js";
 import { type BootTracker, createBootTracker } from "./platform/boot.js";
 import { createPerfTracker, type PerfTracker } from "./platform/perf.js";
@@ -327,8 +328,12 @@ export interface Services {
     // streamAgent appends at turn end; /usage/rollup and /system/usage project it.
     readonly usage: UsageStore;
     // Per-sandbox agent settings (.intentic/settings.json) — /settings edits it; streamAgent reads it to gate
-    // per-turn agent behavior (iq plugin, hashline tools, output cleaning, prompt stability).
+    // per-turn agent behavior (iq plugin, hashline tools, output cleaning, prompt stability) and it carries the
+    // owner's rule table (rules/rules.ts).
     readonly sandboxSettings: SandboxSettingsStore;
+    // When each rule last did something (.intentic/rule-firings.json). Beside the settings rather than in them:
+    // a firing is not an edit, so it must not make every push a write of the owner's configuration.
+    readonly ruleFirings: RuleFiringsStore;
     // Web-push state: this sandbox's VAPID keypair + one entry per subscribed browser. On the HISTORY volume,
     // outside the agent's reach, because the private key can forge notifications to the owner's devices.
     readonly push: PushStore;
@@ -775,6 +780,7 @@ export const createServices = (config: Config, logger: Logger): Services => {
         activity: fileActivityStore(join(config.historyRoot, "activity.jsonl")),
         usage: fileUsageStore(join(config.historyRoot, "usage.jsonl")),
         sandboxSettings: fileSandboxSettingsStore(statePath(workspace.root, ".intentic/settings.json")),
+        ruleFirings: fileRuleFiringsStore(statePath(workspace.root, ".intentic/rule-firings.json")),
         push: pushStore,
         pushSender: createPushSender(pushStore, logger),
         claudeStore,

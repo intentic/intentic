@@ -4,6 +4,7 @@ import { effectiveAutoLand, landedAway } from "../composables/agents/agentStatus
 import type { useAgentChanges } from "../composables/agents/useAgentChanges";
 import { useAgents } from "../composables/agents/useAgents";
 import { useRole } from "../composables/sandbox/useRole";
+import { landsByDefault } from "../composables/sandbox/rules";
 import { useSandboxSettings } from "../composables/sandbox/useSandboxSettings";
 
 /* What you do to a SESSION, as opposed to what you do to its diff — refresh, land, hold, archive, discard.
@@ -51,10 +52,11 @@ const archiveBusy = computed(() => busyIds.value.includes(agentId));
  * mid-turn: the daemon reads the value at turn COMPLETION, so pressing hold while the agent works is exactly
  * "keep THIS turn's work on the branch" — the press that matters most. */
 const { settings: sandboxSettings } = useSandboxSettings();
-const autoLandOn = computed(() => effectiveAutoLand(agentById(agentId), sandboxSettings.value?.autoLand));
+const sandboxLands = computed(() => landsByDefault(sandboxSettings.value?.rules ?? []));
+const autoLandOn = computed(() => effectiveAutoLand(agentById(agentId), sandboxLands.value));
 const toggleAutoLand = (): void => {
     const next = !autoLandOn.value;
-    void changes.setAutoLand(next === (sandboxSettings.value?.autoLand ?? false) ? null : next);
+    void changes.setAutoLand(next === sandboxLands.value ? null : next);
     emit(`selected`);
 };
 

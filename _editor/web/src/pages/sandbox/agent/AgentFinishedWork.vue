@@ -2,6 +2,8 @@
 import { Row, RowGroup, Segmented } from "@intentic/ui";
 import ToggleSwitch from "primevue/toggleswitch";
 import { useSandboxSettings } from "../../../composables/sandbox/useSandboxSettings";
+import { NAMED_RULES } from "../../../composables/sandbox/rules";
+import { useRules } from "../../../composables/sandbox/useRules";
 import FinishedWorkInfo from "./FinishedWorkInfo.vue";
 
 /* WHAT HAPPENS AFTER AN AGENT STOPS — to its work, and then to the agent. Both answer the same question at
@@ -9,6 +11,30 @@ import FinishedWorkInfo from "./FinishedWorkInfo.vue";
  * it keep its card and its checkout. */
 
 const { settings, patch } = useSandboxSettings();
+const { byId, upsert, remove } = useRules();
+
+/* Landing is a VERDICT rule, not a switch over a boolean, and the difference is the whole reason it moved:
+ * nothing extra runs when an agent finishes — the landing pass runs either way — so what a rule contributes
+ * here is which way it goes. That is the same allow/hold vocabulary the permission rules speak.
+ *
+ * No rule ⇒ held, so switching this off DELETES the rule rather than writing "hold": an empty table already
+ * means what the off position means, and a redundant rule sitting in the list below would be one more thing to
+ * read that changes nothing. */
+const land = () => byId(NAMED_RULES.land);
+
+const setLand = (on: boolean): void => {
+    if (!on) {
+        remove(NAMED_RULES.land);
+        return;
+    }
+    upsert({
+        id: NAMED_RULES.land,
+        label: `Land finished work automatically`,
+        moment: `agent.finished`,
+        action: { kind: `verdict`, verdict: `allow` },
+        enabled: true,
+    });
+};
 
 // How long a finished agent stays on the fleet board before the daemon archives it (and reclaims its worktree
 // checkout). Days, because the sweep runs hourly and the whole point is "after you've stopped thinking about
@@ -36,11 +62,13 @@ const RETENTION_OPTIONS = [
             description="When an agent finishes cleanly, apply its work to your workspace as uncommitted changes right away. Off, it waits on the agent's branch until you land it."
         >
             <template #control>
-                <ToggleSwitch
-                    :model-value="settings?.autoLand ?? false"
-                    :disabled="settings === undefined"
-                    @update:model-value="(value: boolean) => patch({ autoLand: value })"
-                />
+                <ToggleSwitch :model-value="land()?.enabled ?? false" :disabled="settings === undefined" @update:model-value="setLand" />
+            </template>
+            <template #below>
+                <p v-if="land()?.enabled === true" class="text-2xs text-muted">
+                    A single agent can still be held back from the review panel, and a rule below can narrow this — hold anything touching a path you
+                    name, and let the rest through.
+                </p>
             </template>
         </Row>
 

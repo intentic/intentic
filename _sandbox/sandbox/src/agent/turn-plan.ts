@@ -4,6 +4,7 @@ import {
     type AgentTurn,
     type Capability,
     type IqContextOutcome,
+    type Rule,
     SandboxSettingsSchema,
     capabilitiesOf,
     withoutResumeNote,
@@ -16,6 +17,9 @@ import { pluginDirsOf } from "../capabilities/plugin-dirs.js";
 import type { Services } from "../composition.js";
 import { extensionAgentDirsOf } from "../extensions/installed-extensions.js";
 import { createHashlineServer } from "../hashline/hashline-tools.js";
+import { runRuleCommand } from "../rules/rule-command.js";
+import { standing } from "../rules/rules.js";
+import { CHECKS_SESSION } from "../terminal/terminal-session.js";
 import type { AgentRequest, ParkedSync } from "./agent.js";
 import { adapterFor } from "./adapter-registry.js";
 import { isUnknownSlashCommand } from "./agent-commands.js";
@@ -294,6 +298,11 @@ export const planAcpTurn = async (
  * and one list of stale numbers. */
 const SETTINGS_DEFAULTS = SandboxSettingsSchema.parse({});
 
+// How much of a failed turn-ending command rides back to the model. Smaller than the pre-push budget on
+// purpose: this one goes into a turn that is still running and still holds its whole transcript, so it needs
+// enough to act on rather than the whole suite a push dialog quotes into a fresh session.
+const TURN_RULE_OUTPUT_BYTES = 4_000;
+
 /* The Claude Code harness — a native Claude turn's subscription OAuth (with its mid-turn refresh callback), or
  * the translator endpoint a routed provider rides. Credentials are resolved by harness-credentials.ts,
  * which the quick-model one-shot behind the commit box's autofill reads too, so both authenticate identically;
@@ -339,7 +348,7 @@ export const planHarnessTurn = async (
         terseOutput,
         terseHoldout,
         systemPromptMode,
-        verifyOnStop,
+        rules,
         subagentsAtOnce,
         subagentsPerTurn,
         subagentDepth,
@@ -347,6 +356,9 @@ export const planHarnessTurn = async (
         commandRules,
         systemPrompt: customPrompt,
     } = settings;
+    /* The rules armed where a turn ends. STANDING, not matching: their conditions are read at the Stop, when
+     * the turn has actually edited something to narrow on (rules/turn-ending.ts). */
+    const turnEndingRules = standing(rules, "turn.ending");
     /* THE TERSE EXPERIMENT'S COIN FLIP. The steer is eligible only where the daemon still appends to the
      * prompt — a custom prompt takes it away with everything else — and the holdout then runs its fraction of
      * eligible turns WITHOUT it, so the savings report has two populations of the same command stream to
@@ -541,8 +553,44 @@ export const planHarnessTurn = async (
             ...(subagentsAtOnce !== SETTINGS_DEFAULTS.subagentsAtOnce ? { subagentsAtOnce } : {}),
             ...(subagentsPerTurn !== SETTINGS_DEFAULTS.subagentsPerTurn ? { subagentsPerTurn } : {}),
             ...(subagentDepth !== SETTINGS_DEFAULTS.subagentDepth ? { subagentDepth } : {}),
-            // The verify-on-stop ledger, forwarded only when on so an unset workspace wires no hooks at all.
-            ...(verifyOnStop ? { verifyOnStop } : {}),
+            /* The rules standing where a turn ends, forwarded only when there ARE some so a workspace with none
+             * wires no hooks at all. Their CONDITIONS are deliberately not read here: this turn has not run
+             * yet, so nothing knows which files it will touch, and a path condition resolved now would be a
+             * condition that can never hold (rules/turn-ending.ts reads them at the Stop instead).
+             *
+             * The runner rides along beside them so a `command` rule has somewhere to run — in the turn's own
+             * cwd, which under an isolated turn is the worktree the agent is actually editing. */
+            ...(turnEndingRules.length > 0
+                ? {
+                      turnEndingRules,
+                      /* A rule that spoke here CONTINUED a turn the model had finished, which is the answer to
+                       * "why is this still going" and the one thing about this moment nobody can see from the
+                       * outside. Stamped for the settings list and written to the feed, both best-effort: a
+                       * turn must settle whether or not its bookkeeping did. */
+                      onRuleFired: (rule: Rule) => {
+                          void services.ruleFirings
+                              .stamp(rule.id, Date.now())
+                              .catch((error: unknown) => services.logger.warn({ err: error, rule: rule.id }, "rule firing stamp failed"));
+                          void services.activity
+                              .append({
+                                  direction: "system",
+                                  type: "rule.continued_turn",
+                                  content: `"${rule.label}" asked for one more thing before this turn could finish.`,
+                                  ...(input.conversationId !== undefined ? { conversationId: input.conversationId } : {}),
+                              })
+                              .catch((error: unknown) => services.logger.warn({ err: error, rule: rule.id }, "rule activity append failed"));
+                      },
+                      runRuleCommand: (command: string, timeoutMs: number) =>
+                          runRuleCommand(services, {
+                              command,
+                              timeoutMs,
+                              cwd: context.localCwd,
+                              session: CHECKS_SESSION,
+                              window: "checks",
+                              outputBytes: TURN_RULE_OUTPUT_BYTES,
+                          }),
+                  }
+                : {}),
             // The sniffer's rulebook, forwarded only when the owner wrote a rule — same no-hook economy.
             ...(Object.keys(actionRules).length > 0 ? { actionRules } : {}),
             // The command gate's rulebook, on the same terms: no rule, no hook, and a workspace that has never

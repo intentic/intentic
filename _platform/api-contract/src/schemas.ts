@@ -32,6 +32,9 @@ import {
     PanelSummarySchema,
     PushConfigSchema,
     RepoAppSchema,
+    RuleFiringsSchema,
+    RuleMomentSchema,
+    RuleSchema,
     SandboxSettingsSchema,
     ServiceKindSchema,
     AgentChangeSchema,
@@ -125,6 +128,9 @@ export {
     PanelSummarySchema,
     PushConfigSchema,
     RepoAppSchema,
+    RuleFiringsSchema,
+    RuleMomentSchema,
+    RuleSchema,
     SandboxSettingsSchema,
     ServiceEntrySchema,
     ServiceKindSchema,
@@ -162,6 +168,9 @@ export type Draft = z.infer<typeof DraftSchema>;
 export type DraftSummary = z.infer<typeof DraftSummarySchema>;
 export type DraftsList = z.infer<typeof DraftsListSchema>;
 export type SandboxSettings = z.infer<typeof SandboxSettingsSchema>;
+export type Rule = z.infer<typeof RuleSchema>;
+export type RuleMoment = z.infer<typeof RuleMomentSchema>;
+export type RuleFirings = z.infer<typeof RuleFiringsSchema>;
 export type BuiltinPromptText = z.infer<typeof BuiltinPromptTextSchema>;
 export type PanelSummary = z.infer<typeof PanelSummarySchema>;
 export type TemplateSummary = z.infer<typeof TemplateSummarySchema>;
@@ -342,16 +351,7 @@ export const SetupReportFailureSchema = z.object({
 // invisible Docker work; a non-empty `failed` is a verdict, not progress. `at` (ISO) is stamped by the
 // platform on receipt — the reporting machine's clock is never trusted.
 export const SetupReportSchema = z.object({
-    stage: z.enum([
-        "preflight",
-        "pulling-image",
-        "creating-tunnel",
-        "starting-sandbox",
-        "starting-connector",
-        "waiting-health",
-        "verifying",
-        "done",
-    ]),
+    stage: z.enum(["preflight", "pulling-image", "creating-tunnel", "starting-sandbox", "starting-connector", "waiting-health", "verifying", "done"]),
     failed: z.array(SetupReportFailureSchema).max(12),
     at: z.string(),
 });

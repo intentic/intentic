@@ -3,6 +3,7 @@ import { computed, ref, shallowRef, watch } from "vue";
 import { composeSession, startSession } from "../agents/sessionSuggestion";
 import type { Conversation } from "../chat/conversation";
 import { useSandbox } from "../sandbox/useSandbox";
+import { prepushCommandOf } from "../sandbox/rules";
 import { useSandboxSettings } from "../sandbox/useSandboxSettings";
 import { checkOutcome, fixPrompt, fixSummary } from "./prepushFix";
 import { type SyncTarget, useChanges } from "./useChanges";
@@ -225,7 +226,7 @@ export function usePushFlow() {
             return;
         }
         const push: PendingPush = { verb, what, targets };
-        const command = settings.value?.prepushCommand ?? ``;
+        const command = prepushCommandOf(settings.value?.rules ?? []);
         if (command === `` || !targets.some((target) => target.push)) {
             void send(push);
             return;
@@ -312,7 +313,7 @@ export function usePushFlow() {
         running: computed(() => stage.value !== undefined),
         // The command being run, for the line that says what is happening. From the run while there is one, from
         // settings in the moment before the first poll answers.
-        command: computed(() => (prepush.run.value.command === `` ? (settings.value?.prepushCommand ?? ``) : prepush.run.value.command)),
+        command: computed(() => (prepush.run.value.command === `` ? prepushCommandOf(settings.value?.rules ?? []) : prepush.run.value.command)),
         // The check's terminal, where it exists — absent on a sandbox with no tmux wrapper, where the suite ran
         // in an invisible shell and a button would only open an empty panel.
         terminal: prepush.terminal,

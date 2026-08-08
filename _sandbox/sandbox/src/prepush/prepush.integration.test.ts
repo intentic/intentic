@@ -3,19 +3,45 @@ import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
-import { SandboxSettingsSchema } from "@intentic/sandbox-contract";
+import { type SandboxSettings, SandboxSettingsSchema } from "@intentic/sandbox-contract";
 import { expect, test, vi } from "vitest";
 import type { Services } from "../composition.js";
 import { unstubbed } from "@intentic/testing";
 import type { TerminalRunner } from "../terminal/terminal-run.js";
-import { PREPUSH_SESSION } from "../terminal/terminal-session.js";
+import { CHECKS_SESSION } from "../terminal/terminal-session.js";
 import { createPrepushCheck } from "./prepush.js";
 
-// The check touches sandboxSettings, workspace, logger and the terminal runner; `unstubbed` keeps the fake that
-// small. Nothing is persisted — the run lives in the returned object, which is the whole point of the rewrite.
-// The schema's own defaults with the two fields this check reads set on top — what the daemon actually hands
-// `sandboxSettings.get`, rather than the two-key subset a cast used to let this fake pass off as the whole of it.
-const SETTINGS = { ...SandboxSettingsSchema.parse({}), prepushCommand: "exit 0", prepushTimeoutMs: 60_000 };
+/* The check touches sandboxSettings, workspace, logger, the terminal runner and the two bookkeeping stores;
+ * `unstubbed` keeps the fake that small. Nothing is persisted — the run lives in the returned object.
+ *
+ * Every test here says what it wants as a COMMAND and a TIMEOUT, which is what a pre-push check is about, and
+ * the fixture turns that into the rule the daemon actually reads (`rulesOf`). Writing rule literals in thirty
+ * places would have buried each test's actual subject under four lines of scaffolding — and the settings the
+ * fake hands back are still the schema's own defaults with the rule table on top, so nothing here can pass off
+ * a two-key subset as the whole settings object.  */
+const SETTINGS = SandboxSettingsSchema.parse({});
+
+interface Knobs {
+    readonly prepushCommand: string;
+    readonly prepushTimeoutMs: number;
+}
+
+const DEFAULTS: Knobs = { prepushCommand: "exit 0", prepushTimeoutMs: 60_000 };
+
+// An empty command means the check is OFF, and off is an EMPTY TABLE rather than a rule with a blank command —
+// the same thing clearing the settings row does.
+const rulesOf = ({ prepushCommand, prepushTimeoutMs }: Knobs): SandboxSettings["rules"] =>
+    prepushCommand === ""
+        ? []
+        : [
+              {
+                  id: "pre-push",
+                  label: "Check before you push",
+                  moment: "push.starting",
+                  action: { kind: "command", command: prepushCommand, timeoutMs: prepushTimeoutMs },
+                  enabled: true,
+              },
+          ];
 
 const execFileAsync = promisify(execFile);
 
@@ -52,7 +78,7 @@ const fakeRunner = (visible: boolean, count: () => void): TerminalRunner =>
 
 interface Fakes {
     readonly services: Services;
-    readonly settings: { current: typeof SETTINGS };
+    readonly settings: { current: SandboxSettings };
     // Every away-notification the check sent. A verdict the user is not standing in front of is the whole
     // reason this subsystem is allowed to interrupt anyone, so which runs send one is worth asserting.
     readonly notified: () => readonly string[];
@@ -63,9 +89,9 @@ interface Fakes {
 
 // `visible` stands in for the sandbox having the tmux wrapper, and `root` for the working tree the check runs on —
 // a `root` that does not exist is how the one genuinely unstartable command below is written.
-const fakeServices = (over: Partial<typeof SETTINGS> & { visible?: boolean; root?: string } = {}): Fakes => {
-    const { visible = true, root = mkdtempSync(join(tmpdir(), "prepush-")), ...fields } = over;
-    const settings = { current: { ...SETTINGS, ...fields } };
+const fakeServices = (over: Partial<Knobs> & { visible?: boolean; root?: string } = {}): Fakes => {
+    const { visible = true, root = mkdtempSync(join(tmpdir(), "prepush-")), ...knobs } = over;
+    const settings = { current: { ...SETTINGS, rules: rulesOf({ ...DEFAULTS, ...knobs }) } };
     let runs = 0;
     const notified: string[] = [];
     const services = unstubbed<Services>("services", {
@@ -81,6 +107,11 @@ const fakeServices = (over: Partial<typeof SETTINGS> & { visible?: boolean; root
         terminalRun: fakeRunner(visible, () => {
             runs += 1;
         }),
+        // Both are fire-and-forget bookkeeping the check must never be blocked by, so the fakes only have to
+        // exist. What they RECORD is asserted where it is the subject (rules/rules.test.ts, and the feed's own
+        // tests) rather than in every run this file drives.
+        ruleFirings: unstubbed<Services["ruleFirings"]>("ruleFirings", { stamp: async () => {} }),
+        activity: unstubbed<Services["activity"]>("activity", { append: async () => {} }),
     });
     return { services, settings, runs: () => runs, notified: () => notified };
 };
@@ -110,7 +141,7 @@ test("a running check names its terminal and carries no output of its own", asyn
     const check = createPrepushCheck(services);
     await check.run();
     const state = await check.state();
-    expect(state.session).toBe(PREPUSH_SESSION);
+    expect(state.session).toBe(CHECKS_SESSION);
     expect(state.output).toBe("");
 });
 
@@ -276,7 +307,7 @@ test("clearing the command reports idle, whatever the last run concluded", async
     const check = createPrepushCheck(services);
     await check.run();
     await vi.waitFor(async () => expect((await check.state()).status).toBe("failed"), { timeout: 5_000 });
-    settings.current = { ...settings.current, prepushCommand: "" };
+    settings.current = { ...settings.current, rules: [] };
     expect(await check.state()).toEqual({ status: "idle", command: "", output: "" });
 });
 

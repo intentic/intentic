@@ -38,5 +38,8 @@ export const createSettingsRoutes = (services: Services) => {
         builtinPrompt: i.builtinPrompt.handler(({ input }) =>
             input.base === "intentic" ? { text: INTENTIC_PROMPT, version: "" } : presetSystemPrompt(services.workspace.root),
         ),
+        // When each rule last did something — what the settings list shows beside a rule so one that has been
+        // silent for three weeks is visible as such rather than merely present.
+        firings: i.firings.handler(() => services.ruleFirings.get()),
     };
 };

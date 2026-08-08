@@ -4,6 +4,7 @@ import {
     BuiltinPromptTextSchema,
     DayWindowQuerySchema,
     OkSchema,
+    RuleFiringsSchema,
     SandboxSettingsSchema,
     SavingsReportSchema,
 } from "../schemas.js";
@@ -20,4 +21,8 @@ export const settingsContract = {
     set: oc.route({ method: "POST", path: "/settings" }).input(SandboxSettingsSchema).output(OkSchema),
     savings: oc.route({ method: "GET", path: "/settings/savings" }).input(DayWindowQuerySchema).output(SavingsReportSchema),
     builtinPrompt: oc.route({ method: "GET", path: "/settings/system-prompt/{base}" }).input(BuiltinPromptSchema).output(BuiltinPromptTextSchema),
+    // When each rule last did something, keyed by rule id. Its own route rather than a field on the settings
+    // object because a firing is not an edit: folding it in would make every push a settings write, and would
+    // put a value that changes on its own inside the object the screen optimistically patches.
+    firings: oc.route({ method: "GET", path: "/settings/rule-firings" }).output(RuleFiringsSchema),
 };

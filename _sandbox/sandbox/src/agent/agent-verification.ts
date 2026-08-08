@@ -1,6 +1,5 @@
 import { readFile } from "node:fs/promises";
 import { dirname, extname, join, resolve } from "node:path";
-import type { HookCallbackMatcher, HookEvent } from "@anthropic-ai/claude-agent-sdk";
 import { inWorktree, type IsolationPlan } from "../agents/isolation.js";
 
 /* DID THIS TURN PROVE ANYTHING? — the one question a turn that edited code should not end without answering,
@@ -45,10 +44,6 @@ const PROSE_EXTENSIONS = new Set([".md", ".markdown", ".mdx", ".rst", ".txt", ".
 // Prose even without a prose extension.
 const PROSE_FILENAMES = new Set(["license", "licence", "notice", "authors", "contributors", "changelog", "codeowners"]);
 
-// At most this many follow-ups per turn. The model gets a second ask only because the first one is sometimes
-// answered with a check that fails — one more round to repair it is the point. A third would be a loop.
-const MAX_NUDGES = 2;
-
 // How much of a failing check's own words ride back with the nudge. Enough to act on, not enough to re-paste a
 // suite: the output is still in the transcript directly above.
 const EVIDENCE_DETAIL_MAX = 800;
@@ -81,6 +76,11 @@ export interface VerificationLedger {
     readonly noteCommand: (command: string, passed: boolean, detail: string) => void;
     // Undefined ⇒ nothing to ask for: no code was edited, or a passing check followed the last edit.
     readonly verdict: () => VerificationVerdict | undefined;
+    /* Every code path this turn edited, deduped, newest last — whether or not anything has since proven them.
+     * `verdict` cannot answer this: it goes quiet precisely when the work WAS verified, and a rule that reads
+     * "before a turn ending that touched the database" has to fire on a turn that did its job properly. So the
+     * ledger is two readers over one record — what still wants proof, and what was touched at all. */
+    readonly edited: () => readonly string[];
 }
 
 const isProsePath = (path: string): boolean => {
@@ -116,7 +116,10 @@ const basename = (token: string): string => token.split("/").pop() ?? token;
 
 // The kind one command segment proves, or undefined when it proves nothing.
 export const classifyCommand = (segment: string): VerificationKind | undefined => {
-    const tokens = segment.trim().split(/\s+/).filter((token) => token !== "");
+    const tokens = segment
+        .trim()
+        .split(/\s+/)
+        .filter((token) => token !== "");
     for (let i = 0; i < tokens.length; i += 1) {
         const raw = tokens[i] ?? "";
         // Leading `FOO=bar` env assignments belong to the command, not to the classification.
@@ -153,16 +156,20 @@ const commandKind = (command: string): VerificationKind | undefined => {
 };
 
 export const createVerificationLedger = (): VerificationLedger => {
-    const edits: { path: string; at: number }[] = [];
+    /* EVERY edit is recorded, prose included, and the prose filter is applied by `verdict` where it belongs.
+     *
+     * It used to be applied here, at the door, and that was right while asking for proof was the only thing
+     * reading this record. It stopped being right the moment rule conditions started reading it too: "before a
+     * turn that touched docs/**, remind me to check the docs build" is a perfectly reasonable rule, and a
+     * ledger that had already discarded the docs edit could never fire it. Filtering at the reader keeps both
+     * honest — nothing asks for proof of a README, and nothing pretends the README was never written. */
+    const edits: { path: string; at: number; prose: boolean }[] = [];
     const evidence: Evidence[] = [];
     let counter = 0;
     return {
         noteEdit: (path) => {
-            if (isProsePath(path)) {
-                return;
-            }
             counter += 1;
-            edits.push({ path, at: counter });
+            edits.push({ path, at: counter, prose: isProsePath(path) });
         },
         noteCommand: (command, passed, detail) => {
             const kind = commandKind(command);
@@ -172,8 +179,13 @@ export const createVerificationLedger = (): VerificationLedger => {
             counter += 1;
             evidence.push({ kind, command: command.trim(), passed, detail: detail.slice(0, EVIDENCE_DETAIL_MAX), at: counter });
         },
+        edited: () => [...new Set(edits.map((edit) => edit.path))],
         verdict: () => {
-            const lastEdit = edits.at(-1);
+            // Only code counts here — a turn that touched nothing else is done when it says it is, and the
+            // ORDER question ("did a check run after the last edit") is about the last edit a check could
+            // speak to, not the last edit of any kind.
+            const code = edits.filter((edit) => !edit.prose);
+            const lastEdit = code.at(-1);
             if (lastEdit === undefined) {
                 return undefined;
             }
@@ -182,7 +194,7 @@ export const createVerificationLedger = (): VerificationLedger => {
                 return undefined;
             }
             // Newest-last, deduped: the same file edited five times is one path to name.
-            const paths = [...new Set(edits.map((edit) => edit.path))];
+            const paths = [...new Set(code.map((edit) => edit.path))];
             const failed = after.findLast((item) => !item.passed);
             return { paths, ...(failed !== undefined ? { failed } : { failed: undefined }) };
         },
@@ -195,7 +207,7 @@ export const createVerificationLedger = (): VerificationLedger => {
 export type ScriptsProbe = (fromPath: string) => Promise<readonly string[] | undefined>;
 
 const readPackageScripts: ScriptsProbe = async (fromPath) => {
-    for (let dir = dirname(resolve(fromPath)); ; ) {
+    for (let dir = dirname(resolve(fromPath)); ;) {
         try {
             const raw = JSON.parse(await readFile(join(dir, "package.json"), "utf8")) as { scripts?: Record<string, unknown> };
             return Object.keys(raw.scripts ?? {});
@@ -236,114 +248,26 @@ const nudgeText = (verdict: VerificationVerdict, commands: readonly string[]): s
     ].join("\n");
 };
 
-// Does this Bash result say the command failed? The tmux wrapper's footer carries the real exit code
-// (`--- [exit 7, 2s] ...`), which is the authoritative answer whenever output filtering is on. Without a
-// footer there is nothing to read here and the caller's event tells us instead: PostToolUse ⇒ ran,
-// PostToolUseFailure ⇒ did not.
-const footerExitCode = (response: unknown): number | undefined => {
-    const text = typeof response === "string" ? response : typeof response === "object" && response !== null ? JSON.stringify(response) : "";
-    const matches = [...text.matchAll(/---\s\[exit\s(\d+),/g)];
-    const last = matches.at(-1)?.[1];
-    return last === undefined ? undefined : Number(last);
-};
-
-const bashCommand = (input: unknown): string | undefined => {
-    const command = (input as { command?: unknown }).command;
-    return typeof command === "string" && command.trim() !== "" ? command : undefined;
-};
-
-const editedPath = (input: unknown): string | undefined => {
-    const path = (input as { file_path?: unknown }).file_path;
-    return typeof path === "string" && path !== "" ? path : undefined;
-};
-
-/* The hooks. Edits and Bash results feed the ledger; Stop reads it once the turn tries to end.
+/* THE `verify-edits` BUILT-IN, as one function: what this turn should be told, or nothing.
  *
- * `stop_hook_active` is the SDK's own re-entry flag — true when this Stop is the one that follows a hook that
- * already continued the turn. We count our own asks anyway (a turn can be stopped for other reasons in
- * between) and honour both, so neither alone can produce a loop. */
-export const verificationHooks = (
+ * A built-in action rather than something the rule table could express, because what it does is not a command
+ * and never will be — it reads a running record of what the turn edited against what the turn proved, and only
+ * the daemon is standing where both of those are visible. The rule table's job is to say WHEN it applies and
+ * under what conditions; this is the part that would be absurd to ask an owner to write.
+ *
+ * Undefined ⇒ nothing to ask for, which is the common case and costs the turn nothing. */
+export const verifyEditsMessage = async (
+    ledger: VerificationLedger,
     isolation?: IsolationPlan,
     scripts: ScriptsProbe = readPackageScripts,
-): Partial<Record<HookEvent, HookCallbackMatcher[]>> => {
-    const ledger = createVerificationLedger();
-    let nudges = 0;
-    return {
-        PostToolUse: [
-            {
-                matcher: "Edit|Write|NotebookEdit",
-                hooks: [
-                    async (input) => {
-                        if (input.hook_event_name === "PostToolUse") {
-                            const path = editedPath(input.tool_input);
-                            if (path !== undefined) {
-                                ledger.noteEdit(path);
-                            }
-                        }
-                        return {};
-                    },
-                ],
-            },
-            {
-                matcher: "Bash",
-                hooks: [
-                    async (input) => {
-                        if (input.hook_event_name !== "PostToolUse") {
-                            return {};
-                        }
-                        const command = bashCommand(input.tool_input);
-                        if (command !== undefined) {
-                            const exit = footerExitCode(input.tool_response);
-                            const text = typeof input.tool_response === "string" ? input.tool_response : "";
-                            ledger.noteCommand(command, exit === undefined || exit === 0, text);
-                        }
-                        return {};
-                    },
-                ],
-            },
-        ],
-        PostToolUseFailure: [
-            {
-                matcher: "Bash",
-                hooks: [
-                    async (input) => {
-                        if (input.hook_event_name !== "PostToolUseFailure") {
-                            return {};
-                        }
-                        const command = bashCommand(input.tool_input);
-                        if (command !== undefined) {
-                            ledger.noteCommand(command, false, input.error);
-                        }
-                        return {};
-                    },
-                ],
-            },
-        ],
-        Stop: [
-            {
-                hooks: [
-                    async (input) => {
-                        if (input.hook_event_name !== "Stop" || input.stop_hook_active || nudges >= MAX_NUDGES) {
-                            return {};
-                        }
-                        const verdict = ledger.verdict();
-                        if (verdict === undefined) {
-                            return {};
-                        }
-                        nudges += 1;
-                        // The paths the agent named are the ones it reads back; the probe needs the daemon's
-                        // view of them, which under an unanchored isolated turn is a different file.
-                        const first = verdict.paths[0];
-                        const defined = first === undefined ? undefined : await scripts(inWorktree(first, isolation));
-                        return {
-                            hookSpecificOutput: {
-                                hookEventName: "Stop",
-                                additionalContext: nudgeText(verdict, suggestedCommands(defined ?? [])),
-                            },
-                        };
-                    },
-                ],
-            },
-        ],
-    };
+): Promise<string | undefined> => {
+    const verdict = ledger.verdict();
+    if (verdict === undefined) {
+        return undefined;
+    }
+    // The paths the agent named are the ones it reads back; the probe needs the daemon's view of them, which
+    // under an unanchored isolated turn is a different file.
+    const first = verdict.paths[0];
+    const defined = first === undefined ? undefined : await scripts(inWorktree(first, isolation));
+    return nudgeText(verdict, suggestedCommands(defined ?? []));
 };

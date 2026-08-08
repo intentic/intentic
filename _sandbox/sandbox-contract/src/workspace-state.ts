@@ -94,6 +94,15 @@ const STATE_FILES = [
     },
 
     { path: ".intentic/settings.json", invalidates: ["settings"], portability: "carry" },
+    // The rule table's last-fired stamps, beside the rules themselves. `derived` rather than `carry`: it is a
+    // record of what happened in THIS sandbox, and carrying it to a fresh one would date every rule to work
+    // that machine never did.
+    {
+        path: ".intentic/rule-firings.json",
+        invalidates: ["rule-firings"],
+        portability: "derived",
+        note: "Stamps of when each rule last did something; the new sandbox starts its own record.",
+    },
     // Written by the AGENT's file tools (the drafts skill), read by the owner's approval inbox — the one entry
     // here whose whole point is that a change arrives from outside the browser that renders it.
     { path: ".intentic/drafts/", invalidates: ["drafts"], portability: "carry" },

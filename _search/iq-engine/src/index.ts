@@ -39,6 +39,10 @@ export type { HotspotFile } from "./engines/hotspots.js";
 export { disabledOf, type Feature, FEATURES, parseFeatures } from "./features.js";
 export { estimateTokens } from "./render/budget.js";
 export { isIqDenied, IQ_DIR } from "./workspace/floor.js";
+// The scope-filter glob dialect, exported because the daemon's rule conditions narrow by path too. One dialect
+// rather than two: `docs/**` typed into a rule and `docs/**` typed into the search box have to mean the same
+// thing, and the surest way to guarantee that is for one function to answer both.
+export { globToRegExp } from "./workspace/glob.js";
 export { canonicalLang } from "./workspace/scan.js";
 
 export interface EngineOptions {

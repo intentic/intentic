@@ -16,6 +16,7 @@ import { openFileRefFromEvent } from "../composables/workspace/openFileRef";
 import { invalidateWorkspace } from "../composables/workspace/useHistory";
 import { usePaneView } from "../composables/chat/useChat";
 import { useChatPopout } from "../composables/chat/useChatPopout";
+import { landsByDefault } from "../composables/sandbox/rules";
 import { useSandboxSettings } from "../composables/sandbox/useSandboxSettings";
 import { openWorkTerminal, useWorkTerminals } from "../composables/terminal/useWorkTerminals";
 import ChatAttachmentStrip from "./ChatAttachmentStrip.vue";
@@ -62,7 +63,8 @@ const { agentById, setAutoLand } = useAgents();
 const { settings: sandboxSettings, save: saveSandboxSettings } = useSandboxSettings();
 const holdOffer = computed(
     () =>
-        props.message.noticeAction === `landHold` && effectiveAutoLand(agentById(conversation.value.conversationId), sandboxSettings.value?.autoLand),
+        props.message.noticeAction === `landHold` &&
+        effectiveAutoLand(agentById(conversation.value.conversationId), landsByDefault(sandboxSettings.value?.rules ?? [])),
 );
 // Best-effort like markSeen: a failed write leaves the offer standing to press again.
 const holdFutureLands = (): void => {

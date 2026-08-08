@@ -26,6 +26,7 @@ import {
     type CommandClass,
     type FastModeState,
     type PermissionMode,
+    type Rule,
     sendableEffort,
     type SystemPromptMode,
     type UsageWindow,
@@ -45,7 +46,7 @@ import { outboundGateHooks } from "../guard/outbound-gate.js";
 import { type AgentTool, mcpServersOf } from "./agent-tools.js";
 import { createRequest } from "./agent-requests.js";
 import type { SteeringQueue } from "./agent-steering.js";
-import { verificationHooks } from "./agent-verification.js";
+import { type TurnRuleCommand, turnEndingHooks } from "../rules/turn-ending.js";
 import { agentShellBusy, bashTmuxHooks, tmuxRunEnabled } from "./agent-terminals.js";
 import { withTurnPreamble } from "./turn-preamble.js";
 import { EventQueue } from "./event-queue.js";
@@ -143,9 +144,17 @@ export interface AgentRequest {
     // Env vars for the agent's shell from cli-kind capabilities (e.g. DISCORD_BOT_TOKEN) — the stored
     // credentials their CLI tools read. Merged into the SDK `env` each turn; absent ⇒ no extra env.
     readonly cliEnv?: Record<string, string>;
-    // Ask for proof before a turn that edited code ends (settings.verifyOnStop). Absent/false ⇒ the ledger and
-    // its Stop hook are not wired at all, so an unset workspace pays nothing — not even the bookkeeping.
-    readonly verifyOnStop?: boolean;
+    /* The owner's rules standing at `turn.ending` (rules/rules.ts), plus the way to run one's command. Their
+     * conditions are read at the Stop rather than here — a turn is planned before it runs, so nothing yet knows
+     * which files it will touch (rules/turn-ending.ts).
+     *
+     * Absent/empty ⇒ the ledger and its Stop hook are not wired at all, so a workspace with no rule at this
+     * moment pays nothing — not even the bookkeeping. */
+    readonly turnEndingRules?: readonly Rule[];
+    readonly runRuleCommand?: TurnRuleCommand;
+    // Told when one of them actually said something, so the settings list can show which rules are earning
+    // their place and which have been silent for three weeks.
+    readonly onRuleFired?: (rule: Rule) => void;
     // Absolute Claude Code plugin checkout dirs from plugin-kind capabilities, rebuilt each turn (see
     // pluginDirsOf). The SDK's plugin loader parses their skills/agents/hooks/commands/.mcp.json — the daemon
     // never does, so the plugin format tracks Claude Code via SDK upgrades alone.
@@ -1335,9 +1344,15 @@ const baseOptions = (
         // the owner's action rules BEFORE they run — and hooks fire even under bypassPermissions, which is what
         // makes this hold for unattended automation turns. No rules ⇒ no hook (turn-plan forwards none).
         request.actionRules !== undefined && Object.keys(request.actionRules).length > 0 ? outboundGateHooks(request.actionRules) : {},
-        // Verification: the per-turn ledger of what was edited against what was proven, and the one follow-up
-        // it asks for when a turn tries to end on unproven code. Opt-in — off, nothing is wired.
-        request.verifyOnStop === true ? verificationHooks(request.isolation?.plan) : {},
+        /* The `turn.ending` moment: every rule the owner has standing where a turn tries to finish — the proof
+         * ledger's follow-up, a standing instruction, a command that has to pass first. No rule ⇒ nothing is
+         * wired, so a workspace that has never opened this pays nothing for it. */
+        turnEndingHooks(request.turnEndingRules ?? [], {
+            isolation: request.isolation?.plan,
+            runCommand: request.runRuleCommand,
+            cwd: request.cwd,
+            onFired: request.onRuleFired,
+        }),
         // The worktree the namespace could not build. Only when this turn is isolated AND unanchored: with an
         // anchor the paths already mean the worktree, and rewriting them a second time would aim the tool at a
         // worktree-inside-the-worktree that does not exist.

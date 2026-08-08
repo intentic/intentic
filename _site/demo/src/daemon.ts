@@ -111,7 +111,14 @@ const patchAgent = (id: string, patch: Partial<AgentSummary>): AgentSummary | un
 // Who is in the workspace. The second one is the whole sharing story told in one frame — and the first thing a
 // minimal recording drops, because an avatar nobody asked for is furniture.
 const OWNER: PresenceUser = { clientId: `demo-owner`, email: `ada@acme.dev`, name: `Ada Lovelace`, role: `owner`, idle: false, view: `workspace` };
-const TEAMMATE: PresenceUser = { clientId: `demo-mate`, email: `grace@acme.dev`, name: `Grace Hopper`, role: `collaborator`, idle: true, view: `agents` };
+const TEAMMATE: PresenceUser = {
+    clientId: `demo-mate`,
+    email: `grace@acme.dev`,
+    name: `Grace Hopper`,
+    role: `collaborator`,
+    idle: true,
+    view: `agents`,
+};
 
 /* The /events stream: the hello identity frame, then a heartbeat inside the browser's 10s watchdog, plus the
  * roster and the presence of whoever this mode has in the workspace.
@@ -372,6 +379,8 @@ const ROUTES: readonly (readonly [string, string, Handler])[] = [
 
     [`GET`, `/settings`, () => json(DEMO_SETTINGS)],
     [`GET`, `/settings/savings`, () => json(DEMO_SAVINGS)],
+    // No rule has ever fired in a recorded demo, which is the honest answer for a table with no rules in it.
+    [`GET`, `/settings/rule-firings`, () => json({})],
     [`GET`, `/vpn`, () => json({ networks: [] })],
 
     /* CI. The board is real data (fixture/ci.ts) and its read state is real state: opening the view stamps
@@ -487,9 +496,10 @@ const CODEX_MODELS: Model[] = [
     { id: `gpt-5.2`, label: `GPT-5.2`, efforts: [`low`, `medium`, `high`] },
 ];
 
-// The sandbox-wide agent settings the chat and the hub read. autoLand off is what puts a finished agent in
-// "Ready to land" — the state the demo's review panel exists to show.
-const DEMO_SETTINGS = { autoLand: false, systemPromptMode: `intentic`, stableSystemPrompt: true, skills: [] };
+// The sandbox-wide agent settings the chat and the hub read. An EMPTY rule table is what puts a finished agent
+// in "Ready to land" — with no rule saying otherwise, work waits on its branch, which is the state the demo's
+// review panel exists to show.
+const DEMO_SETTINGS = { rules: [], systemPromptMode: `intentic`, stableSystemPrompt: true, skills: [] };
 
 // What the tool-output cleaners were worth over the window the hub is showing. A measured claim, so the demo
 // states it the way the product does: per-stage, with the ledger's own freshness.

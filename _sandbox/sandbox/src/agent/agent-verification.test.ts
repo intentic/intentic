@@ -1,40 +1,5 @@
-import type { HookInput } from "@anthropic-ai/claude-agent-sdk";
 import { describe, expect, test } from "vitest";
-import { syncHookOutput } from "../testing.js";
-import { classifyCommand, createVerificationLedger, type ScriptsProbe, verificationHooks } from "./agent-verification.js";
-
-const SCRIPTS: ScriptsProbe = async () => ["test", "lint", "dev"];
-const NO_PACKAGE: ScriptsProbe = async () => undefined;
-
-// Drive a hook set the way the SDK does. Each helper fires one event at the set built for a single turn, so a
-// test can interleave edits, commands and stops against ONE ledger — which is the whole thing under test.
-const edit = async (hooks: ReturnType<typeof verificationHooks>, file_path: string) => {
-    const matcher = hooks.PostToolUse![0]!;
-    const input = { hook_event_name: "PostToolUse", tool_name: "Edit", tool_input: { file_path }, tool_use_id: "t" } as unknown as HookInput;
-    return matcher.hooks[0]!(input, "t", { signal: new AbortController().signal });
-};
-
-const bash = async (hooks: ReturnType<typeof verificationHooks>, command: string, response: string) => {
-    const matcher = hooks.PostToolUse![1]!;
-    const input = { hook_event_name: "PostToolUse", tool_name: "Bash", tool_input: { command }, tool_response: response, tool_use_id: "t" } as unknown as HookInput;
-    return matcher.hooks[0]!(input, "t", { signal: new AbortController().signal });
-};
-
-const bashFailed = async (hooks: ReturnType<typeof verificationHooks>, command: string, error: string) => {
-    const matcher = hooks.PostToolUseFailure![0]!;
-    const input = { hook_event_name: "PostToolUseFailure", tool_name: "Bash", tool_input: { command }, error, tool_use_id: "t" } as unknown as HookInput;
-    return matcher.hooks[0]!(input, "t", { signal: new AbortController().signal });
-};
-
-const stop = async (hooks: ReturnType<typeof verificationHooks>, stop_hook_active = false) => {
-    const matcher = hooks.Stop![0]!;
-    const input = { hook_event_name: "Stop", stop_hook_active } as unknown as HookInput;
-    const result = await matcher.hooks[0]!(input, "t", { signal: new AbortController().signal });
-    return (syncHookOutput(result).hookSpecificOutput as { additionalContext?: string } | undefined)?.additionalContext;
-};
-
-const PASSED = "all good\n--- [exit 0, 2s] 40 lines filtered to 12\n";
-const FAILED = "1 failed\n--- [exit 1, 2s] 40 lines filtered to 12\n";
+import { classifyCommand, createVerificationLedger } from "./agent-verification.js";
 
 describe("command classification", () => {
     test.each([
@@ -48,7 +13,12 @@ describe("command classification", () => {
         ["go build ./...", "build"],
         ["cd _editor/web && pnpm typecheck", "typecheck"],
     ])("%s proves %s", (command, kind) => {
-        expect(command.split(/(?:&&|\|\||;|\|)/).map(classifyCommand).find((k) => k !== undefined)).toBe(kind);
+        expect(
+            command
+                .split(/(?:&&|\|\||;|\|)/)
+                .map(classifyCommand)
+                .find((k) => k !== undefined),
+        ).toBe(kind);
     });
 
     test.each(["ls -la", "git status", "cat package.json", "echo test", "rm -rf dist"])("%s proves nothing", (command) => {
@@ -114,71 +84,25 @@ describe("the ledger", () => {
         ledger.noteCommand("pnpm test", false, "broken");
         expect(ledger.verdict()).toBeUndefined();
     });
-});
 
-describe("the stop nudge", () => {
-    test("edited code with no check is asked to run the workspace's own script", async () => {
-        const hooks = verificationHooks(undefined, SCRIPTS);
-        await edit(hooks, "/work/src/a.ts");
-        const nudge = await stop(hooks);
-        expect(nudge).toContain("/work/src/a.ts");
-        expect(nudge).toContain("`pnpm test`");
-        expect(nudge).toContain("`pnpm lint`");
-        // `dev` is a script but not a check — offering it would be worse than offering nothing.
-        expect(nudge).not.toContain("pnpm dev");
+    /* The two readers want different answers from the same record, and conflating them broke a real case: a
+     * rule narrowed to `docs/**` could never fire, because the ledger had discarded the docs edit at the door
+     * before any condition could see it. Nothing asks for proof of a README; nothing pretends it wasn't
+     * written. */
+    test("prose is remembered as edited even though no check is asked for it", () => {
+        const ledger = createVerificationLedger();
+        ledger.noteEdit("/work/docs/intro.md");
+        expect(ledger.edited()).toEqual(["/work/docs/intro.md"]);
+        expect(ledger.verdict()).toBeUndefined();
     });
 
-    test("a passing check means the turn ends silently", async () => {
-        const hooks = verificationHooks(undefined, SCRIPTS);
-        await edit(hooks, "/work/src/a.ts");
-        await bash(hooks, "pnpm test", PASSED);
-        expect(await stop(hooks)).toBeUndefined();
-    });
-
-    test("a non-zero exit in the footer is not a pass", async () => {
-        const hooks = verificationHooks(undefined, SCRIPTS);
-        await edit(hooks, "/work/src/a.ts");
-        await bash(hooks, "pnpm test", FAILED);
-        expect(await stop(hooks)).toContain("did NOT pass");
-    });
-
-    test("a Bash tool failure counts as a failed check", async () => {
-        const hooks = verificationHooks(undefined, SCRIPTS);
-        await edit(hooks, "/work/src/a.ts");
-        await bashFailed(hooks, "pnpm test", "exit 1: 2 failed");
-        const nudge = await stop(hooks);
-        expect(nudge).toContain("2 failed");
-    });
-
-    test("a workspace with no package.json is told to pick its own check, not given an invented one", async () => {
-        const hooks = verificationHooks(undefined, NO_PACKAGE);
-        await edit(hooks, "/srv/thing.py");
-        const nudge = await stop(hooks);
-        expect(nudge).toContain("defines no test/lint/typecheck script");
-        expect(nudge).not.toContain("pnpm");
-    });
-
-    test("at most two asks per turn — the third stop is silent", async () => {
-        const hooks = verificationHooks(undefined, SCRIPTS);
-        await edit(hooks, "/work/src/a.ts");
-        expect(await stop(hooks)).toBeDefined();
-        expect(await stop(hooks)).toBeDefined();
-        expect(await stop(hooks)).toBeUndefined();
-    });
-
-    test("the SDK's own re-entry flag suppresses the ask on its own", async () => {
-        const hooks = verificationHooks(undefined, SCRIPTS);
-        await edit(hooks, "/work/src/a.ts");
-        expect(await stop(hooks, true)).toBeUndefined();
-    });
-
-    test("a check that fixes the failure clears the second stop", async () => {
-        const hooks = verificationHooks(undefined, SCRIPTS);
-        await edit(hooks, "/work/src/a.ts");
-        await bash(hooks, "pnpm test", FAILED);
-        expect(await stop(hooks)).toContain("did NOT pass");
-        await edit(hooks, "/work/src/a.ts");
-        await bash(hooks, "pnpm test", PASSED);
-        expect(await stop(hooks)).toBeUndefined();
+    // The ordering question is about the last edit a check could SPEAK to: touching a README after a green
+    // suite has not invalidated it.
+    test("a prose edit after a passing check does not reopen the verdict", () => {
+        const ledger = createVerificationLedger();
+        ledger.noteEdit("/work/src/a.ts");
+        ledger.noteCommand("pnpm test", true, "");
+        ledger.noteEdit("/work/README.md");
+        expect(ledger.verdict()).toBeUndefined();
     });
 });

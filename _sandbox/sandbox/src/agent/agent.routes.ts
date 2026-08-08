@@ -26,6 +26,8 @@ import { holdAccount } from "../claude/claude-credentials.js";
 import { accountLimitReset } from "../usage/account-usage.js";
 import { isIsolated } from "../agents/agents-store.js";
 import { landAgent } from "../agents/land.js";
+import { landingPaths } from "../agents/landing-paths.js";
+import { landingVerdict, standing } from "../rules/rules.js";
 import { type RepoSync, syncConversation } from "../agents/sync.js";
 import { recordConversationPrompt, recordPrompt } from "../sessions/prompt-index.js";
 import { handoffHistory, turnStartIndex } from "../sessions/turn-transcript.js";
@@ -347,12 +349,45 @@ async function* runConversationTurn(
         // waits on the branch as a "Ready to land" card until the user lands it deliberately.
         const finished = services.agents.entry(conversationId);
         if (!failed && signal?.aborted !== true && finished !== undefined && isIsolated(finished)) {
-            const { autoLand } = await services.sandboxSettings.get();
-            const landed = await landAgent(
-                services.agentWorktrees,
-                finished,
-                (input.autoLand ?? finished.autoLand ?? autoLand) ? "check" : "measure",
-            );
+            /* THE `agent.finished` MOMENT — does this work reach the tree by itself? A verdict rather than
+             * something that runs, because nothing extra happens here: the pass below runs either way and the
+             * rule only picks which way it goes. `measure` is the held form — provenance and diffstat happen,
+             * the main tree is untouched, and the delta waits on the branch as a "Ready to land" card.
+             *
+             * The per-agent override (this turn's, then the card's) still wins over the table: an owner who
+             * pressed hold on one card meant that card. With neither, and no rule matching, work is HELD —
+             * which is the recoverable mistake, and the default a sandbox with an empty table has. */
+            const { rules } = await services.sandboxSettings.get();
+            /* The changed paths cost a git pass per repo, so they are read ONLY when a rule here actually
+             * narrows by path. The common shapes — an empty table, or "land everything" — never pay for it. */
+            const finishedRules = standing(rules, "agent.finished");
+            const paths = finishedRules.some((rule) => (rule.when?.paths?.length ?? 0) > 0)
+                ? await landingPaths(services, finished, span)
+                : undefined;
+            const decided = landingVerdict(rules, { repos: span.map(({ repo }) => repo), paths }, input.autoLand ?? finished.autoLand);
+            const landed = await landAgent(services.agentWorktrees, finished, decided.land ? "check" : "measure");
+            /* A rule that decided a card's fate did something, and the settings list says so. The per-agent
+             * override reports no rule, because in that case none decided.
+             *
+             * Only a HOLD reaches the feed. Landing is self-evident — the work is in the tree — while work that
+             * did not arrive is the thing someone goes looking for an explanation of, and "a rule you wrote
+             * held it" is that explanation. An empty table holds too, and says nothing: nobody wrote that, so
+             * there is no rule to name and nothing was decided that the card does not already show. */
+            if (decided.rule !== undefined) {
+                void services.ruleFirings
+                    .stamp(decided.rule.id, Date.now())
+                    .catch((error: unknown) => services.logger.warn({ err: error }, "rule firing stamp failed"));
+                if (!decided.land) {
+                    void services.activity
+                        .append({
+                            direction: "system",
+                            type: "rule.held_work",
+                            content: `"${decided.rule.label}" held this work on its branch instead of landing it.`,
+                            conversationId,
+                        })
+                        .catch((error: unknown) => services.logger.warn({ err: error }, "rule activity append failed"));
+                }
+            }
             if (!landed.changed && landed.diff.files > 0) {
                 // Nothing NEW to land, but the agent's cumulative output exists and is all accounted for in
                 // the main tree — a follow-up turn that only answered a question must not downgrade the card

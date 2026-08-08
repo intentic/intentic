@@ -1,8 +1,9 @@
-import type { PrepushRun } from "@intentic/sandbox-contract";
+import type { PrepushRun, Rule } from "@intentic/sandbox-contract";
 import type { Services } from "../composition.js";
 import { prepushFailed } from "../push/notifications.js";
-import { plainText } from "../terminal/plain-text.js";
-import { PREPUSH_SESSION } from "../terminal/terminal-session.js";
+import { type RuleCommandRun, runRuleCommand } from "../rules/rule-command.js";
+import { matching } from "../rules/rules.js";
+import { CHECKS_SESSION } from "../terminal/terminal-session.js";
 
 /* THE PRE-PUSH CHECK — the workspace's own answer to "would this push go red", asked at the push and answered
  * while the user waits for it.
@@ -59,9 +60,9 @@ export interface PrepushCheck {
     readonly cancel: () => void;
 }
 
-// What this reaches for out of the daemon. Stated rather than taking Services whole, so a test stands up five
-// seams instead of a hundred and thirty.
-export type PrepushDeps = Pick<Services, "logger" | "sandboxSettings" | "workspace" | "terminalRun" | "pushSender">;
+// What this reaches for out of the daemon. Stated rather than taking Services whole, so a test stands up a
+// handful of seams instead of a hundred and thirty.
+export type PrepushDeps = Pick<Services, "logger" | "sandboxSettings" | "workspace" | "terminalRun" | "pushSender" | "ruleFirings" | "activity">;
 
 /* THE ONE CHECK THIS PROCESS HAS. A module singleton because the routes (the dialog's clicks) and the shutdown
  * hook all have to reach the SAME live run, and there is only one main working tree for them to be about.
@@ -77,45 +78,42 @@ export const createPrepushCheck = (services: PrepushDeps): PrepushCheck => {
     // True from the moment `run` is entered until the command is under way — the window `running` cannot cover,
     // because reading the settings is an await (see `run`).
     let starting = false;
-    /* How a run is stopped: aborting SIGTERMs the wrapper, whose trap kills the tmux window (terminal-run.ts).
-     * The two flags say WHY it stopped, because the abort itself cannot — a cancel and a timeout produce the
-     * same rejection and mean opposite things to the user. Both are reset by the next `run`. */
+    // How a run is stopped: aborting SIGTERMs the wrapper, whose trap kills the tmux window (terminal-run.ts).
+    // WHY it stopped — a cancel and a timeout produce the same rejection and mean opposite things to the user —
+    // is the command runner's to distinguish and report (rules/rule-command.ts).
     let controller: AbortController | undefined;
-    let cancelled = false;
-    let timedOut = false;
 
-    const execute = async (command: string, timeoutMs: number): Promise<PrepushRun> => {
+    /* EVERY RULE STANDING AT THIS PUSH, IN THE OWNER'S ORDER, STOPPING AT THE FIRST ONE THAT DOES NOT PASS.
+     *
+     * Two checks before a push are two checks: running only the first would drop the second silently, which is
+     * the one thing a gate must never do. Stopping at the first failure is the other half of the same
+     * judgement — the push is already not going, and burning ten more minutes of the owner's suite to tell them
+     * so again is time spent on an answer they have.
+     *
+     * `current` is republished before each rule, so a dialog polling it names the command actually running
+     * rather than the first of several. */
+    const execute = async (rules: readonly Rule[]): Promise<PrepushRun> => {
         const startedAt = Date.now();
         const abort = new AbortController();
         controller = abort;
-        // Counted from the start of the command — a ceiling measured from anywhere else is not the ceiling the
-        // setting promises. Unref'd: a check's watchdog must never be the thing keeping a daemon alive.
-        const watchdog = setTimeout(() => {
-            timedOut = true;
-            logger.warn({ command, timeoutMs }, "prepush: check timed out — killing");
-            abort.abort();
-        }, timeoutMs);
-        watchdog.unref();
         // The terminal only exists where the image's tmux wrapper does; without it the runner degrades to an
         // invisible shell, and a session name nothing can attach to would send the browser after a tab that is
         // never going to be listed.
-        const session = terminalRun.visible ? PREPUSH_SESSION : undefined;
-        logger.info({ command, session }, "prepush: check started");
-        current = { status: "running", command, startedAt, output: "", ...(session !== undefined ? { session } : {}) };
-        const settle = (fields: Omit<PrepushRun, "command" | "startedAt" | "finishedAt" | "session">): PrepushRun => {
+        const session = terminalRun.visible ? CHECKS_SESSION : undefined;
+        const settle = (rule: Rule, command: string, run: RuleCommandRun): PrepushRun => {
             const settled: PrepushRun = {
-                ...fields,
+                status: run.status,
+                ...(run.exitCode !== undefined ? { exitCode: run.exitCode } : {}),
+                ...(run.timedOut !== undefined ? { timedOut: run.timedOut } : {}),
                 command,
                 startedAt,
                 finishedAt: Date.now(),
                 ...(session !== undefined ? { session } : {}),
-                // The suite ran in a real terminal and printed for one; what it printed is about to be quoted
-                // into a prompt a human edits and a model reads, so it arrives as text (plain-text.ts).
-                output: plainText(fields.output).slice(-PREPUSH_OUTPUT_BYTES),
+                output: run.output,
             };
             current = settled;
             logger.info(
-                { command, status: settled.status, exitCode: settled.exitCode, timedOut, durationMs: Date.now() - startedAt },
+                { rule: rule.id, command, status: settled.status, exitCode: settled.exitCode, durationMs: Date.now() - startedAt },
                 "prepush: check settled",
             );
             /* A verdict the user is not there to read. The whole point of a check that runs while they get on
@@ -128,30 +126,50 @@ export const createPrepushCheck = (services: PrepushDeps): PrepushCheck => {
             return settled;
         };
         try {
-            // `window` names the tmux window rather than the command, so a session holding several runs reads as
-            // a list of checks. The runner's own timeout is left alone — this module's watchdog owns the ceiling,
-            // because it is the only one that can tell the dialog which of the two kills happened.
-            const { code, output } = await terminalRun.tryRun(PREPUSH_SESSION, command, {
-                cwd: workspace.root,
-                window: "checks",
-                signal: abort.signal,
-            });
-            clearTimeout(watchdog);
-            return settle({ status: code === 0 ? "passed" : "failed", exitCode: code, output });
-        } catch (cause) {
-            clearTimeout(watchdog);
-            /* Not our abort ⇒ the command never ran at all: no shell, an unreadable cwd, a missing wrapper.
-             * `error`, not `failed` — nothing was learned about the code, so nobody should be sent to fix it. */
-            if (!abort.signal.aborted) {
-                return settle({ status: "error", output: `${command}: ${cause instanceof Error ? cause.message : String(cause)}` });
+            let last: PrepushRun = IDLE;
+            for (const rule of rules) {
+                if (rule.action.kind !== "command") {
+                    continue;
+                }
+                const { command, timeoutMs } = rule.action;
+                logger.info({ rule: rule.id, command, session }, "prepush: check started");
+                current = { status: "running", command, startedAt, output: "", ...(session !== undefined ? { session } : {}) };
+                // `window` names the tmux window rather than the command, so a session holding several runs
+                // reads as a list of checks.
+                const run = await runRuleCommand(services, {
+                    command,
+                    timeoutMs,
+                    cwd: workspace.root,
+                    session: CHECKS_SESSION,
+                    window: "checks",
+                    outputBytes: PREPUSH_OUTPUT_BYTES,
+                    signal: abort.signal,
+                });
+                last = settle(rule, command, run);
+                // A check that ran did something, whichever way it went — that is what the settings list's
+                // "last fired" is answering, and a rule only ever stamped on failure would read as never used
+                // in exactly the workspace where it is working.
+                void services.ruleFirings
+                    .stamp(rule.id, Date.now())
+                    .catch((error: unknown) => logger.warn({ err: error, rule: rule.id }, "prepush: firing stamp failed"));
+                if (run.status !== "passed") {
+                    // The one outcome worth a row in the feed: a push the owner asked for did not go, and the
+                    // named rule is the answer to the "why won't my push go" they are about to ask. A pass says
+                    // nothing — a feed that logs every green check is one the eye learns to skip.
+                    if (run.status !== "cancelled") {
+                        void services.activity
+                            .append({
+                                direction: "system",
+                                type: "rule.blocked_push",
+                                content: `"${rule.label}" ran \`${command}\` before your push and it ${run.timedOut === true ? "timed out" : `exited ${run.exitCode ?? "abnormally"}`} — the push did not go.`,
+                                outcome: "error",
+                            })
+                            .catch((error: unknown) => logger.warn({ err: error, rule: rule.id }, "prepush: activity append failed"));
+                    }
+                    return last;
+                }
             }
-            // A kill the watchdog caused is a TIMEOUT, not a cancellation — the user asked for neither, and
-            // reporting it as cancelled would hide the one outcome this check most needs to be loud about. The
-            // output stays with the pane: what the wrapper had buffered when it was signalled is not a verdict.
-            if (timedOut) {
-                return settle({ status: "failed", timedOut: true, output: "" });
-            }
-            return settle({ status: cancelled ? "cancelled" : "error", output: "" });
+            return last;
         } finally {
             controller = undefined;
         }
@@ -167,18 +185,16 @@ export const createPrepushCheck = (services: PrepushDeps): PrepushCheck => {
             }
             starting = true;
             try {
-                const { prepushCommand, prepushTimeoutMs } = await services.sandboxSettings.get();
-                // No command ⇒ nothing to run and nothing to say. The dialog never opens without one, so this is
-                // the race where the setting was cleared between the click and the request.
-                if (prepushCommand === "") {
+                const rules = matching((await services.sandboxSettings.get()).rules, "push.starting");
+                // Nothing standing here ⇒ nothing to run and nothing to say. The dialog never opens without a
+                // rule, so this is the race where the last one was deleted between the click and the request.
+                if (rules.length === 0) {
                     current = IDLE;
                     return;
                 }
-                cancelled = false;
-                timedOut = false;
                 // NOT awaited: `execute` runs synchronously as far as publishing the `running` state this
                 // function's caller is about to poll for, and only then awaits the suite.
-                running = execute(prepushCommand, prepushTimeoutMs).finally(() => {
+                running = execute(rules).finally(() => {
                     running = undefined;
                 });
                 running.catch((error: unknown) => logger.warn({ err: error }, "prepush: check failed"));
@@ -187,16 +203,14 @@ export const createPrepushCheck = (services: PrepushDeps): PrepushCheck => {
             }
         },
         state: async () => {
-            const { prepushCommand } = await services.sandboxSettings.get();
-            // No command ⇒ the check is off, whatever the last run concluded. A result from before the setting
-            // was cleared would otherwise gate a push on a check nobody can run any more.
-            if (prepushCommand === "") {
+            // No rule ⇒ the check is off, whatever the last run concluded. A result from before the rule was
+            // deleted would otherwise gate a push on a check nobody can run any more.
+            if (matching((await services.sandboxSettings.get()).rules, "push.starting").length === 0) {
                 return IDLE;
             }
             return current;
         },
         cancel: () => {
-            cancelled = true;
             controller?.abort();
         },
     };

@@ -52,10 +52,21 @@ vi.mock(`./useChanges`, async () => {
     return { COMMIT_SCOPE: `commit`, useChanges: () => ({ actionBusy, failures, syncAll }) };
 });
 
+// The check this flow gates on is a `push.starting` rule, so the settings the flow reads carry a rule table
+// rather than a command field — the real shape, so the real reader (prepushCommandOf) runs against it.
 vi.mock(`../sandbox/useSandboxSettings`, async () => {
     const { ref } = await import(`vue`);
+    const rules = [
+        {
+            id: `pre-push`,
+            label: `Check before you push`,
+            moment: `push.starting`,
+            action: { kind: `command`, command: `pnpm check`, timeoutMs: 900_000 },
+            enabled: true,
+        },
+    ];
     return {
-        useSandboxSettings: () => ({ settings: ref({ prepushCommand: `pnpm check`, agentRunModel: `anthropic:sonnet`, agentRunEffort: `high` }) }),
+        useSandboxSettings: () => ({ settings: ref({ rules, agentRunModel: `anthropic:sonnet`, agentRunEffort: `high` }) }),
     };
 });
 

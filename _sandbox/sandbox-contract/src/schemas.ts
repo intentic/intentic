@@ -1120,6 +1120,107 @@ export type SystemPromptMode = z.infer<typeof SystemPromptModeSchema>;
 // whatever they have already typed into the settings field.
 export const BuiltinPromptSchema = z.object({ base: z.enum(["intentic", "claude"]) });
 
+/* ---- rules: "at this moment, if this is true, do this" ------------------------------------------------------
+ *
+ * The one table behind every standing instruction the owner gives the sandbox about its own work. It replaces
+ * three settings that were the same idea built three ways — ask for proof before a turn ends, run a command
+ * before a push, hold or release finished work — and the point of replacing them is that a FOURTH is now a row
+ * in this table rather than a release.
+ *
+ * The moments are named to sit in one family with WorkspaceEventKind (`turn.settled`, `agent.landed`), because
+ * chores already wake on those and folding them into this table later must not mean renaming what users wrote.
+ */
+
+// WHERE a rule can stand. Three, and each is a place the daemon already stopped to make a decision — this
+// names those decisions rather than inventing new ones.
+export const RuleMomentSchema = z.enum([
+    // The assistant is about to stop. A rule here can send it back to work, which is the only moment that can.
+    "turn.ending",
+    // Code is about to leave the machine. A rule here gates the push on its own exit code.
+    "push.starting",
+    // An agent's turn is over and its delta is sitting on its branch. A rule here decides whether it lands.
+    "agent.finished",
+]);
+export type RuleMoment = z.infer<typeof RuleMomentSchema>;
+
+/* WHAT A RULE DOES. Four shapes, and the split is load-bearing rather than tidy: the three settings this table
+ * replaces need three DIFFERENT ones, which is the evidence that a single "run this command" table would have
+ * mangled at least two of them.
+ *
+ *   command — run a shell command; its exit code is the verdict. What the pre-push check always was.
+ *   instruct — say something to the assistant, so it acts before it finishes.
+ *   verdict — allow or hold the thing that is about to happen. The vocabulary the permission rules already
+ *             speak, and the honest shape of "land finished work automatically": nothing extra RUNS at that
+ *             moment, a pass that always runs is told which way to go.
+ *   builtin — invoke a named daemon behaviour. The escape hatch that keeps this table from having to express
+ *             machinery it has no business expressing: the proof ledger behind "verify before finishing"
+ *             tracks what a turn edited against what it ran, which is not a shell command and never will be.
+ */
+export const RuleBuiltinSchema = z.enum(["verify-edits"]);
+export type RuleBuiltin = z.infer<typeof RuleBuiltinSchema>;
+
+export const RuleActionSchema = z.discriminatedUnion("kind", [
+    z.object({
+        kind: z.literal("command"),
+        command: z.string().max(500),
+        // Ceiling on one run, after which the child's whole process group is killed and the run is `failed`.
+        // Never a pass: a command that did not finish has said nothing, and a green light nobody earned is the
+        // one outcome a check exists to prevent.
+        timeoutMs: z.number().min(60_000).max(3_600_000).default(900_000),
+    }),
+    z.object({ kind: z.literal("instruct"), text: z.string().min(1).max(4000) }),
+    z.object({ kind: z.literal("verdict"), verdict: z.enum(["allow", "hold"]) }),
+    z.object({ kind: z.literal("builtin"), name: RuleBuiltinSchema }),
+]);
+export type RuleAction = z.infer<typeof RuleActionSchema>;
+
+// WHEN a rule narrows. Three keys, chosen because they cover the two things people reach for on day one —
+// "only this repo" and "don't bother for a docs-only change" — without opening a query language. Every key
+// absent ⇒ the rule always matches at its moment, which is what the three replaced settings each did.
+export const RuleConditionSchema = z.object({
+    // A workspace repo id, or "root". Absent ⇒ any.
+    repo: z.string().min(1).optional(),
+    // Globs the change has to touch for the rule to fire. Absent/empty ⇒ any.
+    paths: z.array(z.string().min(1)).max(20).optional(),
+    // How the turn ended. Absent/empty ⇒ any.
+    outcome: z.array(z.enum(["clean", "error", "conflict"])).optional(),
+});
+export type RuleCondition = z.infer<typeof RuleConditionSchema>;
+
+/* ONE RULE. `id` is stable and owner-visible: it is what the activity feed names when the rule fires and what
+ * the last-fired store is keyed by, so it survives a relabel.
+ *
+ * WHICH ACTIONS FIT WHICH MOMENT is checked here rather than left to the consumer, because the alternative is
+ * a rule that saves cleanly and then quietly does nothing — the failure mode a settings screen can least
+ * afford. A verdict at `turn.ending` has nothing to decide; a command at `agent.finished` has no defined place
+ * in the landing pass and would be a promise this stage cannot keep. */
+const MOMENT_ACTIONS: Record<RuleMoment, readonly RuleAction["kind"][]> = {
+    "turn.ending": ["builtin", "instruct", "command"],
+    "push.starting": ["command"],
+    "agent.finished": ["verdict"],
+};
+
+export const RuleSchema = z
+    .object({
+        id: z.string().regex(/^[a-z0-9][a-z0-9-]*$/),
+        label: z.string().min(1).max(80),
+        moment: RuleMomentSchema,
+        when: RuleConditionSchema.optional(),
+        action: RuleActionSchema,
+        enabled: z.boolean().default(true),
+    })
+    .refine((rule) => MOMENT_ACTIONS[rule.moment].includes(rule.action.kind), {
+        message: "that action cannot stand at that moment",
+        path: ["action"],
+    });
+export type Rule = z.infer<typeof RuleSchema>;
+
+// When a rule last did something, keyed by rule id — read by the settings list so a rule nobody has seen fire
+// in three weeks is visible as such. Kept out of the settings object on purpose: a firing is not an edit, and
+// writing the owner's config on every push would make every run a settings save.
+export const RuleFiringsSchema = z.record(z.string(), z.number());
+export type RuleFirings = z.infer<typeof RuleFiringsSchema>;
+
 // Small user-owned config the /settings routes edit and streamAgent reads — all opt-in booleans the owner
 // toggles in the UI (so each can be A/B benchmarked):
 //   stableSystemPrompt — keeps the system prompt byte-stable across turns (the delegation note rides the user
@@ -1149,8 +1250,9 @@ export const BuiltinPromptSchema = z.object({ base: z.enum(["intentic", "claude"
 //   outputHoldout     — measurement control: a fraction [0,1] of Bash commands whose output bypasses cleaning
 //                        (recorded raw as `heldOut`), so the savings report compares a real cleaned-vs-raw
 //                        population instead of an estimate. 0 = no holdout (default).
-//   verifyOnStop      — a turn that edited code and ran no passing check gets ONE follow-up asking for proof,
-//                        naming the scripts this workspace defines; off ⇒ the turn ends when the model says so.
+//   rules             — the standing "at this moment, if this is true, do this" table (RuleSchema): what proves
+//                        a turn's work, what runs before a push, whether finished work lands by itself. Empty
+//                        (the default) means none of those happen, which is the shape a fresh sandbox has.
 //   automationFailureLimit — consecutive `error` runs after which an automation is disabled rather than left
 //                        firing forever; 0 (default) ⇒ never.
 //   subagentsAtOnce / subagentsPerTurn / subagentDepth — the harness's own ceilings on delegation, raised or
@@ -1247,14 +1349,6 @@ export const SandboxSettingsSchema = z.object({
     // terminal state: without a sweep the Finished lane grows for the life of the sandbox, and each card it
     // holds is a live worktree checkout, not just a row.
     agentRetentionDays: z.number().min(0).max(365).default(3),
-    /* Land a clean turn's delta into the main tree automatically at completion — the Claude Code review model.
-     * OFF by default, because landing writes into the tree the user works in, and the two mistakes are not the
-     * same size: work held on its branch costs one press to release (the card reads "Ready to land" and the
-     * user lands it from the review panel or the card), while work that landed unread has to be noticed before
-     * it can be undone. Sandbox-wide because automation-opened agents (Discord, webhooks, email) finish turns
-     * with no browser in the room — a browser-held preference could not govern them. Per-agent override:
-     * AgentSummarySchema.autoLand. */
-    autoLand: z.boolean().default(false),
     /* When a turn dies because the MODEL PROVIDER was failing (500/502/503, a 529 at capacity, a dropped
      * socket), re-run it on an escalating backoff until it goes through or the attempts are spent.
      *
@@ -1276,30 +1370,20 @@ export const SandboxSettingsSchema = z.object({
      * OFF still records the interruption: the fleet card reads `interrupted` (see AgentStatusSchema) and an
      * automation's row shows an `interrupted` run — nothing is re-run, but nothing is silently lost either. */
     autoResumeOnRestart: z.boolean().default(false),
-    /* THE PRE-PUSH CHECK — the command run when the user pushes, before anything leaves the machine.
-     * Empty ⇒ no check at all, which is the default: only the owner knows what verifies this workspace, and a
-     * guessed command that fails on a fresh clone would read as the check finding a bug on its first run.
+    /* THE RULE TABLE — every standing instruction the owner gives the sandbox about its own work: ask for
+     * proof before a turn ends, run a command before a push, hold or release finished work, and whatever they
+     * add next. See RuleSchema for the shape and for why the four action kinds are four.
      *
-     * Configuring it is the opt-in, which is why there is no separate enable flag to disagree with it. The
-     * command runs in the workspace root through `sh -c`, exactly as a terminal would run it. */
-    prepushCommand: z.string().max(500).default(""),
-    // Ceiling on one run, after which the child's whole process group is killed and the result is `failed` with
-    // `timedOut`. Never a pass: a suite that did not finish has said nothing about the tree, and the one thing
-    // this check exists to prevent is a green light nobody earned.
-    prepushTimeoutMs: z.number().min(60_000).max(3_600_000).default(900_000),
-    /* ASK FOR PROOF BEFORE A TURN THAT EDITED CODE ENDS. The daemon keeps a per-turn ledger of which code
-     * files were written and which commands the agent ran that constitute a check (test/typecheck/lint/build);
-     * when the turn tries to stop with edits that no PASSING check followed, it gets one bounded follow-up
-     * naming the scripts this workspace actually defines (agent/agent-verification.ts).
+     * EMPTY IS THE DEFAULT, and it is exactly the behaviour a fresh sandbox had when these were three separate
+     * flags: no proof is asked for, no command runs at a push, and finished work waits on its branch. That is
+     * not a coincidence to preserve by hand — each of those defaults is what "no rule matched" means at its
+     * moment, so the empty table IS the old default rather than a reconstruction of it.
      *
-     * Off by default, and the reason is the same one prepushCommand has no enable flag: only the owner knows
-     * what verifies their workspace. A repo with known-failing baseline tests, or whose real check is a command
-     * no table can guess, would get an ask it cannot satisfy — and the ask costs a whole extra model turn, not
-     * a few tokens. So this is the opt-in you turn on once you know the nudge would be right here.
-     *
-     * It never runs anything itself and never claims more than it saw: a passing targeted run clears it, and
-     * the follow-up says in as many words not to report a targeted check as the suite being green. */
-    verifyOnStop: z.boolean().default(false),
+     * Rules live here, in the owner's own settings, rather than in the workspace: a rule can hold work back and
+     * gate a push, so the first version answers to the person whose sandbox it is and to nobody else. Repo-
+     * committed and extension-contributed rules are worth having and are deliberately not here yet — they need
+     * the question of what a rule from somewhere else may WIDEN answered first. */
+    rules: z.array(RuleSchema).max(50).default([]),
     /* STOP AN AUTOMATION THAT ONLY EVER FAILS. After this many consecutive `error` runs the scheduler disables
      * it and says so on the row, instead of firing a job that has proven it cannot succeed every minute until
      * someone notices. 0 ⇒ never, which is the default.
@@ -4903,6 +4987,10 @@ export const ActivityEventSchema = z.object({
     // out: message.send | reaction.add | messages.read | api.call (unclassified provider endpoint)
     // system: gateway.login_failed | dispatch.failed | voice.session_started | voice.session_ended | automation.run
     //         | turn.started | turn.plan | turn.error | turn.completed (agent turn lifecycle; provider = claude/codex)
+    //         | rule.blocked_push | rule.held_work | rule.continued_turn (a rule DID something — see RuleSchema.
+    //           Only the three outcomes a person would otherwise have no explanation for: a push that did not
+    //           go, work that did not arrive, a turn that did not end. A rule that ran and passed says nothing,
+    //           because a feed that logs every green check is one the eye learns to skip.)
     type: z.string(),
     channelId: z.string().optional(),
     // Inbound author display name.
