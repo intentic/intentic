@@ -18,6 +18,10 @@
             "types": "./src/components/dagLayout.ts",
             "default": "./src/components/dagLayout.ts"
         },
+        "./brand-color": {
+            "types": "./src/brandColor.ts",
+            "default": "./src/brandColor.ts"
+        },
         "./format": {
             "types": "./src/format.ts",
             "default": "./src/format.ts"

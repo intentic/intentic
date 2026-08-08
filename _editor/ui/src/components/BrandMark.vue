@@ -16,31 +16,32 @@
      The copies this replaces disagreed at exactly the point that matters: two tracked failures in a reactive
      Set the CALLER had to own and never cleared, and two others (the automation source and recipe rows) had no
      error handler at all, so a dead slug left an empty box that reads as a rendering bug rather than as a
-     thing. Here the tier underneath is painted first and the image covers it only once it has really loaded,
-     so a load that fails reveals the answer instead of a hole — no caller state, nothing to reset, nothing to
-     forget. EXACTLY ONE TIER IS EVER ON SCREEN: a simple-icons mark is a transparent single-colour SVG, so a
-     fallback left underneath a loaded one is read THROUGH it, and the elephant with a lightning bolt across it
-     is not a fallback anybody recognises as one.
+     thing. Here the tier underneath is painted first and the brand covers it only once its colour has really
+     arrived, so a load that fails reveals the answer instead of a hole — no caller state, nothing to reset,
+     nothing to forget. EXACTLY ONE TIER IS EVER ON SCREEN: a simple-icons mark is a transparent single-colour
+     SVG, so a fallback left underneath a loaded one is read THROUGH it, and the elephant with a lightning bolt
+     across it is not a fallback anybody recognises as one.
 
      DECORATIVE, always: the mark is `aria-hidden` and carries no label, because unlike an avatar in a stack it
      is never the only representation of the thing — every surface that draws one draws the name beside it, so a
      labelled mark makes a screen reader say every row twice. <Avatar> labels itself for the opposite reason.
 
-     EVERY TIER IS DRAWN IN THE THEME'S OWN TEXT COLOUR, brand marks included. A brand's colour is chosen to
-     work on white, and this plate is white in one scheme and near-black in the other across four themes — so
-     honouring it meant 13 of 20 marks landing under 3:1 on the dark card (Sentry at 1.05:1 is not visible at
-     all), and the four manifests that noticed pinned themselves to near-white, which is the same bug pointed at
-     the light scheme. Nobody could have got this right by hand: it is a fact about the surface, which the
-     manifest declaring a slug cannot see. So the slug names WHICH mark and nothing else, any colour in it is
-     ignored, and the mark is painted as a mask filled with `currentColor` — this plate's own text colour, the
-     very one the glyph tier already uses, in every theme, with no second request when the scheme flips. All
-     three tiers therefore weigh the same on a row, which is the other half of what was wrong: a full-colour
-     logo beside a muted glyph read as two different kinds of thing.
+     A BRAND MARK ARRIVES IN THE BRAND'S OWN COLOUR, and the one fetch pays for both halves of that: the CDN
+     bakes each brand's official hex into the SVG it serves, so the document IS the colour source (no table of
+     3000 brands to keep in step, and a slug invented next week is coloured correctly with no change here), and
+     its text doubles as the mask that draws the shape. What makes the colour safe to honour — a brand hex is
+     chosen to work on white, and this plate is white in one scheme and near-black in the other across four
+     themes — is that each mark now brings its own OPAQUE plate, tinted with its own hue. brandColor.ts owns
+     that reasoning and the arithmetic; brandMark.ts owns the fetch, and owns it from OUTSIDE this block because
+     a `<script setup>` const is per-instance — so a cache kept here would let one screen fetch the same slug
+     once per tile. Both schemes are resolved together into four custom properties and the mode picks between
+     them in CSS, so flipping the theme repaints without a second fetch.
 
-     `idle` is for a thing that is present but switched off. It dims: with every tier monochrome there is no
-     longer any colour to drain, and dimming is what makes a row go quiet. -->
+     `idle` is for a thing that is present but switched off. It drains the colour and dims — which is what makes
+     a row go quiet, and now says the same thing to someone who cannot see the colour. -->
 <script setup lang="ts">
 import { computed, ref, watch } from "vue";
+import { type Brand, brandUrl, loadBrand } from "./brandMark.js";
 import { isIconName } from "../icons/iconSets.js";
 import { initialsOf } from "../format.js";
 import Icon from "./Icon.vue";
@@ -57,9 +58,9 @@ const {
     size: number;
     /** The monogram tier — the one thing every caller can always supply. Not an accessible label: see below. */
     name: string;
-    /** A simple-icons slug. Colour is not the caller's to choose (see above), so a `<slug>/<hex>` left over
-     *  from when it was gets its colour dropped rather than passed on — appended to ours the CDN reads it as
-     *  the light half of a light/dark pair, and the mark comes out wrong in exactly one scheme. */
+    /** A simple-icons slug. Colour is not the caller's to choose — the brand's own is what gets painted, and
+     *  it comes from the fetched mark — so a `<slug>/<hex>` left over from when it was gets its colour
+     *  dropped rather than passed on. */
     logo?: string | undefined;
     /** A name from the app's icon set. An OPEN string: manifests declare it, so an unknown one is expected
      *  and falls to the monogram rather than drawing nothing. */
@@ -71,66 +72,82 @@ const {
 const glyph = computed(() => (icon !== undefined && isIconName(icon) ? icon : undefined));
 const initials = computed(() => initialsOf(name));
 
-// The full CDN URL, built HERE so the app holds one copy of it. `?? undefined` is not needed: an absent slug
-// simply never renders the <img>. One URL for every scheme — the colour is applied in CSS, so flipping the
-// theme repaints rather than re-fetching, and the mark never blinks back to its fallback to do it.
-const logoUrl = computed(() => (logo === undefined ? undefined : `https://cdn.simpleicons.org/${logo.split(`/`)[0]}`));
+// An absent slug simply never resolves a brand.
+const logoUrl = computed(() => brandUrl(logo));
 
-// How far the top tier has got. The image is allowed to fail, so the tier under it stays painted until the
-// load actually succeeds — but only until then: a simple-icons mark is a transparent single-colour SVG, so a
-// glyph left underneath one shows through its holes and reads as a deformed logo rather than as a fallback.
-// `failed` also stops the retry a re-render would otherwise mount, and the caller's slug is not ours to correct.
-const logoState = ref<`pending` | `loaded` | `failed`>(`pending`);
-// A mark can be re-pointed while mounted (a recycled list row). The new slug has its own load to do, so the
-// tier underneath comes back until it answers.
-watch(logoUrl, () => {
-    logoState.value = `pending`;
-});
+/* How far the top tier has got. Undefined means "not this tier" — still in flight, or answered with no brand —
+ * and the tier underneath stays painted until a brand actually arrives. */
+const brand = ref<Brand>();
+watch(
+    logoUrl,
+    (url) => {
+        // A mark can be re-pointed while mounted (a recycled list row). The new slug has its own load to do, so
+        // the tier underneath comes back until it answers.
+        brand.value = undefined;
+        if (url === undefined) {
+            return;
+        }
+        void loadBrand(url).then((resolved) => {
+            // The row may have been re-pointed again while this was in flight; a late answer must not paint
+            // over the slug that is current now.
+            if (logoUrl.value === url) {
+                brand.value = resolved;
+            }
+        });
+    },
+    { immediate: true },
+);
 </script>
 
 <template>
     <span
-        class="relative flex shrink-0 items-center justify-center overflow-hidden border border-line bg-content/5 text-muted transition-opacity"
-        :class="[idle ? `opacity-50` : ``, size >= 28 ? `rounded-lg` : `rounded-md`]"
-        :style="{ width: `${size}px`, height: `${size}px` }"
+        class="relative flex shrink-0 items-center justify-center overflow-hidden border border-line transition-opacity"
+        :class="[
+            idle ? `opacity-50 grayscale` : ``,
+            size >= 28 ? `rounded-lg` : `rounded-md`,
+            // The brand's own plate replaces the neutral one only once its colour is known — a tinted tile
+            // under a fallback glyph would claim a brand that never loaded.
+            brand === undefined ? `bg-content/5 text-muted` : `brand-plate`,
+        ]"
+        :style="{
+            width: `${size}px`,
+            height: `${size}px`,
+            ...(brand === undefined
+                ? {}
+                : {
+                      // Declared once here and inherited by the mark below. Both schemes, because which one is
+                      // wanted is a fact about the page, not about the brand — the CSS at the foot picks.
+                      '--brand-plate-light': brand.palette.plateLight,
+                      '--brand-plate-dark': brand.palette.plateDark,
+                      '--brand-mark-light': brand.palette.markLight,
+                      '--brand-mark-dark': brand.palette.markDark,
+                  }),
+        }"
         aria-hidden="true"
     >
-        <template v-if="logoState !== `loaded`">
+        <template v-if="brand === undefined">
             <Icon v-if="glyph !== undefined" :name="glyph" :style="{ fontSize: `${size * 0.5}px` }" />
             <span v-else-if="initials !== undefined" class="font-semibold leading-none" :style="{ fontSize: `${Math.max(7, size * 0.375)}px` }">
                 {{ initials }}
             </span>
         </template>
-        <!-- THE LOAD PROBE, and only that: it is the element that knows whether the slug resolved, which is
-             what the ladder turns on, and it is never seen. Its src is the same URL the mask below paints, so
-             the two share one fetch. no-referrer because an icon CDN has no business learning which sandbox is
-             looking at it, nor which of its brands that sandbox has installed. -->
-        <img
-            v-if="logoUrl !== undefined && logoState !== `failed`"
-            :src="logoUrl"
-            alt=""
-            referrerpolicy="no-referrer"
-            class="absolute size-0 opacity-0"
-            @load="logoState = `loaded`"
-            @error="logoState = `failed`"
-        />
-        <!-- The mark itself: the fetched SVG used as a MASK over the current text colour, so it is themed like
-             every other tier rather than arriving in a brand's own palette. Only once the probe has answered —
-             a mask that 404s paints a filled square, which is worse than the fallback it would be covering. -->
+        <!-- The mark itself: the fetched SVG as a MASK over the brand's colour. A mask rather than the image,
+             because the colour that ships is the one brandColor.ts cleared against this plate, not whatever
+             the file happens to carry. -->
         <span
-            v-if="logoUrl !== undefined && logoState === `loaded`"
-            class="absolute bg-current"
+            v-else
+            class="brand-mark absolute"
             :style="{
                 width: `${size * 0.625}px`,
                 height: `${size * 0.625}px`,
                 // Prefixed as well as not: unprefixed `mask` is recent in Safari, and where it is not understood
                 // the element keeps its background and paints a filled square — the one failure here that looks
                 // like a bug rather than like a fallback.
-                WebkitMaskImage: `url(${logoUrl})`,
+                WebkitMaskImage: brand.mask,
                 WebkitMaskSize: `contain`,
                 WebkitMaskPosition: `center`,
                 WebkitMaskRepeat: `no-repeat`,
-                maskImage: `url(${logoUrl})`,
+                maskImage: brand.mask,
                 maskSize: `contain`,
                 maskPosition: `center`,
                 maskRepeat: `no-repeat`,
@@ -138,3 +155,21 @@ watch(logoUrl, () => {
         />
     </span>
 </template>
+
+<!-- Which scheme's pair to paint. Keyed off the app's [data-mode] exactly as the code blocks' Shiki colours
+     are, so a theme flip is a repaint of two properties rather than 35 fetches — and no `!important` is needed
+     here, because what the element carries inline is the custom properties, never the colour itself. -->
+<style scoped>
+.brand-plate {
+    background-color: var(--brand-plate-light);
+}
+.brand-mark {
+    background-color: var(--brand-mark-light);
+}
+[data-mode="dark"] .brand-plate {
+    background-color: var(--brand-plate-dark);
+}
+[data-mode="dark"] .brand-mark {
+    background-color: var(--brand-mark-dark);
+}
+</style>

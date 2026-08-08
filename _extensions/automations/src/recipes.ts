@@ -160,7 +160,7 @@ export const AUTOMATION_RECIPES: readonly AutomationRecipe[] = [
     {
         providers: ["github"],
         title: "Push to repo",
-        logo: "github/f5f5f5",
+        logo: "github",
         id: "github-push",
         trigger: { kind: "event" },
         prompt: "A push just landed — the webhook payload is in $AUTOMATION_PAYLOAD. Review the new commits and summarize what changed.",

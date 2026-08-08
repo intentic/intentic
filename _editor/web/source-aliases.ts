@@ -54,6 +54,10 @@ export const sourceAliases = (): Record<string, string> => ({
     // from a manifest is an open string, and the tests that check our own extensions name real glyphs read
     // JSON off disk — no components, no DOM, and nothing to gain from booting Picker.vue to get there.
     "@intentic/ui/icons": here("../../_editor/ui/src/icons/iconSets.ts"),
+    // And again, for the arithmetic that makes a brand mark legible on our own plate: it is what decides whether
+    // 24 official brand hexes clear 3:1 in both schemes, which is a claim only a test can hold — and one that
+    // must not need a DOM (nor <BrandMark> itself) to be asked.
+    "@intentic/ui/brand-color": here("../../_editor/ui/src/brandColor.ts"),
     // And again, for the app's base text size: it is the knob that column widths, editor font sizes and the
     // terminal's grid all convert against (uiScale.ts), so it is reached from plain modules the shell loads on
     // every boot — and through the barrel, asking a column how wide it should be would boot Picker.vue.
