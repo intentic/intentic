@@ -168,7 +168,7 @@ test("workspace.tree returns the full working tree from the walker", async () =>
     expect(await client.workspace.tree({})).toEqual(tree);
 });
 
-test("workspace.file reads any contained file (former-secret paths included), NOT_FOUNDs missing, BAD_REQUESTs escape", async () => {
+test("workspace.file reads any contained file (former-secret paths included), answers absent, BAD_REQUESTs escape", async () => {
     const client = clientFor(
         createApp(
             services({
@@ -187,6 +187,7 @@ test("workspace.file reads any contained file (former-secret paths included), NO
         ),
     );
     expect(await client.workspace.file({ path: "app/src/index.ts" })).toEqual({
+        present: true,
         path: "app/src/index.ts",
         content: "console.log(1);",
         size: 15,
@@ -197,6 +198,7 @@ test("workspace.file reads any contained file (former-secret paths included), NO
     });
     // No security floor: a former-secret file reads through like any other contained file.
     expect(await client.workspace.file({ path: "desired-state/.env" })).toEqual({
+        present: true,
         path: "desired-state/.env",
         content: "SECRET=1",
         size: 8,
@@ -204,7 +206,10 @@ test("workspace.file reads any contained file (former-secret paths included), NO
         bytes: 8,
         shared: true,
     });
-    expect(await errorCode(client.workspace.file({ path: "app/nope.ts" }))).toBe("NOT_FOUND");
+    // Nothing at that path is an ANSWER, not a failure — the reads that ask "is it there?" outnumber every other
+    // read in the product, and a rejection put a failed request in the browser's console for each one.
+    expect(await client.workspace.file({ path: "app/nope.ts" })).toEqual({ present: false, path: "app/nope.ts" });
+    // A read the caller was never allowed to make still fails.
     expect(await errorCode(client.workspace.file({ path: "../../etc/passwd" }))).toBe("BAD_REQUEST");
 });
 
@@ -225,6 +230,7 @@ test("workspace.file passes the requested window through and reports the range i
         ),
     );
     expect(await client.workspace.file({ path: "big.log", offset: -8, limit: 64 })).toEqual({
+        present: true,
         path: "big.log",
         content: "tail\n",
         size: 4096,

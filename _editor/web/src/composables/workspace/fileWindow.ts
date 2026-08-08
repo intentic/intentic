@@ -18,6 +18,10 @@ export const FILE_WINDOW_BYTES = 4 * 1024 * 1024;
 // user is actually looking at without any of them having to know that more than one exists. The response's
 // `shared` says which tree answered — a conversation's checkout is not a superset of /work, so a scoped read
 // can legitimately come back from the shared one.
+//
+// A path with NOTHING at it resolves (`present: false`) rather than rejecting: half the reads in the app are
+// "read it if it is there", and a rejection made the browser log a failed request for each one. Only a refused
+// or unreachable read throws now, which is what every caller's error branch is actually about.
 export const readFileWindow = (path: string, opts?: { offset?: number; limit?: number; signal?: AbortSignal }): Promise<WorkspaceFileResponse> => {
     const query = scopeQuery(new URLSearchParams({ path, limit: String(opts?.limit ?? FILE_WINDOW_BYTES) }));
     if (opts?.offset !== undefined) {

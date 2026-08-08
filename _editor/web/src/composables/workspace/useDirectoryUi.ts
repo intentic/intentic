@@ -20,12 +20,15 @@ import { errorMessage } from "../useAsyncAction";
  *   stream:     { __intentic: true, id, frame } … repeated, then { __intentic: true, id, done: true }
  *               (an error mid-stream arrives as { id, ok: false, error }). */
 
-// Read a directory's UI document, or undefined when it declares none (the daemon 404s the missing file). dir is
-// root-relative ("" = /work root); the escape hatch when there's no UI is the normal file tree.
+// Read a directory's UI document, or undefined when it declares none. dir is root-relative ("" = /work root);
+// the escape hatch when there's no UI is the normal file tree. Almost every directory a reader opens declares
+// none, which is exactly why the read answers absence instead of failing (see readFileWindow) — this is the
+// most-asked "is it there?" question in the app.
 export const loadDirectoryUi = async (dir: string): Promise<string | undefined> => {
     const path = dir === `` ? `.intentic/ui/index.html` : `${dir}/.intentic/ui/index.html`;
     try {
-        return (await readFileWindow(path)).content;
+        const window = await readFileWindow(path);
+        return window.present ? window.content : undefined;
     } catch {
         return undefined;
     }

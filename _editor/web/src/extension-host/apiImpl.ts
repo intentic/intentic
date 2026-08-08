@@ -338,9 +338,13 @@ export const createExtensionApi = (
                 const route = `/workspace/file?path=${encodeURIComponent(path)}`;
                 guardSandbox(route);
                 try {
-                    return WorkspaceFileSchema.parse(await sandboxJson(route)).content;
+                    const answer = WorkspaceFileSchema.parse(await sandboxJson(route));
+                    // Absent is the ordinary first state, not an error — see IntenticApi.workspace.file. The
+                    // daemon says so in the body now, so most of what extensions read never reaches the catch.
+                    return answer.present ? answer.content : undefined;
                 } catch {
-                    // Absent is the ordinary first state, not an error — see IntenticApi.workspace.file.
+                    // A refused or unreachable read. Still undefined here: an extension polling a file it may not
+                    // be granted must not take its own view down over it.
                     return undefined;
                 }
             },

@@ -26,6 +26,7 @@ const panel = (over: Partial<PanelSummary> & { repo: string }): PanelSummary => 
     monorepo: false,
     vitest: false,
     userStories: true,
+    docs: false,
     ...over,
 });
 
@@ -340,7 +341,9 @@ describe(`aimOf`, () => {
      * repo's to re-aim; with nothing safe to offer, the honest answer is to ask. */
     it(`never substitutes a sibling app for a group's remembered address`, () => {
         expect(aimOf({ typed: undefined, remembered: `http://localhost:4321`, state: `ready`, servers: ONE_OF_THREE })).toBeUndefined();
-        expect(aimOf({ typed: undefined, remembered: `http://localhost:4321`, state: `ready`, servers: [MONOREPO[0]!, MONOREPO[1]!] })).toBeUndefined();
+        expect(
+            aimOf({ typed: undefined, remembered: `http://localhost:4321`, state: `ready`, servers: [MONOREPO[0]!, MONOREPO[1]!] }),
+        ).toBeUndefined();
     });
 
     it(`keeps aiming a group at the elsewhere it was last run against, so it is typed once and not once per run`, () => {

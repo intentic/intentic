@@ -537,10 +537,16 @@ export const fileBody = (path: string): string | undefined => {
     return entry === undefined ? undefined : typeof entry === `number` ? unrecordedBody(path) : entry;
 };
 
-/** GET /workspace/file — the whole file as one window, which is what every read in this recording is. */
-export const readFile = (path: string): { path: string; content: string; size: number; offset: number; bytes: number } | undefined => {
+/* GET /workspace/file — the whole file as one window, which is what every read in this recording is. A path the
+ * recording does not carry answers `present: false`, exactly as the daemon does: half the surfaces here read a
+ * file to find out whether something EXISTS, and that answer is not a failure. */
+export const readFile = (
+    path: string,
+): { present: true; path: string; content: string; size: number; offset: number; bytes: number; shared: true } | { present: false; path: string } => {
     const content = fileBody(path);
-    return content === undefined ? undefined : { path, content, size: content.length, offset: 0, bytes: content.length };
+    return content === undefined
+        ? { present: false, path }
+        : { present: true, path, content, size: content.length, offset: 0, bytes: content.length, shared: true };
 };
 
 /** POST /workspace/upload — the writes the panels make: an acknowledgement, a story, a published document. */

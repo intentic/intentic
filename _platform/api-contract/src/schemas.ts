@@ -213,7 +213,8 @@ export interface WorkspaceChildrenResponse {
  * decodes from — so `offset > 0 || offset + bytes < size` means there is more, and `offset + bytes` is where
  * the next window starts. Byte counts, not `content.length`: they differ on non-ASCII, and the daemon reads
  * by byte. The viewer gates on `size` from here rather than on a tree entry's, which it may not have. */
-export interface WorkspaceFileResponse {
+export interface WorkspaceFileWindow {
+    readonly present: true;
     readonly path: string;
     readonly content: string;
     readonly size: number;
@@ -224,6 +225,11 @@ export interface WorkspaceFileResponse {
     // checkout is not a superset of /work. The one thing the reader must not have to guess.
     readonly shared: boolean;
 }
+/* A read of a path with nothing at it — a successful answer, not a failure. Most reads in the product are "read
+ * it if it is there" (a bookkeeping file nobody has written yet, a directory with no UI document of its own, a
+ * document set nobody has generated), so absence is an ordinary value and the daemon says so in the body rather
+ * than in the status. A read the caller was not ALLOWED to make still fails. */
+export type WorkspaceFileResponse = WorkspaceFileWindow | { readonly present: false; readonly path: string };
 // What a NAMED file reference (agent prose, terminal output) resolves to: the workspace path it means, absent
 // when nothing in the workspace ends in that reference.
 export interface WorkspaceResolveResponse {

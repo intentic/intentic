@@ -25,8 +25,8 @@ const importMemory = async (): Promise<void> => {
     importError.value = undefined;
     try {
         for (const file of MEMORY_FILES) {
-            // readFile throws on a missing file (first import) — treat that as an empty starting point.
-            const current = await readFile(file).catch(() => ``);
+            // No file yet is the first import, which starts from empty rather than failing.
+            const current = (await readFile(file)) ?? ``;
             await saveText(file, mergeMemory(current, text));
         }
         importText.value = ``;

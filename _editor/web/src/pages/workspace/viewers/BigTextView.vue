@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import type { WorkspaceFileResponse } from "@intentic-app/api-contract";
+import type { WorkspaceFileWindow } from "@intentic-app/api-contract";
 import { formatBytes } from "@intentic/ui";
 import { computed, onBeforeUnmount, ref, watch } from "vue";
 import { FILE_WINDOW_BYTES, readFileWindow } from "../../../composables/workspace/fileWindow";
@@ -23,7 +23,7 @@ import CodeView from "./CodeView.vue";
 
 // `first` is the window the dispatcher already fetched to learn the file's size — reusing it means opening a
 // huge file costs exactly one read, not two.
-const { path, first, lang } = defineProps<{ path: string; first: WorkspaceFileResponse; lang?: string }>();
+const { path, first, lang } = defineProps<{ path: string; first: WorkspaceFileWindow; lang?: string }>();
 const emit = defineEmits<{ download: [] }>();
 
 /* How much text the view keeps while following. Appending forever would grow the model without bound over a
@@ -57,13 +57,20 @@ const position = computed(() =>
         : `${formatBytes(shown.value)} of ${formatBytes(size.value)}${start.value === 0 ? ` from the start` : atEnd.value ? ` at the end` : ``}`,
 );
 
-const read = async (offset: number, limit?: number): Promise<WorkspaceFileResponse | undefined> => {
+const read = async (offset: number, limit?: number): Promise<WorkspaceFileWindow | undefined> => {
     inFlight?.abort();
     const controller = new AbortController();
     inFlight = controller;
     busy.value = true;
     try {
-        return await readFileWindow(path, { offset, limit, signal: controller.signal });
+        const window = await readFileWindow(path, { offset, limit, signal: controller.signal });
+        // Deleted while being followed — the honest thing to say, and the view keeps whatever it already holds
+        // rather than blanking a log the reader may still be reading.
+        if (!window.present) {
+            error.value = `That file is no longer there.`;
+            return undefined;
+        }
+        return window;
     } catch (err) {
         // An abort is this component replacing its own request, never a failure to report.
         if (!controller.signal.aborted) {
@@ -79,7 +86,7 @@ const read = async (offset: number, limit?: number): Promise<WorkspaceFileRespon
 };
 
 // Replace what's shown with `window` (a tail jump, or a reseed after the file rotated or grew past RETAIN_BYTES).
-const reseed = (window: WorkspaceFileResponse): void => {
+const reseed = (window: WorkspaceFileWindow): void => {
     seed.value = window.content;
     start.value = window.offset;
     end.value = window.offset + window.bytes;

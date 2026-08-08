@@ -66,16 +66,19 @@ export const createWorkspaceRoutes = (services: Services) => {
         tree: i.tree.handler(async ({ input }) => services.workspaceTree(await workspaceRootFor(scope, input.agent))),
         // Lazy-load the children of an ignored dir (node_modules, .git, …) the tree didn't descend into.
         children: i.children.handler(async ({ input }) => services.workspaceChildren(await workspaceRootFor(scope, input.agent), input.path)),
-        // A window, not the file (see readWorkspaceFileWindow). The response carries the file's total size, so
-        // the viewer decides how to render from the daemon's number rather than from a tree entry it may not
-        // have — the gate can't be skipped by opening a file the tree never listed.
+        /* A window, not the file (see readWorkspaceFileWindow). The response carries the file's total size, so
+         * the viewer decides how to render from the daemon's number rather than from a tree entry it may not
+         * have — the gate can't be skipped by opening a file the tree never listed.
+         *
+         * NOTHING THERE IS A 200 that says `present: false`, not a 404 (WorkspaceFileAbsentSchema explains why).
+         * The guards above this line still refuse: an escape and the control plane throw from scopedTarget, so
+         * "absent" here means the caller was allowed to look and there was nothing to read. */
         file: i.file.handler(async ({ input }) => {
             const { target, shared } = await scopedTarget(scope, input.agent, input.path);
             const window = await services.files.readWindow(target, input.offset, input.limit);
-            if (window === undefined) {
-                throw new ORPCError("NOT_FOUND", { message: "not found" });
-            }
-            return { path: input.path, shared, ...window };
+            return window === undefined
+                ? { present: false as const, path: input.path }
+                : { present: true as const, path: input.path, shared, ...window };
         }),
         /* Mint the ticket a media element will present to GET /workspace/media. Guarded exactly like a read —
          * escape, control plane, existence — so a ticket can only ever name a file this caller could already

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import type { WorkspaceFileResponse, WorkspaceTreeEntry } from "@intentic-app/api-contract";
+import type { WorkspaceFileWindow, WorkspaceTreeEntry } from "@intentic-app/api-contract";
 import { CopyButton, useDevice } from "@intentic/ui";
 import { computed, ref, shallowRef, watch, type Component } from "vue";
 import { sandboxBlob, SandboxHttpError } from "../../../composables/sandbox/sandboxClient";
@@ -48,8 +48,9 @@ import { resolveOpenFile, type OpenFile } from "./openFile";
 
 // `line` = jump the viewer to this line (a content-search match); undefined for a plain open.
 const { path, meta, line } = defineProps<{ path: string; meta?: WorkspaceTreeEntry; line?: LineJump }>();
-// The open file was deleted on disk (daemon read 404s) — the parent closes this tab rather than leaving a
-// "not found" panel. Only fires for a clean read; a dirty file's re-read is skipped (staleOnDisk) so edits survive.
+// The open file was deleted on disk (the read came back with nothing there) — the parent closes this tab rather
+// than leaving a "not found" panel. Only fires for a clean read; a dirty file's re-read is skipped (staleOnDisk)
+// so edits survive.
 const emit = defineEmits<{ gone: [path: string] }>();
 
 // Which surface is open — starts from resolveOpenFile(), but a `code` file whose bytes contain NUL is switched
@@ -92,7 +93,7 @@ let seq = 0;
  * holding the file's text, and the daemon paid for every one of them. */
 let reading: AbortController | undefined;
 // The window a big text file opened with, handed to BigTextView so it doesn't re-read what we already have.
-const firstWindow = ref<WorkspaceFileResponse | undefined>(undefined);
+const firstWindow = ref<WorkspaceFileWindow | undefined>(undefined);
 /* This file came from the SHARED tree even though the view is scoped to a conversation's copy — which is
  * legitimate and common: a checkout mirrors the /work layout but is not a superset of it (the shared state
  * dir, the reference shelf, anything under /work no repo tracks). The banner says "showing X's copy", so the
@@ -102,10 +103,22 @@ const firstWindow = ref<WorkspaceFileResponse | undefined>(undefined);
  * preview is bytes with no room for it. So the chip appearing is a fact; its absence is not a claim. */
 const fromShared = ref(false);
 
-const readText = (target: string): Promise<WorkspaceFileResponse> => {
+/* THE ONE SURFACE FOR WHICH A MISSING FILE IS EXCEPTIONAL. Everywhere else in the app a read of a path with
+ * nothing at it is an ordinary answer (see readFileWindow), and this view is the exception that proves the rule:
+ * the file is open in a tab, so it being gone is news. Turning that answer back into a rejection right here
+ * means every failure path below handles it in the one place it already handles a failed read, rather than each
+ * of the five call sites growing a branch for it. */
+class FileGone extends Error {}
+const gone = (err: unknown): boolean => err instanceof FileGone;
+
+const readText = async (target: string): Promise<WorkspaceFileWindow> => {
     reading?.abort();
     reading = new AbortController();
-    return readFileWindow(target, { signal: reading.signal });
+    const window = await readFileWindow(target, { signal: reading.signal });
+    if (!window.present) {
+        throw new FileGone();
+    }
+    return window;
 };
 // An aborted read is this component replacing its own request — never an error to show the user.
 const superseded = (err: unknown): boolean => err instanceof DOMException && err.name === `AbortError`;
@@ -148,7 +161,7 @@ const reconcileOpenFile = (currentPath: string): void => {
             if (id !== seq || superseded(err)) {
                 return;
             }
-            if (err instanceof SandboxHttpError && err.status === 404) {
+            if (gone(err)) {
                 // Deleted on disk: close the tab when clean; keep a dirty buffer behind the stale-on-disk banner.
                 if (edit.isDirty(currentPath)) {
                     staleOnDisk.value = true;
@@ -206,7 +219,10 @@ watch(
                 return;
             }
             loading.value = false;
-            if (err instanceof SandboxHttpError && err.status === 404) {
+            // A text read reports "nothing there" in its answer (FileGone). A binary preview and a media ticket
+            // have no envelope to report it in — raw bytes and a mint still 404 — and to this view the two mean
+            // exactly the same thing: the tab is open on a file that is not there any more.
+            if (gone(err) || (err instanceof SandboxHttpError && err.status === 404)) {
                 emit(`gone`, currentPath);
                 return;
             }

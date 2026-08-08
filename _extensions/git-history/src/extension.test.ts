@@ -15,6 +15,7 @@ const facts = (repo: string): RepoFacts => ({
     monorepo: false,
     vitest: false,
     userStories: false,
+    docs: false,
 });
 
 // Accepts every registration `activate` makes and records what it was handed — the same shape the host's real

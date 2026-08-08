@@ -328,9 +328,9 @@ const ROUTES: readonly (readonly [string, string, Handler])[] = [
     [`GET`, `/sessions/{id}`, () => json({ messages: [] })],
 
     /* The recording's filesystem (fixture/workspace.ts), served the way the daemon serves /work: a tree, a lazy
-     * listing per directory, a read that 404s for a path that is not there — and real WRITES, because the
-     * surfaces reading these files also acknowledge, author and publish through them. What a visitor writes
-     * holds until the tab is reloaded. */
+     * listing per directory, a read that says "nothing there" for a path that is not there — and real WRITES,
+     * because the surfaces reading these files also acknowledge, author and publish through them. What a visitor
+     * writes holds until the tab is reloaded. */
     [`GET`, `/workspace/tree`, () => json(workspaceTree())],
     [`GET`, `/workspace/children`, ({ url }) => json(workspaceChildren(url.searchParams.get(`path`) ?? ``))],
     [`GET`, `/workspace/file`, ({ url }) => workspaceRead(url.searchParams.get(`path`) ?? ``)],
@@ -576,14 +576,12 @@ function saveAutomationRoute({ request }: RouteContext): Promise<Response> {
     return request.json().then((body) => okAfter(() => saveAutomation(Date.now(), body as Automation)));
 }
 
-/* The four filesystem handlers. A read of a path the recording does not carry answers 404 rather than a
- * placeholder, because half the surfaces above read a file to find out whether something EXISTS — an
+/* The four filesystem handlers. A read of a path the recording does not carry answers "nothing there" rather
+ * than a placeholder, because half the surfaces above read a file to find out whether something EXISTS — an
  * acknowledgement, a staged document set, a run's result — and a fixture that answered every read would be
- * telling all of them yes. */
-const workspaceRead = (path: string): Response => {
-    const file = readFile(path);
-    return file === undefined ? refuse(`No such file: ${path}`, 404) : json(file);
-};
+ * telling all of them yes. It says so the way the daemon does, in a 200 body: a demo whose console fills with
+ * failed requests looks broken to the one audience that reads consoles. */
+const workspaceRead = (path: string): Response => json(readFile(path));
 
 // Only the screenshots an acceptance report embeds. `svg+xml` is a deliberate choice upstream (fixture/
 // storefront.ts): a page of product UI as markup weighs a few kilobytes and stays sharp at any size.

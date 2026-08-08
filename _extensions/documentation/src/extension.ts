@@ -18,10 +18,11 @@ import { bindHost } from "./host.js";
  * THE PER-REPO SURFACE IS `directory` AND `auxiliary`. Opened from the Workspace tree beside whatever else serves
  * that repo — auxiliary because a docs browser renders no preview, so claiming the repo would drop the dev-server
  * tile for nothing. The extension API's own comment names "a docs browser" as the example of exactly this case.
- * It activates for every repo rather than only documented ones because `detect()` is synchronous over the public
- * facts and cannot read a file; the honest refinement is a `docs` fact on RepoFacts (one line beside `userStories`
- * in the daemon's panels route), and until that exists an undocumented repo gets an empty state that offers to
- * generate — which is the same answer the rail gives. */
+ * It activates for every repo rather than only documented ones DELIBERATELY, and not for want of a fact to gate
+ * on: `RepoFacts.docs` now says which repos carry documentation (docPresence spends it to avoid reading anything
+ * from the rest), but gating the surface on it would hide the one place a first document set gets generated from
+ * every repo that needs one. An undocumented repo gets an empty state that offers to generate — the same answer
+ * the rail gives. */
 export const activate = (api: IntenticApi, context: ExtensionContext): void => {
     bindHost(api);
     // Before the registrations, so the tile can badge on its first render rather than a minute later.

@@ -2237,7 +2237,8 @@ export const WorkspaceFileReadQuerySchema = WorkspaceScopeSchema.extend({
 });
 // `size` is the whole file; `offset`/`bytes` the byte range `content` decodes from, so the reader can tell a
 // window from a whole file (offset > 0 || offset + bytes < size ⇒ there is more) and ask for the next one.
-export const WorkspaceFileSchema = z.object({
+export const WorkspaceFilePresentSchema = z.object({
+    present: z.literal(true),
     path: z.string(),
     content: z.string(),
     size: z.number(),
@@ -2248,6 +2249,19 @@ export const WorkspaceFileSchema = z.object({
     // the one case the reader has to be told about rather than left to assume.
     shared: z.boolean(),
 });
+/* NOTHING TO READ AT THAT PATH — an ANSWER, not a failure, which is the whole reason this branch exists.
+ *
+ * Most reads in this product are "read it if it is there": the file each extension keeps of what its badge has
+ * already shown, a repo's documentation index, a run's result, a directory's own UI document. Absent is their
+ * ordinary FIRST state, and every one of them already treats it as a value. Answering those with a 404 made the
+ * browser log a failed request per read — around a dozen red lines on every page load, none of which meant
+ * anything was wrong, and none of which a `catch` can suppress: the log happens in the network stack before any
+ * JavaScript sees the response.
+ *
+ * A read that is REFUSED (an escape, the control plane, a denylisted path) is still an error, because that is a
+ * real answer about the caller rather than about the file. */
+export const WorkspaceFileAbsentSchema = z.object({ present: z.literal(false), path: z.string() });
+export const WorkspaceFileSchema = z.discriminatedUnion("present", [WorkspaceFilePresentSchema, WorkspaceFileAbsentSchema]);
 // Resolve a file reference an agent (or a compiler, or a terminal) NAMED to the workspace path it means. Prose
 // paths are routinely partial — a model that has been discussing `_editor/web/src` writes
 // `pages/workspace/Foo.vue` — so a clickable mention has to be matched as a path SUFFIX against the real tree,
@@ -4179,14 +4193,16 @@ export const PanelSummarySchema = z.object({
     // Content facts: deploy.config.ts (the intent ledger's day-one marker), desired-state.json (present after
     // the first resolve), .intentic/ui/index.html (a sandboxed directory UI), pnpm-workspace.yaml +
     // turbo.json (a pnpm+turbo monorepo), vitest evidence (a root vitest.config.ts, or "vitest" in the
-    // root manifest / workspace catalog), and docs/user-stories (a directory of stories an agent can test
-    // against the running app — the one fact here that says nothing about the repo's language).
+    // root manifest / workspace catalog), docs/user-stories (a directory of stories an agent can test
+    // against the running app — the one fact here that says nothing about the repo's language), and
+    // docs/architecture (the repo carries generated architecture documentation).
     deployConfig: z.boolean(),
     desiredState: z.boolean(),
     directoryUi: z.boolean(),
     monorepo: z.boolean(),
     vitest: z.boolean(),
     userStories: z.boolean(),
+    docs: z.boolean(),
 });
 export type PanelSummary = z.infer<typeof PanelSummarySchema>;
 export const PanelsListSchema = z.object({ panels: z.array(PanelSummarySchema) });

@@ -121,10 +121,14 @@ const copyRaw = (from: string, to: string): Promise<{ ok: true }> => jsonPost(`/
 // must carry {path} as a JSON body — a query param deserializes to undefined ("expected object").
 const removeRaw = (path: string): Promise<unknown> => sandboxJson(`/workspace/entry`, jsonBody(`DELETE`, { path }));
 
-// The file's contents, or throws with a user-facing message (e.g. the daemon's denylist 404). One window's
-// worth — the callers here read small managed files (an agent's instructions file), and the route serves text
-// in windows so that no reader can be the one that pulls a log into memory (see readFileWindow).
-const readFile = async (path: string): Promise<string> => (await readFileWindow(path)).content;
+// The file's contents, undefined when there is nothing at that path, or throws with a user-facing message when
+// the read was refused (e.g. the daemon's denylist). One window's worth — the callers here read small managed
+// files (an agent's instructions file), and the route serves text in windows so that no reader can be the one
+// that pulls a log into memory (see readFileWindow).
+const readFile = async (path: string): Promise<string | undefined> => {
+    const window = await readFileWindow(path);
+    return window.present ? window.content : undefined;
+};
 
 // Raw bytes for binary preview (images / PDF), where the text route's utf8 decode would corrupt the file.
 const readBlob = (path: string): Promise<Blob> => sandboxBlob(`/workspace/raw?${scopeQuery(new URLSearchParams({ path })).toString()}`);
@@ -284,17 +288,14 @@ export function useWorkspaceTree() {
      * rebuilt path map and a repaint per answer — for a tree nothing had touched. vue-query's structural sharing
      * holds the reference steady across a refetch that changed nothing, which makes the identity the question
      * this actually wants to ask. */
-    watch(
-        query.data,
-        () => {
-            // Iterating the live keys is safe: fetchChildren only writes this map after its first await.
-            for (const path of lazyChildren.value.keys()) {
-                if (!lazyLoading.value.has(path)) {
-                    void fetchChildren(path);
-                }
+    watch(query.data, () => {
+        // Iterating the live keys is safe: fetchChildren only writes this map after its first await.
+        for (const path of lazyChildren.value.keys()) {
+            if (!lazyLoading.value.has(path)) {
+                void fetchChildren(path);
             }
-        },
-    );
+        }
+    });
 
     return {
         tree,

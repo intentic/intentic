@@ -40,6 +40,8 @@ export const demoPanels = (): PanelSummary[] => [
         monorepo: false,
         vitest: false,
         userStories: true,
+        // Its set is PUBLISHED (fixture/docs.ts); `api`'s is only staged, which is what the false below means.
+        docs: true,
     },
     {
         repo: `api`,
@@ -53,6 +55,7 @@ export const demoPanels = (): PanelSummary[] => [
         monorepo: false,
         vitest: false,
         userStories: true,
+        docs: false,
     },
 ];
 

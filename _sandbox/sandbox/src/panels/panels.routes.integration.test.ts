@@ -49,7 +49,7 @@ test("panels.list enumerates every repo with its operator panel + runtime status
         // procfs attribution finds nothing for them either.
         processes: fakeProcesses({ app: 1 }),
     });
-    const facts = { deployConfig: false, desiredState: false, directoryUi: false, monorepo: false, vitest: false, userStories: false };
+    const facts = { deployConfig: false, desiredState: false, directoryUi: false, monorepo: false, vitest: false, userStories: false, docs: false };
     expect(await client.list()).toEqual({
         panels: [
             {
@@ -87,6 +87,7 @@ test("panels.list reports the content facts extensions detect on", async () => {
     mkdirSync(join(dir, ".intentic", "ui"), { recursive: true });
     writeFileSync(join(dir, ".intentic", "ui", "index.html"), "<html></html>");
     mkdirSync(join(dir, "docs", "user-stories"), { recursive: true });
+    mkdirSync(join(dir, "docs", "architecture"), { recursive: true });
     const client = panelsClient(workspace);
     expect(await client.list()).toEqual({
         panels: [
@@ -102,6 +103,7 @@ test("panels.list reports the content facts extensions detect on", async () => {
                 monorepo: true,
                 vitest: false,
                 userStories: true,
+                docs: true,
             },
         ],
     });
@@ -127,6 +129,7 @@ test("panels.list advertises no previewUrl without a connect token (loopback —
                 monorepo: false,
                 vitest: false,
                 userStories: false,
+                docs: false,
             },
         ],
     });

@@ -26,6 +26,12 @@ export interface RepoFacts {
     // Whether the repo describes its features as user stories (a docs/user-stories directory) — the one fact
     // here that is language-agnostic, and the evidence an acceptance-testing surface activates on.
     readonly userStories: boolean;
+    /* Whether the repo carries architecture documentation (a docs/architecture directory).
+     *
+     * Here so that a surface which READS documentation can tell, without asking the file routes, which repos
+     * have any. The alternative was a read per repo on a poll — an answer the daemon already has from the same
+     * one-pass scan that produces every other fact on this interface. */
+    readonly docs: boolean;
 }
 
 // One connected capability's secret-free echo — `kind` is an open string: new kinds appear without an API bump,

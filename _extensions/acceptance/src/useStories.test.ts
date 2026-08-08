@@ -39,6 +39,7 @@ const routes = (json: Readonly<Record<string, unknown>>): IntenticApi =>
                     directoryUi: false,
                     monorepo: false,
                     vitest: false,
+                    docs: false,
                 },
             ],
             capabilities: () => [],
@@ -48,7 +49,8 @@ const routes = (json: Readonly<Record<string, unknown>>): IntenticApi =>
             // rather than throwing — which is the behaviour every caller of it depends on.
             file: async (path: string) => {
                 const hit = json[`/workspace/file?path=${encodeURIComponent(path)}`];
-                return hit === undefined ? undefined : WorkspaceFileSchema.parse(hit).content;
+                const answer = hit === undefined ? undefined : WorkspaceFileSchema.parse(hit);
+                return answer?.present === true ? answer.content : undefined;
             },
         },
     }) as unknown as IntenticApi;
@@ -61,7 +63,7 @@ const children = (path: string, entries: readonly WorkspaceTreeEntry[]) =>
 const file = (path: string, content: string) =>
     [
         `/workspace/file?path=${encodeURIComponent(path)}`,
-        WorkspaceFileSchema.parse({ path, content, size: content.length, offset: 0, bytes: content.length, shared: true }),
+        WorkspaceFileSchema.parse({ present: true, path, content, size: content.length, offset: 0, bytes: content.length, shared: true }),
     ] as const;
 
 // Drive the composable the way the view does: inside an app context (vue-query injects its client from there)

@@ -6,7 +6,7 @@ import { type BrandPalette, brandPalette, officialHex } from "../brandColor.js";
  * there is per-instance and shares nothing. Measured, not assumed: with the cache inside the component, one
  * screen drawing Docker at three sizes made three requests for the same slug, and the capabilities grid draws 35
  * marks and recycles its rows as the filter narrows. Only imports hoist, so the cache lives in this module — the
- * sibling-.ts split ImageView, BarChart and ChangeStatusMark already use for the same reason. */
+ * sibling-module split ImageView, BarChart and ChangeStatusMark already use for the same reason. */
 
 /** What one fetched brand yields: the shape to mask with, and the four colours to paint it in. */
 export interface Brand {

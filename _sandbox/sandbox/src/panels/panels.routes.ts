@@ -25,6 +25,10 @@ const mentionsVitest = (file: string): boolean => existsSync(file) && readFileSy
 // one file each. A directory rather than a marker file because the stories ARE the evidence.
 const USER_STORIES_DIR = join("docs", "user-stories");
 
+// Where a repo's architecture documentation lands (the map; each package's page is its own README beside its
+// code). Its sibling above, and the same shape of evidence: the documents ARE the fact.
+const ARCHITECTURE_DIR = join("docs", "architecture");
+
 export type PanelsRoutesDeps = Pick<Services, "config" | "ensurePreviewRoutes" | "panelToken" | "processes" | "scanPorts" | "workspace">;
 
 /* The repo's answering dev servers, each probed for the scheme it speaks, named by the package that bound it,
@@ -121,6 +125,7 @@ export const createPanelsRoutes = (services: PanelsRoutesDeps) => {
                             mentionsVitest(join(dir, "pnpm-workspace.yaml")) ||
                             mentionsVitest(join(dir, "package.json")),
                         userStories: existsSync(join(dir, USER_STORIES_DIR)),
+                        docs: existsSync(join(dir, ARCHITECTURE_DIR)),
                     };
                     const withRole = (REPO_ROLES as readonly string[]).includes(repo) ? Object.assign(summary, { role: repo as RepoRole }) : summary;
                     const withPort = port !== undefined ? Object.assign(withRole, { port }) : withRole;

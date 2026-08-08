@@ -289,7 +289,9 @@ export interface IntenticApi {
          * that doesn't is still refused. This removes the encoding, not the grant. */
         // The file's text, or undefined when it is not there. Absent is the ordinary FIRST state for most of what
         // extensions keep — nothing has been acknowledged because nothing has been seen — so it is a value here,
-        // not a throw every caller would have to wrap.
+        // not a throw every caller would have to wrap. The daemon reports it the same way (a 200 that says the
+        // path holds nothing), so a poll over files that do not exist yet is silent rather than a page of failed
+        // requests in the owner's console.
         file(path: string): Promise<string | undefined>;
         /* The file parsed as a JSON object, or undefined when it is absent, truncated, or not an object at all.
          *

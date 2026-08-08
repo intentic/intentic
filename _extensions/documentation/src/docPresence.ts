@@ -39,7 +39,9 @@ const documents = ref<ReadonlyMap<string, DocumentPresence>>(new Map());
  * the descriptions — which is also why the row's tooltip can say what a package IS without a read per row.
  *
  * A repo whose set was hand-written and never checked has no index and therefore no icons: the same blind spot
- * the view's own package list has, and the same fix. */
+ * the view's own package list has, and the same fix.
+ *
+ * Only asked of a repo whose `docs` fact is true (see scan) — a repo that documents nothing is not asked at all. */
 const publishedEntries = async (repo: string): Promise<ReadonlyMap<string, string>> => {
     try {
         // An index that does not parse is an index that says nothing — the same answer as a missing one, and not
@@ -79,8 +81,17 @@ const scan = async (): Promise<void> => {
         }
         const next = new Map<string, DocumentPresence>();
         await Promise.all(
-            api.workspace.repos().map(async ({ repo }) => {
-                const [published, staged, map] = await Promise.all([publishedEntries(repo), listStagedTails(api, repo), hasPublishedMap(repo)]);
+            /* THE `docs` FACT DECIDES WHETHER THE PUBLISHED SIDE IS READ AT ALL. The daemon already knows which
+             * repos carry a `docs/architecture` directory — it computes that in the same pass as every other repo
+             * fact — so asking an undocumented repo for its index and its map was two round trips per repo per
+             * poll, forever, to learn something the shell was already told. The staged side has no such fact
+             * (nothing publishes it, and a run writes into it between polls), so it is still walked. */
+            api.workspace.repos().map(async ({ repo, docs }) => {
+                const [published, staged, map] = await Promise.all([
+                    docs ? publishedEntries(repo) : new Map<string, string>(),
+                    listStagedTails(api, repo),
+                    docs ? hasPublishedMap(repo) : false,
+                ]);
                 // Drafts first, so a published document overwrites its draft's entry rather than the other way
                 // round: the tab opens the published page, and the row should not call it a draft.
                 if (staged.includes(REPO_DOC_TAIL)) {

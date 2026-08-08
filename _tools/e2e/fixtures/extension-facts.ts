@@ -31,6 +31,7 @@ const repo = (repo: string, facts: Partial<Omit<PanelSummary, `repo`>>): PanelSu
     monorepo: false,
     vitest: false,
     userStories: false,
+    docs: false,
     ...facts,
 });
 

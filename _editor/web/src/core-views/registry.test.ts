@@ -41,6 +41,7 @@ const panel = (over: Partial<PanelSummary> & { repo: string }): PanelSummary => 
     monorepo: false,
     vitest: false,
     userStories: false,
+    docs: false,
     ...over,
 });
 

@@ -92,6 +92,7 @@ const richRepo: RepoFacts = {
     monorepo: true,
     vitest: true,
     userStories: true,
+    docs: true,
 };
 
 /* The whole-fleet guard. createExtensionApi refuses a view whose id AND surface the manifest doesn't declare,
