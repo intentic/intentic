@@ -266,6 +266,11 @@ const HOVER_ACTION = `flex h-5 w-5 shrink-0 items-center justify-center rounded 
 // Offer the card to the board's drag as long as the press starts on the card BODY — the rename pencil and its
 // input run their own pointer gestures, and a press while renaming belongs to the input's caret.
 const grab = (event: PointerEvent): void => {
+    // THE PRIMARY BUTTON ONLY. A right-press opens the card's menu (AgentsView), and a menu that opens over a
+    // card the board has already picked up for dragging is one gesture answered twice.
+    if (event.button !== 0) {
+        return;
+    }
     if (edit.editing || !(event.currentTarget instanceof HTMLElement) || !(event.target instanceof Element)) {
         return;
     }
@@ -449,12 +454,12 @@ const grab = (event: PointerEvent): void => {
                 <span v-if="model !== undefined" class="truncate">{{ model }}</span>
                 <template v-if="agent.branch !== undefined">
                     <span v-if="model !== undefined">·</span>
-                    <!-- A target of its own inside a card that is itself one press (focus) and one drag (lane).
-                         The session name is the only thing on this card anybody needs CHARACTER-EXACT — every
-                         other word here is read, not retyped — and the card is select-none, so until this became
-                         a button the name could not even be dragged through with a caret.
-                         No hover label, for the reason the stats row below states: the press announces itself
-                         by flashing "Copied", which is the only thing a hint here could have promised. -->
+                    <!-- The session name is the only thing on this card anybody needs CHARACTER-EXACT — every
+                         other word here is read, not retyped — but it is still a LABEL here, not a control.
+                         It briefly was one, and a small target for a rare want, sitting mid-card in the path of
+                         the press that focuses the agent, is a target hit by accident more often than on
+                         purpose. Copying it is on the right-click menu (AgentsView), where the board keeps the
+                         decisions that are made about a card rather than to it. -->
                     <SessionChip :branch="agent.branch" />
                 </template>
             </div>

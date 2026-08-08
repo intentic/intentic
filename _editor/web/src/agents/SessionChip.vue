@@ -1,24 +1,21 @@
 <script setup lang="ts">
-import { clipboardOf } from "@intentic/ui";
-import { ref } from "vue";
-
 /* THE SESSION'S NAME, wherever it is printed — the branch an isolated agent works on, which is also the name of
- * its worktree and the id in its page's address. One component so the string looks the same on every surface
- * and answers to the same press, because it is the only thing joining this app to git, the disk and the CLI:
- * a name you have to retype off the screen is not an identifier, it is a picture of one.
+ * its worktree and the id in its page's address. One component so the string looks the same on every surface,
+ * because it is the only thing joining this app to git, the disk and the CLI: a name you have to retype off the
+ * screen is not an identifier, it is a picture of one.
  *
- * COPY IS THE CLICK, and it copies EXACTLY what the chip shows. A control that puts something else on the
- * clipboard than the text under the cursor is the fastest way to make people stop trusting copy controls at
- * all — so the board's chip, which shows the branch, hands over the branch. The other forms of the same name
- * (the bare id, the link) live in the identity panel, where they are labelled and visible before the press.
+ * IT IS A LABEL BY DEFAULT, AND THAT IS THE POINT. The board's card is one press (focus the agent) and one drag
+ * (move it to a lane), and this line sits in the middle of it. Made pressable, it became a small target for a
+ * rare want — copying — parked in the path of the press people make all day, and it was hit by accident far
+ * more often than on purpose. Copying moved to the card's right-click menu, where a once-in-a-while action does
+ * not have to share a surface with an every-time one.
  *
- * `reveal` is the second surface: the agent's own page, where the chip opens that panel instead of copying.
- * The chevron is what keeps the two honest — a chip that opens something has to look different from a chip
- * that copies, or the press is a coin flip.
+ * `reveal` is the exception, and only on the agent's own page: there the chip opens the identity panel, which
+ * is that page's subject rather than something in the way of it. The chevron is what marks it — a chip that
+ * opens something has to look different from one that just says a name.
  *
- * NO HOVER LABEL on either spelling. A hint here could only ever have named the press ("copy this"), and the
- * press names itself the instant it happens: the glyph turns into a check and the name into "Copied". The
- * screen reader keeps the sentence (aria-label), because it has no glyph to watch. */
+ * No hover label on either spelling: the label spells the name out already, and the chevron says the other
+ * one opens. */
 
 const {
     branch,
@@ -26,49 +23,32 @@ const {
     compact = false,
 } = defineProps<{
     branch: string;
-    // Open the identity panel rather than copy — the agent's own page, the one surface that shows every form.
+    // Press to open the identity panel — the agent's own page, the one surface that shows every form of the name.
     reveal?: boolean;
     // Glyph only, for a header row with no width to spare (the detail page on a phone).
     compact?: boolean;
 }>();
 const emit = defineEmits<{ reveal: [event: MouseEvent] }>();
 
-const copied = ref(false);
-const root = ref<HTMLButtonElement>();
-
-/* The press stops here in every sense: the board card underneath is a click target AND a drag handle, so a
- * copy that bubbled would also focus the agent, and a press that bubbled would start dragging the card to
- * another lane. (`grab` already lets a <button> through, but the click and the double-click do not.) */
-const press = async (event: MouseEvent): Promise<void> => {
-    if (reveal) {
-        emit(`reveal`, event);
-        return;
-    }
-    try {
-        await clipboardOf(root.value).writeText(branch);
-        copied.value = true;
-        setTimeout(() => (copied.value = false), 1500);
-    } catch {
-        // Clipboard may be unavailable (insecure context); the name is still readable on the chip.
-    }
-};
+const CHROME = `inline-flex min-w-0 items-center gap-1 rounded font-mono text-2xs text-subtle`;
 </script>
 
 <template>
     <button
-        ref="root"
+        v-if="reveal"
         type="button"
-        class="inline-flex min-w-0 items-center gap-1 rounded font-mono text-2xs text-subtle transition-colors hover:text-content"
-        :class="compact ? `h-7 w-7 shrink-0 justify-center hover:bg-overlay` : `max-w-full shrink`"
-        :aria-label="reveal ? `Session name — ${branch}` : `Copy session name — ${branch}`"
-        @click.stop="press"
-        @dblclick.stop
+        :class="[CHROME, `transition-colors hover:text-content`, compact ? `h-7 w-7 shrink-0 justify-center hover:bg-overlay` : `max-w-full shrink`]"
+        :aria-label="`Session name — ${branch}`"
+        @click.stop="emit(`reveal`, $event)"
     >
-        <Icon :name="copied ? `check` : `code`" class="shrink-0 text-2xs" :class="copied ? `text-success` : ``" />
+        <Icon name="code" class="shrink-0 text-2xs" />
         <template v-if="!compact">
-            <span v-if="copied" class="shrink-0 font-sans text-success">Copied</span>
-            <span v-else class="truncate">{{ branch }}</span>
-            <Icon v-if="reveal" name="chevron-down" class="shrink-0 text-[0.6rem] opacity-60" />
+            <span class="truncate">{{ branch }}</span>
+            <Icon name="chevron-down" class="shrink-0 text-[0.6rem] opacity-60" />
         </template>
     </button>
+    <span v-else :class="[CHROME, `max-w-full shrink`]">
+        <Icon name="code" class="shrink-0 text-2xs" />
+        <span class="truncate">{{ branch }}</span>
+    </span>
 </template>

@@ -2,16 +2,17 @@
 import Button from "primevue/button";
 import type { Disposable } from "@intentic/extension-api";
 import type { WorkflowRun } from "@intentic/sandbox-contract";
-import { useDevice } from "@intentic/ui";
+import { clipboardOf, ContextMenu, useDevice } from "@intentic/ui";
 import Dialog from "primevue/dialog";
+import type { MenuItem } from "primevue/menuitem";
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { startAgent } from "../composables/agents/agentActions";
 import { dropActionLabel, dropRejection, type PendingAction } from "../composables/agents/laneDrop";
 import { useAgentDrag } from "../composables/agents/useAgentDrag";
 import { useAgentFilter } from "../composables/agents/useAgentFilter";
-import type { FleetLane } from "../composables/agents/agentStatus";
-import { FINISHED_WINDOW, type FleetAgent, useAgents, windowFinished } from "../composables/agents/useAgents";
+import { type FleetLane, reviewAction, unregistered } from "../composables/agents/agentStatus";
+import { canArchive, FINISHED_WINDOW, type FleetAgent, useAgents, windowFinished } from "../composables/agents/useAgents";
 import { insideRun, laneOfRun, runIdsInLedger, runMatches, runsInLane, runsNeedingYou, useWorkflowRuns } from "../composables/agents/useWorkflowRuns";
 import { relativeTime } from "../composables/chat/catalog";
 import { chatRun, showingRunGraph } from "../composables/chat/chatRun";
@@ -578,7 +579,9 @@ const LANES: readonly { key: FleetLane; label: string; dot: string; empty: strin
  * "0 of 0" and then told the user their query matched nothing, with the match sitting above the sentence. */
 // Held wakes count toward the board having something to show — a fresh workspace whose only row is a hold
 // must not hide it behind the "No agents yet" splash.
-const total = computed(() => LANES.reduce((sum, lane) => sum + boardLanes.value[lane.key].length, 0) + boardRunRows.value.length + heldWakes.value.length);
+const total = computed(
+    () => LANES.reduce((sum, lane) => sum + boardLanes.value[lane.key].length, 0) + boardRunRows.value.length + heldWakes.value.length,
+);
 // The header's tally. Summed over the same cardsFor and runsFor the lanes render, so it can never disagree
 // with the `n of m` counts under it.
 const kept = computed(() => LANES.reduce((sum, lane) => sum + cardsFor(lane.key).length + runsFor(lane.key).length, 0));
@@ -670,6 +673,78 @@ const reviewAgent = (agent: FleetAgent): void => {
  * for no confirmation, so the two surfaces cannot come to mean different things by the same press. */
 const closeAgent = (agent: FleetAgent): void => {
     closeTabs(new Set([agent.id]));
+};
+
+/* --- The card's right-click menu ------------------------------------------------------------------
+ * THE BOARD'S ONE MENU, driven by every card on it (the chat rail's tab menu, same shape) — forty cards cost
+ * one node, and there is only ever one open.
+ *
+ * It exists because of what a card IS: a press that focuses the agent and a drag that moves it between lanes,
+ * over a body that is otherwise all reading matter. Anything a user wants to do OCCASIONALLY therefore has
+ * nowhere to sit — the session name spent a version as a small button in the middle of the card and was hit by
+ * accident far more often than on purpose. So the rare things live behind the gesture that means "about this
+ * one", and the card's surface goes back to answering one press one way.
+ *
+ * Nothing here is new: every row is a press the card already offers (the glyphs in its header, its
+ * double-click, its contextual buttons). What the menu adds is a place to FIND them — two of those glyphs
+ * appear only on hover, which is no affordance at all until you have already found it. */
+const cardMenu = ref<{ show: (event: Event) => void } | undefined>();
+const menuAgent = ref<FleetAgent>();
+
+// Copied through the pressed CARD's document rather than this module's `navigator` — the app's one clipboard
+// accessor (clipboardOf), which asks the element the gesture actually happened in.
+const menuAnchor = ref<Element>();
+const copySessionName = async (branch: string): Promise<void> => {
+    try {
+        await clipboardOf(menuAnchor.value).writeText(branch);
+    } catch {
+        // Clipboard may be unavailable (insecure context). The name is on the card either way.
+    }
+};
+
+/* Written as GROUPS rather than one flat list with separators sprinkled through it. Almost every row here is
+ * conditional — an agent holding a question offers no Archive, a main-tree conversation has no session name,
+ * a draft has no review — so a separator written inline is a rule about rows that may not be rendered, and it
+ * draws a line under the last item of a menu whose whole bottom group turned out to be empty. Grouping makes
+ * the separator a property of the JOIN, which cannot dangle. */
+const cardMenuItems = computed<MenuItem[]>(() => {
+    const agent = menuAgent.value;
+    if (agent === undefined) {
+        return [];
+    }
+    const review = mobile.value ? undefined : reviewAction(agent);
+    const branch = agent.branch;
+    const groups: MenuItem[][] = [
+        [
+            { label: `Open`, icon: `arrow-right`, command: () => focusAgent(agent) },
+            ...(review === undefined ? [] : [{ label: review, icon: `copy`, command: () => reviewAgent(agent) }]),
+        ],
+        /* The whole reason this menu was built. It hands over the BRANCH, which is what the card prints — the
+           other forms of the name are labelled and visible before the press, on the agent's own page. */
+        branch === undefined ? [] : [{ label: `Copy session name`, icon: `code`, command: () => void copySessionName(branch) }],
+        [
+            ...(agent.archivedAt !== undefined
+                ? [{ label: `Restore`, icon: `history`, command: () => restore([agent.id]) }]
+                : canArchive(agent)
+                  ? [{ label: `Archive`, icon: `box`, command: () => archive([agent.id]) }]
+                  : []),
+            ...(unregistered(agent.status) ? [{ label: `Close`, icon: `times`, command: () => closeAgent(agent) }] : []),
+        ],
+    ];
+    const items: MenuItem[] = [];
+    for (const group of groups.filter((candidate) => candidate.length > 0)) {
+        if (items.length > 0) {
+            items.push({ separator: true });
+        }
+        items.push(...group);
+    }
+    return items;
+});
+
+const openCardMenu = (agent: FleetAgent, event: MouseEvent): void => {
+    menuAgent.value = agent;
+    menuAnchor.value = event.currentTarget instanceof Element ? event.currentTarget : undefined;
+    cardMenu.value?.show(event);
 };
 /* --- Workflow runs on the board ------------------------------------------------------------------
  * A run is not an agent (WorkflowRunCard says why at length), so it is a SECOND list rendered into the same
@@ -1012,7 +1087,9 @@ const grabCard = (event: PointerEvent, agent: FleetAgent, card: HTMLElement): vo
                          lane holding only a run — or, in Attention, only a held wake — is not empty, whatever
                          the fleet half of it says. -->
                     <p
-                        v-else-if="cardsFor(lane.key).length === 0 && runsFor(lane.key).length === 0 && !(lane.key === 'attention' && heldWakes.length > 0)"
+                        v-else-if="
+                            cardsFor(lane.key).length === 0 && runsFor(lane.key).length === 0 && !(lane.key === 'attention' && heldWakes.length > 0)
+                        "
                         class="px-3 pb-3 text-2xs text-subtle"
                     >
                         {{ filtering ? "No matches in this lane." : lane.empty }}
@@ -1040,6 +1117,7 @@ const grabCard = (event: PointerEvent, agent: FleetAgent, card: HTMLElement): vo
                             @restore="restore([agent.id])"
                             @close="closeAgent(agent)"
                             @grab="(event, card) => grabCard(event, agent, card)"
+                            @contextmenu.prevent.stop="openCardMenu(agent, $event)"
                         />
                     </TransitionGroup>
                     <!-- The lane's tail, not a pager: the count is the point ("there are 12 more"), and the row
@@ -1113,6 +1191,7 @@ const grabCard = (event: PointerEvent, agent: FleetAgent, card: HTMLElement): vo
                             @open="(event) => focusAgent(agent, event)"
                             @review="reviewAgent(agent)"
                             @restore="restore([agent.id])"
+                            @contextmenu.prevent.stop="openCardMenu(agent, $event)"
                         />
                     </div>
                 </section>
@@ -1244,6 +1323,8 @@ const grabCard = (event: PointerEvent, agent: FleetAgent, card: HTMLElement): vo
                 {{ hint }}
             </p>
         </div>
+        <!-- One menu for every card on the board — see cardMenuItems. -->
+        <ContextMenu ref="cardMenu" :model="cardMenuItems" :min-width="12" />
     </div>
 </template>
 <style scoped>
