@@ -11,7 +11,10 @@
         "tauri:build": "tauri build",
         "stage:downloads": "bash scripts/stage-local-downloads.sh",
         "typecheck": "vue-tsc --noEmit -p tsconfig.json",
-        "test:rust": "cargo test --manifest-path src-tauri/Cargo.toml"
+        "test:rust": "cargo test --manifest-path src-tauri/Cargo.toml",
+        "format:rust": "cargo fmt --manifest-path src-tauri/Cargo.toml --all",
+        "lint:rust": "cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets -- -D warnings",
+        "check:rust": "cargo fmt --manifest-path src-tauri/Cargo.toml --all --check && pnpm lint:rust && pnpm test:rust"
     },
     "dependencies": {
         "@intentic/ui": "workspace:*",

@@ -74,7 +74,8 @@ pub fn start(app: &AppHandle) -> Result<(), String> {
         started_at: Instant::now(),
     });
     drop(slot);
-    let opened = app.opener()
+    let opened = app
+        .opener()
         .open_url(url, None::<&str>)
         .map_err(|error| format!("could not open your browser to sign in: {error}"));
     if opened.is_err() {
@@ -86,9 +87,9 @@ pub fn start(app: &AppHandle) -> Result<(), String> {
 pub fn complete(app: &AppHandle, args: &crate::setup_link::AuthArgs) {
     let pending = app.state::<PendingAuth>();
     let mut slot = pending.0.lock().unwrap();
-    let matches = slot
-        .as_ref()
-        .is_some_and(|attempt| attempt.started_at.elapsed() < ATTEMPT_TTL && attempt.state == args.state);
+    let matches = slot.as_ref().is_some_and(|attempt| {
+        attempt.started_at.elapsed() < ATTEMPT_TTL && attempt.state == args.state
+    });
     if !matches {
         eprintln!("dropped an auth handoff this app did not ask for");
         return;

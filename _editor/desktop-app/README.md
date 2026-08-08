@@ -260,6 +260,18 @@ INTENTIC_APP_URL=https://localhost:47145 pnpm --filter @intentic/desktop-app tau
 INTENTIC_DISABLE_UPDATE_CHECK=1 pnpm --filter @intentic/desktop-app tauri:dev            # fully offline
 ```
 
+**Run the Rust gate before you push.** `desktop-check` fails the whole pipeline on a formatting difference —
+a round trip of several minutes to be told about whitespace — and nothing in the repo-wide `pnpm check` reads
+Rust, so this is the only thing standing in front of it:
+
+```sh
+pnpm --filter @intentic/desktop-app check:rust    # exactly what desktop-check runs: fmt --check, clippy, test
+pnpm --filter @intentic/desktop-app format:rust   # and this is the fix for the first of the three
+```
+
+`check:rust` is the CI job's three cargo steps in the CI job's order, so a pass here is a pass there. The
+formatting step is instant and needs no build; clippy is the slow one, and only the first run pays for it.
+
 - **Linux builds need system packages** — `webkit2gtk-4.1`, `gtk-3`, `libayatana-appindicator3`, `librsvg2`
   (dev packages), plus `patchelf` and `xdg-utils` for AppImage. In a sandbox, that is the
   `.intentic/environment.d/rust-tauri.Dockerfile` overlay.
