@@ -1,11 +1,15 @@
 <script setup lang="ts">
 import Button from "primevue/button";
 import type { GitChange, GitDiffSide, RepoChanges, RepoPaths } from "@intentic-app/api-contract";
-import { ChangeStatusMark, cmp, DiffStat, useDevice } from "@intentic/ui";
+import { ChangeStatusMark, cmp, useDevice } from "@intentic/ui";
 import Dialog from "primevue/dialog";
 import { computed, onScopeDispose, ref, watch } from "vue";
 import ProviderLogo from "../../chat/ProviderLogo.vue";
 import HoverCard from "../../components/HoverCard.vue";
+import ReviewStat from "../../components/ReviewStat.vue";
+import type { LineStat } from "../../composables/workspace/codeStat";
+import { useCodeStats } from "../../composables/workspace/useCodeStats";
+import { rendersAsBytes } from "./fileType";
 import { useAgents } from "../../composables/agents/useAgents";
 import { useChat } from "../../composables/chat/useChat";
 import { useQuickModel } from "../../composables/chat/quickModel";
@@ -347,15 +351,29 @@ const openDiff = (repo: string, side: GitDiffSide, change: GitChange, mode: Open
  * reviewing. The badge in the shell reads the same list from every page in the app, and reading ahead for a
  * review nobody has opened would be daemon work spent on a guess. A re-mount costs nothing: everything already
  * warmed answers from the cache without a request. */
+/* The walk also COUNTS what it reads. These rows sit beside diffs that open on code alone, so their +/− has to
+ * be the code's — see useCodeStats. The count is a by-product of a read that was happening anyway; nothing here
+ * fetches for it, which is why a row past the walk's limit keeps git's number until it is opened. */
+const { record: recordStat, statOf } = useCodeStats();
+const statKey = (repo: string, side: GitDiffSide, path: string): string => JSON.stringify([`working`, repo, side, path]);
+const codeOf = (repo: string, side: GitDiffSide, path: string): LineStat | undefined => statOf(statKey(repo, side, path));
+
 let warmGeneration = 0;
 watch(
     changes.repos,
     (repos) => {
         const generation = (warmGeneration += 1);
-        void warmDiffs(warmRows(repos), (row) => changes.fileDiff(row.repo, row.path, row.side), {
-            stopped: () => generation !== warmGeneration,
-            idle: whenIdle,
-        });
+        void warmDiffs(
+            warmRows(repos),
+            async (row) => {
+                const body = await changes.fileDiff(row.repo, row.path, row.side);
+                // Bytes and oversized files have no text to strip, and neither renders as a diff anyway.
+                if (body.truncated !== true && !rendersAsBytes(row.path, body.binary)) {
+                    void recordStat(statKey(row.repo, row.side, row.path), row.path, body.before ?? ``, body.after ?? ``);
+                }
+            },
+            { stopped: () => generation !== warmGeneration, idle: whenIdle },
+        );
     },
     { immediate: true },
 );
@@ -1505,7 +1523,11 @@ const WARNING = `flex items-start gap-1.5 rounded-md border border-warning/40 bg
                                                 +{{ originsOf(group, change.path).length - 2 }}
                                             </span>
                                         </span>
-                                        <DiffStat :additions="change.additions" :deletions="change.deletions" />
+                                        <ReviewStat
+                                            :code="codeOf(group.repo, section.side, change.path)"
+                                            :additions="change.additions"
+                                            :deletions="change.deletions"
+                                        />
                                     </button>
                                     <button
                                         type="button"

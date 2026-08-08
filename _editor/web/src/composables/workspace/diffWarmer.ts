@@ -55,9 +55,13 @@ interface WarmPace {
     readonly idle: () => Promise<void>;
 }
 
-/** Walk `rows`, reading each one, until they run out or the walk is abandoned. Returns what it warmed. */
-export const warmDiffs = async (rows: readonly WarmRow[], read: (row: WarmRow) => Promise<unknown>, pace: WarmPace): Promise<readonly WarmRow[]> => {
-    const warmed: WarmRow[] = [];
+/* Walk `rows`, reading each one, until they run out or the walk is abandoned. Returns what it warmed.
+ *
+ * Generic in the row because the two review surfaces name a file differently — the workspace's rows carry the
+ * stage they came from, an agent's have no stages to carry — and the walk never looks inside one. The pacing is
+ * the whole of what this owns, and it is the same pacing either way. */
+export const warmDiffs = async <Row>(rows: readonly Row[], read: (row: Row) => Promise<unknown>, pace: WarmPace): Promise<readonly Row[]> => {
+    const warmed: Row[] = [];
     for (const row of rows) {
         await pace.idle();
         if (pace.stopped()) {

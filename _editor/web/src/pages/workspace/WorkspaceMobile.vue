@@ -10,6 +10,7 @@ import { type SidebarPanel, useLayout } from "../../composables/useLayout";
 import { reportOpenPath } from "../../composables/usePresence";
 import { outgoingMark, outgoingSummary } from "../../composables/workspace/outgoingWork";
 import { useChangeGrouping } from "../../composables/workspace/useChangeGrouping";
+import { useDiffStat } from "../../composables/workspace/useDiffStat";
 import { useChanges } from "../../composables/workspace/useChanges";
 import { useMonaco } from "../../composables/workspace/useMonaco";
 import { useUploadQueue } from "../../composables/workspace/useUploadQueue";
@@ -95,6 +96,8 @@ const diffTab = computed(() => {
     const tab = tabs.value.find((candidate) => candidate.id === diffId.value);
     return tab?.kind === `diff` ? tab : undefined;
 });
+// What the open diff is showing once its comments are out, for the bar above it — see useDiffStat.
+const { stat: diffStat, onStat: setDiffStat } = useDiffStat(diffId);
 watch(
     [diffId, diffTab],
     ([id, tab]) => {
@@ -270,6 +273,7 @@ const onPick = (event: Event): void => {
                 v-if="diffTab"
                 :path="diffTab.label"
                 :status="diffTab.status"
+                :code="diffStat"
                 :additions="diffTab.additions"
                 :deletions="diffTab.deletions"
                 class="bg-card"
@@ -311,7 +315,7 @@ const onPick = (event: Event): void => {
                         :after="diffTab.afterRaw"
                     />
                     <p v-else-if="diffTab.truncated" class="p-4 text-xs text-subtle">File too large to diff in the browser.</p>
-                    <DiffView v-else :key="diffTab.id" :before="diffTab.before" :after="diffTab.after" :path="diffTab.path" />
+                    <DiffView v-else :key="diffTab.id" :before="diffTab.before" :after="diffTab.after" :path="diffTab.path" @stat="setDiffStat" />
                 </template>
                 <FileViewer
                     v-else-if="openPath"

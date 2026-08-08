@@ -17,6 +17,7 @@ import { toAppPx, uiLength } from "../../composables/uiScale";
 import { reportOpenPath } from "../../composables/usePresence";
 import { outgoingMark, outgoingSummary } from "../../composables/workspace/outgoingWork";
 import { useChangeGrouping } from "../../composables/workspace/useChangeGrouping";
+import { useDiffStat } from "../../composables/workspace/useDiffStat";
 import { useChanges } from "../../composables/workspace/useChanges";
 import { useRepos } from "../../composables/workspace/useRepos";
 import { useUploadQueue } from "../../composables/workspace/useUploadQueue";
@@ -178,6 +179,8 @@ const rowActions = (dir: string): readonly RowAction[] =>
     });
 
 const activeFile = computed(() => (activeTab.value?.kind === `file` ? activeTab.value : undefined));
+// What the open diff is showing once its comments are out, for the bar above it — see useDiffStat.
+const { stat: diffStat, onStat: setDiffStat } = useDiffStat(computed(() => activeTab.value?.id));
 const openPath = computed(() => activeFile.value?.path);
 const openMeta = computed(() => entry(openPath.value));
 // Presence: announce which file this tab has open. Component-scoped is right here — the open file genuinely
@@ -937,6 +940,7 @@ const endResize = (event: PointerEvent): void => {
                     <DiffToolbar
                         :path="activeTab.label"
                         :status="activeTab.status"
+                        :code="diffStat"
                         :additions="activeTab.additions"
                         :deletions="activeTab.deletions"
                     />
@@ -954,7 +958,14 @@ const endResize = (event: PointerEvent): void => {
                             :after="activeTab.afterRaw"
                         />
                         <p v-else-if="activeTab.truncated" class="p-4 text-xs text-subtle">File too large to diff in the browser.</p>
-                        <DiffView v-else :key="activeTab.id" :before="activeTab.before" :after="activeTab.after" :path="activeTab.path" />
+                        <DiffView
+                            v-else
+                            :key="activeTab.id"
+                            :before="activeTab.before"
+                            :after="activeTab.after"
+                            :path="activeTab.path"
+                            @stat="setDiffStat"
+                        />
                     </div>
                 </template>
                 <div v-else-if="activeTab?.kind === 'plan'" class="min-h-0 flex-1">

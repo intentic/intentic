@@ -4,6 +4,7 @@ import type * as Monaco from "monaco-editor-core";
 import { computed, onBeforeUnmount, onMounted, ref, shallowRef, watch } from "vue";
 import { useLayout } from "../../../composables/useLayout";
 import { stripComments } from "../../../composables/workspace/codeComments";
+import { lineStat, type LineStat } from "../../../composables/workspace/codeStat";
 import { firstChangeBeyondImports, importLines } from "../../../composables/workspace/codeImports";
 import { editorType, useMonaco, watchEditorType } from "../../../composables/workspace/useMonaco";
 import { highlightLangFor } from "../fileType";
@@ -21,6 +22,11 @@ import { highlightLangFor } from "../fileType";
  * where this lands the reader on the way in, so a control over the code would look like it did nothing. */
 
 const { before, after, path } = defineProps<{ before?: string; after?: string; path: string }>();
+/* How much this pane is actually showing, for the bar above it. Reported from HERE because here is the one place
+ * that has already stripped both sides — a toolbar working it out for itself would tokenize the same two files a
+ * second time, and could reach a different answer than the panes underneath it. Undefined for a file with no
+ * grammar: it renders whole, so git's own counts are the true ones. */
+const emit = defineEmits<{ stat: [LineStat | undefined] }>();
 
 const { mobile } = useDevice();
 const { ensureMonaco, ensureLanguage } = useMonaco();
@@ -50,12 +56,12 @@ const step = (forward: boolean): void => diff.value?.goToDiff(forward ? `next` :
 
 // One side as its pane should show it. Stripping shortens the model, so the gutter has to render the source line
 // each kept line came from — Monaco's own numbering would be off by every comment above it.
-const side = async (text: string): Promise<{ text: string; lineNumbers: Monaco.editor.LineNumbersType }> => {
+const side = async (text: string): Promise<{ text: string; lineNumbers: Monaco.editor.LineNumbersType; stripped: boolean }> => {
     const stripped = showComments.value ? undefined : await stripComments(text, lang);
     if (stripped === undefined) {
-        return { text, lineNumbers: `on` };
+        return { text, lineNumbers: `on`, stripped: false };
     }
-    return { text: stripped.text, lineNumbers: (line) => String(stripped.lines[line - 1] ?? ``) };
+    return { text: stripped.text, lineNumbers: (line) => String(stripped.lines[line - 1] ?? ``), stripped: true };
 };
 
 // Load both sides into the panes. Also the toggle's whole effect: same editor, same file, comments in or out.
@@ -69,6 +75,9 @@ const render = async (editor: Monaco.editor.IStandaloneDiffEditor): Promise<void
     editor.getOriginalEditor().updateOptions({ lineNumbers: left.lineNumbers });
     editor.getModifiedEditor().updateOptions({ lineNumbers: right.lineNumbers });
     changeless.value = (before ?? ``) === (after ?? ``) ? `identical` : left.text === right.text ? `comments` : undefined;
+    // Unstripped means the reader asked for the comments back, or the file has no grammar — either way what is
+    // on screen is the whole file, which is what git already counted.
+    emit(`stat`, left.stripped && right.stripped ? lineStat(left.text, right.text) : undefined);
 };
 
 /* Land the reader on a change instead of line 1: the change is often mid-file, and Monaco opens at the top,

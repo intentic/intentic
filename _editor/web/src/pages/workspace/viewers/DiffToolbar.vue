@@ -1,9 +1,11 @@
 <script setup lang="ts">
-import { ChangeStatusMark, DiffStat, Segmented, useDevice } from "@intentic/ui";
+import { ChangeStatusMark, Segmented, useDevice } from "@intentic/ui";
 import type { DiffLayout } from "../../../composables/useLayout";
 import { useLayout } from "../../../composables/useLayout";
 import type { ChangeStatus } from "@intentic/extension-api";
 import { basename, parentDir } from "@intentic/ui/path";
+import ReviewStat from "../../../components/ReviewStat.vue";
+import type { LineStat } from "../../../composables/workspace/codeStat";
 
 /* The bar above a diff — WHICH file, and HOW it is being read. Every diff surface in the app renders this one:
  * the workspace tab, the agent review, the environment card's proposal. Before it there was no such thing, and
@@ -24,10 +26,13 @@ import { basename, parentDir } from "@intentic/ui/path";
  *   badges  — after the path (a blocked/not-landed mark: a property of the FILE, so it rides with its name)
  *   actions — after the reading controls (the host's own file-scoped buttons) */
 
-const { path, status, additions, deletions, from } = defineProps<{
+const { path, status, code, additions, deletions, from } = defineProps<{
     // Repo-qualified where the surface knows the repo — this is a label to read, not a key.
     path: string;
     status?: ChangeStatus;
+    // This file's counts with the comments out, for the pane below — which is showing exactly that unless the
+    // toggle on this bar says otherwise. Undefined until the file has been read (see useCodeStats).
+    code?: LineStat;
     additions?: number;
     deletions?: number;
     // Where a rename came from, printed as `← old/path` on the surfaces that track renames.
@@ -68,7 +73,7 @@ const LAYOUT_OPTIONS: { label: string; value: DiffLayout }[] = [
             ← {{ from }}
         </span>
         <slot name="badges" />
-        <DiffStat :additions="additions" :deletions="deletions" />
+        <ReviewStat :code="code" :additions="additions" :deletions="deletions" />
         <Segmented v-if="!mobile" :model-value="diffLayout" :options="LAYOUT_OPTIONS" size="xs" @update:model-value="setDiffLayout" />
         <!-- A default that silently removes lines has to keep saying so, which is why this is a labelled toggle
              and not one more glyph: "Comments" with an eye through it is readable at a glance as a state. -->
