@@ -11,11 +11,9 @@
         "test": "vitest run"
     },
     "dependencies": {
+        "@intentic/connector-runtime": "workspace:*",
         "@slack/socket-mode": "catalog:",
         "@slack/web-api": "catalog:"
-    },
-    "dependencies": {
-        "@intentic/connector-runtime": "workspace:*"
     },
     "devDependencies": {
         "@intentic/tsconfig": "workspace:*",
