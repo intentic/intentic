@@ -1,5 +1,6 @@
 #!/usr/bin/env node
-/* Mint this machine's development CA and this checkout's localhost leaf, on install.
+/* Mint this machine's development CA and the localhost leaf under it, on install. Both land outside the
+ * repository, in this user's own data directory — see paths.mjs for why they belong together there.
  *
  * WHY THE CA IS NOT COMMITTED. A CA certificate is only useful once it is in a trust store, and this one is
  * meant to go into yours — that is the whole reason it exists. A CA whose private key is published is a CA
@@ -81,6 +82,9 @@ const mintCa = () => {
 };
 
 const mintLeaf = () => {
+    // The directory already exists whenever the root does; creating it here covers the leaf-only path, where a
+    // pair was minted before and only the certificate needs re-signing.
+    mkdirSync(CA_DIR, { recursive: true, mode: 0o700 });
     const scratch = mkdtempSync(join(tmpdir(), `localhost-https-`));
     try {
         // The leaf the API and Vite actually serve. The browser matches on the SAN; the subject CN has not been

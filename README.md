@@ -185,9 +185,11 @@ pnpm dev                  # turbo: api on https://localhost:6480, web on https:/
 ```
 
 Dev serves over HTTPS via `@intentic-app/localhost-https` (Google FedCM One Tap refuses `http://localhost`).
-`pnpm install` mints a root for this machine and a certificate under it; `pnpm cert:trust` is what puts that
-root in your trust store, and you run it once per machine rather than once per clone. Skip it and everything
-still works behind a browser warning. See [_tools/localhost-https](_tools/localhost-https/README.md).
+`pnpm install` mints a root and a certificate into your own data directory, outside every checkout;
+`pnpm cert:trust` is what puts that root in your trust store, and you run it once per machine rather than once
+per clone. Skip it and everything still works behind a browser warning. Run both on the machine whose browser
+you use — inside a container they produce a perfectly good pair that your desktop browser never sees. See
+[_tools/localhost-https](_tools/localhost-https/README.md).
 
 **Sandbox daemon (optional).** To run the daemon outside its container, add its creds to the same root `.env` —
 see the `# Sandbox daemon` section of `.env.example` (`ANTHROPIC_API_KEY`, `CLOUDFLARE_API_TOKEN`, … all

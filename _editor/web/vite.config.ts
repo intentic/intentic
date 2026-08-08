@@ -1,5 +1,6 @@
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
+import { LEAF_CRT, LEAF_KEY } from "@intentic-app/localhost-https/paths";
 import { defineConfig } from "vite";
 import { shared } from "./vite.shared.ts";
 
@@ -16,10 +17,11 @@ export default defineConfig({
         strictPort: true,
         // The same machine-local dev cert is used by the API and Vite, so https:47145 -> https:6480 shares a
         // trust chain and the session cookie rides along with no mixed-content warnings. `pnpm install` mints
-        // it and `pnpm cert:trust` approves its root; see _tools/localhost-https for why neither is committed.
+        // it and `pnpm cert:trust` approves its root. The location is asked for rather than written down: it is
+        // this user's own data directory, which differs per person and per OS (see _tools/localhost-https).
         https: {
-            cert: readFileSync(here("./node_modules/@intentic-app/localhost-https/localhost.crt")),
-            key: readFileSync(here("./node_modules/@intentic-app/localhost-https/localhost.key")),
+            cert: readFileSync(LEAF_CRT),
+            key: readFileSync(LEAF_KEY),
         },
     },
     build: {

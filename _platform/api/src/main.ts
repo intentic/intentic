@@ -1,4 +1,5 @@
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
+import { LEAF_CRT, LEAF_KEY } from "@intentic-app/localhost-https/paths";
 import { createApp } from "./app.js";
 import { CONFIG_SECRETS, loadConfig } from "./config.js";
 import { mask } from "./log.js";
@@ -33,9 +34,20 @@ startRetention(prisma, config, logger);
 startSandboxPool(prisma, config, logger);
 const { app } = createApp(config, prisma, logger);
 
-// Dev serves https (the SPA does too, for FedCM); prod runs plain http behind a TLS-terminating proxy.
+/* Dev serves https (the SPA does too, for FedCM); prod runs plain http behind a TLS-terminating proxy.
+ *
+ * API_HTTPS_KEY/CERT win when set. Otherwise dev falls back to the pair `pnpm install` mints for this user,
+ * because that pair no longer has a path anyone could write into a .env: it lives in this user's own data
+ * directory, which differs per person and per OS. Two guards keep the fallback out of production — not being
+ * production, and the pair actually existing, which on a server it does not because nothing mints it there. */
+const devPair = (): { key: Buffer; cert: Buffer } | undefined => {
+    if (process.env[`NODE_ENV`] === `production` || !existsSync(LEAF_KEY) || !existsSync(LEAF_CRT)) {
+        return undefined;
+    }
+    return { key: readFileSync(LEAF_KEY), cert: readFileSync(LEAF_CRT) };
+};
 const tls =
-    config.api.httpsKey && config.api.httpsCert ? { key: readFileSync(config.api.httpsKey), cert: readFileSync(config.api.httpsCert) } : undefined;
+    config.api.httpsKey && config.api.httpsCert ? { key: readFileSync(config.api.httpsKey), cert: readFileSync(config.api.httpsCert) } : devPair();
 
 const server = Bun.serve({
     port: config.api.port,

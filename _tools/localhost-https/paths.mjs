@@ -1,13 +1,22 @@
-/* Where the development CA and this checkout's leaf live.
+/* Where the development root and the certificate under it live.
  *
- * THE CA IS PER MACHINE, NOT PER CHECKOUT. It is the thing you put in a trust store, and a trust store is a
- * property of the machine — so a root that lived beside the code would mean re-approving a browser warning for
- * every clone, every worktree and every sandbox workspace on the same laptop. It sits in the OS's own per-user
- * data directory instead, and every checkout signs its leaf with it.
+ * BOTH LIVE OUTSIDE THE REPOSITORY, TOGETHER, in the OS's own per-user data directory — and the two halves of
+ * that sentence fix two different bugs.
  *
- * THE LEAF IS PER CHECKOUT, beside this file, because that is where the API and Vite already read it from
- * (`node_modules/@intentic-app/localhost-https/localhost.crt`). It is signed by the shared root, so a leaf a
- * fresh clone mints is trusted the moment it exists.
+ * OUTSIDE, because the root is the thing you put in a trust store, and a trust store belongs to a machine. A
+ * root that lived beside the code would mean re-approving a browser warning for every clone, worktree and
+ * sandbox workspace on the same laptop.
+ *
+ * TOGETHER, because a certificate is worthless without the root that signed it, and keeping the certificate in
+ * the repository while the root moved out made them separable in the one way that matters. A workspace folder is
+ * shared with every container mounted on it; each container has its own home directory, so each resolves its own
+ * root. One agent running the installer inside a sandbox minted a root in the container, re-signed the
+ * certificate in the shared folder with it, and left the host's dev server serving a chain whose root died with
+ * the container — a browser warning with nothing on the machine able to explain it. Now a container writes only
+ * its own pair in its own home, and the host's is untouched.
+ *
+ * The consequence is that no consumer can hardcode the location any more, since it differs per user and per OS.
+ * Vite, the API and the tests import these constants instead; nothing writes a certificate into this package.
  */
 import { homedir } from "node:os";
 import { join } from "node:path";
@@ -27,8 +36,8 @@ export const CA_DIR = machineDir();
 export const CA_KEY = join(CA_DIR, `localhost-com-ca.key`);
 export const CA_CRT = join(CA_DIR, `localhost-com-ca.crt`);
 
-export const LEAF_KEY = join(import.meta.dirname, `localhost.key`);
-export const LEAF_CRT = join(import.meta.dirname, `localhost.crt`);
+export const LEAF_KEY = join(CA_DIR, `localhost.key`);
+export const LEAF_CRT = join(CA_DIR, `localhost.crt`);
 
 // The name the root goes into a trust store under, so `cert:trust` can find and replace its own earlier entry
 // rather than stacking duplicates.

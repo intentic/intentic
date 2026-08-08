@@ -65,6 +65,7 @@
     },
     "devDependencies": {
         "@huggingface/hub": "catalog:",
+        "@intentic-app/localhost-https": "workspace:*",
         "@intentic/testing": "workspace:*",
         "@intentic/tsconfig": "workspace:*",
         "@orpc/contract": "catalog:",

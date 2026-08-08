@@ -2150,6 +2150,9 @@ importers:
       '@huggingface/hub':
         specifier: 'catalog:'
         version: 2.14.4
+      '@intentic-app/localhost-https':
+        specifier: workspace:*
+        version: link:../../_tools/localhost-https
       '@intentic/testing':
         specifier: workspace:*
         version: link:../../_tools/testing

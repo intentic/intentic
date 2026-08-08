@@ -15,8 +15,8 @@ HTTPS with the browser's lock rather than its warning.
 
 - [generate.mjs](generate.mjs) — mints the root and the leaf, idempotently. Runs from `prepare`.
 - [trust.mjs](trust.mjs) — puts the root into the OS and Firefox trust stores. Runs from `pnpm cert:trust`.
-- [paths.mjs](paths.mjs) — where each half lives, and why the root is not one of them.
-- [package.json](package.json) — the `prepare` hook, and how the files are resolved by the packages that use them.
+- [paths.mjs](paths.mjs) — where the pair lives, and the two bugs that put it there. Read this one first.
+- [package.json](package.json) — the `prepare` hook, and the `./paths` export consumers resolve the pair through.
 
 ## How it fits
 
@@ -24,22 +24,28 @@ Development-only. Several browser behaviours the app depends on — secure cooki
 clipboard and media APIs — differ between `http://localhost` and real HTTPS, so developing over plain HTTP means
 finding those differences in production instead. Google's FedCM One Tap simply refuses `http://localhost`.
 
-The API reads its pair through `API_HTTPS_KEY`/`API_HTTPS_CERT`, Vite reads the same one directly, and both
-resolve it through `node_modules/@intentic-app/localhost-https/`, which links here.
+Nothing hardcodes where the pair is, because it is in your own data directory and that differs per person and
+per OS. Vite, the API and the port probe's test all import the locations from `@intentic-app/localhost-https/paths`
+instead. `API_HTTPS_KEY`/`API_HTTPS_CERT` still win when set, for serving some other certificate.
 
 Setup is two commands, and the second is once per machine, not once per clone:
 
 ```sh
-pnpm install        # mints the root (first time) and this checkout's leaf
+pnpm install        # mints the pair for this machine, first time only
 pnpm cert:trust     # approves the root — answer Yes to the OS prompt
 ```
 
 ## Conventions & gotchas
 
-- **The root is per machine and lives outside the repository** — in the OS's own per-user data directory, not
-  beside this file. A trust store is a property of a machine, so a root that lived per checkout would mean
-  re-approving a browser warning for every clone, worktree and sandbox workspace on the same laptop. Only the
-  leaf is here, and it is git-ignored.
+- **Both halves live outside the repository, together** — in the OS's own per-user data directory, never beside
+  this file. Outside, because a trust store belongs to a machine, so a root that lived per checkout would mean
+  re-approving a browser warning for every clone, worktree and sandbox workspace on the same laptop. Together,
+  because a workspace folder is shared with every container mounted on it while each container has its own home
+  directory: keeping the certificate in the repository let an agent running the installer inside a sandbox
+  re-sign it with a root that died with the container, leaving the host serving a chain nothing could validate.
+- **"Per machine" is really per home directory, so mind where you run the installer.** Running it inside a
+  container gives that container its own pair, which is correct and harmless — but it is not the pair the
+  browser on your desktop sees, and `cert:trust` there approves a root no browser will ever consult.
 - **The root and the leaf renew separately.** The root is good for ten years; the leaf lives 825 days under it
   and is re-signed in place. Throwing the root away with the leaf would silently revoke the approval you gave
   it, so nothing does that unless the root itself is missing or expiring — and then it says so.
@@ -49,6 +55,9 @@ pnpm cert:trust     # approves the root — answer Yes to the OS prompt
   and every machine trusting that root accepts it. The published root was `CA:TRUE`, carried no name
   constraints, and was valid until 2035 — so it vouched for the whole DNS namespace on behalf of everyone who
   followed the old instructions. If you trusted it, remove it from your trust store.
+- **The `.gitignore` here still lists names nothing writes any more, deliberately.** They were dropped once, on
+  the reasoning that the files had moved — and a checkout that had run the older generator still had the pair
+  sitting here, no longer ignored, so the next commit that staged everything pushed a private key. Leave them.
 - **The generated root is name-constrained** to `localhost`, `localhost.com` and the loopback addresses, so it
   cannot vouch for anything else even on the machine that holds its key.
 - **A browser already running keeps its warning.** One that has been clicked through to "proceed anyway" for

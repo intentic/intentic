@@ -4,6 +4,7 @@ import http from "node:http";
 import https from "node:https";
 import net from "node:net";
 import { join } from "node:path";
+import { LEAF_CRT, LEAF_KEY } from "@intentic-app/localhost-https/paths";
 import { expect, test } from "vitest";
 import { answers, detectScheme } from "./port-probe.js";
 
@@ -12,12 +13,12 @@ import { answers, detectScheme } from "./port-probe.js";
  * self-signed cert even when asked in https — so a Vite dev server serving the repo's own dev cert read as
  * DOWN and its panel span "Starting…" for as long as it ran. The cert below is that same one.
  *
- * Minted rather than read straight off disk: the dev certificate is per machine and git-ignored, so a fresh
- * worktree has none until something asks for one. The generator is idempotent and returns immediately when
- * the pair is already there. */
-const CERT_DIR = join(import.meta.dirname, "..", "..", "..", "..", "_tools", "localhost-https");
-execFileSync("node", [join(CERT_DIR, "generate.mjs")], { stdio: "ignore" });
-const tls = { cert: readFileSync(join(CERT_DIR, "localhost.crt")), key: readFileSync(join(CERT_DIR, "localhost.key")) };
+ * Minted rather than read straight off disk: the pair lives in this user's data directory rather than the repo,
+ * so a fresh worktree or a CI runner has none until something asks for one. The generator is idempotent and
+ * returns immediately when the pair is already there. */
+const GENERATOR = join(import.meta.dirname, "..", "..", "..", "..", "_tools", "localhost-https", "generate.mjs");
+execFileSync("node", [GENERATOR], { stdio: "ignore" });
+const tls = { cert: readFileSync(LEAF_CRT), key: readFileSync(LEAF_KEY) };
 
 // Listen on an OS-assigned port and hand it back, closing the server when the test ends.
 const serve = async (server: http.Server | net.Server): Promise<number> => {

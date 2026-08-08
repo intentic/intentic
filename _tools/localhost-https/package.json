@@ -2,12 +2,19 @@
     "name": "@intentic-app/localhost-https",
     "version": "0.0.0",
     "private": true,
+    "exports": {
+        "./paths": {
+            "types": "./paths.d.ts",
+            "default": "./paths.mjs"
+        }
+    },
     "scripts": {
         "prepare": "node generate.mjs",
         "trust": "node trust.mjs"
     },
     "files": [
         "generate.mjs",
+        "paths.d.ts",
         "paths.mjs",
         "trust.mjs"
     ]
