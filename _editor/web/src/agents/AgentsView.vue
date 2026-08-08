@@ -8,6 +8,7 @@ import type { MenuItem } from "primevue/menuitem";
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { startAgent } from "../composables/agents/agentActions";
+import { synthesizeSessions, synthesizing } from "../composables/agents/synthesizeSessions";
 import { dropActionLabel, dropRejection, type PendingAction } from "../composables/agents/laneDrop";
 import { useAgentDrag } from "../composables/agents/useAgentDrag";
 import { useAgentFilter } from "../composables/agents/useAgentFilter";
@@ -103,6 +104,14 @@ const { popOut: popOutChat, poppedOut } = useChatPopout();
 // This agent's chat has a column in the chat window but not the focus — the board's half of the rail's
 // "showing" mark, so a split is legible from either surface.
 const showingInPane = (id: string): boolean => panes.value.length > 1 && id !== active.value.conversationId && panes.value.includes(id);
+// A refusal lands on the board's notice strip — the preparation refuses whole (a running source, a transcript
+// that couldn't be captured), and a press that does nothing visible reads as a button that broke.
+const synthesize = async (): Promise<void> => {
+    const result = await synthesizeSessions();
+    if (!result.started) {
+        notice.value = result.why;
+    }
+};
 const {
     dragged,
     dragging,
@@ -893,6 +902,19 @@ const grabCard = (event: PointerEvent, agent: FleetAgent, card: HTMLElement): vo
                 <!-- The tally, so an empty board under a query reads as "nothing matched" rather than as a board
                      that broke. Only while filtering: the lane headers already carry the unfiltered counts. -->
                 <span v-if="filtering" class="shrink-0 text-2xs text-muted">{{ matchTally }}</span>
+                <!-- The panes on screen ARE the selection (the ringed cards), so this appears exactly when two
+                     or more chats sit side by side — press it and a fresh draft chat opens over their full
+                     transcripts, composed but NOT sent (synthesizeSessions.ts). -->
+                <Button
+                    v-if="panes.length >= 2"
+                    size="small"
+                    severity="secondary"
+                    :disabled="synthesizing"
+                    class="shrink-0 gap-1 px-2.5 py-1 text-2xs"
+                    @click="synthesize"
+                >
+                    <Icon :name="synthesizing ? `spinner` : `sparkles`" :spin="synthesizing" class="text-2xs" />Synthesize {{ panes.length }}
+                </Button>
                 <Button size="small" class="shrink-0 gap-1 px-2.5 py-1 text-2xs" @click="startAgent()">
                     <Icon name="plus" class="text-2xs" />New agent
                 </Button>
