@@ -50,6 +50,7 @@ import { type ChoresStore, fileChoresStore, LEDGER_FILE, PROBES_FILE } from "./c
 import { createProbeRunner, type ProbeRunner } from "./chores/probe-runner.js";
 import { type CapabilitiesStore, fileCapabilitiesStore } from "./capabilities/capabilities-store.js";
 import { type DismissalsStore, fileDismissalsStore } from "./capabilities/dismissals-store.js";
+import { fileIdentitiesStore, type IdentitiesStore } from "./identities/identities-store.js";
 import { type CiStore, fileCiStore } from "./ci/ci-store.js";
 import { fileVerifyStore, type VerifyStore } from "./workspace/verify-store.js";
 import { type CiHookReconciler, createCiHookReconciler } from "./ci/hooks.js";
@@ -275,6 +276,9 @@ export interface Services {
     // Recommendations the owner has declined (.intentic/capability-dismissals.json), so a "no" survives the
     // page load that would otherwise re-derive the same suggestion straight back onto the catalog.
     readonly capabilityDismissals: DismissalsStore;
+    // The named faces this sandbox shows the outside world (.intentic/identities.json) — which connected
+    // accounts each speaks for. The turn path reads it to decide what a wake may act through.
+    readonly identities: IdentitiesStore;
     // Scheduled agent wake-ups (.intentic/automations.json) — the scheduler polls it; /automations edits it.
     readonly automations: AutomationsStore;
     // Ralph loops (.intentic/loops.json): the pump drives them, /loops starts and stops them, and the record is
@@ -717,6 +721,9 @@ export const createServices = (config: Config, logger: Logger): Services => {
     const capabilities = fileCapabilitiesStore(statePath(workspace.root, ".intentic/capabilities.json"), (id, reason) =>
         logger.warn(`capabilities: skipping unreadable entry "${id}" (${reason}) — the rest of the manifest is unaffected`),
     );
+    const identities = fileIdentitiesStore(statePath(workspace.root, ".intentic/identities.json"), (id, reason) =>
+        logger.warn(`identities: skipping unreadable card "${id}" (${reason}) — the rest of the cast is unaffected`),
+    );
     const ciStore = fileCiStore(statePath(workspace.root, ".intentic/ci.json"));
     const verifyStore = fileVerifyStore(statePath(workspace.root, ".intentic/verify.json"));
     // Hoisted: the background probe runner writes the same cache the /chores route reads, and a second store
@@ -779,6 +786,7 @@ export const createServices = (config: Config, logger: Logger): Services => {
         tools: internalTools(config.intenticAgentTools),
         capabilities,
         capabilityDismissals: fileDismissalsStore(statePath(workspace.root, ".intentic/capability-dismissals.json")),
+        identities,
         ciStore,
         verifyStore,
         ciRuns: createRunsCache(),

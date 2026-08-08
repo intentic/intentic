@@ -84,6 +84,15 @@ export type EditorContext = z.infer<typeof EditorContextSchema>;
 // and by the workspace scope (WorkspaceScopeSchema), which names a conversation to read a file tree AS.
 export const ConversationIdSchema = z.string().regex(/^[a-zA-Z0-9][a-zA-Z0-9_-]{0,63}$/);
 
+// A manifest entry id (capabilities + automations + identities) — also the `mcp__<id>__…` server name for mcp
+// capabilities, so it's a safe identifier. Up here beside the other id primitives because a turn names an
+// identity by one (AgentTurnSchema.actsAs), hundreds of lines above the manifest section that consumes it.
+const entryId = z
+    .string()
+    .min(1)
+    .max(60)
+    .regex(/^[a-zA-Z0-9][a-zA-Z0-9_-]*$/);
+
 // Where a conversation came from when nobody typed it into the browser: an automation wake carrying a message
 // from OUTSIDE the sandbox (a Discord mention, a web-chat visitor, a webhook). Such a wake runs as an ordinary
 // isolated conversation — registry entry, worktree, chat tab, land flow — and this is the only thing that
@@ -190,6 +199,18 @@ export const AgentTurnSchema = z
         harness: AgentHarnessSchema.optional(),
         // Which connected account of that provider serves the turn; absent = the provider's first account.
         account: z.string().optional(),
+        /* WHICH FACE THE TURN SHOWS THE OUTSIDE WORLD — an IdentitySchema id, deliberately NOT the `account`
+         * directly above it. The two words are one letter apart in meaning and a world apart in consequence:
+         * `account` is which subscription PAYS for the turn, `actsAs` is whose name is on what the turn posts.
+         * Naming both "account" is how someone eventually pins a nightly job to the right billing and the wrong
+         * Reddit.
+         *
+         * Absent means opposite things either side of the "is anyone watching" line, which is the owner's chosen
+         * posture and the reason this is resolved in one place (turnIdentity): an ordinary chat with no identity
+         * keeps every connected account, because a person is there to catch a mistake; an `unattended` turn with
+         * no identity gets NONE, because at 3am the prompt's wording is the only thing left and that is not
+         * enough to bet an unrepeatable post on. */
+        actsAs: entryId.optional(),
         sessionId: z.string().optional(),
         // The client-minted stable conversation identity (survives provider/account/harness switches, which
         // retire sessions). Keys the fleet registry entry and turn run, plus the worktree when isolated.
@@ -2666,14 +2687,6 @@ export type CapabilityKind = z.infer<typeof CapabilityKindSchema>;
 export const CapabilityStateSchema = z.enum(["active", "pending", "error", "inactive"]);
 export type CapabilityState = z.infer<typeof CapabilityStateSchema>;
 
-// A manifest entry id (capabilities + automations) — also the `mcp__<id>__…` server name for mcp capabilities,
-// so it's a safe identifier.
-const entryId = z
-    .string()
-    .min(1)
-    .max(60)
-    .regex(/^[a-zA-Z0-9][a-zA-Z0-9_-]*$/);
-
 // Per-kind config. Secrets (an mcp token) live here and are denylisted like tools.json.
 export const McpConfigSchema = z.object({ url: z.url(), token: z.string().optional() });
 export const ServiceConfigSchema = z.object({
@@ -3044,6 +3057,58 @@ export const CapabilitySchema = z.discriminatedUnion("kind", [
     z.object({ id: entryId, kind: z.literal("endpoint"), config: EndpointConfigSchema }),
 ]);
 export type Capability = z.infer<typeof CapabilitySchema>;
+
+/* A NAMED FACE THE SANDBOX SHOWS THE OUTSIDE WORLD — "work-reddit", "the studio account" — and the layer that
+ * decides which connected accounts a given turn may act through.
+ *
+ * THE CARD AND THE KEYS ARE DELIBERATELY SEPARATE. This is the card: a name, the accounts it speaks for, how it
+ * should sound, whether it may publish. It carries NO credential, which is what lets it be the one thing under
+ * .intentic that is committed and reviewed like the workspace's instructions are (see identities-store.ts for
+ * the exclude carve-out that makes that true). The keys — the logged-in browser profile, its cookies, its
+ * passkey — stay where they already are: private to the sandbox, never exported without an explicit opt-in. So a
+ * cloned workspace arrives listing its identities, each visibly unconnected, waiting for one sign-in apiece.
+ *
+ * WHAT IT IS NOT is a security boundary. A chat still reaches every connected account by default (that is the
+ * owner's chosen posture — a chat has a human in the room), and an agent with a shell can reach a token whatever
+ * this file says. What it prevents is the mistake this codebase already names as the one that cannot be undone:
+ * a post from the wrong account. Where nobody is watching — an unattended wake — it is a real fence, because
+ * there the resolver's default is NOTHING rather than everything (see turnIdentity in identities.ts). */
+export const IdentitySchema = z.object({
+    id: entryId,
+    // What the owner calls it in the composer chip. Absent ⇒ surfaces read the id, which is already human-chosen.
+    label: z.string().max(60).optional(),
+    /* The capability ids this identity acts THROUGH — the logged-in browser accounts (and, later, the credential
+     * connectors) that are its hands. Ids rather than platforms, because "two accounts of one site" is the whole
+     * problem: `reddit-work` and `reddit-personal` are two capabilities and exactly one of them belongs here.
+     *
+     * An id naming a capability that isn't connected is not an error — it is a card describing an account this
+     * sandbox has yet to sign into, which is precisely what a freshly cloned workspace looks like. */
+    capabilities: z.array(entryId).max(50),
+    // Folded into the turn's guidance when this identity is the one acting — how this face writes, what it does
+    // and doesn't talk about. Optional: an identity that is purely about WHICH account needs no voice at all.
+    voice: z.string().max(4000).optional(),
+    /* Whether this face may publish on its own. "draft" routes anything outward through the approvals queue the
+     * owner already reads instead of letting the turn post directly; absent ⇒ "publish", which is what every
+     * account does today. Advisory in the same sense the rest of the card is: it shapes the turn's guidance and
+     * the surfaces around it, and is not a substitute for the tool gate. */
+    posture: z.enum(["publish", "draft"]).optional(),
+    /* Which workspace repos prefer this face, so a chat opened on a project starts with the right chip already
+     * selected. A PREFERENCE, not a fence — the owner's chosen chat default is still "every account" — and it
+     * lives on the card rather than in each project's own config so that one account named by three repos stays
+     * one definition instead of three that drift. */
+    repos: z.array(z.string().min(1)).max(50).optional(),
+});
+export type Identity = z.infer<typeof IdentitySchema>;
+export const IdentityIdParamSchema = z.object({ id: entryId });
+/* The cast, plus which of the accounts they name this sandbox is actually signed into. The second half is what
+ * makes the list honest on a freshly cloned workspace: every card is present and most of them cannot act yet,
+ * and a surface that showed only the cards would present a face that is one login away from working as though
+ * it already did. Ids the manifest has no capability for at all are `connected: false` too — a card may name an
+ * account nobody has added here. */
+export const IdentitiesListSchema = z.object({
+    identities: z.array(IdentitySchema),
+    connected: z.array(z.string()),
+});
 
 export const CapabilityStatusSchema = z.object({ state: CapabilityStateSchema, detail: z.string().optional() });
 export type CapabilityStatus = z.infer<typeof CapabilityStatusSchema>;
@@ -3572,6 +3637,16 @@ export const AutomationSchema = z.object({
      * human happens to read the row. Pinning the wake to an account that can actually run is the difference
      * between "my nightly sweep is quiet" and a Doorbell that turns visitors away all day. */
     account: z.string().optional(),
+    /* WHICH FACE THE WAKE SHOWS THE OUTSIDE WORLD (AgentTurnSchema.actsAs — read its note for why this is not
+     * spelled `account`, which is the field directly above and means who PAYS).
+     *
+     * Absent ⇒ the wake reaches NO logged-in account at all. That is the one place this whole layer stops being
+     * a convenience and becomes a boundary, and it is deliberately the strictest default in the schema: an
+     * automation fires with nobody at the composer, on a prompt that — for a Doorbell — a stranger helped write.
+     * `allowedTools` above already carries this exact reasoning for tools; an unrepeatable public post deserves
+     * it at least as much. An automation that genuinely means "post as us" says so, once, in a field a reviewer
+     * can see. */
+    actsAs: entryId.optional(),
     // Which harness (agentic loop) runs the wake; absent ⇒ native. Same semantics as AgentTurnSchema.harness.
     harness: AgentHarnessSchema.optional(),
     // Which model the wake runs on (see agent-catalog.ts modelsFor); absent ⇒ the provider's default.

@@ -51,6 +51,10 @@ export function useAutomationForm(sources: ComputedRef<readonly ListenerSource[]
         // The pinned provider account, by its daemon-minted id. Blank ⇒ absent ⇒ the provider's first account,
         // which is what every automation made before this field existed keeps doing.
         account: ``,
+        /* Which of the sandbox's named faces this wake acts as. Blank means something STRICTER than the account
+         * field above it, not looser: the daemon reads an unpinned unattended wake as reaching no logged-in
+         * account at all, so an automation made before this field existed cannot post as anybody. */
+        actsAs: ``,
         harness: `native` as AgentHarness,
         model: ``,
         requireApproval: false,
@@ -233,6 +237,7 @@ export function useAutomationForm(sources: ComputedRef<readonly ListenerSource[]
             prompt: ``,
             agent: `claude`,
             account: ``,
+            actsAs: ``,
             harness: `native`,
             model: ``,
             requireApproval: false,
@@ -294,6 +299,7 @@ export function useAutomationForm(sources: ComputedRef<readonly ListenerSource[]
         form.prompt = automation.prompt;
         form.agent = automation.agent ?? `claude`;
         form.account = automation.account ?? ``;
+        form.actsAs = automation.actsAs ?? ``;
         form.harness = automation.harness ?? `native`;
         form.model = automation.model ?? ``;
         form.requireApproval = automation.requireApproval === true;
@@ -399,6 +405,10 @@ export function useAutomationForm(sources: ComputedRef<readonly ListenerSource[]
         // Blank ⇒ absent ⇒ the provider's first account, independent of which provider is selected.
         if (form.account === ``) delete automation.account;
         else automation.account = form.account;
+        // Blank ⇒ absent ⇒ no outward accounts at all (see the form state's note) — the one field here whose
+        // default is to take something away rather than to leave it unspecified.
+        if (form.actsAs === ``) delete automation.actsAs;
+        else automation.actsAs = form.actsAs;
         if (form.model === ``) delete automation.model;
         else automation.model = form.model;
         if (form.requireApproval) automation.requireApproval = true;

@@ -11,6 +11,7 @@ import { claudeContract } from "./contracts/claude.contract.js";
 import { draftsContract } from "./contracts/drafts.contract.js";
 import { endpointsContract } from "./contracts/endpoints.contract.js";
 import { extensionsContract } from "./contracts/extensions.contract.js";
+import { identitiesContract } from "./contracts/identities.contract.js";
 import { gitContract } from "./contracts/git.contract.js";
 import { grokContract } from "./contracts/grok.contract.js";
 import { historyContract } from "./contracts/history.contract.js";
@@ -45,6 +46,7 @@ export { claudeContract } from "./contracts/claude.contract.js";
 export { draftsContract } from "./contracts/drafts.contract.js";
 export { endpointsContract } from "./contracts/endpoints.contract.js";
 export { extensionsContract } from "./contracts/extensions.contract.js";
+export { identitiesContract } from "./contracts/identities.contract.js";
 export { gitContract } from "./contracts/git.contract.js";
 export { grokContract } from "./contracts/grok.contract.js";
 export { historyContract } from "./contracts/history.contract.js";
@@ -108,6 +110,7 @@ export const sandboxContract = {
     drafts: draftsContract,
     endpoints: endpointsContract,
     extensions: extensionsContract,
+    identities: identitiesContract,
     sessions: sessionsContract,
     settings: settingsContract,
     intentic: intenticContract,

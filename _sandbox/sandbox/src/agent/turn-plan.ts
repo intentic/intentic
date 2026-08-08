@@ -11,6 +11,7 @@ import {
 } from "@intentic/sandbox-contract";
 import { browserOutputDir } from "../browser/browser-artifacts.js";
 import { browserServersOf } from "../browser/browser-tools.js";
+import { identityCapabilities, identityNote, turnIdentity } from "../identities/identities.js";
 import { hostToolsOf } from "../capabilities/host-tools.js";
 import { mcpToolsOf } from "../capabilities/mcp-tools.js";
 import { pluginDirsOf } from "../capabilities/plugin-dirs.js";
@@ -420,11 +421,32 @@ export const planHarnessTurn = async (
      * delegation lookup that reaches the translator. Only `delegation` waited on anything above it (it needs
      * `stableSystemPrompt`), which is why these could not join the round before it — and why they had no
      * business being three more awaits in a row. */
+    /* WHICH FACE THIS TURN WEARS, resolved before the browser bring-up because it decides what that bring-up is
+     * allowed to launch. `identityCapabilities` filters the manifest rather than trimming tool names afterwards,
+     * so an account this turn may not act through has no MCP server, no Chromium and no open profile — absent
+     * rather than present-and-discouraged (identities/identities.ts holds the rule and the reasoning).
+     *
+     * The read is cheap and unconditional: it is one small JSON file, and making it conditional on `actsAs`
+     * being set would skip exactly the case that matters most — an unattended wake that named nothing, whose
+     * correct answer is "no accounts" and which must not be able to reach one by saying nothing at all. */
+    const identity = turnIdentity({
+        identities: await services.identities.list(),
+        actsAs: input.actsAs,
+        unattended: input.unattended === true,
+    });
+    if (identity.reason === "unknown-identity") {
+        // Worth a line of its own: the turn asked to act as somebody and this workspace has no such card, so it
+        // is about to run with no outward accounts and the prompt will read as though it should have had them.
+        services.logger.warn({ actsAs: input.actsAs }, "identity: no such card — this turn reaches no logged-in account");
+    }
     const [extensionAgentDirs, browser, delegation] = await Promise.all([
         services.perf.track("turn.plan.extensions", {}, () => extensionAgentDirsOf(services)),
         // Each logged-in browser capability grants the @playwright/mcp browser tools, bound to that platform's
-        // persisted profile so the agent acts as the signed-in owner (read/reply/comment/post/join).
-        services.perf.track("turn.plan.browser", {}, () => browserServersOf(installed, services.workspace.root)),
+        // persisted profile so the agent acts as the signed-in owner (read/reply/comment/post/join) — filtered
+        // to the accounts this turn's identity speaks for.
+        services.perf.track("turn.plan.browser", {}, () =>
+            browserServersOf(identityCapabilities(installed, identity), services.workspace.root),
+        ),
         services.perf.track("turn.plan.delegation", {}, () => delegationEnv(services, stableSystemPrompt)),
     ]);
     // The image-baked iq plugin (skill + SessionStart nudge) loads ahead of any user-added plugin-kind
@@ -453,6 +475,9 @@ export const planHarnessTurn = async (
     // Where this turn's instructions go — the owner's own system prompt (or the preset), what may be appended to
     // it, and whether the delegation note has to travel in the user message instead (system-prompt.ts owns all
     // three, because they are one decision).
+    // Which face the turn is wearing, said once in the instructions. Undefined when there is nothing to say —
+    // an ordinary attended turn that named no identity is the status quo and needs no narration.
+    const actingNote = identityNote(identity);
     const placement = turnPromptPlacement({
         mode: systemPromptMode,
         systemPrompt: customPrompt,
@@ -460,6 +485,7 @@ export const planHarnessTurn = async (
         stableSystemPrompt,
         // The arm decides when the experiment is running; the plain setting decides when it isn't.
         terseOutput: terseArm ?? terseOutput,
+        ...(actingNote === undefined ? {} : { identityNote: actingNote }),
     });
     // A prompt whose leading `/` names no command this session has, which the CLI would otherwise answer with
     // "Unknown command" and discard — the note keeps the user's words in front of the model (agent-commands.ts

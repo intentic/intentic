@@ -330,6 +330,15 @@ export const fireAutomation = async (
             // The pinned account, when the owner chose one. Absent leaves the resolution where it was — the
             // provider's first account — so an automation nobody configured keeps behaving as it always has.
             ...(automation.account !== undefined ? { account: automation.account } : {}),
+            /* The face this wake shows the outside world — and, unlike `account` on the line above, absence here
+             * is a DECISION rather than a deferral. `unattended: true` is already set, which means the resolver
+             * (identities/identities.ts) reads a missing identity as "no logged-in account at all" rather than
+             * "all of them". So an automation the owner never pinned cannot post as anybody, and one they did
+             * pin reaches exactly the accounts on that card.
+             *
+             * Spread the same way as the rest for consistency, though the absent case is what carries the
+             * meaning: what makes the default strict is the resolver, not this line. */
+            ...(automation.actsAs !== undefined ? { actsAs: automation.actsAs } : {}),
             ...(automation.harness !== undefined ? { harness: automation.harness } : {}),
             ...(automation.model !== undefined ? { model: automation.model } : {}),
         };

@@ -3,7 +3,7 @@ import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import type { AgentEvent, Capability } from "@intentic/sandbox-contract";
+import type { AgentEvent, Capability, Identity } from "@intentic/sandbox-contract";
 import { capabilitiesOf, SandboxSettingsSchema, sandboxContract } from "@intentic/sandbox-contract";
 import { portSlotsFromToken } from "@intentic/sandbox-contract/tunnel-ids";
 import type { ControlScope } from "./auth/control-tokens.js";
@@ -26,6 +26,7 @@ import { createAuthConnections } from "./auth/connections.js";
 import type { AppEnv, OrpcContext } from "./context.js";
 import type { AutomationRecord, AutomationsStore } from "./automations/automations-store.js";
 import type { CapabilitiesStore } from "./capabilities/capabilities-store.js";
+import type { IdentitiesStore } from "./identities/identities-store.js";
 import type { DismissalsStore, DismissedRecommendation } from "./capabilities/dismissals-store.js";
 import type { Services } from "./composition.js";
 import { createLogger } from "./logger.js";
@@ -91,6 +92,24 @@ export const memoryCapabilitiesStore = (initial: Capability[] = []): Capabilitie
             const next = capabilities.filter((capability) => capability.id !== id);
             const existed = next.length !== capabilities.length;
             capabilities = next;
+            return existed;
+        },
+    };
+};
+
+// An in-memory identities store — the sandbox's named faces, without the fs.
+export const memoryIdentitiesStore = (initial: Identity[] = []): IdentitiesStore => {
+    let identities = [...initial];
+    return {
+        list: async () => identities,
+        get: async (id) => identities.find((identity) => identity.id === id),
+        upsert: async (identity) => {
+            identities = [...identities.filter((existing) => existing.id !== identity.id), identity];
+        },
+        remove: async (id) => {
+            const next = identities.filter((identity) => identity.id !== id);
+            const existed = next.length !== identities.length;
+            identities = next;
             return existed;
         },
     };
@@ -344,6 +363,11 @@ export const services = (overrides: ServiceOverrides = {}): Services => {
         // Nothing declined by default: every route suite wants the catalog answering as it does on a sandbox
         // nobody has said no on yet.
         capabilityDismissals: memoryDismissalsStore(),
+        /* No faces by default, which is the state of a sandbox nobody has named one in. Note what that means for
+         * the suites here: an unattended turn reaches no logged-in account, because an unpinned wake is denied
+         * rather than waved through (identities/identities.ts). A suite that wants a wake to act as somebody
+         * builds the card AND the browser capability behind it. */
+        identities: memoryIdentitiesStore(),
         automations: memoryAutomationsStore(),
         // Empty approvals queue: agents.list projects it as `held`, and no suite here holds a wake.
         approvals: {

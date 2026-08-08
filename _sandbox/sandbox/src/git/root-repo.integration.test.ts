@@ -53,6 +53,35 @@ test("provision inits /work with a separate git dir, a baseline commit, and the 
     expect(await bothSides(work)).toEqual([]);
 });
 
+/* THE ONE HOLE IN THE .intentic WALL, checked against real git rather than reasoned about.
+ *
+ * Identity cards are committed on purpose — a face should be addable in a pull request and visible in `git log`
+ * — while everything beside them in that directory is manifests and credentials that must never be. The rule is
+ * a single character of git syntax: the exclude names the directory's CONTENTS (`/.intentic/*`) rather than the
+ * directory, because git does not descend into an excluded directory and a `!` negation under one re-includes
+ * nothing at all. Get that wrong in the safe direction and identities silently never commit; get it wrong in the
+ * other and the next baseline commits the owner's provider tokens. Neither failure announces itself, so the
+ * assertion is on git's own answer. */
+test("the baseline commits an identity card and still refuses every credential beside it", async () => {
+    const { work, historyRoot } = await tempBase();
+    await mkdir(join(work, ".intentic", "browser", "reddit-work"), { recursive: true });
+    await mkdir(join(work, ".intentic", "claude"), { recursive: true });
+    await writeFile(join(work, ".intentic", "identities.json"), `[{"id":"work","capabilities":["reddit-work"]}]\n`);
+    await writeFile(join(work, ".intentic", "capabilities.json"), `[{"id":"reddit-work","kind":"browser","config":{}}]\n`);
+    await writeFile(join(work, ".intentic", "owner.json"), "{}\n");
+    await writeFile(join(work, ".intentic", "settings.json"), "{}\n");
+    await writeFile(join(work, ".intentic", "claude", "token.json"), "{}\n");
+    await writeFile(join(work, ".intentic", "browser", "reddit-work", "Cookies"), "secret\n");
+
+    expect(await ensureRootRepo(workspacePaths(work), historyRoot)).toBe(true);
+    await commitRootBaseline(workspacePaths(work));
+
+    // Exactly one path out of that directory, and it is the card.
+    expect(await sh(work, "ls-files")).toBe(".intentic/identities.json");
+    // Nothing left over: the credentials are IGNORED, not merely uncommitted-and-pending.
+    expect(await bothSides(work)).toEqual([]);
+});
+
 test("daemon-owned skill files converged before the baseline read clean", async () => {
     const { work, historyRoot } = await tempBase();
 

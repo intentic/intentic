@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { WEBCHAT_DAILY_MAX_DEFAULT } from "@intentic/sandbox-contract";
 import { cmp, formatDateTime, Icon, ToggleSwitch } from "@intentic/extension-ui";
+import { useQuery } from "@tanstack/vue-query";
 import { computed, ref } from "vue";
 import { host } from "./host";
 import { useCiDelivery } from "./useCiDelivery";
@@ -46,6 +47,28 @@ const {
     promptError,
     originsError,
 } = props.state;
+
+/* THE FACES THIS SANDBOX CAN WEAR, for the "Acts as" picker below. Read here rather than passed in because it
+ * is the same list for every automation and changes only when the owner edits their cast.
+ *
+ * Each option also carries whether its accounts are actually signed in, because the honest failure this picker
+ * has to make visible is a card that exists and cannot act — the ordinary state of a workspace someone has just
+ * cloned, where every face is one login short of working. */
+const identities = useQuery({
+    queryKey: host().sandbox.key(`identities`),
+    queryFn: () => host().sandbox.rpc.identities.list(),
+    enabled: computed(() => host().sandbox.reachable()),
+});
+const faces = computed(() =>
+    (identities.data.value?.identities ?? []).map((identity) => ({
+        id: identity.id,
+        label: identity.label ?? identity.id,
+        // Signed in enough to act at all. A card naming three accounts with one connected is still usable —
+        // the turn simply reaches the one — so this marks only the face that can reach nothing whatsoever.
+        ready: identity.capabilities.some((capability) => (identities.data.value?.connected ?? []).includes(capability)),
+    })),
+);
+const actsAsLabel = computed(() => faces.value.find((face) => face.id === form.actsAs));
 
 // A CI trigger's delivery path — whether this will fire instantly, be polled, or never fire at all. Only
 // fetched while a CI trigger is on screen. See useCiDelivery.
@@ -672,6 +695,32 @@ const setProvider = (provider: string): void => {
                     </p>
                     <p v-if="form.model === ``" class="text-xs text-muted">
                         On the default model the provider picks one at each wake, which is what keeps this working after a model is retired.
+                    </p>
+                </div>
+                <!-- ACTS AS — whose name is on whatever this posts, kept deliberately apart from "Runs on" just
+                     above it. The two read almost the same and mean opposite things: "Runs on" is which
+                     subscription pays for the wake, this is which of your connected accounts it can speak
+                     through. Sharing a row would invite exactly the mix-up the whole feature exists to prevent.
+
+                     Blank is the strict end of this control, not the neutral one, which is why the note under it
+                     states the consequence in plain terms rather than describing a default. -->
+                <div class="ui-field">
+                    <label class="ui-field-label" for="automation-acts-as">Acts as</label>
+                    <select id="automation-acts-as" v-model="form.actsAs" :class="cmp.input()">
+                        <option value="">No account — this automation can't post anywhere</option>
+                        <option v-for="face in faces" :key="face.id" :value="face.id">
+                            {{ face.label }}{{ face.ready ? `` : ` (not signed in yet)` }}
+                        </option>
+                    </select>
+                    <p v-if="form.actsAs === ``" class="text-xs text-muted">
+                        This wake reaches none of your connected accounts — it can read and work, but it cannot post, reply or send as anyone. Nobody
+                        is watching an automation, so it only gets a voice when you name one.
+                    </p>
+                    <p v-else-if="actsAsLabel && !actsAsLabel.ready" class="text-xs text-warning">
+                        {{ actsAsLabel.label }} isn't signed in yet, so this wake still can't post. Finish its login under Capabilities first.
+                    </p>
+                    <p v-else-if="faces.length === 0" class="text-xs text-muted">
+                        You haven't set up any identities yet — until you do, automations can work but not speak.
                     </p>
                 </div>
                 <label class="flex items-center gap-2 text-sm text-content">

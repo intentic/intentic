@@ -88,7 +88,18 @@ const COMMON_EXCLUDES = [
 // /work, so the list is DERIVED from the live repo set, not static.
 export const rootExcludes = (repoIds: readonly string[]): string[] => [
     ...repoIds.map((id) => `/${id}/`),
-    "/.intentic/",
+    /* .intentic is daemon-internal manifests + credentials and stays out of version control — with ONE carve-out
+     * beneath it. The pattern is the directory's CONTENTS (`/*`) rather than the directory itself, which is the
+     * only spelling that leaves room for the negation on the next line: git does not descend into an excluded
+     * DIRECTORY, so `/.intentic/` followed by a `!` rule re-includes nothing. Excluding the children by glob
+     * keeps every one of them ignored — including any file added under here later, which is what makes the
+     * carve-out safe to leave standing — while the parent stays walkable.
+     *
+     * identities.json is the exception because it is the only thing in here that is neither a manifest of this
+     * sandbox's machinery nor a secret: it is the owner's cast of named faces, and it belongs in review and in
+     * `git log` alongside the workspace's instructions (identities/identities-store.ts says why at length). */
+    "/.intentic/*",
+    "!/.intentic/identities.json",
     `/${REFERENCE_DIR}/`,
     ...COMMON_EXCLUDES,
 ];

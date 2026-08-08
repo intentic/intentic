@@ -114,6 +114,14 @@ export interface TurnPromptInput {
     // Keep the system prefix byte-stable across the session by moving the note into the user message.
     readonly stableSystemPrompt: boolean;
     readonly terseOutput: boolean;
+    /* Which face this turn is wearing, when it is wearing one (identities/identities.ts identityNote).
+     *
+     * It rides the SYSTEM append rather than the user message, unlike the delegation note above, and it may do so
+     * even under stableSystemPrompt: an identity does not change from turn to turn within a session — changing it
+     * is a deliberate act that mints a different prefix anyway — so it costs the prompt cache nothing. A custom
+     * system prompt still drops it, like everything else the daemon would have appended; that is the owner
+     * saying they will do their own instructing, and the tool gate holds regardless of what any prose says. */
+    readonly identityNote?: string;
 }
 
 export interface TurnPromptPlacement {
@@ -128,14 +136,29 @@ export interface TurnPromptPlacement {
 // Where each composed piece of this turn's instructions goes. One function because the three destinations are
 // one decision: a note that rides the user message must NOT also ride the append, and a custom prompt takes
 // both choices away at once.
-export const turnPromptPlacement = ({ mode, systemPrompt, note, stableSystemPrompt, terseOutput }: TurnPromptInput): TurnPromptPlacement => {
+export const turnPromptPlacement = ({
+    mode,
+    systemPrompt,
+    note,
+    stableSystemPrompt,
+    terseOutput,
+    identityNote,
+}: TurnPromptInput): TurnPromptPlacement => {
     // Only "custom" replaces. Intentic's prompt is a BASE like Claude's preset — the daemon still appends to it,
     // which is what keeps the chat's cards working on the default setting.
     const replacing = mode === "custom";
     // The note goes to the user message when the system prompt is being kept byte-stable, and when there is no
     // daemon-controlled system prompt left to put it in.
     const noteInUserMessage = note !== undefined && (stableSystemPrompt || replacing);
-    const append = replacing ? "" : [...(noteInUserMessage || note === undefined ? [] : [note]), ...(terseOutput ? [TERSE_NOTE] : [])].join("\n\n");
+    const append = replacing
+        ? ""
+        : [
+              ...(noteInUserMessage || note === undefined ? [] : [note]),
+              ...(terseOutput ? [TERSE_NOTE] : []),
+              // Last, so it sits closest to the turn it governs — and after the terse steer, which must not be
+              // the final word when the turn is about to act as somebody in public.
+              ...(identityNote === undefined ? [] : [identityNote]),
+          ].join("\n\n");
     return {
         ...(replacing ? { systemPrompt } : {}),
         ...(append === "" ? {} : { systemAppend: append }),
