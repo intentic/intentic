@@ -20,14 +20,17 @@ let root: string;
 const git = (...args: string[]): void => void execFileSync(`git`, args, { cwd: root, stdio: `ignore` });
 const check = (): { entries: { dir: string; oneLiner: string; anchors: { path: string; what: string; line?: number }[]; behind: number; stale: boolean; reason?: string }[]; undocumented: string[] } =>
     JSON.parse(execFileSync(`node`, [BIN, `check`, `--root`, root, `--from`, `published`], { encoding: `utf8` }));
-const validate = (): { status: number; output: string } => {
+// The bin's exit code and whichever stream carried its answer — a refusal is the point of several of these, so a
+// non-zero exit is a result to assert on rather than a throw.
+const run = (...args: string[]): { status: number; output: string } => {
     try {
-        return { status: 0, output: execFileSync(`node`, [BIN, `validate`, `--root`, root, `--from`, `published`], { encoding: `utf8` }) };
+        return { status: 0, output: execFileSync(`node`, [BIN, ...args], { encoding: `utf8` }) };
     } catch (error) {
         const failure = error as { status: number; stderr: string };
         return { status: failure.status, output: failure.stderr };
     }
 };
+const validate = (): { status: number; output: string } => run(`validate`, `--root`, root, `--from`, `published`);
 
 const write = (path: string, content: string): void => {
     mkdirSync(join(root, path, `..`), { recursive: true });
@@ -137,15 +140,7 @@ describe(`intentic-docs against a real repository`, () => {
      * index. The app reads that directory to answer "is there a draft to review": a lone index there announced a
      * draft with no map and no pages, and the repository's published documents went behind a toggle. */
     it(`refuses to write a staged index for a draft that does not exist, and says which flag was meant`, () => {
-        const attempt = (): { status: number; output: string } => {
-            try {
-                return { status: 0, output: execFileSync(`node`, [BIN, `check`, `--root`, root, `--write`], { encoding: `utf8` }) };
-            } catch (error) {
-                const failure = error as { status: number; stderr: string };
-                return { status: failure.status, output: failure.stderr };
-            }
-        };
-        const result = attempt();
+        const result = run(`check`, `--root`, root, `--write`);
         expect(result.status).toBe(1);
         expect(result.output).toContain(`--from published`);
         expect(existsSync(join(root, `.intentic/docs/root`))).toBe(false);
@@ -155,5 +150,31 @@ describe(`intentic-docs against a real repository`, () => {
         write(`.intentic/docs/root/repo.json`, `{ "repo": "", "provenance": { "sourceRev": "x", "generatedAt": 1 } }\n`);
         execFileSync(`node`, [BIN, `check`, `--root`, root, `--write`], { encoding: `utf8` });
         expect(existsSync(join(root, `.intentic/docs/root/index.json`))).toBe(true);
+    });
+
+    /* A REPOSITORY CHECKED OUT INSIDE ANOTHER ONE IS NOT PART OF IT. A workspace root holding clones — a monorepo
+     * beside a shelf of reference checkouts — is the ordinary shape here, and without a boundary the root claimed
+     * every package in every clone: hundreds of entries duplicating indexes those repos keep themselves, and every
+     * reference checkout reported as undocumented work nobody owes. */
+    it(`leaves a nested repository's packages to that repository`, () => {
+        write(`refs/openclaw/package.json`, `{ "name": "openclaw" }\n`);
+        write(`refs/openclaw/pkg/package.json`, `{ "name": "openclaw-pkg" }\n`);
+        execFileSync(`git`, [`init`, `-q`], { cwd: join(root, `refs/openclaw`), stdio: `ignore` });
+
+        const result = check();
+        const mentioned = [...result.entries.map((entry) => entry.dir), ...result.undocumented];
+        expect(mentioned.filter((dir) => dir.startsWith(`refs/`))).toEqual([]);
+    });
+
+    /* `--repo` is relative to `--root`, and the absolute path is the obvious thing to type. Joining the two used
+     * to yield a directory that had never existed (`/work` + `/work/intentic` → `/work/work/intentic`): the run
+     * scanned nothing, found nothing, and left an empty index in a tree it had just invented — which someone then
+     * had to notice and delete by hand. */
+    it(`refuses an absolute repository path, and names the relative one it wanted`, () => {
+        const result = run(`check`, `--root`, root, `--repo`, join(root, `refs/openclaw`), `--from`, `published`);
+        expect(result.status).toBe(2);
+        expect(result.output).toContain(`refs/openclaw`);
+        // The path the join would have invented: the root, with the whole absolute path hung off it again.
+        expect(existsSync(join(root, root))).toBe(false);
     });
 });

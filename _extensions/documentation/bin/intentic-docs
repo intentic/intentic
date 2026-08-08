@@ -29,7 +29,7 @@
 
 import { execFileSync } from "node:child_process";
 import { existsSync, mkdirSync, readdirSync, readFileSync, realpathSync, statSync, writeFileSync } from "node:fs";
-import { join, relative } from "node:path";
+import { isAbsolute, join, relative } from "node:path";
 import { fileURLToPath } from "node:url";
 
 // Mirrored from src/paths.ts — see the header, and paths.test.ts which pins them together.
@@ -208,6 +208,17 @@ const keyFilesOf = (markdown, dir) => {
  *
  * The repo root counts as a package only when nothing under it does, so a plain single-package repo documents
  * itself instead of coming back empty. */
+/* A DIRECTORY THAT IS ITS OWN REPOSITORY, and therefore where this repository's packages stop. A worktree's
+ * marker is a file rather than a directory, so this asks whether the marker exists at all. */
+const isRepoRoot = (dir) => existsSync(join(dir, `.git`));
+
+/* Every package in a repository, found by its manifest — and NOTHING from a repository nested inside it.
+ *
+ * The boundary is the whole reason this is not a plain walk. A workspace root holding clones (a monorepo beside a
+ * reference shelf, which is the ordinary shape here) would otherwise claim every package in every clone as its
+ * own: hundreds of entries duplicating indexes those repos already keep, plus every reference checkout reported
+ * as undocumented work. Each of those repos documents itself, at its own root, in its own git history — which is
+ * the point of a page living beside its code. */
 const discoverPackages = (repoRoot) => {
     const found = [];
     const walk = (dir, depth) => {
@@ -227,7 +238,7 @@ const discoverPackages = (repoRoot) => {
             // Do NOT return: a monorepo nests packages under packages, and stopping here would hide them.
         }
         for (const entry of entries) {
-            if (entry.isDirectory() && !SKIP_DIRS.has(entry.name) && !entry.name.startsWith(`.`)) {
+            if (entry.isDirectory() && !SKIP_DIRS.has(entry.name) && !entry.name.startsWith(`.`) && !isRepoRoot(join(dir, entry.name))) {
                 walk(join(dir, entry.name), depth + 1);
             }
         }
@@ -546,6 +557,16 @@ const main = (argv) => {
     const root = flag(`root`, `/work`);
     const repo = flag(`repo`, ``);
     const from = flag(`from`, `staging`) === `published` ? `published` : `staging`;
+
+    /* `--repo` IS RELATIVE TO `--root`, and passing the absolute path instead has to fail loudly rather than
+     * quietly work. Joining a root onto an absolute path yields a directory that does not exist and never did
+     * (`/work` + `/work/intentic` → `/work/work/intentic`), so the run scanned nothing, found nothing, and wrote
+     * an empty index into a tree it had just invented — twice, and someone had to notice and delete it by hand
+     * both times. The absolute path is the obvious thing to type; the only defence is refusing it. */
+    if (isAbsolute(repo) || repo.split(`/`).includes(`..`)) {
+        process.stderr.write(`--repo is relative to --root, so pass \`${relative(root, repo) || `.`}\` rather than \`${repo}\`.\nOmit it entirely for the root repository itself.\n`);
+        return 2;
+    }
 
     if (verb === `facts`) {
         process.stdout.write(canonical(factsOf(root, repo)));
