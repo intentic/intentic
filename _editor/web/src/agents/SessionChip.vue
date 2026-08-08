@@ -16,8 +16,9 @@ import { ref } from "vue";
  * The chevron is what keeps the two honest — a chip that opens something has to look different from a chip
  * that copies, or the press is a coin flip.
  *
- * Placement of the hover hint is the caller's (a board card wants it above, a header below), so `v-tooltip`
- * is left to the call site the way CopyButton leaves it. */
+ * NO HOVER LABEL on either spelling. A hint here could only ever have named the press ("copy this"), and the
+ * press names itself the instant it happens: the glyph turns into a check and the name into "Copied". The
+ * screen reader keeps the sentence (aria-label), because it has no glyph to watch. */
 
 const {
     branch,

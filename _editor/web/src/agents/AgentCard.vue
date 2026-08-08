@@ -452,8 +452,10 @@ const grab = (event: PointerEvent): void => {
                     <!-- A target of its own inside a card that is itself one press (focus) and one drag (lane).
                          The session name is the only thing on this card anybody needs CHARACTER-EXACT — every
                          other word here is read, not retyped — and the card is select-none, so until this became
-                         a button the name could not even be dragged through with a caret. -->
-                    <SessionChip :branch="agent.branch" v-tooltip.top="'Copy the session name'" />
+                         a button the name could not even be dragged through with a caret.
+                         No hover label, for the reason the stats row below states: the press announces itself
+                         by flashing "Copied", which is the only thing a hint here could have promised. -->
+                    <SessionChip :branch="agent.branch" />
                 </template>
             </div>
 

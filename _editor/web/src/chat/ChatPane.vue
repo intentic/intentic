@@ -114,7 +114,6 @@ const {
     streaming,
     awaitingDecision,
     pendingPlanMessage,
-    activeModel,
     contextUsage,
     capabilities,
     mode,
@@ -152,15 +151,13 @@ const providerName = computed(() => providerLabel(provider.value));
 // The chip's model name: shared with the picker menu so they can't drift; falls back to the provider name (never
 // blank) while Grok's daemon catalog is still loading.
 const modelLabelText = computed(() => modelLabelFor(provider.value, model.value));
-// The pill already reads "Claude Opus 5", so a tooltip saying "claude-opus-5" is the same fact in a worse
-// font. What the pill CANNOT show is the provider (its logo is a glyph, not a word) and the case where the
-// running turn reports a different model than the one selected — a fallback, or a provider alias. Those, and
-// nothing else, are what hovering it is worth.
-const modelHint = computed(() =>
-    activeModel.value === null || activeModel.value === model.value
-        ? providerName.value
-        : `${providerName.value} · this turn is running ${activeModel.value}`,
-);
+/* NEITHER PILL CARRIES A HOVER LABEL. The model pill's said the provider's name — which its own logo is
+ * already there to say — and the mode pill's said the mode's description, which the menu one click below
+ * prints under every mode including the one in force. Two boxes that opened over the composer to repeat what
+ * was under them, on the two controls a hand rests on most while writing.
+ * What the model's hint alone could say is gone with it: a turn RUNNING a different model than the one
+ * selected (a fallback, or a provider alias) had no other home. That belongs on the turn, not on a hover of a
+ * control that describes the NEXT one. */
 // The scale is offered only where the runtime forwards it. An ACP agent owns its own reasoning settings, which
 // effortsFor already knows; the record adds the case it can't see — OpenCode takes a model id and a prompt and
 // nothing else, so a Grok turn dropped the effort it was sent and the segments were four buttons that changed
@@ -378,7 +375,6 @@ const effortFill = (i: number) => {
 };
 const modeLabel = computed(() => modeMeta(mode.value).label);
 const modeIcon = computed(() => modeMeta(mode.value).icon);
-const modeDescription = computed(() => modeMeta(mode.value).description);
 
 // Manual textarea auto-grow: reset to one line, then size to content up to the max-height.
 const grow = (): void => {
@@ -1425,7 +1421,6 @@ watch(
                                         :class="{ 'composer-steered': pickedWorkflow !== undefined }"
                                         :disabled="pickedWorkflow !== undefined"
                                         @click="modelOpen = !modelOpen"
-                                        v-tooltip.top="modelHint"
                                         :aria-expanded="modelOpen"
                                         :aria-label="`Provider and model: ${providerName} · ${modelLabelText}`"
                                     >
@@ -1464,7 +1459,6 @@ watch(
                                         :class="{ 'composer-steered': pickedWorkflow !== undefined }"
                                         :disabled="pickedWorkflow !== undefined"
                                         @click="modeOpen = !modeOpen"
-                                        v-tooltip.top="modeDescription"
                                         :aria-expanded="modeOpen"
                                         aria-label="Agent mode"
                                     >

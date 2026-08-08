@@ -30,21 +30,24 @@ const ROW = `flex items-start gap-2 rounded-lg px-2.5 py-1.5`;
 </script>
 
 <template>
+    <!-- No hover labels down this column. Each row already reads "<what it is> <the value> [copy]", so a hint
+         on the button could only repeat the label six pixels to its left — and three of them stacked is a
+         column that pops a box wherever the pointer rests on its way to the one you want. -->
     <div class="flex flex-col p-1">
         <div :class="ROW">
             <span class="w-16 shrink-0 pt-px text-2xs text-subtle">Session id</span>
             <span class="min-w-0 flex-1 select-text break-all font-mono text-2xs text-content">{{ agentId }}</span>
-            <CopyButton :text="agentId" v-tooltip.left="'Copy the session id'" />
+            <CopyButton :text="agentId" aria-label="Copy the session id" />
         </div>
         <div :class="ROW">
             <span class="w-16 shrink-0 pt-px text-2xs text-subtle">Branch</span>
             <span class="min-w-0 flex-1 select-text break-all font-mono text-2xs text-content">{{ branch }}</span>
-            <CopyButton :text="branch" v-tooltip.left="'Copy the branch name'" />
+            <CopyButton :text="branch" aria-label="Copy the branch name" />
         </div>
         <div :class="ROW">
             <span class="w-16 shrink-0 pt-px text-2xs text-subtle">Link</span>
             <span class="min-w-0 flex-1 select-text break-all font-mono text-2xs text-content">{{ link }}</span>
-            <CopyButton :text="link" v-tooltip.left="'Copy a link to this agent'" />
+            <CopyButton :text="link" aria-label="Copy a link to this agent" />
         </div>
         <!-- The reason the id is worth carrying anywhere: it is also what brings you back. Said once, here,
              rather than as a hint on every surface that prints the name. -->

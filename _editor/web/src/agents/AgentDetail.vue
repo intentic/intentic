@@ -227,7 +227,7 @@ const confirmDiscard = (): void => {
                 v-if="fleetAgent?.branch !== undefined"
                 class="hidden max-w-[16rem] shrink-0 items-center rounded bg-overlay px-1.5 py-px md:inline-flex"
             >
-                <SessionChip :branch="fleetAgent.branch" reveal v-tooltip.bottom="'Session name'" @reveal="openIdentity" />
+                <SessionChip :branch="fleetAgent.branch" reveal @reveal="openIdentity" />
             </span>
             <SessionChip
                 v-if="fleetAgent?.branch !== undefined && mobile"
