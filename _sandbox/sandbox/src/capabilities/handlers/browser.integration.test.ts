@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { Capability } from "@intentic/sandbox-contract";
 import { expect, test } from "vitest";
+import { packFragment, readPack } from "../../environment/packs.js";
 import { readWorkspaceFile, removeWorkspacePath, writeWorkspaceFile } from "../../workspace/workspace-files.js";
 import type { CapabilityCtx } from "../capability.js";
 import { contributionRegistry } from "../contributions.js";
@@ -58,16 +59,19 @@ test("apply writes the platform SKILL.md; status is pending until logged in / re
 });
 
 test("the fragment is the browser pack — Chromium + Xvfb as one unit, no runtime directive", async () => {
-    // No base stamp in a test run — like a core image, so the whole pack rides the fragment. On a standard
-    // image (stamped base) the same call composes nothing: the pack is already baked.
-    const fragment = (await browserHandler.fragment!(reddit.config))!;
-    expect(fragment).toContain("xvfb");
-    expect(fragment).toContain("install --with-deps chromium");
+    // The pack rides whole on a core image and composes to nothing on a standard image (stamped base), so
+    // WHAT the fragment says is pinned on the pack itself and WHETHER it rides on what the base already
+    // bakes — the alternative asserts whichever of the two images the suite happens to run in.
+    const pack = (await readPack("browser"))!;
+    expect(pack.content).toContain("xvfb");
+    expect(pack.content).toContain("install --with-deps chromium");
     // Into playwright's default cache path — a PLAYWRIGHT_BROWSERS_PATH override here would put a second
     // Chromium beside the one chromium.executablePath() resolves.
-    expect(fragment).not.toContain("PLAYWRIGHT_BROWSERS_PATH");
+    expect(pack.content).not.toContain("PLAYWRIGHT_BROWSERS_PATH");
     // App-level --no-sandbox, not a container privilege — the fragment carries no intentic:runtime line.
-    expect(fragment).not.toContain("intentic:runtime");
+    expect(pack.content).not.toContain("intentic:runtime");
+    // And the handler adds NOTHING of its own: the browser fragment IS the pack, whichever image composes it.
+    expect(await browserHandler.fragment!(reddit.config)).toBe(await packFragment("browser"));
 });
 
 test("remove deletes the skill dir; status returns to inactive", async () => {

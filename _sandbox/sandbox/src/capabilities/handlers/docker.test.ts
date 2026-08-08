@@ -1,4 +1,5 @@
 import { expect, test } from "vitest";
+import { packFragment, readPack } from "../../environment/packs.js";
 import { registry } from "../registry.js";
 import { addressPoolOf, isPrivileged, withEngineSettings } from "./docker.js";
 
@@ -9,9 +10,13 @@ import { addressPoolOf, isPrivileged, withEngineSettings } from "./docker.js";
 test("the fragment carries the privileged directive plus the engine pack when the base image lacks it", async () => {
     const fragment = (await registry.docker.fragment?.({})) ?? "";
     expect(fragment).toContain("# intentic:runtime --privileged");
-    // No base stamp in a test run — like a core image, so the engine install rides the fragment. On a
-    // standard image (stamped base) the same compose yields the directive alone: a cache-hit rebuild.
-    expect(fragment).toContain("docker-ce");
+    // The engine half is the docker pack, and WHETHER it rides depends on the image the suite runs in — a
+    // core image (or a dev checkout) composes the install, a standard image (stamped base) yields the
+    // directive alone, a cache-hit rebuild. Both are the contract, so the install is pinned against the
+    // pack's own content and its presence against the stamp, rather than against wherever this happens to run.
+    expect((await readPack("docker"))!.content).toContain("docker-ce");
+    const engine = await packFragment("docker");
+    expect(fragment.includes("docker-ce")).toBe(engine !== undefined);
 });
 
 /* The gpu option's fragment has to satisfy BOTH layers or the option is a lie: the directive gets the devices
