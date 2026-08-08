@@ -28,6 +28,7 @@ import {
 import { providerLabel } from "@intentic/sandbox-contract";
 import { sessionCategory } from "../composables/sessionCategory";
 import IdentityTile from "../components/IdentityTile.vue";
+import SessionChip from "./SessionChip.vue";
 import { createTitleEdit } from "../composables/agents/titleEdit";
 import { markSegments } from "../composables/agents/useAgentFilter";
 import { canArchive, useAgents, type FleetAgent } from "../composables/agents/useAgents";
@@ -448,8 +449,11 @@ const grab = (event: PointerEvent): void => {
                 <span v-if="model !== undefined" class="truncate">{{ model }}</span>
                 <template v-if="agent.branch !== undefined">
                     <span v-if="model !== undefined">·</span>
-                    <Icon name="code" class="shrink-0 text-2xs" />
-                    <span class="truncate font-mono">{{ agent.branch }}</span>
+                    <!-- A target of its own inside a card that is itself one press (focus) and one drag (lane).
+                         The session name is the only thing on this card anybody needs CHARACTER-EXACT — every
+                         other word here is read, not retyped — and the card is select-none, so until this became
+                         a button the name could not even be dragged through with a caret. -->
+                    <SessionChip :branch="agent.branch" v-tooltip.top="'Copy the session name'" />
                 </template>
             </div>
 
@@ -571,9 +575,7 @@ const grab = (event: PointerEvent): void => {
                     class="inline-flex shrink-0 items-center self-start whitespace-nowrap rounded border border-line px-1.5 py-0.5 text-2xs text-muted transition-colors hover:bg-overlay hover:text-content"
                     @click.stop="emit('reland')"
                 >
-                    <Icon :name="relanding ? 'spinner' : 'undo'" :spin="relanding" class="mr-1 text-2xs" />{{
-                        relanding ? "Landing…" : "Land again"
-                    }}
+                    <Icon :name="relanding ? 'spinner' : 'undo'" :spin="relanding" class="mr-1 text-2xs" />{{ relanding ? "Landing…" : "Land again" }}
                 </button>
                 <span class="text-2xs leading-snug text-subtle">{{ away.hint }}</span>
             </div>

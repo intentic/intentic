@@ -15,6 +15,8 @@ import { useRole } from "../composables/sandbox/useRole";
 import { useChat } from "../composables/chat/useChat";
 import AgentReviewPanel from "./AgentReviewPanel.vue";
 import AgentSessionMenu from "./AgentSessionMenu.vue";
+import SessionChip from "./SessionChip.vue";
+import SessionIdentity from "./SessionIdentity.vue";
 
 /* Drill-in for one agent (/agents/:id) — one canonical chat surface per form factor (the fleet-UX rule that
  * kills the duplicated-conversation problem):
@@ -156,6 +158,11 @@ const requestLand = async (): Promise<void> => {
     }
 };
 
+// The session's name, in every form anyone pastes it in — beside the chip on desktop, a sheet on a phone.
+const identity = ref<InstanceType<typeof Popover> | null>(null);
+const identitySheet = ref(false);
+const openIdentity = (event: MouseEvent): void => identity.value?.toggle(event);
+
 const menu = ref<InstanceType<typeof Popover> | null>(null);
 const menuSheet = ref(false);
 const openMenu = (event: MouseEvent): void => {
@@ -208,17 +215,27 @@ const confirmDiscard = (): void => {
                     <Icon name="pencil" class="text-xs" />
                 </button>
             </template>
+            <!-- THE SESSION'S NAME, and the way to get hold of it. This chip used to be a picture of the name:
+                 cut off at a fixed width, hoverable to see the rest, and impossible to put on a clipboard — so
+                 the only route to the id every git command, worktree path and CLI verb needs was to read
+                 thirty-six characters off the screen and retype them. Pressing it now opens the one panel that
+                 states the name in all three forms anyone pastes it in.
+                 It survives onto a phone as the bare glyph rather than vanishing: this row has no width for a
+                 branch name there, but hiding the chip made the identity of the thing on screen unreachable on
+                 the one device where retyping it is worst. -->
             <span
                 v-if="fleetAgent?.branch !== undefined"
-                class="hidden max-w-[16rem] shrink-0 items-center gap-1 rounded bg-overlay px-1.5 py-px font-mono text-2xs text-subtle md:inline-flex"
+                class="hidden max-w-[16rem] shrink-0 items-center rounded bg-overlay px-1.5 py-px md:inline-flex"
             >
-                <!-- The hint this chip used to carry explained what a branch chip IS, once, forever. What it
-                     could not do was show the branch NAME when the chip cut it off — which is the only thing
-                     hovering it was ever going to be for. -->
-                <Icon name="code" class="text-2xs" /><span class="truncate" v-tooltip.bottom.overflow="fleetAgent.branch">{{
-                    fleetAgent.branch
-                }}</span>
+                <SessionChip :branch="fleetAgent.branch" reveal v-tooltip.bottom="'Session name'" @reveal="openIdentity" />
             </span>
+            <SessionChip
+                v-if="fleetAgent?.branch !== undefined && mobile"
+                :branch="fleetAgent.branch"
+                reveal
+                compact
+                @reveal="identitySheet = true"
+            />
             <!-- No tooltip: the chip prints status.label already, and hovering it to be told the word you are
                  reading is the kind of hint that teaches people not to hover anything. -->
             <span v-if="status !== undefined" class="inline-flex shrink-0 items-center gap-1 text-2xs" :class="status.class">
@@ -310,6 +327,16 @@ const confirmDiscard = (): void => {
                     @selected="closeMenu"
                     @discard="pendingDiscard = true"
                 />
+            </div>
+        </Popover>
+
+        <!-- The session's identity, in the same two dresses as the menu above it. -->
+        <BottomSheet v-if="mobile" v-model="identitySheet" header="Session name">
+            <SessionIdentity v-if="fleetAgent?.branch !== undefined" :agent-id="agentId" :branch="fleetAgent.branch" />
+        </BottomSheet>
+        <Popover v-else ref="identity" :pt="{ content: { class: '!p-0' } }">
+            <div class="w-96">
+                <SessionIdentity v-if="fleetAgent?.branch !== undefined" :agent-id="agentId" :branch="fleetAgent.branch" />
             </div>
         </Popover>
 

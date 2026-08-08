@@ -6,6 +6,8 @@ import { commands, executeCommand, type RegisteredCommand } from "../composables
 import { formatChord, isApplePlatform } from "../composables/commands/keybindings";
 import { effectiveKeybinding } from "../composables/commands/useKeymap";
 import { useQuickOpen } from "../composables/useQuickOpen";
+import { sessionIdFrom } from "../composables/agents/sessionRef";
+import { useAgents } from "../composables/agents/useAgents";
 import { useFuzzyFiles } from "../composables/workspace/useFuzzyFiles";
 import { useWorkspaceTabs } from "../composables/workspace/useWorkspaceTabs";
 import { iconForEntry, type IconName } from "@intentic/ui";
@@ -22,6 +24,7 @@ import { basename, parentDir } from "@intentic/ui/path";
 const { isOpen, mode } = useQuickOpen();
 const router = useRouter();
 const { tabs } = useWorkspaceTabs();
+const { agentById } = useAgents();
 // Resolve the platform once so command rows can render their shortcut in native form (⇧⌘P vs Ctrl+Shift+P).
 const isMac = isApplePlatform();
 // The chord a row displays is the EFFECTIVE one (user override ?? declared default) — reads keymapOverrides
@@ -37,9 +40,23 @@ const commandRows = computed<readonly RegisteredCommand[]>(() =>
         (entry) => entry.title.toLowerCase().includes(commandQuery.value) || entry.command.toLowerCase().includes(commandQuery.value),
     ),
 );
+/* A PASTED SESSION REFERENCE — the way back into the app from everywhere the id gets carried. An agentic
+ * session's name is the join between this app and git, the worktree on disk and the CLI, so it travels: out of
+ * a branch chip, through a terminal or a message, and back in here. Until now the return leg did not exist —
+ * you held the exact name of a thing the app knows and had no way to spend it.
+ *
+ * It takes over the palette rather than adding a row to the file list, for the same reason `>` does: a session
+ * name has no file matches worth ranking, so a list would be one offer and a page of nothing. Any of the four
+ * spellings is accepted (see sessionRef) — nobody should have to convert a name they did not choose — and the
+ * roster is lent to it so a bare id that is nobody's uuid (a workflow names its steps' sessions) still lands. */
+const sessionRef = computed(() => (commandMode.value ? undefined : sessionIdFrom(query.value, (id) => agentById(id) !== undefined)));
+// The agent behind it, when this browser has been told about it — the row shows a title where it can, and
+// otherwise still offers the jump: the detail page settles an id the roster has not caught up with yet.
+const sessionAgent = computed(() => (sessionRef.value === undefined ? undefined : agentById(sessionRef.value)));
+
 // File matching stays idle until the palette is open AND we're not in command mode (a ">foo" query would
-// otherwise match files against the literal text).
-const searchActive = computed(() => isOpen.value && !commandMode.value);
+// otherwise match files against the literal text) or holding a session reference (which is not a filename).
+const searchActive = computed(() => isOpen.value && !commandMode.value && sessionRef.value === undefined);
 const { paths: filePaths, floor, searching, pending, truncated, error } = useFuzzyFiles(query, searchActive);
 
 const input = ref<HTMLInputElement | null>(null);
@@ -49,10 +66,11 @@ const rowEls = new Map<string, HTMLElement>();
 const openTabPaths = computed<readonly string[]>(() => tabs.value.flatMap((tab) => (tab.kind === `file` ? [tab.path] : [])));
 const showingRecents = computed(() => query.value.trim().length < floor.value);
 const rows = computed<readonly string[]>(() => (showingRecents.value ? openTabPaths.value : filePaths.value));
-const rowCount = computed(() => (commandMode.value ? commandRows.value.length : rows.value.length));
+const rowCount = computed(() => (commandMode.value ? commandRows.value.length : sessionRef.value !== undefined ? 1 : rows.value.length));
 
-// Snap the highlight back to the top whenever the result set changes under it.
-watch([rows, commandRows], () => (activeIndex.value = 0));
+// Snap the highlight back to the top whenever the result set changes under it — including the swap to the
+// single session row, whose only index is 0.
+watch([rows, commandRows, sessionRef], () => (activeIndex.value = 0));
 
 const setRowEl = (path: string, el: unknown): void => {
     if (el) {
@@ -85,12 +103,21 @@ const move = (delta: number): void => {
     rowEls.get(key ?? ``)?.scrollIntoView({ block: `nearest` });
 };
 
+const openAgent = (id: string): void => {
+    void router.push({ name: `agent`, params: { id } });
+    isOpen.value = false;
+};
+
 const openActive = (): void => {
     if (commandMode.value) {
         const entry = commandRows.value[activeIndex.value];
         if (entry !== undefined) {
             run(entry);
         }
+        return;
+    }
+    if (sessionRef.value !== undefined) {
+        openAgent(sessionRef.value);
         return;
     }
     const path = rows.value[activeIndex.value];
@@ -142,7 +169,7 @@ const onShow = async (): Promise<void> => {
                     ref="input"
                     v-model="query"
                     type="text"
-                    placeholder="Go to file by name or path… (> for commands)"
+                    placeholder="Go to file, or paste a session id… (> for commands)"
                     class="w-full min-w-0 bg-transparent py-2.5 pl-9 pr-3 text-sm text-content placeholder:text-subtle focus:outline-none"
                     role="searchbox"
                     aria-controls="quick-open-list"
@@ -178,6 +205,29 @@ const onShow = async (): Promise<void> => {
                     No commands registered — extensions contribute them.
                 </p>
                 <p v-else-if="commandRows.length === 0" class="px-3 py-3 text-center text-2xs text-subtle">No commands match.</p>
+            </div>
+            <!-- One offer, because there is only ever one thing a session's name can mean. The id is echoed
+                 under the title so the reader can check the string they pasted against the one that matched
+                 before pressing — the whole value of a name is that it is exact. -->
+            <div
+                v-else-if="sessionRef !== undefined"
+                id="quick-open-list"
+                class="scrollbar-thin max-h-80 overflow-auto py-1"
+                role="listbox"
+                aria-label="Agent"
+            >
+                <button
+                    id="quick-open-opt-0"
+                    type="button"
+                    role="option"
+                    :aria-selected="true"
+                    class="ui-row-select ui-row-select-on flex w-full items-center gap-2 px-3 py-1.5 text-left"
+                    @click="openAgent(sessionRef)"
+                >
+                    <Icon name="robot" class="shrink-0 text-2xs text-muted" />
+                    <span class="min-w-0 truncate text-sm text-content">{{ sessionAgent?.title ?? `Open this agent` }}</span>
+                    <span class="min-w-0 flex-1 truncate font-mono text-2xs text-subtle">{{ sessionRef }}</span>
+                </button>
             </div>
             <div v-else id="quick-open-list" class="scrollbar-thin max-h-80 overflow-auto py-1" role="listbox" aria-label="Files">
                 <p v-if="showingRecents && rows.length > 0" class="px-3 pb-1 pt-0.5 text-2xs font-medium uppercase tracking-wide text-subtle">
