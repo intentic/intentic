@@ -117,23 +117,20 @@ test("the preamble round-trips: what restore gives back is the message alone", a
     expect(stripTurnPreamble(withTurnPreamble([note!], prompt))).toBe(prompt);
 });
 
-/* THE DEADLINE IS THE PIPELINE'S PROBLEM, not just the clock's. The cross-encoder is a transformer sharing the
- * daemon's thread with every agent stream it is serving: measured on one week of real prompts, the full
- * pipeline answers in ~1.2s idle and ~2.7s with the box saturated, which is how the deadline came to take four
- * eligible turns in five. Dropping that one stage answers in ~0.7s saturated, and this note was never the
- * search whose ordering had to be perfect. */
-test("the pre-injected query runs without the cross-encoder, so a busy box still gets its note", async () => {
+/* NO STAGE HELD BACK, which is a claim about the deadline as much as about ranking. This ran with the
+ * cross-encoder switched off for as long as the cross-encoder ran on the daemon's own thread: measured on one
+ * week of real prompts, the full pipeline answered in ~1.2s idle and ~2.7s on a busy box, which is how the
+ * deadline came to take four eligible turns in five. Both model stages moved to the engine's query worker, so
+ * narrowing the pipeline here buys nothing — and a narrowing left behind after its reason expired is how a
+ * feature quietly keeps paying a cost nobody can find. */
+test("the pre-injected query holds no stage back — the engine runs its full pipeline", async () => {
     const seen: Parameters<ResidentEngine["run"]>[0][] = [];
     const deps = depsOf((request) => {
         seen.push(request);
         return Promise.resolve(outcome());
     });
     await retrieveTurnContext(deps, "how do we rotate credentials?");
-    expect(seen[0]?.features?.has("rerank")).toBe(false);
-    // Only the reranker. The embedding half is what answers a question whose words the code does not use, which
-    // is the entire reason to retrieve for a prompt instead of grepping it.
-    expect(seen[0]?.features?.has("semantic")).toBe(true);
-    expect(seen[0]?.features?.has("bm25")).toBe(true);
+    expect(seen[0]?.features).toBeUndefined();
 });
 
 test("an ineligible prompt never reaches the engine", async () => {

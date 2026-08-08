@@ -1,8 +1,6 @@
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { WorkspaceSearchFreshness, WorkspaceSearchGroup, WorkspaceSearchResult } from "@intentic/sandbox-contract";
-import type { Embedder } from "../embed/embedder.js";
-import type { Reranker } from "../embed/reranker.js";
 import { astSearch } from "../engines/astq.js";
 import { bm25Search, prfTerms } from "../engines/bm25.js";
 import { fileSearch } from "../engines/files.js";
@@ -10,10 +8,10 @@ import { logSearch, recentFiles, whoAnchor } from "../engines/git.js";
 import { hotspotFiles } from "../engines/hotspots.js";
 import { type RgOptions, type RgResult, rgSearch } from "../engines/lexical.js";
 import { repoMap } from "../engines/map.js";
-import { embedPending, semanticSearch } from "../engines/semantic.js";
 import { defOf, refsOf, symSearch } from "../engines/symbols.js";
 import { disabledOf, type Feature } from "../features.js";
 import { classify } from "../plan/classify.js";
+import type { QueryScorer } from "../query/scorer.js";
 import { fuse, type FuseContext } from "../plan/fuse.js";
 import { queryTokens } from "../plan/tokens.js";
 import { estimateTokens } from "../render/budget.js";
@@ -33,12 +31,9 @@ export interface DispatchContext {
     // How current the index is relative to disk, as of this query — the caller knows (the CLI just revalidated:
     // fresh; the resident engine may be mid-revalidation: building/stale).
     readonly freshness: WorkspaceSearchFreshness;
-    readonly getEmbedder: () => Promise<Embedder | undefined>;
-    readonly getReranker: () => Promise<Reranker | undefined>;
-    // Whether `ask` may spend part of its own latency budget filling NULL embeddings. True for the one-shot CLI
-    // engine, where a query is the only thing that ever runs; false for the resident engine, whose worker owns
-    // every write to the index and keeps the backlog at zero without borrowing the request path to do it.
-    readonly topUpEmbeddings: boolean;
+    // The semantic scan and the cross-encoder — the two stages heavy enough that the host decides which thread
+    // they run on. See query/scorer.ts.
+    readonly scorer: QueryScorer;
     readonly features: ReadonlySet<Feature>;
     readonly rgPath?: string;
     // Aborts cancellable work (the rg child) when the caller's request dies mid-query.
@@ -370,12 +365,14 @@ const sigmoid = (x: number): number => 1 / (1 + Math.exp(-x));
 // poor judge of code irrelevance (it prefers prose about a thing over the thing), so it votes, never dictates:
 // benchmarked, rerank-dominates cost 0.10 recall@10 by evicting correct code below the cutoff. Hits beyond the
 // rerank window keep their fused order after the blended ones.
+// undefined when this host has no cross-encoder (no baked model dir, or its worker is down) — the fused order
+// stands and the caller says nothing about reranking, because none happened.
 const rerankGroups = async (
     db: IndexDb,
-    reranker: Reranker,
+    scorer: QueryScorer,
     query: string,
     groups: RankedGroup[],
-): Promise<{ groups: RankedGroup[]; best: number; margin: number }> => {
+): Promise<{ groups: RankedGroup[]; margin: number } | undefined> => {
     const candidates: RankedHit[] = [];
     for (const group of groups) {
         for (const hit of group.hits) {
@@ -386,7 +383,10 @@ const rerankGroups = async (
         }
     }
     const passages = candidates.map((hit) => chunkAt(db, hit.path, hit.line)?.text ?? hit.text);
-    const scores = await reranker.rerank(query, passages);
+    const scores = await scorer.rerank(query, passages);
+    if (scores === undefined) {
+        return undefined;
+    }
     const scoredKeys = new Set(candidates.map((hit) => `${hit.path}:${hit.line}`));
     // Candidate index IS its fused rank (candidates were taken in fused order).
     const scored = candidates.map((hit, fusedRank) => {
@@ -419,7 +419,7 @@ const rerankGroups = async (
     // passage stand out from the field" (margin) separates a clear winner from a flat, genuinely-ambiguous set —
     // whereas the raw top score flags even a correct rank-1 answer.
     const sorted = scores.map(sigmoid).toSorted((a, b) => b - a);
-    return { groups: regrouped, best: sorted[0] ?? 0, margin: (sorted[0] ?? 0) - (sorted[1] ?? 0) };
+    return { groups: regrouped, margin: (sorted[0] ?? 0) - (sorted[1] ?? 0) };
 };
 
 // The full natural-language pipeline: BM25 with RM3 expansion, semantic vectors, a cross-encoder rerank, and
@@ -446,31 +446,27 @@ const naturalPlan = async (
             }
         }
     }
-    const embedder = on("semantic") ? await context.getEmbedder() : undefined;
-    if (embedder === undefined) {
+    const semantic = on("semantic") ? await context.scorer.semantic(request.query, allowed) : undefined;
+    if (semantic === undefined) {
         notes.push(on("semantic") ? "no embedding backend — BM25 only" : "semantic off");
     } else {
-        const remaining = context.topUpEmbeddings
-            ? await embedPending(context.db, embedder)
-            : Number(context.db.get("SELECT COUNT(*) AS n FROM chunks WHERE embedding IS NULL")?.["n"] ?? 0);
-        results.push({ engine: "semantic", hits: semanticSearch(context.db, await embedder.embedQuery(request.query), allowed) });
-        if (remaining > 0) {
+        results.push({ engine: "semantic", hits: semantic.hits });
+        if (semantic.pending > 0) {
             const total = Number(context.db.get("SELECT COUNT(*) AS n FROM chunks")?.["n"] ?? 0);
-            notes.push(`embeddings ${Math.floor(((total - remaining) / Math.max(1, total)) * 100)}%`);
+            notes.push(`embeddings ${Math.floor(((total - semantic.pending) / Math.max(1, total)) * 100)}%`);
         }
     }
     let groups = toGroups(results, request.query, entries, context.features, on("srcfirst"));
     let confidence: VerbPlan["confidence"];
-    const reranker = on("rerank") ? await context.getReranker() : undefined;
-    if (reranker !== undefined && groups.length > 0) {
-        const { groups: rerankedGroups, margin } = await rerankGroups(context.db, reranker, request.query, groups);
-        groups = rerankedGroups;
+    const reranked = on("rerank") && groups.length > 0 ? await rerankGroups(context.db, context.scorer, request.query, groups) : undefined;
+    if (reranked !== undefined) {
+        groups = reranked.groups;
         notes.push("reranked");
         // A flat field means no clear winner. Say which of the two it is on the answer line: "confident" is
         // permission to stop reading, "ambiguous" points at the candidates — never out of iq into a grep spiral
         // (benchmarked: the old "try iq find" note made models abandon a correct rank-1 hit).
         if (on("confidence")) {
-            confidence = margin < CONFIDENCE_MARGIN ? "ambiguous" : "confident";
+            confidence = reranked.margin < CONFIDENCE_MARGIN ? "ambiguous" : "confident";
         }
     }
     const rgBase = {

@@ -914,6 +914,9 @@ export const createServices = (config: Config, logger: Logger): Services => {
             // An index pass that fails once warm() has settled has no caller to reject — without this the index
             // would stop tracking disk and search would just quietly get older.
             onIndexError: (error) => logger.warn({ err: error }, "iq index pass failed — search results may be stale"),
+            // The query worker owns the semantic scan and the cross-encoder. Losing it does not fail a search,
+            // it silently narrows one to keyword matching — so it has to be visible here.
+            onQueryError: (error) => logger.warn({ err: error }, "iq query worker failed — search fell back to keyword matching"),
             ...(config.iqModelDir !== "" ? { modelDir: config.iqModelDir } : {}),
             ...(config.iqRgPath !== "" ? { rgPath: config.iqRgPath } : {}),
         }),

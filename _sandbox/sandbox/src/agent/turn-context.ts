@@ -1,4 +1,4 @@
-import { parseFeatures, type ResidentEngine } from "@intentic/iq-engine";
+import type { ResidentEngine } from "@intentic/iq-engine";
 import type { IqContextOutcome } from "@intentic/sandbox-contract";
 import type { Logger } from "pino";
 
@@ -42,20 +42,23 @@ const QUERY_MAX_CHARS = 400;
  * turn actually pays is whatever retrieval takes BEYOND that, and for a p90 near 0.9s that is nothing. */
 const RETRIEVAL_DEADLINE_MS = 3_000;
 
-/* WITHOUT THE CROSS-ENCODER, and the deadline above is the whole reason.
+/* WITH THE CROSS-ENCODER — the full pipeline, no stage held back, and worth recording why it took a threading
+ * change to get here.
  *
- * The reranker is a transformer run in-process, and this query shares its thread with everything else the
- * daemon is doing — several agent streams, the index worker, the routes. Measured against the real prompts of
- * one week: on an idle box the full pipeline answers in ~1.2s, comfortably inside the deadline; with the box
- * saturated it answers in ~2.7s and misses it 71% of the time. That is not a hypothetical — the ledger says
- * the deadline took 104 of the 133 turns this feature was eligible for, so four notes in five were computed
- * and thrown away. Without the cross-encoder the same queries answer in ~0.7s saturated and never miss.
+ * This ran WITHOUT the reranker for as long as the reranker ran on the daemon's own thread. It is a transformer
+ * in-process, and this query shared that thread with several agent streams, the index worker and the routes:
+ * measured against the real prompts of one week, the full pipeline answered in ~1.2s on an idle box and ~2.7s
+ * on a busy one, missing the deadline 71% of the time. The ledger says it took 104 of the 133 turns retrieval
+ * was eligible for — four notes in five computed and thrown away — so ordering was traded for arrival.
  *
- * The trade is ordering, not finding: the candidates are the same, and what the reranker buys is which of them
- * leads. That is worth paying for a search the reader is waiting on, and not worth it here — this note is
- * explicitly a starting point, its anchors are positions to read, and an answer that arrives second-best beats
- * the four-fifths that arrived not at all. */
-const CONTEXT_FEATURES = parseFeatures("-rerank");
+ * Neither stage runs here now. The resident engine answers the semantic scan and the cross-encoder on its query
+ * worker (iq-engine's query/query-worker.ts), so this query no longer queues behind whatever else the daemon is
+ * doing, and the daemon no longer stalls behind it. Measured against this workspace's index with the daemon's
+ * thread held at roughly half duty: the full reranked pipeline answers at p50 ~0.7s, max ~1.2s — well inside
+ * the deadline — while the host thread's own work runs 4ms late instead of 400ms late.
+ *
+ * So the trade the old note described is simply off the table: the candidates were always the same, and which
+ * of them leads is now free. */
 
 /* Words that carry no search intent. A prompt made of nothing but these is the user talking TO the agent —
  * "go on", "yes please do that", "thanks, looks good" — and retrieving for it returns whatever the index thinks
@@ -187,7 +190,6 @@ export const retrieveTurnContext = async (deps: TurnContextDeps, prompt: string)
                 scope: {},
                 render: { budget: CONTEXT_BUDGET_TOKENS },
                 options: {},
-                features: CONTEXT_FEATURES,
                 // The CLI form of the same call, which is what seeds the pagination cursor id — and what the
                 // note tells the model was run, so the two never disagree.
                 echo: `"${query}"`,
@@ -203,9 +205,10 @@ export const retrieveTurnContext = async (deps: TurnContextDeps, prompt: string)
             return undefined;
         });
     /* Raced rather than left to the abort alone, because the signal only reaches the cancellable half of a
-     * query (the rg child). A first query that has to load the embedding model runs seconds past the deadline
-     * and would hold the turn there — so the deadline is what returns, and the abandoned query finishes into
-     * nothing. The abort still goes out: it releases the half that does listen. */
+     * query (the rg child). The model stages answer from another thread and take no signal at all, so a query
+     * that goes long — a cold worker, an index mid-rebuild — would hold the turn there. The deadline is what
+     * returns, and the abandoned query finishes into nothing. The abort still goes out: it releases the half
+     * that does listen. */
     let timer: ReturnType<typeof setTimeout> | undefined;
     const deadline = new Promise<undefined>((resolve) => {
         timer = setTimeout(() => {

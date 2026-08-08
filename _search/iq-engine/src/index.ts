@@ -9,6 +9,8 @@ import { embedPending } from "./engines/semantic.js";
 import type { IndexWorkerData, IndexWorkerEvent, IndexWorkerRequest } from "./indexer/index-worker.js";
 import { indexLag, revalidate, syncModel } from "./indexer/indexer.js";
 import { parseEntry } from "./indexer/parse-entry.js";
+import { inThreadScorer } from "./query/scorer.js";
+import { workerScorer } from "./query/worker-scorer.js";
 import { type IndexDb, isIndexBusy, openIndex } from "./store/db.js";
 import { generationOf, readIndexStatus } from "./store/index-store.js";
 import { claimIndexer, indexerAlive, releaseIndexer } from "./store/indexer-lock.js";
@@ -66,6 +68,10 @@ export interface ResidentEngineOptions extends EngineOptions {
     // settled and no query is waiting on it. Without this seam the daemon's index would quietly stop tracking
     // disk with nothing in the log to say so.
     readonly onIndexError?: (error: Error) => void;
+    // The query worker died or refused a request. Queries degrade to BM25 and the next one gets a fresh thread,
+    // so nothing here decides anything — but semantic search going missing is exactly the kind of quiet
+    // half-working a host should be able to see in its log.
+    readonly onQueryError?: (error: Error) => void;
 }
 
 // A long-lived engine for hosts that serve other traffic (the sandbox daemon): one open DB, the sweep cached in
@@ -165,13 +171,18 @@ export const createEngine = (options: EngineOptions): Engine => {
                         db,
                         generation,
                         freshness: freshnessOf(db, entries, sweepStart, indexed),
-                        getEmbedder,
-                        getReranker,
-                        // Nothing indexes in the background here — the process exists for this one query — so
-                        // `ask` filling embeddings inline is the only thing that ever advances semantic coverage.
-                        // Unless someone else owns the index: topping up WRITES vectors, so a query that did not
-                        // earn the write lock leaves the backlog to the process that did.
-                        topUpEmbeddings: indexed,
+                        // In-thread: this process exists for one query and has nothing else to serve, so a
+                        // worker would buy nothing and cost a second model load.
+                        scorer: inThreadScorer({
+                            db,
+                            embedder: getEmbedder,
+                            reranker: getReranker,
+                            // Nothing indexes in the background here, so `ask` filling embeddings inline is the
+                            // only thing that ever advances semantic coverage. Unless someone else owns the
+                            // index: topping up WRITES vectors, so a query that did not earn the write lock
+                            // leaves the backlog to the process that did.
+                            topUpEmbeddings: indexed,
+                        }),
                         features: request.features ?? options.features ?? new Set(FEATURES),
                         ...(options.rgPath !== undefined ? { rgPath: options.rgPath } : {}),
                     },
@@ -237,13 +248,15 @@ export const createResidentEngine = (options: ResidentEngineOptions): ResidentEn
     // pid file cannot be one of the things that open deletes. One-shot engines (the `iq` CLI) read this and
     // query read-only instead of racing the worker below for the write lock.
     claimIndexer(indexDir);
-    let embedderPromise: Promise<Embedder | undefined> | undefined;
-    // Query-side inference only — one sentence per `ask`/`q`. The backlog's embedder lives in the worker, so the
-    // model is resident on both threads; that is the deliberate trade, ~30 MB against a query that would
-    // otherwise wait behind an indexing batch.
-    const getEmbedder = (): Promise<Embedder | undefined> => (embedderPromise ??= loadEmbedder(options.modelDir));
-    let rerankerPromise: Promise<Reranker | undefined> | undefined;
-    const getReranker = (): Promise<Reranker | undefined> => (rerankerPromise ??= loadReranker(options.modelDir));
+    // Neither model is loaded on THIS thread. Both live on the query worker, which answers the semantic scan and
+    // the cross-encoder for every query this engine serves — the ~700ms of blocking CPU that used to land on
+    // whatever loop happened to call run(). Memory is unchanged by the move: the same two models were resident
+    // here before, one thread over.
+    const scorer = workerScorer({
+        indexDir,
+        modelDir: options.modelDir,
+        ...(options.onQueryError !== undefined ? { onError: options.onQueryError } : {}),
+    });
 
     let entries: FileEntry[] = [];
     let sweepStart = 0;
@@ -338,12 +351,7 @@ export const createResidentEngine = (options: ResidentEngineOptions): ResidentEn
                     db,
                     generation,
                     freshness: freshness(),
-                    getEmbedder,
-                    getReranker,
-                    // The worker drives the backlog to zero after every pass, so there is nothing for a query to
-                    // top up — and an `ask` that spent its 2s embedding budget on this thread would be the exact
-                    // stall the worker exists to prevent.
-                    topUpEmbeddings: false,
+                    scorer,
                     // Per-call stages beat the engine's own set: one resident engine serves the CLI, the routes
                     // and the turn preamble off one index, and only the last of those is answering under a
                     // deadline it would rather meet than rank perfectly (QueryRequest.features).
@@ -368,7 +376,9 @@ export const createResidentEngine = (options: ResidentEngineOptions): ResidentEn
         async close() {
             // Terminated mid-write on purpose: WAL makes an interrupted transaction a rollback on next open, so
             // there is nothing to drain, and waiting out an embedding batch would hold up the daemon's shutdown.
-            await worker.terminate();
+            // The query worker only ever read, so it has even less to lose — a search in flight is abandoned
+            // along with the request that asked for it.
+            await Promise.all([worker.terminate(), scorer.close()]);
             db.close();
             // Ownership ends with the writer, so the next one-shot engine indexes inline again. A process killed
             // without reaching this is covered too — the pid it left behind resolves to nothing.
