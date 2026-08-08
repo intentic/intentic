@@ -1383,7 +1383,7 @@ const WARNING = `flex items-start gap-1.5 rounded-md border border-warning/40 bg
                          then unstaged. The header's action is whole-side and ignores the row selection, which is
                          VSCode's "Stage All Changes" / "Unstage All". -->
                     <template v-for="section in sidesOf(group)" :key="`${group.repo}/${section.side}`">
-                        <div class="group/side flex items-center gap-1 pl-2 pt-1">
+                        <div class="flex items-center gap-1 pl-2 pt-1">
                             <span
                                 class="truncate text-2xs font-medium uppercase tracking-wide"
                                 :class="section.side === 'conflicted' ? 'text-danger' : 'text-subtle'"
@@ -1392,19 +1392,19 @@ const WARNING = `flex items-start gap-1.5 rounded-md border border-warning/40 bg
                             <!-- Only when there is more than one section to tell apart; alone it repeats the repo badge. -->
                             <span v-if="sidesSplit(group)" class="shrink-0 text-2xs text-subtle">{{ section.changes.length }}</span>
                             <span class="flex-1"></span>
-                            <!-- Hover-revealed at rest, VISIBLE while a filter is on. Not an inconsistency: the
-                                 filter changes what this button means — "that agent's files in this repo",
-                                 which is the granular half of the intent the chip started — and an action the
-                                 user has just narrowed for is the last one that should be waiting behind a
-                                 hover they have no reason to try. The layout is identical either way, so
-                                 nothing moves when the filter clears. -->
+                            <!-- ALWAYS DRAWN — the one rule this panel's action buttons follow: what moves a row
+                                 ACROSS THE INDEX is on screen, what destroys work waits for a hover. Staging is
+                                 the errand the panel exists for and the step every commit goes through, and it
+                                 was the only control here you had to already know about to find: a section at
+                                 rest showed a label, a count, and nothing you could press. Hover-reveal is for
+                                 the actions you should have to point at first (discard, on the row and on the
+                                 repo row) — it was spent on the one action that should never have been hidden.
+                                 It also retires the filter exception this replaces: a lit chip no longer has
+                                 to un-hide the button, it only changes what the button promises (see the
+                                 tooltip), which is a thing words do better than an appearing control. -->
                             <button
                                 type="button"
-                                :class="[
-                                    ICON_BUTTON,
-                                    'disabled:opacity-40 max-md:h-8 max-md:w-8 max-md:opacity-100',
-                                    originFilter === undefined ? 'opacity-0 focus-visible:opacity-100 group-hover/side:opacity-100' : '',
-                                ]"
+                                :class="[ICON_BUTTON, 'max-md:h-8 max-md:w-8']"
                                 :disabled="changes.actionBusy.value"
                                 @click="stageSide(group, section.side)"
                                 v-tooltip.right="sideVerbHint(group, section.side)"
@@ -1529,9 +1529,22 @@ const WARNING = `flex items-start gap-1.5 rounded-md border border-warning/40 bg
                                             :deletions="change.deletions"
                                         />
                                     </button>
+                                    <!-- The row's half of the same rule: the index verb is always on screen. It
+                                         rests a step BELOW the filename it sits beside (`text-subtle` against
+                                         the path's `text-muted`) so a hundred of them read as texture down the
+                                         right edge rather than as a hundred buttons; the row under the pointer
+                                         brings it up to the path's own weight, and the pointer on the button
+                                         itself lights it fully. Three steps, no movement — the same reveal the
+                                         trash gets, done in tone instead of in existence.
+                                         NOT TINTED, which is the other half of the decision. Green and red are
+                                         already load-bearing on this row — +12/−3 beside it, and A/M/D on the
+                                         status letter before the path — so a green plus would spend a colour
+                                         that already means something on a control that is identical in every
+                                         row. Colour here would be the loudest thing in the list and the least
+                                         informative; the row's own colours are the data. -->
                                     <button
                                         type="button"
-                                        class="flex h-5 w-5 shrink-0 items-center justify-center rounded text-muted opacity-0 transition-colors hover:bg-overlay hover:text-content focus-visible:opacity-100 group-hover/file:opacity-100 disabled:opacity-40 max-md:h-8 max-md:w-8 max-md:opacity-100"
+                                        class="flex h-5 w-5 shrink-0 items-center justify-center rounded text-subtle transition-colors hover:bg-overlay hover:text-content disabled:opacity-40 group-hover/file:text-muted max-md:h-8 max-md:w-8"
                                         :disabled="changes.actionBusy.value"
                                         @click="stageRow({ repo: group.repo, side: section.side, path: change.path })"
                                         v-tooltip.top="INDEX_VERB[section.side].one"
