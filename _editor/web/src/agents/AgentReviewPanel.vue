@@ -2,17 +2,21 @@
 import type { FileDiffResponse } from "@intentic-app/api-contract";
 import { ChangeStatusMark, cmp, explorerColorClass, iconForEntry, Segmented, useDevice, useExplorerStyle } from "@intentic/ui";
 import { isTestPath } from "@intentic/sandbox-contract";
-import { useQueryClient } from "@tanstack/vue-query";
-import { computed, nextTick, onBeforeUnmount, onMounted, onScopeDispose, ref, type Ref, watch } from "vue";
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, type Ref, watch } from "vue";
 import { useRouter } from "vue-router";
 import ReviewStat from "../components/ReviewStat.vue";
-import { WARM_LIMIT, warmDiffs, whenIdle } from "../composables/workspace/diffWarmer";
 import type { LineStat } from "../composables/workspace/codeStat";
 import { useCodeStats } from "../composables/workspace/useCodeStats";
 import { stopAgent } from "../composables/agents/agentActions";
 import { type Blocker, REASON_COPY } from "../composables/agents/conflictResolution";
-import { type AgentReviewFile, useAgentChanges } from "../composables/agents/useAgentChanges";
-import { sandboxKey } from "../composables/sandbox/useSandbox";
+import {
+    AGENT_FILE_DIFF_OPTIONS,
+    agentFileDiffKey,
+    agentStatKey,
+    type AgentReviewFile,
+    readAgentFileDiff,
+    useAgentChanges,
+} from "../composables/agents/useAgentChanges";
 import { useSandboxQuery } from "../composables/sandbox/useSandboxQuery";
 import { useLayout } from "../composables/useLayout";
 import { toAppPx, uiLength } from "../composables/uiScale";
@@ -160,8 +164,8 @@ const filtered = computed<readonly AgentReviewFile[]>(() => {
  * the comments back, so the counts beside them do too — see useCodeStats for where they come from and why they
  * arrive rather than being computed here. Scoped by agent, since the store is shared with every other review
  * surface in the app and two agents can be holding the same path. */
-const { record: recordStat, statOf } = useCodeStats();
-const codeOf = (file: AgentReviewFile): LineStat | undefined => statOf(`agent:${agentId}:${file.key}`);
+const { statOf } = useCodeStats();
+const codeOf = (file: AgentReviewFile): LineStat | undefined => statOf(agentStatKey(agentId, file.repo, file.change.path));
 
 /* What a heading says about the rows under it — at BOTH scopes, because both fold. A collapsed heading is the
  * only thing left of its rows, so it has to carry what the rows would have said: how big the change is, and
@@ -440,15 +444,17 @@ onMounted(() => window.addEventListener(`keydown`, onKey));
 onBeforeUnmount(() => window.removeEventListener(`keydown`, onKey));
 
 // --- the diff ------------------------------------------------------------------------------------------
-/* One query per selected row, keyed UNDER the agent's diff so the invalidation that refreshes the file list
- * (invalidateAgentAction, after a land or discard) drops the per-file diffs with it. The key does what this
- * block used to hand-roll: arrowing through the list outruns the network, and a key change already means a
- * slow early file can't land on top of the one now selected; a re-selected file paints from cache and
- * refreshes behind itself instead of costing a blank pane per revisit. */
+/* One query per selected row, on the SHARED terms (useAgentChanges' AGENT_FILE_DIFF_OPTIONS) rather than a set
+ * of its own — so this observer and the background loader that warmed the row are the same cache entry, and a
+ * row already in hand paints without re-reading it. The key is filed under the agent's diff, so the invalidation
+ * that refreshes the file list (invalidateAgentAction, after a land or discard) drops the per-file diffs with
+ * it. That key is also what makes arrowing through the list safe: it outruns the network, and a key change
+ * already means a slow early file can't land on top of the one now selected. */
 const { query: diffQuery, error: diffError } = useSandboxQuery({
-    queryKey: computed(() => [...sandboxKey(`agents`, agentId, `diff`), `file`, selected.value?.repo, selected.value?.change.path]),
-    queryFn: () => changes.fileDiff(selected.value!.repo, selected.value!.change.path),
+    queryKey: computed(() => agentFileDiffKey(agentId, selected.value?.repo ?? ``, selected.value?.change.path ?? ``)),
+    queryFn: () => readAgentFileDiff(agentId, selected.value!.repo, selected.value!.change.path),
     enabled: computed(() => selected.value !== undefined),
+    ...AGENT_FILE_DIFF_OPTIONS,
 });
 const diff = computed(() => diffQuery.data.value);
 const diffLoading = diffQuery.isFetching;
@@ -471,67 +477,17 @@ const diffKey = computed(() => {
 });
 
 /* --- reading ahead ------------------------------------------------------------------------------------
- * The list is on screen and the reader is deciding what to open; the walk spends that gap reading the diffs
- * behind it (diffWarmer.ts holds why it is a trickle and not a prefetch storm). Two things come of that. The
- * click that follows paints from the cache rather than waiting on a round trip — and every file that arrives
- * gets counted with its comments stripped out, which is what the row beside it has to be showing.
+ * NOT DONE HERE ANY MORE, and that is the point. This panel used to walk its own file list reading the diffs
+ * behind it, which meant the read-ahead existed exactly while the panel was mounted — arrive at a review and
+ * the first click still paid a round trip, because the walk had only just started. The app's background loader
+ * (composables/prefetch) now keeps this agent's rows warm from wherever the user happens to be standing, and it
+ * reads through the very query above, so a click either finds the answer sitting there or joins the read
+ * already in flight.
  *
- * It reads through the SAME query the selection does, so the two share one cache entry: warming past it would
- * be the review fetching every file twice, once to count it and once to look at it.
- *
- * Restarted whenever the list changes — the agent writing more, a land — and abandoned when the panel goes
- * away; the walk cannot be interrupted mid-await, so it asks whether it is still the current one instead. */
-const queryClient = useQueryClient();
-const diffKeyFor = (file: AgentReviewFile): unknown[] => [...sandboxKey(`agents`, agentId, `diff`), `file`, file.repo, file.change.path];
-
-// A file's counts, from a diff someone has already read. Bytes and oversized files are left alone: neither has
-// text to strip, and both already render as something other than a diff.
-const countFrom = (file: AgentReviewFile, body: FileDiffResponse): void => {
-    if (body.truncated === true || rendersAsBytes(file.change.path, body.binary)) {
-        return;
-    }
-    void recordStat(`agent:${agentId}:${file.key}`, file.change.path, body.before ?? ``, body.after ?? ``);
-};
-
-let warmGeneration = 0;
-watch(
-    changes.files,
-    (files) => {
-        const generation = (warmGeneration += 1);
-        void warmDiffs(
-            files.slice(0, WARM_LIMIT),
-            async (file) =>
-                countFrom(
-                    file,
-                    await queryClient.ensureQueryData<FileDiffResponse>({
-                        queryKey: diffKeyFor(file),
-                        queryFn: () => changes.fileDiff(file.repo, file.change.path),
-                    }),
-                ),
-            { stopped: () => generation !== warmGeneration, idle: whenIdle },
-        );
-    },
-    { immediate: true },
-);
-onScopeDispose(() => (warmGeneration += 1));
-
-/* The file being read counts itself the moment its diff lands, however it got here — a row past the walk's
- * limit, or one clicked before the walk reached it. The store turns away a second ask for content it has already
- * counted, so overlapping with the walk costs nothing.
- *
- * The body is taken from the cache BY THIS FILE'S KEY rather than from `diff`, which is only the trigger:
- * arrowing down the list moves the selection a tick before the query it drives catches up, so the two read
- * together would briefly pair the new row with the previous file's content — and file it under the new row's
- * name. A count landing on the wrong file is the one failure this whole feature exists to prevent. */
-watch([diff, selected], ([, file]) => {
-    if (file === undefined) {
-        return;
-    }
-    const body = queryClient.getQueryData<FileDiffResponse>(diffKeyFor(file));
-    if (body !== undefined) {
-        countFrom(file, body);
-    }
-});
+ * The COUNTS came along with it. A row's code-only +/− is a by-product of having both sides of the file, so it
+ * is taken where the file is read (useAgentChanges' readAgentFileDiff) rather than by whoever asked for it —
+ * which is why the second watch that used to catch rows past the walk's limit is gone too: there is no limit
+ * here to be past, and no path that reads a diff without counting it. */
 
 // Where the selected file's BYTES live, for the sides the response can only flag as binary. Derived from the
 // row rather than fetched: a binary diff carries no content to infer the sides from, and the status letter

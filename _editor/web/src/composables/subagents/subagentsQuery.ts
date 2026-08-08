@@ -17,7 +17,10 @@ import { useSandboxQuery } from "../sandbox/useSandboxQuery";
 
 const QUERY_KEY = sandboxKey(`subagents`);
 
-const fetchSubagents = async (): Promise<SubagentSession[]> => SubagentsListSchema.parse(await sandboxJson(`/system/subagents`)).sessions;
+// Named for the background loader (composables/prefetch), which warms this list into the very entry the tile
+// and the area read.
+export const subagentsKey = QUERY_KEY;
+export const fetchSubagents = async (): Promise<SubagentSession[]> => SubagentsListSchema.parse(await sandboxJson(`/system/subagents`)).sessions;
 
 // Live is `pending | running | paused` — the daemon's own split (see subagentRunning there). Duplicated as one
 // exported predicate rather than re-derived per surface, so the rail's count and the area's grouping mean the

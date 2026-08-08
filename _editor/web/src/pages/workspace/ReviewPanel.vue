@@ -3,7 +3,7 @@ import Button from "primevue/button";
 import type { GitChange, GitDiffSide, RepoChanges, RepoPaths } from "@intentic-app/api-contract";
 import { ChangeStatusMark, cmp, useDevice } from "@intentic/ui";
 import Dialog from "primevue/dialog";
-import { computed, onScopeDispose, ref, watch } from "vue";
+import { computed, ref, watch } from "vue";
 import ProviderLogo from "../../chat/ProviderLogo.vue";
 import HoverCard from "../../components/HoverCard.vue";
 import ReviewStat from "../../components/ReviewStat.vue";
@@ -20,10 +20,9 @@ import { useCommitDraft } from "../../composables/workspace/useCommitDraft";
 import { ALL_SIDES, originHue, originsOf, summarizeOrigins, YOURS } from "../../composables/workspace/changeOrigins";
 import { formatElapsed, unfinishedMark } from "../../composables/agents/agentStatus";
 import { diffRawUrls } from "../../composables/workspace/diffRaw";
-import { warmDiffs, warmRows, whenIdle } from "../../composables/workspace/diffWarmer";
 import { repoOfPath, turnWrites } from "../../composables/workspace/liveWrites";
 import { ahead, behind, syncable, unpublished } from "../../composables/workspace/outgoingWork";
-import { COMMIT_SCOPE, useChanges } from "../../composables/workspace/useChanges";
+import { COMMIT_SCOPE, useChanges, workingStatKey } from "../../composables/workspace/useChanges";
 import { usePushFlow } from "../../composables/workspace/usePushFlow";
 import { useRepos } from "../../composables/workspace/useRepos";
 import { useNow } from "../../composables/useNow";
@@ -342,42 +341,19 @@ const openDiff = (repo: string, side: GitDiffSide, change: GitChange, mode: Open
 };
 
 /* --- reading ahead --------------------------------------------------------------------------------------------
- * The list is on screen and the reader is deciding what to open; the walk spends that gap reading their diffs
- * (diffWarmer.ts holds why, and why it is a trickle). Restarted whenever the list changes — a stage, a commit, an
- * agent landing more work — and abandoned when this panel goes away, which is the same generation check either
- * way: the walk cannot be interrupted mid-await, so it asks whether it is still the current one instead.
+ * NOT DONE HERE ANY MORE. This panel used to walk its own row list reading the diffs behind it, which tied the
+ * read-ahead to the panel being MOUNTED: arriving at the review started the walk, so the first click still paid
+ * a round trip, and stepping away threw away everything the walk had not reached. The app's background loader
+ * (composables/prefetch) keeps these rows warm from wherever the user is standing instead, through the very
+ * read this panel's clicks go through — so a click either finds the answer sitting there or joins the read
+ * already in flight.
  *
- * Driven from the PANEL rather than from useChanges, because the panel being mounted is what says the user is
- * reviewing. The badge in the shell reads the same list from every page in the app, and reading ahead for a
- * review nobody has opened would be daemon work spent on a guess. A re-mount costs nothing: everything already
- * warmed answers from the cache without a request. */
-/* The walk also COUNTS what it reads. These rows sit beside diffs that open on code alone, so their +/− has to
- * be the code's — see useCodeStats. The count is a by-product of a read that was happening anyway; nothing here
- * fetches for it, which is why a row past the walk's limit keeps git's number until it is opened. */
-const { record: recordStat, statOf } = useCodeStats();
-const statKey = (repo: string, side: GitDiffSide, path: string): string => JSON.stringify([`working`, repo, side, path]);
-const codeOf = (repo: string, side: GitDiffSide, path: string): LineStat | undefined => statOf(statKey(repo, side, path));
-
-let warmGeneration = 0;
-watch(
-    changes.repos,
-    (repos) => {
-        const generation = (warmGeneration += 1);
-        void warmDiffs(
-            warmRows(repos),
-            async (row) => {
-                const body = await changes.fileDiff(row.repo, row.path, row.side);
-                // Bytes and oversized files have no text to strip, and neither renders as a diff anyway.
-                if (body.truncated !== true && !rendersAsBytes(row.path, body.binary)) {
-                    void recordStat(statKey(row.repo, row.side, row.path), row.path, body.before ?? ``, body.after ?? ``);
-                }
-            },
-            { stopped: () => generation !== warmGeneration, idle: whenIdle },
-        );
-    },
-    { immediate: true },
-);
-onScopeDispose(() => (warmGeneration += 1));
+ * HOW BIG EACH CHANGE IS IN THE READING ON SCREEN: these rows sit beside diffs that open on code alone, so
+ * their +/− has to be the code's. That count is a by-product of having both sides of a file, so it is taken
+ * where the file is READ (useChanges' fileDiff) rather than by whoever asked for it — which is why there is no
+ * limit here any more past which a row keeps git's number. */
+const { statOf } = useCodeStats();
+const codeOf = (repo: string, side: GitDiffSide, path: string): LineStat | undefined => statOf(workingStatKey(repo, side, path));
 
 // --- row selection (a list selection, NOT a commit target) -------------------------------------------------
 // Ordinary click/ctrl/shift list selection, exactly as VSCode's SCM list works, and for exactly one purpose:

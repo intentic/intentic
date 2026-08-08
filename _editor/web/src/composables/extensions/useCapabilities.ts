@@ -21,9 +21,13 @@ import { useSandboxQuery } from "../sandbox/useSandboxQuery";
 
 const QUERY_KEY = sandboxKey(`capabilities`);
 
+// Named for the background loader (composables/prefetch), which warms the "+" view's list into the same entry
+// this reads.
+export const capabilitiesKey = QUERY_KEY;
+
 // The whole payload, not just `.capabilities`: the daemon also derives which capabilities the WORKSPACE is
 // asking for (a compose file in /work ⇒ docker), and the catalog grid badges those.
-const fetchCapabilities = async (): Promise<{ capabilities: CapabilitySummary[]; recommendations: CapabilityRecommendation[] }> =>
+export const fetchCapabilities = async (): Promise<{ capabilities: CapabilitySummary[]; recommendations: CapabilityRecommendation[] }> =>
     CapabilitiesListSchema.parse(await sandboxJson(`/capabilities`));
 
 // Resolve a Claude Code plugin marketplace repo into installable entries — the daemon clones it, reads its

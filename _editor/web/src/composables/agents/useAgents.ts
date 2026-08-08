@@ -2,12 +2,13 @@ import type { AgentSummary, AutomationApproval } from "@intentic/sandbox-contrac
 import { computed, ref, shallowRef, watch } from "vue";
 import { awaitingUser, blocked, type ClientAgentStatus, type FleetLane, laneOf, turnInFlight, unregistered } from "./agentStatus";
 import type { Conversation } from "../chat/conversation";
+import { invalidateAgentTranscript } from "../chat/agentTranscript";
 import { openAgentConversation, useChat } from "../chat/useChat";
 import { onScreen } from "../onScreen";
 import { queryClient } from "../queryPersistence";
 import { sandboxJson } from "../sandbox/sandboxClient";
 import { jsonBody } from "../sandbox/jsonBody";
-import { sandboxKey } from "../sandbox/useSandbox";
+import { sandboxKey, useSandbox } from "../sandbox/useSandbox";
 import { errorMessage } from "../useAsyncAction";
 
 /* The fleet store — the daemon's agent registry mirrored into the browser. Fed two ways: the /events stream's
@@ -119,11 +120,17 @@ const holdPending = (moves: readonly { id: string; present?: AgentSummary }[], r
  * agent's work", so it is the diff's invalidation signal. An id this roster has never seen counts as a
  * change: the first snapshot of a (re)connection may be carrying the outcome of a turn that finished while
  * no stream was up. Unobserved queries are only marked stale, so a closed panel costs no request. */
-const invalidateStaleDiffs = (agents: readonly AgentSummary[]): void => {
+const invalidateStaleWork = (agents: readonly AgentSummary[]): void => {
     const held = new Map(registry.value.map((agent) => [agent.id, agent.status]));
     for (const agent of agents) {
         if (held.get(agent.id) !== agent.status) {
             void queryClient.invalidateQueries({ queryKey: sandboxKey(`agents`, agent.id, `diff`) });
+            /* AND THE TRANSCRIPT WITH IT, on exactly the same signal and for the same reason one step further
+             * along. The daemon writes a conversation's record as each turn SETTLES, so a status change is the
+             * one moment that record can have grown — and the copy this browser warmed ahead of the click was
+             * read before it did. Without this the board would hand a clicked card a transcript ending one turn
+             * early, which is a worse answer than the round trip it saved. */
+            invalidateAgentTranscript(agent.id);
         }
     }
 };
@@ -134,7 +141,7 @@ export const setAgents = (agents: AgentSummary[], rev: number): void => {
     if (rev < appliedRev) {
         return;
     }
-    invalidateStaleDiffs(agents);
+    invalidateStaleWork(agents);
     /* WHAT LEFT THE ROSTER BY ANOTHER HAND THAN THIS BROWSER'S — the daemon's retention sweep, an archive or
      * discard on another device. Local moves are excluded: they already wrote both halves, and `pending` is
      * exactly the set of them still unconfirmed. A reset board has no ids to depart, so the reconnect's first
@@ -525,6 +532,29 @@ const refresh = async (): Promise<void> => {
         // Leave the last roster; the events stream repaints on reconnect.
     }
 };
+
+/* COMING BACK TO THE APP RE-READS THE BOARD.
+ *
+ * Steady state is pushed and needs nothing: the daemon frames a roster as agents start, park and finish. The
+ * gap is at the EDGES of that — a laptop that slept, a phone whose tab was evicted from the foreground, a
+ * stream that half-opened and died without a FIN. The connection heals itself, but only once the watchdog has
+ * noticed the silence, and until then the board sits showing the moment the user walked away from. Someone
+ * looking at it again is the one signal that the delay is now being WATCHED, so it is answered with a read
+ * rather than waited out.
+ *
+ * Asked of every window the app renders into rather than of this tab (onScreen.ts) — a board read in a
+ * pop-out is being looked at whatever the tab behind it is doing. Gated on the daemon being reachable: with
+ * the stream down this would fail anyway, and the reconnect brings its own roster with it. One request per
+ * return, not per second; a refresh that fails leaves the roster exactly where it stood.
+ *
+ * Module scope, like the unread watch above: this is a fact about the SESSION, not about whether the board
+ * happens to be the open route — the rail's badge is drawn from the same roster on every page in the app. */
+const { reachable } = useSandbox();
+watch([onScreen, reachable] as const, ([looking, live], [wasLooking]) => {
+    if (looking && !wasLooking && live) {
+        void refresh();
+    }
+});
 
 /* Release or drop a held wake — the automations routes' own verbs, so the board and any other surface cannot
  * come to mean different things by the same press. The entry leaves the list optimistically (the daemon

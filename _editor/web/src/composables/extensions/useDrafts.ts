@@ -13,13 +13,15 @@ import { useSandboxQuery } from "../sandbox/useSandboxQuery";
 
 const QUERY_KEY = sandboxKey(`drafts`);
 
+// Named for the background loader, which warms this view's list from wherever the user is standing and must
+// land in the same cache entry the view reads (composables/prefetch).
+export const draftsKey = QUERY_KEY;
+export const fetchDrafts = async (): Promise<DraftsList> => DraftsListSchema.parse(await sandboxJson(`/drafts`));
+
 export function useDrafts() {
     const queryClient = useQueryClient();
 
-    const { query, error } = useSandboxQuery({
-        queryKey: QUERY_KEY,
-        queryFn: async (): Promise<DraftsList> => DraftsListSchema.parse(await sandboxJson(`/drafts`)),
-    });
+    const { query, error } = useSandboxQuery({ queryKey: QUERY_KEY, queryFn: fetchDrafts });
     const invalidate = (): Promise<void> => queryClient.invalidateQueries({ queryKey: QUERY_KEY });
 
     const save = useMutation({

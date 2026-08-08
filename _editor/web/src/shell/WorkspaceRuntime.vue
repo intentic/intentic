@@ -4,6 +4,7 @@ import { onMounted, onUnmounted, watch } from "vue";
 import { useRoute } from "vue-router";
 import { useChat } from "../composables/chat/useChat";
 import { onScreen } from "../composables/onScreen";
+import { startBackgroundLoader, stopBackgroundLoader } from "../composables/prefetch/useBackgroundLoader";
 import { reportIdle, reportSessionId, reportView } from "../composables/usePresence";
 import { useSandboxLiveness } from "../composables/sandbox/useSandboxLiveness";
 import PoppablePanels from "./PoppablePanels.vue";
@@ -52,6 +53,12 @@ watch(onScreen, (looking) => reportIdle(!looking), { immediate: true });
 // detected the moment the stream breaks — wherever in the app the user happens to be standing.
 onMounted(() => liveness.start());
 onUnmounted(() => liveness.stop());
+
+// …and, on the same lifetime and for the same reason, the background loader: it reads ahead for screens the
+// user has not reached yet, so tying it to any one of them would mean it only ever warmed the screen already
+// open. It gates itself on the stream's verdict and on whether anyone is looking (composables/prefetch).
+onMounted(() => startBackgroundLoader());
+onUnmounted(() => stopBackgroundLoader());
 </script>
 
 <template>

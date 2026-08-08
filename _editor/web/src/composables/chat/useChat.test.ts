@@ -12,7 +12,10 @@ vi.mock("../sandbox/useSandbox", async () => {
     const { ref } = await import("vue");
     const activeSandboxId = ref<string | undefined>(`sb1`);
     const reachable = ref(false);
-    return { useSandbox: () => ({ activeSandboxId, reachable }) };
+    // `sandboxKey` too, and not as an afterthought: an agent's transcript is a CACHED read now (agentTranscript
+    // .ts), so the hydrate path this file exercises files it under a sandbox-scoped key. A mock missing it left
+    // the key builder undefined, and every replay assertion here failed as a transcript that never arrived.
+    return { useSandbox: () => ({ activeSandboxId, reachable }), sandboxKey: (...parts: unknown[]) => [...parts, activeSandboxId] };
 });
 
 // The node test environment has neither storage; the tab snapshot round-trips need both — sessionStorage is
@@ -44,6 +47,7 @@ const storage = {
 };
 
 const { sandboxJson, sandboxRequest } = await import("../sandbox/sandboxClient");
+const { queryClient } = await import("../queryPersistence");
 const sandboxRequestMock = vi.mocked(sandboxRequest);
 const sandboxJsonMock = vi.mocked(sandboxJson);
 
@@ -75,6 +79,10 @@ beforeEach(() => {
 
 afterEach(() => {
     vi.clearAllMocks();
+    // An agent's transcript is cached across the app now, and this file reuses conversation ids between tests
+    // with different daemon answers behind them — so the cache has to go with the mocks, or one test's reply is
+    // handed to the next before its mock is ever asked.
+    queryClient.clear();
 });
 
 describe(`useChat provider reconciliation`, () => {

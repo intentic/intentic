@@ -20,6 +20,7 @@ import {
 } from "@intentic/sandbox-contract";
 import { computed, type ComputedRef, inject, type InjectionKey, ref, shallowRef, watch } from "vue";
 import { router } from "../../router";
+import { agentTranscript, type AgentTranscript } from "./agentTranscript";
 import { traceFocus } from "./focusTrace";
 import { Conversation, type PendingAttachment } from "./conversation";
 import { accountsLoaded, providerAccounts, providerRefusals, rememberedAccountFor, selectedAccountId, translatorAccounts } from "./providerAccounts";
@@ -45,7 +46,6 @@ import { track } from "../analytics";
 import { withConcurrency } from "../concurrency";
 import { sandboxJson, sandboxRequest } from "../sandbox/sandboxClient";
 import { jsonBody } from "../sandbox/jsonBody";
-import { supportsRoute } from "../sandbox/useDaemonRoutes";
 import { useSandbox } from "../sandbox/useSandbox";
 import { errorMessage } from "../useAsyncAction";
 import { useWorkspaceTabs } from "../workspace/useWorkspaceTabs";
@@ -1388,29 +1388,18 @@ const fetchTranscript = async (conversation: Conversation, id: string): Promise<
     }
 };
 
-/* A registered agent's transcript, with the one distinction that matters to the TAB: NOT_FOUND is the daemon
- * saying this conversation has no registry entry any more (discarded, or a store that lost it), where a thrown
- * request or any other status says only that we could not ask right now. Archiving keeps the entry — the
- * registry holds archived agents and `entry(id)` finds them — so an archived agent answers 200 and its tab is
- * never touched by this.
+/* A registered agent's transcript, through the shared cached read (agentTranscript.ts) — so a card the
+ * background loader already warmed opens without a round trip, and a card clicked WHILE it is being warmed
+ * waits for that read instead of starting a second one. Archiving keeps the entry — the registry holds archived
+ * agents and `entry(id)` finds them — so an archived agent answers 200 and its tab is never touched by this.
  *
- * The 404 is only believed when the daemon ADVERTISES this route. A daemon older than this browser answers 404
- * for a route it simply doesn't have (see useDaemonRoutes), and reading that as "your agent is gone" would
- * unregister every open agent tab in the app against a sandbox that is merely behind. */
-const fetchAgentTranscript = async (
-    conversation: Conversation,
-): Promise<{ sessionId?: string; messages: RestoredMessage[] } | "gone" | undefined> => {
+ * What this adds over the cached read is the TAB's half: a failure is reported on the conversation, where the
+ * user can see it, and folded to `undefined` so the caller retries rather than settling for an empty pane. The
+ * "gone" verdict passes straight through — it is the one answer that says something about this conversation
+ * rather than about the network. */
+const fetchAgentTranscript = async (conversation: Conversation): Promise<AgentTranscript | undefined> => {
     try {
-        const response = await sandboxRequest(`/agents/${encodeURIComponent(conversation.conversationId)}/transcript`);
-        if (response.status === 404 && supportsRoute(`agents.transcript`)) {
-            return `gone`;
-        }
-        if (!response.ok) {
-            conversation.error.value = `Could not open that conversation.`;
-            return undefined;
-        }
-        const body = (await response.json()) as { sessionId?: string; messages?: RestoredMessage[] };
-        return { ...(body.sessionId !== undefined ? { sessionId: body.sessionId } : {}), messages: body.messages ?? [] };
+        return await agentTranscript(conversation.conversationId);
     } catch {
         conversation.error.value = `Could not open that conversation.`;
         return undefined;

@@ -133,15 +133,23 @@ const readFile = async (path: string): Promise<string | undefined> => {
 // Raw bytes for binary preview (images / PDF), where the text route's utf8 decode would corrupt the file.
 const readBlob = (path: string): Promise<Blob> => sandboxBlob(`/workspace/raw?${scopeQuery(new URLSearchParams({ path })).toString()}`);
 
+/* The scope is part of the KEY, not just the request: two trees genuinely differ, and one cached under the
+ * other's key is a file explorer listing a workspace nobody is looking at. Switching scope is therefore an
+ * ordinary query switch — cached, instant on the way back, refetched when stale.
+ *
+ * Named out here for the background loader (composables/prefetch), which warms the tree into the entry the
+ * explorer reads — and which must read the scope live, since a scope switch is a different tree entirely. */
+export const workspaceTreeKey = (): unknown[] => sandboxKey(`workspace`, `tree`, workspaceAgent.value ?? `shared`);
+
+export const fetchWorkspaceTree = (): Promise<WorkspaceTreeResponse> =>
+    sandboxJson<WorkspaceTreeResponse>(`/workspace/tree?${scopeQuery(new URLSearchParams()).toString()}`);
+
 export function useWorkspaceTree() {
     const queryClient = useQueryClient();
 
     const { query, error } = useSandboxQuery({
-        // The scope is part of the KEY, not just the request: two trees genuinely differ, and one cached under
-        // the other's key is a file explorer listing a workspace nobody is looking at. Switching scope is
-        // therefore an ordinary query switch — cached, instant on the way back, refetched when stale.
-        queryKey: computed(() => sandboxKey(`workspace`, `tree`, workspaceAgent.value ?? `shared`)),
-        queryFn: () => sandboxJson<WorkspaceTreeResponse>(`/workspace/tree?${scopeQuery(new URLSearchParams()).toString()}`),
+        queryKey: computed(() => workspaceTreeKey()),
+        queryFn: fetchWorkspaceTree,
         // Fallback only: live freshness is pushed (the daemon's file watcher → /events SSE → markWorkspaceChanged
         // invalidates this query), so this poll is a backstop for a broken push chain, not the freshness path — a
         // slow 2min cap keeps steady-state traffic low while still self-healing if any link ever breaks.

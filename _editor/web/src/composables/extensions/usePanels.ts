@@ -18,13 +18,15 @@ import { useSandboxQuery } from "../sandbox/useSandboxQuery";
 
 const QUERY_KEY = sandboxKey(`panels`);
 
+// Named for the background loader (composables/prefetch): the rail's extension tiles are detected from these
+// facts, so having them early is what lets a tile open filled in rather than empty.
+export const panelsKey = QUERY_KEY;
+export const fetchPanels = async () => PanelsListSchema.parse(await sandboxJson(`/panels`));
+
 export function usePanels() {
     const queryClient = useQueryClient();
 
-    const { query, error } = useSandboxQuery({
-        queryKey: QUERY_KEY,
-        queryFn: async () => PanelsListSchema.parse(await sandboxJson(`/panels`)),
-    });
+    const { query, error } = useSandboxQuery({ queryKey: QUERY_KEY, queryFn: fetchPanels });
 
     const invalidate = async (): Promise<void> => {
         await queryClient.invalidateQueries({ queryKey: QUERY_KEY });

@@ -1,6 +1,9 @@
 import type { AgentChange, AgentChangesResponse, AgentRepoChanges, FileDiffResponse } from "@intentic-app/api-contract";
 import { isTestPath, type AgentSpan, type LandConflictReason, type LandMode, type LandResult } from "@intentic/sandbox-contract";
 import { computed, ref, watch, type Ref } from "vue";
+import { rendersAsBytes } from "../../pages/workspace/fileType";
+import { queryClient, UNPERSISTED } from "../queryPersistence";
+import { useCodeStats } from "../workspace/useCodeStats";
 import { sandboxJson } from "../sandbox/sandboxClient";
 import { sandboxKey } from "../sandbox/useSandbox";
 import { useSandboxQuery } from "../sandbox/useSandboxQuery";
@@ -42,6 +45,70 @@ export interface AgentReviewFile {
 
 const reviewFileKey = (repo: string, path: string): string => JSON.stringify([repo, path]);
 
+/* THE REVIEW'S OWN READ, named apart from the composable that observes it — so the background loader can warm
+ * the same cache entry the panel later reads, rather than a parallel one. Both halves have to be shared for
+ * that to hold: the key (or the warm lands somewhere the panel never looks) and the request (or the two
+ * disagree the first time one of them changes). */
+export const agentChangesKey = (agentId: string): unknown[] => sandboxKey(`agents`, agentId, `diff`);
+
+export const fetchAgentChanges = (agentId: string): Promise<AgentChangesResponse> =>
+    sandboxJson<AgentChangesResponse>(`/agents/${encodeURIComponent(agentId)}/diff`);
+
+/* ONE ROW'S DIFF, cached under the review's own key — so the invalidation that refreshes the file list (a land,
+ * a discard, a turn settling) drops the per-file diffs with it, and a warmed row and a clicked row are one
+ * entry rather than two. Concurrent callers share one request, which is what lets a click land on a file the
+ * background loader is already reading and simply wait for that read instead of racing it.
+ *
+ * UNPERSISTED, like the workspace review's: a diff is two whole file texts, and the loader reads one per
+ * changed file. queryPersistence holds what putting that in the disk mirror would charge every other write. */
+export const agentFileDiffKey = (agentId: string, repo: string, path: string): unknown[] => [
+    ...agentChangesKey(agentId),
+    UNPERSISTED,
+    `file`,
+    repo,
+    path,
+];
+
+// Where this row's code-only +/− is filed (useCodeStats). Scoped to the agent, because the same path in two
+// agents' worktrees is two different changes.
+export const agentStatKey = (agentId: string, repo: string, path: string): string => `agent:${agentId}:${reviewFileKey(repo, path)}`;
+
+/* THE CACHING TERMS, shared rather than defaulted — because the panel OBSERVES this query while the loader
+ * merely fills it, and an observer that brought vue-query's defaults would undo the warming it is supposed to
+ * benefit from: a default staleTime of 0 makes mounting one refetch on the spot, so every warmed row would be
+ * re-read the instant it was looked at.
+ *
+ * staleTime Infinity for the reason the workspace review's diffs give: time is not what makes a diff wrong, a
+ * write is, and every write already invalidates the list these are filed under. gcTime is the memory bound that
+ * follows — warmed rows nobody opened are collected a few minutes after the review moved on. */
+export const AGENT_FILE_DIFF_OPTIONS = {
+    staleTime: Infinity,
+    gcTime: 5 * 60 * 1000,
+    // No retry — see the workspace review's file diff for why a read-ahead must not multiply its own requests
+    // against a daemon that is having a moment.
+    retry: false as const,
+};
+
+export const readAgentFileDiff = async (agentId: string, repo: string, path: string): Promise<FileDiffResponse> => {
+    const body = await sandboxJson<FileDiffResponse>(
+        `/agents/${encodeURIComponent(agentId)}/${encodeURIComponent(repo)}/file-diff?path=${encodeURIComponent(path)}`,
+    );
+    // Counted here rather than by whoever asked, for the reason the workspace review's read gives at length:
+    // the count needs both whole sides of the file, this read just paid for them, and every caller then gets it
+    // at the same price. Bytes and oversized files have no text to strip.
+    if (body.truncated !== true && !rendersAsBytes(path, body.binary)) {
+        void useCodeStats().record(agentStatKey(agentId, repo, path), path, body.before ?? ``, body.after ?? ``);
+    }
+    return body;
+};
+
+export const agentFileDiff = (agentId: string, repo: string, path: string): Promise<FileDiffResponse> =>
+    queryClient.fetchQuery({
+        queryKey: agentFileDiffKey(agentId, repo, path),
+        queryFn: () => readAgentFileDiff(agentId, repo, path),
+        ...AGENT_FILE_DIFF_OPTIONS,
+    });
+
 // Files/±lines of a review subset — the header's split chips total code and tests through this one shape.
 const statOf = (subset: readonly AgentReviewFile[]): { files: number; additions: number; deletions: number } => ({
     files: subset.length,
@@ -64,8 +131,8 @@ const askedByAgent = ref<ReadonlySet<string>>(new Set());
 // never run, and be told so, once per visit.
 export function useAgentChanges(agentId: Ref<string>) {
     const { query, error } = useSandboxQuery({
-        queryKey: computed(() => sandboxKey(`agents`, agentId.value, `diff`)),
-        queryFn: () => sandboxJson<AgentChangesResponse>(`/agents/${encodeURIComponent(agentId.value)}/diff`),
+        queryKey: computed(() => agentChangesKey(agentId.value)),
+        queryFn: () => fetchAgentChanges(agentId.value),
         enabled: computed(() => agentId.value !== ``),
     });
 
@@ -116,12 +183,9 @@ export function useAgentChanges(agentId: Ref<string>) {
     const codeStat = computed(() => statOf(files.value.filter((file) => !isTestPath(file.change.path))));
     const testStat = computed(() => statOf(files.value.filter((file) => isTestPath(file.change.path))));
 
-    // One file's diff, uncached: the review panel reads this through its own vue-query (keyed per row, under
-    // the agent's diff key), which owns the arrow-through caching this used to duplicate with a local Map.
-    const fileDiff = (repo: string, path: string): Promise<FileDiffResponse> =>
-        sandboxJson<FileDiffResponse>(
-            `/agents/${encodeURIComponent(agentId.value)}/${encodeURIComponent(repo)}/file-diff?path=${encodeURIComponent(path)}`,
-        );
+    // One file's diff, through the shared cached read above — so the row the background loader already warmed
+    // opens without a round trip, and the +/− beside it is already counted.
+    const fileDiff = (repo: string, path: string): Promise<FileDiffResponse> => agentFileDiff(agentId.value, repo, path);
 
     const viewed = computed<ReadonlySet<string>>(() => viewedByAgent.value[agentId.value] ?? NONE);
     // Counted over the CURRENT rows, so a file the agent has since reverted stops inflating the progress.

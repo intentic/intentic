@@ -19,14 +19,34 @@ const IDB_KEY = `intentic-query-cache`;
 /* THE SEGMENT A QUERY KEY CARRIES WHEN ITS VALUE MUST STAY IN MEMORY. The mirror is structured-cloned WHOLE, on
  * the main thread, once per window (see the throttle below) — so its cost is set by everything the app has ever
  * cached, and a single query measured in megabytes is charged to every write of every other cached thing for the
- * rest of the session. A file diff is exactly that: two complete file texts, and the Changes review reads one
- * per changed file ahead of the reader.
+ * rest of the session.
+ *
+ * WHICH IS THE WHOLE STORAGE RULE, and it is worth stating as one now that a background loader fills this cache
+ * on the app's behalf rather than only the screen in front of the user (composables/prefetch). Three classes:
+ *
+ *   · SMALL AND SHAPE-STABLE — rosters, lists, trees, view contents. Memory AND this mirror. They are what makes
+ *     a reload paint the last-known workspace instead of a blank one, and they are small enough that mirroring
+ *     all of them costs less than the blank frame does.
+ *   · LARGE AND DISPOSABLE — a file diff is two complete file texts, and both reviews read one per changed file
+ *     ahead of the reader. Memory only, bounded by gcTime. Marked here.
+ *   · LARGE AND WORTH KEEPING — a conversation's transcript, which runs to megabytes and IS worth surviving a
+ *     reload. Marked here too, and kept instead in a store of its own where it is written ONE RECORD AT A TIME
+ *     (chat/transcriptCache.ts). That is the point: its size is charged to itself rather than to every other
+ *     write in the app.
  *
  * Marking the key rather than listing the queries down in the exclusion is what keeps this honest as more of
  * them appear — the query that knows it is heavy says so, where it is impossible to forget while writing it.
- * Such a query still lives in the in-memory cache, which is where the speed comes from; it simply re-reads after
- * a reload instead of being restored, which costs nothing anybody waits for. */
+ * Such a query still lives in the in-memory cache, which is where the speed comes from. */
 export const UNPERSISTED = `unpersisted`;
+
+/* MAY THIS KEY'S VALUE GO TO DISK? Two exclusions, for opposite reasons: `sandbox` rows carry per-sandbox
+ * connect tokens (the tunnel secret), and an UNPERSISTED-marked key carries more bytes than the mirror can
+ * afford (above). Every other daemon query — workspace, info, capabilities, the agent roster — still persists.
+ *
+ * Split out from the persister below so it can be asserted directly: the rule is one line, and the cost of
+ * getting it wrong (a megabyte re-cloned every two seconds for the rest of the session, or a connect token on
+ * disk) is not something to discover by watching the app stutter. */
+export const mirrors = (queryKey: readonly unknown[]): boolean => queryKey[0] !== `sandbox` && !queryKey.includes(UNPERSISTED);
 
 export const queryClient = new QueryClient();
 
@@ -76,14 +96,8 @@ export const restorePersistedQueries = async (userId: string): Promise<void> => 
         buster: `${userId}:${buildId()}`,
         // A Monday-morning open after Friday still paints; anything older restores as empty.
         maxAge: 7 * 24 * 60 * 60 * 1000,
-        // Two exclusions, for opposite reasons: sandbox.list carries per-sandbox connect tokens (the tunnel
-        // secret), and an UNPERSISTED-marked query carries more bytes than the mirror can afford (above).
-        // Every other daemon query (workspace/info/capabilities/… keys) still persists.
-        // Composed with the default so non-success queries stay out too.
-        dehydrateOptions: {
-            shouldDehydrateQuery: (query) =>
-                query.queryKey[0] !== `sandbox` && !query.queryKey.includes(UNPERSISTED) && defaultShouldDehydrateQuery(query),
-        },
+        // The storage rule (`mirrors`, above), composed with the default so non-success queries stay out too.
+        dehydrateOptions: { shouldDehydrateQuery: (query) => mirrors(query.queryKey) && defaultShouldDehydrateQuery(query) },
     });
     uninstall = unsubscribe;
     // The cache is an optimization: a failed restore (IndexedDB unavailable/corrupt) degrades to an empty

@@ -20,10 +20,15 @@ import { useSandboxQuery } from "../sandbox/useSandboxQuery";
  * "package.json, index.ts, README.md, loose in this repo" about a package that plainly existed. */
 const MODULES_STALE_MS = 5 * 60_000;
 
+// Named for the background loader (composables/prefetch): both review surfaces group their rows by this, so
+// having it early is the difference between a review that groups on arrival and one that regroups a beat later.
+export const modulesKey = (): unknown[] => sandboxKey(`workspace`, `modules`);
+export const fetchModules = (): Promise<WorkspaceModules> => sandboxJson<WorkspaceModules>(`/workspace/modules`);
+
 export function useModules() {
     const { query } = useSandboxQuery({
-        queryKey: sandboxKey(`workspace`, `modules`),
-        queryFn: () => sandboxJson<WorkspaceModules>(`/workspace/modules`),
+        queryKey: modulesKey(),
+        queryFn: fetchModules,
         staleTime: MODULES_STALE_MS,
     });
     // Keyed by the {repo} id both panels already carry on every row, so a lookup is never a scan.

@@ -9,6 +9,7 @@ import type {
     RepoPaths,
 } from "@intentic-app/api-contract";
 import { computed, ref, watch } from "vue";
+import { rendersAsBytes } from "../../pages/workspace/fileType";
 import { useChat } from "../chat/useChat";
 import { queryClient, UNPERSISTED } from "../queryPersistence";
 import { sandboxJson } from "../sandbox/sandboxClient";
@@ -18,6 +19,7 @@ import { useSandboxQuery } from "../sandbox/useSandboxQuery";
 import { errorMessage } from "../useAsyncAction";
 import { outgoingWork } from "./outgoingWork";
 import { spliceRepoChanges } from "./spliceRepoChanges";
+import { useCodeStats } from "./useCodeStats";
 import { resetEditBuffers } from "./useEditBuffers";
 
 /* The Changes review — VSCode's SCM model over the workspace's real repos, including git's index: each repo
@@ -151,7 +153,7 @@ const runBatch = async (tasks: readonly ScopedTask[], settle: () => Promise<unkn
  * click land on a file the warmer is already reading and simply wait for that read instead of racing it. */
 const FILE_DIFF_GC_MS = 5 * 60 * 1000;
 
-const fileDiffKey = (repo: string, path: string, side: GitDiffSide): unknown[] => [
+export const fileDiffKey = (repo: string, path: string, side: GitDiffSide): unknown[] => [
     ...sandboxKey(`git`, `changes`),
     UNPERSISTED,
     `file-diff`,
@@ -160,20 +162,56 @@ const fileDiffKey = (repo: string, path: string, side: GitDiffSide): unknown[] =
     path,
 ];
 
-const fileDiff = (repo: string, path: string, side: GitDiffSide): Promise<FileDiffResponse> =>
+/* Where this row's code-only +/− is filed (useCodeStats). Scoped to the working tree and to the SIDE, because a
+ * path that is staged and then edited again is two rows with two different diffs and two different counts. */
+export const workingStatKey = (repo: string, side: GitDiffSide, path: string): string => JSON.stringify([`working`, repo, side, path]);
+
+/* THE COUNT IS A BY-PRODUCT OF THE READ, not of who did the reading.
+ *
+ * These rows sit beside diffs that open on code alone, so their +/− has to be the code's rather than git's —
+ * and working that out needs both whole sides of the file, which is precisely what this read just paid for.
+ * Counting HERE rather than in the surface that asked means every path gets it for the same price: the
+ * background loader walking the review, the reader clicking a row past where the loader got to, a repeat visit
+ * answered from the cache. It used to be the warm walk's job, so a row the walk hadn't reached showed git's
+ * number until it was opened AND a second watch existed to catch that case.
+ *
+ * Bytes and oversized files are left alone: neither has text to strip, and both already render as something
+ * other than a diff. The store turns away a second ask for content it has already counted, so overlapping
+ * callers cost nothing. */
+const countDiff = (repo: string, path: string, side: GitDiffSide, body: FileDiffResponse): void => {
+    if (body.truncated === true || rendersAsBytes(path, body.binary)) {
+        return;
+    }
+    void useCodeStats().record(workingStatKey(repo, side, path), path, body.before ?? ``, body.after ?? ``);
+};
+
+export const fileDiff = (repo: string, path: string, side: GitDiffSide): Promise<FileDiffResponse> =>
     queryClient.fetchQuery({
         queryKey: fileDiffKey(repo, path, side),
-        queryFn: () => sandboxJson<FileDiffResponse>(`/git/${encodeURIComponent(repo)}/file-diff?path=${encodeURIComponent(path)}&side=${side}`),
+        queryFn: async () => {
+            const body = await sandboxJson<FileDiffResponse>(
+                `/git/${encodeURIComponent(repo)}/file-diff?path=${encodeURIComponent(path)}&side=${side}`,
+            );
+            countDiff(repo, path, side, body);
+            return body;
+        },
         staleTime: Infinity,
         gcTime: FILE_DIFF_GC_MS,
-        // No retry, which is what this read has always done (it was a bare fetch) and what the warmer needs it to
+        // No retry, which is what this read has always done (it was a bare fetch) and what the loader needs it to
         // keep doing: a daemon hiccup during a read-ahead would otherwise turn one quiet walk into four times the
         // requests, which is the burst the pacing exists to avoid. A failure leaves nothing cached, so the click
         // that follows asks again for real.
         retry: false,
     });
 
-const invalidateChanges = (): Promise<void> => queryClient.invalidateQueries({ queryKey: sandboxKey(`git`, `changes`) });
+// The review set itself — named apart from the composable that observes it so the background loader can warm
+// the same entry rather than a parallel one. `sandboxKey("git","changes")` is also the PREFIX every file diff
+// above is filed under, which is what makes one invalidation drop the list and its diffs together.
+export const changesKey = (): unknown[] => sandboxKey(`git`, `changes`);
+
+export const fetchChanges = (): Promise<GitChangesResponse> => sandboxJson<GitChangesResponse>(`/git/changes`);
+
+const invalidateChanges = (): Promise<void> => queryClient.invalidateQueries({ queryKey: changesKey() });
 
 const post = <T>(repo: string, action: string, body: Record<string, unknown>): Promise<T> =>
     sandboxJson<T>(`/git/${encodeURIComponent(repo)}/${action}`, jsonBody(`POST`, body));
@@ -189,7 +227,7 @@ const post = <T>(repo: string, action: string, body: Record<string, unknown>): P
  * instead of letting it win on arrival; a scan that starts AFTER this reads a tree that already has the commit
  * in it, so only the overlap needs handling. */
 const applyCommitResult = async (repo: string, result: CommitResult): Promise<void> => {
-    const queryKey = sandboxKey(`git`, `changes`);
+    const queryKey = changesKey();
     await queryClient.cancelQueries({ queryKey });
     queryClient.setQueryData<GitChangesResponse>(queryKey, (held) => (held === undefined ? held : spliceRepoChanges(held, repo, result)));
 };
@@ -366,10 +404,7 @@ const syncAll = (targets: readonly SyncTarget[]): Promise<void> =>
     );
 
 export function useChanges() {
-    const { query, error } = useSandboxQuery({
-        queryKey: sandboxKey(`git`, `changes`),
-        queryFn: () => sandboxJson<GitChangesResponse>(`/git/changes`),
-    });
+    const { query, error } = useSandboxQuery({ queryKey: changesKey(), queryFn: fetchChanges });
 
     // `repos` also carries the repos git could NOT scan (empty change lists + a one-line `error`; the panel
     // renders them as their own rows) and repos that are merely out of sync with their remote (clean tree,

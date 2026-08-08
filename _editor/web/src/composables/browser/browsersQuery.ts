@@ -21,7 +21,10 @@ import { useSandboxQuery } from "../sandbox/useSandboxQuery";
 
 const QUERY_KEY = sandboxKey(`browsers`);
 
-const fetchBrowsers = async (): Promise<BrowserSession[]> => BrowsersListSchema.parse(await sandboxJson(`/system/browsers`)).sessions;
+// Named for the background loader (composables/prefetch), which warms this list into the very entry the tile
+// and the view read.
+export const browsersKey = QUERY_KEY;
+export const fetchBrowsers = async (): Promise<BrowserSession[]> => BrowsersListSchema.parse(await sandboxJson(`/system/browsers`)).sessions;
 
 export const useBrowsersQuery = (): { sessions: ComputedRef<BrowserSession[]>; refetch: () => Promise<unknown> } => {
     const { query } = useSandboxQuery({ queryKey: QUERY_KEY, queryFn: fetchBrowsers });
