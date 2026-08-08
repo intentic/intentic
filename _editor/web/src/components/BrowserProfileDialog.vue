@@ -6,19 +6,24 @@ import { computed, onBeforeUnmount, ref, watch } from "vue";
 import { viewportCoords } from "../composables/browser/viewportCoords";
 import { socketUrl as wsSocketUrl } from "../composables/sandbox/wsTicket";
 
-/* A `browser`-kind capability's own Chromium, in the user's hands. Opens the daemon's /system/browser-profile
- * WebSocket: the daemon drives the platform's persistent profile on a virtual display and screencasts it here as
+/* ONE CONNECTED ACCOUNT's own Chromium, in the user's hands. Opens the daemon's /system/browser-profile
+ * WebSocket: the daemon drives that account's persistent profile on a virtual display and screencasts it here as
  * image frames; we forward the user's mouse + keyboard back over the same socket. Modeled on terminalSession.ts
  * (same token+connect query-string auth over the sandbox's tunnel).
  *
- * `login` is the first visit: it opens the platform's sign-in page, the user signs in (incl. 2FA/CAPTCHA) and
+ * `capability` is the connection this window belongs to, not the site — one site can be connected several times
+ * over (a work Reddit and a personal one), each with its own profile, so the connection is what identifies the
+ * browser to open. `label` is what the user sees, and it names the ACCOUNT for the same reason: two windows onto
+ * one site have to be tellable apart.
+ *
+ * `login` is the first visit: it opens the site's sign-in page, the user signs in (incl. 2FA/CAPTCHA) and
  * clicks "I'm done", and the daemon keeps the logged-in profile so the agent's browser tools reuse it.
- * `browse` is every visit after that: the SAME profile, already signed in, opened on the platform's home page
+ * `browse` is every visit after that: the SAME profile, already signed in, opened on the site's home page
  * for the user to do something in themselves. One component because it is one browser and one wire — what
  * differs is where it starts, whether finishing re-attests the account, and the address bar, which only browsing
  * needs (the screencast is the page alone, so there is no window chrome in the picture to click). */
 
-const props = defineProps<{ visible: boolean; platform: string; label: string; mode: "login" | "browse" }>();
+const props = defineProps<{ visible: boolean; capability: string; label: string; mode: "login" | "browse" }>();
 const emit = defineEmits<{ (event: "update:visible", value: boolean): void; (event: "done"): void }>();
 
 // Keys forwarded as key events; everything printable rides as an insertText `text` frame instead.
@@ -58,7 +63,7 @@ const connect = async (): Promise<void> => {
     frame.value = undefined;
     address.value = "";
     editingAddress.value = false;
-    const url = await wsSocketUrl(`/system/browser-profile`, { platform: props.platform, mode: props.mode });
+    const url = await wsSocketUrl(`/system/browser-profile`, { capability: props.capability, mode: props.mode });
     if (url === undefined) {
         status.value = "error";
         errorMsg.value = "Sandbox isn't reachable, or you're not signed in.";

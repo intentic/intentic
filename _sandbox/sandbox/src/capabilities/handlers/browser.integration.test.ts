@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { Capability } from "@intentic/sandbox-contract";
 import { expect, test } from "vitest";
+import { hasSession, markConnected } from "../../browser/session-store.js";
 import { packFragment, readPack } from "../../environment/packs.js";
 import { readWorkspaceFile, removeWorkspacePath, writeWorkspaceFile } from "../../workspace/workspace-files.js";
 import type { CapabilityCtx } from "../capability.js";
@@ -129,4 +130,38 @@ test("a browser platform contributed by another extension applies the same way",
 test("echoConfig exposes only the platform; browser holds no manifest secret", () => {
     expect(echoConfig(reddit, new Map())).toEqual({ platform: "reddit" });
     expect(secretField(reddit, new Map())).toBeUndefined();
+});
+
+/* SEVERAL ACCOUNTS OF ONE SITE. Two entries, one platform, and the identity keyed by the ENTRY: so the second
+ * account has its own skill file, is not born connected off the first one's login, and — the one that would hurt
+ * most silently — does not take the first account's session with it when disconnected. */
+test("a second account of the same site is its own connection", async () => {
+    const { ctx, root } = tempCtx();
+    const config = { platform: "reddit" };
+    const skillOf = (id: string): string => join(root, ".claude", "skills", id, "SKILL.md");
+
+    await drain(browserHandler.apply(ctx, "reddit-work", config));
+    await drain(browserHandler.apply(ctx, "reddit-personal", config));
+
+    // Each account's skill names itself, so the agent can tell which browser it is holding.
+    expect(await readWorkspaceFile(skillOf("reddit-work"))).toContain("name: reddit-work");
+    expect(await readWorkspaceFile(skillOf("reddit-personal"))).toContain("name: reddit-personal");
+    expect(await readWorkspaceFile(skillOf("reddit-work"))).toContain("THIS SKILL IS ONE ACCOUNT: `reddit-work`");
+
+    // Signing one in leaves the other waiting for its own login. Only observable where the browser pack is
+    // installed — without it BOTH accounts pend on the rebuild first, as the status test above allows for.
+    await markConnected(root, "reddit-work");
+    const work = await browserHandler.status(ctx, "reddit-work", config);
+    if (!String(work.detail ?? "").includes("rebuild")) {
+        expect(work).toEqual({ state: "active" });
+        expect((await browserHandler.status(ctx, "reddit-personal", config)).detail).toContain("log in");
+    }
+
+    // And disconnecting it takes only its own session and skill.
+    await markConnected(root, "reddit-personal");
+    await browserHandler.remove!(ctx, "reddit-work", config);
+    expect(await readWorkspaceFile(skillOf("reddit-work"))).toBeUndefined();
+    expect(await readWorkspaceFile(skillOf("reddit-personal"))).toContain("name: reddit-personal");
+    expect(hasSession(root, "reddit-work")).toBe(false);
+    expect(hasSession(root, "reddit-personal")).toBe(true);
 });

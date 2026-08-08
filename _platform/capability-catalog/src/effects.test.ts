@@ -165,9 +165,11 @@ describe("capabilityEffects", () => {
         expect(machine).toEqual({ kind: "machine", platform: "linux", grants: ["read files", "write and trash files", "start and stop its sandboxes"] });
     });
 
-    it("keeps a browser profile per platform", () => {
-        expect(capabilityEffects({ kind: "browser", id: "reddit", config: { platform: "reddit" } })).toEqual([
-            { kind: "skill", name: "reddit" },
+    // One profile per CONNECTION, named after the site it is a profile of — so a second account of that site
+    // discloses its own stored session rather than looking like a second row about the first one's.
+    it("keeps a browser profile per connected account", () => {
+        expect(capabilityEffects({ kind: "browser", id: "reddit-work", config: { platform: "reddit" } })).toEqual([
+            { kind: "skill", name: "reddit-work" },
             { kind: "image" },
             { kind: "profile", platform: "reddit" },
         ]);

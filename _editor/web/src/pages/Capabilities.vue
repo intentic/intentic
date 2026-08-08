@@ -353,9 +353,13 @@ const entryIcon = (entry: CapabilityCatalogEntry): IconName => (entry.icon as Ic
 /* The live-browser window for a browser-kind capability (the session is a real logged-in browser, not a pasted
  * token, so it lives out-of-band over the /system/browser-profile WebSocket). Two things open it and one
  * component serves both: signing the account in, and — once it IS signed in — the user taking that same browser
- * for a spin themselves. */
+ * for a spin themselves.
+ *
+ * It opens ONE CONNECTION, never a site: the same card can hold several accounts (a work Reddit and a personal
+ * one), each with its own profile and its own login, so every caller below passes the instance it is standing on
+ * and the window is titled with that account's name. */
 const profileVisible = ref(false);
-const profilePlatform = ref(``);
+const profileCapability = ref(``);
 const profileLabel = ref(``);
 const profileMode = ref<`login` | `browse`>(`login`);
 // An ACP agent's interactive sign-in: the daemon starts its loginCommand in the capability's job session and
@@ -369,8 +373,8 @@ const startAgentLogin = async (id: string): Promise<void> => {
     }
 };
 
-const openBrowser = (platform: string, label: string, mode: `login` | `browse` = `login`): void => {
-    profilePlatform.value = platform;
+const openBrowser = (capability: string, label: string, mode: `login` | `browse` = `login`): void => {
+    profileCapability.value = capability;
     profileLabel.value = label;
     profileMode.value = mode;
     profileVisible.value = true;
@@ -980,7 +984,7 @@ const submit = async (): Promise<void> => {
             if (entry.kind === `host` && hostFor(added.id)?.lastSeen === undefined) {
                 openConnect(added);
             } else if (entry.kind === `browser` && awaitingLogin(added)) {
-                openBrowser(String(added.config[`platform`]), entry.name);
+                openBrowser(added.id, added.id);
             }
             return;
         }
@@ -1131,13 +1135,15 @@ const submitLabel = computed(() =>
                                             <!-- A connected browser is an account the user still owns, so the window that signed
                                                  it in is also the way to USE it: check a message, clear a captcha, change a
                                                  setting the agent has no business changing. Only once it is connected — before
-                                                 that the same window's job is the sign-in beside it. -->
+                                                 that the same window's job is the sign-in beside it. Both pass THIS ROW's
+                                                 instance: the card may hold several accounts of the site, and the window opens
+                                                 one of them. -->
                                             <Button
                                                 v-if="selected.kind === 'browser' && instance.status.state === 'active'"
                                                 label="Open browser"
                                                 size="small"
                                                 :text="true"
-                                                @click="openBrowser(String(instance.config[`platform`]), selected.name, `browse`)"
+                                                @click="openBrowser(instance.id, instance.id, `browse`)"
                                             >
                                                 <template #icon><Icon name="globe" /></template>
                                             </Button>
@@ -1148,7 +1154,7 @@ const submitLabel = computed(() =>
                                                 :label="instance.status.state === 'active' ? 'Re-log in' : 'Log in'"
                                                 size="small"
                                                 :text="true"
-                                                @click="openBrowser(String(instance.config[`platform`]), selected.name)"
+                                                @click="openBrowser(instance.id, instance.id)"
                                             >
                                                 <template #icon><Icon name="sign-in" /></template>
                                             </Button>
@@ -1194,7 +1200,7 @@ const submitLabel = computed(() =>
                                         v-if="selected.kind === 'browser' && awaitingLogin(instance)"
                                         type="button"
                                         class="inline-flex w-fit items-center gap-1 text-2xs text-warning hover:underline"
-                                        @click="openBrowser(String(instance.config[`platform`]), selected.name)"
+                                        @click="openBrowser(instance.id, instance.id)"
                                     >
                                         <Icon name="exclamation-triangle" />
                                         {{ instance.status.detail ?? "Not connected" }} — Log in →
@@ -1696,10 +1702,10 @@ const submitLabel = computed(() =>
                 </p>
             </ConfirmDialog>
 
-            <!-- Guided browser login for browser-kind capabilities (screencast a live Chromium the user signs into). -->
+            <!-- Guided browser login for one connected account (screencast a live Chromium the user signs into). -->
             <BrowserProfileDialog
                 v-model:visible="profileVisible"
-                :platform="profilePlatform"
+                :capability="profileCapability"
                 :label="profileLabel"
                 :mode="profileMode"
                 @done="onBrowserDone"

@@ -2725,9 +2725,13 @@ export const DockerConfigSchema = z.object({
 });
 // A logged-in browser session the AGENT drives via Playwright MCP tools — for social platforms whose APIs can't
 // cover "all the actions" (X reads are paywalled; X community-join and YouTube community-posts have no API). No
-// secret in the manifest: the session lives in a persisted Chromium profile under .intentic/browser/<platform>,
+// secret in the manifest: the session lives in a persisted Chromium profile under .intentic/browser/<id>,
 // established once through the guided-login WebSocket (/system/browser-login). Chromium itself rides this kind's
-// Dockerfile fragment, applied on an owner rebuild. One capability = one platform (the id doubles as the profile).
+// Dockerfile fragment, applied on an owner rebuild.
+//
+// ONE CAPABILITY = ONE ACCOUNT, not one platform: several entries may name the same `platform` (reddit-work and
+// reddit-personal), and the ID is what the profile, the login, the passkey and the agent's tool prefix are all
+// keyed by — so each account signs in separately and is disconnected on its own.
 //
 // `platform` is an OPEN slug, not an enum, for the reason `cli`'s `provider` is: a platform is a card, a login URL
 // and a skill in an installed extension's `contributes.capabilities`, so the set of them is not a fact this

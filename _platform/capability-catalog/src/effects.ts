@@ -53,7 +53,8 @@ export type CapabilityEffect =
     | { readonly kind: "deploy"; readonly provisions: boolean }
     // Extension code runs inside the app with the owner's session — the owner-only trust decision.
     | { readonly kind: "trusted-code" }
-    // Keeps a logged-in Chromium profile under .intentic/browser/<platform> that the agent drives.
+    // Keeps a logged-in Chromium profile under .intentic/browser/<id> that the agent drives — one per connected
+    // ACCOUNT, so `platform` here is what the profile is a profile OF, not what it is keyed by.
     | { readonly kind: "profile"; readonly platform: string }
     // Gives the agent hands on a computer the user OWNS — the most consequential effect in this union, so it
     // spells out the grant rather than naming a mechanism. `grants` is the scopes ticked on the card, in the

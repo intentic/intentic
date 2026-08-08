@@ -231,17 +231,22 @@ const browserRuntime = async (): Promise<BrowserRuntime | undefined> => {
 // each logged-in server's passkey store. The ports travel with the servers because they are the same decision —
 // a browser the agent can drive and a browser the owner can watch have to be the same browser
 // (browser-sessions.ts holds the other end); the passkey stores ride the same map because the observer that
-// watches those pages is also what plugs the platform's software security key into them (passkeys.ts).
+// watches those pages is also what plugs the account's software security key into them (passkeys.ts).
 export interface BrowserTurnTools {
     readonly servers: Record<string, McpServerConfig>;
     readonly ports: Record<string, number>;
-    // Server id → the platform's passkey store path. Absent for `web` — the credential-free browser holds no identity.
+    // Server id → that account's passkey store path. Absent for `web` — the credential-free browser holds no identity.
     readonly passkeys: Record<string, string>;
 }
 
 // Every browser server for this turn. The isolated one is unconditional; a capability's own server is added
 // only once it's logged in, and never while a guided login holds the profile (Chromium locks the
 // --user-data-dir). A capability may take the `web` id, in which case its persisted profile deliberately wins.
+//
+// One server PER ACCOUNT, keyed by the capability's id — which is also the profile's key, so two accounts of one
+// site (reddit-work, reddit-personal) are two servers over two separate profiles and both are drivable in the
+// same turn. Keyed by platform they would have been two prefixes over one user-data-dir, which Chromium locks:
+// whichever launched first would work and the other would fail on its first call.
 export const browserServersOf = async (capabilities: readonly Capability[], root: string): Promise<BrowserTurnTools> => {
     const runtime = await browserRuntime();
     if (runtime === undefined) {
@@ -255,7 +260,7 @@ export const browserServersOf = async (capabilities: readonly Capability[], root
         web: isolatedBrowserSpec(runtime.cli, runtime.executablePath, browserOutputDir(root), await writeBrowserConfig("web", webPort)),
     };
     const loggedIn = capabilities.filter(
-        (capability) => capability.kind === "browser" && hasSession(root, capability.config.platform) && !isProfileOpen(capability.config.platform),
+        (capability) => capability.kind === "browser" && hasSession(root, capability.id) && !isProfileOpen(capability.id),
     );
     if (loggedIn.length === 0) {
         return { servers, ports, passkeys };
@@ -265,16 +270,13 @@ export const browserServersOf = async (capabilities: readonly Capability[], root
     const display = await ensureXvfb();
     const stealthPath = await ensureStealthScript(root);
     for (const capability of loggedIn) {
-        if (capability.kind !== "browser") {
-            continue;
-        }
         const port = await freePort();
         ports[capability.id] = port;
-        passkeys[capability.id] = passkeyPath(root, capability.config.platform);
+        passkeys[capability.id] = passkeyPath(root, capability.id);
         servers[capability.id] = browserServerSpec(
             runtime.cli,
             runtime.executablePath,
-            sessionDir(root, capability.config.platform),
+            sessionDir(root, capability.id),
             stealthPath,
             display,
             await writeBrowserConfig(capability.id, port),

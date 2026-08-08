@@ -6,16 +6,17 @@ import type { BrowserContext, Page } from "playwright";
  *
  * The sites the sandbox signs into are moving their second factor from TOTP codes to WebAuthn (npm has already
  * arrived), and a hardware key on the owner's desk can never reach a Chromium running in this container. So the
- * sandbox holds its own: every page of a platform's logged-in browser gets a CDP virtual authenticator — a
- * software security key Chromium itself provides — restored from that platform's credential store. When the
+ * sandbox holds its own: every page of a connected account's logged-in browser gets a CDP virtual authenticator —
+ * a software security key Chromium itself provides — restored from that ACCOUNT's credential store. When the
  * owner clicks "Add security key" on a site's 2FA page (in the guided login window), the enrollment lands on
  * the virtual authenticator, the credentialAdded event hands us the credential, and it is persisted; every
  * later ceremony — the owner approving a publish, the agent answering a CLI's web-auth prompt — finds the key
  * already plugged in and answers without any dialog (presence and user-verification are simulated).
  *
- * The store sits beside the platform's Chromium profile and is exactly as sensitive as it: the profile's
+ * The store sits beside that account's Chromium profile and is exactly as sensitive as it: the profile's
  * cookies already ARE the account, so a private key scoped to one site adds risk of the same kind, not a new
- * kind. 0600, on the /work volume (survives rebuilds), deleted with the session (session-store.clearSession).
+ * kind. Two accounts of one site hold separate stores, as they would separate physical keys. 0600, on the /work
+ * volume (survives rebuilds), deleted with the session (session-store.clearSession).
  *
  * Two honest limits. The authenticator is per-PAGE (the CDP WebAuthn domain is target-scoped), so arming rides
  * the two places every page already passes through — the guided login's context and browser-sessions' observer
@@ -64,7 +65,7 @@ export const listPasskeys = async (storePath: string): Promise<PasskeyCredential
     }
 };
 
-/* Writes are serialized per store: two pages of one platform each hold an authenticator, and an enrollment on
+/* Writes are serialized per store: two pages of one account each hold an authenticator, and an enrollment on
  * one racing an assertion on the other is two read-modify-write cycles on the same file. */
 const writing = new Map<string, Promise<void>>();
 

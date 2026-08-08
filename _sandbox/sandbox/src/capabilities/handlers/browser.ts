@@ -14,10 +14,15 @@ import { contributedSkill, contributionKey, contributionRegistry, hostOf } from 
 // browser feature pack — Chromium + Xvfb as one unit (packs/browser.Dockerfile), nothing when the running base
 // image already bakes it (the standard image does; a core image rides it through an owner rebuild).
 // The login itself happens out-of-band over the /system/browser-profile
-// WebSocket, which persists a Chromium profile under .intentic/browser/<platform>; the agent's @playwright/mcp
+// WebSocket, which persists a Chromium profile under .intentic/browser/<id>; the agent's @playwright/mcp
 // (wired in agent.routes) reads that profile so it's already signed in, and the owner can reopen that same
 // profile by hand on the same route. Distinct from `cli` (env credential + curl) — here the credential is a
 // browser session, not an env var.
+//
+// ONE ENTRY IS ONE ACCOUNT, not one site: several entries may name the same platform (reddit-work and
+// reddit-personal), and everything that carries identity — the profile, the login, the passkey — is keyed by the
+// entry's ID (session-store.ts), as this handler's skill file and the agent's tool prefix already are. So the
+// status below asks whether THIS account signed in, and the removal takes only this account's session with it.
 const skillPath = (root: string, id: string): string => join(root, ".claude", "skills", id, "SKILL.md");
 
 // Is the browser pack actually present — Chromium at playwright's cache path AND Xvfb on PATH? The probe for
@@ -57,20 +62,20 @@ export const browserHandler: CapabilityHandler = {
     // Two distinct pending states. The web UI (Capabilities.vue) routes the rebuild one to the Environment card
     // and the login one to the guided-login window — it distinguishes them by the word "rebuild" in the detail,
     // so keep that word in the rebuild detail (and out of the login detail).
-    status: async (ctx, id, config) => {
+    status: async (ctx, id) => {
         if ((await ctx.files.read(skillPath(ctx.workspace.root, id))) === undefined) {
             return { state: "inactive" };
         }
         if (!browserPackInstalled()) {
             return { state: "pending", detail: "rebuild the sandbox to finish browser setup (Environment card)" };
         }
-        if (!hasSession(ctx.workspace.root, (config as BrowserConfig).platform)) {
+        if (!hasSession(ctx.workspace.root, id)) {
             return { state: "pending", detail: "log in to connect your account" };
         }
         return { state: "active" };
     },
-    remove: async (ctx, id, config) => {
+    remove: async (ctx, id) => {
         await ctx.files.remove(join(ctx.workspace.root, ".claude", "skills", id));
-        await clearSession(ctx.workspace.root, (config as BrowserConfig).platform);
+        await clearSession(ctx.workspace.root, id);
     },
 };

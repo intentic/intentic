@@ -58,7 +58,7 @@ const firstSegment = (relPath: string): string | undefined => relPath.split(/[\\
 export const isReferencePath = (relPath: string): boolean => firstSegment(relPath) === REFERENCE_DIR;
 export const isPublicPath = (relPath: string): boolean => firstSegment(relPath) === PUBLIC_DIR;
 
-// The persisted browser-login profiles (.intentic/browser/<platform>) are a Chromium user-data dir: thousands of
+// The persisted browser-login profiles (.intentic/browser/<capability>) are a Chromium user-data dir: thousands of
 // constantly-rewritten files (Cookies, Login Data, …). Treated as ignored so the tree grays + lazy-loads the
 // subtree instead of eagerly walking it, and the file watcher skips its churn. Not a read block — its files are
 // served on demand like any other ignored path.

@@ -1,7 +1,7 @@
 import type { BrowserContext, CDPSession, Page } from "playwright";
 
 // The live-browser wire, shared by the two surfaces that show a Chromium the user isn't sitting in front of:
-// the platform's own profile (browser-profile.ts — the owner drives) and the agent's browser view (browser-view.ts — the
+// a connected account's own profile (browser-profile.ts — the owner drives) and the agent's browser view (browser-view.ts — the
 // owner watches, and may take the wheel). Both are the same three things: image frames out over CDP's
 // screencast, the owner's mouse/keyboard back in over CDP's Input domain, and a rebind that follows popups —
 // so they are one module rather than two copies that drift.

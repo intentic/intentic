@@ -9,26 +9,32 @@ import type { Services } from "../composition.js";
 import { redeemTicket } from "../auth/ws-tickets.js";
 import { contributionKey, contributionRegistry } from "../capabilities/contributions.js";
 
-/* The /system/browser-profile route: THE OWNER'S OWN HANDS ON A PLATFORM'S CONNECTED BROWSER. Like
+/* The /system/browser-profile route: THE OWNER'S OWN HANDS ON ONE CONNECTED ACCOUNT'S BROWSER. Like
  * /system/terminal it's a WebSocket the header-less browser drives, so it authorizes token+connect from the
  * query string (app.ts exempts it from the bearer middleware). The daemon launches the persistent
- * (profile-backed) Chromium for one platform, screencasts it to the client, and forwards the owner's
+ * (profile-backed) Chromium for one account, screencasts it to the client, and forwards the owner's
  * mouse/keyboard back over CDP.
  *
+ * ADDRESSED BY CAPABILITY, NOT BY SITE: the window opens ONE ACCOUNT, and several accounts of one site can be
+ * connected at once (reddit-work, reddit-personal). The entry is what the profile is keyed by; the SITE is read
+ * back off it, because only the site knows where a sign-in starts and where "home" is.
+ *
  * Two modes over one window, because they are the same browser at two moments of its life:
- *   login  — open the platform's sign-in page; when the owner clicks Done the profile holds the auth cookies
+ *   login  — open the site's sign-in page; when the owner clicks Done the profile holds the auth cookies
  *            and the session is marked connected, so the agent's @playwright/mcp reuses it.
- *   browse — open the platform's home page in the profile that ALREADY has those cookies. Nothing is marked:
+ *   browse — open the site's home page in the profile that ALREADY has those cookies. Nothing is marked:
  *            this is the owner using their own connected account by hand (check a message, clear a captcha,
  *            change a setting the agent shouldn't), and a session it cannot judge is not one to re-attest.
  * Browsing needs an address bar, which a screencast of the page alone can't provide (there is no window chrome
  * in the picture) — hence the `go`/`back`/`reload` frames and the `url` frames going the other way.
  *
- * One window per platform at a time (a persistent profile can't be opened twice) — the same lock that parks
- * the agent's browser tools for that platform while the owner has the wheel. */
+ * One window per ACCOUNT at a time (a persistent profile can't be opened twice) — the same lock that parks the
+ * agent's browser tools for that account while the owner has the wheel, and the reason the owner can sit in one
+ * Reddit account by hand while the agent works in the other. */
 export const createBrowserProfileRoute = (services: Services) =>
     upgradeWebSocket((c) => {
-        let platform: string | undefined;
+        // The capability id of the account this window drives — the profile's key, and the lock's.
+        let account: string | undefined;
         let context: BrowserContext | undefined;
         let screencast: Screencast | undefined;
         let closed = false;
@@ -47,8 +53,8 @@ export const createBrowserProfileRoute = (services: Services) =>
             } catch (err) {
                 services.logger.warn({ err }, "browser-profile: context close failed");
             }
-            if (platform !== undefined) {
-                releaseProfileLock(platform);
+            if (account !== undefined) {
+                releaseProfileLock(account);
             }
         };
 
@@ -65,10 +71,17 @@ export const createBrowserProfileRoute = (services: Services) =>
                     ws.close(1008, "unauthorized");
                     return;
                 }
-                // A platform is real iff an enabled extension declares it — the same registry the browser handler
-                // resolves against, so a card that can be added is a card that can be opened.
-                const requested = url.searchParams.get("platform") ?? "";
-                const contribution = (await contributionRegistry(services)).get(contributionKey("browser", requested));
+                // An account is real iff the manifest holds a browser entry with that id — the profile this
+                // window opens IS that entry's, so an id nobody added has no profile to open.
+                const requested = url.searchParams.get("capability") ?? "";
+                const capability = await services.capabilities.get(requested);
+                if (capability === undefined || capability.kind !== "browser") {
+                    ws.close(1008, "invalid capability");
+                    return;
+                }
+                // Its SITE is where the sign-in and the home page live — real iff an enabled extension declares
+                // it, the same registry the browser handler resolves against.
+                const contribution = (await contributionRegistry(services)).get(contributionKey("browser", capability.config.platform));
                 if (contribution === undefined || contribution.spec.kind !== "browser") {
                     ws.close(1008, "invalid platform");
                     return;
@@ -82,7 +95,7 @@ export const createBrowserProfileRoute = (services: Services) =>
                     ws.close(1008, "this browser is already open in another window");
                     return;
                 }
-                platform = requested;
+                account = requested;
                 let playwright: typeof import("playwright");
                 try {
                     playwright = await import("playwright");
@@ -96,7 +109,7 @@ export const createBrowserProfileRoute = (services: Services) =>
                     // Run HEADED on a virtual display: the headless shell is fingerprinted and blocked by anti-bot
                     // WAFs (Reddit's "network security"). Xvfb rides the capability's Dockerfile fragment.
                     const display = await ensureXvfb();
-                    context = await playwright.chromium.launchPersistentContext(sessionDir(services.workspace.root, platform), {
+                    context = await playwright.chromium.launchPersistentContext(sessionDir(services.workspace.root, account), {
                         headless: false,
                         env: { ...process.env, DISPLAY: display },
                         viewport: { width: VIEW_WIDTH, height: VIEW_HEIGHT },
@@ -114,10 +127,11 @@ export const createBrowserProfileRoute = (services: Services) =>
                     // so the stream has something to bind to (it follows every later page — popups included —
                     // by itself; see screencast.ts).
                     const page = ctx.pages()[0] ?? (await ctx.newPage());
-                    // The sandbox's software security key, plugged in BEFORE the first navigation: this window
-                    // is where the owner enrolls it (a site's "Add security key" lands on the virtual
-                    // authenticator and persists) and where a stored one answers a 2FA prompt.
-                    const storePath = passkeyPath(services.workspace.root, requested);
+                    // The sandbox's software security key for THIS ACCOUNT, plugged in BEFORE the first
+                    // navigation: this window is where the owner enrolls it (a site's "Add security key" lands on
+                    // the virtual authenticator and persists) and where a stored one answers a 2FA prompt. Two
+                    // accounts of one site enroll their own, as they would on two physical keys.
+                    const storePath = passkeyPath(services.workspace.root, account);
                     const arm = (target: Page): void =>
                         void armPasskeys(ctx, target, storePath).catch((err: unknown) =>
                             services.logger.warn({ err }, "browser-profile: passkey arm failed"),
@@ -172,7 +186,7 @@ export const createBrowserProfileRoute = (services: Services) =>
                     return;
                 }
                 if (message.type === "done") {
-                    const finished = platform;
+                    const finished = account;
                     // Close first so Chromium flushes the profile's cookies to disk, then mark connected — a
                     // browse window changes nothing about whether the account is connected, so it only closes.
                     await cleanup();

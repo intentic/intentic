@@ -127,11 +127,12 @@ vi.mock(`../components/HostConnectDialog.vue`, () => ({
 }));
 vi.mock(`../components/BrowserProfileDialog.vue`, () => ({
     default: defineComponent({
-        props: { visible: Boolean, platform: String, label: String, mode: String },
+        props: { visible: Boolean, capability: String, label: String, mode: String },
         render() {
             // One window, two jobs — so the stub records WHICH one it was opened for: a hand-off that landed on
-            // the browse mode would be pointing at the wrong step.
-            return this.visible ? h(`div`, { "data-browser": this.platform, "data-mode": this.mode }, this.label) : null;
+            // the browse mode would be pointing at the wrong step. It records the CONNECTION too, because a card
+            // can hold several accounts of one site and the window opens exactly one of them.
+            return this.visible ? h(`div`, { "data-browser": this.capability, "data-mode": this.mode }, this.label) : null;
         },
     }),
 }));
@@ -249,6 +250,35 @@ it(`offers the connected browser to be used, not only signed into again`, async 
     const window = el.querySelector(`[data-browser]`);
     expect(window?.getAttribute(`data-browser`)).toBe(`reddit`);
     expect(window?.getAttribute(`data-mode`)).toBe(`browse`);
+});
+
+/* ONE SITE, TWO ACCOUNTS. The card's Name field already invites a second connection ("Give this one a new name
+ * to add another connection"), and each connection is its own signed-in browser — so every button on a row has
+ * to act on THAT row's account. Opening the site instead of the connection is the bug this pins: it would put
+ * the user in whichever account happened to be first, on a window that says nothing about which one it is. */
+it(`opens the account a row belongs to when one site is connected twice`, async () => {
+    card = `reddit`;
+    applied = { state: `active` };
+    capabilities.value = [{ id: `reddit`, kind: `browser`, status: { state: `active` }, config: { platform: `reddit` } }];
+    add.mockClear();
+    push.mockClear();
+    const el = mount();
+
+    // The form pre-fills a free name over the taken one, so submitting adds a SECOND account rather than
+    // overwriting the first.
+    await submitForm(el);
+    expect(add).toHaveBeenCalledWith(expect.objectContaining({ id: `reddit-2` }));
+
+    // Two rows, in list order, each with its own window — the second row's opens the second account.
+    const opens = [...el.querySelectorAll(`button`)].filter((button) => button.textContent?.includes(`Open browser`));
+    expect(opens).toHaveLength(2);
+    opens[1]!.click();
+    await nextTick();
+
+    const window = el.querySelector(`[data-browser]`);
+    expect(window?.getAttribute(`data-browser`)).toBe(`reddit-2`);
+    // And it names the ACCOUNT, not the card — two windows onto one site have to be tellable apart.
+    expect(window?.textContent).toBe(`reddit-2`);
 });
 
 it(`leaves the form on screen with the failure when the apply fails, offering no command`, async () => {

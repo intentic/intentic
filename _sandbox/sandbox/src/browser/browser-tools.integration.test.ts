@@ -1,4 +1,4 @@
-import { mkdtempSync } from "node:fs";
+import { existsSync, mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { Capability } from "@intentic/sandbox-contract";
@@ -93,7 +93,7 @@ test("a browser capability contributes nothing extra until it is logged in", asy
     expect(Object.keys((await browserServersOf([reddit], tempRoot())).servers)).toEqual(["web"]);
 });
 
-test("a login in progress suppresses that platform's server (the profile is locked)", async () => {
+test("a login in progress suppresses that account's server (the profile is locked)", async () => {
     if (!(await chromiumInstalled())) {
         return;
     }
@@ -103,6 +103,36 @@ test("a login in progress suppresses that platform's server (the profile is lock
     // The credential-free browser is unaffected — it holds no profile to lock.
     expect(Object.keys((await browserServersOf([reddit], root)).servers)).toEqual(["web"]);
     releaseProfileLock("reddit");
+});
+
+/* TWO ACCOUNTS OF ONE SITE ARE TWO BROWSERS, in the same turn. Each gets its own tool prefix (which it already
+ * did) AND its own --user-data-dir (which is the fix): pointed at one shared directory they would not merely be
+ * confusable, they would be unusable, because Chromium takes an exclusive lock on a profile — the first server
+ * to launch would work and the second would fail on its first call.
+ *
+ * The logged-in path needs the virtual display, which the sandbox image has and a dev host may not; guarded like
+ * the Chromium probe above rather than left to throw somewhere it was never going to run. */
+test("accounts of the same site each get their own browser on their own profile", async () => {
+    if (!(await chromiumInstalled()) || !existsSync("/usr/bin/Xvfb")) {
+        return;
+    }
+    const root = tempRoot();
+    const work: Capability = { id: "reddit-work", kind: "browser", config: { platform: "reddit" } };
+    const personal: Capability = { id: "reddit-personal", kind: "browser", config: { platform: "reddit" } };
+    await markConnected(root, "reddit-work");
+    await markConnected(root, "reddit-personal");
+
+    const { servers, passkeys } = await browserServersOf([work, personal], root);
+
+    expect(Object.keys(servers).toSorted()).toEqual(["reddit-personal", "reddit-work", "web"]);
+    const dirOf = (id: string): string | undefined => {
+        const args = (servers[id] as { args: string[] }).args;
+        return args[args.indexOf("--user-data-dir") + 1];
+    };
+    expect(dirOf("reddit-work")).toBe(join(root, ".intentic", "browser", "reddit-work"));
+    expect(dirOf("reddit-personal")).toBe(join(root, ".intentic", "browser", "reddit-personal"));
+    // Their software security keys are separate too — one account's second factor is not the other's.
+    expect(passkeys["reddit-work"]).not.toBe(passkeys["reddit-personal"]);
 });
 
 // Without the binary there is nothing to drive, and executablePath() alone never says so.
