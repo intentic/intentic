@@ -4427,6 +4427,23 @@ export const ComputerSchema = z.object({
     hostId: z.string().optional(),
     // Host-capability liveness. Absent when there is no host capability — which is NOT the same as offline.
     online: z.boolean().optional(),
+    /* WHAT THE COMPUTER IS, as distinct from how it is reachable — the half a row used to leave out entirely,
+     * so a Windows laptop and a Linux desktop were two identical lines of text with different names on them.
+     *
+     * It is carried BESIDE the report rather than inside it because the rows that need it most are the ones with
+     * no report: a connected computer with no sync agent, or one that is asleep, still knows its own OS. Nothing
+     * here depends on an agent being installed, and the daemon has held all of it since the machine connected.
+     *
+     * `platform` is the slug this side classifies the machine by — the host capability's own card ("windows",
+     * "linux"), or the platform token a sync report carries, normalised to the same words. `facts` is the
+     * machine's connect-time description of ITSELF, which is what says which Windows and which shell. */
+    platform: z.string().optional(),
+    facts: HostFactsSchema.optional(),
+    // The host agent's version and when the machine last held a socket — how a connected computer AGES. An old
+    // agent explains a row that lacks something newer machines have, and "last seen" is the one honest thing an
+    // offline row can still say about itself.
+    hostAgent: z.string().optional(),
+    lastSeen: z.number().optional(),
     report: MachineReportSchema.optional(),
     gap: ComputerGapSchema.optional(),
 });

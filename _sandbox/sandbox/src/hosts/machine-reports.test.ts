@@ -1,4 +1,4 @@
-import type { MachineReport } from "@intentic/sandbox-contract";
+import type { HostSummary, MachineReport } from "@intentic/sandbox-contract";
 import { expect, test } from "vitest";
 import { mergeComputers, type PullResult, reportFrom, sandboxesFromTool } from "./machine-reports.js";
 
@@ -11,6 +11,15 @@ const report = (hostname: string, overrides: Partial<MachineReport> = {}): Machi
     ports: [],
     watcher: { running: true },
     capturedAt: 1_700_000_000_000,
+    ...overrides,
+});
+
+// A host capability as the hub holds it: the card's platform always, and what the machine said about itself only
+// once it has connected.
+const host = (id: string, overrides: Partial<HostSummary> = {}): HostSummary => ({
+    id,
+    platform: "linux",
+    online: true,
     ...overrides,
 });
 
@@ -70,6 +79,45 @@ test("keeps an enrolled machine that has never reported, and says why it is empt
     expect(merged).toEqual([{ key: "laptop", label: "laptop", syncEnrolled: true, gap: "unreported" }]);
 });
 
+/* WHAT THE MACHINE IS has to survive having no report, because that is the row it matters on: a connected
+ * computer with no sync agent had nothing on it but a name, so a Windows PC and a Linux desktop rendered as the
+ * same line twice. None of this comes from an agent — the card names the platform and the machine described
+ * itself when it connected. */
+test("says what a connected computer is even when it reported nothing", () => {
+    const facts = { os: "Windows 11 Pro (build 10.0.26100)", arch: "x64", shell: "PowerShell 7", home: "C:\\Users\\ada", roots: ["C:\\Users\\ada"] };
+    const merged = mergeComputers(
+        [],
+        [],
+        [{ host: host("my-pc", { platform: "windows", facts, version: "0.5.1", lastSeen: 1_700_000_000_000 }), result: { gap: "no-agent" } }],
+    );
+    expect(merged[0]).toEqual({
+        key: "my-pc",
+        label: "my-pc",
+        syncEnrolled: false,
+        hostId: "my-pc",
+        online: true,
+        platform: "windows",
+        facts,
+        hostAgent: "0.5.1",
+        lastSeen: 1_700_000_000_000,
+        gap: "no-agent",
+    });
+});
+
+// A sync-only machine has no capability card to name its platform, so the report's own token is read — in the
+// spelling `os.platform()` uses, which is not one anybody should have to recognise on screen.
+test("reads a sync-only machine's platform off its report", () => {
+    const merged = mergeComputers(
+        ["laptop", "mac"],
+        [
+            { machine: "laptop", report: report("laptop-box", { os: "win32" }) },
+            { machine: "mac", report: report("mac-box", { os: "darwin" }) },
+        ],
+        [],
+    );
+    expect(merged.map((row) => row.platform)).toEqual(["windows", "macos"]);
+});
+
 /* The conservative half of the reconciliation. Both doors onto the SAME box collapse into one row only because
  * the two reports agree on a hostname — the sandbox knows the machine as "laptop" (the ssh key's comment) and the
  * capability calls it "my-pc", and neither name could have told us they were the same computer. */
@@ -77,7 +125,7 @@ test("folds a sync enrollment and a host capability into one row when the hostna
     const pulled: PullResult = {
         report: report("blackbox", { sandboxes: [{ slug: "work", container: "intentic-sandbox-work", running: true, image: "img" }] }),
     };
-    const merged = mergeComputers(["laptop"], [{ machine: "laptop", report: report("blackbox") }], [{ id: "my-pc", online: true, result: pulled }]);
+    const merged = mergeComputers(["laptop"], [{ machine: "laptop", report: report("blackbox") }], [{ host: host("my-pc"), result: pulled }]);
 
     expect(merged).toHaveLength(1);
     expect(merged[0]).toMatchObject({ key: "blackbox", label: "laptop", syncEnrolled: true, hostId: "my-pc", online: true });
@@ -91,7 +139,7 @@ test("keeps two machines apart when nothing says they are the same box", () => {
     const merged = mergeComputers(
         ["ada-laptop"],
         [{ machine: "ada-laptop", report: report("ada-box") }],
-        [{ id: "grace-pc", online: true, result: { report: report("grace-box") } }],
+        [{ host: host("grace-pc"), result: { report: report("grace-box") } }],
     );
     expect(merged.map((row) => row.key)).toEqual(["ada-box", "grace-box"]);
     expect(merged.map((row) => row.syncEnrolled)).toEqual([true, false]);
@@ -104,9 +152,9 @@ test("carries the reason a reachable computer produced nothing", () => {
         [],
         [],
         [
-            { id: "asleep", online: false, result: { gap: "offline" } },
-            { id: "locked-down", online: true, result: { gap: "scope-off" } },
-            { id: "bare", online: true, result: { gap: "no-agent" } },
+            { host: host("asleep", { online: false }), result: { gap: "offline" } },
+            { host: host("locked-down"), result: { gap: "scope-off" } },
+            { host: host("bare"), result: { gap: "no-agent" } },
         ],
     );
     expect(merged.map((row) => row.gap)).toEqual(["offline", "scope-off", "no-agent"]);

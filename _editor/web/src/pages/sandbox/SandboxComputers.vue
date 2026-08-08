@@ -5,6 +5,7 @@ import Button from "primevue/button";
 import { computed, onMounted, ref } from "vue";
 import { useRoute } from "vue-router";
 import BridgeTokensCard from "./BridgeTokensCard.vue";
+import { computerDetails, osLabel, osTitle } from "./computerFacts";
 import DesktopSyncCard from "./DesktopSyncCard.vue";
 import MachineRunLog from "./MachineRunLog.vue";
 import { manageMachineSandbox, reportStale, useComputers } from "../../composables/sandbox/useComputers";
@@ -65,12 +66,6 @@ const label = (computer: Computer): string => {
     }
     return reportStale(computer, now.value) ? `gone quiet` : `live`;
 };
-
-// How this sandbox can reach the machine at all — two independent doors, and a box may be behind both.
-const reach = (computer: Computer): string =>
-    [computer.syncEnrolled ? `desktop sync` : undefined, computer.hostId === undefined ? undefined : `connected computer`]
-        .filter((part) => part !== undefined)
-        .join(" · ");
 
 const sorted = computed(() => computers.value.toSorted((a, b) => a.label.localeCompare(b.label)));
 
@@ -152,9 +147,16 @@ const act = async (computer: Computer, box: MachineSandbox, op: MachineSandboxOp
                 <div class="flex flex-wrap items-center gap-2">
                     <Icon name="desktop" class="shrink-0 text-muted" />
                     <span class="truncate text-sm font-medium text-content">{{ computer.label }}</span>
-                    <span class="truncate text-2xs text-subtle">{{ reach(computer) }}</span>
+                    <!-- WHICH COMPUTER THIS IS. Beside the name rather than down in the detail line because it is
+                         the fact that tells two rows apart at a glance, and the one the rows were missing: three
+                         machines used to differ only by the word somebody typed when they added them. -->
+                    <span v-if="osLabel(computer)" class="truncate text-2xs text-muted" :title="osTitle(computer)">{{ osLabel(computer) }}</span>
                     <StatusBadge :variant="tone(computer)" size="xs" :dot="true" :label="label(computer)" class="ml-auto" />
                 </div>
+
+                <!-- How this sandbox reaches it, what it runs on, and which agents are on it — one wrapping line,
+                     because each part is a fact somebody occasionally needs and none of them is worth a row. -->
+                <p v-if="computerDetails(computer).length > 0" class="text-2xs text-subtle">{{ computerDetails(computer).join(` · `) }}</p>
 
                 <!-- The reading's own age, not its arrival's: a report is a snapshot of a computer that may since
                      have closed its lid, so it is presented as of when the machine took it. -->
@@ -184,6 +186,9 @@ const act = async (computer: Computer, box: MachineSandbox, op: MachineSandboxOp
                             <span v-if="isSelf(computer, box)" class="text-subtle">· the one you're using</span>
                             <!-- Absent tunnel and stopped tunnel are different facts; only the second is a warning. -->
                             <span v-if="box.tunnelRunning === false" class="text-warning">· tunnel off</span>
+                            <!-- WHICH IMAGE it is on — the fact Update is about, and the only way to see that one
+                                 sandbox on this machine is running something older than its neighbour. -->
+                            <span class="truncate font-mono text-subtle" :title="box.image">{{ box.image }}</span>
                             <span v-if="manageable(computer)" class="ml-auto flex items-center gap-1">
                                 <Button
                                     v-if="!box.running"

@@ -1,6 +1,7 @@
 import {
     type Computer,
     type ComputerGap,
+    type HostSummary,
     type MachineFlowLine,
     type MachineReport,
     MachineReportSchema,
@@ -152,6 +153,19 @@ const pullCached = async (services: Services, id: string): Promise<PullResult> =
     return result;
 };
 
+/* WHICH OS, in the one vocabulary the view renders — the capability cards' own slugs (see the `computers`
+ * extension). A sync report states the same fact in Node's spelling, because that is what `os.platform()`
+ * returns on the machine, so the two are folded together here rather than in the browser: "win32" is a token
+ * this side knows the meaning of, and a view that has to know it too is a view that has to be updated when a
+ * platform is added. An unrecognised token passes through as itself — better a strange word on the row than a
+ * machine that claims no OS at all. */
+const PLATFORM_SLUGS: Record<string, string> = { win32: "windows", darwin: "macos", linux: "linux" };
+
+// The capability's card is authoritative when there is one: the owner picked it, and it is known whether or not
+// the machine has ever answered anything.
+const platformOf = (declared: string | undefined, report: MachineReport | undefined): string | undefined =>
+    declared ?? (report === undefined ? undefined : (PLATFORM_SLUGS[report.os] ?? report.os));
+
 /* THE RECONCILIATION, as a pure function of the three things that feed it — which machines are enrolled, what
  * they volunteered, and what each host capability answered. Pure because this is the part with a judgement in it,
  * and a judgement is worth testing without a WebSocket, a tmpdir and a capability store standing behind it.
@@ -162,37 +176,50 @@ const pullCached = async (services: Services, id: string): Promise<PullResult> =
 export const mergeComputers = (
     enrolled: readonly string[],
     volunteered: readonly { machine: string; report: MachineReport }[],
-    hosts: readonly { id: string; online: boolean; result: PullResult }[],
+    // The host's whole summary, not just its id and liveness: what the machine said about itself at connect is
+    // the only description a row with no report has, and it is already sitting in the hub's memory.
+    hosts: readonly { host: HostSummary; result: PullResult }[],
 ): Computer[] => {
     // Driven by the ENROLLMENT list, not the report list: a machine that has never posted still gets a row, which
     // is the whole difference between "your laptop's agent is too old to report" and the sandbox quietly
     // pretending the laptop is not there.
     const rows: Computer[] = enrolled.map((machine) => {
         const report = volunteered.find((entry) => entry.machine === machine)?.report;
+        const platform = platformOf(undefined, report);
         return {
             key: report?.hostname ?? machine,
             label: machine,
             syncEnrolled: true,
+            ...(platform === undefined ? {} : { platform }),
             ...(report === undefined ? {} : { report }),
         };
     });
 
-    for (const host of hosts) {
-        const report = "report" in host.result ? host.result.report : undefined;
+    for (const { host, result } of hosts) {
+        const report = "report" in result ? result.report : undefined;
+        // Everything this side knows about the machine itself, as opposed to what it is doing for this sandbox.
+        const platform = platformOf(host.platform, report);
+        const identity = {
+            hostId: host.id,
+            online: host.online,
+            ...(platform === undefined ? {} : { platform }),
+            ...(host.facts === undefined ? {} : { facts: host.facts }),
+            ...(host.version === undefined ? {} : { hostAgent: host.version }),
+            ...(host.lastSeen === undefined ? {} : { lastSeen: host.lastSeen }),
+        };
         const existing = report === undefined ? undefined : rows.find((row) => row.key === report.hostname);
         if (existing !== undefined) {
             // The same box through both doors. The pulled report wins because it alone carries the containers;
             // the sync-enrolled label stays because it is the name this sandbox has always shown for the machine.
-            Object.assign(existing, { hostId: host.id, online: host.online, report });
+            Object.assign(existing, { ...identity, report });
             continue;
         }
         rows.push({
             key: report?.hostname ?? host.id,
             label: host.id,
             syncEnrolled: false,
-            hostId: host.id,
-            online: host.online,
-            ...(report === undefined ? { gap: "gap" in host.result ? host.result.gap : "offline" } : { report }),
+            ...identity,
+            ...(report === undefined ? { gap: "gap" in result ? result.gap : "offline" } : { report }),
         });
     }
 
@@ -211,8 +238,7 @@ export const computers = async (services: Services): Promise<Computer[]> => {
     const hosts = await hostSummaries(services);
     const answered = await Promise.all(
         hosts.map(async (host) => ({
-            id: host.id,
-            online: host.online,
+            host,
             // An offline machine is never asked: the call would hang until the hub's own timeout to produce an
             // answer that is already knowable.
             result: host.online ? await pullCached(services, host.id) : ({ gap: "offline" } as const),
