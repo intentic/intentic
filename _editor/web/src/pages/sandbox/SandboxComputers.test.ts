@@ -103,7 +103,9 @@ it(`says what a computer is when it has no report to show`, () => {
     expect(text).toContain(`Windows 11 Pro`);
     expect(text).toContain(`x64`);
     expect(text).toContain(`PowerShell 7`);
-    expect(text).toContain(`computer agent 0.5.1`);
+    // The door it is reachable through, and the version of the agent answering on it — one chip, two spans.
+    expect(text).toContain(`connected computer`);
+    expect(text).toContain(`0.5.1`);
     // The gap it had before is still said, because the OS does not answer it: this machine still has no agent.
     expect(text).toContain(`no sync agent`);
 });
@@ -126,6 +128,33 @@ it(`falls back to the platform, and ages a computer that is not here`, () => {
     const text = el.textContent ?? ``;
     expect(text).toContain(`Linux`);
     expect(text).toContain(`last seen 3h ago`);
+});
+
+/* Sorting by name alone buried the one machine worth reading. The names here are chosen so that alphabetical
+ * order is the exact opposite of the order that helps: a reader arriving at this tab wants the computer actually
+ * serving folders and ports, not three screens of "nothing to read from it right now" above it. */
+it(`puts the machines worth reading first`, () => {
+    const report = (capturedAt: number): Computer[`report`] => ({
+        hostname: `host`,
+        os: `linux`,
+        agents: { sync: `0.1.0` },
+        sandboxes: [],
+        pairings: [],
+        ports: [],
+        watcher: { running: true },
+        capturedAt,
+    });
+    const el = mount([
+        { key: `a`, label: `a-offline`, syncEnrolled: false, hostId: `a`, online: false, platform: `linux`, gap: `offline` },
+        { key: `b`, label: `b-quiet`, syncEnrolled: true, platform: `linux`, report: report(Date.now() - 60 * 60_000) },
+        { key: `c`, label: `c-attention`, syncEnrolled: false, hostId: `c`, online: true, platform: `linux`, gap: `no-agent` },
+        { key: `d`, label: `d-live`, syncEnrolled: true, platform: `linux`, report: report(Date.now()) },
+    ]);
+    const text = el.textContent ?? ``;
+    const at = (label: string): number => text.indexOf(label);
+    expect(at(`d-live`)).toBeLessThan(at(`c-attention`));
+    expect(at(`c-attention`)).toBeLessThan(at(`b-quiet`));
+    expect(at(`b-quiet`)).toBeLessThan(at(`a-offline`));
 });
 
 // The image is what Update changes, and one sandbox on a machine running something older than its neighbour was
@@ -153,8 +182,11 @@ it(`names the image each sandbox on the machine is running`, () => {
 });
 
 /* THE SIGNAL THIS ROW WAS MISSING. A machine ran an agent five days behind a fix for the very bug it was hitting,
- * and this line said "sync agent 0.1.0" throughout — true, and useless without the version it should have been.
- * Both halves are asserted: the fact, in place among the other facts, and the one command that resolves it. */
+ * and this row said "desktop sync 0.1.0" throughout — true, and useless without the version it should have been.
+ * Both halves are asserted: the fact, inside the door chip it is about, and the one command that resolves it.
+ *
+ * The version and the release that supersedes it are separate spans in that chip, so they are asserted separately
+ * rather than as one string — what matters is that both reach the reader, not the whitespace between them. */
 const behind = (): Computer => ({
     key: `laptop`,
     label: `laptop`,
@@ -174,7 +206,9 @@ const behind = (): Computer => ({
 
 it(`says when a computer's sync agent is behind, and what to run`, () => {
     const text = mount([behind()]).textContent ?? ``;
-    expect(text).toContain(`sync agent 0.1.0 (1.183.0 available)`);
+    expect(text).toContain(`desktop sync`);
+    expect(text).toContain(`0.1.0`);
+    expect(text).toContain(`1.183.0 available`);
     expect(text).toContain(`intentic-sync upgrade`);
 });
 
@@ -183,7 +217,8 @@ it(`says when a computer's sync agent is behind, and what to run`, () => {
 it(`says nothing about updating a computer that is already current`, () => {
     const row = behind();
     const text = mount([{ ...row, report: { ...row.report!, agents: { sync: `1.183.0` } } }]).textContent ?? ``;
-    expect(text).toContain(`sync agent 1.183.0`);
+    expect(text).toContain(`desktop sync`);
+    expect(text).toContain(`1.183.0`);
     expect(text).not.toContain(`available`);
     expect(text).not.toContain(`intentic-sync upgrade`);
 });
@@ -192,7 +227,8 @@ it(`says nothing about updating a computer that is already current`, () => {
 it(`makes no claim when this sandbox doesn't know the latest release`, () => {
     latest.value = undefined;
     const text = mount([behind()]).textContent ?? ``;
-    expect(text).toContain(`sync agent 0.1.0`);
+    expect(text).toContain(`desktop sync`);
+    expect(text).toContain(`0.1.0`);
     expect(text).not.toContain(`available`);
     expect(text).not.toContain(`intentic-sync upgrade`);
 });

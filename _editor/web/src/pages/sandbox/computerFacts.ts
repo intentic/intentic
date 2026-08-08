@@ -35,70 +35,76 @@ export const osLabel = (computer: Computer): string | undefined => {
 // The full string behind that label, when there is more to it than the row shows.
 export const osTitle = (computer: Computer): string | undefined => (computer.facts?.os === osLabel(computer) ? undefined : computer.facts?.os);
 
-/* THE REST OF WHAT IS KNOWN, as one wrapping line of parts.
+/* WHAT THE MACHINE IS, as one wrapping line of parts — the two facts that decide how work on it behaves, then
+ * who it thinks it is.
  *
- * Ordered by what a reader is looking for: how this sandbox reaches the machine at all (two independent doors, and
- * a box may be behind both), then the two facts that decide how work on it behaves, then who it thinks it is, then
- * which agents are on it — an old one explains a row that lacks what newer machines show, which is the same
- * argument the report's own `agents` field makes.
+ * The machine's own name for itself appears only when the row is showing something else: the label is the
+ * enrolled machine's name or the capability id the user typed, and either can differ from the hostname the
+ * machine answers to — which is the name that turns up in its own logs and terminals. "my-pc · hostname my-pc"
+ * is the kind of line that makes a reader stop reading the rest. */
+export const machineFacts = (computer: Computer): string[] => {
+    const parts: string[] = [];
+    if (computer.facts !== undefined) {
+        parts.push(computer.facts.arch, computer.facts.shell);
+    }
+    const hostname = computer.report?.hostname;
+    if (hostname !== undefined && hostname.toLowerCase() !== computer.label.toLowerCase()) {
+        parts.push(hostname);
+    }
+    return parts;
+};
+
+/* HOW THIS SANDBOX REACHES IT — two independent doors, and a box may be behind both.
+ *
+ * Split out of the fact line rather than sitting at the head of it, because it answers a different question. A
+ * row used to run "desktop sync · connected computer · x64 · /usr/bin/zsh · sync agent 0.1.0 · computer agent
+ * 0.1.0" — six facts of three kinds, one grey, one size, one separator — and the reader had to know which was
+ * which to get anything out of it. These are the ones with a shape: each door is one chip, and each carries its
+ * own agent's version, so a machine running an old build is visible rather than mysteriously lacking a field.
  *
  * A version is labelled by ITS DOOR rather than by its binary: "desktop sync" and "connected computer" are the
- * names this tab already uses for the two ways in, so "sync agent" and "computer agent" need no explaining.
- *
- * `last seen` appears only when the machine is NOT here now. On a live row it is noise the badge already carries;
- * on an offline one it is the single most useful thing left to say, because "asleep since this morning" and
- * "gone since April" are different situations wearing the same grey badge. */
-/* An agent version, and whether a newer release has passed it — the two facts as one part, because they are one
- * thought. "sync agent 0.1.0" was already on the row and was already the answer to a question nobody knew to ask:
- * a machine ran a five-day-old agent through a bug that agent had a fix for, and this line said so the whole time,
- * to a reader who had no way to know 0.1.0 was not current. A version is only a fact about staleness next to the
- * version it should be.
+ * names this tab already uses for the two ways in, so nothing needs explaining. */
+/* And whether a newer release has passed the agent behind that door — the version and its staleness as one chip,
+ * because they are one thought. "desktop sync 0.1.0" was already on the row and was already the answer to a
+ * question nobody knew to ask: a machine ran a five-day-old agent through a bug that agent had a fix for, and
+ * this chip said so the whole time, to a reader who had no way to know 0.1.0 was not current. A version is only a
+ * fact about staleness next to the version it should be.
  *
  * `latest` is the release this sandbox knows about (/info, the same value behind its own update badge) — every
  * first-party build is stamped to it, so it is the right yardstick for an agent as much as for the daemon. When
- * it is unknown, or the agent is a working-tree build, the part renders exactly as it always did: see isBehind,
+ * it is unknown, or the agent is a working-tree build, the chip renders exactly as it did before: see isBehind,
  * where every kind of not-knowing resolves to silence rather than to a nag somebody cannot act on. */
-const agentPart = (label: string, installed: string | undefined, latest: string | undefined): string | undefined => {
-    if (installed === undefined) {
-        return undefined;
+export interface ComputerDoor {
+    name: string;
+    version?: string;
+    available?: string;
+}
+
+const door = (name: string, version: string | undefined, latest: string | undefined): ComputerDoor => ({
+    name,
+    ...(version === undefined ? {} : { version }),
+    ...(isBehind(version, latest) && latest !== undefined ? { available: latest } : {}),
+});
+
+export const computerDoors = (computer: Computer, latest?: string): ComputerDoor[] => {
+    const doors: ComputerDoor[] = [];
+    if (computer.syncEnrolled) {
+        doors.push(door(`desktop sync`, computer.report?.agents.sync, latest));
     }
-    return isBehind(installed, latest) ? `${label} ${installed} (${latest} available)` : `${label} ${installed}`;
+    if (computer.hostId !== undefined) {
+        doors.push(door(`connected computer`, computer.hostAgent ?? computer.report?.agents.host, latest));
+    }
+    return doors;
 };
 
-/* Whether this computer's SYNC agent is one the user should replace — the one flag that earns a remedy on the
+/* Whether this computer's SYNC agent is one the user should replace — the one door that earns a remedy on the
  * row, because it is the one with a command behind it (`intentic-sync upgrade`). The computer agent's version is
  * reported the same way and shown the same way, but nothing here should print an instruction for updating it that
  * has not been built: a wrong command is worse than a fact with no command attached. */
 export const syncAgentBehind = (computer: Computer, latest?: string): boolean => isBehind(computer.report?.agents.sync, latest);
 
-export const computerDetails = (computer: Computer, latest?: string): string[] => {
-    const parts: string[] = [];
-    if (computer.syncEnrolled) {
-        parts.push(`desktop sync`);
-    }
-    if (computer.hostId !== undefined) {
-        parts.push(`connected computer`);
-    }
-    if (computer.facts !== undefined) {
-        parts.push(computer.facts.arch, computer.facts.shell);
-    }
-    // The machine's own name for itself, and only when the row is showing something else: the label is the
-    // enrolled machine's name or the capability id the user typed, and either can differ from the hostname the
-    // machine answers to — which is the name that turns up in its own logs and terminals.
-    const hostname = computer.report?.hostname;
-    if (hostname !== undefined && hostname.toLowerCase() !== computer.label.toLowerCase()) {
-        parts.push(`hostname ${hostname}`);
-    }
-    const sync = agentPart(`sync agent`, computer.report?.agents.sync, latest);
-    if (sync !== undefined) {
-        parts.push(sync);
-    }
-    const computerAgent = agentPart(`computer agent`, computer.hostAgent ?? computer.report?.agents.host, latest);
-    if (computerAgent !== undefined) {
-        parts.push(computerAgent);
-    }
-    if (computer.online === false && computer.lastSeen !== undefined) {
-        parts.push(`last seen ${timeAgo(computer.lastSeen)}`);
-    }
-    return parts;
-};
+/* WHEN IT WAS LAST HERE, and only when it is not here now. On a live row it is noise the badge already carries;
+ * on an offline one it is the single most useful thing left to say, because "asleep since this morning" and
+ * "gone since April" are different situations wearing the same grey badge. */
+export const lastSeenNote = (computer: Computer): string | undefined =>
+    computer.online === false && computer.lastSeen !== undefined ? `last seen ${timeAgo(computer.lastSeen)}` : undefined;

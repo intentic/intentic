@@ -1,6 +1,6 @@
 import type { Computer } from "@intentic/sandbox-contract";
 import { expect, test } from "vitest";
-import { computerDetails, osLabel, osTitle } from "./computerFacts";
+import { computerDoors, lastSeenNote, machineFacts, osLabel, osTitle } from "./computerFacts";
 
 /* The row shapes these have to survive are the interesting half. A computer arrives through either of two doors,
  * and the ones that arrive with NO report — a connected computer whose owner never installed the sync agent, a
@@ -43,7 +43,10 @@ test(`falls back to the platform when the machine has never described itself`, (
     expect(osTitle(computer({ platform: `windows` }))).toBeUndefined();
 });
 
-test(`lists both doors, what it runs on, and which agents are on it`, () => {
+/* The two questions the row's old single line ran together: what the computer IS, and how this sandbox gets to
+ * it. They are separated on screen now, so they are derived separately here — and each door carries the version
+ * of the agent behind it, which is what explains a machine that lacks something newer ones show. */
+test(`separates what the machine is from how it is reached`, () => {
     const row = computer({
         label: `laptop`,
         syncEnrolled: true,
@@ -63,19 +66,15 @@ test(`lists both doors, what it runs on, and which agents are on it`, () => {
             capturedAt: 1_700_000_000_000,
         },
     });
-    expect(computerDetails(row)).toEqual([
-        `desktop sync`,
-        `connected computer`,
-        `x64`,
-        `PowerShell 7`,
-        `hostname ADA-LAPTOP`,
-        `sync agent 0.1.0`,
-        `computer agent 0.5.1`,
+    expect(machineFacts(row)).toEqual([`x64`, `PowerShell 7`, `ADA-LAPTOP`]);
+    expect(computerDoors(row)).toEqual([
+        { name: `desktop sync`, version: `0.1.0` },
+        { name: `connected computer`, version: `0.5.1` },
     ]);
 });
 
 // The hostname is worth width only when the row is showing a different name. Machines are routinely enrolled under
-// their own hostname, and "my-pc · hostname my-pc" is the kind of line that makes a reader stop reading the rest.
+// their own hostname, and "my-pc · my-pc" is the kind of line that makes a reader stop reading the rest.
 test(`repeats the hostname only when the row is called something else`, () => {
     const report = {
         hostname: `MY-PC`,
@@ -87,8 +86,10 @@ test(`repeats the hostname only when the row is called something else`, () => {
         watcher: { running: true },
         capturedAt: 1_700_000_000_000,
     };
-    expect(computerDetails(computer({ syncEnrolled: true, report }))).toEqual([`desktop sync`]);
-    expect(computerDetails(computer({ label: `ada's box`, syncEnrolled: true, report }))).toEqual([`desktop sync`, `hostname MY-PC`]);
+    expect(machineFacts(computer({ syncEnrolled: true, report }))).toEqual([]);
+    expect(machineFacts(computer({ label: `ada's box`, syncEnrolled: true, report }))).toEqual([`MY-PC`]);
+    // A door with no report behind it is still a door — it just cannot say which version answered.
+    expect(computerDoors(computer({ syncEnrolled: true }))).toEqual([{ name: `desktop sync` }]);
 });
 
 /* "Last seen" is the one thing an asleep machine can still say, and it is the difference between a lid closed an
@@ -96,6 +97,6 @@ test(`repeats the hostname only when the row is called something else`, () => {
  * is here right now it is noise the badge already carries. */
 test(`ages a machine that is not here, and stays quiet about one that is`, () => {
     const lastSeen = Date.now() - 90 * 60_000;
-    expect(computerDetails(computer({ hostId: `my-pc`, online: false, lastSeen }))).toEqual([`connected computer`, `last seen 2h ago`]);
-    expect(computerDetails(computer({ hostId: `my-pc`, online: true, lastSeen }))).toEqual([`connected computer`]);
+    expect(lastSeenNote(computer({ hostId: `my-pc`, online: false, lastSeen }))).toBe(`last seen 2h ago`);
+    expect(lastSeenNote(computer({ hostId: `my-pc`, online: true, lastSeen }))).toBeUndefined();
 });
