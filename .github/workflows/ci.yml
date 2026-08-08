@@ -719,6 +719,14 @@ jobs:
     permissions:
       contents: read
       packages: write
+    # OFF THE FLEET, SO OFF THE FLEET'S CACHE. The workflow-level TURBO_CACHE_DIR names /ci-cache, a host
+    # directory the self-hosted runners mount and a GitHub-hosted one has never heard of. The header above says
+    # an absent mount falls back "cold, never broken" — true of pnpm, not of turbo, which CREATES the directory
+    # it is pointed at and dies on the permission error, /ci-cache being at the filesystem root. Overridden per
+    # job rather than dropped from the workflow env, because every other job here does want the shared one.
+    # PNPM_STORE needs no override: only the pnpm-setup composite reads it, and this job does not use it.
+    env:
+      TURBO_CACHE_DIR: ${{ github.workspace }}/.turbo-cache
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: pnpm/action-setup@fc06bc1257f339d1d5d8b3a19a8cae5388b55320 # v4.4.0
