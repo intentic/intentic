@@ -221,8 +221,12 @@ it(`does not open the sign-in window when the browser is still waiting on a rebu
     expect(el.querySelector(`[data-browser]`)).toBeNull();
     // Still no navigation: the card is where the row that names the rebuild — and leads to it — lives.
     expect(push).not.toHaveBeenCalled();
+    // NAMES IT AND LEADS TO IT, in the row's two halves: the daemon's own words are the state badge, and the
+    // link beside them is the way to the screen that carries the remedy. They used to be one sentence inside
+    // the link, which is why this asserted the anchor's text.
     const link = [...el.querySelectorAll(`a`)].find((anchor) => anchor.getAttribute(`href`) === `/sandbox/environment`);
-    expect(link?.textContent).toContain(`rebuild the sandbox to install the browser`);
+    expect(link).toBeDefined();
+    expect(el.textContent).toContain(`rebuild the sandbox to install the browser`);
 });
 
 // The other half of the rule: an apply that actually finished has nothing left to hand over, and the catalog

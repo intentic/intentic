@@ -283,7 +283,7 @@ export const CAPABILITY_CATALOG: readonly CapabilityCatalogEntry[] = [
                 boolean: true,
                 default: "off",
                 rebuild: true,
-                hint: "Passes the host's NVIDIA GPUs into the engine, for CUDA images and GPU compose stacks. The host needs an NVIDIA GPU and nvidia-container-toolkit — checked when the sandbox is rebuilt, and the sandbox still starts (without GPUs) if it can't.",
+                hint: "Passes the host's NVIDIA GPUs into the engine, for CUDA images and GPU compose stacks. Needs an NVIDIA GPU and nvidia-container-toolkit on the host — checked at rebuild, and the sandbox still starts without GPUs if it can't.",
             },
             {
                 key: "registryMirror",
@@ -304,7 +304,7 @@ export const CAPABILITY_CATALOG: readonly CapabilityCatalogEntry[] = [
                 label: "Container address pool",
                 optional: true,
                 placeholder: "10.201.0.0/16",
-                hint: "The subnet this engine carves container networks from. Change it when Docker's default (172.17.0.0/16) collides with your VPN or LAN — the symptom is internal hosts going unreachable while everything else keeps working.",
+                hint: "The subnet this engine carves container networks from. Change it when Docker's default (172.17.0.0/16) collides with your VPN or LAN — the symptom is internal hosts going unreachable while everything else works.",
             },
         ],
         hint: "One-time rebuild required — the sandbox restarts privileged with its own isolated Docker Engine (your machine's Docker is never shared).",

@@ -17,7 +17,7 @@
                     "logo": "github",
                     "description": "Issues, PRs, code search and git on your repos.",
                     "category": "code",
-                    "hint": "The agent uses the token with curl against the GitHub API. With Git access on you can git pull/push in the terminal — ssh-form URLs work too (rerouted over HTTPS when native SSH isn't available), so any repo-scoped token works. For native ssh://git we register an SSH key to your account, which needs write:public_key on a classic PAT (or the \"Git SSH keys: write\" permission on a fine-grained token); without it git still works over HTTPS and we show the key to add manually. Workspace repos on GitHub also get a CI webhook (the Pipelines view + instant CI automations), which needs admin:repo_hook on a classic PAT (or \"Webhooks: write\"); without it the Pipelines view shows the hook to add manually.",
+                    "hint": "Any repo-scoped token is enough: the agent calls the API with curl, and with Git access on, pull and push work over HTTPS. The two extra permissions beside add native ssh://git and CI webhooks on workspace repos — without them both still work, and the card shows you what to add by hand.",
                     "guide": {
                         "url": "https://github.com/settings/tokens",
                         "scopes": "`repo` (+ `write:public_key` for native ssh, `admin:repo_hook` for CI webhooks)",
@@ -64,7 +64,7 @@
                     "logo": "gitlab",
                     "description": "Issues, merge requests, pipelines and git.",
                     "category": "code",
-                    "hint": "The agent uses the token with curl against the GitLab API. With Git access on, we register an SSH key to your account (the api scope covers key upload) so you can git clone/pull/push over ssh://git in the terminal; if key upload is refused, ssh-form URLs are rerouted over HTTPS so git still works. Workspace repos on this GitLab also get a CI webhook (the Pipelines view + instant CI automations) — the api scope covers it, but the token's user needs at least the Maintainer role on the project; otherwise the Pipelines view shows the hook to add manually.",
+                    "hint": "The api scope covers both extras: an SSH key on your account for ssh://git, and a CI webhook on workspace repos. If key upload is refused git is rerouted over HTTPS; the webhook also needs the token's user to be at least Maintainer. Either way the card shows what to add by hand.",
                     "guide": {
                         "urlFromField": "url",
                         "path": "/-/user_settings/personal_access_tokens",
@@ -120,7 +120,7 @@
                     "logo": "npm",
                     "description": "Publish and manage packages on the npm registry.",
                     "category": "code",
-                    "hint": "The agent uses the npm CLI, already authenticated against registry.npmjs.org. Publishing may ask for a one-time 2FA code: with a TOTP secret stored below, the agent mints codes itself (`otp <name>`) and only ever sees the expiring code, never the secret. Write tokens expire after at most 90 days — when one dies, paste a fresh one under Sandbox ▸ Secrets.",
+                    "hint": "The agent uses the npm CLI, already signed in. Publishing may ask for a one-time 2FA code: with a TOTP secret stored, the agent mints its own and never sees the secret. Write tokens expire within 90 days — paste a fresh one under Sandbox ▸ Secrets.",
                     "guide": {
                         "url": "https://www.npmjs.com/",
                         "linkLabel": "Open npmjs.com",

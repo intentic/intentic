@@ -18,6 +18,7 @@ import {
     type IconName,
     Notice,
     type NoticeModel,
+    Row,
     RowGroup,
     Segmented,
     SplitView,
@@ -34,9 +35,9 @@ import { useRoute, useRouter } from "vue-router";
 import BrowserProfileDialog from "../components/BrowserProfileDialog.vue";
 import HostConnectDialog from "../components/HostConnectDialog.vue";
 import CapabilityConnections, { type CapabilityConnection, type CapabilityConnectionGroup } from "../components/CapabilityConnections.vue";
+import CapabilityContext from "../components/CapabilityContext.vue";
 import CapabilityEffects from "../components/CapabilityEffects.vue";
 import CapabilityRail, { type CapabilityScope } from "../components/CapabilityRail.vue";
-import CredentialGuide from "../components/CredentialGuide.vue";
 import { startAgent } from "../composables/agents/agentActions";
 import { devFillGet, devFillSet } from "../composables/devFill";
 import { sandboxJson } from "../composables/sandbox/sandboxClient";
@@ -433,9 +434,30 @@ const awaitingLogin = (instance: CapabilitySummary): boolean =>
 const onBrowserDone = (): void => {
     void refetch();
 };
+
 // A `when`-gated field applies only while its referenced field holds the given value (e.g. the SSH credential
 // matching the chosen auth mode). Read from reactive `values`, so it re-evaluates as the user toggles.
 const whenMet = (field: CapabilityField): boolean => field.when === undefined || values[field.when.key] === field.when.value;
+
+/* WHICH FIELDS ANSWER THEMSELVES BESIDE THEIR LABEL rather than under it. A switch always does. A picker does
+ * when its answers are short enough to sit in the same line as the question — and the test is the WIDTH of the
+ * answers, not how many there are, because that is what actually decides whether the row fits.
+ *
+ * Counting options would have been the obvious rule and it is the wrong one: `Allowed`/`Blocked` and
+ * `OpenAI-compatible`/`Anthropic-compatible` are both two options, and only one of them leaves room for a label
+ * to its left. Measuring instead puts the six Allowed/Blocked permissions of a computer inline (where they
+ * halve the form) and leaves the model-endpoint protocol and the VPN's three-protocol picker stacked (where
+ * they would otherwise crush the label or wrap). A long list — the DH groups — fails the same test by itself. */
+const INLINE_OPTIONS_BUDGET = 24;
+const inlineField = (field: CapabilityField): boolean => {
+    if (field.boolean === true) {
+        return true;
+    }
+    if (field.options === undefined || field.multiline === true) {
+        return false;
+    }
+    return field.options.reduce((total, option) => total + option.label.length, 0) <= INLINE_OPTIONS_BUDGET;
+};
 // The fields shown as inputs (const-valued ones are baked into config, not rendered; when-gated ones only
 // while their condition holds).
 const visibleFields = (entry: CapabilityCatalogEntry): CapabilityCatalogEntry["fields"] =>
@@ -490,7 +512,9 @@ const badgeEffects = (entry: CapabilityCatalogEntry): readonly CapabilityEffect[
     );
 };
 // A connected instance's effects from its secret-stripped config echo; an installed extension also resolves
-// its manifest so process/image contributions show.
+// its manifest so process/image contributions show. Not rendered any more — the effects a card implies are
+// stated once beside the form (<CapabilityContext>), not repeated under every connection of it — but still
+// read for the ONE fact that is genuinely per-instance: the grants a machine was given (hostGrants below).
 const instanceEffects = (instance: CapabilitySummary): readonly CapabilityEffect[] =>
     capabilityEffects({
         kind: instance.kind,
@@ -762,6 +786,43 @@ const connectionGroups = computed<CapabilityConnectionGroup[]>(() =>
 const showingConnections = computed(() => activeScope.value.key === CONNECTED);
 const visibleCount = computed(() => (showingConnections.value ? visibleConnections.value.length : visibleCards.value.length));
 const nothingMatches = computed(() => (showingConnections.value ? connectionGroups.value.length === 0 : groupedCatalog.value.length === 0));
+
+/* --- AND THE SAME CONNECTION SEEN FROM INSIDE ITS CARD ---
+ * The Connected slice above lists every connection in the sandbox; a card's own view lists the ones that came
+ * from THAT card, which is where they are also acted on. Two surfaces, one vocabulary: both read their state
+ * from connectionState(), so a Reddit account cannot be "needs sign-in" in the inventory and "pending" on its
+ * card. That mattered enough to delete a second mapping written for the card rows alone.
+ *
+ * What the card's rows need on top is the two live facts a stored config cannot answer — the address a tunnel
+ * was actually given, the OS a machine actually reported. connectionFacts() is the fallback for everything
+ * else, so a Postgres row still names its host and database. */
+const cardRowFacts = (instance: CapabilitySummary): string => {
+    if (selected.value?.kind === `vpn`) {
+        return vpnFacts(instance.id) ?? connectionFacts(instance);
+    }
+    if (selected.value?.kind === `host`) {
+        return hostFor(instance.id)?.facts?.os ?? connectionFacts(instance);
+    }
+    return connectionFacts(instance);
+};
+
+/* THE ONE UNFINISHED STEP THE ROW CANNOT OFFER ITSELF. A pending connection is waiting on one of three things,
+ * and two of them — a browser's login, a computer's pairing command — are already a button on this very row, so
+ * a second link beside the badge saying "Log in →" next to the Log in button was the same click twice.
+ *
+ * The third has nowhere on this card to go: a rebuild happens on the Sandbox screen. That is the only one that
+ * still needs a link, and pointing it at the right place is the whole reason this is a function rather than a
+ * `v-if` — a reader sent to /sandbox for a browser that merely needs signing in is a reader who does not come
+ * back. The distinction is the daemon's "rebuild" wording (see awaitingLogin). */
+const rebuildStep = (instance: CapabilitySummary): boolean =>
+    instance.status.state === `pending` && selected.value?.kind !== `host` && !awaitingLogin(instance);
+
+/* THE ONE-PER-SANDBOX CARD HAS NO LIST, because it never had one — it had a list of one, which is a different
+ * thing wearing a list's chrome. Docker is not an account you hold N of; it is a part of the sandbox that is
+ * either on or off, and rendering "docker · active" as a bordered card above the form that configures that very
+ * docker asked the reader to hold two objects where there is one. Its state belongs on the card's own heading,
+ * beside its name, which is where a state that describes the whole screen goes. */
+const soleInstance = computed<CapabilitySummary | undefined>(() => (selected.value?.singleton === true ? selectedInstances.value[0] : undefined));
 
 // --- FortiClient import (vpn card only) ---
 // A user with an exported FortiClient config drops the file in and picks a connection instead of re-keying its
@@ -1197,12 +1258,12 @@ const submitLabel = computed(() =>
         </template>
 
         <template #detail>
-            <!-- STEP 2: configure + apply the picked capability. The form keeps its reading width and the card's
-                 credential guide docks beside it, /setup-style — see the aside at the foot of this block. A
-                 @container rather than a viewport breakpoint: this pane shares the page with the index column and
-                 the shell with a chat panel the user drags, so how much room there is for a second column is a
-                 fact about the pane, not about the screen. Below that width the row collapses and the guide moves
-                 inline into the form. -->
+            <!-- STEP 2: configure + apply the picked capability. TWO COLUMNS, ALWAYS: the form keeps its reading
+                 width and everything the card SAYS rather than ASKS docks beside it, /setup-style — see
+                 <CapabilityContext> and the aside at the foot of this block. A @container rather than a viewport
+                 breakpoint: this pane shares the page with the index column and the shell with a chat panel the
+                 user drags, so how much room there is for a second column is a fact about the pane, not about the
+                 screen. Below that width the row collapses and the context moves inline into the form. -->
             <div v-if="selected" class="scrollbar-thin scrollbar-stable @container min-h-0 flex-1 overflow-y-auto pr-2">
                 <div class="mx-auto flex max-w-xl flex-col @3xl:max-w-none @3xl:flex-row @3xl:items-start @3xl:justify-center @3xl:gap-6">
                     <div class="flex min-w-0 flex-1 flex-col @3xl:max-w-xl">
@@ -1223,13 +1284,47 @@ const submitLabel = computed(() =>
                             <Button class="ml-auto" label="Skip" size="small" severity="secondary" text @click="skip" />
                         </div>
 
+                        <!-- The card's own heading, and — for a one-per-sandbox card — its STATE, because on
+                             such a card the state describes this whole screen rather than one row in a list of
+                             them. Its removal sits here too, for the same reason: the thing being removed is
+                             the subject of the page, not an entry under it. -->
                         <div class="mb-4 flex items-center gap-3">
                             <BrandMark :size="32" :name="selected.name" :logo="selected.logo" :icon="entryIcon(selected)" />
-                            <div class="min-w-0">
-                                <div class="font-medium text-content">{{ selected.name }}</div>
+                            <div class="min-w-0 flex-1">
+                                <div class="flex flex-wrap items-center gap-2">
+                                    <span class="font-medium text-content">{{ selected.name }}</span>
+                                    <StatusBadge
+                                        v-if="soleInstance"
+                                        size="xs"
+                                        :dot="true"
+                                        :variant="connectionState(selected, soleInstance).tone"
+                                        :label="connectionState(selected, soleInstance).label"
+                                    />
+                                </div>
                                 <div class="text-xs text-muted">{{ selected.description }}</div>
                             </div>
+                            <Button
+                                v-if="soleInstance && selected.kind !== 'devops'"
+                                label="Remove"
+                                size="small"
+                                severity="danger"
+                                :text="true"
+                                @click="askRemove(soleInstance.id)"
+                            >
+                                <template #icon><Icon name="trash" /></template>
+                            </Button>
                         </div>
+
+                        <!-- A one-per-sandbox card whose setup never finished has no row to carry the step it is
+                             waiting on, so it carries it here — directly under the heading its badge is on. -->
+                        <RouterLink
+                            v-if="soleInstance && rebuildStep(soleInstance)"
+                            to="/sandbox/environment"
+                            class="mb-4 inline-flex w-fit items-center gap-1 text-xs text-warning hover:underline"
+                        >
+                            <Icon name="exclamation-triangle" />
+                            {{ soleInstance.status.detail ?? "Needs a sandbox rebuild" }} — Finish setup →
+                        </RouterLink>
 
                         <!-- Precondition gate: a service/integration needs DevOps first. -->
                         <div v-if="!requiresMet" :class="cmp.alertInfo()">
@@ -1237,31 +1332,61 @@ const submitLabel = computed(() =>
                         </div>
 
                         <form v-else class="flex flex-col gap-3" @submit.prevent="submit">
-                            <!-- The connections already added for this card — each instance removable here (the only place a
-                             custom-named instance can be torn down). -->
-                            <RowGroup v-if="selectedInstances.length > 0" label="Connected">
-                                <div v-for="instance in selectedInstances" :key="instance.id" class="flex flex-col gap-1 px-4 py-3">
-                                    <div class="flex items-center gap-2 text-xs">
-                                        <span class="font-medium text-content">{{ instance.id }}</span>
-                                        <span class="text-2xs text-muted">{{ instance.status.state }}</span>
-                                        <!-- A VPN's live link says more than "active": the address it was assigned and what
-                                         it routes are what tell you whether your internal host is reachable through it. -->
-                                        <span v-if="selected.kind === 'vpn' && vpnFacts(instance.id)" class="font-mono text-2xs text-subtle">{{
-                                            vpnFacts(instance.id)
-                                        }}</span>
-                                        <!-- A connected computer's liveness is the fact its row exists to carry: "added" and
-                                         "asleep" and "working" are three different situations for the person reading it. -->
-                                        <span
-                                            v-if="selected.kind === 'host'"
-                                            class="text-2xs"
-                                            :class="hostFor(instance.id)?.online ? 'text-success' : 'text-subtle'"
-                                        >
-                                            {{ hostFor(instance.id)?.online ? "online" : "offline" }}
+                            <!-- WHAT YOU ALREADY HAVE OF THIS CARD — a list of accounts, and therefore a LIST:
+                                 <Row> at the density every other record list in the app is read at, one line
+                                 each. It used to be a stack of two-line blocks, and the second line was a strip
+                                 of icon-only effect glyphs repeated identically under every row — the same three
+                                 symbols under all three GitHub connections, saying nothing that distinguished
+                                 one from another, and clickable-looking without being clickable. Effects are a
+                                 fact about the CARD, so they are stated once, in the column beside this one.
+                                 What is left is what actually differs per connection: its name, its state, the
+                                 live fact it reports, and what you can do to it.
+
+                                 Suppressed entirely for a one-per-sandbox card, whose single instance is the
+                                 subject of the heading above rather than an entry under it. -->
+                            <RowGroup
+                                v-if="selectedInstances.length > 0 && !selected.singleton"
+                                label="Your connections"
+                                :count="selectedInstances.length"
+                            >
+                                <Row v-for="instance in selectedInstances" :key="instance.id" density="compact">
+                                    <template #title>
+                                        <span class="flex flex-wrap items-center gap-2">
+                                            <span class="font-mono">{{ instance.id }}</span>
+                                            <StatusBadge
+                                                size="xs"
+                                                :dot="true"
+                                                :variant="connectionState(selected, instance).tone"
+                                                :label="connectionState(selected, instance).label"
+                                            />
+                                            <!-- The one unfinished step this row has no button for, in line with
+                                                 the badge that named it: it is one clause, and giving it a line
+                                                 of its own is what made these rows two-deep. The badge says the
+                                                 STATE in the reader's words and this says what is actually
+                                                 outstanding, in the daemon's — the same division <CapabilityConnections>
+                                                 draws between a row's state and its note. -->
+                                            <RouterLink
+                                                v-if="rebuildStep(instance)"
+                                                to="/sandbox/environment"
+                                                class="text-2xs text-warning hover:underline"
+                                            >
+                                                {{ instance.status.detail ?? "Needs a sandbox rebuild" }} — Finish setup →
+                                            </RouterLink>
                                         </span>
-                                        <span v-if="selected.kind === 'host' && hostFor(instance.id)?.facts" class="font-mono text-2xs text-subtle">{{
-                                            hostFor(instance.id)?.facts?.os
-                                        }}</span>
-                                        <div class="ml-auto flex items-center gap-1">
+                                    </template>
+                                    <!-- A tunnel's address and what it routes, a machine's reported OS: what the
+                                         connection says about itself, in the column <Row> reserves for facts.
+                                         CAPPED, because a split tunnel lists every network it carries and the
+                                         column does not shrink — left to run, it pushed the name and its badge
+                                         onto two lines. The full list is one hover away and, unabridged, on the
+                                         Status card that dials the thing. -->
+                                    <template v-if="cardRowFacts(instance)" #meta>
+                                        <span class="block max-w-40 truncate font-mono" :title="cardRowFacts(instance)">
+                                            {{ cardRowFacts(instance) }}
+                                        </span>
+                                    </template>
+                                    <template #control>
+                                        <div class="flex items-center gap-1">
                                             <!-- A computer is connected by running a command ON IT — this button hands over that
                                              command (and is also how a machine is re-connected after being revoked). -->
                                             <Button
@@ -1347,43 +1472,8 @@ const submitLabel = computed(() =>
                                                 <template #icon><Icon name="trash" /></template>
                                             </Button>
                                         </div>
-                                    </div>
-                                    <CapabilityEffects :effects="instanceEffects(instance)" :compact="true" />
-                                    <!-- A browser capability that's installed but not signed in is pending on the LOGIN, not a
-                                         rebuild — make the hint open the login window (same action as the button above), never
-                                         the /sandbox rebuild hub. Keyed off the daemon's "rebuild" detail (see handlers/browser.ts). -->
-                                    <button
-                                        v-if="selected.kind === 'browser' && awaitingLogin(instance)"
-                                        type="button"
-                                        class="inline-flex w-fit items-center gap-1 text-2xs text-warning hover:underline"
-                                        @click="openBrowser(instance.id, instance.id)"
-                                    >
-                                        <Icon name="exclamation-triangle" />
-                                        {{ instance.status.detail ?? "Not connected" }} — Log in →
-                                    </button>
-                                    <!-- A computer that was added but never connected is pending on the ONE-LINER, not on a
-                                     rebuild — send the hint to the same dialog as the button rather than to /sandbox. -->
-                                    <button
-                                        v-else-if="instance.status.state === 'pending' && selected.kind === 'host'"
-                                        type="button"
-                                        class="inline-flex w-fit items-center gap-1 text-2xs text-warning hover:underline"
-                                        @click="openConnect(instance)"
-                                    >
-                                        <Icon name="exclamation-triangle" />
-                                        {{ instance.status.detail ?? "Not connected" }} — Connect →
-                                    </button>
-                                    <!-- A capability that needs a sandbox rebuild (Discord voice / a DB client / a browser whose
-                                         Chromium isn't installed yet) is otherwise a dead-end "pending" — point at the Sandbox ▸
-                                         Environment tab where the rebuild command lives. -->
-                                    <RouterLink
-                                        v-else-if="instance.status.state === 'pending'"
-                                        to="/sandbox/environment"
-                                        class="inline-flex items-center gap-1 text-2xs text-warning hover:underline"
-                                    >
-                                        <Icon name="exclamation-triangle" />
-                                        {{ instance.status.detail ?? "Needs a sandbox rebuild" }} — Finish setup →
-                                    </RouterLink>
-                                </div>
+                                    </template>
+                                </Row>
                             </RowGroup>
 
                             <!-- The gateway serving those connections. It answers the question the connector page is
@@ -1582,6 +1672,15 @@ const submitLabel = computed(() =>
                                 </div>
                             </RowGroup>
 
+                            <!-- WHAT THE FORM BELOW IS FOR, said out loud. The fields used to begin immediately
+                                 under the list of existing connections, which left "Name" — pre-filled with
+                                 `github-2` — as the only clue that this was a second connection rather than an
+                                 edit of the first. A card that holds one thing per sandbox is not adding
+                                 anything, so it says what it IS doing instead. -->
+                            <div v-if="selectedInstances.length > 0 || selected.singleton" :class="cmp.sectionLabel(`mt-1`)">
+                                {{ selected.singleton ? "Settings" : "Add another" }}
+                            </div>
+
                             <!-- One per sandbox → nothing to name, and a name box would be the field that invites a second
                              one. The id stays the card's (suggestName), so the submit updates what's there. -->
                             <label v-if="!selected.singleton" class="ui-field">
@@ -1605,16 +1704,22 @@ const submitLabel = computed(() =>
                                     Give this one a new name to add another connection, or reuse a name to update it.
                                 </span>
                             </label>
-                            <!-- The narrow half of the credential guide, above the fields it explains. From @3xl it
-                             is docked in a column of its own (see the aside below) and this one is hidden. -->
-                            <CredentialGuide v-if="selected.guide" :entry="selected" :values="values" class="@3xl:hidden" />
+                            <!-- The narrow half of the card's reference material, above the fields it explains.
+                             From @3xl it is docked in a column of its own (see the aside below) and this one is
+                             hidden — exactly one of the two is ever on screen. -->
+                            <CapabilityContext :entry="selected" :values="values" :effects="liveEffects" class="@3xl:hidden" />
                             <template v-for="field in visibleFields(selected)" :key="field.key">
-                                <!-- An opt-in extra: the switch sits BESIDE its label, not under it. Stacked in the column
-                                 of inputs it would read as one more thing to fill in; beside the label it reads as the
-                                 thing it is — already answered, changeable. Its hint carries what the label can't say
-                                 (a host requirement, when the value takes effect), which is exactly the caveat a lone
-                                 switch invites people to skip. -->
-                                <label v-if="field.boolean" class="flex items-start justify-between gap-4">
+                                <!-- AN ANSWERED QUESTION SITS BESIDE ITS LABEL, NOT UNDER IT. Stacked in the column of
+                                 inputs it reads as one more thing to fill in; beside the label it reads as the thing it
+                                 is — already answered, changeable. Its hint carries what the label can't say (a host
+                                 requirement, when the value takes effect), which is exactly the caveat a lone switch
+                                 invites people to skip.
+                                 The switches always worked this way; the SHORT PICKERS did not, and they are the ones
+                                 that hurt — a connected computer asks six Allowed/Blocked questions, and stacking each
+                                 label over its own pair of buttons made a form of six pre-answered defaults twice as
+                                 tall as the screen. See inlineField() for where the line is drawn and why it is drawn
+                                 on the width of the answers rather than on their number. -->
+                                <label v-if="inlineField(field)" class="flex items-start justify-between gap-4">
                                     <span class="min-w-0">
                                         <span class="ui-field-label">{{ field.label }}</span>
                                         <StatusBadge
@@ -1627,10 +1732,18 @@ const submitLabel = computed(() =>
                                         <span v-if="field.hint" class="mt-0.5 block text-2xs text-muted">{{ field.hint }}</span>
                                     </span>
                                     <ToggleSwitch
+                                        v-if="field.boolean"
                                         class="ui-switch-sm mt-0.5 shrink-0"
                                         :model-value="values[field.key] === 'on'"
                                         :aria-label="field.label"
                                         @update:model-value="(value: boolean) => (values[field.key] = value ? 'on' : 'off')"
+                                    />
+                                    <Segmented
+                                        v-else
+                                        class="shrink-0"
+                                        :model-value="values[field.key] ?? ''"
+                                        :options="[...(field.options ?? [])]"
+                                        @update:model-value="values[field.key] = $event"
                                     />
                                 </label>
                                 <label v-else class="ui-field">
@@ -1678,7 +1791,6 @@ const submitLabel = computed(() =>
                                     <span v-else-if="field.hint" class="text-2xs text-muted">{{ field.hint }}</span>
                                 </label>
                             </template>
-                            <CapabilityEffects :effects="liveEffects" />
                             <!-- Why the grid badged this one — the claim, then the thing that was read to make
                                  it, verbatim. The evidence is what makes this checkable instead of magic, and it
                                  is also what "Not needed" is answering: the suggestion goes quiet for THIS, and
@@ -1699,10 +1811,20 @@ const submitLabel = computed(() =>
                                     />
                                 </div>
                             </div>
-                            <p v-if="selected.hint" class="text-xs text-muted">{{ selected.hint }}</p>
 
+                            <!-- THE SUBMIT STAYS ON SCREEN. A few cards are genuinely long — a VPN carries three
+                                 protocols' worth of fields, a computer seven permissions — and no amount of moving
+                                 prose out of this column makes those short. What made a long one unusable was not
+                                 its length but that scrolling took the only button on the page out of view, so the
+                                 reader had to scroll back down through what they had just filled in to press it.
+                                 Stuck to the foot of the pane it is reachable from anywhere in the form, and the
+                                 canvas tint under it keeps the last field from appearing to run into it. -->
                             <div
-                                :class="['flex items-center gap-3', auditable ? 'justify-between' : 'justify-end', shaking ? 'ui-shake' : '']"
+                                :class="[
+                                    'sticky bottom-0 -mx-1 flex items-center gap-3 border-t border-line bg-canvas px-1 py-3',
+                                    auditable ? 'justify-between' : 'justify-end',
+                                    shaking ? 'ui-shake' : '',
+                                ]"
                                 @animationend="shaking = false"
                             >
                                 <!-- The read is beside the approval because that is when it matters: before the
@@ -1722,12 +1844,25 @@ const submitLabel = computed(() =>
                         </form>
                     </div>
 
-                    <!-- The docked half of the card's credential guide. `hidden` below @3xl, where the same
+                    <!-- The docked half of the card's reference material. `hidden` below @3xl, where the same
                          component renders inline inside the form instead — exactly one of the two is ever on
                          screen. `items-start` on the row is what leaves it room to stick while the form scrolls
-                         past it, and the v-if keeps a card with no guide from reserving an empty column. -->
-                    <aside v-if="selected.guide" class="hidden @3xl:sticky @3xl:top-0 @3xl:block @3xl:w-72 @3xl:shrink-0">
-                        <CredentialGuide :entry="selected" :values="values" />
+                         past it.
+
+                         NO `v-if` ANY MORE, and that is the point of the restructure: it used to appear only for
+                         a card whose author had written a credential guide, so half the catalog rendered one
+                         narrow column against an empty half-page. Every card has effects, so every card has a
+                         column — the page has one shape instead of two.
+
+                         AND IT SCROLLS WITH THE PANE rather than sticking. Sticky was right when this column
+                         held only a guide, because a guide short enough to pin is a guide that fits. Holding
+                         three panels it does not fit, and the two ways to pin something that doesn't fit are
+                         both worse than not pinning it: leave it sticky and its foot — where "this will add to
+                         your sandbox" now lives — is unreachable; cap it and give it its own scrollbar and the
+                         page has three nested scroll regions, which is the thing this whole pass is undoing.
+                         Flowing, one scrollbar moves the whole page and nothing is hidden anywhere. -->
+                    <aside class="hidden @3xl:block @3xl:w-72 @3xl:shrink-0">
+                        <CapabilityContext :entry="selected" :values="values" :effects="liveEffects" />
                     </aside>
                 </div>
             </div>
