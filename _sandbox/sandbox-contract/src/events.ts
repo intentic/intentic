@@ -201,6 +201,17 @@ export type RestoredMessage = z.infer<typeof RestoredMessageSchema>;
 export const SessionTranscriptSchema = z.object({ messages: z.array(RestoredMessageSchema) });
 export const AgentTranscriptSchema = SessionTranscriptSchema.extend({ sessionId: z.string().optional() });
 
+/* THE THREE RESTORABLE CARDS, named so the turn journal can hold them verbatim: a parked turn's raised cards
+ * are written down beside its prompt (sandbox turn-journal.ts), and a daemon death under the park restores the
+ * very same frames instead of ending the turn `interrupted` — the card the user was about to answer survives
+ * the restart that killed the process holding it. `browser_help` is deliberately not among them: the browser
+ * session its card points at dies with the container, so that park cannot be restored, only reported. */
+const PlanCardSchema = z.object({ kind: z.literal("plan"), requestId: z.string(), text: z.string() });
+const QuestionCardSchema = z.object({ kind: z.literal("question"), requestId: z.string(), questions: z.array(AskQuestionSchema) });
+const PermissionCardSchema = PermissionAskSchema.extend({ kind: z.literal("permission"), requestId: z.string() });
+export const ParkedCardSchema = z.discriminatedUnion("kind", [PlanCardSchema, QuestionCardSchema, PermissionCardSchema]);
+export type ParkedCard = z.infer<typeof ParkedCardSchema>;
+
 // One frame from an agent turn, relayed to the UI. `kind`-discriminated. The daemon normalizes the SDK's
 // ~40 SDKMessage types down to this union: high-value block types get a dedicated frame
 // (delta/thinking/tool_call/tool_call_update/todos/usage/rate_limit_info/account_usage/context_usage/init/compact); any SDK message
@@ -434,9 +445,9 @@ export const AgentEventSchema = z.discriminatedUnion("kind", [
     ContextUsageSchema.extend({ kind: z.literal("context_usage") }),
     z.object({ kind: z.literal("compact"), trigger: z.string(), preTokens: z.number().optional(), postTokens: z.number().optional() }),
     // The four interactive cards. Each parks the turn until `POST /agent/reply` resolves its `requestId`.
-    z.object({ kind: z.literal("plan"), requestId: z.string(), text: z.string() }),
-    z.object({ kind: z.literal("question"), requestId: z.string(), questions: z.array(AskQuestionSchema) }),
-    PermissionAskSchema.extend({ kind: z.literal("permission"), requestId: z.string() }),
+    PlanCardSchema,
+    QuestionCardSchema,
+    PermissionCardSchema,
     // The agent's browser needs a person: it parked mid-sign-in on something it cannot clear itself (a captcha,
     // a password it does not hold, a phone check). `session` names the browser session on /browsers — the card's
     // one action is going THERE, where the live stage and Take control already are; the Browsers banner and this
@@ -561,17 +572,25 @@ export type AttachFrame = z.infer<typeof AttachFrameSchema>;
  * carries the run's prompt verbatim, and a window joining a resumed run would otherwise render the note as a
  * message the USER wrote — the same words the user already said one run up, with a machine's preamble on them.
  * Recognising the prefix is what lets that window reuse the bubble that is already there instead. */
+// The instruction the three whole-turn re-runs share: what follows the note is the original request, repeated.
+// `answered` deliberately does not carry it — what follows THAT note is not a repetition but the user's answer,
+// and telling the model to "continue from that point instead of starting over" about words it has never seen
+// is how a resume reads as the user contradicting themselves.
+const REPEATED = "The interrupted request is repeated below — where part of it was already completed in this session, continue from that point instead of starting over.";
 export const RESUME_NOTES = {
-    auth: "The Claude credential that interrupted this conversation has been renewed, and this turn resumed automatically.",
-    outage: "The model provider was briefly unavailable and interrupted this conversation; this turn resumed automatically.",
-    restart: "The sandbox restarted while this turn was running, which stopped it, and this turn resumed automatically once it came back.",
+    auth: `The Claude credential that interrupted this conversation has been renewed, and this turn resumed automatically. ${REPEATED}`,
+    outage: `The model provider was briefly unavailable and interrupted this conversation; this turn resumed automatically. ${REPEATED}`,
+    restart: `The sandbox restarted while this turn was running, which stopped it, and this turn resumed automatically once it came back. ${REPEATED}`,
+    // A turn that was PARKED on the user when the daemon died: nothing re-runs at boot — the card is restored
+    // instead, and this is the turn their answer starts (turn-resume.ts). What rides below the note is the
+    // answer itself, so the model picks the session back up at exactly the decision it had handed over.
+    answered: "The sandbox restarted while this conversation was waiting for the user to respond; it is back, and their response follows below — continue from where the session left off.",
 } as const;
 
-// The prompt a resume actually sends: the note, then why the words below are being repeated, then them.
+// The prompt a resume actually sends: the note (each carries its own account of what the words below are),
+// then them.
 export const withResumeNote = (prompt: string, note: string): string =>
-    Object.values(RESUME_NOTES).some((known) => prompt.startsWith(known))
-        ? prompt
-        : `${note} The interrupted request is repeated below — where part of it was already completed in this session, continue from that point instead of starting over.\n\n${prompt}`;
+    Object.values(RESUME_NOTES).some((known) => prompt.startsWith(known)) ? prompt : `${note}\n\n${prompt}`;
 
 // The user's own words inside a resumed prompt — the note and its explanation stripped back off. Returns the
 // prompt unchanged when it is not a resume, so a caller can hand every attach head through it.

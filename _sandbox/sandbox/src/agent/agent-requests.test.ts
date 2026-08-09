@@ -1,5 +1,5 @@
 import { expect, test } from "vitest";
-import { createRequest, resolveRequest } from "./agent-requests.js";
+import { createRequest, resolveRequest, restoreRequest } from "./agent-requests.js";
 
 /* The registry decides what every client will be told about a card's fate, so what matters here is the one
  * distinction only it can draw: an answer a user actually gave versus the stand-in an abort settles with. */
@@ -49,6 +49,20 @@ test("a reply for another kind of card settles as the abort value rather than an
     const { reply, resolved } = await settled;
     expect(reply).toBe(onAbort);
     expect(resolved).toEqual({ kind: "resolved", requestId: id });
+});
+
+// The restart path: a card restored from the journal answers to the id it was raised with one process ago —
+// the id every replayed frame and saved answer draft still holds.
+test("a restored card settles under its original id", async () => {
+    const { id, wait } = restoreRequest("r-restored", "question", onAbort, "c-1");
+    expect(id).toBe("r-restored");
+    const settled = wait(new AbortController().signal);
+
+    expect(resolveRequest({ kind: "question", requestId: "r-restored", answers: { Which: ["B"] } })).toBe(true);
+
+    const { reply, resolved } = await settled;
+    expect(reply).toEqual({ kind: "question", requestId: "r-restored", answers: { Which: ["B"] } });
+    expect(resolved).toEqual({ kind: "resolved", requestId: "r-restored", reply });
 });
 
 test("only the first settle counts — a second reply for the same id finds nothing to resolve", async () => {

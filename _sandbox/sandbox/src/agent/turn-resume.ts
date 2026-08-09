@@ -1,9 +1,12 @@
-import { type AgentTurn, parsePinned, RESUME_NOTES, withResumeNote } from "@intentic/sandbox-contract";
+import { type AgentEvent, type AgentReply, type AgentTurn, type ParkedCard, parsePinned, RESUME_NOTES, withResumeNote } from "@intentic/sandbox-contract";
 import { fireAutomation, type WakeFn } from "../automations/scheduler.js";
 import { replaceRejectedToken } from "../claude/claude-credentials.js";
 import type { Services } from "../composition.js";
 import { turnAwaiting, turnFinished } from "../push/notifications.js";
 import { openTurnTranscript, recordTurnTranscript } from "../sessions/turn-transcript.js";
+import { formatAnswers, grantRestoredPermission, POST_PLAN_MODE } from "./agent.js";
+import { restoreRequest } from "./agent-requests.js";
+import { registerTurn } from "./agent-steering.js";
 import { outageRetryDue, outageRetryFired } from "./provider-health.js";
 import type { JournalEntry, JournalledTurn } from "./turn-journal.js";
 import { startTurnRun, type TurnRun } from "./turn-runs.js";
@@ -422,6 +425,192 @@ export const createTurnResumeScheduler = (services: Services, wake: WakeFn, inte
     };
 };
 
+/* A TURN THAT WAS WAITING FOR THE USER when the daemon died is still waiting for them after it comes back.
+ *
+ * Its journal entry carries the raised cards verbatim (`parked` — turn-journal.ts), and this restores them
+ * instead of ending the turn `interrupted` and instead of re-running it: nothing unattended runs, no tokens
+ * are spent at boot, and the card the user was about to answer is back where it was, live and answerable
+ * under its ORIGINAL request ids (so a reopened window's replayed frame and a half-typed answer draft both
+ * still point at a waiter that exists).
+ *
+ * The vehicle is a PLACEHOLDER TURN down the ordinary startConversationTurn road, whose generator — where a
+ * provider would be — re-emits the journalled frames and awaits the restored waiters. Running through the
+ * normal pump is what makes everything downstream just work with no special cases: the fleet reads `awaiting`
+ * and the right attention flag (the frames fold through registry observe), any window attaches and renders
+ * the live card, POST /agent/reply finds the waiter, the awaiting push observer fires, the transcript records
+ * the turn when it settles, and the re-emitted park frames re-journal through the same frame loop — so a
+ * SECOND restart rehydrates again.
+ *
+ * The answer then hands off to a REAL turn on the journalled session, the user's response folded behind the
+ * `answered` resume note — started only after the placeholder's run has fully unwound, because the resumed
+ * turn needs the conversation mutex the placeholder still holds. The settlements that end quietly live
+ * (a dismissed question, a bare permission deny) end quietly here too: no follow-up starts. */
+const rehydrateParkedTurn = async (services: Services, wake: WakeFn, entry: JournalledTurn): Promise<void> => {
+    const conversationId = entry.turn.conversationId;
+    const cards = entry.parked ?? [];
+    const sessionId = entry.sessionId ?? entry.turn.sessionId;
+    // The turn the settlement starts — written by the placeholder generator before it returns, read only
+    // after its run has completely unwound. A closure, not a return value: the pump owns the generator.
+    let followUp: (AgentTurn & { conversationId: string }) | undefined;
+    /* The resumed turn: the original turn's identity, the user's answer behind the `answered` note, the
+     * journalled session (which holds the partial work the answer continues), and — where the settlement
+     * dictates one — the posture it runs in. resumedTurn above is deliberately NOT reused: it repeats the
+     * original PROMPT for a turn that must be re-run, and this turn must not be — the answer is the prompt. */
+    const resumed = (answer: string, mode?: AgentTurn["permissionMode"]): AgentTurn & { conversationId: string } => ({
+        ...entry.turn,
+        prompt: withResumeNote(answer, RESUME_NOTES.answered),
+        ...(sessionId !== undefined ? { sessionId } : {}),
+        ...(mode !== undefined ? { permissionMode: mode } : {}),
+    });
+    /* THE SETTLEMENT TABLE — how the answered card maps to the turn that runs next. Undefined is the quiet
+     * ending and mirrors live behaviour exactly: a dismissed question already ended the turn through the reply
+     * route (stopping + stopTurn — restoreRequest carries the conversationId that route needs), and a bare
+     * permission deny is the user pulling the plug (the client stops the turn on it, as live). The kind
+     * double-check is for the types — restoreRequest guarantees a reply matches its card's kind. */
+    const settlementOf = (card: ParkedCard, reply: AgentReply): (AgentTurn & { conversationId: string }) | undefined => {
+        if (card.kind === "plan" && reply.kind === "plan") {
+            // Approval runs in POST_PLAN_MODE — the posture a live approval sets on the session. Rejection
+            // goes back into plan mode with the feedback, the same words the live gate would deny with.
+            return reply.approve
+                ? resumed("The user approved the plan — proceed with it.", POST_PLAN_MODE)
+                : resumed(reply.feedback?.trim() || "Keep refining the plan — do not exit plan mode yet.", "plan");
+        }
+        if (card.kind === "question" && reply.kind === "question") {
+            return reply.cancelled === true || reply.answers === undefined ? undefined : resumed(formatAnswers(card.questions, reply));
+        }
+        if (card.kind === "permission" && reply.kind === "permission") {
+            if (reply.decision === "deny") {
+                const feedback = reply.feedback?.trim() ?? "";
+                // Feedback is a redirection the turn takes; a bare deny ends it (see the table's note above).
+                return feedback === "" ? undefined : resumed(feedback);
+            }
+            // The allow has no waiting tool call to feed — the process holding it died — so it becomes a
+            // one-shot grant the resumed turn's first ask for this tool consumes, and `always` carries the
+            // "don't ask again" flavour through to the session rule that click would have written live.
+            grantRestoredPermission(conversationId, card.toolName, reply.decision === "always");
+            return resumed(`The user allowed ${card.toolName} — run it and continue where the session left off.`);
+        }
+        return undefined;
+    };
+    // The card's stand-in reply if the turn dies before the user answers — each the same value its live
+    // raiser registers (agent.ts), so an abort reads identically whichever side of a restart it lands on.
+    const restore = (card: ParkedCard) => {
+        switch (card.kind) {
+            case "plan":
+                return restoreRequest(card.requestId, "plan", { kind: "plan", requestId: "", approve: false, feedback: "Planning cancelled." }, conversationId);
+            case "question":
+                return restoreRequest(card.requestId, "question", { kind: "question", requestId: "", cancelled: true }, conversationId);
+            case "permission":
+                return restoreRequest(
+                    card.requestId,
+                    "permission",
+                    { kind: "permission", requestId: "", decision: "deny", feedback: "The turn was cancelled before you answered." },
+                    conversationId,
+                );
+        }
+    };
+    const placeholder: WakeFn = async function* (svc, input) {
+        /* The registry lifecycle runConversationTurn wraps around a real turn, minus what a turn that runs no
+         * tools has no use for (worktree ensure, sync, naming, checkpoint) — the resumed turn takes the real
+         * road and does all of it at its own start. Placement follows the entry the conversation already owns,
+         * the same rule as live. */
+        const record = svc.agents.entry(conversationId);
+        const began = await svc.agents.begin(
+            {
+                conversationId,
+                isolated: record?.branch !== undefined,
+                prompt: input.prompt,
+                provider: input.agent ?? "claude",
+                harness: input.harness ?? "native",
+                ...(input.title !== undefined ? { title: input.title } : {}),
+                ...(input.model !== undefined ? { model: input.model } : {}),
+                ...(input.effort !== undefined ? { effort: input.effort } : {}),
+                ...(input.thinking !== undefined ? { thinking: input.thinking } : {}),
+                ...(input.fast !== undefined ? { fast: input.fast } : {}),
+                ...(input.account !== undefined ? { account: input.account } : {}),
+                ...(input.origin !== undefined ? { origin: input.origin } : {}),
+            },
+            Date.now(),
+        );
+        if (!began) {
+            yield { kind: "error", code: "agent-busy", message: "This agent is already running a turn — wait for it to finish." };
+            yield { kind: "done" };
+            return;
+        }
+        // Every frame folds through registry observe on its way out, exactly as runConversationTurn's loop
+        // does — it is what lights `awaiting` and the card's attention flag on the fleet.
+        const see = (event: AgentEvent): AgentEvent => {
+            svc.agents.observe(conversationId, event);
+            return event;
+        };
+        const controller = new AbortController();
+        // Stop works on the placeholder like on any turn: the abort settles every waiter with its stand-in,
+        // the cards freeze cancelled, and the run unwinds. No steering queue on purpose — /agent/steer answers
+        // NOT_FOUND and the client's own "queued for the next turn" fallback applies.
+        const unregister = registerTurn(conversationId, { abort: () => controller.abort() });
+        try {
+            // The session first: it re-binds the conversation to the partial work, and the pump folds it back
+            // into the journal entry — without it a second restart would rehydrate a turn with no session.
+            if (sessionId !== undefined) {
+                yield see({ kind: "session", sessionId });
+            }
+            // Waiters go up before their frames go out (restoreRequest registers on the wait call), so a reply
+            // racing the replay cannot land in the gap and 404.
+            const raised = cards.map((card) => ({ card, outcome: restore(card).wait(controller.signal) }));
+            for (const { card } of raised) {
+                yield see(card);
+            }
+            const winner = await Promise.race(raised.map(async ({ card, outcome }) => ({ card, ...(await outcome) })));
+            // One answer settles the turn; the rest freeze cancelled — the resumed turn re-asks what it still
+            // needs. (A turn parked on several cards at once is rare; answering them as one is not a thing a
+            // live turn offers either.)
+            controller.abort();
+            for (const { outcome } of raised) {
+                yield see((await outcome).resolved);
+            }
+            // A resolved frame carrying a reply is the user's own settlement; its absence is the abort's
+            // stand-in — Stop, or a dismissal's stop — and nothing follows those.
+            if (winner.resolved.reply !== undefined) {
+                followUp = settlementOf(winner.card, winner.reply);
+                if (followUp !== undefined) {
+                    // An approved plan moves the mode the way the live gate does, so an attached window's mode
+                    // chip follows the turn out of planning.
+                    if (winner.card.kind === "plan" && winner.reply.kind === "plan" && winner.reply.approve) {
+                        yield see({ kind: "mode", mode: POST_PLAN_MODE });
+                    }
+                    // Between this turn's finish and the resumed turn's begin the entry's resting state would
+                    // go out — a blink of "Finished" on a card that is about to be running. `resuming` is
+                    // exactly that flag, and the resumed turn's own begin is what clears it.
+                    svc.agents.markResuming(conversationId);
+                }
+            }
+            yield see({ kind: "done" });
+        } finally {
+            unregister();
+            await svc.agents.finish(conversationId, Date.now());
+        }
+    };
+    // Rehydration is not an attempt — the counter guards re-RUNS that spend tokens, and this spends none. The
+    // attempts ride through unchanged so the journal keeps telling the truth about what has been re-run.
+    const run = await startConversationTurn(services, placeholder, entry.turn, entry.attempts);
+    if (run === undefined) {
+        // A live turn already owns the conversation — it supersedes the park, exactly as a hand retry does.
+        return;
+    }
+    services.logger.info({ conversationId, cards: cards.length }, "parked turn rehydrated — its cards are back where they were");
+    // The handoff waits out the whole placeholder run (mutex released, finally unwound), detached — a card can
+    // sit unanswered for days, and nothing at boot may wait on it.
+    void (async () => {
+        await run.waitUntilFinished();
+        if (followUp === undefined) {
+            return;
+        }
+        if ((await startConversationTurn(services, wake, followUp)) !== undefined) {
+            services.logger.info({ conversationId }, "parked turn resumed — the user's answer continues its session");
+        }
+    })().catch((error: unknown) => services.logger.error({ err: error, conversationId }, "parked turn's answer failed to resume it"));
+};
+
 /* THE BOOT PASS — the restart condition. Run once, right after the daemon comes up, before anything else can
  * start a turn on these conversations.
  *
@@ -458,6 +647,17 @@ export const resumeInterruptedTurns = async (services: Services, wake: WakeFn, n
                     conversationId: entry.conversationId,
                 })
                 .catch((error: unknown) => services.logger.warn({ err: error, automation: entry.automationId }, "interrupted run not recorded"));
+        }
+        /* A turn parked ON THE USER takes its own road, ahead of every gate below — none of them applies.
+         * autoResumeOnRestart gates unattended re-runs that spend tokens, and rehydration runs nothing and
+         * spends nothing; an unanswered question does not go stale; restoring a card is not an attempt. The
+         * entry is NOT cleared or bumped here — the placeholder's own run re-journals the same state through
+         * the ordinary frame loop, which is what makes a second restart rehydrate again. */
+        if (entry.kind === "turn" && entry.parked !== undefined && entry.parked.length > 0) {
+            await rehydrateParkedTurn(services, wake, entry).catch((error: unknown) =>
+                services.logger.error({ err: error, conversationId: entry.turn.conversationId }, "parked turn failed to rehydrate"),
+            );
+            continue;
         }
         const spent = entry.attempts >= MAX_RESUME_ATTEMPTS;
         const stale = now - entry.startedAt > RESUME_MAX_AGE_MS;

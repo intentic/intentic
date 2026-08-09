@@ -1065,7 +1065,10 @@ async function* streamSdk(
 // quieter answer: the client stops the turn on it (and the stand-in an aborted turn settles with lands here
 // too), so this text is read on the NEXT turn, where "proceed on defaults" would be an instruction to resume
 // work the user just pulled the plug on.
-const formatAnswers = (questions: AskQuestion[], reply: Extract<AgentReply, { kind: "question" }>): string => {
+// Exported for the restart path: a restored question card's answer arrives with no tool call left to feed, so
+// it rides a resumed turn's prompt instead — worded by the same function, so the model reads one shape of
+// answer wherever the daemon was in between (turn-resume.ts).
+export const formatAnswers = (questions: AskQuestion[], reply: Extract<AgentReply, { kind: "question" }>): string => {
     if (reply.cancelled || reply.answers === undefined) {
         return "The user dismissed the questions without answering and stopped the turn. STOP what you are doing and wait for them to say how to proceed.";
     }
@@ -1463,8 +1466,41 @@ const UNGATED = new Set(["mcp__ui__ask", "AskUserQuestion", "EnterPlanMode"]);
  * command, so approving a plan bought the user a permission prompt for `git log`.
  *
  * The container is the isolation boundary, exactly as it is for toolWideAllow below. A user who wants per-tool
- * approvals still has them: they are a posture the composer picks for the turn, not a tax on planning. */
-const POST_PLAN_MODE: PermissionMode = "bypassPermissions";
+ * approvals still has them: they are a posture the composer picks for the turn, not a tax on planning.
+ *
+ * Exported for the restart path, which owes an approval the SAME posture: a plan approved on a restored card
+ * runs as a resumed turn rather than through the gate below, and starting that turn in anything narrower would
+ * make "the sandbox restarted in between" cost the user a permission prompt per tool (turn-resume.ts). */
+export const POST_PLAN_MODE: PermissionMode = "bypassPermissions";
+
+/* A PERMISSION THE USER GRANTED ACROSS A RESTART — one tool, one conversation, consumed by the first ask.
+ *
+ * The live gate hands an allow straight back to the SDK's waiting canUseTool; a RESTORED permission card has no
+ * waiting tool call — the process holding it died — so its "Allow" starts a resumed turn that re-runs the tool
+ * (turn-resume.ts). That re-run asks the gate again, and without this the user would answer the same question
+ * twice, the second time with less faith in the first click. The grant is the first answer, carried to the ask
+ * it belongs to.
+ *
+ * Deliberately narrow: keyed by conversation, matched by tool name, deleted on use — and expired after a few
+ * minutes so a resumed turn that never re-attempts the tool cannot leave a standing allow behind for some
+ * later turn's identically-named ask. `always` carries the "don't ask again" flavour through, so the one click
+ * writes the same session-wide rule it would have written live. */
+const RESTORED_GRANT_TTL_MS = 10 * 60_000;
+const restoredGrants = new Map<string, { tool: string; always: boolean; grantedAt: number }>();
+export const grantRestoredPermission = (conversationId: string, tool: string, always: boolean, now: number = Date.now()): void => {
+    restoredGrants.set(conversationId, { tool, always, grantedAt: now });
+};
+const consumeRestoredGrant = (conversationId: string | undefined, tool: string, now: number = Date.now()): { always: boolean } | undefined => {
+    if (conversationId === undefined) {
+        return undefined;
+    }
+    const grant = restoredGrants.get(conversationId);
+    if (grant === undefined || grant.tool !== tool || now - grant.grantedAt > RESTORED_GRANT_TTL_MS) {
+        return undefined;
+    }
+    restoredGrants.delete(conversationId);
+    return { always: grant.always };
+};
 
 // What "always" persists on top of the SDK's own suggestions: allow this TOOL, for the rest of the session.
 // The suggestions are narrowly scoped — for Bash they carry the command prefix (`pnpm install:*`), so the next
@@ -1531,6 +1567,18 @@ const permissionGate =
         }
         if (UNGATED.has(toolName)) {
             return { behavior: "allow", updatedInput: input };
+        }
+        // An answer the user already gave: the restored card's "Allow", waiting for the re-attempt it belongs
+        // to (see grantRestoredPermission). Consumed here so the resumed turn's first ask for this tool sails
+        // through instead of raising the same card twice across one restart.
+        const granted = consumeRestoredGrant(request.conversationId, toolName);
+        if (granted !== undefined) {
+            return {
+                behavior: "allow",
+                updatedInput: input,
+                decisionClassification: granted.always ? "user_permanent" : "user_temporary",
+                ...(granted.always ? { updatedPermissions: [...(options.suggestions ?? []), toolWideAllow(toolName)] } : {}),
+            };
         }
         const { id, wait } = createRequest("permission", {
             kind: "permission",

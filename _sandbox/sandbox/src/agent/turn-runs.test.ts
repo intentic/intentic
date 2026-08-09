@@ -238,6 +238,44 @@ describe(`turn runs`, () => {
         await vi.waitFor(() => expect(calls).toEqual([`record`, `clear:c-journal-fail`]));
     });
 
+    /* THE PARKED CARDS ride the journal entry while they are up — they are what a boot restores when the daemon
+     * dies under a park (turn-resume.ts), and their content exists nowhere else once the frame log dies with
+     * the process. Every rewrite carries the whole live state (session AND cards), so neither update can erase
+     * the other's half. */
+    it(`journals a raised card, keeps the session beside it, and takes the card back off when it resolves`, async () => {
+        const { turnFn, push, close } = crankedTurn();
+        const entries: (JournalEntry & { kind: "turn" })[] = [];
+        const journal = {
+            list: async () => [],
+            recordTurn: async (entry: JournalEntry & { kind: "turn" }) => {
+                entries.push(entry);
+            },
+            recordFire: async () => undefined,
+            clearTurn: async () => undefined,
+            clearFire: async () => undefined,
+        };
+        startTurnRun(turnFn, turn(`c-parked`), { journal });
+
+        push({ kind: `session`, sessionId: `sess-3` });
+        push({ kind: `plan`, requestId: `r-plan`, text: `the plan` });
+        push({ kind: `question`, requestId: `r-q`, questions: [{ question: `which?`, header: `Pick`, multiSelect: false, options: [] }] });
+        // browser_help parks the turn but is never journalled: its browser session dies with the container.
+        push({ kind: `browser_help`, requestId: `r-b`, session: `b-1`, account: `acc`, message: `captcha` });
+        push({ kind: `resolved`, requestId: `r-plan` });
+        push({ kind: `done` });
+        close();
+        await vi.waitFor(() => expect(turnRunOf(`c-parked`)!.done).toBe(true));
+
+        const parked = entries.map((entry) => ({ session: entry.sessionId, cards: (entry.parked ?? []).map((card) => card.requestId) }));
+        expect(parked).toEqual([
+            { session: undefined, cards: [] }, // the opening write
+            { session: `sess-3`, cards: [] },
+            { session: `sess-3`, cards: [`r-plan`] },
+            { session: `sess-3`, cards: [`r-plan`, `r-q`] },
+            { session: `sess-3`, cards: [`r-q`] }, // the plan resolved; the question still stands
+        ]);
+    });
+
     it(`a journal that throws cannot break the turn`, async () => {
         const { turnFn, push, close } = crankedTurn();
         const broken = {

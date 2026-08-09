@@ -1,4 +1,4 @@
-import type { AgentEvent } from "@intentic/sandbox-contract";
+import { type AgentEvent, RESUME_NOTES, withoutResumeNote, withResumeNote } from "@intentic/sandbox-contract";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { TranscriptClock } from "./transcriptClock";
 
@@ -59,6 +59,25 @@ it(`settles an unwatched transcript in the frame its text arrives`, () => {
     paint();
 
     expect(said(clock)).toBe(ANSWER);
+});
+
+/* THE ATTACH HEAD OF A RESUMED TURN, folded the way Conversation.reattach folds it: the prompt through
+ * withoutResumeNote, then reuseUserBubble against what the transcript already shows. The two resume shapes
+ * want OPPOSITE outcomes and this is the seam that decides them. A re-run repeats the original request behind
+ * its note, so the stripped words match the bubble the user really typed and that bubble is reused; an
+ * `answered` resume carries the user's ANSWER to a restored card — words the transcript has never shown — so
+ * it must land as its own bubble rather than be mistaken for the question it answers. */
+it(`a re-run's head reuses the prompt's own bubble; an answered park's head lands as its own`, () => {
+    const clock = new TranscriptClock(() => {});
+    const asked = clock.append({ role: `user`, text: `ship the parser` });
+
+    const rerun = withoutResumeNote(withResumeNote(`ship the parser`, RESUME_NOTES.restart));
+    expect(clock.reuseUserBubble(rerun, false)).toBe(asked);
+
+    const answered = withoutResumeNote(withResumeNote(`The user approved the plan — proceed with it.`, RESUME_NOTES.answered));
+    // The strip leaves exactly the answer — no machine preamble in a user bubble either way.
+    expect(answered).toBe(`The user approved the plan — proceed with it.`);
+    expect(clock.reuseUserBubble(answered, false)).toBeUndefined();
 });
 
 // The pane the user moves to takes over mid-answer: what is already buffered starts typing from there, rather

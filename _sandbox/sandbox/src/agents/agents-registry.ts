@@ -236,6 +236,14 @@ export interface AgentsRegistry {
     // Deliberately says nothing about where the work now stands: that is standing.ts's question, re-derived
     // here before the roster goes out.
     readonly finish: (id: string, now: number) => Promise<void>;
+    /* A RESUME IS COMING — the way INTO `resuming` for an ending the observer cannot see. The error-frame path
+     * covers a turn the daemon is repairing (a re-mint, an outage backoff); this covers a settlement that IS a
+     * beginning: a restored card's answer ends its placeholder turn and starts the real resumed one seconds
+     * later (turn-resume.ts), and without this flag the entry's resting `idle` goes out in between — the board
+     * files the card under Finished for the blink before it climbs back into Active. Set BEFORE the placeholder
+     * settles; cleared by what always clears it — the resumed turn's own begin, or abandonResume when the
+     * resume never comes. */
+    readonly markResuming: (id: string) => void;
     /* THE RESUME IS NOT COMING — the other way out of `resuming`, and the one nobody sees happen: the credential
      * could not be re-minted, or an outage's stranded turn went stale waiting for a setting that stayed off
      * (turn-resume.ts). Writes the failure the card was holding open for: this is exactly the condition where a
@@ -941,6 +949,11 @@ export const createAgentsRegistry = (store: AgentsStore, standings: LandStanding
             // from before the turn ran.
             await reprobe();
             broadcast();
+        },
+        markResuming: (id) => {
+            // runtimeOf, not get: the placeholder's finish is about to reset the state, and `resuming` is the
+            // one flag finish deliberately leaves alone — it only has to exist before that reset runs.
+            runtimeOf(id).resuming = true;
         },
         abandonResume: async (id, now, reason) => {
             const entry = entryOf(id);

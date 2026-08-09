@@ -709,6 +709,21 @@ describe("agents registry", () => {
         expect(registry.get("c1")?.status).toBe("idle");
     });
 
+    /* The way INTO `resuming` that no frame announces: a restored card's answer ends its placeholder turn and
+     * the real resumed turn begins seconds later (turn-resume.ts). markResuming before the finish is what keeps
+     * the card out of Finished for that blink — the same hold the error-frame path gets from its own flag. */
+    it("markResuming holds the card through the settle that precedes its resumed turn", async () => {
+        const registry = createAgentsRegistry(memoryStore(), standings(), presences());
+        await registry.init();
+        await registry.begin(turn(), 1_000);
+        registry.markResuming("c1");
+        await registry.finish("c1", 2_000);
+        expect(registry.get("c1")?.status).toBe("resuming");
+        // The resumed turn's own begin is what ends the wait, exactly as it does for the error-frame path.
+        expect(await registry.begin(turn({ prompt: "…their response follows below. Approved." }), 3_000)).toBe(true);
+        expect(registry.get("c1")?.status).toBe("running");
+    });
+
     /* The other ending, and the one that must not leave a spinner turning forever: the credential is genuinely
      * dead, so nothing re-runs. The wait closes into the failure it was holding open — Attention, where a person
      * is asked to reconnect the account — and not back into the clean `idle` the killed turn left on the entry. */

@@ -1,6 +1,6 @@
 import { mkdir, readdir, readFile, unlink, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { AgentOriginSchema, AgentTurnSchema } from "@intentic/sandbox-contract";
+import { AgentOriginSchema, AgentTurnSchema, ParkedCardSchema } from "@intentic/sandbox-contract";
 import { z } from "zod";
 
 /* THE TURN JOURNAL — what is in flight right now, written down where the process cannot take it with it.
@@ -49,6 +49,13 @@ const JournalledTurnSchema = z.object({
     // The session the turn last reported. It holds the partial work the resume continues from, which is the
     // difference between picking the thread back up and starting the whole turn over.
     sessionId: z.string().optional(),
+    /* The cards this turn is PARKED on right now — the raised plan/question/permission frames verbatim,
+     * appended as each goes up and removed as each resolves. Their presence at boot is what tells a turn that
+     * was WAITING ON THE USER from one the daemon died under mid-work: the first is not re-run and not left
+     * `interrupted` — its cards are restored as they stood, and the user's answer is what runs next
+     * (turn-resume.ts). browser_help is never here: the browser session its card points at died with the
+     * container, so that park has nothing to restore. */
+    parked: z.array(ParkedCardSchema).optional(),
 });
 export type JournalledTurn = z.infer<typeof JournalledTurnSchema>;
 

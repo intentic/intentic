@@ -47,7 +47,20 @@ export function createRequest<K extends AgentReply["kind"]>(
     onAbort: Extract<AgentReply, { kind: K }>,
     conversationId?: string,
 ): { id: string; wait: (signal: AbortSignal) => Promise<Settled<K>> } {
-    const id = randomUUID();
+    return restoreRequest(randomUUID(), kind, onAbort, conversationId);
+}
+
+/* Re-register a card under the id it was ORIGINALLY raised with — the restart path (turn-resume.ts). A parked
+ * turn's cards survive a daemon death in the turn journal, and restoring them under fresh ids would strand
+ * every copy the old id reached: the frame a reopened window replays, and the half-typed answer draft the
+ * browser keys by requestId. The id space is shared and unguessable either way — a journalled id was minted by
+ * createRequest one process ago. */
+export function restoreRequest<K extends AgentReply["kind"]>(
+    id: string,
+    kind: K,
+    onAbort: Extract<AgentReply, { kind: K }>,
+    conversationId?: string,
+): { id: string; wait: (signal: AbortSignal) => Promise<Settled<K>> } {
     const wait = (signal: AbortSignal): Promise<Settled<K>> =>
         new Promise((resolve) => {
             const settle = (reply: AgentReply, fromUser: boolean): void => {

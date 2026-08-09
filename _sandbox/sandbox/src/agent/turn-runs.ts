@@ -1,4 +1,4 @@
-import type { AgentEvent, AgentTurn } from "@intentic/sandbox-contract";
+import type { AgentEvent, AgentTurn, ParkedCard } from "@intentic/sandbox-contract";
 import { recordCommands } from "./agent-commands.js";
 import type { TurnJournal } from "./turn-journal.js";
 
@@ -187,7 +187,26 @@ export function startTurnRun(
         }
         journalled = journalled.then(() => op(journal)).catch(() => undefined);
     };
-    journalOp((target) => target.recordTurn({ kind: "turn", turn: input, startedAt: run.startedAt, attempts }));
+    /* The journal entry's live fields, held so every rewrite carries ALL of them — the session update and a
+     * park update writing only what each knew would erase the other's half. `parked` is the cards the turn is
+     * waiting on right now, written down because a daemon death under a park must restore the card, not the
+     * turn (turn-resume.ts), and the card's content exists nowhere else once the frame log dies with the
+     * process. The entry is SNAPSHOTTED synchronously — only the write is queued; a closure that read these
+     * fields when it finally ran would journal a later frame's state under this one's write. */
+    let sessionId: string | undefined;
+    const parked: ParkedCard[] = [];
+    const journalEntry = (): void => {
+        const entry = {
+            kind: "turn" as const,
+            turn: input,
+            startedAt: run.startedAt,
+            attempts,
+            ...(sessionId !== undefined ? { sessionId } : {}),
+            ...(parked.length > 0 ? { parked: [...parked] } : {}),
+        };
+        journalOp((target) => target.recordTurn(entry));
+    };
+    journalEntry();
     // An observer is an optional side-channel, so it must be unable to break the turn — a throw from a
     // notification hook cannot be allowed to abort a run that is otherwise fine.
     const tell = (report: (target: TurnObserver) => void): void => {
@@ -216,12 +235,26 @@ export function startTurnRun(
                 if (event.kind === "plan" || event.kind === "question" || event.kind === "permission" || event.kind === "browser_help") {
                     tell((target) => target.awaiting(event.kind));
                 }
+                // The restorable cards ride the journal entry while they are up (browser_help stays out — see
+                // ParkedCardSchema), and come off it as each resolves: what is in the entry at any instant is
+                // exactly what a boot would have to restore.
+                if (event.kind === "plan" || event.kind === "question" || event.kind === "permission") {
+                    parked.push(event);
+                    journalEntry();
+                }
+                if (event.kind === "resolved") {
+                    const held = parked.findIndex((card) => card.requestId === event.requestId);
+                    if (held !== -1) {
+                        parked.splice(held, 1);
+                        journalEntry();
+                    }
+                }
                 // The session the provider minted or advanced for this turn, folded into the journal entry as
                 // soon as it is known. It is what makes a resume CONTINUE — the partial work of the interrupted
                 // turn lives in that session, and a resume without it re-runs the whole turn from nothing.
                 if (event.kind === "session") {
-                    const sessionId = event.sessionId;
-                    journalOp((target) => target.recordTurn({ kind: "turn", turn: input, sessionId, startedAt: run.startedAt, attempts }));
+                    sessionId = event.sessionId;
+                    journalEntry();
                 }
                 if (event.kind === "error") {
                     failure = event.message;
