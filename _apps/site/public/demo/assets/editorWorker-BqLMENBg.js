@@ -1,1 +1,0 @@
-function e(e){return new Worker(`/demo/assets/editorWorker-DRsDZpDG.js`,{name:e?.name})}export{e as default};

@@ -1,1 +1,0 @@
-import{I as e}from"./sandboxSession-DgvcpUB0.js";var t=`intentic.devfill.`,n=n=>{if(!e.production)return localStorage.getItem(`${t}${n}`)??void 0},r=(n,r)=>{e.production||r===``||localStorage.setItem(`${t}${n}`,r)};export{r as n,n as t};

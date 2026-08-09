@@ -1,2 +1,0 @@
-import"./src-DNJcLpF2.js";import{n as e,t}from"./sse-1mMrJaOM.js";async function*n(n){for await(let r of e(n)){let e=t(r);if(typeof e!=`object`||!e)continue;let n=e;if(r.split(`
-`).find(e=>e.startsWith(`event:`))?.slice(6).trim()===`error`){yield{kind:`error`,message:typeof n.message==`string`?n.message:`Provisioning failed.`};continue}yield n}}export{n as t};

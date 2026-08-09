@@ -1,2 +1,0 @@
-var e=[],t=e=>new Date(e).toISOString().slice(11,23),n=e=>`${t(e.at)}  ${e.what.padEnd(16)} ${Object.entries(e.detail).map(([e,t])=>`${e}=${typeof t==`string`?t:JSON.stringify(t)}`).join(` `)}`,r=(t,r)=>{let i={at:Date.now(),what:t,detail:r};e.push(i),e.length>300&&e.shift(),console.info(`[intentic focus] ${n(i)}`)};typeof window<`u`&&(window.intenticFocusTrace=()=>e.map(n).join(`
-`));export{r as t};

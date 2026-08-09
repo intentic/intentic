@@ -1,1 +1,0 @@
-var e=(e,t,n,r)=>{let i=t.getBoundingClientRect(),a=Math.min(i.width/n,i.height/r);if(a<=0)return{x:0,y:0};let o=(e,t)=>Math.min(t,Math.max(0,Math.round(e/a)));return{x:o(e.clientX-i.left-(i.width-n*a)/2,n),y:o(e.clientY-i.top-(i.height-r*a)/2,r)}};export{e as t};

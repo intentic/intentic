@@ -12,6 +12,12 @@
 pnpm-lock.yaml
 **/assets/js/env.js
 _sandbox/sandbox/operator-templates
+# Derived files whose generator owns their shape — `**/generated` matches directories, and neither of these
+# lives in one. Formatting them writes a diff the next generator run reverts, and puts generated output in
+# scope of a repo-wide `pnpm format` — which is how 12 MB of minified bundles once got pretty-printed into a
+# 30 MB change set that was too big to hand back to the main tree.
+**/*.generated.ts
+docs/architecture/index.json
 
 # Local tooling config, not project source.
 .claude

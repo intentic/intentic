@@ -1,1 +1,0 @@
-import{yt as e}from"./reactivity.esm-bundler-CApNupZD.js";import{b as t,k as n,mt as r,xt as i}from"./runtime-core.esm-bundler-Dy0E0lo5.js";var a=n({__name:`Card`,props:{dashed:{type:Boolean,default:!1}},setup(n){return(a,o)=>(r(),t(`div`,{class:e([`ui-card`,{"ui-card-dashed":n.dashed}])},[i(a.$slots,`default`)],2))}});export{a as t};

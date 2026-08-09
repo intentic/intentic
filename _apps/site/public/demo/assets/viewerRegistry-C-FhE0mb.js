@@ -1,1 +1,0 @@
-import{O as e}from"./reactivity.esm-bundler-CApNupZD.js";var t=e([]),n=e=>{let n=t.value.findIndex(t=>t.owner===e.owner&&t.id===e.id);return t.value=n===-1?[...t.value,e]:t.value.with(n,e),{dispose:()=>{t.value=t.value.filter(t=>t!==e)}}},r=e=>{let n=e.toLowerCase();return t.value.toReversed().find(e=>e.extensions.includes(n))};export{r as n,n as t};

@@ -1,1 +1,0 @@
-import{C as e}from"./reactivity.esm-bundler-CApNupZD.js";import{Ht as t}from"./runtime-core.esm-bundler-Dy0E0lo5.js";var n=`ui-file-nesting`,r=e((()=>{try{return localStorage.getItem(n)!==`off`}catch{return!0}})());t(r,e=>{try{localStorage.setItem(n,e?`on`:`off`)}catch{}});function i(){return{fileNesting:r}}export{i as t};

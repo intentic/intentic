@@ -1,1 +1,0 @@
-import{C as e}from"./reactivity.esm-bundler-CApNupZD.js";import{Ht as t}from"./runtime-core.esm-bundler-Dy0E0lo5.js";var n=`ui-icon-rail-size`,r=e=>e===`compact`||e===`comfortable`,i=e((()=>{try{let e=localStorage.getItem(n);if(r(e))return e}catch{}return`compact`})());t(i,e=>{try{localStorage.setItem(n,e)}catch{}});function a(){return{iconRailSize:i}}export{a as t};
