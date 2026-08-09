@@ -157,6 +157,21 @@ test("names every repo and says the message is shared when a commit spans more t
     expect(commitMessagePrompt([one])).not.toContain("spans");
 });
 
+test("carries the session's ask as context to be overruled, and says nothing about one when there is none", async () => {
+    const dir = await tempRepo();
+    await writeFile(join(dir, "a.txt"), "x\n");
+    await sh(dir, "add", "-A");
+    const diff = await collectRepoDiff("root", dir, {});
+
+    const prompt = commitMessagePrompt([diff], "Review panel · audit");
+
+    expect(prompt).toContain(`tasked with "Review panel · audit"`);
+    // The half that matters: the ask is the thing most likely to be STALE — a session that audited and then
+    // fixed still answers to "audit" — so the prompt has to say the diff wins, or the model writes the title back.
+    expect(prompt).toContain("if the diff shows something else, describe the diff");
+    expect(commitMessagePrompt([diff])).not.toContain("tasked with");
+});
+
 test("marks a clipped diff as clipped, so a truncated hunk does not read as the whole change", async () => {
     const dir = await tempRepo();
     await writeFile(join(dir, "big.txt"), `${"line of content\n".repeat(20_000)}`);

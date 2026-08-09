@@ -123,7 +123,7 @@ const clip = (patch: string, budget: number): string => {
 // The prompt. Written flat rather than as a system/user pair because the one-shot sends no system prompt at all
 // (see one-shot.ts): the instruction, the style examples and the material are one message, in the order the
 // model should weigh them.
-export const commitMessagePrompt = (diffs: readonly RepoDiff[]): string => {
+export const commitMessagePrompt = (diffs: readonly RepoDiff[], intent?: string): string => {
     const budget = Math.floor(MAX_PATCH_BYTES / Math.max(1, diffs.length));
     const repos = diffs.map((diff) =>
         [
@@ -145,6 +145,16 @@ export const commitMessagePrompt = (diffs: readonly RepoDiff[]): string => {
         `- Describe WHAT the change accomplishes, not which files moved.`,
         // A commit spanning repos gets one message, so it has to describe the change rather than any one repo.
         diffs.length > 1 ? `- This commit spans ${diffs.length} repositories and shares one message. Describe the change as a whole.` : undefined,
+        /* WHAT THE WORK WAS FOR, when the caller knows — the session's own name for the job it was given.
+         *
+         * Context, never the answer, and the wording says so twice over. A diff shows what moved and leaves the
+         * model to infer the point of it, which on a mechanical rung produces a subject that restates the file
+         * list ("update review panel and commit message composables"); knowing the job turns the same diff into
+         * a sentence about the reason. But the ask is exactly what goes stale — it is the drift this whole
+         * feature exists to correct — so it is offered as a hint to be OVERRULED by the code rather than as a
+         * line to reproduce. A model told "here is the title, here is the diff" writes the title back. */
+        intent === undefined ? undefined : `- Context: this work came from a session tasked with "${intent}".`,
+        intent === undefined ? undefined : `  Use it only to understand the intent; if the diff shows something else, describe the diff.`,
         ``,
         ...repos,
         ``,

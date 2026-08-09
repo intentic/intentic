@@ -1776,6 +1776,11 @@ export type RepoPaths = z.infer<typeof RepoPathsSchema>;
 export const CommitMessageDraftSchema = z.object({
     repos: z.array(RepoPathsSchema).min(1).max(50),
     all: z.boolean().optional(),
+    // What the session behind this commit was ASKED to do, when the panel is scoped to exactly one — its title,
+    // verbatim. Context, never the answer: the diff still says what changed, and this says what it was for, so
+    // the subject can name the reason instead of restating the file list. Absent for an unscoped commit, where
+    // there is no single ask to name.
+    intent: z.string().max(200).optional(),
 });
 // The draft plus WHICH model wrote it, so the surface can name it rather than claiming an anonymous "AI" —
 // that name is also the only place the resolved quick model is visible before anyone opens settings.
@@ -1923,6 +1928,17 @@ export const OriginAgentSchema = z.object({
     // Absent for an entry that never got a title (a turn that failed before one was derived).
     title: z.string().optional(),
     provider: AgentProviderSchema,
+    /* WHAT THIS AGENT'S LANDED WORK DID, as a commit subject — written from the landed diff when the work
+     * arrived (agents/landed-subject.ts), which is why it can say what a title cannot.
+     *
+     * A title names the ASK, and it is written once, from the opening prompt, a second into the first turn. A
+     * conversation that opens "audit the review panel" and then spends four turns fixing what the audit found
+     * still answers to "Review panel · audit" — a good name for the session and a wrong subject for the
+     * commit. This is read off the code instead, so it describes the change the user is about to record.
+     *
+     * Absent when no quick model is connected, when the draft failed, or for a landing that predates this —
+     * the panel falls back to reading the title as a subject, which is where it started. */
+    subject: z.string().optional(),
 });
 export type OriginAgent = z.infer<typeof OriginAgentSchema>;
 

@@ -318,7 +318,7 @@ export const createGitRoutes = (services: Services) => {
                     }),
                 ),
             );
-            const { text, choice } = await askQuickModel(services, commitMessagePrompt(diffs), signal ?? new AbortController().signal);
+            const { text, choice } = await askQuickModel(services, commitMessagePrompt(diffs, input.intent), signal ?? new AbortController().signal);
             const message = cleanCommitSubject(text);
             if (message === "") {
                 throw new ORPCError("BAD_GATEWAY", { message: `${choice.model} returned an empty commit message — try again.` });

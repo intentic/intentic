@@ -178,7 +178,13 @@ export const createAgentOrigins = (
                 if (entry === undefined) {
                     continue;
                 }
-                identities[id] = { provider: entry.provider, ...(entry.title !== undefined ? { title: entry.title } : {}) };
+                identities[id] = {
+                    provider: entry.provider,
+                    ...(entry.title !== undefined ? { title: entry.title } : {}),
+                    // What the landed work did, for the chip to file into the commit box — written at land
+                    // time from the diff, so it describes the change rather than the ask the title names.
+                    ...(entry.landedSubject !== undefined ? { subject: entry.landedSubject } : {}),
+                };
             }
             return identities;
         },

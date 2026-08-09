@@ -178,6 +178,14 @@ export interface AgentsRegistry {
     // re-read the entry, so a mid-turn rename survives. Undefined ⇒ unknown id or a title that sanitizes to
     // nothing; a rejected promotion returns the entry's CURRENT summary rather than undefined.
     readonly setTitle: (id: string, title: string, source: AgentTitleSource) => Promise<AgentSummary | undefined>;
+    /* Record what this agent's landed work DID, as a commit subject (PersistedAgent.landedSubject). No ranking
+     * and no ladder — unlike a title, which is an identity several sources compete over, this is one sentence
+     * about one diff, and the newest land is by definition the one describing the most of the claim.
+     *
+     * No broadcast: nothing on the fleet board shows it. The Changes panel reads it through agentOrigins, which
+     * reads these entries live on every scan, so the chip has it as soon as it is written. Leaves updatedAt
+     * alone for the same reason setTitle does — the land already stamped the activity this describes. */
+    readonly setLandedSubject: (id: string, subject: string) => Promise<void>;
     // Stamp the read marker the cards' unread badge is measured against. Like setTitle it leaves updatedAt
     // alone (reading is not activity) and needs no running guard. Undefined ⇒ unknown id.
     readonly markSeen: (id: string, now: number) => Promise<AgentSummary | undefined>;
@@ -653,6 +661,17 @@ export const createAgentsRegistry = (store: AgentsStore, standings: LandStanding
             }
             const entry = entryOf(id);
             return entry === undefined ? undefined : summaryOf(entry);
+        },
+        setLandedSubject: async (id, subject) => {
+            const entry = entryOf(id);
+            const clean = sanitizeTitle(subject);
+            // Sanitized through the title cleaner, which is the same job: one bounded line, no control
+            // characters. An empty draft writes nothing rather than clearing what the last land said.
+            if (entry === undefined || clean === undefined) {
+                return;
+            }
+            replace({ ...entry, landedSubject: clean });
+            await persist();
         },
         markSeen: async (id, now) => {
             const entry = entryOf(id);

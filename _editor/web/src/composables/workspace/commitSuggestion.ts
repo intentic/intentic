@@ -1,9 +1,11 @@
-/* A SESSION TITLE, READ AS A COMMIT SUBJECT — what the Changes panel files into the commit box when the user
- * clicks a session in its "From" legend.
+/* A SESSION TITLE, READ AS A COMMIT SUBJECT — the FALLBACK the Changes panel files into the commit box when a
+ * session in its "From" legend has no sentence of its own.
  *
- * Those titles name the work already — a user typing a message above a legend that says exactly what the
- * change was is retyping what they can already read. One click moves it across, in the shape a subject line
- * wants.
+ * It used to be the only reading. A landing now carries a subject drafted from its own diff (the daemon's
+ * landed-subject.ts), which beats this outright for the reason spelled out there: a title names the ASK, and
+ * the ask and the change drift apart in any conversation that turns. What is left for this is everything that
+ * cannot produce one — no AI account connected, a draft that failed, a landing older than the feature — where
+ * the title is still the best thing on screen and retyping it is still waste.
  *
  * They arrive in two shapes, because two things write them. The quick model writes `<subject> · <action>`
  * (agent/title-namer.ts), which is a commit subject with its type sitting at the far end. Everything else —
@@ -13,9 +15,9 @@
  * the leading-verb reading that has always handled the rest.
  *
  * A CHOSEN LINE, NOT A GUESS ABOUT THE DIFF. It arrives only when asked for, it is one keystroke from being
- * overwritten, and it costs nothing — which is what separates it from the AI autofill next to it: that one
- * reads the actual diff on a model, so it is worth a click and a quota, and it stays the way to get a message
- * about what the code does rather than what the ask was.
+ * overwritten, and it costs nothing — no model, no quota, no wait, which is what keeps it the answer on a
+ * sandbox with nothing connected. The sparkle button next to it stays the way to describe a commit this cannot
+ * see at all: everything the user staged themselves, and everything they have edited since a land.
  *
  * The prefix is PRESCRIBED here, and deliberately unlike the daemon's draft (which infers the house style from
  * the repo's own recent subjects and knows nothing of Conventional Commits). Nothing on this side of the wire

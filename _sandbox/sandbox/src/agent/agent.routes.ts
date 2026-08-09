@@ -27,6 +27,7 @@ import { accountLimitReset } from "../usage/account-usage.js";
 import { isIsolated } from "../agents/agents-store.js";
 import { anchorWorktree, forkWorktreeBase } from "./anchor-worktree.js";
 import { landAgent } from "../agents/land.js";
+import { describeLandingInBackground } from "../agents/landed-subject.js";
 import { landingPaths } from "../agents/landing-paths.js";
 import { landingVerdict, standing } from "../rules/rules.js";
 import { type RepoSync, syncConversation } from "../agents/sync.js";
@@ -434,6 +435,12 @@ async function* runConversationTurn(
             if (landed.changed) {
                 await services.agents.recordLanded(conversationId, landed);
                 outcome = landed.held === true ? "ready" : landed.landed ? "landed" : "conflict";
+                if (landed.landed) {
+                    // What this turn's work DID, drafted from the diff it just put in the tree, for the
+                    // Changes panel's chip to file into the commit box. Not awaited: the turn is over, and the
+                    // sentence is for a panel nobody has opened yet.
+                    describeLandingInBackground(services, conversationId);
+                }
                 /* The delta is in the main tree, which is where a package.json change starts costing everyone:
                  * every later isolated turn overlays THIS node_modules, so a dependency that landed uninstalled
                  * is inherited by every conversation after it. Reconciled here rather than left for someone to

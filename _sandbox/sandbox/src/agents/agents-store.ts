@@ -105,6 +105,20 @@ export const PersistedAgentSchema = z.object({
             landedAt: z.number().optional(),
         }),
     ),
+    /* WHAT THE LANDED WORK DID, as a commit subject — drafted from the diff the moment it reached the main tree
+     * (agents/landed-subject.ts), for the Changes panel's "From" chip to file into the commit box.
+     *
+     * Kept HERE rather than derived on demand for two reasons. It is written from a MODEL call, so deriving it
+     * when the panel asks would put a second of latency and a quota charge behind a click that is meant to be
+     * free and instant. And the moment it is cheapest to know is the moment the work arrives: the diff is
+     * already in hand and nobody is waiting on it.
+     *
+     * Persisted alongside the landed shas because it describes the same thing they do — a claim on the main
+     * tree that outlives the card. Archiving the agent does not commit its lines, and land-archive-commit-later
+     * is the ordinary flow, so a subject held only in memory would be gone exactly when the chip needs it.
+     * Overwritten by the next land (the claim grows; so does the sentence about it) and left alone otherwise —
+     * a commit expires the claim, and the entry going quiet is what retires this with it. */
+    landedSubject: z.string().optional(),
     status: PersistedAgentStatusSchema,
     // Why the last turn failed — the EVIDENCE behind an errored card, the same role `conflicts` below plays for
     // a refused land (see AgentSummarySchema). Persisted rather than held in the turn's runtime state because

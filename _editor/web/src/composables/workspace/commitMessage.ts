@@ -10,9 +10,9 @@ import { useSandbox } from "../sandbox/useSandbox";
  * whenever another agent landed, and a commit's subject is the last thing that should arrive by default —
  * a message you did not write is one you do not read before pressing Commit.
  *
- * So naming the commit is now a GESTURE: clicking a session in the From legend files its title into the box
- * (fillFromOrigin below), which is the same click that narrows the list to that session's files. One session,
- * one subject, chosen — and the two halves of "commit this agent's work" are one action instead of two.
+ * So naming the commit is now a GESTURE: clicking a session in the From legend files that session's work into
+ * the box as a subject line, which is the same click that narrows the list to its files. One session, one
+ * subject, chosen — and the two halves of "commit this agent's work" are one action instead of two.
  *
  * WHAT THE USER TYPED IS UNTOUCHABLE, which is why a fill records the exact text it wrote. A later fill may
  * replace its own output, and clicking off the legend takes its own output back; neither may touch a keystroke.

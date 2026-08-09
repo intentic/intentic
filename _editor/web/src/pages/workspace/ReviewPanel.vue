@@ -184,23 +184,40 @@ const originNote = (id: string): string | undefined => {
     return [mark.label, turn, doing, since].filter((part) => part !== undefined && part !== ``).join(` · `);
 };
 
+/* WHAT THE CHIP FILES INTO THE COMMIT BOX — the sentence written from that session's landed diff when its work
+ * arrived, and its title read as a subject when there is no such sentence.
+ *
+ * THE DIFF WINS, and the reason is that the two describe different things. A title names the ASK, once, from
+ * the opening prompt (see the daemon's landed-subject.ts) — so a conversation that opened "audit the review
+ * panel" and then fixed what the audit found kept filing `chore: audit review panel` over a diff full of
+ * fixes. The subject is read off the code instead, at land time, so it says what the commit actually contains.
+ * It arrives already in the repo's own house style and goes in VERBATIM: it was drafted by the same reader the
+ * sparkle button uses, against the same paths, so re-prefixing it here would put a second convention on a line
+ * that already has one.
+ *
+ * The title fallback is what answers with no AI account connected, for a landing that predates this, or when
+ * the draft failed — the reading that used to be the only one, unchanged and still one keystroke from being
+ * overwritten. */
+const originSubject = (id: string): string | undefined => originOf(id)?.subject ?? conventionalSubject([originTitle(id) ?? ``]);
+
 /* ONE CLICK, TWO HALVES OF THE SAME INTENT — "commit this session's work". The chip has always narrowed the
- * list (and every section verb under it) to that agent's files; it now also files that session's title into the
- * commit box as a subject line. Those were the two things a user did by hand, in a row, every time: filter to
- * the agent, then retype the title they could already read one line above the input.
+ * list (and every section verb under it) to that agent's files; it now also names that work in the commit box.
+ * Those were the two things a user did by hand, in a row, every time: filter to the agent, then describe what
+ * they were looking at.
  *
  * Which is also why the box no longer fills itself. It used to open holding every legend session's title joined
  * into one line — a message nobody chose, that changed under them whenever another agent landed. Naming a
  * commit is now something you ASK for, and the ask is the click you were already making.
  *
- * Untitled origins file nothing: the chip's "Agent 4f2a1c" fallback is an id, and an id is not a description of
- * a change. The filter still applies — you can narrow to a session you cannot name. */
+ * An origin with neither a drafted subject nor a title files nothing: the chip's "Agent 4f2a1c" fallback is an
+ * id, and an id is not a description of a change. The filter still applies — you can narrow to a session you
+ * cannot name. */
 const toggleOrigin = (id: string): void => {
     const next = originFilter.value === id ? undefined : id;
     originFilter.value = next;
-    const subject = next === undefined || next === YOURS ? undefined : conventionalSubject([originTitle(next) ?? ``]);
+    const subject = next === undefined || next === YOURS ? undefined : originSubject(next);
     if (subject === undefined) {
-        // Toggled off, moved to "you", or a session with no title to lend — either way the line the legend put
+        // Toggled off, moved to "you", or a session with nothing to lend — either way the line the legend put
         // there no longer has a chip behind it. Anything the user has made their own survives this.
         clearFilledMessage();
         return;
@@ -646,7 +663,10 @@ const runAutofill = async (): Promise<void> => {
         blockerNotice.value = autofillHint.value;
         return;
     }
-    const message = await commitDraft.draft(commitGroups.value, commitAll.value, commitMessage.value);
+    // What the filtered session was ASKED to do, sent alongside the diff so the line can say why as well as
+    // what. Only for a commit narrowed to one session: "you", and an unfiltered commit, have no single ask.
+    const intent = originFilter.value === undefined || originFilter.value === YOURS ? undefined : originTitle(originFilter.value);
+    const message = await commitDraft.draft(commitGroups.value, commitAll.value, commitMessage.value, intent);
     if (message !== undefined) {
         commitMessage.value = message;
     }

@@ -10,6 +10,7 @@ import { agentRepoChanges, anchorOf } from "./agent-changes.js";
 import { type IsolatedAgent, isIsolated, type PersistedAgent } from "./agents-store.js";
 import { archivable, archiveAgents, purgeArchived } from "./archive.js";
 import { landAgent, outstandingConflicts } from "./land.js";
+import { describeLandingInBackground } from "./landed-subject.js";
 
 // The fleet routes: list/get the registry, review a conversation worktree's delta vs its recorded bases
 // (the same GitChanges shape the Changes panel renders), land it into the main tree, archive it off the board,
@@ -270,6 +271,9 @@ export const createAgentsRoutes = (services: Services) => {
             await services.agents.recordLanded(input.id, result);
             await services.agents.finish(input.id, Date.now());
             if (result.landed && result.changed) {
+                // What this work DID, drafted from the diff now sitting in the tree, for the Changes panel's
+                // chip to file into the commit box. Not awaited — the card's response does not wait on it.
+                describeLandingInBackground(services, entry.id);
                 // The main tree changed under the user — same attribution convention as git.discard.
                 services.history.notifyUserWrite();
                 emitWorkspaceEvent(
