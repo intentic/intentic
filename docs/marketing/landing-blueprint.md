@@ -25,24 +25,36 @@ near the bottom instead of demonstrated nine times. That band is also the honest
 automations, Discord, Slack, IMAP, memory, pipelines and the Doorbell webchat really are things you
 bolt on. Result: **9,592 px, five arguments and one index** — 10,298 px once `#trust` joined it.
 
-**The environment argument did not die — it was demoted.** It rides in loop beat 02's sandbox
-figure, in the FAQ's "How is this different from a custom GPT", on `/product/supervise/` (the
-`prompt-vs-environment` figure), and across `/compare/`. What it no longer gets is four bands of the
-landing page.
+**The environment argument did not die — it was demoted.** It rides in the FAQ's "How is this
+different from a custom GPT", on `/product/supervise/` (the `prompt-vs-environment` figure) and
+`/product/empower/` (the sandbox and its installed tools), and across `/compare/`. What it no longer
+gets is four bands of the landing page.
 
 **Re-centered 2026-08-07 (recorded decision).** The headline claim now leads with what the
 infrastructure buys — persistence and reach — instead of the IDE frame: the brand line is
 `Workstation for your agents. / A window for you.` (messaging.md's retired-framing list has
-the old first line and the reason), and the loop gained beat ③, the continuity beat. Nothing else moved:
-same bands, same order, same quiet `#extend` index — this was a re-center, not a re-cut.
+the old first line and the reason). This was a re-center, not a re-cut.
 
-**Deliberately not on this page (all of it has a home).** The product-tour grid (the nav
-mega-menu and `/product/` already list every verb), the prompt-vs-environment argument
-(`/product/supervise/`), the four-layer anatomy (same page), the integrations hub (`/product/empower/`),
-the Discord teammate mock (same page), team sharing (`/product/delegate/`), the workforce triptych and
-the company topology (`/docs/autonomous-employees/`, `/docs/reference-architecture/`), and Doorbell
-(`/product/empower/`, `/docs/doorbell/`). Adding any of them back as a band is a regression, not an
-improvement — the `#extend` band exists to carry the link instead.
+**Re-cut around the verbs 2026-08-09 (recorded decision, supersedes the loop/extend split).** The
+middle of the page — the four-beat `#loop` and the six-row `#extend` bento — is now one band: a
+five-verb tour (`#verbs`) in the same order as the Features menu (Orchestrate · Empower · Automate ·
+Supervise · Delegate). The trigger was duplication — the same powers were told three times, in the
+loop, in the extend bento, and in the menu — and it read as three tellings a visitor had to reconcile.
+The tour tells them once, each verb one line and one screen, each linking to the page that proves it.
+The core thesis, the ownership/economics/trust/connect objection bank and every guard below are
+unchanged, and the page got shorter (~9,600 → ~8,000 px), not louder. The old loop's best proof is
+kept where it belongs: the full board leads Orchestrate, the review diff is Supervise's card. The
+sandbox "tools really installed" figure that rode in loop beat ② now lives only on the feature pages
+(`/product/empower/`, `/product/delegate/`).
+
+**Deliberately not on this page (all of it has a home).** The *detailed* product tour — each surface
+with its own screens and figures — lives on `/product/*`; the home's `#verbs` band is a one-line-per-verb
+summary that links there, never a second copy of it. Also off the page: the prompt-vs-environment
+argument (`/product/supervise/`), the four-layer anatomy (same page), the integrations hub
+(`/product/empower/`), the Discord teammate mock (same page), team sharing (`/product/delegate/`), the
+workforce triptych and the company topology (`/docs/autonomous-employees/`, `/docs/reference-architecture/`),
+and Doorbell (`/product/empower/`, `/docs/doorbell/`). Adding any of those back as a full band is a
+regression, not an improvement — the `#verbs` tour carries the link instead.
 
 **Deployment is not part of the product (do not re-add).** The monorepo happens to include a
 deployment engine, but it is just one of the many tools an agent can run (like `psql`, a headless
@@ -87,52 +99,41 @@ this page.
 
 ## Page architecture
 
-One page, one continuous scroll — **five arguments, one index and one trust band**, down from fourteen.
-Section ids in parens; copy per section in `landing.ts`, except `#trust`, whose copy is in `about.ts`
-because `/about/` shares it.
+One page, one continuous scroll — **the claim, a five-verb tour, two objection bands and a trust band**,
+down from fourteen. Section ids in parens; copy per section in `landing.ts`, except `#trust`, whose copy
+is in `about.ts` because `/about/` shares it.
 
 1. **Hero (`#hero`)** — the brand line, kept verbatim ("Workstation for your agents. A window
    for you.") + a subhead that carries the whole claim: agents that live on hardware you own
    and keep running when you look away, every browser a window onto the same fleet — steer,
    approve, interrupt, land. CTAs, chips, the real fleet board cropped to two lanes, and the play
    button into the live demo. (P1, P2, P6)
-2. **The loop (`#loop`)** — the spine, in four beats, and **the section that earns the headline's
-   second half**: the window is the board you watch, from whatever device you have, and the diff
-   you read.
-   ① *Give the work to as many agents as it needs* — the whole fleet board, full column width.
-   ② *Each works in a sandbox of its own* — the container figure, because there is no honest screen of
-   "its tools are really installed" and a mockup of one would be the first lie on the page.
-   ③ *Walk away — the run doesn't stop* — the continuity beat, and the phone shot (`mobile-fleet`),
-   phone-framed: the honest proof that the runs live on the machine and not in the browser is the
-   same board on a different device.
-   ④ *Nothing lands until you have read the diff* — the review panel, cropped. (P2, P4, P6)
-   Layout follows the shot, as on the product pages: a capture wider than 3:2 takes the full column,
-   anything squarer keeps the cropped side-by-side. The threshold is 3:2 and not merely landscape
-   because `agent-review.png` is 2144×1800 — a tall panel a hair wider than high, which given the whole
-   column is mostly the empty canvas under its own diff.
+2. **What you do — the five verbs (`#verbs`)** — the one telling of what the product does, in the
+   same five verbs as the Features menu, so the home page and the feature pages read as one product.
+   **Orchestrate** leads at full column width with the whole fleet board; **Empower**, **Automate**,
+   **Supervise** and **Delegate** follow as a 2×2 grid of compact cards — each a cropped real screen
+   over one line, the whole card a link to the page that proves it. **Automate carries no screenshot**:
+   it shows the events it wakes on and the guard→fresh-session outcome, because no honest automations
+   capture exists (same rule as its feature page). This one band replaced the old four-beat `#loop` and
+   six-row `#extend` (see the 2026-08-09 decision above): the product's powers were told three times —
+   the loop beats, the extend bento, and the menu — and once is enough. (P2, P4, P5, P6)
 3. **Ownership (`#ownership`)** — the moat: browser → private tunnel → your machine, with the platform
    dashed and off-path. Code and keys never leave your machine; the platform keeps identity and a URL.
    Give it room — competitors can't copy this without re-architecting. (P1)
 4. **Economics (`#economics`)** — the deal, and the answer to the reflex that "ten agents" triggers:
    bring your own model subscription, run on your own hardware, pay us nothing — never a meter on model
    usage. Carries the free story. (P7)
-5. **Extend it (`#extend`)** — *"A small core. Everything else is an extension."* Six one-line rows,
-   each linking to the page that owns it: automations, Discord & Slack, Doorbell, team sharing,
-   memory/pipelines/previews, a whole company of agents. **Deliberately the quietest band on the
-   page** — no screenshots, no figures, no argument. Its job is to be findable, not persuasive; every
-   row here used to be a band of its own, and together they were what made a visitor lose the thread.
-   Keep it to one screen. (P5, P6)
-6. **About the creator (`#trust`)** — the last objection before the command. The page has just asked a
+5. **About the creator (`#trust`)** — the last objection before the command. The page has just asked a
    visitor to run a container on their own machine and hand it a GitHub token and a database password;
    `#ownership` answers the architectural half of *"can I trust this"*, and this answers the human half.
    Creator-forward: the name, the role, three profile chips, then four cards — *why trust intentic ·
    open source first · it builds itself · honest about its age*. Copy in `about.ts`, shared with
    `/about/` so the two cannot drift. (P1, P4)
-7. **Get connected (`#connect`)** — the speed proof: ① Sign in with Google ② The sandbox is waiting
+6. **Get connected (`#connect`)** — the speed proof: ① Sign in with Google ② The sandbox is waiting
    (made and named for you) ③ Paste one command, with the real command block. Two of the three are things
    the visitor does not have to do, which is the point the band is making. (P3)
-8. **FAQ (`#faq`)** — see below.
-9. **Final CTA** — restate the claim + `Get started free` · `See the source`. (close)
+7. **FAQ (`#faq`)** — see below.
+8. **Final CTA** — restate the claim + `Get started free` · `See the source`. (close)
 
 ### The trust band's rules (they are what keep it from backfiring)
 
@@ -239,9 +240,9 @@ recorded decisions, not omissions.
 ### No new bands (deliberate — the 2026-08-02 cut)
 
 The third recorded no, and the easiest one to undo by accident. **A capability that deserves attention
-gets a row in `#extend` and a page of its own; it does not get a band.** Before adding a section, check
-whether the thing already has a `/product/*` or `/docs/*` page: if it does, the honest move is a link.
-Fourteen bands is what cost this page its meaning.
+belongs on the relevant verb's `/product/*` page and, at most, its verb's line in `#verbs`; it does not
+get a band of its own.** Before adding a section, check whether the thing already has a `/product/*` or
+`/docs/*` page: if it does, the honest move is a link. Fourteen bands is what cost this page its meaning.
 
 **The one carve-out, and its boundary.** `#trust` was added later the same day and is not a breach of
 the rule above — the rule governs *capability* creep, and trust is not a capability. A visitor who does
@@ -250,7 +251,7 @@ nice-to-have, and it answers a question the page provably was not answering: the
 in the JSON-LD, told to Google and never to the reader. That is the shape of a legitimate exception —
 **an unanswered objection on the path to the CTA, not a feature that wants more room.** A feature never
 qualifies. If a future band cannot be described as "the reader will not act until this is answered",
-it is a row in `#extend`.
+it belongs on a `/product/*` page the `#verbs` tour links to, not on a band of its own.
 
 ## Conversion checklist
 
@@ -260,7 +261,8 @@ it is a row in `#extend`.
 - [ ] The page is still one claim. Read it cold and answer "what is this product?" in one sentence.
 - [ ] `#trust` still concedes something, and still shows no number that could be zero.
 - [ ] The `#trust` commit figures came from git, not from a paste — check a real `astro build`, not dev.
-- [ ] Full-page height at 1440 has not crept back over ~10,000 px (it was 16,254; it is 9,592).
+- [ ] Full-page height at 1440 has not crept back over ~10,000 px (it was 16,254, then 9,592; it is
+  ~8,000 after the 2026-08-09 verb re-cut).
 - [ ] Nothing on the page implies a paid tier, a limit or a price.
 - [ ] Every screenshot is real product UI (`_site/site/src/assets/product/`); re-shoot on UI shifts.
 - [ ] `prefers-reduced-motion` respected (`.fade-in` noscript fallback — keep).

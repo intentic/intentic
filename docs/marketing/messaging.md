@@ -95,11 +95,11 @@ headline claim. The brand tagline is now "Workstation for your agents. A window 
 
 The page is a single continuous scroll; the full section-by-section blueprint (ids, jobs, accuracy
 rules) lives in [landing-blueprint.md](landing-blueprint.md). At the message level the order walks
-the golden path: **state the claim** (Hero) → **prove the loop** (give the work to several → each
-isolated in a sandbox of its own → walk away and come back on any device, same runs → nothing lands
-unread) → **carry the trust** (ownership) → **the deal** (economics) → **everything else it can be**
-(extend, one quiet index) → **who is behind it** (trust) → **get connected** → **objections** (FAQ)
-→ **final CTA**. Each pain from positioning.md (P1–P7) surfaces where its band lands.
+the golden path: **state the claim** (Hero) → **show what you do** (the five verbs — orchestrate the
+fleet, empower it, automate it, supervise it, delegate it — each one line and one screen, linking to
+its page) → **carry the trust** (ownership) → **the deal** (economics) → **who is behind it** (trust)
+→ **get connected** → **objections** (FAQ) → **final CTA**. Each pain from positioning.md (P1–P7)
+surfaces where its band lands.
 
 **Free, no pricing section (principle, not a section).** There is deliberately no on-page pricing
 block and no "Pricing" nav/footer link — there is nothing to price. The whole product is free and

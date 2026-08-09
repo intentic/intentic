@@ -10,6 +10,7 @@ import BaseLayout from "../layouts/BaseLayout.astro";
 import CreatorLinks from "./CreatorLinks.astro";
 import Footer from "./Footer.astro";
 import Nav from "./Nav.astro";
+import ProductShotFigure from "./ProductShotFigure.astro";
 import TrustCards from "./TrustCards.astro";
 
 interface Props {
@@ -31,27 +32,14 @@ const crossIcon = icon('<path d="M18 6 6 18M6 6l12 12"/>');
 // The FAQ disclosure marker. Both strokes are drawn; CSS rotates the vertical one away when open.
 const plusIcon = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" width="16" height="16" aria-hidden="true"><path d="M5 12h14"/><path class="faq-marker-bar" d="M12 5v14"/></svg>`;
 
-// Per-index glyphs for the extend bento, in tile order; content stays pure copy.
-const extendIcons = [
-    icon('<path d="M13 2 4.5 13.5H11L10 22l8.5-11.5H12z"/>'),
-    icon('<path d="M21 12a8 8 0 0 1-11.6 7.1L3 21l1.9-6.4A8 8 0 1 1 21 12z"/>'),
-    icon('<path d="M4 10.5 12 4l8 6.5"/><path d="M6.5 9.5V20h11V9.5"/><path d="M10 20v-4h4v4"/>'),
-    icon('<path d="M9 11a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7z"/><path d="M2.5 20v-1a5 5 0 0 1 5-5H10"/><path d="M16 8.5a3 3 0 1 1 2 5.3"/><path d="M15 20v-1a4 4 0 0 1 4-4h2.5"/>'),
-    icon('<rect x="3.5" y="4" width="17" height="7" rx="2"/><rect x="3.5" y="13" width="17" height="7" rx="2"/><path d="M7 7.5h.01M7 16.5h.01"/>'),
-    icon('<rect x="3" y="8" width="18" height="13" rx="1.5"/><path d="M7.5 8V4.5h9V8"/><path d="M9.5 21v-4h5v4"/>'),
-];
-
 /* The hero is the LCP and it is a CROP: the frame shows 262% of its own width on a phone and 168% from sm up,
  * so what the browser paints is that multiple of the column, not the column. Spelling the three cases out is
  * the difference between fetching ~950px of screenshot and fetching all 2144. */
 const heroImage = shotAsset(content.hero.shot.name);
 const heroSizes = "(min-width: 64rem) calc((min(100vw, 80rem) - 6rem) * 0.84), (min-width: 40rem) calc(min(100vw - 3rem, 34rem) * 1.68), calc(min(100vw - 3rem, 34rem) * 2.62)";
-/* Same idea for the one portrait beat: 145% of half the column above lg, 145% of the whole one below it. */
-const cropBeatSizes = "(min-width: 64rem) calc((min(100vw, 80rem) - 6.5rem) * 0.725), calc((100vw - 3rem) * 1.45)";
 
-// Line glyphs for the sandbox figure (same 1.5-stroke motif as the section icons above).
-const monitorGlyph = icon('<rect x="3" y="4" width="18" height="12.5" rx="1.5"/><path d="M8.5 20.5h7M12 16.5v4"/>');
-const cubeGlyph = icon('<path d="M12 2.5 20.5 7v10L12 21.5 3.5 17V7z"/><path d="m3.5 7 8.5 4.5L20.5 7M12 11.5v10"/>');
+// The tour leads with the first verb (Orchestrate) at full width; the rest are the compact cards.
+const [leadVerb, ...verbCards] = content.verbs.items;
 ---
 
 <BaseLayout
@@ -175,166 +163,103 @@ const cubeGlyph = icon('<path d="M12 2.5 20.5 7v10L12 21.5 3.5 17V7z"/><path d="
             </div>
         </section>
 
-        <!-- 2 · The loop: assign several, each isolated, nothing lands unread.
-             This is the section that earns the headline's second half: the window is the board you watch,
-             the agent you answer, and the diff you read. Beat 02 carries the sandbox FIGURE rather than a
-             screenshot because a container is not a surface: there is no honest screen of "its tools are
-             really installed", and a mockup of one would be the first lie on the page. -->
-        <section class="border-t border-line" id="loop">
+        <!-- 2 · What you do: the five verbs, said once.
+             The single telling of what the product does, in the same order as the Features menu, so the
+             home page and the feature pages read as one product. It replaces the old four-beat "loop" and
+             six-tile "extend" bands, which between them said the same powers three times over. Orchestrate
+             leads at full width because the board is the product's face; the other four are compact cards,
+             each a cropped real screen — or, for Automate, its trigger list, because there is no honest
+             screenshot of an automations screen and a mockup would be the one lie on the page. -->
+        <section class="border-t border-line" id="verbs">
             <div class="fade-in mx-auto max-w-7xl px-6 py-20 lg:py-24">
-                <div class="eyebrow">{content.loop.eyebrow}</div>
-                <h2 class="mt-3 max-w-2xl text-3xl font-semibold tracking-tight text-balance">{content.loop.heading}</h2>
-                <p class="mt-3 max-w-2xl text-base leading-relaxed text-muted">{content.loop.sub}</p>
+                <div class="eyebrow">{content.verbs.eyebrow}</div>
+                <h2 class="mt-3 max-w-2xl text-3xl font-semibold tracking-tight text-balance">{content.verbs.heading}</h2>
+                <p class="mt-3 max-w-2xl text-base leading-relaxed text-muted">{content.verbs.sub}</p>
 
-                <div class="mt-14 space-y-14 lg:mt-16 lg:space-y-20">
+                <!-- The lead verb: the whole board, with its one line above it. -->
+                <div class="mt-12 lg:mt-14">
+                    <div class="flex max-w-3xl flex-wrap items-end justify-between gap-x-6 gap-y-3">
+                        <div class="max-w-2xl">
+                            <div class="eyebrow text-link">{leadVerb.verb}</div>
+                            <p class="mt-2 text-lg leading-relaxed text-balance text-content">{leadVerb.line}</p>
+                        </div>
+                        <a href={leadVerb.href} class="text-sm font-medium whitespace-nowrap text-link hover:underline">See it →</a>
+                    </div>
+                    {leadVerb.shot && (
+                        <ProductShotFigure
+                            shot={{ name: leadVerb.shot.name, alt: leadVerb.shot.alt, frame: "browser", label: leadVerb.shot.label }}
+                            sizes={COLUMN_SIZES}
+                            class="mt-6"
+                        />
+                    )}
+                </div>
+
+                <!-- The other four: compact cards, each a link to its page. A real screen shows as a cropped
+                     thumbnail so it reads as an interface rather than a shrunk-illegible one; Automate, which
+                     has no honest screen, shows the events it wakes on instead. -->
+                <div class="mt-4 grid gap-4 sm:grid-cols-2 lg:mt-6">
                     {
-                        content.loop.beats.map((beat, i) => {
-                            /* Layout follows the shot, the way the product pages do it: a wide capture is 1072 CSS px
-                               of real interface and takes the whole column, because halving it renders the app's own
-                               text at a third size. It also keeps beat 01 from reading as the hero's screenshot
-                               printed twice — the hero shows a cropped corner of the board, this shows all of it.
-                               The threshold is 3:2 rather than merely landscape: the review capture is 2144×1800, a
-                               tall panel that happens to be a hair wider than high, and given the whole column it is
-                               mostly the empty canvas under its own diff. That one keeps the cropped side-by-side. */
-                            const shot = beat.shot === undefined ? undefined : { ...beat.shot, image: shotAsset(beat.shot.name) };
-                            const wideShot = shot !== undefined && shot.frame === "browser" && shot.image.width >= shot.image.height * 1.5 ? shot : undefined;
-                            const words = (
-                                <>
-                                    <div class="text-5xl font-semibold tracking-tight text-primary-500/25 select-none" aria-hidden="true">
-                                        {beat.step}
-                                    </div>
-                                    <h3 class="mt-3 text-xl font-semibold tracking-tight text-balance text-content">{beat.title}</h3>
-                                    <p class="mt-3 text-base leading-relaxed text-muted">{beat.body}</p>
-                                </>
-                            );
-
-                            if (wideShot !== undefined) {
-                                return (
+                        verbCards.map((item) => (
+                            <a href={item.href} class="card group flex flex-col overflow-hidden transition-colors hover:border-line-strong">
+                                {item.shot ? (
                                     <div>
-                                        <div class="max-w-2xl">{words}</div>
-                                        <figure class="m-0 mt-8 overflow-hidden rounded-xl border border-line bg-card shadow-2xl shadow-black/50">
-                                            <div class="flex items-center gap-2 border-b border-line bg-overlay/40 px-4 py-2.5">
-                                                <span class="h-2.5 w-2.5 rounded-full bg-line-strong" />
-                                                <span class="h-2.5 w-2.5 rounded-full bg-line-strong" />
-                                                <span class="h-2.5 w-2.5 rounded-full bg-line-strong" />
-                                                <span class="ml-3 rounded-md border border-line bg-canvas/60 px-3 py-1 font-mono text-2xs text-subtle">
-                                                    {wideShot.frameLabel}
-                                                </span>
-                                            </div>
+                                        <div class="flex items-center gap-2 border-b border-line bg-overlay/40 px-4 py-2.5">
+                                            <span class="h-2.5 w-2.5 rounded-full bg-line-strong" />
+                                            <span class="h-2.5 w-2.5 rounded-full bg-line-strong" />
+                                            <span class="h-2.5 w-2.5 rounded-full bg-line-strong" />
+                                            <span class="ml-3 rounded-md border border-line bg-canvas/60 px-3 py-1 font-mono text-2xs text-subtle">
+                                                {item.shot.label}
+                                            </span>
+                                        </div>
+                                        <div class="relative h-52 overflow-hidden border-b border-line">
                                             <Image
-                                                src={wideShot.image}
-                                                alt={wideShot.alt}
+                                                src={shotAsset(item.shot.name)}
+                                                alt={item.shot.alt}
                                                 widths={SHOT_WIDTHS}
-                                                sizes={COLUMN_SIZES}
+                                                sizes="(min-width: 64rem) 420px, (min-width: 40rem) 45vw, calc(100vw - 3rem)"
                                                 loading="lazy"
                                                 decoding="async"
-                                                class="w-full"
+                                                class="absolute top-0 left-0 w-[150%] max-w-none"
                                             />
-                                        </figure>
+                                        </div>
                                     </div>
-                                );
-                            }
-
-                            return (
-                                <div class="grid items-center gap-8 lg:grid-cols-2 lg:gap-14">
-                                    <div class={i % 2 === 1 ? "lg:order-2" : ""}>{words}</div>
-
-                                    <div class={i % 2 === 1 ? "lg:order-1" : ""}>
-                                        {/* The continuity beat's proof is the same board on a different device, so its
-                                            shot gets the phone shell (the product pages' frame, `ProductShotFigure`):
-                                            a 430px-wide capture in the browser chrome reads as a cropped desktop. */}
-                                        {shot && shot.frame === "phone" && (
-                                            <figure class="m-0 mx-auto w-full max-w-[20rem] overflow-hidden rounded-[2rem] border border-line-strong bg-card p-2 shadow-2xl shadow-black/50">
-                                                <Image
-                                                    src={shot.image}
-                                                    alt={shot.alt}
-                                                    widths={SHOT_WIDTHS}
-                                                    sizes="(min-width: 22rem) 304px, calc(100vw - 4rem)"
-                                                    loading="lazy"
-                                                    decoding="async"
-                                                    class="w-full rounded-[1.5rem]"
-                                                />
-                                            </figure>
-                                        )}
-                                        {shot && shot.frame === "browser" && (
-                                            <figure class="m-0 overflow-hidden rounded-xl border border-line bg-card shadow-2xl shadow-black/50">
-                                                <div class="flex items-center gap-2 border-b border-line bg-overlay/40 px-4 py-2.5">
-                                                    <span class="h-2.5 w-2.5 rounded-full bg-line-strong" />
-                                                    <span class="h-2.5 w-2.5 rounded-full bg-line-strong" />
-                                                    <span class="h-2.5 w-2.5 rounded-full bg-line-strong" />
-                                                    <span class="ml-3 rounded-md border border-line bg-canvas/60 px-3 py-1 font-mono text-2xs text-subtle">
-                                                        {shot.frameLabel}
-                                                    </span>
-                                                </div>
-                                                {/* A crop window, not a fit: a portrait capture scaled into half a column is
-                                                    the app at a third size — a shape you can see, not a screen you can read.
-                                                    So the shot is oversized and the window shows its top-left, where this
-                                                    surface puts the thing the beat claims. Pinned rather than left in flow:
-                                                    a block box with an aspect-ratio and `overflow-hidden` centres a child
-                                                    taller than itself, which scrolled the review past its own diff. */}
-                                                <div class="relative aspect-16/10 overflow-hidden">
-                                                    <Image
-                                                        src={shot.image}
-                                                        alt={shot.alt}
-                                                        widths={SHOT_WIDTHS}
-                                                        sizes={cropBeatSizes}
-                                                        loading="lazy"
-                                                        decoding="async"
-                                                        class="absolute top-0 left-0 w-[145%] max-w-none"
-                                                    />
-                                                </div>
-                                            </figure>
-                                        )}
-
-                                        {beat.figure === "sandbox" && (
-                                            <figure class="m-0 rounded-2xl border border-dashed border-line-strong p-4 sm:p-6">
-                                                <div class="eyebrow mb-4 flex items-center gap-2">
-                                                    <span class="text-subtle">
-                                                        <Fragment set:html={monitorGlyph} />
-                                                    </span>
-                                                    {content.loop.sandbox.boundary}
-                                                </div>
-
-                                                <div class="card border-primary-600/30 bg-primary-600/[0.03] p-5 shadow-xl shadow-black/30">
-                                                    <div class="flex items-center gap-3 border-b border-line pb-4">
-                                                        <span class="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary-600/15 text-link">
-                                                            <Fragment set:html={cubeGlyph} />
-                                                        </span>
-                                                        <div class="min-w-0">
-                                                            <div class="font-mono text-sm text-content">{content.loop.sandbox.agent.name}</div>
-                                                            <div class="text-2xs text-subtle">{content.loop.sandbox.agent.role}</div>
-                                                        </div>
-                                                        <span class="chip ml-auto bg-success/10 text-success">
-                                                            <span class="h-1.5 w-1.5 rounded-full bg-success" />
-                                                            running
-                                                        </span>
-                                                    </div>
-
-                                                    <div class="mt-4 space-y-4">
-                                                        {content.loop.sandbox.layers.map((layer) => (
-                                                            <div class="flex flex-col gap-1.5">
-                                                                <div class="eyebrow">{layer.label}</div>
-                                                                <div class="flex flex-wrap gap-1.5">
-                                                                    {layer.items.map((item) => (
-                                                                        <span class="rounded-md border border-line bg-overlay/50 px-2 py-0.5 font-mono text-2xs text-muted">
-                                                                            {item}
-                                                                        </span>
-                                                                    ))}
-                                                                </div>
-                                                            </div>
-                                                        ))}
-                                                    </div>
-                                                </div>
-                                            </figure>
-                                        )}
+                                ) : (
+                                    // Automate has no honest screenshot, so its visual is the trigger→outcome it names.
+                                    // `flex-1` lets it grow to the height the screenshot cards set, and `justify-between`
+                                    // spreads the events to the top and the outcome to the bottom so the cell fills.
+                                    <div class="flex flex-1 flex-col justify-between border-b border-line bg-primary-600/[0.03] p-5">
+                                        <div>
+                                            <div class="eyebrow text-link">Wakes on</div>
+                                            <ul class="mt-3 grid grid-cols-2 gap-x-5 gap-y-2">
+                                                {item.triggers?.map((trigger) => (
+                                                    <li class="flex items-center gap-2 text-sm text-muted">
+                                                        <span class="h-1 w-1 shrink-0 rounded-full bg-primary-500" />
+                                                        {trigger}
+                                                    </li>
+                                                ))}
+                                            </ul>
+                                        </div>
+                                        <p class="mt-5 flex items-start gap-2 text-xs leading-relaxed text-subtle">
+                                            <span class="text-link" aria-hidden="true">→</span>
+                                            a guard you write decides, then a fresh agent session runs and lands like any other.
+                                        </p>
                                     </div>
+                                )}
+                                <div class:list={["p-5", item.shot && "flex flex-1 flex-col"]}>
+                                    <h3 class="flex items-center gap-2 text-base font-semibold tracking-tight text-content">
+                                        {item.verb}
+                                        <span class="text-subtle opacity-0 transition-opacity group-hover:opacity-100" aria-hidden="true">
+                                            →
+                                        </span>
+                                    </h3>
+                                    <p class="mt-2 text-sm leading-relaxed text-muted">{item.line}</p>
                                 </div>
-                            );
-                        })
+                            </a>
+                        ))
                     }
                 </div>
 
-                <a href="/product/" class="mt-14 inline-block text-sm font-medium text-link hover:underline">{content.loop.cta} →</a>
+                <a href="/product/" class="mt-10 inline-block text-sm font-medium text-link hover:underline">{content.verbs.cta} →</a>
             </div>
         </section>
 
@@ -451,76 +376,6 @@ const cubeGlyph = icon('<path d="M12 2.5 20.5 7v10L12 21.5 3.5 17V7z"/><path d="
             </div>
         </section>
 
-        <!-- 5 · Extend it: a bento of the six superpowers.
-             Everything here used to be a section of its own, and together they were what made a visitor
-             lose track of what the product is. As a bento they read as one shelf of options rather than
-             six more arguments: a glance takes the whole band, and each tile hands the reader to the
-             page that owns it. -->
-        <section class="border-t border-line" id="extend">
-            <div class="fade-in mx-auto max-w-7xl px-6 py-20 lg:py-24">
-                <div class="eyebrow">{content.extend.eyebrow}</div>
-                <h2 class="mt-3 max-w-2xl text-3xl font-semibold tracking-tight text-balance">{content.extend.heading}</h2>
-                <p class="mt-3 max-w-2xl text-base leading-relaxed text-muted">{content.extend.sub}</p>
-
-                <!-- The bento: tile 0 takes a 2×2 cell, so the auto-flow fills the remaining column with
-                     tiles 1–2 and the bottom row with 3–5: six tiles, nine cells, no holes. On md the
-                     lead tile spans the full width and the last one closes the odd row; below that it is
-                     an ordinary stack, because a bento at 375px is just a column with extra rules. -->
-                <div class="mt-10 grid gap-4 md:grid-cols-2 lg:auto-rows-fr lg:grid-cols-3">
-                    {
-                        content.extend.tiles.map((tile, i) => (
-                            <a
-                                href={tile.href}
-                                class:list={[
-                                    "card group flex flex-col p-6 transition-colors hover:border-line-strong hover:bg-overlay/30",
-                                    i === 0 && "md:col-span-2 lg:row-span-2 lg:bg-primary-600/[0.03]",
-                                    i === 5 && "md:col-span-2 lg:col-span-1",
-                                ]}
-                            >
-                                <span class:list={["text-subtle transition-colors group-hover:text-link", i === 0 && "text-link"]}>
-                                    <Fragment set:html={extendIcons[i] ?? ""} />
-                                </span>
-                                <h3
-                                    class:list={[
-                                        "mt-4 flex items-center gap-2 font-semibold tracking-tight text-content",
-                                        i === 0 ? "text-lg" : "text-[0.9375rem]",
-                                    ]}
-                                >
-                                    {tile.name}
-                                    <span class="text-subtle opacity-0 transition-opacity group-hover:opacity-100" aria-hidden="true">
-                                        →
-                                    </span>
-                                </h3>
-                                <p class="mt-2 text-sm leading-relaxed text-muted">{tile.body}</p>
-                                {/* Only the lead tile carries these: a 2×2 cell has to earn its size with
-                                    something real, and the trigger list is the thing that reads at a glance.
-                                    Two columns of three rather than one wrapped row of chips — the taller
-                                    block is what fills the cell, and it borrows the dotted list from the
-                                    ownership ledger so the page has one way of writing a list of nouns. */}
-                                {tile.triggers && (
-                                    <div class="mt-auto pt-8">
-                                        <div class="eyebrow">{tile.triggers.label}</div>
-                                        <ul class="mt-3 grid gap-x-6 gap-y-2.5 sm:grid-cols-2">
-                                            {tile.triggers.items.map((trigger) => (
-                                                <li class="flex items-center gap-2.5 text-sm text-muted">
-                                                    <span class="h-1 w-1 shrink-0 rounded-full bg-primary-500" />
-                                                    {trigger}
-                                                </li>
-                                            ))}
-                                        </ul>
-                                    </div>
-                                )}
-                            </a>
-                        ))
-                    }
-                </div>
-
-                <div class="mt-6 flex flex-wrap items-baseline justify-between gap-x-8 gap-y-3">
-                    <p class="max-w-xl text-xs leading-relaxed text-subtle">{content.extend.note}</p>
-                    <a href="/extensions/" class="text-sm font-medium text-link hover:underline">{content.extend.cta} →</a>
-                </div>
-            </div>
-        </section>
 
         <!-- 6 · About the creator: the last objection before the command.
              The page has just asked a visitor to run a container on their own machine and hand it a
