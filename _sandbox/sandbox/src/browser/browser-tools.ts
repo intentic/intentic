@@ -240,29 +240,36 @@ export interface BrowserTurnTools {
     readonly passkeys: Record<string, string>;
 }
 
-// Every browser server for this turn. The isolated one is unconditional; a capability's own server is added
-// whether or not the account has signed in yet — a PENDING account's server runs over the very same persisted
-// profile the guided login would write, which is what lets the agent perform the sign-in (or sign-up) itself
-// and leave the account exactly as connected as a hand login would have. The one gate left is the profile lock:
-// never while the owner's own window holds it (Chromium locks the --user-data-dir). A capability may take the
-// `web` id, in which case its persisted profile deliberately wins.
+// Every browser server for this turn. A capability's own server is added whether or not the account has signed
+// in yet — a PENDING account's server runs over the very same persisted profile the guided login would write,
+// which is what lets the agent perform the sign-in (or sign-up) itself and leave the account exactly as
+// connected as a hand login would have. The one gate left is the profile lock: never while the owner's own
+// window holds it (Chromium locks the --user-data-dir). A capability may take the `web` id, in which case its
+// persisted profile deliberately wins.
 //
 // One server PER ACCOUNT, keyed by the capability's id — which is also the profile's key, so two accounts of one
 // site (reddit-work, reddit-personal) are two servers over two separate profiles and both are drivable in the
 // same turn. Keyed by platform they would have been two prefixes over one user-data-dir, which Chromium locks:
 // whichever launched first would work and the other would fail on its first call.
-export const browserServersOf = async (capabilities: readonly Capability[], root: string): Promise<BrowserTurnTools> => {
+//
+// `anonymous` is the credential-free browser — the persona shelf of the same name, and the reason this is a
+// parameter rather than the unconditional server it used to be. It is asked separately from the accounts above
+// because it is a different question: that one is "whose name may this turn use", this one is "may it read the
+// web at all", and a persona that reads docs pages while touching nobody's account is an ordinary answer.
+export const browserServersOf = async (capabilities: readonly Capability[], root: string, anonymous = true): Promise<BrowserTurnTools> => {
     const runtime = await browserRuntime();
     if (runtime === undefined) {
         return { servers: {}, ports: {}, passkeys: {} };
     }
     await sweepConfigs(Date.now());
-    const webPort = await freePort();
-    const ports: Record<string, number> = { web: webPort };
+    const ports: Record<string, number> = {};
     const passkeys: Record<string, string> = {};
-    const servers: Record<string, McpServerConfig> = {
-        web: isolatedBrowserSpec(runtime.cli, runtime.executablePath, browserOutputDir(root), await writeBrowserConfig("web", webPort)),
-    };
+    const servers: Record<string, McpServerConfig> = {};
+    if (anonymous) {
+        const webPort = await freePort();
+        ports["web"] = webPort;
+        servers["web"] = isolatedBrowserSpec(runtime.cli, runtime.executablePath, browserOutputDir(root), await writeBrowserConfig("web", webPort));
+    }
     const accounts = capabilities.filter((capability) => capability.kind === "browser" && !isProfileOpen(capability.id));
     if (accounts.length === 0) {
         return { servers, ports, passkeys };

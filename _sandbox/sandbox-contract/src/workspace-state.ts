@@ -85,6 +85,13 @@ const STATE_FILES = [
      * personas/personas-store.ts for the exclude carve-out and why it is safe here and nowhere else). */
     { path: ".intentic/personas.json", invalidates: ["personas", "capabilities"], portability: "carry" },
 
+    {
+        path: ".intentic/personas.seeded.json",
+        invalidates: [],
+        why: "Which stock personas this workspace has been offered (default-personas.ts); nothing renders it — it exists so deleting a seeded card is final.",
+        portability: "carry",
+    },
+
     /* The overlay Dockerfile, four files that a single `.intentic/environment.` prefix used to cover. They are
      * split here because they answer PORTABILITY differently while answering invalidation identically, and the
      * split is the whole difference between an export that reproduces an environment and one that reproduces a

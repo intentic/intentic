@@ -22,6 +22,14 @@ The **per-project AI-agent dev daemon** — a Docker image that runs as the proj
   git, recursive deletes, credential reads, publishes, outbound fetches — park on a permission card before they
   execute. Both in-turn gates are PreToolUse hooks, which is what makes them hold in the autonomous posture
   where the permission cards are never raised at all.
+- Decide who a session IS and what it may do, once per turn and above the choice of runtime (src/personas). A
+  persona card names the connected accounts a session may speak through, which shelves of its toolbox are open
+  — files, shell, web, browser, connectors, computers, MCP connections, delegation, changing the sandbox — and
+  where in the workspace it works. Accounts, connectors, computers and MCP connections are enforced by ABSENCE:
+  the credential is never injected and the server never mounted, so nothing depends on the model cooperating.
+  The plain switches take their tools out of the turn, and the folder limit refuses file tool calls that point
+  outside. Naming no persona keeps the full toolbox and reaches no logged-in account; naming one that does not
+  exist gets neither.
 - Schedule workflow graphs daemon-side. A run snapshots every repository HEAD once, creates every fresh step
   from those exact commits, holds candidate branches instead of auto-landing them, and resumes workflow-owned
   loops through one coordinated restart path. At most four workflow graphs execute across a sandbox at once.
@@ -55,6 +63,12 @@ The **per-project AI-agent dev daemon** — a Docker image that runs as the proj
   slowest of those actions pulls an image for minutes; the scope behind it is checked on the machine and never
   here.
 - [src/guard/guard.ts](src/guard/guard.ts) — the one gate every gated action consults (fail-closed); [src/guard/actions.ts](src/guard/actions.ts) is the catalog of decisions, and [src/guard/command-gate.ts](src/guard/command-gate.ts) is the one that can park a running turn on a card.
+- [src/personas/personas.ts](src/personas/personas.ts) — who a turn is and what it may do, resolved in one
+  function whose header carries the reasoning for why accounts default to nothing and powers default to
+  everything. [src/personas/persona-scope.ts](src/personas/persona-scope.ts) is the folder limit and the
+  "change the sandbox" switch as a PreToolUse hook — a refusal, honestly weaker than the container, and the
+  card's own UI says so where it is set. [src/personas/default-personas.ts](src/personas/default-personas.ts)
+  seeds Visitor, Maintainer and Publisher once each.
 - [src/auth/role-floor.ts](src/auth/role-floor.ts) — the minimum trust tier per route, in one table. [src/auth/auth.ts](src/auth/auth.ts) resolves who a caller is (owner TOFU, members with granted roles); the floor decides what that tier reaches.
 - [src/workflows](src/workflows) — workflow scheduling, immutable run snapshots, restart recovery, run-ledger
   retention, and complete handoff artifacts; [src/loops](src/loops) drives each individual step.

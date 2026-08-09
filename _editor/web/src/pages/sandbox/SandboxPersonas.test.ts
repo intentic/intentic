@@ -43,6 +43,11 @@ vi.mock(`../../composables/extensions/useBrowserAccounts`, () => ({
     useBrowserAccounts: () => ({ accounts, accountOf: (id: string) => accounts.value.find((entry) => entry.id === id) }),
 }));
 
+// The connectors, computers and MCP connections a card can grant by id. Mocked rather than left real because
+// the composable behind it reaches the sandbox client at import time, which has no environment under jsdom.
+const capabilities = ref<{ id: string; kind: string }[]>([]);
+vi.mock(`../../composables/extensions/useCapabilities`, () => ({ useCapabilities: () => ({ capabilities }) }));
+
 const { default: SandboxPersonas } = await import("./SandboxPersonas.vue");
 
 // A logo slug is deliberately absent: <BrandMark> falls to the glyph tier, which is what a site the manifest
@@ -123,6 +128,44 @@ it(`saves one persona holding accounts on two different sites`, async () => {
     buttonLabelled(el, `Add persona`)!.click();
     await vi.waitFor(() => expect(save).toHaveBeenCalled());
     expect(save.mock.calls[0]![0]).toMatchObject({ id: `work`, label: `Work`, capabilities: [`reddit-work`, `x-company`] });
+});
+
+/* The form is now three questions rather than one, and the two new sections are the whole feature — a card that
+ * renders its accounts and silently drops the powers is indistinguishable, on screen, from one that has no
+ * powers to set. This is the check that the sections are actually there and labelled. */
+it(`offers the powers and where-it-works sections when a card is open`, async () => {
+    const el = mount();
+    buttonLabelled(el, `Add a persona`)!.click();
+    await nextTick();
+    const rendered = text(el);
+    expect(rendered).toContain(`What it may do`);
+    expect(rendered).toContain(`Run commands`);
+    expect(rendered).toContain(`Change the sandbox`);
+    expect(rendered).toContain(`Where it works`);
+    expect(rendered).toContain(`Only these folders`);
+    // The honest caveat about what a folder limit is worth — rendered where it is set, not in documentation.
+    expect(rendered).toContain(`not a shell`);
+});
+
+/* THE COMMITTED FILE IS A RECORD OF DECISIONS, not a dump of defaults. A card nobody has bounded must save no
+ * `powers` at all — otherwise every persona ever created writes ten fields saying "yes" into a tracked file, and
+ * the diff on a card someone DID bound is buried in noise on every other card. */
+it(`saves no powers block for a card nobody has bounded`, async () => {
+    const el = mount();
+    buttonLabelled(el, `Add a persona`)!.click();
+    await nextTick();
+    await type(nameField(el), `Work`);
+    buttonLabelled(el, `Add persona`)!.click();
+    await vi.waitFor(() => expect(save).toHaveBeenCalled());
+    expect(save.mock.calls[0]![0].powers).toBeUndefined();
+    expect(save.mock.calls[0]![0].workspace).toBeUndefined();
+});
+
+/* A card that IS bounded says so on its row. Which shelf is off is the form's business; what the list owes a
+ * reader scanning six cards is which of them are limited at all. */
+it(`shows how bounded a card is on its row`, () => {
+    personas.value = [{ id: `visitor`, capabilities: [], powers: { files: `read`, shell: false, web: false, browser: false, delegate: false, sandbox: false } }];
+    expect(text(mount())).toContain(`Read-only`);
 });
 
 /* A new card landing on a name already taken would UPSERT the other one — the save is by id, so this would read

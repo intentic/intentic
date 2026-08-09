@@ -14,6 +14,7 @@ import { streamAgent } from "./agent/agent.routes.js";
 import { createTurnResumeScheduler, resumeInterruptedTurns } from "./agent/turn-resume.js";
 import { resumeWorkflowExecution } from "./workflows/workflow-runner.js";
 import { seedDefaultAutomations } from "./automations/default-automations.js";
+import { seedDefaultPersonas } from "./personas/default-personas.js";
 import { createAutomationsScheduler } from "./automations/scheduler.js";
 import { statePath } from "./workspace/state-paths.js";
 import { capabilityCtx } from "./capabilities/capability.js";
@@ -645,6 +646,15 @@ const main = async (): Promise<void> => {
         logger,
     });
     void leftovers.sweep();
+
+    /* The stock personas a workspace starts with, offered exactly once — a deleted seed stays deleted.
+     *
+     * BEFORE THE AUTOMATIONS, because one of them names a persona: the Doorbell recipe runs as `visitor`, and a
+     * seeded automation pointing at a card that does not exist yet is a wake that can do nothing at all until
+     * the next boot. Two seeds, one order, and the dependency runs this way round. */
+    await seedDefaultPersonas(services.personas, statePath(services.workspace.root, ".intentic/personas.seeded.json")).catch((error: unknown) =>
+        services.logger.warn({ err: error }, "default personas: seed failed"),
+    );
 
     // The stock automations a workspace starts with (currently the dependency fix chore), offered exactly
     // once — a deleted seed stays deleted. Before the scheduler so the first tick already sees them.

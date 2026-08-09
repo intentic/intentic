@@ -57,6 +57,9 @@ const servicesIn = (root: string, overrides: Partial<Services> = {}): Services =
         workspace: unstubbed<Services["workspace"]>("workspace", { root }),
         processes: unstubbed<Services["processes"]>("processes", { running: () => false }),
         capabilities: unstubbed<Services["capabilities"]>("capabilities", { list: async () => [] }),
+        // Every turn resolves a persona now, above the provider split, so every arm below reaches this — a
+        // workspace with no cards is the open attended posture these tests already assume.
+        personas: unstubbed<Services["personas"]>("personas", { list: async () => [] }),
         // A measurement seam, not a behavioural one: pass the work through and time nothing.
         perf: unstubbed<Services["perf"]>("perf", { track: (_op, _fields, run) => run() }),
         config: { ...testConfig, translator: { url: "http://127.0.0.1:8788", token: "local" } },

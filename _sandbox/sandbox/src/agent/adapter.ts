@@ -46,14 +46,20 @@ export interface AdapterHealth {
  * without a cast, and so an adapter cannot be filed under a runtime it does not serve. */
 export interface AgentAdapter<R extends AgentCapabilities["runtime"] = AgentCapabilities["runtime"]> {
     readonly runtime: R;
-    /* Gate the credential, resolve the model, and assemble the request — or refuse. `installed` is the owner's
-     * capability manifest, read once per turn by the caller and shared, because three of the four arms need it
-     * and re-reading it per arm is a file read on the turn path. */
+    /* Gate the credential, resolve the model, and assemble the request — or refuse. `granted` is the owner's
+     * capability manifest AS THIS TURN'S PERSONA MAY SEE IT: read once per turn by the caller, narrowed once by
+     * the card, and shared, because three of the four arms need it and re-reading it per arm is a file read on
+     * the turn path.
+     *
+     * NARROWED BEFORE AN ARM EVER SEES IT, which is the whole point of handing it down rather than letting each
+     * arm read the manifest itself. An arm builds servers, credentials and plugin loads straight out of this
+     * list, so a capability the persona did not grant is one an arm cannot accidentally mount — and a shelf
+     * therefore means the same thing on every runtime instead of on whichever one remembered to check. */
     readonly preflight: (
         services: Services,
         input: AgentTurn,
         context: TurnContext,
-        installed: Awaited<ReturnType<Services["capabilities"]["list"]>>,
+        granted: Awaited<ReturnType<Services["capabilities"]["list"]>>,
     ) => Promise<TurnPlan>;
     // Cheap, cached, and never on a turn's path — see adapter-health.ts for the caching and the schedule.
     readonly health: (services: Services) => Promise<AdapterHealth>;

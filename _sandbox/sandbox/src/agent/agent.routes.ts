@@ -127,7 +127,22 @@ async function* runConversationTurn(
     // Placement is a property of the conversation, not of whichever client happens to send this turn. A fresh
     // conversation takes the request's choice; every later turn follows the registry entry it already owns.
     const existing = services.agents.entry(conversationId);
-    const isolated = existing === undefined ? input.isolated === true : existing.branch !== undefined;
+    /* THE PERSONA GETS THE FIRST WORD ON PLACEMENT, because "work in your own copy" is a property of the job
+     * rather than of the surface that started it: a maintenance persona wants its own branch whether it was
+     * woken by a schedule, a webhook or somebody typing, and saying so once on the card beats saying it at four
+     * call sites that each decide placement for their own reasons.
+     *
+     * Read here rather than taken from the resolved card downstream because placement is decided BEFORE a turn
+     * is planned — the worktree has to exist before there is a cwd to plan against. It is one small JSON file,
+     * and only on a conversation's first turn: every later turn follows the entry that already exists.
+     *
+     * A card that names no preference, or an `actsAs` naming no card at all, leaves the request's own choice
+     * standing. The missing-card case is deliberately NOT made strict here — the resolver downstream already
+     * answers it by handing that turn nothing at all, and a second refusal spelled as a placement would only
+     * make the failure harder to read. */
+    const card = input.actsAs === undefined || existing !== undefined ? undefined : await services.personas.get(input.actsAs);
+    const wantsCopy = card?.workspace?.copy;
+    const isolated = existing === undefined ? (wantsCopy === undefined ? input.isolated === true : wantsCopy === "own") : existing.branch !== undefined;
     const began = await services.agents.begin(
         {
             conversationId,

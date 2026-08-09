@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { WEBCHAT_DAILY_MAX_DEFAULT } from "@intentic/sandbox-contract";
+import { personaBounds, WEBCHAT_DAILY_MAX_DEFAULT } from "@intentic/sandbox-contract";
 import { cmp, formatDateTime, Icon, ProseField, ResizeSeam, ToggleSwitch } from "@intentic/extension-ui";
 import { useQuery } from "@tanstack/vue-query";
 import { computed, ref } from "vue";
@@ -48,12 +48,13 @@ const {
     originsError,
 } = props.state;
 
-/* THE PERSONAS THIS SANDBOX CAN WEAR, for the "Acts as" picker below. Read here rather than passed in because
+/* THE PERSONAS THIS SANDBOX CAN WEAR, for the "Runs as" picker below. Read here rather than passed in because
  * it is the same list for every automation and changes only when the owner edits it.
  *
  * Each option also carries whether its accounts are actually signed in, because the honest failure this picker
  * has to make visible is a card that exists and cannot act — the ordinary state of a workspace someone has just
- * cloned, where every persona is one login short of working. */
+ * cloned, where every persona is one login short of working — and how bounded the card is, because picking one
+ * now decides what the wake may DO and not only whose name is on it. */
 const personaList = useQuery({
     queryKey: host().sandbox.key(`personas`),
     queryFn: () => host().sandbox.rpc.personas.list(),
@@ -66,6 +67,8 @@ const personas = computed(() =>
         // Signed in enough to act at all. A card naming three accounts with one connected is still usable —
         // the turn simply reaches the one — so this marks only the persona that can reach nothing whatsoever.
         ready: persona.capabilities.some((capability) => (personaList.data.value?.connected ?? []).includes(capability)),
+        // From the contract, so this sentence and the badge on the Personas page describe a card the same way.
+        bounds: `${personaBounds(persona)}${persona.workspace?.folders === undefined ? `` : `, ${persona.workspace.folders.join(`, `)} only`}.`,
     })),
 );
 const actsAsLabel = computed(() => personas.value.find((persona) => persona.id === form.actsAs));
@@ -751,46 +754,73 @@ const setProvider = (provider: string): void => {
                         On the default model the provider picks one at each wake, which is what keeps this working after a model is retired.
                     </p>
                 </div>
-                <!-- ACTS AS — whose name is on whatever this posts, kept deliberately apart from "Runs on" just
-                     above it. The two read almost the same and mean opposite things: "Runs on" is which
-                     subscription pays for the wake, this is which of your connected accounts it can speak
-                     through. Sharing a row would invite exactly the mix-up the whole feature exists to prevent.
+                <!-- RUNS AS — the persona this wake wears, which is now one choice covering three things: whose
+                     accounts it may speak through, what it may do, and where in the workspace it works. Kept
+                     deliberately apart from "Runs on" just above it, because the two read almost the same and
+                     mean opposite things: "Runs on" is which subscription PAYS for the wake. Sharing a row would
+                     invite exactly the mix-up the persona layer exists to prevent.
 
-                     Blank is the strict end of this control, not the neutral one, which is why the note under it
-                     states the consequence in plain terms rather than describing a default. -->
+                     Blank is the strict end of this control for accounts and the permissive end for tools, and
+                     the note under it says both — that asymmetry is the product's own decision (an unrepeatable
+                     post is worth defaulting to nothing for; an over-powered turn in a disposable container is
+                     not) and a picker that implied otherwise either way would be lying. -->
                 <div class="ui-field">
-                    <label class="ui-field-label" for="automation-acts-as">Acts as</label>
+                    <label class="ui-field-label" for="automation-acts-as">Runs as</label>
                     <select id="automation-acts-as" v-model="form.actsAs" :class="cmp.input()">
-                        <option value="">No account — this automation can't post anywhere</option>
+                        <option value="">Nobody — no accounts, and every tool</option>
                         <option v-for="persona in personas" :key="persona.id" :value="persona.id">
                             {{ persona.label }}{{ persona.ready ? `` : ` (not signed in yet)` }}
                         </option>
                         <!-- A pin whose card is gone still has to be VISIBLE in the control, or the select
-                             renders blank and reads as "no account" — which is the one other thing it could
-                             mean, and the two behave identically at 3am but need different fixing. -->
+                             renders blank and reads as "nobody" — which is the one other thing it could
+                             mean, and the two behave very differently: this one gets NOTHING at all. -->
                         <option v-if="form.actsAs !== `` && actsAsLabel === undefined" :value="form.actsAs" disabled>
                             {{ form.actsAs }} (no longer exists)
                         </option>
                     </select>
                     <!-- The four states this picker can be in, most specific first. The orphan case is third
                          rather than folded into "not signed in": a pin to a persona that no longer exists is
-                         read by the turn as NO accounts, and telling someone to go finish a login for a card
-                         that isn't there would send them looking for something they deleted. -->
+                         read by the turn as no accounts AND no tools, and telling someone to go finish a login
+                         for a card that isn't there would send them looking for something they deleted. -->
                     <p v-if="personas.length === 0" class="text-xs text-muted">
-                        You haven't set up any personas yet, so this wake can work but not speak.
+                        You haven't set up any personas yet, so this wake can do anything and speak as nobody.
                         <button type="button" :class="cmp.linkButton('inline')" @click="host().navigate(`/sandbox/personas`)">Set one up</button>
                     </p>
                     <p v-else-if="form.actsAs === ``" class="text-xs text-muted">
-                        This wake reaches none of your connected accounts — it can read and work, but it cannot post, reply or send as anyone. Nobody
-                        is watching an automation, so it only gets a voice when you name one.
+                        This wake reaches none of your connected accounts — it can work but not post, reply or send as anyone. It does get the full
+                        toolbox: pick a persona to bound what it may touch.
                     </p>
                     <p v-else-if="actsAsLabel === undefined" class="text-xs text-warning">
-                        This is pinned to a persona that no longer exists, so it reaches no accounts at all. Pick another one.
+                        This is pinned to a persona that no longer exists, so it gets no accounts and no tools at all. Pick another one.
                     </p>
                     <p v-else-if="!actsAsLabel.ready" class="text-xs text-warning">
                         {{ actsAsLabel.label }} isn't signed in yet, so this wake still can't post. Finish its login under Capabilities first.
                     </p>
+                    <p v-else class="text-xs text-muted">
+                        {{ actsAsLabel.bounds }}
+                        <button type="button" :class="cmp.linkButton('inline')" @click="host().navigate(`/sandbox/personas`)">Edit this persona</button>
+                    </p>
                 </div>
+
+                <!-- NARROW THIS FURTHER — raw tool names, folded away, and deliberately not how anyone is
+                     expected to answer this question. The persona above is the reusable answer; this is for the
+                     one job that needs less than its card, and it can only ever take away (the daemon applies
+                     both, and an allowlist cannot hand back a shelf the card switched off). -->
+                <details v-if="form.actsAs !== ``" class="text-xs">
+                    <summary class="cursor-pointer text-muted hover:text-content">Narrow this one job further</summary>
+                    <div class="ui-field mt-2">
+                        <input
+                            v-model="form.allowedTools"
+                            :class="cmp.input()"
+                            placeholder="Read, Grep, Glob"
+                            aria-label="Tool names this job may call"
+                        />
+                        <p class="text-xs text-subtle">
+                            Comma-separated tool names. Leave empty to use everything the persona allows — anything named here is narrowed on top of
+                            it, never added back.
+                        </p>
+                    </div>
+                </details>
                 <label class="flex items-center gap-2 text-sm text-content">
                     <ToggleSwitch v-model="form.requireApproval" aria-label="Require my approval before running" />
                     Require my approval before it runs

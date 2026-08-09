@@ -20,10 +20,14 @@ import { AUTOMATION_RECIPES, type AutomationRecipe } from "./recipes";
 
 export const NAME_RE = /^[a-zA-Z0-9][a-zA-Z0-9_-]*$/;
 
-// What a Doorbell may do while a stranger drives it. Deliberately read-only: an automation turn runs
-// bypassPermissions, so without an allowlist a support question is a shell on the sandbox. Widening it is a
-// deliberate edit of the automation, not a default.
-export const DOORBELL_TOOLS = [`Read`, `Grep`, `Glob`, `WebFetch`] as const;
+/* The persona a Doorbell starts on — the stock read-only card the sandbox seeds (default-personas.ts).
+ *
+ * A Doorbell is driven by a stranger and runs with nobody watching, so it is the one automation whose bounds
+ * cannot be left to the prompt's wording. It used to carry a hidden four-tool allowlist for exactly that
+ * reason; naming a persona instead does the same job in a place the owner can SEE, edit, and reuse for
+ * everything else a stranger drives. Changing this row's persona is a deliberate edit, as widening the old
+ * allowlist was. */
+export const DOORBELL_PERSONA = `visitor`;
 
 export type TriggerKind = `schedule` | `event` | `listener` | `workspace`;
 
@@ -51,10 +55,15 @@ export function useAutomationForm(sources: ComputedRef<readonly ListenerSource[]
         // The pinned provider account, by its daemon-minted id. Blank ⇒ absent ⇒ the provider's first account,
         // which is what every automation made before this field existed keeps doing.
         account: ``,
-        /* Which of the sandbox's named personas this wake acts as. Blank means something STRICTER than the account
-         * field above it, not looser: the daemon reads an unpinned unattended wake as reaching no logged-in
-         * account at all, so an automation made before this field existed cannot post as anybody. */
+        /* Which of the sandbox's named personas this wake RUNS AS — its accounts, its toolbox, and where in the
+         * workspace it works, in one choice. Blank is strict about accounts and permissive about tools: the
+         * daemon reads an unpinned unattended wake as reaching no logged-in account at all, and as keeping the
+         * full toolbox. See the picker's own note for why those two defaults point opposite ways. */
         actsAs: ``,
+        /* NARROW THIS ONE JOB below its persona — raw tool names, comma-separated, and empty in the ordinary
+         * case. Held as the typed string rather than an array because it is an <input>: splitting on save is one
+         * place, where splitting on every keystroke would fight the person typing a comma. */
+        allowedTools: ``,
         harness: `native` as AgentHarness,
         model: ``,
         requireApproval: false,
@@ -238,6 +247,7 @@ export function useAutomationForm(sources: ComputedRef<readonly ListenerSource[]
             agent: `claude`,
             account: ``,
             actsAs: ``,
+            allowedTools: ``,
             harness: `native`,
             model: ``,
             requireApproval: false,
@@ -300,6 +310,7 @@ export function useAutomationForm(sources: ComputedRef<readonly ListenerSource[]
         form.agent = automation.agent ?? `claude`;
         form.account = automation.account ?? ``;
         form.actsAs = automation.actsAs ?? ``;
+        form.allowedTools = (automation.allowedTools ?? []).join(`, `);
         form.harness = automation.harness ?? `native`;
         form.model = automation.model ?? ``;
         form.requireApproval = automation.requireApproval === true;
@@ -409,6 +420,14 @@ export function useAutomationForm(sources: ComputedRef<readonly ListenerSource[]
         // default is to take something away rather than to leave it unspecified.
         if (form.actsAs === ``) delete automation.actsAs;
         else automation.actsAs = form.actsAs;
+        // Empty ⇒ absent ⇒ whatever the persona allows. A list here is applied ON TOP of the card, so it can
+        // only ever narrow — which is why the field is offered at all and why it needs no validation against it.
+        const narrowed = form.allowedTools
+            .split(`,`)
+            .map((name) => name.trim())
+            .filter((name) => name !== ``);
+        if (narrowed.length > 0) automation.allowedTools = narrowed;
+        else delete automation.allowedTools;
         if (form.model === ``) delete automation.model;
         else automation.model = form.model;
         if (form.requireApproval) automation.requireApproval = true;
@@ -420,11 +439,11 @@ export function useAutomationForm(sources: ComputedRef<readonly ListenerSource[]
         else delete automation.chore;
         if (isDoorbell.value) {
             automation.webchat = webchatOf();
-            const wasDoorbell = original?.trigger.kind === `listener` && original.trigger.provider === `webchat`;
-            // A new Doorbell (or an existing one that predates the restriction) gets the safe read-only floor.
-            // An already-restricted Doorbell keeps its exact allowlist: editing its greeting must never widen it.
-            if (!wasDoorbell || original?.allowedTools === undefined) {
-                automation.allowedTools = [...DOORBELL_TOOLS];
+            /* A Doorbell that named no persona gets the read-only one. The owner's own choice always stands —
+             * a Doorbell deliberately pointed at a card with more powers is a decision they made on a visible
+             * field — so this fills a blank rather than overriding an answer. */
+            if (automation.actsAs === undefined) {
+                automation.actsAs = DOORBELL_PERSONA;
             }
         } else {
             delete automation.webchat;

@@ -44,6 +44,7 @@ import { editDiagnosticsHooks } from "./agent-diagnostics.js";
 import { installSteeringHooks } from "./agent-installs.js";
 import { commandGateHooks } from "../guard/command-gate.js";
 import { outboundGateHooks } from "../guard/outbound-gate.js";
+import { type PersonaScope, personaScopeHooks } from "../personas/persona-scope.js";
 import { type AgentTool, mcpServersOf } from "./agent-tools.js";
 import { createRequest } from "./agent-requests.js";
 import type { SteeringQueue } from "./agent-steering.js";
@@ -182,8 +183,12 @@ export interface AgentRequest {
     // browsers hold no identity.
     readonly browserPasskeys?: Record<string, string>;
     // Built-in tool names to remove from the model's context this turn (SDK disallowedTools). Set by the
-    // hashlineEdits toggle to disable native Edit/Write so file mutations route through the hashline MCP tools.
+    // hashlineEdits toggle to disable native Edit/Write so file mutations route through the hashline MCP tools,
+    // and by the persona's own shelves for every power it switched off (personas/personas.ts).
     readonly disallowedTools?: readonly string[];
+    // Where this persona's file tools may point, when its card limits them at all (personas/persona-scope.ts).
+    // Absent ⇒ no hook is wired, so a workspace that has never set a folder limit pays nothing for it.
+    readonly personaScope?: PersonaScope;
     // The Bash output-cleaner spec, forwarded to agent-output-filter via env (INTENTIC_OUTPUT_CLEANERS), or the
     // literal "off" to disable the filter (INTENTIC_RUN_FILTER=0, raw baseline). Empty/undefined ⇒ the filter's
     // all-on default. See settings/outputCleaners + bin/cleaners.mjs.
@@ -1360,6 +1365,10 @@ const baseOptions = (
         // the owner's action rules BEFORE they run — and hooks fire even under bypassPermissions, which is what
         // makes this hold for unattended automation turns. No rules ⇒ no hook (turn-plan forwards none).
         request.actionRules !== undefined && Object.keys(request.actionRules).length > 0 ? outboundGateHooks(request.actionRules) : {},
+        // The persona's folder limit, and its answer to whether this session may edit the sandbox's own
+        // configuration. Same posture as the gate above and for the same reason — an unattended wake has no
+        // permission cards, so a hook is the only layer between it and the path it was told to open.
+        request.personaScope !== undefined ? personaScopeHooks(request.personaScope) : {},
         /* The `turn.ending` moment: every rule the owner has standing where a turn tries to finish — the proof
          * ledger's follow-up, a standing instruction, a command that has to pass first. No rule ⇒ nothing is
          * wired, so a workspace that has never opened this pays nothing for it. */

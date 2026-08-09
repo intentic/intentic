@@ -7,7 +7,7 @@ cron expression, or a listener a connector provides) with the prompt to run when
 
 ## Responsibilities
 
-- Compose an automation: its trigger, its prompt, and which agent runs it.
+- Compose an automation: its trigger, its prompt, which agent runs it, and which persona it runs as.
 - Derive live trigger choices from installed listener contributions rather than owning provider knowledge.
 - Translate a schedule into something a person can read back before they save it.
 - Offer recipes — the automations most workspaces want, pre-written.
@@ -31,6 +31,15 @@ unconditionally and the rail tile is permanent.
 
 - A trigger fires a TURN, not a script. What happens next is the agent's judgement against the prompt, which is
   why an automation stays useful when the thing it reacts to changes shape.
+- "Runs as" is one choice covering three things — whose accounts the wake may speak through, what it may do, and
+  where in the workspace it works. It is a persona, edited on the Personas page, so the same bounds apply to the
+  chat, the workflow and the Doorbell that name the same card. Naming none keeps the full toolbox and reaches no
+  account; naming one that has been deleted gets neither, which is why the picker keeps an orphaned pin visible
+  rather than rendering blank. "Narrow this one job further" is raw tool names on top of the card, and only ever
+  narrower — it cannot hand back a shelf the persona switched off.
+- A Doorbell that names no persona is saved onto the seeded read-only one. It is the single automation a
+  stranger drives with nobody watching, so it is the one whose bounds cannot be left to the prompt's wording;
+  an owner who deliberately points it at a card with more powers keeps that choice.
 - Two ways to keep a hand on the wheel, and they compose: `requireApproval` holds every fire for the owner's
   click, while `holdForSeconds` holds it under a visible countdown and the daemon starts it itself once the
   timer passes on a quiet fleet — cancel and start-now stay one click away the whole time. When both are set,

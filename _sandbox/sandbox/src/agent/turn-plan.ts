@@ -13,7 +13,17 @@ import {
 import { accountsServer } from "../browser/accounts-tools.js";
 import { browserOutputDir } from "../browser/browser-artifacts.js";
 import { browserServersOf } from "../browser/browser-tools.js";
-import { personaCapabilities, personaNote, turnPersona } from "../personas/personas.js";
+import {
+    type TurnPersona,
+    personaCapabilities,
+    personaCliEnv,
+    personaDisallowedTools,
+    personaNote,
+    turnPersona,
+} from "../personas/personas.js";
+import { personaScopeOf } from "../personas/persona-scope.js";
+import { envSuffix } from "../capabilities/cli-env.js";
+import { resolveWithin } from "../workspace/workspace-files.js";
 import { hostToolsOf } from "../capabilities/host-tools.js";
 import { mcpToolsOf } from "../capabilities/mcp-tools.js";
 import { pluginDirsOf } from "../capabilities/plugin-dirs.js";
@@ -103,6 +113,10 @@ export interface TurnContext {
     // Mid-turn steering, present only where the runtime declares it (capabilitiesOf().steering — the Claude
     // Code loop's streaming input, and Pi's own steer queue).
     readonly steering: SteeringQueue | undefined;
+    /* Who the turn is and what it may do, resolved once by planTurn and handed down (personas/personas.ts).
+     * Set only on the context the arms receive — the route builds this object before a card has been read, so
+     * it is absent there and present everywhere it is used. */
+    readonly persona?: TurnPersona;
     /* Re-take the pre-turn rebase while the turn is parked on a card (agent.routes.ts owns the git and the
      * bookkeeping; agent.ts picks the moments). Isolated turns only — a main-tree turn has no branch to move.
      *
@@ -131,7 +145,7 @@ export const planTurn = async (services: Services, input: AgentTurn, context: Tu
     const provider = input.agent ?? "claude";
     const harness = input.harness ?? "native";
     const capabilities = capabilitiesOf(provider, harness);
-    const [installed, setup] = await Promise.all([
+    const [installed, setup, cast] = await Promise.all([
         // cli/mcp/plugin/browser/agent-kind capabilities, read once and shared by the arms that need them. NOT
         // the record above — these are what the OWNER installed, that is what the runtime can DO.
         services.perf.track("turn.plan.capabilities", {}, () => services.capabilities.list()),
@@ -149,12 +163,37 @@ export const planTurn = async (services: Services, input: AgentTurn, context: Tu
          *
          * Resolved HERE, ahead of the dispatch, because it is true of every runtime — see `honoured`. */
         services.perf.track("turn.plan.deps", {}, () => workspaceSetup(services.workspace.root, services.processes)),
+        // The cards themselves — one small JSON file, read unconditionally. Making the read conditional on
+        // `actsAs` being set would skip exactly the case that matters most: an unattended wake that named
+        // nothing, whose correct answer is "no accounts" and which must not reach one by saying nothing at all.
+        services.perf.track("turn.plan.personas", {}, () => services.personas.list()),
     ]);
-    const planned: TurnContext = { ...context, base: honoured(services, context, capabilities, setupNoticeFor(setup)) };
+    /* WHO THIS TURN IS AND WHAT IT MAY DO — resolved ABOVE the provider split, which is the whole reason this
+     * moved here from the harness arm.
+     *
+     * It used to be resolved inside the Claude Code plan, so a native Codex, Grok, Pi or ACP session ignored the
+     * card entirely: the same automation, pinned to the same read-only persona, was bounded on one runtime and
+     * unbounded on another depending on a dropdown nobody associates with security. For an account filter that
+     * was already wrong; for a toolbox it is the difference between a fence and a decoration.
+     *
+     * Every session start in the sandbox passes through this function — the chat, an automation wake, a Doorbell
+     * message, a workflow step, a loop iteration — so this is the one place that can answer the question once
+     * and have every surface inherit it. */
+    const persona = turnPersona({ personas: cast, actsAs: input.actsAs, unattended: input.unattended === true });
+    if (persona.reason === "unknown-persona") {
+        // Worth a line of its own: the turn asked to act as somebody and this workspace has no such card, so it
+        // is about to run with nothing at all and the prompt will read as though it should have had everything.
+        services.logger.warn({ actsAs: input.actsAs }, "persona: no such card — this turn reaches no account and no tools");
+    }
+    /* The manifest as this turn may see it, narrowed ONCE and handed to every arm in place of the full list.
+     * Filtering here rather than in each arm is what makes a shelf mean the same thing on every runtime, and
+     * what keeps a capability kind added tomorrow from being quietly denied to everybody (personas.ts). */
+    const granted = personaCapabilities(installed, persona);
+    const planned: TurnContext = { ...context, base: honoured(services, context, capabilities, setupNoticeFor(setup), persona, installed), persona };
     // The dispatch, through the registry rather than an if/else chain over the same union — so the set of
     // runtimes has one declaration, and the health probe the picker reads is written next to the arm it
     // predicts (see agent/adapter-registry.ts).
-    return adapterFor(provider, harness).preflight(services, input, planned, installed);
+    return adapterFor(provider, harness).preflight(services, input, planned, granted);
 };
 
 /* THE REQUEST EVERY ARM BUILDS ON, with the controls this runtime does not honour already gone.
@@ -181,9 +220,24 @@ export const planTurn = async (services: Services, input: AgentTurn, context: Tu
  * them. It also made the same request arrive as two different messages depending on who was serving it, which
  * is fatal to the one thing a workflow of two models exists to measure: run the same brief on Claude and on
  * Codex and the only difference must be the model. Rides the USER message, never systemAppend: it changes the
- * moment an install finishes, and the system prefix is kept byte-stable for the prompt cache. */
-const honoured = (services: Services, context: TurnContext, capabilities: AgentCapabilities, setupNotice: string | undefined): AgentRequest => {
-    const { permissionMode, effort, fast, ...rest } = context.base;
+ * moment an install finishes, and the system prefix is kept byte-stable for the prompt cache.
+ *
+ * THE PERSONA'S SHELVES ARE APPLIED HERE FOR THE SAME REASON THE DEPENDENCY NOTICE IS. A bound that holds on one
+ * runtime and not on the other three is not a bound; this is the single point all of them pass through, so the
+ * connectors whose credentials are withheld and the tools taken out of the turn are the same set whoever serves
+ * it. What CANNOT be applied here is anything capability-shaped that an arm builds for itself — those are
+ * filtered upstream, out of the manifest each arm is handed (personaCapabilities). */
+const honoured = (
+    services: Services,
+    context: TurnContext,
+    capabilities: AgentCapabilities,
+    setupNotice: string | undefined,
+    persona: TurnPersona,
+    // The UNFILTERED manifest — this needs to know which connectors exist in order to know whose credentials to
+    // withhold, which the already-filtered list by definition cannot say.
+    installed: readonly Capability[],
+): AgentRequest => {
+    const { permissionMode, effort, fast, cliEnv, disallowedTools, ...rest } = context.base;
     // An isolated conversation's worktree is not the workspace root; a main-tree turn has nothing to say.
     const isolated = context.localCwd !== services.workspace.root;
     const notes = [
@@ -191,9 +245,34 @@ const honoured = (services: Services, context: TurnContext, capabilities: AgentC
         ...(isolated && context.syncNote !== undefined ? [context.syncNote] : []),
         ...(setupNotice !== undefined ? [setupNotice] : []),
     ];
+    // The connectors this card did not grant, taken out of the shell's environment rather than left in it with
+    // an instruction not to look. The manifest is read from the context's own base, which is the unfiltered
+    // list — the filtered one is what the ARMS get, and this is the same decision applied to the environment.
+    const shellEnv = cliEnv === undefined ? undefined : personaCliEnv(cliEnv, installed, persona, envSuffix);
+    // The shelves that are not capability-shaped, as tool names the runtime knows. Concatenated with whatever
+    // the request already carried (the hashline swap sets its own) rather than replacing it.
+    const denied = [...(disallowedTools ?? []), ...personaDisallowedTools(persona)];
+    /* WHERE THE CARD SAYS TO STAND — a folder under the turn's own root, which is the worktree for an isolated
+     * turn and the workspace for a shared one, so "start in this repo" means the same thing either way.
+     *
+     * Resolved through the workspace escape guard, and a path that fails it is DROPPED rather than refused: the
+     * card is committed config a person hand-edits, and the honest failure for a typo'd folder is a session
+     * that opens at the workspace root — not one that will not start at all, at 3am, for a job whose actual
+     * work was never going to touch that folder anyway. */
+    const startIn = persona.workspace?.startIn;
+    const startPath = startIn === undefined || startIn === "" ? undefined : resolveWithin(context.effectiveCwd, startIn);
+    /* The folder limit and the sandbox switch, carried on the request for the runtime that can enforce them.
+     * The folders resolve against the workspace root rather than `startPath` — the card spells them
+     * workspace-relative, and a persona that starts in one repo while being allowed to read a sibling is an
+     * ordinary answer that anchoring them to the start folder would make unsayable. */
+    const scope = personaScopeOf(persona, context.effectiveCwd);
     return {
         ...rest,
         prompt: withTurnPreamble(notes, context.base.prompt),
+        ...(startPath !== undefined ? { cwd: startPath } : {}),
+        ...(scope !== undefined ? { personaScope: scope } : {}),
+        ...(shellEnv !== undefined && Object.keys(shellEnv).length > 0 ? { cliEnv: shellEnv } : {}),
+        ...(denied.length > 0 ? { disallowedTools: denied } : {}),
         // A "plan" runtime knows two postures: propose-then-approve, or run. Every other mode names the second
         // one, so it travels as the absence it already meant.
         ...(permissionMode !== undefined && (capabilities.permissions === "modes" || permissionMode === "plan") ? { permissionMode } : {}),
@@ -280,9 +359,9 @@ export const planPiTurn = async (
     services: Services,
     _input: AgentTurn,
     context: TurnContext,
-    installed: readonly Capability[],
+    granted: readonly Capability[],
 ): Promise<TurnPlan> => {
-    const capability = installed.find((entry) => entry.kind === "agent" && entry.id === PI_PROVIDER);
+    const capability = granted.find((entry) => entry.kind === "agent" && entry.id === PI_PROVIDER);
     if (capability === undefined || capability.kind !== "agent") {
         return { ok: false, message: "Pi is not installed — add the Pi Agent capability first." };
     }
@@ -303,15 +382,15 @@ export const planAcpTurn = async (
     services: Services,
     input: AgentTurn,
     context: TurnContext,
-    installed: readonly Capability[],
+    granted: readonly Capability[],
     provider: string,
 ): Promise<TurnPlan> => {
-    const capability = installed.find((entry) => entry.kind === "agent" && entry.id === provider);
+    const capability = granted.find((entry) => entry.kind === "agent" && entry.id === provider);
     if (capability === undefined || capability.kind !== "agent") {
         return { ok: false, message: `Unknown agent provider "${provider}" — add it as an Agent capability first.` };
     }
     const acpConfig = capability.config;
-    const tools = [...services.tools, ...mcpToolsOf(installed), ...hostToolsOf(installed, services.config.sandbox.port, services.hostBridgeToken)];
+    const tools = [...services.tools, ...mcpToolsOf(granted), ...hostToolsOf(granted, services.config.sandbox.port, services.hostBridgeToken)];
     return {
         ok: true,
         run: (turnRequest) => services.acpAgent(provider, acpConfig, turnRequest),
@@ -338,7 +417,7 @@ export const planHarnessTurn = async (
     services: Services,
     input: AgentTurn,
     context: TurnContext,
-    installed: readonly Capability[],
+    granted: readonly Capability[],
 ): Promise<TurnPlan> => {
     /* THE TWO THINGS NOTHING ELSE HERE DEPENDS ON, together — a token refresh that may go to the network, and a
      * settings read. They used to be awaits in a row in front of every gate, which meant every turn paid both
@@ -363,7 +442,7 @@ export const planHarnessTurn = async (
     const { oauthToken, refreshOauthToken, endpoint, allowance } = resolved.credentials;
     // Internal (intent-declared, from env) tools first, then external mcp-kind capabilities — a same-named
     // external tool overrides, matching mcpServersOf's last-wins merge.
-    const tools = [...services.tools, ...mcpToolsOf(installed), ...hostToolsOf(installed, services.config.sandbox.port, services.hostBridgeToken)];
+    const tools = [...services.tools, ...mcpToolsOf(granted), ...hostToolsOf(granted, services.config.sandbox.port, services.hostBridgeToken)];
     const {
         stableSystemPrompt,
         hashlineEdits,
@@ -447,35 +526,24 @@ export const planHarnessTurn = async (
      * delegation lookup that reaches the translator. Only `delegation` waited on anything above it (it needs
      * `stableSystemPrompt`), which is why these could not join the round before it — and why they had no
      * business being three more awaits in a row. */
-    /* WHICH PERSONA THIS TURN WEARS, resolved before the browser bring-up because it decides what that bring-up is
-     * allowed to launch. `personaCapabilities` filters the manifest rather than trimming tool names afterwards,
-     * so an account this turn may not act through has no MCP server, no Chromium and no open profile — absent
-     * rather than present-and-discouraged (personas/personas.ts holds the rule and the reasoning).
+    /* WHICH PERSONA THIS TURN WEARS — resolved by planTurn, above the provider split, and arriving here already
+     * applied to `granted`: an account this turn may not act through is not in that list, so it gets no MCP
+     * server, no Chromium and no open profile. Absent rather than present-and-discouraged, which is the only
+     * version of this that survives an agent misreading its instructions (personas/personas.ts holds the rule).
      *
-     * The read is cheap and unconditional: it is one small JSON file, and making it conditional on `actsAs`
-     * being set would skip exactly the case that matters most — an unattended wake that named nothing, whose
-     * correct answer is "no accounts" and which must not be able to reach one by saying nothing at all. */
-    const persona = turnPersona({
-        personas: await services.personas.list(),
-        actsAs: input.actsAs,
-        unattended: input.unattended === true,
-    });
-    if (persona.reason === "unknown-persona") {
-        // Worth a line of its own: the turn asked to act as somebody and this workspace has no such card, so it
-        // is about to run with no outward accounts and the prompt will read as though it should have had them.
-        services.logger.warn({ actsAs: input.actsAs }, "persona: no such card — this turn reaches no logged-in account");
-    }
-    // The accounts this turn's persona speaks for — one list feeding both the browser servers and the
-    // accounts tools' scope, so a tool can never reach an account whose browser this turn was refused.
-    const personaInstalled = personaCapabilities(installed, persona);
-    const browserAccountIds = personaInstalled.filter((capability) => capability.kind === "browser").map((capability) => capability.id);
+     * The fallback is the open attended posture, for the one caller that builds a plan without a route behind it
+     * (the bench). Nothing that starts a real session takes it: planTurn always resolves a card first. */
+    const persona = context.persona ?? turnPersona({ personas: [], actsAs: undefined, unattended: false });
+    // The accounts this turn speaks for — one list feeding both the browser servers and the accounts tools'
+    // scope, so a tool can never reach an account whose browser this turn was refused.
+    const browserAccountIds = granted.filter((capability) => capability.kind === "browser").map((capability) => capability.id);
     const [extensionAgentDirs, browser, delegation] = await Promise.all([
         services.perf.track("turn.plan.extensions", {}, () => extensionAgentDirsOf(services)),
         // Each browser capability (account) grants the @playwright/mcp browser tools, bound to that account's
         // persisted profile so the agent acts as the signed-in owner (read/reply/comment/post/join) — or signs
         // the account in itself when it is still pending — filtered to the accounts this turn's persona
         // speaks for.
-        services.perf.track("turn.plan.browser", {}, () => browserServersOf(personaInstalled, services.workspace.root)),
+        services.perf.track("turn.plan.browser", {}, () => browserServersOf(granted, services.workspace.root, persona.powers.browser)),
         services.perf.track("turn.plan.delegation", {}, () => delegationEnv(services, stableSystemPrompt)),
     ]);
     // The image-baked iq plugin (skill + SessionStart nudge) loads ahead of any user-added plugin-kind
@@ -484,7 +552,7 @@ export const planHarnessTurn = async (
     // contributes.agent manifest entry ride the same SDK plugin loader.
     const plugins = [
         ...(services.config.iqPluginDir !== "" && iqSearch ? [services.config.iqPluginDir] : []),
-        ...pluginDirsOf(installed, services.workspace.root),
+        ...pluginDirsOf(granted, services.workspace.root),
         ...extensionAgentDirs,
     ];
     // Turn-scoped roots follow the effective cwd: hashline edits must anchor in the worktree an isolated turn

@@ -1,10 +1,11 @@
 <script setup lang="ts">
-import type { Persona } from "@intentic/sandbox-contract";
+import { type Persona, personaBounds } from "@intentic/sandbox-contract";
 import { Avatar, BrandMark, cmp, ConfirmDialog, Notice, type NoticeModel, Row, RowGroup, StatusBadge } from "@intentic/ui";
 import Button from "primevue/button";
 import { computed, ref } from "vue";
-import PersonaForm, { type PersonaDraft } from "./PersonaForm.vue";
+import PersonaForm, { type PersonaDraft, type PersonaGrantable } from "./PersonaForm.vue";
 import { useBrowserAccounts } from "../../composables/extensions/useBrowserAccounts";
+import { useCapabilities } from "../../composables/extensions/useCapabilities";
 import { identityHue } from "../../composables/identityHue";
 import { usePersonas } from "../../composables/sandbox/usePersonas";
 import { noticeFrom } from "../../composables/useAsyncAction";
@@ -35,6 +36,20 @@ const listNotice = computed<NoticeModel | undefined>(() =>
 // of them belongs on any given card.
 const { accounts, accountOf } = useBrowserAccounts();
 
+/* The other three things a card grants by id: the connectors whose credentials reach the shell, the computers
+ * the agent can drive, and the MCP connections it can call. Read from the same capability list the accounts
+ * come from — one source, so a card can never offer a grant for something this sandbox does not have.
+ *
+ * Kinds the card has no opinion about (the agent runtimes, the platform entries) are deliberately absent: a
+ * persona that could switch off the runtime serving its own turn is a card that can only confuse. */
+const { capabilities } = useCapabilities();
+const GRANTABLE_KINDS = new Set([`cli`, `host`, `mcp`]);
+const grantables = computed<PersonaGrantable[]>(() =>
+    capabilities.value
+        .filter((capability) => GRANTABLE_KINDS.has(capability.kind))
+        .map((capability) => ({ id: capability.id, kind: capability.kind as PersonaGrantable[`kind`], label: capability.id })),
+);
+
 /* The marks a row shows for the accounts its card names — the fastest way to read that a persona spans two
  * sites, and the reason the row does not spell them out in a comma-joined line. An id the manifest has no
  * capability for still gets an entry: a card may name an account nobody has added HERE, and dropping it would
@@ -61,9 +76,26 @@ const slug = (name: string): string =>
         .replace(/^-+|-+$/g, ``)
         .slice(0, 60);
 
+/* A card with no `powers` means the full toolbox, so a NEW draft opens with every shelf on — the form is then
+ * the same shape whether it was opened on a card that has never thought about powers or one that has, and
+ * "everything, until you turn something off" is a sentence the form can state rather than imply. */
+const FULL_POWERS = {
+    files: `write`,
+    shell: true,
+    web: true,
+    browser: true,
+    delegate: true,
+    sandbox: true,
+    connectors: undefined,
+    computers: undefined,
+    mcp: undefined,
+} satisfies Pick<PersonaDraft, `files` | `shell` | `web` | `browser` | `delegate` | `sandbox` | `connectors` | `computers` | `mcp`>;
+
+const NO_SCOPE = { startIn: ``, copy: `` as const, folders: `` };
+
 const startAdd = (): void => {
     saveError.value = undefined;
-    draft.value = { original: undefined, label: ``, capabilities: [], voice: ``, posture: `publish` };
+    draft.value = { original: undefined, label: ``, capabilities: [], voice: ``, posture: `publish`, ...FULL_POWERS, ...NO_SCOPE };
 };
 const startEdit = (persona: Persona): void => {
     saveError.value = undefined;
@@ -73,6 +105,20 @@ const startEdit = (persona: Persona): void => {
         capabilities: [...persona.capabilities],
         voice: persona.voice ?? ``,
         posture: persona.posture ?? `publish`,
+        // Field by field rather than a spread, so a card written by a newer build cannot put a shape the form
+        // does not understand into a draft it is about to save back.
+        files: persona.powers?.files ?? FULL_POWERS.files,
+        shell: persona.powers?.shell ?? FULL_POWERS.shell,
+        web: persona.powers?.web ?? FULL_POWERS.web,
+        browser: persona.powers?.browser ?? FULL_POWERS.browser,
+        delegate: persona.powers?.delegate ?? FULL_POWERS.delegate,
+        sandbox: persona.powers?.sandbox ?? FULL_POWERS.sandbox,
+        connectors: persona.powers?.connectors === undefined ? undefined : [...persona.powers.connectors],
+        computers: persona.powers?.computers === undefined ? undefined : [...persona.powers.computers],
+        mcp: persona.powers?.mcp === undefined ? undefined : [...persona.powers.mcp],
+        startIn: persona.workspace?.startIn ?? ``,
+        copy: persona.workspace?.copy ?? ``,
+        folders: (persona.workspace?.folders ?? []).join(`, `),
     };
 };
 const cancelEdit = (): void => {
@@ -95,8 +141,44 @@ const submit = async (): Promise<void> => {
     if (draft.value === undefined || !draftValid.value) {
         return;
     }
-    const { label, capabilities: picked, voice, posture } = draft.value;
+    const { label, capabilities: picked, voice, posture, startIn, copy, folders } = draft.value;
     saveError.value = undefined;
+    /* WHAT IS WORTH STORING. A card that grants everything stores no `powers` at all, and one that limits
+     * nothing stores no `workspace` — so the committed file stays a description of the DECISIONS somebody made
+     * rather than a dump of every default, and a diff on it reads as the change it was.
+     *
+     * That is the same rule the label and the posture already follow one block up, applied to two objects
+     * instead of two fields. */
+    const powers = {
+        files: draft.value.files,
+        shell: draft.value.shell,
+        web: draft.value.web,
+        browser: draft.value.browser,
+        delegate: draft.value.delegate,
+        sandbox: draft.value.sandbox,
+        ...(draft.value.connectors !== undefined ? { connectors: draft.value.connectors } : {}),
+        ...(draft.value.computers !== undefined ? { computers: draft.value.computers } : {}),
+        ...(draft.value.mcp !== undefined ? { mcp: draft.value.mcp } : {}),
+    };
+    const bounded =
+        powers.files !== `write` ||
+        !powers.shell ||
+        !powers.web ||
+        !powers.browser ||
+        !powers.delegate ||
+        !powers.sandbox ||
+        draft.value.connectors !== undefined ||
+        draft.value.computers !== undefined ||
+        draft.value.mcp !== undefined;
+    const folderList = folders
+        .split(`,`)
+        .map((entry) => entry.trim())
+        .filter((entry) => entry !== ``);
+    const workspace = {
+        ...(startIn.trim() !== `` ? { startIn: startIn.trim() } : {}),
+        ...(copy !== `` ? { copy } : {}),
+        ...(folderList.length > 0 ? { folders: folderList } : {}),
+    };
     try {
         await save.mutateAsync({
             id: draftId.value,
@@ -106,6 +188,8 @@ const submit = async (): Promise<void> => {
             ...(voice.trim() !== `` ? { voice: voice.trim() } : {}),
             // "publish" is what every account does today, so only the restrictive posture is worth recording.
             ...(posture === `draft` ? { posture: `draft` as const } : {}),
+            ...(bounded ? { powers } : {}),
+            ...(Object.keys(workspace).length > 0 ? { workspace } : {}),
         });
         draft.value = undefined;
     } catch (err) {
@@ -129,7 +213,8 @@ const confirmRemove = async (): Promise<void> => {
         <!-- One sentence. The rest of what a persona is — that it spans sites, that the names travel and the
              logins don't — is shown by the surface itself rather than explained above it. -->
         <p class="mb-5 max-w-2xl text-sm text-muted">
-            A persona is who this sandbox is when it acts outside: a name, the accounts it speaks through, and whether it may publish on its own.
+            A persona is who this sandbox is when it works: the accounts it speaks through, what it may do, and where in the workspace it works. Point an
+            automation at one and it runs inside those bounds.
         </p>
 
         <Notice v-if="listNotice" :of="listNotice" class="mb-4" />
@@ -218,6 +303,11 @@ const confirmRemove = async (): Promise<void> => {
                                 :idle="!mark.signedIn"
                             />
                         </span>
+                        <!-- A card that has been bounded says so on its row. Which shelf is off is the form's
+                             business; what the LIST owes a reader scanning six cards is which of them are
+                             limited at all — that is the difference between "my Doorbell is safe" being a
+                             belief and being something they can see. -->
+                        <StatusBadge v-if="persona.powers !== undefined" variant="neutral" size="xs">{{ personaBounds(persona) }}</StatusBadge>
                         <StatusBadge v-if="persona.posture === `draft`" variant="info" size="xs">Drafts only</StatusBadge>
                         <StatusBadge v-if="persona.capabilities.length > 0 && !ready(persona)" variant="neutral" size="xs" dot>
                             Not signed in
@@ -246,6 +336,7 @@ const confirmRemove = async (): Promise<void> => {
                             :draft="draft"
                             :accounts="accounts"
                             :connected="connected"
+                            :grantables="grantables"
                             :valid="draftValid"
                             :saving="save.isPending.value"
                             :error="saveError"
@@ -263,6 +354,7 @@ const confirmRemove = async (): Promise<void> => {
                         :draft="draft"
                         :accounts="accounts"
                         :connected="connected"
+                        :grantables="grantables"
                         :valid="draftValid"
                         :saving="save.isPending.value"
                         :error="saveError"

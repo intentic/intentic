@@ -3122,6 +3122,74 @@ export type Capability = z.infer<typeof CapabilitySchema>;
  * this file says. What it prevents is the mistake this codebase already names as the one that cannot be undone:
  * a post from the wrong account. Where nobody is watching — an unattended wake — it is a real fence, because
  * there the resolver's default is NOTHING rather than everything (see turnPersona in personas.ts). */
+/* WHAT A PERSONA MAY DO — the shelves, one switch each, and the half of the card that bounds the turn rather
+ * than the account it speaks for.
+ *
+ * SHELVES, NOT TOOL NAMES. Every field here is a phrase a person decides about ("run commands", "read the
+ * web"), never the name of a tool. Tool names drift with every runtime upgrade, one power answers to several of
+ * them, and a connector is not a tool at all — it is a shell command plus a credential. Naming the shelf means
+ * a tool added next month lands inside an answer the owner already gave, and a card written today still means
+ * what it said after the SDK renames something.
+ *
+ * TWO STRENGTHS, AND THE DIFFERENCE IS VISIBLE FROM HERE. Everything capability-shaped (`connectors`,
+ * `computers`, `mcp`, and the accounts in `capabilities`) is enforced by ABSENCE — the credential is never
+ * injected, the server never mounted, the browser never launched — which is the same mechanism the account
+ * filter already uses and needs no cooperation from the model. The plain switches are enforced by taking the
+ * tools out of the turn's context, which holds for every tool the harness owns and cannot reach a program the
+ * agent runs for itself.
+ *
+ * WHICH IS WHY `shell` IS THE ONE THAT DECIDES. A session with a shell can read a credential this card never
+ * granted it, so switching it off is what turns the rest of these into a fence; leaving it on leaves them a
+ * strong default. The card's own UI says so at the switch — see PersonaForm.vue — because a limit that is
+ * weaker than it looks is worse than no limit at all.
+ *
+ * PERMISSIVE BY DEFAULT, deliberately, and the opposite of the account rule directly below it. An unrepeatable
+ * public post is worth defaulting to nothing for; an over-powered turn inside a container the owner can throw
+ * away is not, and it is the same reasoning that makes bypassPermissions this sandbox's default posture. So an
+ * absent `powers` means today's full toolbox, and a workspace that never opens this notices nothing. */
+export const PersonaPowersSchema = z.object({
+    // "read" is look-and-search only; "write" adds creating and changing; "none" takes both away.
+    files: z.enum(["none", "read", "write"]).default("write"),
+    // Shell commands, and with them the terminals, the test runs, and every CLI on the image. See the header:
+    // this is the switch the others' strength depends on.
+    shell: z.boolean().default(true),
+    // Fetch a page, run a search.
+    web: z.boolean().default(true),
+    // The credential-free browser. The SIGNED-IN browsers are `capabilities` below — a different question, and
+    // the reason this one is safe to leave on: it holds nobody's account.
+    browser: z.boolean().default(true),
+    // Spawn sub-agents and run workflows.
+    delegate: z.boolean().default(true),
+    /* Change the sandbox itself: its settings and manifests, and the public outbox that publishes a file to
+     * anyone with the link. Enforced as a refusal on the paths that carry those, not as a tool switch — there
+     * is no "install a capability" tool to take away, only files that mean it. */
+    sandbox: z.boolean().default(true),
+    /* The connected accounts and services this persona may reach, BY ID. Absent means every one of them, which
+     * is what a card that has never thought about it should get; an empty list means none. That tri-state is the
+     * whole reason these are optional rather than defaulted arrays — "all" and "none" are both real answers and
+     * an empty default could only spell one of them. */
+    connectors: z.array(entryId).max(100).optional(),
+    computers: z.array(entryId).max(50).optional(),
+    mcp: z.array(entryId).max(50).optional(),
+});
+export type PersonaPowers = z.infer<typeof PersonaPowersSchema>;
+
+/* WHERE A PERSONA WORKS — the third question after who it is and what it may do.
+ *
+ * `folders` is the one field here that promises less than it looks like it promises, and the card says so where
+ * it is set: it is enforced by refusing file tool calls that point outside, which stops a misread instruction
+ * and an honest mistake, and does not stop a shell. The workspace-wide fence is the container. */
+export const PersonaWorkspaceSchema = z.object({
+    // The repo (or folder) under the workspace a session starts in. Absent ⇒ the workspace root, as today.
+    startIn: z.string().max(200).optional(),
+    // Its own copy of the workspace, or the shared one. Absent ⇒ the surface's own choice, which is what every
+    // session already gets: an outside message works in its own copy, a schedule works in the shared tree.
+    copy: z.enum(["own", "shared"]).optional(),
+    // Workspace-relative folders the file tools may touch. Absent ⇒ anywhere under the workspace.
+    folders: z.array(z.string().min(1)).max(50).optional(),
+});
+export type PersonaWorkspace = z.infer<typeof PersonaWorkspaceSchema>;
+
 export const PersonaSchema = z.object({
     id: entryId,
     // What the owner calls it in the composer chip. Absent ⇒ surfaces read the id, which is already human-chosen.
@@ -3146,8 +3214,49 @@ export const PersonaSchema = z.object({
      * lives on the card rather than in each project's own config so that one account named by three repos stays
      * one definition instead of three that drift. */
     repos: z.array(z.string().min(1)).max(50).optional(),
+    // What a session wearing this card may do, and where it works. Both absent ⇒ the full toolbox and the whole
+    // workspace, so a card written before these existed keeps behaving exactly as it did.
+    powers: PersonaPowersSchema.optional(),
+    workspace: PersonaWorkspaceSchema.optional(),
 });
 export type Persona = z.infer<typeof PersonaSchema>;
+
+/* HOW BOUNDED A CARD IS, in one phrase — for the row badge on the Personas page and for the sentence under the
+ * automations composer's persona picker.
+ *
+ * It lives in the contract rather than in either surface because those two are in different packages and would
+ * otherwise each grow their own vocabulary for the same card: a workspace where the Personas page says
+ * "Read-only" and the automation under it says "3 limits" is one where the reader cannot tell whether they are
+ * looking at the same thing.
+ *
+ * TWO NAMED SHAPES AND THEN A COUNT. "Read-only" and "no shell" are the two people actually reach for, so they
+ * get words; everything else gets a number, because listing four switched-off shelves in a badge produces a line
+ * nobody reads and buries the one fact that matters — that this card is limited at all. */
+export const personaBounds = (persona: Persona): string => {
+    const powers = persona.powers;
+    if (powers === undefined) {
+        return "Full powers";
+    }
+    const resolved = PersonaPowersSchema.parse(powers);
+    if (resolved.files === "read" && !resolved.shell) {
+        return "Read-only";
+    }
+    if (!resolved.shell) {
+        return "No shell";
+    }
+    const limits = [
+        resolved.files === "none",
+        !resolved.web,
+        !resolved.browser,
+        !resolved.delegate,
+        !resolved.sandbox,
+        resolved.connectors !== undefined,
+        resolved.computers !== undefined,
+        resolved.mcp !== undefined,
+    ].filter(Boolean).length;
+    return limits === 0 ? "Full powers" : `${limits} limit${limits === 1 ? "" : "s"}`;
+};
+
 export const PersonaIdParamSchema = z.object({ id: entryId });
 /* Every persona, plus which of the accounts they name this sandbox is actually signed into. The second half is
  * what makes the list honest on a freshly cloned workspace: every card is present and most of them cannot act
@@ -3671,9 +3780,13 @@ export const AutomationSchema = z.object({
     prompt: z.string().min(1),
     // The Doorbell widget's settings — `webchat` listener automations only, ignored on every other trigger.
     webchat: WebchatConfigSchema.optional(),
-    // The tool names this automation's wake may call (AgentTurnSchema.allowedTools). The reason it exists: a
-    // webchat automation is driven by strangers, and an automation turn runs bypassPermissions by default — so
-    // the allowlist, not the prompt's wording, is what bounds what an injected instruction can reach.
+    /* NARROW THIS ONE JOB FURTHER than the persona it runs as — raw tool names, and the escape hatch under the
+     * shelves rather than the way anyone is expected to answer this question.
+     *
+     * The persona (`actsAs` below) is where a session's toolbox is decided now, because the answer is worth
+     * reusing: the same bounds apply to the chat, the workflow and the Doorbell that name the same card. This
+     * stays for the job that needs LESS than its persona allows — and only less, which is a rule the composer
+     * enforces rather than a convention: an edit here can never hand back a shelf the persona switched off. */
     allowedTools: z.array(z.string().min(1)).optional(),
     // Which provider adapter serves the wake; absent ⇒ claude. Same dispatch as a chat turn (AgentTurnSchema.agent).
     agent: AgentProviderSchema.optional(),

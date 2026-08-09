@@ -170,8 +170,9 @@ describe(`editing preserves fields outside the changed control`, () => {
                 conversationMessageMax: 8,
                 sessionTtlMinutes: 30,
             },
-            // Deliberately narrower than the new-Doorbell default: editing must not widen a security boundary.
+            // Deliberately narrower than its persona: editing must not widen a security boundary.
             allowedTools: [`Read`],
+            actsAs: `visitor`,
             account: `reliable-account`,
             holdForSeconds: 20,
             enabled: false,
@@ -179,5 +180,31 @@ describe(`editing preserves fields outside the changed control`, () => {
         const { load, build } = formState();
         load(automation);
         expect(build()).toEqual(automation);
+    });
+
+    /* A Doorbell is driven by a stranger with nobody watching, so it is the one automation that must never end
+     * up unbounded. Naming no persona means the full toolbox everywhere else in the product — here it is filled
+     * in with the read-only card instead. */
+    it(`gives a Doorbell that names no persona the read-only one`, () => {
+        const { form, build } = formState();
+        form.kind = `listener`;
+        form.provider = `webchat`;
+        form.id = `support`;
+        form.prompt = `Answer support questions.`;
+        form.origins = `https://example.com`;
+        expect(build().actsAs).toBe(`visitor`);
+    });
+
+    // ...and the owner's own choice stands. A Doorbell deliberately pointed at a card with more powers is a
+    // decision they made on a visible field, not something to quietly overwrite on every save.
+    it(`leaves a Doorbell's chosen persona alone`, () => {
+        const { form, build } = formState();
+        form.kind = `listener`;
+        form.provider = `webchat`;
+        form.id = `support`;
+        form.prompt = `Answer support questions.`;
+        form.origins = `https://example.com`;
+        form.actsAs = `support-desk`;
+        expect(build().actsAs).toBe(`support-desk`);
     });
 });
