@@ -137,17 +137,33 @@ export const folderState = (folder: MachineFolderRow): string | undefined => {
 export const folderTone = (state: string | undefined): `success` | `warning` | `neutral` =>
     state === `watching` ? `success` : state?.startsWith(`halted`) === true ? `warning` : `neutral`;
 
+/* WHO TOOK THE PORT, as a row on this same card.
+ *
+ * `heldBy` is the winning pairing's sandbox id — the same key every group here is built on — so the sandbox that
+ * beat this one is, almost always, a block the reader can already see. Resolving it turns the note from a fact
+ * into a destination: the holder's row is where its container's Stop button lives, which is the one gesture that
+ * actually frees the number. Undefined when the winner is not on this machine's report (a stale reading, a
+ * pairing since removed), and the note falls back to naming it in words. */
+export const portHolder = (groups: readonly MachineSandboxGroup[], port: MachinePortRow): MachineSandboxGroup | undefined =>
+    port.heldBy === undefined ? undefined : groups.find((group) => group.sandboxId === port.heldBy);
+
 /* WHY A PORT IS NOT ON LOCALHOST. Each state names a DIFFERENT remedy, which is the whole reason they are not
- * one "unavailable": a contested port is freed by unpairing a sandbox, a busy one by quitting whatever local
- * process holds it. Said as a sentence about localhost because the chip beside it no longer claims one — a port
- * that never made it is shown as a bare number, not as an address nobody can open. */
-export const portNote = (port: MachinePortRow): string | undefined => {
+ * one "unavailable": a contested port is freed by stopping or unpairing the sandbox that holds it, a busy one by
+ * quitting whatever local process does. Said as a sentence about localhost because the chip beside it no longer
+ * claims one — a port that never made it is shown as a bare number, not as an address nobody can open.
+ *
+ * NAMED THE WAY THE READER NAMES IT. `heldBy` is an id (`sandbox-0738cd6b5027-intentic-dev`), and printing it
+ * raw asked someone to recognise a string they have never typed; where the holder is a block on this card, its
+ * own title is the name on that block and on the switcher. The id survives as the fallback — a wrong-looking
+ * name is worse than an unfamiliar one. */
+export const portNote = (port: MachinePortRow, holder?: MachineSandboxGroup | undefined): string | undefined => {
     if (port.state === `mirrored`) {
         return undefined;
     }
-    return port.heldBy === undefined
-        ? `not on localhost — another program on this computer already has it`
-        : `not on localhost — ${port.heldBy} got there first`;
+    if (port.heldBy === undefined) {
+        return `not on localhost — another program on this computer already has it`;
+    }
+    return `not on localhost — ${holder?.title ?? port.heldBy} got there first`;
 };
 
 // Interpreters are the only commands whose real subject is their ARGUMENT: `node` on its own says nothing about

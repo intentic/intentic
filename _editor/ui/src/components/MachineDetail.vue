@@ -25,7 +25,7 @@
      Derivations live in machineDetail.ts, including the prop shapes: they are STRUCTURAL rather than the sandbox
      contract's own types (`@intentic/ui` carries no domain dependency) and a MachineReport satisfies them. -->
 <script setup lang="ts">
-import { computed } from "vue";
+import { computed, onBeforeUnmount, ref, useId } from "vue";
 import CopyButton from "./CopyButton.vue";
 import {
     folderState,
@@ -35,6 +35,7 @@ import {
     type MachineSandboxGroup,
     type MachineSandboxRow,
     type MachineWatcherState,
+    portHolder,
     portNote,
     sandboxGroups,
     shortCommand,
@@ -93,6 +94,36 @@ const blocked = (group: MachineSandboxGroup): MachinePortRow[] => group.ports.fi
  * stays (it is the session's own state, and this view exists to replace the CLI that prints it); only the states
  * worth looking at keep the pill. */
 const restingSync = (folder: MachineFolderRow): boolean => folderTone(folderState(folder)) === `success`;
+
+/* GOING TO WHOEVER TOOK THE PORT.
+ *
+ * The note names the sandbox that won; the row that names it again is somewhere above or below on this same
+ * card, and it is the row with the Stop button on it — so the note has a destination and, until now, no way to
+ * say so. This scrolls to that block and flashes it, which is the whole gesture: a card can hold four sandboxes
+ * and the eye has no idea which line to look for.
+ *
+ * Scoped by `uid` rather than by sandbox id alone because a page renders one of these per COMPUTER, and two
+ * machines pairing the same sandbox would otherwise both answer to the same element id — the first in the
+ * document wins, and the reader is scrolled to a different computer's copy of the row.
+ *
+ * The flash is a class the block wears for a beat, not a permanent selection: nothing was chosen, and a row left
+ * highlighted reads as state the reader now has to clear. */
+// Long enough to find the row after the scroll settles, short enough that it is over before it is furniture.
+const FLASH_MS = 1600;
+
+const uid = useId();
+const blockId = (group: MachineSandboxGroup): string => `${uid}-${group.sandboxId}`;
+const flashing = ref<string>();
+let flashTimer: ReturnType<typeof setTimeout> | undefined;
+
+const showHolder = (holder: MachineSandboxGroup): void => {
+    const id = blockId(holder);
+    document.getElementById(id)?.scrollIntoView({ behavior: `smooth`, block: `center` });
+    clearTimeout(flashTimer);
+    flashing.value = id;
+    flashTimer = setTimeout(() => (flashing.value = undefined), FLASH_MS);
+};
+onBeforeUnmount(() => clearTimeout(flashTimer));
 </script>
 
 <template>
@@ -125,7 +156,9 @@ const restingSync = (folder: MachineFolderRow): boolean => folderTone(folderStat
             <div
                 v-for="group in groups"
                 :key="group.sandboxId"
-                class="flex flex-col gap-2 border-t border-line py-3 first:border-t-0 first:pt-0 last:pb-0"
+                :id="blockId(group)"
+                class="flex flex-col gap-2 border-t border-line py-3 transition-colors duration-500 first:border-t-0 first:pt-0 last:pb-0"
+                :class="flashing === blockId(group) ? `bg-warning/10` : ``"
             >
                 <!-- WHICH SANDBOX THIS IS, and what can be done to it — one line, so a machine's list is read
                      down its names rather than down the boxes those names used to sit in. -->
@@ -226,12 +259,32 @@ const restingSync = (folder: MachineFolderRow): boolean => folderTone(folderStat
                                     {{ port.port }}
                                 </span>
                                 <p class="min-w-0 flex-1 text-xs text-muted">
-                                    {{ portNote(port) }}
+                                    {{ portNote(port, portHolder(groups, port)) }}
                                     <!-- What is listening on the sandbox side, named rather than quoted — the
                                          whole command line is on the hover, where its width costs nothing. -->
                                     <span v-if="shortCommand(port.command)" class="font-mono text-2xs text-subtle" :title="port.command">
                                         · {{ shortCommand(port.command) }}
                                     </span>
+                                    <!-- THE ONE THING THERE IS TO DO ABOUT IT. The sentence has always named the
+                                         winner and stopped there, which left a reader who wanted their port back
+                                         with a name and no idea it was a row on this very card — so the note
+                                         ended as a fact about the past. This is the link between the two: it goes
+                                         to the holder's block, where its Stop button is, and stopping it hands
+                                         the number back on the next sync tick.
+
+                                         Inline and underlined rather than a button, because it belongs to the
+                                         sentence: a button here would sit in the column of verbs that act on THIS
+                                         sandbox and read as one of them. Absent when the holder is not on this
+                                         report — there is nothing to scroll to, and a dead link is worse than the
+                                         sentence alone. -->
+                                    <button
+                                        v-if="portHolder(groups, port)"
+                                        type="button"
+                                        class="ml-1 rounded underline decoration-dotted underline-offset-2 transition-colors hover:text-content"
+                                        @click="showHolder(portHolder(groups, port)!)"
+                                    >
+                                        show it
+                                    </button>
                                 </p>
                             </div>
                         </div>

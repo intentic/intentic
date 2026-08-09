@@ -231,7 +231,9 @@ const browserTile = computed<AreaTile | undefined>(() => {
         to: `/browsers`,
         label: `Browsers`,
         icon: `desktop`,
-        ...(live > 0 ? { badge: { count: live, tooltip: `${live} open` } } : {}),
+        // `neutral`, because "two browsers are open" is an inventory and not a debt: the tile says what the turn
+        // has running, and nothing on the other end of it is waiting for the reader (viewBadge.ts).
+        ...(live > 0 ? { badge: { count: live, tone: `neutral` as const, tooltip: `${live} open` } } : {}),
     };
 });
 /* Subagents, on exactly the browsers' terms above: it appears when a turn starts an agent, and its badge counts
@@ -247,7 +249,8 @@ const subagentTile = computed<AreaTile | undefined>(() => {
         to: `/subagents`,
         label: `Subagents`,
         icon: `users`,
-        ...(live > 0 ? { badge: { count: live, tooltip: `${live} still working` } } : {}),
+        // Neutral for the browsers' reason: a subagent still working is this turn's own doing, not an errand.
+        ...(live > 0 ? { badge: { count: live, tone: `neutral` as const, tooltip: `${live} still working` } } : {}),
     };
 });
 // The live-runtime cluster below the divider — the same AreaTile shape and the same markup as the navigation

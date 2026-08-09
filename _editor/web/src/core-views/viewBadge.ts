@@ -22,8 +22,17 @@ import type { ViewBadge } from "@intentic/extension-api";
  * `*-fill` + `fill-content` is the pairing built for exactly this. Each scheme picks the fill and the label that
  * sits on it TOGETHER (danger-700 on white in light, danger-400 on surface-900 in dark) and those values carry a
  * WCAG AA contract when used solid — measured 6.64:1 light, 6.25:1 dark. A hand-picked `bg-danger text-white`
- * would not: the `danger` role token LIGHTENS in dark mode (red-400), leaving white text near 3:1. */
+ * would not: the `danger` role token LIGHTENS in dark mode (red-400), leaving white text near 3:1.
+ *
+ * `neutral` IS THE ONE THAT IS NOT A CLAIM AT ALL, and it is the newest for the reason the others needed it: an
+ * inventory ("docker is running", "one browser is open") was drawn in `info`, which is also what a debt wears, so
+ * the two were the same orange 1 in the same round pill. Somebody who followed the sandbox chip's "1 port
+ * couldn't be mirrored" into settings found the Status row wearing an identical 1, clicked it, and was told that
+ * docker is active — a badge that led away from its own subject. An inventory is TRUE MOST OF THE DAY, which is
+ * exactly the thing this file's opening rule says a badge must never be, so it gets ink that does not compete:
+ * the same wash the app's quiet tags use, readable but never the thing the eye lands on first. */
 const BADGE_TONE: Record<NonNullable<ViewBadge["tone"]>, string> = {
+    neutral: `bg-content/10 text-muted`,
     info: `bg-primary-600/15 text-link`,
     warning: `bg-warning/15 text-warning`,
     danger: `bg-danger-fill text-fill-content`,

@@ -53,8 +53,11 @@ const { capabilities } = useCapabilities();
  * collapsed chip, the sentences in the popover it opens — and the phone splits it the same way: the Menu TAB
  * carries the badge, and this page, which is what the tab opens, carries the rows. So the Sandbox row below
  * takes no badge of its own: on desktop the chip and its popover are never on screen together, here they
- * would be, and a chip restating the section right above it is the badge saying nothing twice. */
-const { items: sandboxAttention } = useSandboxAttention();
+ * would be, and a chip restating the section right above it is the badge saying nothing twice.
+ *
+ * Two sections for the popover's reason (sandboxAttention's `kind`): the tab's badge counts `needs`, so the
+ * notes below it must not be filed under a heading that says otherwise. */
+const { needs: sandboxAttention, notes: sandboxNotes } = useSandboxAttention();
 
 onMounted(() => {
     if (sandbox.sandboxes.value.length === 0) {
@@ -109,6 +112,25 @@ const logout = async (): Promise<void> => {
                 class="flex h-12 items-center gap-3 rounded-lg px-2 text-sm text-content transition-colors active:bg-overlay"
             >
                 <span class="flex h-8 w-8 shrink-0 items-center justify-center" :class="item.tone === 'warning' ? 'text-warning' : 'text-link'">
+                    <Icon :name="item.icon" class="text-base" />
+                </span>
+                <span class="min-w-0 flex-1 text-xs">{{ item.message }}</span>
+                <Icon name="chevron-right" class="shrink-0 text-xs text-subtle" />
+            </RouterLink>
+        </section>
+
+        <!-- What is simply true of the box — same rows, quieter ink, and a heading that asks for nothing. None of
+             these put the badge on the tab that opened this page, so none of them may read as the reason it is
+             there. -->
+        <section v-if="sandboxNotes.length > 0" class="flex flex-col gap-1">
+            <h2 class="px-1 text-2xs font-semibold uppercase tracking-wide text-subtle">Worth knowing</h2>
+            <RouterLink
+                v-for="item in sandboxNotes"
+                :key="item.message"
+                :to="item.to"
+                class="flex h-12 items-center gap-3 rounded-lg px-2 text-sm text-muted transition-colors active:bg-overlay"
+            >
+                <span class="flex h-8 w-8 shrink-0 items-center justify-center text-subtle">
                     <Icon :name="item.icon" class="text-base" />
                 </span>
                 <span class="min-w-0 flex-1 text-xs">{{ item.message }}</span>

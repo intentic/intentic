@@ -42,10 +42,18 @@ export interface ViewBadge {
     // be sent" is the whole message, and a number beside it would be read in the unit `count` established —
     // so the amount goes in the tooltip and the glyph carries the kind. A badge with neither renders nothing.
     readonly mark?: string | undefined;
-    // `info` is the resting tone every core count uses (unread agents, uncommitted changes, live terminals);
-    // `warning` marks a risk the user is carrying (an exposed port); `danger` means something is BROKEN.
-    // Reach for danger sparingly — its whole value is that it is rare enough to still mean something.
-    readonly tone?: "info" | "warning" | "danger" | undefined;
+    // THE FIRST QUESTION A BADGE ANSWERS IS "DO I OWE THIS ANYTHING?", and until `neutral` existed there was no
+    // way to say no. A count that means "three things are alive in here" (open browsers, running services) was
+    // drawn exactly like one that means "three things are waiting on you" — same pill, same tint, same digit —
+    // so a reader who chased one and found an inventory learned that badges do not repay being chased. That is
+    // the failure this vocabulary exists to prevent, arriving through the door it left open.
+    //
+    // `neutral` is an INVENTORY: true most of the day, nothing owed, quiet ink. `info` is the resting tone for
+    // work the user can act on (unread agents, uncommitted changes); `warning` marks a risk they are carrying
+    // (an exposed port); `danger` means something is BROKEN — reach for it sparingly, its whole value is that it
+    // is rare enough to still mean something. Absent still means `info`, so a badge that says nothing about its
+    // tone is still assumed to be asking for something.
+    readonly tone?: "neutral" | "info" | "warning" | "danger" | undefined;
     // Say what happened and how much, not just the number the user can already see. The host renders it
     // AFTER the view's own name — "Agents · 3 need you" on the rail, the chip's text in the mobile menu — so
     // phrase it as the continuation of a label, not as a standalone sentence that repeats the view.

@@ -6,6 +6,7 @@ import { usePanels } from "../composables/extensions/usePanels";
 import { useRole } from "../composables/sandbox/useRole";
 import { useRunning } from "../composables/sandbox/useRunning";
 import { useSandbox } from "../composables/sandbox/useSandbox";
+import { useSyncHealth } from "../composables/sandbox/useComputers";
 import { type ActiveExtension, activationBadge, detectActivations } from "../core-views/registry";
 import ExtensionView from "../core-views/ExtensionView.vue";
 import HubLayout from "../hub/HubLayout.vue";
@@ -47,7 +48,7 @@ const CONFIGURATION: readonly HubTab[] = [
     { slug: `agent`, label: `Agent`, icon: `sparkles` },
     { slug: `extensions`, label: `Extensions`, icon: `sliders-h` },
 ];
-const REACH: readonly HubTab[] = [
+const reachRows = (contendedPorts: number): readonly HubTab[] => [
     { slug: `access`, label: `Access`, icon: `users` },
     /* Who this box IS when it acts outside — under Reach because that is the direction it points, and
      * deliberately not under Configuration beside `agent`. Those two rows are one letter apart in English and
@@ -56,16 +57,32 @@ const REACH: readonly HubTab[] = [
     { slug: `identities`, label: `Identities`, icon: `user` },
     // "Computers", not "Sync": a machine is the thing that has folders, ports and sandboxes on it, and the
     // enrollment this tab used to be named after is one property of one of them.
-    { slug: `computers`, label: `Computers`, icon: `desktop` },
+    {
+        slug: `computers`,
+        label: `Computers`,
+        icon: `desktop`,
+        badge: contendedPorts > 0 ? { count: contendedPorts, tone: `info` as const } : undefined,
+    },
 ];
-// Built per render rather than declared flat, because Status wears a live count and the other two do not.
+/* Built per render rather than declared flat, because two of these rows wear a live count and the third does not.
+ *
+ * BOTH COUNTS ARE TONED, and Status's is the reason the tone exists. It is an INVENTORY — how many services and
+ * dev servers are up — and it was drawn in the same pill as every badge in the app that means "you owe this
+ * something". Someone who saw "1 port couldn't be mirrored" on the sandbox chip came in here, found the one badge
+ * in the index sitting on Status, followed it, and was told that docker is active: a badge that answered a
+ * question nobody had asked, on the page they were sent to by a different one. Neutral ink settles it — the row
+ * still says how many things are alive, in ink that does not claim to be an errand.
+ *
+ * Computers carries the errand instead, because it is where the port is explained and where the sandbox holding
+ * it can be stopped. Info rather than warning: a contended port breaks nothing (the sandbox serves it fine, it
+ * just isn't on localhost), but it is the one row in this index that a reader is looking FOR. */
 const boxRows = (running: number): readonly HubTab[] => [
     { slug: `overview`, label: `Overview`, icon: `info-circle` },
-    { slug: `status`, label: `Status`, icon: `wave-pulse`, badge: running > 0 ? { count: running } : undefined },
+    { slug: `status`, label: `Status`, icon: `wave-pulse`, badge: running > 0 ? { count: running, tone: `neutral` } : undefined },
     { slug: `usage`, label: `Usage`, icon: `credit-card` },
 ];
 // Every built-in slug, derived from the rows themselves so adding a section cannot forget to guard its name.
-const BUILT_IN = new Set([...boxRows(0), ...CONFIGURATION, ...REACH].map((tab) => tab.slug));
+const BUILT_IN = new Set([...boxRows(0), ...CONFIGURATION, ...reachRows(0)].map((tab) => tab.slug));
 const DEFAULT = `overview`;
 
 const sandbox = useSandbox();
@@ -75,6 +92,9 @@ const sandbox = useSandbox();
  * the operator's reading). The daemon floors all of it regardless; this only keeps the index honest. */
 const { canShip, isOwner } = useRole();
 const { runningCount } = useRunning();
+// The one fact in this index that is looked FOR rather than looked at — the free /system/sync read the sandbox
+// chip already polls, so badging the row it belongs to costs no request.
+const { contendedPorts } = useSyncHealth();
 const { panels, isLoading } = usePanels();
 const { capabilities } = useCapabilities();
 
@@ -104,7 +124,7 @@ const groups = computed<readonly NavGroup<HubTab>[]>(() => [
         label: `Configuration`,
         items: CONFIGURATION.filter((tab) => (tab.slug !== `secrets` && tab.slug !== `agent`) || isOwner.value),
     },
-    { key: `reach`, label: `Reach`, items: REACH.filter((tab) => tab.slug !== `computers` || isOwner.value) },
+    { key: `reach`, label: `Reach`, items: reachRows(contendedPorts.value.length).filter((tab) => tab.slug !== `computers` || isOwner.value) },
     ...(contributed.value.length === 0 ? [] : [{ key: `contributed`, label: `Added by extensions`, items: contributed.value.map(contributedRow) }]),
 ]);
 </script>

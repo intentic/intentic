@@ -118,6 +118,16 @@ const NO_TERMINAL_HINT = `Not running in any of this sandbox's terminals — not
                         <b>Preview</b> makes one reachable in your browser through the sandbox's tunnel; a forwarded port stays public until you stop
                         it.
                     </span>
+                    <!-- WHICH PORTS THIS PAGE IS NOT ABOUT. Two different things are called "ports" here: sending
+                         one out to the public internet (this view) and mirroring one onto the localhost of the
+                         computer on your desk (Computers). Somebody whose dev server is missing from
+                         localhost:3000 reads the word in the index, arrives here, finds their port listed and
+                         apparently healthy, and leaves no wiser — the row was right, it was just answering a
+                         different question. One sentence is cheaper than the hunt. -->
+                    <span class="mt-2 block text-xs text-muted">
+                        Looking for a port on your own <b>localhost</b> instead? That is desktop sync mirroring it onto your machine — Computers says
+                        which ports made it, and which one another sandbox got to first.
+                    </span>
                 </InfoHint>
             </template>
 

@@ -8,8 +8,8 @@ import { useSyncHealth } from "./useComputers";
 import { useEnvironment } from "./useEnvironment";
 import { useSandboxVersion } from "./useSandboxVersion";
 
-/* WHAT THE ACTIVE SANDBOX NEEDS FROM ITS OWNER — one list, read by the rail's sandbox chip and the mobile
- * menu, so both say the same things in the same order.
+/* WHAT THE ACTIVE SANDBOX NEEDS FROM ITS OWNER, AND WHAT IS MERELY TRUE OF IT — one list, split by `kind`, read
+ * by the rail's sandbox chip and the mobile menu, so both say the same things in the same order.
  *
  * Two of these used to be full-width bars above every view, and a bar is the wrong instrument for any of them:
  * none is urgent enough to interrupt, each is a standing CONDITION rather than an event, and a bar carrying a
@@ -46,6 +46,19 @@ export interface SandboxAttentionItem {
     // `warning` is something the user is carrying that will bite (a half-applied capability, a failing deploy);
     // `info` is optional. Nothing here is ever `danger` — none of it means BROKEN, it means UNFINISHED.
     readonly tone: "warning" | "info";
+    /* WHETHER THIS IS A DEBT OR A FACT, which decides whether it may badge the chip.
+     *
+     * They shipped as one list under one heading that says "Needs you", and a `note` does not need you: the
+     * contended port is the sandbox and the machine both working correctly while one number went to whoever
+     * asked first. It cannot be dismissed, it cannot be resolved from the popover, and on a machine running two
+     * sandboxes it is true every day — so it sat on the chip as a "1" that never cleared, which is the exact
+     * shape that teaches a reader to stop looking at the chip. The next badge to appear there would have been
+     * the one that mattered.
+     *
+     * A note is not hidden; it is REHOUSED. It keeps its popover row, and the count moves to the hub row that
+     * explains it (SandboxHub's Computers), where the sentence and the verb both live. A badge belongs on the
+     * thing it is about, and the sandbox chip is about the whole box. */
+    readonly kind: "needs" | "note";
     // The whole fact, phrased to stand alone in a popover row AND to read as a clause when the chip's tooltip
     // joins several of them after the sandbox name. No trailing period, like every other badge tooltip.
     readonly message: string;
@@ -79,6 +92,7 @@ export function useSandboxAttention() {
                       tone: `warning` as const,
                       message: `No AI account connected — the agent can't run a turn`,
                       to: `/sandbox/agent`,
+                      kind: `needs` as const,
                   },
               ]
             : []),
@@ -90,6 +104,7 @@ export function useSandboxAttention() {
                       tone: `warning` as const,
                       message: `Rebuild needed to finish setting up your new capabilities`,
                       to: `/sandbox/environment`,
+                      kind: `needs` as const,
                   },
               ]),
         ...(proposal.value === undefined
@@ -100,6 +115,7 @@ export function useSandboxAttention() {
                       tone: `warning` as const,
                       message: `The agent proposed a change to your environment`,
                       to: `/sandbox/environment`,
+                      kind: `needs` as const,
                   },
               ]),
         /* A stopped sync agent outranks the secrets below it because of how it fails: silently, and while
@@ -113,6 +129,7 @@ export function useSandboxAttention() {
                       tone: `warning` as const,
                       message: `Desktop sync stopped on ${stoppedOn.value.join(`, `)} — its folder isn't syncing`,
                       to: `/sandbox/computers`,
+                      kind: `needs` as const,
                   },
               ]),
         ...(missingRequiredCount.value === 0
@@ -124,11 +141,21 @@ export function useSandboxAttention() {
                       message: `${missingRequiredCount.value} required secret${missingRequiredCount.value === 1 ? `` : `s`} missing`,
                       to: `/sandbox/secrets`,
                       count: missingRequiredCount.value,
+                      kind: `needs` as const,
                   },
               ]),
-        // Informational, not a fault: the sandbox is fine and so is the machine — one port just could not have the
-        // number it wanted. Worth saying because the symptom (a dev server missing from localhost) otherwise
-        // sends people looking for a process that does not exist.
+        /* THE TWO NOTES, and the line they sit under is the point of `kind`.
+         *
+         * A contended port is not a fault: the sandbox is fine and so is the machine — one number went to
+         * whichever sandbox asked for it first. Worth saying, because the symptom (a dev server missing from
+         * localhost) otherwise sends people hunting a process that does not exist. Not worth a counter on the
+         * chip, because on any machine running two sandboxes it is true every day, and it is the Computers row
+         * that carries the number now, beside the sentence and the button that free the port.
+         *
+         * A new version is the same shape from the other end: nothing is wrong until you want it, and the
+         * Overview card that offers the update is the whole errand. Neither of these is a debt; the difference
+         * between "the agent can't run a turn" and "there is a newer image" should not be a difference the
+         * reader has to click to find out. */
         ...(contendedPorts.value.length === 0
             ? []
             : [
@@ -138,6 +165,7 @@ export function useSandboxAttention() {
                       message: `${contendedPorts.value.length} port${contendedPorts.value.length === 1 ? `` : `s`} couldn't be mirrored to your localhost`,
                       to: `/sandbox/computers`,
                       count: contendedPorts.value.length,
+                      kind: `note` as const,
                   },
               ]),
         ...(updateAvailable.value
@@ -147,25 +175,37 @@ export function useSandboxAttention() {
                       tone: `info` as const,
                       message: `A new sandbox version is available`,
                       to: `/sandbox`,
+                      kind: `note` as const,
                   },
               ]
             : []),
     ]);
 
-    // ONE chip states ONE thing (see ViewBadge): the head item's shape — its count where the amount is the
-    // message, its glyph otherwise — and every sentence in the tooltip, which is the only place a second
-    // pending item is sayable without a second badge.
+    /* THE TWO LISTS THE SURFACES ACTUALLY RENDER. `items` stays the declaration — one place, worst-first — and
+     * these are the two halves of it, so a new item is filed by writing its `kind` rather than by remembering
+     * to add it to a second array. */
+    const needs = computed<readonly SandboxAttentionItem[]>(() => items.value.filter((item) => item.kind === `needs`));
+    const notes = computed<readonly SandboxAttentionItem[]>(() => items.value.filter((item) => item.kind === `note`));
+
+    /* ONE chip states ONE thing (see ViewBadge): the head DEBT's shape — its count where the amount is the
+     * message, its glyph otherwise — and every debt's sentence in the tooltip, which is the only place a second
+     * pending item is sayable without a second badge.
+     *
+     * Read off `needs`, not `items`, so the chip cannot wear a number for something nobody owes. The notes are
+     * still in the popover under it; they simply do not summon anyone to open it. */
     const badge = computed<ViewBadge | undefined>(() => {
-        const [head] = items.value;
+        const [head] = needs.value;
         if (head === undefined) {
             return undefined;
         }
         return {
             ...(head.count === undefined ? { mark: head.icon } : { count: head.count }),
             tone: head.tone,
-            tooltip: items.value.map((item) => item.message).join(` · `),
+            tooltip: needs.value.map((item) => item.message).join(` · `),
         };
     });
 
-    return { items, badge };
+    // No `items`: a surface that rendered the undivided list would be the heading bug back again, so the only way
+    // out of this module is by kind.
+    return { needs, notes, badge };
 }

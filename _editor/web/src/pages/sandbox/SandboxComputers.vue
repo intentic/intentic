@@ -1,6 +1,16 @@
 <script setup lang="ts">
 import type { Computer, MachineSandboxOp } from "@intentic/sandbox-contract";
-import { type MachineSandboxGroup, MachineDetail, Notice, type NoticeModel, RowGroup, StatusBadge, type StatusVariant, timeAgo } from "@intentic/ui";
+import {
+    type MachineSandboxGroup,
+    InfoHint,
+    MachineDetail,
+    Notice,
+    type NoticeModel,
+    RowGroup,
+    StatusBadge,
+    type StatusVariant,
+    timeAgo,
+} from "@intentic/ui";
 import { noticeFrom } from "../../composables/useAsyncAction";
 import Button from "primevue/button";
 import { computed, onMounted, ref } from "vue";
@@ -205,6 +215,23 @@ const act = async (computer: Computer, group: MachineSandboxGroup, op: MachineSa
 <template>
     <div class="flex flex-col gap-4">
         <RowGroup label="Computers" :count="sorted.length === 0 ? undefined : sorted.length">
+            <!-- The other half of the cross-link the Ports tab now carries. Both tabs are about "ports" and they
+                 mean opposite directions — out to the internet there, in to the machine on your desk here — so
+                 each says which it is rather than leaving the index's two similar words to be told apart by
+                 opening both. -->
+            <template #info>
+                <InfoHint label="Computers">
+                    <span class="block text-sm font-medium text-content">Your own machines</span>
+                    <span class="mt-1 block text-xs text-muted">
+                        Every computer paired with this sandbox — the folder it syncs, the ports it mirrors onto its own <b>localhost</b>, and the
+                        sandboxes running on it.
+                    </span>
+                    <span class="mt-2 block text-xs text-muted">
+                        A port that couldn't be mirrored is listed under the sandbox that wanted it, with the name of whichever sandbox got there
+                        first. Exposing a port to the public internet instead is the <b>Ports</b> tab.
+                    </span>
+                </InfoHint>
+            </template>
             <Notice v-if="computersNotice" :of="computersNotice" class="m-4" />
             <div v-else-if="sorted.length === 0" class="px-4 py-6 text-center text-xs text-muted">
                 No computer is paired with this sandbox yet. Enable desktop sync below to work on it from your own editor, or add a Linux/Windows PC

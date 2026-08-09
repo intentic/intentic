@@ -23,10 +23,14 @@ import { bashCommand, psCommand } from "../environments/scriptCommand";
 const sandbox = useSandbox();
 const router = useRouter();
 const route = useRoute();
-// Everything the sandbox needs from its owner (sandboxAttention): a corner badge on the chip, and one routed
-// row per item inside the popover. The hub behind them has no rail tile, so without this the only way to learn
-// a rebuild is pending would be to go asking — which is the hole the bars above the app used to plug.
-const { items: attention, badge: attentionBadge } = useSandboxAttention();
+/* Everything the sandbox needs from its owner (sandboxAttention): a corner badge on the chip, and one routed row
+ * per item inside the popover. The hub behind them has no rail tile, so without this the only way to learn a
+ * rebuild is pending would be to go asking — which is the hole the bars above the app used to plug.
+ *
+ * TWO SECTIONS, because only one of them is an errand. The badge counts `needs` alone, so it clears when the last
+ * one is done; `notes` ride along in the popover for the reader who opened it anyway, under a heading that does
+ * not claim they are waiting on anybody. */
+const { needs: attention, notes: attentionNotes, badge: attentionBadge } = useSandboxAttention();
 const { cmdOs } = useOsPreference();
 // ONE label for the whole control, badge included — the rail's tileLabel rule. A tooltip on the badge itself
 // would open a second box on top of this one (it is a descendant), and the badge is a glyph or a bare number,
@@ -230,6 +234,28 @@ const confirmRemove = async (): Promise<void> => {
                         <Icon :name="item.icon" class="text-xs" />
                     </span>
                     <span class="min-w-0 flex-1 text-content">{{ item.message }}</span>
+                    <Icon name="chevron-right" class="shrink-0 text-2xs text-subtle" />
+                </button>
+                <div class="my-1 border-t border-line"></div>
+            </template>
+
+            <!-- AND THE THINGS THAT ARE SIMPLY TRUE — a contended port, a newer image. Same rows, same
+                 destinations, under a heading that promises nothing: none of these brought the reader here (they
+                 do not badge the chip), so they are what is found on arrival rather than what was advertised.
+                 Second, because a debt that IS waiting must not be read past to get to them. -->
+            <template v-if="attentionNotes.length > 0">
+                <div class="px-2 py-1.5 text-2xs font-semibold uppercase tracking-wide text-subtle">Worth knowing</div>
+                <button
+                    v-for="item in attentionNotes"
+                    :key="item.message"
+                    type="button"
+                    class="flex items-center gap-2 rounded-md px-2 py-1 text-left text-xs transition-colors hover:bg-content/5"
+                    @click="openTab(item.to)"
+                >
+                    <span class="flex h-5 w-5 shrink-0 items-center justify-center text-subtle">
+                        <Icon :name="item.icon" class="text-xs" />
+                    </span>
+                    <span class="min-w-0 flex-1 text-muted">{{ item.message }}</span>
                     <Icon name="chevron-right" class="shrink-0 text-2xs text-subtle" />
                 </button>
                 <div class="my-1 border-t border-line"></div>
