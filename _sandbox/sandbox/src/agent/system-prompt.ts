@@ -114,14 +114,14 @@ export interface TurnPromptInput {
     // Keep the system prefix byte-stable across the session by moving the note into the user message.
     readonly stableSystemPrompt: boolean;
     readonly terseOutput: boolean;
-    /* Which face this turn is wearing, when it is wearing one (identities/identities.ts identityNote).
+    /* Which persona this turn is wearing, when it is wearing one (personas/personas.ts personaNote).
      *
      * It rides the SYSTEM append rather than the user message, unlike the delegation note above, and it may do so
-     * even under stableSystemPrompt: an identity does not change from turn to turn within a session — changing it
+     * even under stableSystemPrompt: a persona does not change from turn to turn within a session — changing it
      * is a deliberate act that mints a different prefix anyway — so it costs the prompt cache nothing. A custom
      * system prompt still drops it, like everything else the daemon would have appended; that is the owner
      * saying they will do their own instructing, and the tool gate holds regardless of what any prose says. */
-    readonly identityNote?: string;
+    readonly personaNote?: string;
 }
 
 export interface TurnPromptPlacement {
@@ -142,7 +142,7 @@ export const turnPromptPlacement = ({
     note,
     stableSystemPrompt,
     terseOutput,
-    identityNote,
+    personaNote,
 }: TurnPromptInput): TurnPromptPlacement => {
     // Only "custom" replaces. Intentic's prompt is a BASE like Claude's preset — the daemon still appends to it,
     // which is what keeps the chat's cards working on the default setting.
@@ -157,7 +157,7 @@ export const turnPromptPlacement = ({
               ...(terseOutput ? [TERSE_NOTE] : []),
               // Last, so it sits closest to the turn it governs — and after the terse steer, which must not be
               // the final word when the turn is about to act as somebody in public.
-              ...(identityNote === undefined ? [] : [identityNote]),
+              ...(personaNote === undefined ? [] : [personaNote]),
           ].join("\n\n");
     return {
         ...(replacing ? { systemPrompt } : {}),

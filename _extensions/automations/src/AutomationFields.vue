@@ -48,27 +48,27 @@ const {
     originsError,
 } = props.state;
 
-/* THE FACES THIS SANDBOX CAN WEAR, for the "Acts as" picker below. Read here rather than passed in because it
- * is the same list for every automation and changes only when the owner edits their cast.
+/* THE PERSONAS THIS SANDBOX CAN WEAR, for the "Acts as" picker below. Read here rather than passed in because
+ * it is the same list for every automation and changes only when the owner edits it.
  *
  * Each option also carries whether its accounts are actually signed in, because the honest failure this picker
  * has to make visible is a card that exists and cannot act — the ordinary state of a workspace someone has just
- * cloned, where every face is one login short of working. */
-const identities = useQuery({
-    queryKey: host().sandbox.key(`identities`),
-    queryFn: () => host().sandbox.rpc.identities.list(),
+ * cloned, where every persona is one login short of working. */
+const personaList = useQuery({
+    queryKey: host().sandbox.key(`personas`),
+    queryFn: () => host().sandbox.rpc.personas.list(),
     enabled: computed(() => host().sandbox.reachable()),
 });
-const faces = computed(() =>
-    (identities.data.value?.identities ?? []).map((identity) => ({
-        id: identity.id,
-        label: identity.label ?? identity.id,
+const personas = computed(() =>
+    (personaList.data.value?.personas ?? []).map((persona) => ({
+        id: persona.id,
+        label: persona.label ?? persona.id,
         // Signed in enough to act at all. A card naming three accounts with one connected is still usable —
-        // the turn simply reaches the one — so this marks only the face that can reach nothing whatsoever.
-        ready: identity.capabilities.some((capability) => (identities.data.value?.connected ?? []).includes(capability)),
+        // the turn simply reaches the one — so this marks only the persona that can reach nothing whatsoever.
+        ready: persona.capabilities.some((capability) => (personaList.data.value?.connected ?? []).includes(capability)),
     })),
 );
-const actsAsLabel = computed(() => faces.value.find((face) => face.id === form.actsAs));
+const actsAsLabel = computed(() => personas.value.find((persona) => persona.id === form.actsAs));
 
 // A CI trigger's delivery path — whether this will fire instantly, be polled, or never fire at all. Only
 // fetched while a CI trigger is on screen. See useCiDelivery.
@@ -762,8 +762,8 @@ const setProvider = (provider: string): void => {
                     <label class="ui-field-label" for="automation-acts-as">Acts as</label>
                     <select id="automation-acts-as" v-model="form.actsAs" :class="cmp.input()">
                         <option value="">No account — this automation can't post anywhere</option>
-                        <option v-for="face in faces" :key="face.id" :value="face.id">
-                            {{ face.label }}{{ face.ready ? `` : ` (not signed in yet)` }}
+                        <option v-for="persona in personas" :key="persona.id" :value="persona.id">
+                            {{ persona.label }}{{ persona.ready ? `` : ` (not signed in yet)` }}
                         </option>
                         <!-- A pin whose card is gone still has to be VISIBLE in the control, or the select
                              renders blank and reads as "no account" — which is the one other thing it could
@@ -773,19 +773,19 @@ const setProvider = (provider: string): void => {
                         </option>
                     </select>
                     <!-- The four states this picker can be in, most specific first. The orphan case is third
-                         rather than folded into "not signed in": a pin to a face that no longer exists is read
-                         by the turn as NO accounts, and telling someone to go finish a login for a card that
-                         isn't there would send them looking for something they deleted. -->
-                    <p v-if="faces.length === 0" class="text-xs text-muted">
-                        You haven't set up any faces yet, so this wake can work but not speak.
-                        <button type="button" :class="cmp.linkButton('inline')" @click="host().navigate(`/sandbox/identities`)">Set one up</button>
+                         rather than folded into "not signed in": a pin to a persona that no longer exists is
+                         read by the turn as NO accounts, and telling someone to go finish a login for a card
+                         that isn't there would send them looking for something they deleted. -->
+                    <p v-if="personas.length === 0" class="text-xs text-muted">
+                        You haven't set up any personas yet, so this wake can work but not speak.
+                        <button type="button" :class="cmp.linkButton('inline')" @click="host().navigate(`/sandbox/personas`)">Set one up</button>
                     </p>
                     <p v-else-if="form.actsAs === ``" class="text-xs text-muted">
                         This wake reaches none of your connected accounts — it can read and work, but it cannot post, reply or send as anyone. Nobody
                         is watching an automation, so it only gets a voice when you name one.
                     </p>
                     <p v-else-if="actsAsLabel === undefined" class="text-xs text-warning">
-                        This is pinned to a face that no longer exists, so it reaches no accounts at all. Pick another one.
+                        This is pinned to a persona that no longer exists, so it reaches no accounts at all. Pick another one.
                     </p>
                     <p v-else-if="!actsAsLabel.ready" class="text-xs text-warning">
                         {{ actsAsLabel.label }} isn't signed in yet, so this wake still can't post. Finish its login under Capabilities first.

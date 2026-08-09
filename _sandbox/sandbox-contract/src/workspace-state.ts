@@ -73,17 +73,17 @@ const STATE_FILES = [
      * suggestions they had already dismissed. Holds no credential: it is a card name and a file path. */
     { path: ".intentic/capability-dismissals.json", invalidates: ["capabilities"], portability: "carry" },
 
-    /* The named faces this sandbox shows the outside world — which connected accounts each one speaks for, how it
-     * sounds, whether it may publish (schemas.ts IdentitySchema). It invalidates `capabilities` as well as its
-     * own key because a card and the accounts it names are read together everywhere they are shown: connect a
-     * second Reddit and the identity list has a new candidate; remove one and a card is left pointing at nothing.
+    /* The named personas this sandbox shows the outside world — which connected accounts each one speaks for,
+     * how it sounds, whether it may publish (schemas.ts PersonaSchema). It invalidates `capabilities` as well as
+     * its own key because a card and the accounts it names are read together everywhere they are shown: connect
+     * a second Reddit and the persona list has a new candidate; remove one and a card points at nothing.
      *
      * It is `carry`, and that is the whole design rather than an oversight — a card is a NAME and a list of ids,
      * never a credential, so it travels to a new sandbox in full while the logins it refers to stay behind. What
      * arrives is a workspace that already knows it has a work-reddit and a studio-x, both visibly unconnected,
      * each waiting for one sign-in. This is also the ONE file under .intentic that the root repo tracks (see
-     * identities/identities-store.ts for the exclude carve-out and why it is safe here and nowhere else). */
-    { path: ".intentic/identities.json", invalidates: ["identities", "capabilities"], portability: "carry" },
+     * personas/personas-store.ts for the exclude carve-out and why it is safe here and nowhere else). */
+    { path: ".intentic/personas.json", invalidates: ["personas", "capabilities"], portability: "carry" },
 
     /* The overlay Dockerfile, four files that a single `.intentic/environment.` prefix used to cover. They are
      * split here because they answer PORTABILITY differently while answering invalidation identically, and the

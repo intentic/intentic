@@ -46,9 +46,9 @@ const servicesWith = (overrides: Partial<Services> = {}): Services =>
         // The dependency probe runs for every runtime now, so every arm reaches it — see honoured().
         processes: unstubbed<Services["processes"]>("processes", { running: () => false }),
         capabilities: unstubbed<Services["capabilities"]>("capabilities", { list: async () => [] }),
-        // Read on every turn, not only a pinned one: an unattended wake that named no identity is exactly the
+        // Read on every turn, not only a pinned one: an unattended wake that named no persona is exactly the
         // case whose answer must be "no accounts", so the read cannot be conditional on there being one.
-        identities: unstubbed<Services["identities"]>("identities", { list: async () => [] }),
+        personas: unstubbed<Services["personas"]>("personas", { list: async () => [] }),
         // A measurement seam, not a behavioural one — the planning steps file their own spans so a slow turn
         // names the step rather than the phase. Pass the work through and time nothing.
         perf: unstubbed<Services["perf"]>("perf", { track: (_op, _fields, run) => run() }),

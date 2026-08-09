@@ -95,11 +95,11 @@ export const rootExcludes = (repoIds: readonly string[]): string[] => [
      * keeps every one of them ignored — including any file added under here later, which is what makes the
      * carve-out safe to leave standing — while the parent stays walkable.
      *
-     * identities.json is the exception because it is the only thing in here that is neither a manifest of this
-     * sandbox's machinery nor a secret: it is the owner's cast of named faces, and it belongs in review and in
-     * `git log` alongside the workspace's instructions (identities/identities-store.ts says why at length). */
+     * personas.json is the exception because it is the only thing in here that is neither a manifest of this
+     * sandbox's machinery nor a secret: it is the owner's named personas, and it belongs in review and in
+     * `git log` alongside the workspace's instructions (personas/personas-store.ts says why at length). */
     "/.intentic/*",
-    "!/.intentic/identities.json",
+    "!/.intentic/personas.json",
     `/${REFERENCE_DIR}/`,
     ...COMMON_EXCLUDES,
 ];

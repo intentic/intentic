@@ -51,7 +51,7 @@ export function useAutomationForm(sources: ComputedRef<readonly ListenerSource[]
         // The pinned provider account, by its daemon-minted id. Blank ⇒ absent ⇒ the provider's first account,
         // which is what every automation made before this field existed keeps doing.
         account: ``,
-        /* Which of the sandbox's named faces this wake acts as. Blank means something STRICTER than the account
+        /* Which of the sandbox's named personas this wake acts as. Blank means something STRICTER than the account
          * field above it, not looser: the daemon reads an unpinned unattended wake as reaching no logged-in
          * account at all, so an automation made before this field existed cannot post as anybody. */
         actsAs: ``,

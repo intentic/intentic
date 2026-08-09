@@ -85,9 +85,9 @@ export type EditorContext = z.infer<typeof EditorContextSchema>;
 // and by the workspace scope (WorkspaceScopeSchema), which names a conversation to read a file tree AS.
 export const ConversationIdSchema = z.string().regex(/^[a-zA-Z0-9][a-zA-Z0-9_-]{0,63}$/);
 
-// A manifest entry id (capabilities + automations + identities) — also the `mcp__<id>__…` server name for mcp
-// capabilities, so it's a safe identifier. Up here beside the other id primitives because a turn names an
-// identity by one (AgentTurnSchema.actsAs), hundreds of lines above the manifest section that consumes it.
+// A manifest entry id (capabilities + automations + personas) — also the `mcp__<id>__…` server name for mcp
+// capabilities, so it's a safe identifier. Up here beside the other id primitives because a turn names a
+// persona by one (AgentTurnSchema.actsAs), hundreds of lines above the manifest section that consumes it.
 const entryId = z
     .string()
     .min(1)
@@ -200,16 +200,16 @@ export const AgentTurnSchema = z
         harness: AgentHarnessSchema.optional(),
         // Which connected account of that provider serves the turn; absent = the provider's first account.
         account: z.string().optional(),
-        /* WHICH FACE THE TURN SHOWS THE OUTSIDE WORLD — an IdentitySchema id, deliberately NOT the `account`
+        /* WHICH PERSONA THE TURN SHOWS THE OUTSIDE WORLD — a PersonaSchema id, deliberately NOT the `account`
          * directly above it. The two words are one letter apart in meaning and a world apart in consequence:
          * `account` is which subscription PAYS for the turn, `actsAs` is whose name is on what the turn posts.
          * Naming both "account" is how someone eventually pins a nightly job to the right billing and the wrong
          * Reddit.
          *
          * Absent means opposite things either side of the "is anyone watching" line, which is the owner's chosen
-         * posture and the reason this is resolved in one place (turnIdentity): an ordinary chat with no identity
+         * posture and the reason this is resolved in one place (turnPersona): an ordinary chat with no persona
          * keeps every connected account, because a person is there to catch a mistake; an `unattended` turn with
-         * no identity gets NONE, because at 3am the prompt's wording is the only thing left and that is not
+         * no persona gets NONE, because at 3am the prompt's wording is the only thing left and that is not
          * enough to bet an unrepeatable post on. */
         actsAs: entryId.optional(),
         sessionId: z.string().optional(),
@@ -3075,55 +3075,55 @@ export const CapabilitySchema = z.discriminatedUnion("kind", [
 ]);
 export type Capability = z.infer<typeof CapabilitySchema>;
 
-/* A NAMED FACE THE SANDBOX SHOWS THE OUTSIDE WORLD — "work-reddit", "the studio account" — and the layer that
- * decides which connected accounts a given turn may act through.
+/* A NAMED PERSONA THE SANDBOX SHOWS THE OUTSIDE WORLD — "work-reddit", "the studio account" — and the layer
+ * that decides which connected accounts a given turn may act through.
  *
  * THE CARD AND THE KEYS ARE DELIBERATELY SEPARATE. This is the card: a name, the accounts it speaks for, how it
  * should sound, whether it may publish. It carries NO credential, which is what lets it be the one thing under
- * .intentic that is committed and reviewed like the workspace's instructions are (see identities-store.ts for
+ * .intentic that is committed and reviewed like the workspace's instructions are (see personas-store.ts for
  * the exclude carve-out that makes that true). The keys — the logged-in browser profile, its cookies, its
  * passkey — stay where they already are: private to the sandbox, never exported without an explicit opt-in. So a
- * cloned workspace arrives listing its identities, each visibly unconnected, waiting for one sign-in apiece.
+ * cloned workspace arrives listing its personas, each visibly unconnected, waiting for one sign-in apiece.
  *
  * WHAT IT IS NOT is a security boundary. A chat still reaches every connected account by default (that is the
  * owner's chosen posture — a chat has a human in the room), and an agent with a shell can reach a token whatever
  * this file says. What it prevents is the mistake this codebase already names as the one that cannot be undone:
  * a post from the wrong account. Where nobody is watching — an unattended wake — it is a real fence, because
- * there the resolver's default is NOTHING rather than everything (see turnIdentity in identities.ts). */
-export const IdentitySchema = z.object({
+ * there the resolver's default is NOTHING rather than everything (see turnPersona in personas.ts). */
+export const PersonaSchema = z.object({
     id: entryId,
     // What the owner calls it in the composer chip. Absent ⇒ surfaces read the id, which is already human-chosen.
     label: z.string().max(60).optional(),
-    /* The capability ids this identity acts THROUGH — the logged-in browser accounts (and, later, the credential
+    /* The capability ids this persona acts THROUGH — the logged-in browser accounts (and, later, the credential
      * connectors) that are its hands. Ids rather than platforms, because "two accounts of one site" is the whole
      * problem: `reddit-work` and `reddit-personal` are two capabilities and exactly one of them belongs here.
      *
      * An id naming a capability that isn't connected is not an error — it is a card describing an account this
      * sandbox has yet to sign into, which is precisely what a freshly cloned workspace looks like. */
     capabilities: z.array(entryId).max(50),
-    // Folded into the turn's guidance when this identity is the one acting — how this face writes, what it does
-    // and doesn't talk about. Optional: an identity that is purely about WHICH account needs no voice at all.
+    // Folded into the turn's guidance when this persona is the one acting — how it writes, what it does and
+    // doesn't talk about. Optional: a persona that is purely about WHICH account needs no voice at all.
     voice: z.string().max(4000).optional(),
-    /* Whether this face may publish on its own. "draft" routes anything outward through the approvals queue the
+    /* Whether this persona may publish on its own. "draft" routes anything outward through the approvals queue the
      * owner already reads instead of letting the turn post directly; absent ⇒ "publish", which is what every
      * account does today. Advisory in the same sense the rest of the card is: it shapes the turn's guidance and
      * the surfaces around it, and is not a substitute for the tool gate. */
     posture: z.enum(["publish", "draft"]).optional(),
-    /* Which workspace repos prefer this face, so a chat opened on a project starts with the right chip already
+    /* Which workspace repos prefer this persona, so a chat opened on a project starts with the right chip already
      * selected. A PREFERENCE, not a fence — the owner's chosen chat default is still "every account" — and it
      * lives on the card rather than in each project's own config so that one account named by three repos stays
      * one definition instead of three that drift. */
     repos: z.array(z.string().min(1)).max(50).optional(),
 });
-export type Identity = z.infer<typeof IdentitySchema>;
-export const IdentityIdParamSchema = z.object({ id: entryId });
-/* The cast, plus which of the accounts they name this sandbox is actually signed into. The second half is what
- * makes the list honest on a freshly cloned workspace: every card is present and most of them cannot act yet,
- * and a surface that showed only the cards would present a face that is one login away from working as though
- * it already did. Ids the manifest has no capability for at all are `connected: false` too — a card may name an
- * account nobody has added here. */
-export const IdentitiesListSchema = z.object({
-    identities: z.array(IdentitySchema),
+export type Persona = z.infer<typeof PersonaSchema>;
+export const PersonaIdParamSchema = z.object({ id: entryId });
+/* Every persona, plus which of the accounts they name this sandbox is actually signed into. The second half is
+ * what makes the list honest on a freshly cloned workspace: every card is present and most of them cannot act
+ * yet, and a surface that showed only the cards would present a persona that is one login away from working as
+ * though it already did. Ids the manifest has no capability for at all are `connected: false` too — a card may
+ * name an account nobody has added here. */
+export const PersonasListSchema = z.object({
+    personas: z.array(PersonaSchema),
     connected: z.array(z.string()),
 });
 

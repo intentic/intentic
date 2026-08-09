@@ -9,7 +9,7 @@
         "sandbox": [
             "GET /automations",
             "GET /extensions",
-            "GET /identities",
+            "GET /personas",
             "GET /ci/runs",
             "POST /automations",
             "POST /automations/*/enabled",
@@ -25,7 +25,7 @@
         "views": [{ "id": "automations", "label": "Automations", "surface": "rail" }],
         "files": [
             { "path": ".intentic/automations.json", "invalidates": ["automations"] },
-            { "path": ".intentic/identities.json", "invalidates": ["identities"] },
+            { "path": ".intentic/personas.json", "invalidates": ["personas"] },
             { "path": ".intentic/approvals/", "invalidates": ["automation-approvals"] }
         ]
     }

@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { HISTORY_ROOT, STATE_DIR, WORKSPACE_ROOT } from "@intentic/constants";
 
-import type { AgentEvent, Capability, Identity } from "@intentic/sandbox-contract";
+import type { AgentEvent, Capability, Persona } from "@intentic/sandbox-contract";
 import { capabilitiesOf, SandboxSettingsSchema, sandboxContract } from "@intentic/sandbox-contract";
 import { portSlotsFromToken } from "@intentic/sandbox-contract/tunnel-ids";
 import type { ControlScope } from "./auth/control-tokens.js";
@@ -27,7 +27,7 @@ import { createAuthConnections } from "./auth/connections.js";
 import type { AppEnv, OrpcContext } from "./context.js";
 import type { AutomationRecord, AutomationsStore } from "./automations/automations-store.js";
 import type { CapabilitiesStore } from "./capabilities/capabilities-store.js";
-import type { IdentitiesStore } from "./identities/identities-store.js";
+import type { PersonasStore } from "./personas/personas-store.js";
 import type { DismissalsStore, DismissedRecommendation } from "./capabilities/dismissals-store.js";
 import type { Services } from "./composition.js";
 import { createLogger } from "./logger.js";
@@ -98,19 +98,19 @@ export const memoryCapabilitiesStore = (initial: Capability[] = []): Capabilitie
     };
 };
 
-// An in-memory identities store — the sandbox's named faces, without the fs.
-export const memoryIdentitiesStore = (initial: Identity[] = []): IdentitiesStore => {
-    let identities = [...initial];
+// An in-memory personas store — the sandbox's named personas, without the fs.
+export const memoryPersonasStore = (initial: Persona[] = []): PersonasStore => {
+    let personas = [...initial];
     return {
-        list: async () => identities,
-        get: async (id) => identities.find((identity) => identity.id === id),
-        upsert: async (identity) => {
-            identities = [...identities.filter((existing) => existing.id !== identity.id), identity];
+        list: async () => personas,
+        get: async (id) => personas.find((persona) => persona.id === id),
+        upsert: async (persona) => {
+            personas = [...personas.filter((existing) => existing.id !== persona.id), persona];
         },
         remove: async (id) => {
-            const next = identities.filter((identity) => identity.id !== id);
-            const existed = next.length !== identities.length;
-            identities = next;
+            const next = personas.filter((persona) => persona.id !== id);
+            const existed = next.length !== personas.length;
+            personas = next;
             return existed;
         },
     };
@@ -365,11 +365,11 @@ export const services = (overrides: ServiceOverrides = {}): Services => {
         // Nothing declined by default: every route suite wants the catalog answering as it does on a sandbox
         // nobody has said no on yet.
         capabilityDismissals: memoryDismissalsStore(),
-        /* No faces by default, which is the state of a sandbox nobody has named one in. Note what that means for
+        /* No personas by default, which is the state of a sandbox nobody has named one in. Note what that means for
          * the suites here: an unattended turn reaches no logged-in account, because an unpinned wake is denied
-         * rather than waved through (identities/identities.ts). A suite that wants a wake to act as somebody
+         * rather than waved through (personas/personas.ts). A suite that wants a wake to act as somebody
          * builds the card AND the browser capability behind it. */
-        identities: memoryIdentitiesStore(),
+        personas: memoryPersonasStore(),
         automations: memoryAutomationsStore(),
         // Empty approvals queue: agents.list projects it as `held`, and no suite here holds a wake.
         approvals: {

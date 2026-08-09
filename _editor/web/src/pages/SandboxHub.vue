@@ -16,7 +16,7 @@ import SandboxAgent from "./sandbox/SandboxAgent.vue";
 import SandboxComputers from "./sandbox/SandboxComputers.vue";
 import SandboxEnvironment from "./sandbox/SandboxEnvironment.vue";
 import SandboxExtensions from "./sandbox/SandboxExtensions.vue";
-import SandboxIdentities from "./sandbox/SandboxIdentities.vue";
+import SandboxPersonas from "./sandbox/SandboxPersonas.vue";
 import SandboxOverview from "./sandbox/SandboxOverview.vue";
 import SandboxSecrets from "./sandbox/SandboxSecrets.vue";
 import SandboxStatus from "./sandbox/SandboxStatus.vue";
@@ -54,7 +54,7 @@ const reachRows = (contendedPorts: number): readonly HubTab[] => [
      * deliberately not under Configuration beside `agent`. Those two rows are one letter apart in English and
      * opposite in consequence (which subscription pays for a turn, versus whose name is on what it posts), and
      * neighbouring them is how someone eventually pins a nightly job to the right billing and the wrong Reddit. */
-    { slug: `identities`, label: `Identities`, icon: `user` },
+    { slug: `personas`, label: `Personas`, icon: `user` },
     // "Computers", not "Sync": a machine is the thing that has folders, ports and sandboxes on it, and the
     // enrollment this tab used to be named after is one property of one of them.
     {
@@ -145,7 +145,7 @@ const groups = computed<readonly NavGroup<HubTab>[]>(() => [
             <SandboxSecrets v-else-if="slug === `secrets`" />
             <SandboxEnvironment v-else-if="slug === `environment`" />
             <SandboxAccess v-else-if="slug === `access`" />
-            <SandboxIdentities v-else-if="slug === `identities`" />
+            <SandboxPersonas v-else-if="slug === `personas`" />
             <SandboxAgent v-else-if="slug === `agent`" />
             <SandboxExtensions v-else-if="slug === `extensions`" />
             <SandboxComputers v-else-if="slug === `computers`" />
