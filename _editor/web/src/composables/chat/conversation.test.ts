@@ -1602,56 +1602,6 @@ describe(`Conversation`, () => {
         expect(conversation.streaming.value).toBe(false);
     });
 
-    /* The replay/live boundary the head's `seq` names (see Conversation.replaying): what the run had already
-     * logged when this window attached is history being re-told, and only what is still standing past it is
-     * news. The plan preview's auto-open reads it — a replayed proposal the user answered long ago must not
-     * throw the preview back in front of them (useChat.test.ts holds that end of it). */
-    it(`marks the head's already-logged frames as replay and drops the mark at the boundary`, async () => {
-        const conversation = new Conversation(`c1`);
-        const marks: boolean[] = [];
-        sandboxRequestMock.mockImplementation(() => {
-            const body = new ReadableStream<Uint8Array>({
-                start(controller) {
-                    // Two frames logged before this attach, then one that arrives live.
-                    controller.enqueue(sseFrame(head({ prompt: `Continue`, seq: 2 })));
-                    controller.enqueue(sseFrame({ kind: `frame`, seq: 1, event: { kind: `delta`, text: `one ` } }));
-                    controller.enqueue(sseFrame({ kind: `frame`, seq: 2, event: { kind: `delta`, text: `two ` } }));
-                    controller.enqueue(sseFrame({ kind: `frame`, seq: 3, event: { kind: `delta`, text: `three` } }));
-                    controller.enqueue(sseFrame({ kind: `end` }));
-                    controller.close();
-                },
-            });
-            return Promise.resolve({ ok: true, body } as Response);
-        });
-        const stop = watch(conversation.replaying, (replaying) => marks.push(replaying), { flush: `sync` });
-
-        await expect(conversation.reattach()).resolves.toBe(true);
-        stop();
-
-        // Raised at the head and dropped once, on the frame carrying the boundary — the third frame is live, and
-        // a run that goes on streaming never re-enters replay.
-        expect(marks).toEqual([true, false]);
-        expect(conversation.messages.value.at(-1)).toMatchObject({ text: `one two three` });
-    });
-
-    it(`drops the replay mark when the stream dies before reaching the boundary`, async () => {
-        const conversation = new Conversation(`c1`);
-        sandboxRequestMock.mockImplementation(() =>
-            // A head promising three logged frames, one delivered, then the connection breaks — and every
-            // re-attach after it fails, so the follow gives up mid-replay.
-            Promise.resolve({
-                ok: true,
-                body: chunkStream([head({ seq: 3 }), { kind: `frame`, seq: 1, event: { kind: `delta`, text: `one` } }], `error`),
-            } as Response),
-        );
-
-        await conversation.reattach();
-
-        // Left marked, the conversation would read as "still re-telling history" forever, and a plan it parks
-        // on later would never surface.
-        expect(conversation.replaying.value).toBe(false);
-    });
-
     /* The transcript-loss bug: reattach appends the running turn's prompt bubble to whatever the transcript
      * holds. A reload that lands mid-turn used to attach before the history was in place, so the chat came back
      * showing only the message being answered — and the settle then persisted that stub over the local mirror.

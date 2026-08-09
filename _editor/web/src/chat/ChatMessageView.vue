@@ -40,8 +40,7 @@ const props = defineProps<{
     folded?: readonly ChatMessage[];
 }>();
 
-const { conversation, decidePlan, answerQuestion, cancelQuestion, decidePermission, declineBrowserHelp, openPlanPreview, awaitingDecision } =
-    usePaneView();
+const { conversation, decidePlan, answerQuestion, cancelQuestion, decidePermission, declineBrowserHelp, awaitingDecision } = usePaneView();
 
 // The browser-help card's one real action leads AWAY from the chat: the live stage (and "hand back") are on
 // /browsers, so the primary button is a navigation, not a decision — the card resolves from over there.
@@ -753,15 +752,6 @@ const attachmentsAside = computed(
                     <span v-if="message.plan.status === 'approved'" class="text-2xs font-medium text-success">✓ Approved</span>
                     <span v-else-if="message.plan.status === 'rejected'" class="text-2xs font-medium text-muted">✕ Kept planning</span>
                     <span v-else-if="message.plan.status === 'cancelled'" class="text-2xs font-medium text-muted">✕ Stopped</span>
-                    <button
-                        type="button"
-                        class="shrink-0 rounded p-1 text-subtle transition-colors hover:bg-overlay hover:text-content"
-                        v-tooltip.bottom="'Open in main view'"
-                        aria-label="Open plan in main view"
-                        @click="openPlanPreview(message.plan)"
-                    >
-                        <Icon name="window-maximize" class="text-xs" />
-                    </button>
                 </div>
                 <div class="md-prose chat-markdown chat-markdown-compact px-3.5 py-3" v-html="plan.settled"></div>
                 <div v-if="message.plan.status === 'pending'" class="flex flex-wrap items-center gap-2 border-t border-line px-3.5 py-2.5">

@@ -92,7 +92,6 @@ vi.mock("../composables/chat/useChat", async () => {
             answerQuestion: vi.fn(),
             cancelQuestion: vi.fn(),
             decidePermission: vi.fn(),
-            openPlanPreview: vi.fn(),
             streaming: ref(true),
             awaitingDecision: ref(false),
         }),

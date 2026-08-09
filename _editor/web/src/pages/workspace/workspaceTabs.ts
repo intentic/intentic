@@ -1,11 +1,10 @@
 import type { DiffPayload } from "@intentic/extension-api";
 
-/* Open items in the Workspace editor area. A tab is a filesystem file (the path is its identity), a diff
- * (a synthetic id per diff source + file), or a chat plan preview (a synthetic id per conversation).
+/* Open items in the Workspace editor area. A tab is a filesystem file (the path is its identity) or a diff
+ * (a synthetic id per diff source + file).
  * useWorkspaceTabs owns the list + active id; FileTabs.vue renders it; the Changes and History panels emit
- * diff payloads that Workspace.vue turns into diff tabs; the chat pushes plan previews in via
- * useWorkspaceTabs.openPlan. A `directory` tab is a repository's management surface (DirectoryOperator); a
- * `health` tab is one repo's codebase-health report (CodebaseHealth.vue). A `document` tab is the open-ended
+ * diff payloads that Workspace.vue turns into diff tabs. A `directory` tab is a repository's management surface
+ * (DirectoryOperator); a `health` tab is one repo's codebase-health report (CodebaseHealth.vue). A `document` tab is the open-ended
  * one: whatever an extension's document provider has to say about a DIRECTORY — its architecture page, its git
  * history — rendered by that provider beside the code it explains rather than in a routed area away from it;
  * see core-views/documentRegistry.ts. */
@@ -23,7 +22,6 @@ export type WorkspaceTab =
     // what `key` + `scope` + `path` resolve to (see diffTabId), so keeping them beside it would be two spellings
     // of the same fact.
     | ({ readonly kind: "diff"; readonly id: string } & Omit<DiffPayload, "key" | "scope">)
-    | { readonly kind: "plan"; readonly id: string; readonly title: string; readonly text: string }
     | { readonly kind: "directory"; readonly id: string; readonly dir: string }
     | { readonly kind: "health"; readonly id: string; readonly repo: string }
     | {

@@ -23,10 +23,9 @@ import CodeView from "./CodeView.vue";
 
 // `line` = a content-search match landing here: open on (or switch to) the Source view so the hit is visible —
 // rendered prose has no stable line mapping.
-// `path` is the document's own workspace path, present when this is a FILE (absent for the chat's plan preview,
-// whose references are already workspace-root-relative). Its directory is what the file links inside resolve
-// against, so `docs/a.md` linking `./b.md` opens `docs/b.md`.
-const { source, path, line } = defineProps<{ source: string; path?: string; line?: LineJump }>();
+// `path` is the document's own workspace path. Its directory is what the file links inside resolve against, so
+// `docs/a.md` linking `./b.md` opens `docs/b.md`.
+const { source, path, line } = defineProps<{ source: string; path: string; line?: LineJump }>();
 
 /* Past this, prose is not what a reader gets — it is a frozen tab. Rendering is one synchronous pass of
  * marked → DOMPurify → the file-link walk → serialize → v-html, and then the browser lays out the result:
@@ -50,9 +49,7 @@ watch(
 // navigates like one, and it stays in the copy of the workspace the reader is already in (workspaceScope):
 // following a link out of an agent's README into the shared tree's ARCHITECTURE.md would be the same
 // same-path-different-file confusion one level down.
-const decorate = computed(() =>
-    fileLinkDecorator({ dir: path === undefined ? undefined : path.slice(0, path.lastIndexOf(`/`) + 1), agent: workspaceAgent.value }),
-);
+const decorate = computed(() => fileLinkDecorator({ dir: path.slice(0, path.lastIndexOf(`/`) + 1), agent: workspaceAgent.value }));
 </script>
 
 <template>

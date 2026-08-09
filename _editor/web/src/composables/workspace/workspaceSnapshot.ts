@@ -56,13 +56,8 @@ const tabsKey = (sandboxId: string): string => `intentic.workspaceTabs.${sandbox
  * and what it shows is a snapshot of a git/snapshot state that the agent has probably moved on from by the
  * next page load — a restored diff would quietly display a comparison that is no longer true. The Changes and
  * Checkpoints panels re-open a live one in a click. Every other kind restores from identity alone (a path, a
- * dir, a repo) or, for a plan, from the small markdown it already carries. */
+ * dir, or a repo). */
 export type StoredWorkspaceTab = Exclude<WorkspaceTab, { kind: "diff" }>;
-
-// A plan preview past this size is dropped rather than truncated: half a plan restored as if it were whole is
-// worse than a tab the user re-opens from the chat message that proposed it — and one oversized blob must not
-// cost them the rest of the strip when the write hits the quota.
-const MAX_PLAN_TEXT = 64_000;
 
 export interface WorkspaceTabStrip {
     // Which tab is focused, or null — a legitimate state, not a missing value: closing the last tab leaves the
@@ -84,7 +79,6 @@ const StoredTabSchema: z.ZodType<StoredWorkspaceTab> = z.discriminatedUnion(`kin
      * extensions activate after this is read, and one that has since been switched off should still leave the
      * tab where the user left it — it renders its own "no longer available" rather than vanishing silently. */
     z.object({ kind: z.literal(`document`), id: named, extension: named, provider: named, path: z.string(), title: named, icon: named }),
-    z.object({ kind: z.literal(`plan`), id: named, title: named, text: named.max(MAX_PLAN_TEXT) }),
 ]);
 
 // Parse one stored blob into a coherent strip: readable tabs only (an unreadable one is skipped rather than

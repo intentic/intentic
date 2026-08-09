@@ -1,11 +1,8 @@
 import { STATE_DIR } from "@intentic/constants";
-import type { AgentEvent } from "@intentic/sandbox-contract";
 import { nextTick } from "vue";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("../sandbox/sandboxClient", () => ({ sandboxRequest: vi.fn(), sandboxJson: vi.fn() }));
-// The real router pulls the auth/environment chain, which needs window.env; the plan-preview watch only pushes.
-vi.mock("../../router", () => ({ router: { push: vi.fn() } }));
 // Same window.env chain via analytics; send() only fires a milestone event through track.
 vi.mock("../analytics", () => ({ track: vi.fn() }));
 // Same window.env chain via useApi; the tab persistence only reads activeSandboxId + reachable.
@@ -67,7 +64,6 @@ const mockConnections = (connections: { subscriptions?: Subscriptions; accounts?
 const { useSandbox } = await import("../sandbox/useSandbox");
 const { setDaemonRoutes } = await import("../sandbox/useDaemonRoutes");
 const { hydrateOnce, loadAccountStatus, openAgentConversation, resetChat, useChat } = await import("./useChat");
-const { useWorkspaceTabs } = await import("../workspace/useWorkspaceTabs");
 const { usageStatusByAccount } = await import("./usageStatus");
 
 beforeEach(() => {
@@ -936,84 +932,6 @@ describe(`effort/thinking pairing`, () => {
         chat.effort.value = `max`;
         chat.thinking.value = true;
         expect(chat.effort.value).toBe(`max`);
-    });
-});
-
-/* THE PLAN PREVIEW'S AUTO-OPEN, and the one thing it must not react to: an attach stream's REPLAY.
- *
- * A turn executes as a detached run daemon-side and every window renders it by ATTACHING, which replays the
- * run's frame log from the client's cursor before following live. So the frames that proposed a plan the user
- * approved half an hour ago arrive again on every attach — a reload, a redeploy, a second window, the
- * usage-limit probe — and the card is `pending` for the instant between the replayed `plan` frame and the
- * replayed `resolved` frame that freezes it. Reacting to that instant re-opened the preview and pushed the
- * router to the Workspace over whatever the user had moved on to, once per attach.
- *
- * The head's `seq` is the daemon's replay/live boundary: only a plan STILL pending once the stream reaches it
- * is genuinely waiting on someone. */
-describe(`the plan preview's auto-open`, () => {
-    const encoder = new TextEncoder();
-    const sseFrame = (payload: unknown): Uint8Array => encoder.encode(`data: ${JSON.stringify(payload)}\n\n`);
-
-    // Serve /agent/attach the way the daemon does: a head carrying the log length at attach time (everything up
-    // to it is replay), the run's frames stamped from 1, then `end`.
-    const attachStream = (events: AgentEvent[], replayed = events.length): void => {
-        sandboxRequestMock.mockImplementation((path: string) => {
-            if (path !== `/agent/attach`) {
-                return Promise.resolve({ ok: false, status: 404, json: () => Promise.resolve({}) } as Response);
-            }
-            const body = new ReadableStream<Uint8Array>({
-                start(controller) {
-                    controller.enqueue(sseFrame({ kind: `attached`, run: `r1`, prompt: `refactor the hotspots`, startedAt: 0, seq: replayed }));
-                    events.forEach((event, index) => controller.enqueue(sseFrame({ kind: `frame`, seq: index + 1, event })));
-                    controller.enqueue(sseFrame({ kind: `end` }));
-                    controller.close();
-                },
-            });
-            return Promise.resolve({ ok: true, body } as Response);
-        });
-    };
-
-    const planTabs = (): { title?: string }[] => useWorkspaceTabs().tabs.value.filter((tab) => tab.kind === `plan`) as { title?: string }[];
-
-    beforeEach(() => {
-        storage.clear();
-        resetChat();
-        useWorkspaceTabs().tabs.value = [];
-    });
-
-    it(`leaves a decided plan where it is — a replay re-telling an approved plan must not re-open the preview`, async () => {
-        const conversation = useChat().active.value;
-        attachStream([
-            { kind: `plan`, requestId: `p1`, text: `# Refactor the hotspots\n\nPhase 1 — conversation.ts` },
-            { kind: `resolved`, requestId: `p1`, reply: { kind: `plan`, requestId: `p1`, approve: true } },
-        ]);
-
-        await conversation.reattach();
-        await nextTick();
-
-        expect(conversation.messages.value.find((message) => message.plan !== undefined)?.plan?.status).toBe(`approved`);
-        expect(planTabs()).toHaveLength(0);
-    });
-
-    it(`opens the preview for a plan the replay leaves pending — the reload lands on an agent still waiting`, async () => {
-        const conversation = useChat().active.value;
-        attachStream([{ kind: `plan`, requestId: `p2`, text: `# Ship the thing\n\nStep 1` }]);
-
-        await conversation.reattach();
-        await nextTick();
-
-        expect(planTabs()).toMatchObject([{ title: `Ship the thing` }]);
-    });
-
-    it(`opens the preview for a plan that arrives live`, async () => {
-        const conversation = useChat().active.value;
-        // Nothing logged at attach time, so every frame that follows is live.
-        attachStream([{ kind: `plan`, requestId: `p3`, text: `# Rename the thing\n\nStep 1` }], 0);
-
-        await conversation.reattach();
-        await nextTick();
-
-        expect(planTabs()).toMatchObject([{ title: `Rename the thing` }]);
     });
 });
 

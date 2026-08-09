@@ -86,15 +86,6 @@ export class Conversation {
     // transcript settles its text instead of typing it.
     readonly watched = this.transcript.watched;
     readonly streaming = ref(false);
-    /* True while the attached stream is still re-telling frames that PREDATE this attach (see followRun). The
-     * transcript is rebuilt from that frame log, so a card the user answered long ago passes back through
-     * `pending` on its way to the answer that froze it: a run this window is joining (a reload, a redeploy, a
-     * second window, a probe) re-tells the whole story.
-     *
-     * Rendering follows the frames as they land — that flicker is the transcript being drawn. Anything that
-     * ACTS on what a frame says (the plan preview's auto-open) waits for this to drop, because a replayed
-     * proposal is not a proposal: only what is still pending at the boundary is waiting on the user. */
-    readonly replaying = ref(false);
     readonly error = ref<string | null>(null);
     // True while a daemon read that should produce this conversation's transcript is in flight and nothing is
     // painted meanwhile — a history open, or a restored tab whose local mirror came up empty. The panel shows
@@ -320,12 +311,10 @@ export class Conversation {
         persist: () => this.persist(),
     });
 
-    // What a followed run writes into: this conversation's replay flag and its buffered transcript. The turn a
-    // stream renders under is the one varying part, so each call adds its own `ensureTurn`.
+    // What a followed run writes into. The turn a stream renders under is the one varying part, so each call
+    // adds its own `ensureTurn`.
     private readonly sink = {
-        replaying: this.replaying,
         frame: (event: AgentEvent, turn: TurnContext): void => this.transcript.push(event, turn),
-        catchUp: (): void => this.transcript.catchUp(),
     };
 
     // The one unsent "switched" divider notice, upserted/removed as the user toggles provider/account and made
@@ -832,9 +821,6 @@ export class Conversation {
         this.streaming.value = false;
         // An in-turn retry belongs to the turn that was retrying. Whatever it settled as, the wait is over.
         this.providerRetry.value = undefined;
-        // Nothing is streaming here, so nothing is replay — a stream that died mid-replay must not leave the
-        // conversation permanently marked as re-telling history.
-        this.replaying.value = false;
         this.turnStartedAt.value = undefined;
         this.failures.armRenewalProbe();
         this.persist();

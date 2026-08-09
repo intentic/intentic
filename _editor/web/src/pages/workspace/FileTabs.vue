@@ -6,12 +6,12 @@ import { ChangeStatusMark, explorerColorClass, iconForEntry } from "@intentic/ui
 import { type WorkspaceTab } from "./workspaceTabs";
 import { basename } from "@intentic/ui/path";
 
-/* The open-item tab strip (VSCode-style): one pill per open file, snapshot diff, or plan preview.
+/* The open-item tab strip (VSCode-style): one pill per open file, snapshot diff, or generated workspace surface.
  * Presentational — selection/close are emitted up to Workspace.vue by tab id, which drives the tab list +
  * active id (useWorkspaceTabs), and embeds this strip in its tab row (which provides the bar's
  * border/background). A file tab shows its type icon, basename, and a close ×; a dirty file shows a dot in
- * the close slot (→ × on hover). A diff tab shows its status letter + basename; a plan tab shows the plan
- * icon + its title; neither is ever dirty. The one tab in the preview slot is drawn italic and promoted out of
+ * the close slot (→ × on hover). A diff tab shows its status letter + basename and is never dirty. The one tab
+ * in the preview slot is drawn italic and promoted out of
  * it by a double-click, exactly as VSCode does. */
 
 // `preview` is the one transient tab, if any (see OpenMode): drawn italic, like VSCode's, because it is going
@@ -33,9 +33,6 @@ const { explorerStyle } = useExplorerStyle();
 const fileIcon = (path: string): IconName => iconForEntry(basename(path), `file`);
 
 const tabLabel = (tab: WorkspaceTab): string => {
-    if (tab.kind === `plan`) {
-        return tab.title;
-    }
     if (tab.kind === `directory`) {
         return basename(tab.dir);
     }
@@ -47,9 +44,6 @@ const tabLabel = (tab: WorkspaceTab): string => {
     return tab.kind === `health` ? basename(tab.repo) : basename(tab.path);
 };
 const tabSubject = (tab: WorkspaceTab): string => {
-    if (tab.kind === `plan`) {
-        return tab.title;
-    }
     if (tab.kind === `directory`) {
         return `${tab.dir} (management)`;
     }
@@ -201,7 +195,6 @@ watch(
                     class="text-2xs"
                     :class="explorerColorClass(explorerStyle, basename(tab.path), 'file', false)"
                 />
-                <Icon name="list-check" v-else-if="tab.kind === 'plan'" class="text-2xs text-link" />
                 <Icon name="cog" v-else-if="tab.kind === 'directory'" class="text-2xs text-link" />
                 <Icon name="wave-pulse" v-else-if="tab.kind === 'health'" class="text-2xs text-link" />
                 <!-- The provider's own glyph, an open string like every extension-supplied icon (a bundle may name

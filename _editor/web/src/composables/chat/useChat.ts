@@ -11,7 +11,6 @@ import {
     NATIVE_PROVIDERS,
     type OauthAccount,
     type PermissionMode,
-    planParts,
     providerLabel,
     type ProviderRefusals,
     type RestoredMessage,
@@ -19,7 +18,6 @@ import {
     type UsageAccount,
 } from "@intentic/sandbox-contract";
 import { computed, type ComputedRef, inject, type InjectionKey, ref, shallowRef, watch } from "vue";
-import { router } from "../../router";
 import { agentTranscript, type AgentTranscript } from "./agentTranscript";
 import { traceFocus } from "./focusTrace";
 import { Conversation, type PendingAttachment } from "./conversation";
@@ -37,7 +35,7 @@ import {
 } from "./providerCatalog";
 import { rememberedModelFor, startingMode, turnDefaults } from "./turnDefaults";
 import { providerReady } from "./access";
-import { type ChatAttachment, type ChatMessage, type PlanRequest } from "./transcript";
+import { type ChatAttachment, type ChatMessage } from "./transcript";
 import { readAccountPreference, writeAccountPreference } from "./accountPreference";
 import { readTabSnapshot, type StoredTab, writeTabSnapshot } from "./tabSnapshot";
 import { dropTranscript } from "./transcriptCache";
@@ -48,7 +46,6 @@ import { sandboxJson, sandboxRequest } from "../sandbox/sandboxClient";
 import { jsonBody } from "../sandbox/jsonBody";
 import { useSandbox } from "../sandbox/useSandbox";
 import { errorMessage } from "../useAsyncAction";
-import { useWorkspaceTabs } from "../workspace/useWorkspaceTabs";
 
 // One past conversation in the sandbox's SDK session store, for the history menu.
 export interface ChatSession {
@@ -70,9 +67,9 @@ const { activeSandboxId, reachable } = useSandbox();
 
 // Open conversations (tabs) and which one is focused; always at least one. A tab IS its conversation, so the
 // focus is a conversationId — the one identity the daemon, the fleet registry, the transcript mirror and the
-// workspace's plan preview all already key on. There is deliberately no second, tab-local id: the previous one
-// was minted from a counter that resetChat rewound, so a reused value silently aliased two different chats in
-// anything that outlived the reset.
+// agent fleet registry and transcript mirror all already key on. There is deliberately no second, tab-local
+// id: the previous one was minted from a counter that resetChat rewound, so a reused value silently aliased two
+// different chats in anything that outlived the reset.
 // shallowRef, not ref: a deep ref would unwrap each Conversation's internal Vue refs (messages, title, …)
 // and mangle the class type. The instances' own refs stay reactive; reassigning the array triggers updates.
 const conversations = shallowRef<Conversation[]>([]);
@@ -364,12 +361,6 @@ const loadProviderCommands = (target: AgentProvider): Promise<void> =>
 // Past conversations from the sandbox's session store, loaded on demand for the history menu.
 const sessions = ref<ChatSession[]>([]);
 
-// Open (or re-focus) a conversation's plan preview tab in the main view — the workspace tab is keyed
-// `plan:<conversationId>`, so any plan card in the transcript reopens/replaces the same preview, and it stays
-// that conversation's preview across a reload rather than being inherited by whichever chat happens to land in
-// the same strip position. Also the target of the auto-open watch below.
-const { openPlan } = useWorkspaceTabs();
-
 /* ONE CONVERSATION, AS A PANEL BINDS IT — the facade every chat surface renders through, over whichever
  * conversation it was built for rather than over the focused one.
  *
@@ -395,9 +386,6 @@ export const conversationView = (conversation: ComputedRef<Conversation>) => ({
     }),
     awaitingDecision: computed(() => conversation.value.awaitingDecision.value),
     pendingPlanMessage: computed(() => conversation.value.pendingPlanMessage.value),
-    // Whether this conversation's attach stream is still re-telling frames from before it attached — see
-    // Conversation.replaying, and the plan-preview watch below, which is what it exists for.
-    replaying: computed(() => conversation.value.replaying.value),
     // This conversation's undelivered messages (submitted while its turn was running) and whether its running
     // turn can take one mid-flight — the composer renders the first and words its hints from the second.
     queued: computed(() => conversation.value.queued.value),
@@ -406,10 +394,6 @@ export const conversationView = (conversation: ComputedRef<Conversation>) => ({
     // What this conversation's runtime can do (the contract's declared record) — the composer reads it to
     // offer only the controls something applies, and to say what this provider can't do at all.
     capabilities: computed(() => conversation.value.capabilities.value),
-    openPlanPreview: (plan: PlanRequest): void => {
-        openPlan(conversation.value.conversationId, planParts(plan.text).title ?? `Plan`, plan.text);
-        void router.push({ name: `workspace` });
-    },
     activeModel: computed(() => conversation.value.activeModel.value),
     contextUsage: computed(() => conversation.value.contextUsage.value),
     // This conversation's permission mode (read + write) — the composer's mode pill drives it. Reads the
@@ -575,12 +559,10 @@ const {
     availableCommands,
     awaitingDecision,
     pendingPlanMessage,
-    replaying,
     queued,
     removeQueued,
     steerable,
     capabilities,
-    openPlanPreview,
     activeModel,
     contextUsage,
     mode,
@@ -609,26 +591,6 @@ const {
     cancelQuestion,
     decidePermission,
 } = activeView;
-
-/* A newly proposed plan opens as a rendered markdown preview tab in the main view (Claude Code VSCode style);
- * the approve/keep-planning buttons stay on the chat card. Keyed by requestId so unrelated transcript updates
- * (which re-create message objects) don't re-fire, while a revised plan — or switching to a chat tab with its
- * own pending plan — opens/refreshes the preview. Watching the active-conversation facade means a background
- * tab's plan never hijacks the main view; it opens when that tab is focused.
- *
- * Gated on `replaying`, because a plan card is not only born from a live frame: attaching to a run REPLAYS its
- * whole log, so an approved plan passes back through `pending` on its way to the frozen approval. Acting on
- * that instant threw the preview (and the router, which lands on the Workspace) in front of the user on every
- * reload, redeploy, second window and resume probe — for a decision they had already made, over whatever they
- * had moved on to. A plan STILL pending when the stream reaches the live boundary is one the agent is really
- * parked on, and that is worth surfacing. */
-watch([() => pendingPlanMessage.value?.plan?.requestId, replaying], ([requestId, isReplaying]) => {
-    const plan = pendingPlanMessage.value?.plan;
-    if (requestId === undefined || plan === undefined || isReplaying) {
-        return;
-    }
-    openPlanPreview(plan);
-});
 
 // Providers are an open string vocabulary — an unseeded key (an ACP agent, which owns its own credentials)
 // simply has no daemon account list.
@@ -2025,7 +1987,6 @@ export function useChat() {
         forkAt,
         stop,
         decidePlan,
-        openPlanPreview,
         answerQuestion,
         cancelQuestion,
         decidePermission,

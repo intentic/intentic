@@ -39,7 +39,6 @@ import FileBreadcrumb from "./FileBreadcrumb.vue";
 import FileTabs from "./FileTabs.vue";
 import FileViewer from "./viewers/FileViewer.vue";
 import HistoryPanel from "./HistoryPanel.vue";
-import MarkdownViewer from "./viewers/MarkdownViewer.vue";
 import ReviewPanel from "./ReviewPanel.vue";
 import UploadProgress from "./UploadProgress.vue";
 import WorkspaceEmptyState from "./WorkspaceEmptyState.vue";
@@ -121,8 +120,8 @@ const {
     error: searchError,
     note: searchNote,
 } = useWorkspaceSearch(filter, contentScope, contentMode);
-// The open tabs live in the useWorkspaceTabs singleton (the chat pushes plan previews in from the shell, and
-// tabs survive navigation); this component owns closing — the dirty-confirm dialog and edit-buffer forget.
+// The open tabs live in the useWorkspaceTabs singleton so they survive navigation; this component owns closing
+// — the dirty-confirm dialog and edit-buffer forget.
 const {
     tabs,
     activeId,
@@ -340,7 +339,7 @@ const tabMenuItems = computed<MenuItem[]>(() => {
         },
         { separator: true },
         ...stripItems.value, // Close All — the one row the empty-space menu shows on its own
-        // Only file/diff tabs have a filesystem path to copy (a plan preview and a directory panel don't).
+        // Only file/diff tabs have a filesystem path to copy (directory and generated panels don't).
         // Reached through this view's root so a popped-out panel writes to the focused window (see clipboardOf);
         // the clipboard may still be unavailable (insecure context) — swallow, matching CopyButton.
         ...(menuTab.kind === `file` || menuTab.kind === `diff`
@@ -994,9 +993,6 @@ const endResize = (event: PointerEvent): void => {
                         />
                     </div>
                 </template>
-                <div v-else-if="activeTab?.kind === 'plan'" class="min-h-0 flex-1">
-                    <MarkdownViewer :source="activeTab.text" />
-                </div>
                 <div v-else-if="activeTab?.kind === 'directory'" class="min-h-0 flex-1">
                     <DirectoryOperator :dir="activeTab.dir" />
                 </div>

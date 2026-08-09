@@ -6,7 +6,7 @@ import { workspaceAgent } from "./workspaceScope";
 /* Keeps the open FILE in the URL (`/workspace/src/foo.ts`) so a reload or a shared link reopens it, and the
  * browser back/forward walk the files. The useWorkspaceTabs singleton stays the source of truth — this projects
  * its active file tab onto the route and hydrates the singleton from the route (deep links, back/forward). Only
- * `file` tabs are addressable; a diff/plan/directory tab (or none) is bare `/workspace`. Called once from
+ * `file` tabs are addressable; a diff or generated workspace tab (or none) is bare `/workspace`. Called once from
  * whichever of WorkspaceDesktop/WorkspaceMobile is mounted (needs router context; the singleton openers stay
  * pure so they can fire from outside the Workspace subtree — QuickOpen, chat — without a router).
  *

@@ -5,14 +5,13 @@ import { closeTabs, diffTabId, type LineJump, type OpenMode, placeTab, type Work
 import { useSandbox } from "../sandbox/useSandbox";
 import { readTabStrip, type StoredWorkspaceTab, writeTabStrip } from "./workspaceSnapshot";
 
-/* The Workspace editor area's open tabs, as a module-level singleton (like useChat/useLayout): the chat panel
- * lives in the persistent shell and pushes plan previews in from outside the Workspace subtree, and the open
- * tabs survive navigation between areas. Workspace.vue layers the close orchestration (dirty confirm,
- * edit-buffer forget, context menu) on top of these refs. */
+/* The Workspace editor area's open tabs, as a module-level singleton (like useChat/useLayout), so they survive
+ * navigation between areas. Workspace.vue layers the close orchestration (dirty confirm, edit-buffer forget,
+ * context menu) on top of these refs. */
 
-// Open items, in tab order — a filesystem file, a snapshot diff, or a plan preview (see workspaceTabs.ts).
+// Open items, in tab order — a filesystem file, snapshot diff, or generated workspace surface (see workspaceTabs.ts).
 // Clicking opens/focuses its tab; `activeId` is the focused tab's id (a file's path, or a synthetic
-// diff/plan id).
+// surface id).
 const tabs = ref<readonly WorkspaceTab[]>([]);
 const activeId = ref<string | null>(null);
 const activeTab = computed(() => tabs.value.find((tab) => tab.id === activeId.value));
@@ -147,16 +146,6 @@ const fillDiff = (payload: DiffPayload): void => {
     }
 };
 
-// A plan the chat agent proposed opens as a rendered markdown preview (Claude Code VSCode style). One preview
-// per chat conversation: a revised plan (after "keep planning") refreshes the same tab in place, openDiff-style.
-const openPlan = (conversationId: string, title: string, text: string): void => {
-    const id = `plan:${conversationId}`;
-    const tab: WorkspaceTab = { kind: `plan`, id, title, text };
-    openLine.value = undefined;
-    tabs.value = placeTab(tabs.value, tab, null);
-    activeId.value = id;
-};
-
 // A repository directory opened from the tree renders its management surface (DirectoryOperator) in the main
 // area as a tab — open-or-focus by dir path, so re-selecting the same directory doesn't stack duplicates.
 const openDirectory = (dir: string): void => {
@@ -272,7 +261,6 @@ export function useWorkspaceTabs() {
         openAtLine,
         openDiff,
         fillDiff,
-        openPlan,
         openDirectory,
         openHealth,
         openDocument,

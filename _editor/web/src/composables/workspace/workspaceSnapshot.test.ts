@@ -99,7 +99,6 @@ describe(`the editor's open tabs`, () => {
                 { kind: `file`, id: `src/main.ts`, path: `src/main.ts` },
                 { kind: `directory`, id: `dir:`, dir: `` },
                 { kind: `health`, id: `health:web`, repo: `web` },
-                { kind: `plan`, id: `plan:c1`, title: `Ship it`, text: `# Ship it` },
             ]),
         );
 
@@ -109,7 +108,6 @@ describe(`the editor's open tabs`, () => {
             { kind: `file`, id: `src/main.ts`, path: `src/main.ts` },
             { kind: `directory`, id: `dir:`, dir: `` },
             { kind: `health`, id: `health:web`, repo: `web` },
-            { kind: `plan`, id: `plan:c1`, title: `Ship it`, text: `# Ship it` },
         ]);
     });
 
@@ -151,12 +149,6 @@ describe(`the editor's open tabs`, () => {
         );
 
         expect(readTabStrip(`sb1`)?.tabs.map((tab) => tab.id)).toEqual([`src/main.ts`]);
-    });
-
-    it(`drops an oversized plan rather than restoring half of it`, () => {
-        session.set(TABS_KEY, strip(null, [{ kind: `plan`, id: `plan:c1`, title: `Big`, text: `x`.repeat(64_001) }]));
-
-        expect(readTabStrip(`sb1`)).toBeUndefined();
     });
 
     it(`collapses a tab that appears twice into one`, () => {

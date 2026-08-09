@@ -1,5 +1,4 @@
 import { type AgentEvent, type AgentHarness, type AgentProvider, type AttachFrame, sseData, sseFrames } from "@intentic/sandbox-contract";
-import type { Ref } from "vue";
 import { sandboxRequest } from "../sandbox/sandboxClient";
 import { jsonBody } from "../sandbox/jsonBody";
 import { acquireStreamSlot } from "../sandbox/streamBudget";
@@ -32,20 +31,13 @@ export type AttachHead = Extract<AttachFrame, { kind: "attached" }>;
 
 const delay = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms));
 
-/* What a followed run needs from the conversation rendering it: whose turn the frames belong to, where to put
- * them, and the replay/live boundary — the one moment a buffered transcript has to be exact (see catchUp). */
+/* What a followed run needs from the conversation rendering it: whose turn the frames belong to and where to
+ * put them. */
 export interface RunRenderer {
-    /* True while the stream is still re-telling frames that PREDATE this attach — the head's `seq` is the
-     * daemon's replay/live boundary. Written here because only the stream knows where that boundary is; read by
-     * everything that ACTS on what a frame says (the plan preview's auto-open), because a replayed proposal is
-     * not a proposal: only what is still pending at the boundary is waiting on the user. */
-    readonly replaying: Ref<boolean>;
     // Runs once, at the first attach head. The send path returns the context it already prepared; the reattach
     // path synthesizes bubbles from the head — or returns undefined to stand down when a send won the race.
     ensureTurn(head: AttachHead): TurnContext | undefined;
     frame(event: AgentEvent, turn: TurnContext): void;
-    // Bring the transcript up to date NOW, at the replay/live boundary, ahead of the flag dropping.
-    catchUp(): void;
 }
 
 /* Render a run by attaching to it, re-attaching from the seq cursor whenever the stream drops, until the
@@ -61,10 +53,6 @@ export const followRun = async (
     let attached = false;
     let retryMs = 500;
     let turn: TurnContext | undefined;
-    // The seq the current attach head named: the run's log length at attach time, so every frame up to it
-    // is history this stream is re-telling and everything past it is live (see `replaying`). Re-read at
-    // each head, because a re-attach after a drop has its own boundary.
-    let replayUntil = 0;
     // Consecutive re-attaches that returned no new frames and no `end`. A run that keeps answering empty is
     // done with nothing left to stream (or never terminates its stream), so give up after a few rounds
     // rather than tight-looping the daemon at network speed. Reset the moment real progress arrives.
@@ -141,30 +129,10 @@ export const followRun = async (
                         return false;
                     }
                     attached = true;
-                    // Frames the run had already logged when this attach landed are its story so far, not
-                    // news — whether this window is joining a turn another one started or re-joining its
-                    // own after a drop.
-                    replayUntil = parsed.seq;
-                    renderer.replaying.value = parsed.seq > cursor.after;
                 } else if (parsed.kind === `frame`) {
                     cursor.after = parsed.seq;
                     if (turn !== undefined) {
                         renderer.frame(parsed.event, turn);
-                    }
-                    /* The boundary frame is applied, so from the next one on the run is happening live. The
-                     * flag drops in the SAME tick the frame landed in, which is what lets a card that is
-                     * still pending here read as one genuinely awaiting the user.
-                     *
-                     * Frames are buffered for the next paint, so being right about THIS one means catching
-                     * the transcript up before the flag drops — a replayed card that landed in the buffer
-                     * would otherwise be applied after `replaying` went false, and the plan preview's
-                     * auto-open (which gates on exactly that) would fire on an answer given long ago.
-                     * Guarded on the flag rather than the seq alone because the seq test holds for every
-                     * live frame after the boundary, and catching up on each of them is just the
-                     * unbuffered write back again. */
-                    if (renderer.replaying.value && parsed.seq >= replayUntil) {
-                        renderer.catchUp();
-                        renderer.replaying.value = false;
                     }
                 } else if (parsed.kind === `end`) {
                     return attached;

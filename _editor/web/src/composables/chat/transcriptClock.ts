@@ -224,11 +224,8 @@ export class TranscriptClock {
     }
 
     /* Bring the transcript up to date NOW, off the clock, without disturbing the typewriter: text still being
-     * revealed goes on revealing (the clock is re-armed for it). For the one caller that needs the transcript
-     * exact at an instant the buffer would otherwise straddle — the replay/live boundary in followRun.
-     *
-     * Buffering is invisible to everything that reads the transcript on its own schedule; it is only visible
-     * to a reader that has to be right about a PARTICULAR frame. That is this, and there is one of them. */
+     * revealed goes on revealing (the clock is re-armed for it). User-clock writes call this before applying
+     * their own state so they cannot overtake frames that have already reached the tab. */
     catchUp(): void {
         const { state, applied } = this.foldInbox(this.state.value);
         this.state.value = state;
