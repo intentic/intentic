@@ -69,6 +69,9 @@
         "_extensions/memory": {
             "entry": ["src/server/server.ts", "src/**/*.test.ts"]
         },
+        "_extensions/knowledge": {
+            "entry": ["src/server/server.ts", "src/cli/kb.ts", "src/**/*.test.ts"]
+        },
         "_extensions/*": {
             "entry": ["src/index.ts", "src/**/*.test.ts"]
         },

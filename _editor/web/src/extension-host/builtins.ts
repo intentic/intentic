@@ -8,6 +8,7 @@ import * as automations from "@intentic/ext-automations";
 import * as deployments from "@intentic/ext-deployments";
 import * as documentation from "@intentic/ext-documentation";
 import * as gitHistory from "@intentic/ext-git-history";
+import * as knowledge from "@intentic/ext-knowledge";
 import * as logs from "@intentic/ext-logs";
 import * as maintenance from "@intentic/ext-maintenance";
 import * as memory from "@intentic/ext-memory";
@@ -35,6 +36,7 @@ const modules: readonly BuiltinModule[] = [
     automations,
     logs,
     memory,
+    knowledge,
     activity,
     pipelines,
     deployments,

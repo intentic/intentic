@@ -1,0 +1,25 @@
+{
+    "publisher": "intentic",
+    "name": "knowledge",
+    "version": "1.0.0",
+    "category": "knowledge",
+    "icon": "sitemap",
+    "engines": { "intentic": "^2.1.0" },
+    "server": "dist/server.js",
+    "contributes": {
+        "views": [{ "id": "knowledge", "label": "Knowledge", "surface": "sandbox" }],
+        "files": [{ "path": "knowledge/", "invalidates": ["knowledge"] }],
+        "settings": [
+            {
+                "key": "vault",
+                "type": "string",
+                "title": "Vault folder",
+                "description": "Workspace folder holding the notes. Point it at a vault you already sync if you have one. Live refresh follows the default folder; elsewhere the view catches up on its own poll.",
+                "default": "knowledge",
+                "env": "KB_VAULT"
+            }
+        ],
+        "bin": "dist/bin",
+        "agent": { "path": "plugin" }
+    }
+}

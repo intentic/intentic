@@ -21,6 +21,7 @@ import {
     type TranslatorAccounts,
     type WorkflowRun,
 } from "@intentic/sandbox-contract";
+import { KNOWLEDGE_BASE } from "@intentic/ext-knowledge";
 import { MEMORY_BASE } from "@intentic/ext-memory";
 import { BROWSER_SESSIONS } from "./browser";
 import { automationApprovals, automationsList, deleteAutomation, resolveApproval, saveAutomation } from "./fixture/automations";
@@ -28,6 +29,15 @@ import { demoRuns, demoWorkflows } from "./fixture/workflows";
 import { choresReport, writeLedger } from "./fixture/chores";
 import { ciJobs, ciRunsResponse } from "./fixture/ci";
 import { AWAITING_AGENT_ID, FEATURED_AGENT_ID, fleetRoster } from "./fixture/fleet";
+import {
+    deleteKnowledgeNote,
+    knowledgeGraph,
+    knowledgeNoteAt,
+    knowledgeNotes,
+    knowledgeOverview,
+    knowledgeSearch,
+    saveKnowledgeNote,
+} from "./fixture/knowledge";
 import { deleteMemoryFile, memoryFile, memoryList, saveMemoryFile } from "./fixture/memory";
 import { demoCapabilities, demoEnvironment, demoExtensions, demoPanels, demoUsageRollup, setExtensionEnabled } from "./fixture/sandbox";
 import { transcriptFor } from "./fixture/transcripts";
@@ -451,6 +461,23 @@ const ROUTES: readonly (readonly [string, string, Handler])[] = [
     [`GET`, `${MEMORY_BASE}/memory/file`, ({ url }) => memoryRead(url)],
     [`PUT`, `${MEMORY_BASE}/memory/file`, memoryWrite],
     [`DELETE`, `${MEMORY_BASE}/memory/file`, memoryForget],
+
+    /* Knowledge: the vault of things around the code — people, projects, decisions, words — and the graph they
+     * already form. Served under the extension's own namespace, like memory above.
+     *
+     * The answers are computed by the extension's OWN engine over the fixture's raw markdown (fixture/knowledge.ts),
+     * not hand-authored: backlinks, the neighbourhood map and the drift report are the real ones, so a visitor
+     * clicking through the demo is seeing what the product does rather than a picture of it. */
+    [`GET`, `${KNOWLEDGE_BASE}/overview`, () => json(knowledgeOverview())],
+    [`GET`, `${KNOWLEDGE_BASE}/notes`, () => json({ notes: knowledgeNotes() })],
+    [`GET`, `${KNOWLEDGE_BASE}/search`, ({ url }) => json({ hits: knowledgeSearch(url.searchParams) })],
+    [`GET`, `${KNOWLEDGE_BASE}/note`, ({ url }) => knowledgeRead(url)],
+    [`GET`, `${KNOWLEDGE_BASE}/graph`, ({ url }) => json(knowledgeGraph(url.searchParams))],
+    [`PUT`, `${KNOWLEDGE_BASE}/note`, knowledgeWrite],
+    [`DELETE`, `${KNOWLEDGE_BASE}/note`, knowledgeForget],
+    // The demo vault is already started, so this only ever answers "nothing to write" — which is the honest
+    // answer and the same one a real started vault gives.
+    [`POST`, `${KNOWLEDGE_BASE}/seed`, () => json({ written: [] })],
     [`GET`, `/capabilities`, () => json({ capabilities: demoCapabilities() })],
     [`GET`, `/usage/rollup`, () => json({ rows: demoUsageRollup(STARTED_AT) })],
     [`GET`, `/secrets/inventory`, () => json({ secrets: [] })],
@@ -462,6 +489,12 @@ const ROUTES: readonly (readonly [string, string, Handler])[] = [
     [`POST`, `/panels/{repo}/stop`, () => refuse(`This is the demo workspace — nothing is running to stop.`)],
     [`GET`, `/extensions`, () => json({ extensions: demoExtensions() })],
     [`POST`, `/extensions/{id}/enabled`, setEnabled],
+    /* An extension's own settings, which the host loads BEFORE calling activate() so `api.settings.get` is
+     * synchronous from the first line of it. Missing here, the load rejected and the extension never activated
+     * — a whole surface silently absent from the demo, with nothing in the console but a routine "no fixture
+     * route" line. Answered as the defaults (empty), because a demo visitor configures nothing. */
+    [`GET`, `/extensions/{id}/settings`, () => json({ settings: {}, secretsSet: [] })],
+    [`POST`, `/extensions/{id}/settings`, () => json({ ok: true })],
     [`GET`, `/drafts`, () => json({ drafts: [] })],
     [`GET`, `/members`, () => json({ members: [] })],
     [`GET`, `/environment`, () => json(demoEnvironment())],
@@ -620,6 +653,29 @@ function memoryWrite({ request }: RouteContext): Promise<Response> {
 
 function memoryForget({ request }: RouteContext): Promise<Response> {
     return request.json().then((body) => okAfter(() => deleteMemoryFile(Date.now(), (body as { name?: string }).name ?? ``)));
+}
+
+const knowledgeRead = (url: URL): Response => {
+    const note = knowledgeNoteAt(url.searchParams.get(`path`) ?? ``);
+    return note === undefined ? refuse(`No such note.`, 404) : json(note);
+};
+
+// Refuses exactly what the real backend refuses — a path that leaves the vault, or one that is not a note — so
+// the demo's error state is the product's rather than an optimistic success.
+function knowledgeWrite({ request }: RouteContext): Promise<Response> {
+    return request.json().then((body) => {
+        const { path, content } = body as { path?: string; content?: string };
+        return saveKnowledgeNote(Date.now(), path ?? ``, content ?? ``)
+            ? json({ ok: true })
+            : refuse(`That is not a markdown note inside the vault.`, 400);
+    });
+}
+
+function knowledgeForget({ request }: RouteContext): Promise<Response> {
+    return request.json().then((body) => {
+        const path = (body as { path?: string }).path ?? ``;
+        return deleteKnowledgeNote(Date.now(), path) ? json({ ok: true }) : refuse(`No such note.`, 404);
+    });
 }
 
 function setEnabled({ request, param }: RouteContext): Promise<Response> {

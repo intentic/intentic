@@ -310,12 +310,20 @@ COPY _extensions/google-workspace/intentic-extension.json /opt/extensions/google
 # to be here or the CLI never reaches the agent's PATH and the skill never loads. Straight from context rather than
 # the trees stage: both are dependency-free — plain ESM and markdown — so there is no node_modules to deploy. `src/`
 # is deliberately not copied; that is the web bundle's half.
+#
+# --chmod=755 ON EVERY `contributes.bin` DIRECTORY, and it is not cosmetic. The daemon prepends these directories
+# to the agent's PATH each turn, and PATH resolution skips a file without the execute bit — so `intentic-docs`
+# shipped as mode 644, sat on PATH in every sandbox, and could not be run by the skill that announces it. The
+# same was true of `discord-voice` and `whatsapp` (see packs/messaging.Dockerfile). A tool the agent is told it
+# has and cannot invoke is worse than one it was never given.
 COPY _extensions/documentation/intentic-extension.json /opt/extensions/documentation/
-COPY _extensions/documentation/bin /opt/extensions/documentation/bin
+COPY --chmod=755 _extensions/documentation/bin /opt/extensions/documentation/bin
 COPY _extensions/documentation/plugin /opt/extensions/documentation/plugin
 # The web-builtin UI extensions bake their MANIFEST ONLY — their code is compiled into the web bundle
 # (extension-host/builtins.ts), so there is nothing daemon-side to ship. The manifest is what makes them exist
-# for the daemon: `GET /extensions` then enumerates all twenty-four first-party extensions through one enumerator,
+# for the daemon: `GET /extensions` then enumerates EVERY first-party extension through one enumerator (a count
+# is not written here — it was hand-maintained, and was already wrong by one before anyone noticed; the list in
+# extensions.routes.integration.test.ts is what actually holds the invariant),
 # so the Extensions tab is a complete list with a working on/off switch instead of a view of one load path.
 # The pairing is checked both ways — a manifest here with no compiled-in module shows as "missing" in the tab
 # (image and web bundle built from different commits), and a module with no manifest shows as "unlisted".
@@ -328,6 +336,16 @@ COPY _extensions/deployments/intentic-extension.json /opt/extensions/deployments
 # invisible to a COPY that reads the repo tree — however plainly it sits beside the manifest in the checkout.
 COPY --from=trees extensions/deployments/dist /opt/extensions/deployments/dist
 COPY _extensions/git-history/intentic-extension.json /opt/extensions/git-history/
+COPY _extensions/knowledge/intentic-extension.json /opt/extensions/knowledge/
+# …knowledge is the documentation shape plus a backend: its views compile into the web bundle, its `knowledge`
+# skill (contributes.agent) is read from the image, and BOTH its compiled halves come from the trees context —
+# the backend the host loads (manifest `server`) and the `kb` CLI the agent runs (contributes.bin). The CLI is
+# built rather than hand-written because it drives the same vault engine the backend does, so the agent and the
+# panel cannot disagree about what a note says; that is also why it is here and not a straight COPY like
+# documentation's. The bin directory carries the exec bit — see the note above.
+COPY _extensions/knowledge/plugin /opt/extensions/knowledge/plugin
+COPY --from=trees extensions/knowledge/dist/server.js /opt/extensions/knowledge/dist/
+COPY --from=trees --chmod=755 extensions/knowledge/dist/bin /opt/extensions/knowledge/dist/bin
 COPY _extensions/logs/intentic-extension.json /opt/extensions/logs/
 COPY _extensions/maintenance/intentic-extension.json /opt/extensions/maintenance/
 COPY _extensions/memory/intentic-extension.json /opt/extensions/memory/

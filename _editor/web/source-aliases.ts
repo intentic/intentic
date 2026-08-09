@@ -17,15 +17,33 @@ import { repoRoot } from "@intentic/constants/node";
 // to spell `../../` twenty-three times, each copy silently wrong the moment the file moved a level.
 const fromRoot = (path: string): string => join(repoRoot(import.meta.url), path);
 
-const extensionAliases = Object.fromEntries(
-    readdirSync(fromRoot(`_extensions`), { withFileTypes: true })
-        .filter((entry) => entry.isDirectory())
-        .filter((entry) => existsSync(fromRoot(`_extensions/${entry.name}/src/index.ts`)))
-        .map((entry): [string, string] => [
-            JSON.parse(readFileSync(fromRoot(`_extensions/${entry.name}/package.json`), `utf8`)).name,
-            fromRoot(`_extensions/${entry.name}/src/index.ts`),
-        ]),
-);
+/* EVERY ENTRY POINT AN EXTENSION PUBLISHES, not just its barrel — read off each package's own `exports` map, so
+ * an extension that grows a second entry does not have to be remembered here.
+ *
+ * Subpaths are emitted BEFORE barrels for the reason the hand-written entries below state: a string alias also
+ * matches `<key>/…`, so `@intentic/ext-knowledge` would swallow `@intentic/ext-knowledge/vault` and resolve it
+ * to `src/index.ts/vault`, a path that cannot exist. That failure is a dev server (and only a dev server) that
+ * cannot start — invisible to a typecheck, invisible to the tests, and confusing out of all proportion to its
+ * cause. */
+const extensionEntries = readdirSync(fromRoot(`_extensions`), { withFileTypes: true })
+    .filter((entry) => entry.isDirectory())
+    .filter((entry) => existsSync(fromRoot(`_extensions/${entry.name}/src/index.ts`)))
+    .flatMap((entry): [string, string, boolean][] => {
+        const manifest = JSON.parse(readFileSync(fromRoot(`_extensions/${entry.name}/package.json`), `utf8`)) as {
+            name: string;
+            exports?: Record<string, { default?: string } | string>;
+        };
+        return Object.entries(manifest.exports ?? { ".": `./src/index.ts` }).map(([subpath, target]) => {
+            const file = typeof target === `string` ? target : (target.default ?? `./src/index.ts`);
+            const specifier = subpath === `.` ? manifest.name : `${manifest.name}/${subpath.replace(/^\.\//, ``)}`;
+            return [specifier, fromRoot(`_extensions/${entry.name}/${file.replace(/^\.\//, ``)}`), subpath === `.`];
+        });
+    });
+
+const extensionAliases = Object.fromEntries([
+    ...extensionEntries.filter(([, , isBarrel]) => !isBarrel).map(([specifier, file]) => [specifier, file] as const),
+    ...extensionEntries.filter(([, , isBarrel]) => isBarrel).map(([specifier, file]) => [specifier, file] as const),
+]);
 
 export const sourceAliases = (): Record<string, string> => ({
     // Listed before the barrel: a string alias also matches `<key>/…`, so the more specific subpath has to win

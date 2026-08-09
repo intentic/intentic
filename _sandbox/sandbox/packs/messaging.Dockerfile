@@ -21,3 +21,9 @@ COPY --from=trees extensions/whatsapp /opt/extensions/whatsapp
 # → bin/gw, a launcher over the built dist/). Dependency-free like telegram — Google's APIs are fetch and JSON —
 # so its tree is its own dist plus the two workspace packages it types against.
 COPY --from=trees extensions/google-workspace /opt/extensions/google-workspace
+# EVERY AGENT CLI THESE PACKS CONTRIBUTE (contributes.bin), made runnable. The daemon prepends their directories
+# to the agent's PATH every turn, and PATH resolution skips a file with no execute bit — so all three shipped as
+# mode 644, resolved to nothing, and failed the moment the agent took the skill at its word. Done here rather
+# than as `--chmod` on the COPYs above, because those copy whole deployed trees and would hand the exec bit to
+# every file in node_modules with them. A new pack that ships a `bin` belongs on this line.
+RUN chmod +x /opt/extensions/discord/bin/* /opt/extensions/whatsapp/bin/* /opt/extensions/google-workspace/bin/*

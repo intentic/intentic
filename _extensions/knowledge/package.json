@@ -1,0 +1,47 @@
+{
+    "name": "@intentic/ext-knowledge",
+    "version": "1.0.0",
+    "description": "Knowledge — a markdown vault that is also a typed graph: the owner's notes, entities and relationships, browsable here and queryable by the agent",
+    "license": "MIT",
+    "private": true,
+    "type": "module",
+    "main": "src/index.ts",
+    "types": "src/index.ts",
+    "exports": {
+        ".": {
+            "types": "./src/index.ts",
+            "default": "./src/index.ts"
+        },
+        "./vault": {
+            "types": "./src/vault/index.ts",
+            "default": "./src/vault/index.ts"
+        }
+    },
+    "scripts": {
+        "build": "vite build --config vite.server.config.ts && vite build --config vite.cli.config.ts",
+        "typecheck": "vue-tsc --noEmit",
+        "test": "vitest run"
+    },
+    "dependencies": {
+        "@intentic/extension-api": "workspace:*",
+        "@intentic/extension-manifest": "workspace:*",
+        "@intentic/extension-ui": "workspace:*",
+        "@orpc/contract": "catalog:",
+        "@orpc/openapi": "catalog:",
+        "@orpc/server": "catalog:",
+        "@tanstack/vue-query": "catalog:",
+        "zod": "catalog:"
+    },
+    "devDependencies": {
+        "@intentic/tsconfig": "workspace:*",
+        "jsdom": "catalog:",
+        "typescript": "catalog:",
+        "vite": "catalog:",
+        "vitest": "catalog:",
+        "vue": "catalog:",
+        "vue-tsc": "catalog:"
+    },
+    "peerDependencies": {
+        "vue": "3"
+    }
+}

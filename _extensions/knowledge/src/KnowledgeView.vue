@@ -1,0 +1,250 @@
+<script setup lang="ts">
+import { Button, cmp, Icon, InfoHint, Picker, type PickerOptions, SearchBar, useDevice } from "@intentic/extension-ui";
+import { computed, ref, watch } from "vue";
+import { filterOptions, type Filters, useNoteMutations, useOverview, useSearch } from "./useKnowledge";
+import NoteIndex from "./NoteIndex.vue";
+import NotePane from "./NotePane.vue";
+
+/* THE KNOWLEDGE SECTION — the owner's vault of notes about the world this work happens in, and the graph those
+ * notes already form.
+ *
+ * SEARCH IS THE NAVIGATION. There is no tree of folders here and deliberately so: a knowledge base is reached
+ * by asking it something, and every other way in (by kind, by tag, by what links to a thing) is the same query
+ * with a filter set rather than a different screen. One route answers all of them, so the list can never
+ * disagree with itself about what the vault holds.
+ *
+ * A HUB SECTION, so this file draws neither a page title nor a frame — the hub draws both. That constraint is
+ * what shapes the layout: the section is a wide band rather than a page, so the chrome is one row, the index is
+ * a narrow column beside the note rather than a second rail in front of it, and on a phone it folds above the
+ * note instead of hiding it.
+ *
+ * WHAT IS UNFINISHED ABOUT THE VAULT gets a strip, and only when there IS something — links pointing at notes
+ * nobody wrote, kinds the vocabulary has not adopted, notes that fell out of the graph. A permanent panel
+ * reading "0 problems" would spend the same space to say nothing, and would train the reader to stop looking at
+ * the place where the real thing eventually appears. */
+
+const { mobile } = useDevice();
+const { overview, error: overviewError } = useOverview();
+
+const q = ref(``);
+const type = ref<string>();
+const tag = ref<string>();
+const linkedTo = ref<string>();
+const filters = computed<Filters>(() => ({ q: q.value, type: type.value, tag: tag.value, linkedTo: linkedTo.value }));
+const filtered = computed(() => q.value !== `` || type.value !== undefined || tag.value !== undefined || linkedTo.value !== undefined);
+
+const { hits, error: searchError, isLoading, isFetching } = useSearch(filters);
+
+const options = computed(() => filterOptions(overview.value));
+const pickerOptions = (values: readonly string[], all: string): PickerOptions => [
+    { options: [{ value: ``, label: all }, ...values.map((value) => ({ value, label: value }))] },
+];
+// The pickers speak "" for "no filter" because a Picker always holds one of its options; the queries speak
+// undefined. One conversion, here, rather than a special case in every consumer.
+const typeChoice = computed<string>({ get: () => type.value ?? ``, set: (value) => (type.value = value === `` ? undefined : value) });
+const tagChoice = computed<string>({ get: () => tag.value ?? ``, set: (value) => (tag.value = value === `` ? undefined : value) });
+
+const selected = ref<string>();
+/* Unsaved edits, keyed by note. Held here, above the pane, because the pane is REUSED as the selection moves —
+ * without this, opening a linked note to check a fact would silently drop the correction being written. */
+const drafts = ref(new Map<string, string>());
+const draft = computed<string | undefined>({
+    get: () => (selected.value === undefined ? undefined : drafts.value.get(selected.value)),
+    set: (value) => {
+        if (selected.value === undefined) {
+            return;
+        }
+        if (value === undefined) {
+            drafts.value.delete(selected.value);
+        } else {
+            drafts.value.set(selected.value, value);
+        }
+    },
+});
+
+// Open on the first answer, so the section is never a list with an empty half beside it — and follow the list
+// when what is selected drops out of it, which is what happens as somebody types.
+watch(hits, () => {
+    if (selected.value === undefined || !hits.value.some((hit) => hit.path === selected.value)) {
+        selected.value = hits.value[0]?.path;
+    }
+});
+
+// Following a link opens the note WITHOUT disturbing the search behind it: the list is where the reader came
+// from, and yanking it to the new note would lose their place in an answer they are working through.
+const open = (path: string): void => {
+    selected.value = path;
+};
+
+// "Show these in the list" — re-aim the list at everything linking to the open note. The one navigation that
+// genuinely replaces the query, so it clears the rest of the filters rather than compounding with them.
+const showLinked = (path: string): void => {
+    q.value = ``;
+    type.value = undefined;
+    tag.value = undefined;
+    linkedTo.value = path;
+};
+
+const clearFilters = (): void => {
+    q.value = ``;
+    type.value = undefined;
+    tag.value = undefined;
+    linkedTo.value = undefined;
+};
+watch(q, () => (linkedTo.value = undefined));
+
+const linkedToTitle = computed(() => hits.value.find((hit) => hit.path === linkedTo.value)?.title ?? linkedTo.value);
+
+/* The one-line report on what is unfinished. Ordered by what a reader can actually act on: an unwritten note is
+ * an invitation, a drifting word is a decision to make, an orphan is knowledge that has fallen out of reach. */
+const health = computed(() => {
+    const report = overview.value;
+    if (report === undefined) {
+        return [];
+    }
+    const drift = report.typeDrift.length + report.relationDrift.length;
+    return [
+        report.broken.length === 0
+            ? undefined
+            : `${report.broken.length} ${report.broken.length === 1 ? `link points` : `links point`} at notes nobody has written`,
+        drift === 0 ? undefined : `${drift} ${drift === 1 ? `word is` : `words are`} not in the vocabulary yet`,
+        report.orphans.length === 0
+            ? undefined
+            : `${report.orphans.length} ${report.orphans.length === 1 ? `note is` : `notes are`} connected to nothing`,
+        report.unreadable.length === 0
+            ? undefined
+            : `${report.unreadable.length} ${report.unreadable.length === 1 ? `note has` : `notes have`} a header this reader could not parse`,
+    ].filter((line) => line !== undefined);
+});
+
+const error = computed(() => overviewError.value ?? searchError.value);
+
+/* Starting the vault off writes ONE note — the vocabulary — and opens it. Not a folder of example people: a
+ * knowledge base seeded with facts about nobody has to be emptied before it can say anything true. What a new
+ * vault actually lacks is the handful of words it is going to use, which is also the one thing the owner and
+ * the agent cannot each guess at consistently on their own. */
+const { seed } = useNoteMutations();
+const startVault = async (): Promise<void> => {
+    const { written } = await seed.mutateAsync();
+    selected.value = written[0] ?? selected.value;
+};
+</script>
+
+<template>
+    <!-- A HUB SECTION BODY — no page header and no frame of its own: the hub draws both. -->
+    <div class="flex min-h-0 flex-col gap-3">
+        <div v-if="error" :class="cmp.alertDanger(`px-4 py-3 text-sm`)">{{ error }}</div>
+
+        <!-- The section's one row of chrome: what this is, how to ask it something, and what it amounts to. -->
+        <div class="flex flex-wrap items-center gap-x-3 gap-y-2">
+            <InfoHint label="Knowledge">
+                <span class="block text-sm font-medium text-content">The knowledge vault</span>
+                <span class="mt-1 block text-xs text-muted">
+                    A folder of markdown notes — <b>{{ overview?.vault ?? `knowledge/` }}</b> in your workspace — where each note is a <i>thing</i>
+                    (a person, a project, a decision, a word) and each link is a connection between two of them. The agent reads it before answering
+                    questions about your world and writes to it when it learns something durable; you read, correct and delete here. Open it in
+                    Obsidian or put it under git — it is only ever markdown.
+                </span>
+            </InfoHint>
+
+            <SearchBar
+                v-model="q"
+                variant="field"
+                class="w-64 max-w-full"
+                placeholder="Search the vault…"
+                aria-label="Search the vault"
+                clearable
+                :busy="isFetching && !isLoading"
+            />
+            <Picker
+                v-if="options.types.length > 0"
+                v-model="typeChoice"
+                :options="pickerOptions(options.types, `Any kind`)"
+                class="w-36 py-1.5 text-xs"
+                aria-label="Kind"
+                header="Kind"
+            />
+            <Picker
+                v-if="options.tags.length > 0"
+                v-model="tagChoice"
+                :options="pickerOptions(options.tags, `Any tag`)"
+                class="w-36 py-1.5 text-xs"
+                aria-label="Tag"
+                header="Tag"
+            />
+
+            <span v-if="overview" class="ml-auto text-2xs text-subtle">
+                {{ overview.noteCount }} {{ overview.noteCount === 1 ? `note` : `notes` }} · {{ overview.linkCount }}
+                {{ overview.linkCount === 1 ? `link` : `links` }} · {{ overview.types.length }} {{ overview.types.length === 1 ? `kind` : `kinds` }}
+            </span>
+        </div>
+
+        <!-- The list has been re-aimed at one note's neighbours rather than at a query; say so, and offer the
+             way back, because nothing the reader typed explains what they are looking at. -->
+        <div v-if="linkedTo" class="flex items-center gap-2 rounded-lg border border-line bg-surface-hover px-3 py-1.5 text-xs">
+            <Icon name="sitemap" class="text-subtle" />
+            <span class="text-muted"
+                >Everything linking to <b class="text-content">{{ linkedToTitle }}</b></span
+            >
+            <button type="button" class="ml-auto text-2xs text-link hover:underline" @click="clearFilters">Show everything</button>
+        </div>
+
+        <div
+            v-if="health.length > 0"
+            class="flex flex-wrap items-center gap-x-3 gap-y-1 rounded-lg border border-line px-3 py-1.5 text-2xs text-muted"
+        >
+            <Icon name="info-circle" class="shrink-0 text-subtle" />
+            <span v-for="line in health" :key="line">{{ line }}</span>
+            <span class="ml-auto text-subtle">the agent's <b>kb check</b> lists them in full</span>
+        </div>
+
+        <!-- Bounded, so the two panes scroll inside their own frames and the chrome above stays put. Unbounded,
+             the hub page would scroll them together and reaching the end of a long note would take the way to
+             the next one off screen with it. -->
+        <div v-if="overview?.noteCount === 0 && !filtered" :class="cmp.emptyState(`flex flex-col items-center gap-2 px-6 py-12 text-sm`)">
+            <Icon name="sitemap" class="text-base text-subtle" />
+            <p class="text-content">Nothing in the vault yet.</p>
+            <p class="max-w-md text-xs text-muted">
+                Notes appear here as the agent learns durable things about your world — who you work with, what a project is for, what was decided and
+                why. Ask it to remember something, or drop your own markdown into
+                <b>{{ overview?.vault ?? `knowledge/` }}</b> and it will be read the same way.
+            </p>
+            <!-- One note, not a folder of example people: what a new vault lacks is the handful of words it is
+                 going to use, and that is the one thing neither side can guess at consistently alone. -->
+            <Button label="Start it off with a vocabulary" size="small" severity="secondary" :loading="seed.isPending.value" @click="startVault" />
+            <p v-if="seed.error.value" class="text-xs text-danger">{{ seed.error.value.message }}</p>
+        </div>
+
+        <div v-else class="flex max-h-[72dvh] min-h-0 gap-3" :class="mobile ? `flex-col` : undefined">
+            <!-- On a phone the index folds above the note instead of beside it: a 18rem column next to a note
+                 leaves neither of them readable, and hiding the note behind a list would put two taps between
+                 the reader and the thing they came for. -->
+            <div
+                class="shrink-0 overflow-hidden rounded-lg border border-line"
+                :class="mobile ? `max-h-56` : `flex max-h-full w-64 min-w-0 flex-col`"
+            >
+                <NoteIndex :hits="hits" :selected="selected" :filtered="filtered" :is-loading="isLoading" @pick="open" />
+            </div>
+
+            <NotePane
+                v-if="selected"
+                :key="selected"
+                v-model:draft="draft"
+                :path="selected"
+                class="min-w-0 flex-1"
+                @open="open"
+                @filter="showLinked"
+                @forgotten="selected = undefined"
+            />
+
+            <section
+                v-else
+                class="flex min-h-0 flex-1 flex-col items-center justify-center gap-2 rounded-lg border border-dashed border-line px-6 py-10 text-center"
+            >
+                <Icon name="sitemap" class="text-base text-subtle" />
+                <p class="text-sm text-muted">Pick a note to read it.</p>
+                <p class="max-w-xs text-xs text-subtle">Follow its links to move through the vault the way the agent does.</p>
+            </section>
+        </div>
+    </div>
+</template>

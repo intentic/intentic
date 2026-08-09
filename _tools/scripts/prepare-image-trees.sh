@@ -45,12 +45,14 @@ for pid in "${pids[@]}"; do
 done
 [ "$failed" -eq 0 ] || { echo "one or more deploy trees failed to build" >&2; exit 1; }
 
-# The two feature backends the daemon's backend host loads (manifest `server`). A single self-contained bundle
-# each, so they get no deploy tree — but they are COMPILED OUTPUT, and compiled output reaches the image only
-# through this context. The root build context excludes **/dist (.dockerignore, since the first commit), so a
-# COPY of these straight from the repo tree resolves to nothing: docker fails the build with "not found" on a
-# path that is sitting right there in the checkout, which is exactly how this shipped broken.
-for ext in memory deployments; do
+# The extensions whose dist the image needs: the three feature backends the daemon's backend host loads
+# (manifest `server`), and knowledge's `kb` CLI, which is built from the same TypeScript as its backend so the
+# agent and the panel cannot disagree about what the vault says. A self-contained bundle each, so they get no
+# deploy tree — but they are COMPILED OUTPUT, and compiled output reaches the image only through this context.
+# The root build context excludes **/dist (.dockerignore, since the first commit), so a COPY of these straight
+# from the repo tree resolves to nothing: docker fails the build with "not found" on a path that is sitting
+# right there in the checkout, which is exactly how this shipped broken.
+for ext in memory deployments knowledge; do
     src="_extensions/$ext/dist"
     [ -d "$src" ] || { echo "$src is missing — the turbo build above did not produce ext-$ext's bundle" >&2; exit 1; }
     mkdir -p "$out/extensions/$ext"

@@ -147,8 +147,21 @@ const applyFit = (store: VueFlowStore): void => {
         void store.fitView(FIT.value);
         return;
     }
+    /* THE FRAME MAY NOT BE MEASURED YET, and reaching into it when it isn't took the whole view down with a
+     * `Cannot read properties of undefined (reading 'width')`. Vue Flow populates `dimensions` from its own
+     * observer, so a graph mounted into a container that has just appeared — a tab switched to, a pane
+     * revealed — can be ready before it has been measured. The graph mounted WITH its page (every caller until
+     * one wasn't) always won that race, which is why this only ever crashed for the one that didn't.
+     *
+     * Falling back to the plain fit is the right answer rather than a guard: `fitView` is itself a no-op until
+     * the boxes exist, and the resize observer below calls back the moment they do — at which point this runs
+     * again with a real frame and applies the readable fit properly. */
     const frame = store.dimensions.value;
     const box = extent.value;
+    if (frame === undefined || frame.width === 0 || frame.height === 0) {
+        void store.fitView(FIT.value);
+        return;
+    }
     const fitted = Math.min((frame.width * (1 - 2 * PADDING)) / box.width, (frame.height * (1 - 2 * PADDING)) / box.height, magnify ? 2 : 1);
     if (fitted >= readableZoom) {
         void store.fitView(FIT.value);
