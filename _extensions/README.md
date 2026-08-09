@@ -72,6 +72,7 @@ fails any extension that reaches `/{provider}/models` or `/{provider}/accounts` 
 | `social` | data-only | The platforms the agent acts on **as the owner** through the shared logged-in Chromium (Reddit, X, YouTube): a card, a login URL and a cheatsheet each. The browser itself is core — this pack buys identity, not tooling. |
 | `computers` | data-only | The OS skill packs a connected computer installs (Windows PowerShell, Linux shell + Wayland/X11). The tool surface, the enrollment and the scope enforcement are core; only the pack varies. |
 | `acp-agents` | data-only | The ACP agents offered as chat providers (OpenCode, Gemini CLI, any custom command) — presets over one config shape. |
+| `pi-agent` | data-only + environment fragment | The Pi coding agent as a chat provider under the reserved `pi` id — served by the daemon's own Pi RPC runtime (not ACP), with the image fragment that bakes the Pi CLI in. |
 | `discord` | daemon gateway | A `process` + `listener` bridging Discord to the daemon, plus the discord connector. |
 | `slack` | daemon gateway | A `process` + `listener` bridging Slack to the daemon over Socket Mode (outbound WebSocket — no public URL, no request signing), plus the slack connector. Mention replies are painted into the thread live. |
 | `telegram` | daemon gateway | A `process` + `listener` bridging Telegram to the daemon over long polling (outbound HTTPS — no public URL, no webhook), plus the telegram connector. Dependency-free: the Bot API is `fetch` and JSON. Replies are painted into the chat live. |

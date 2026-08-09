@@ -38,7 +38,7 @@ describe("every provider/harness pair declares what it can do", () => {
 
         // Nothing may be left to inference: a `permissions` a surface can't read, or a runtime nobody serves,
         // is the drift this record exists to end.
-        expect(["claude-code", "codex", "opencode", "acp"]).toContain(capabilities.runtime);
+        expect(["claude-code", "codex", "opencode", "acp", "pi"]).toContain(capabilities.runtime);
         expect(["modes", "plan"]).toContain(capabilities.permissions);
         expect(["full", "http", "none"]).toContain(capabilities.mcp);
         expect(["namespace", "cwd"]).toContain(capabilities.isolation);
@@ -54,6 +54,35 @@ test("an unknown provider id is an ACP agent, on either harness", () => {
     for (const harness of HARNESSES) {
         expect(capabilitiesOf("some-installed-agent", harness.value).runtime).toBe("acp");
     }
+});
+
+/* THE `pi` ID IS RESERVED for the Pi coding agent's own RPC runtime — an `agent`-kind capability like any ACP
+ * agent, but served over Pi's JSONL protocol, which carries abilities the ACP floor cannot: real mid-turn
+ * steering, the thinking-level scale, a published command list. Falling to the ACP record instead would strip
+ * exactly the abilities that justify a fifth runtime. */
+describe("the pi provider", () => {
+    it("runs the pi runtime on either harness — pi is its own loop", () => {
+        for (const harness of HARNESSES) {
+            expect(capabilitiesOf("pi", harness.value).runtime).toBe("pi");
+        }
+    });
+
+    it("sits above the ACP floor: steering, effort and commands are real; terminals and MCP are not", () => {
+        const pi = capabilitiesOf("pi", "native");
+        expect(pi.steering).toBe(true);
+        expect(pi.effort).toBe(true);
+        expect(pi.commands).toBe(true);
+        const limitations = limitationsOf(pi);
+        expect(limitations).toContain("no MCP tools or plugins");
+        expect(limitations).toContain("no terminal panel");
+        expect(limitations).not.toContain("no mid-turn steering");
+        expect(limitations).not.toContain("no effort control");
+        expect(limitations).not.toContain("no slash commands");
+    });
+
+    it("is an installed capability, so it carries no access requirement to connect", () => {
+        expect(accessFor("pi")).toBeUndefined();
+    });
 });
 
 /* The harness axis is real for exactly two providers. Claude is always its own Claude Code loop, and kimi/gemini

@@ -72,7 +72,9 @@ test("each runtime is asked about a resume by its own session store", async () =
     );
 
     expect(asked.toSorted()).toEqual(["claude:/work:s-1", "codex:s-1", "opencode:s-1:/work"]);
-    expect(held).toEqual({ "claude-code": false, codex: false, opencode: false, acp: true });
+    // Pi's store is the filesystem itself — its session id is a session-file path (pi/pi-agent.ts), and a
+    // path that does not exist is a resume that cannot happen.
+    expect(held).toEqual({ "claude-code": false, codex: false, opencode: false, acp: true, pi: false });
 });
 
 /* Health is a fact about the daemon's configuration, so it is probed against a stubbed one. What matters here
@@ -95,7 +97,7 @@ const healthOf = async (runtime: string, overrides: Record<string, unknown> = {}
 };
 
 test("a fully unconfigured sandbox reports every runtime unavailable, each naming what to connect", async () => {
-    for (const runtime of ["claude-code", "codex", "opencode", "acp"]) {
+    for (const runtime of ["claude-code", "codex", "opencode", "acp", "pi"]) {
         const health = await healthOf(runtime);
         expect(health.state, runtime).toBe("unavailable");
         expect(health.detail, runtime).toBeTruthy();
@@ -107,6 +109,11 @@ test("a configured credential reports ready", async () => {
     expect((await healthOf("codex", { config: { translator: { url: "" }, anthropicApiKey: "", openaiApiKey: "sk-x" } })).state).toBe("ready");
     expect((await healthOf("opencode", { openCode: { connected: async () => true } })).state).toBe("ready");
     expect((await healthOf("acp", { capabilities: { list: async () => [{ kind: "agent", id: "a" }] } })).state).toBe("ready");
+    // Pi needs ITS reserved capability id — an unrelated agent capability is the ACP arm's answer, not Pi's.
+    expect((await healthOf("pi", { capabilities: { list: async () => [{ kind: "agent", id: "a" }] } })).state).toBe("unavailable");
+    expect((await healthOf("pi", { capabilities: { list: async () => [{ kind: "agent", id: "pi", config: { command: "pi" } }] } })).state).toBe(
+        "ready",
+    );
 });
 
 test("a probe that cannot run answers unknown rather than greying the provider out", async () => {
@@ -118,6 +125,7 @@ test("a probe that cannot run answers unknown rather than greying the provider o
     );
     expect((await healthOf("opencode", { openCode: { connected: boom } })).state).toBe("unknown");
     expect((await healthOf("acp", { capabilities: { list: boom } })).state).toBe("unknown");
+    expect((await healthOf("pi", { capabilities: { list: boom } })).state).toBe("unknown");
     expect(
         (await healthOf("claude-code", { claudeStore: { list: boom }, config: { translator: { url: "" }, anthropicApiKey: "", openaiApiKey: "" } }))
             .state,

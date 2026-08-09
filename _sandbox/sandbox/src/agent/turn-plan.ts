@@ -5,6 +5,7 @@ import {
     type Capability,
     type IqContextOutcome,
     type Rule,
+    PI_PROVIDER,
     SandboxSettingsSchema,
     capabilitiesOf,
     withoutResumeNote,
@@ -98,7 +99,8 @@ export interface TurnContext {
     // What the pre-turn rebase moved under this branch, already written out (turn-preamble.ts syncNote).
     // Undefined on a main-tree turn and on the ordinary isolated turn whose branch was already up to date.
     readonly syncNote: string | undefined;
-    // Mid-turn steering, present only where the Claude Code loop runs the turn.
+    // Mid-turn steering, present only where the runtime declares it (capabilitiesOf().steering — the Claude
+    // Code loop's streaming input, and Pi's own steer queue).
     readonly steering: SteeringQueue | undefined;
     /* Re-take the pre-turn rebase while the turn is parked on a card (agent.routes.ts owns the git and the
      * bookkeeping; agent.ts picks the moments). Isolated turns only — a main-tree turn has no branch to move.
@@ -267,6 +269,29 @@ export const planGrokTurn = async (services: Services, input: AgentTurn, context
         // Override base's input.model with the validated id; the adapter folds attachment paths into the prompt
         // (OpenCode's tools read them from disk).
         request: withAttachments({ ...context.base, model }, context.attachmentPaths),
+    };
+};
+
+// Pi: the reserved `pi` agent-kind capability, spawned and driven over Pi's own RPC protocol. Harness doesn't
+// apply (Pi is its own loop). Unlike the ACP floor it takes the steering queue (Pi's `steer` command is real
+// mid-turn injection) and the effort tier (set_thinking_level); it has no MCP seam, so no tools are passed.
+export const planPiTurn = async (
+    services: Services,
+    _input: AgentTurn,
+    context: TurnContext,
+    installed: readonly Capability[],
+): Promise<TurnPlan> => {
+    const capability = installed.find((entry) => entry.kind === "agent" && entry.id === PI_PROVIDER);
+    if (capability === undefined || capability.kind !== "agent") {
+        return { ok: false, message: "Pi is not installed — add the Pi Agent capability first." };
+    }
+    return {
+        ok: true,
+        run: (turnRequest) => services.piAgent(capability.config, turnRequest),
+        request: withAttachments(
+            context.steering !== undefined ? { ...context.base, steering: context.steering } : context.base,
+            context.attachmentPaths,
+        ),
     };
 };
 
@@ -444,9 +469,7 @@ export const planHarnessTurn = async (
         // Each logged-in browser capability grants the @playwright/mcp browser tools, bound to that platform's
         // persisted profile so the agent acts as the signed-in owner (read/reply/comment/post/join) — filtered
         // to the accounts this turn's identity speaks for.
-        services.perf.track("turn.plan.browser", {}, () =>
-            browserServersOf(identityCapabilities(installed, identity), services.workspace.root),
-        ),
+        services.perf.track("turn.plan.browser", {}, () => browserServersOf(identityCapabilities(installed, identity), services.workspace.root)),
         services.perf.track("turn.plan.delegation", {}, () => delegationEnv(services, stableSystemPrompt)),
     ]);
     // The image-baked iq plugin (skill + SessionStart nudge) loads ahead of any user-added plugin-kind

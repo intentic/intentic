@@ -1,9 +1,10 @@
-import { type AgentHarness, type AgentProvider, capabilitiesOf } from "@intentic/sandbox-contract";
+import { access } from "node:fs/promises";
+import { type AgentHarness, type AgentProvider, capabilitiesOf, PI_PROVIDER } from "@intentic/sandbox-contract";
 import { codexReadiness } from "../codex/codex-readiness.js";
 import { OPENCODE_BINARY_MISSING } from "../grok/opencode.js";
 import { onPath } from "../platform/on-path.js";
 import type { AdapterHealth, AgentAdapter } from "./adapter.js";
-import { planAcpTurn, planCodexTurn, planGrokTurn, planHarnessTurn } from "./turn-plan.js";
+import { planAcpTurn, planCodexTurn, planGrokTurn, planHarnessTurn, planPiTurn } from "./turn-plan.js";
 
 /* RUNTIME → ADAPTER. The whole dispatch, in one table, so adding a runtime is a row rather than a fifth arm
  * grown onto an if/else chain — and so the question "which runtimes exist" has an answer a reader can see.
@@ -118,7 +119,39 @@ const ACP_ADAPTER: AgentAdapter<"acp"> = {
     holdsSession: async () => true,
 };
 
-export const ADAPTERS: readonly AgentAdapter[] = [CLAUDE_CODE_ADAPTER, CODEX_ADAPTER, OPENCODE_ADAPTER, ACP_ADAPTER];
+const PI_ADAPTER: AgentAdapter<"pi"> = {
+    runtime: "pi",
+    preflight: (services, input, context, installed) => planPiTurn(services, input, context, installed),
+    /* Two things have to hold, and each is a different fix: the reserved `pi` capability must be installed
+     * (Setup ▸ Extend), and its command must resolve on PATH — Pi ships as an npm package the capability's
+     * image fragment bakes in, so a card added before the rebuild is exactly the state this names. Probed on
+     * the command's head, the OpenCode precedent. */
+    health: async (services) => {
+        const installed = await attempt(() => services.capabilities.list());
+        if (installed === undefined) {
+            return unknown();
+        }
+        const capability = installed.find((entry) => entry.kind === "agent" && entry.id === PI_PROVIDER);
+        if (capability === undefined || capability.kind !== "agent") {
+            return unavailable("Add the Pi Agent capability to run Pi here.");
+        }
+        const head = capability.config.command.trim().split(/\s+/)[0] ?? "";
+        return (await onPath(head)) ? ready() : unavailable(`\`${head}\` is not on PATH — rebuild the sandbox so the Pi install lands in the image.`);
+    },
+    /* A Pi session is a JSONL file (the id on the wire IS its path — pi/pi-agent.ts), so whether a resume can
+     * still happen is whether the file is still there. Asked of the filesystem rather than of Pi, because
+     * there is no process between turns to ask. */
+    holdsSession: async (_services, sessionId) => {
+        try {
+            await access(sessionId);
+            return true;
+        } catch {
+            return false;
+        }
+    },
+};
+
+export const ADAPTERS: readonly AgentAdapter[] = [CLAUDE_CODE_ADAPTER, CODEX_ADAPTER, OPENCODE_ADAPTER, ACP_ADAPTER, PI_ADAPTER];
 
 const BY_RUNTIME = new Map(ADAPTERS.map((adapter) => [adapter.runtime, adapter]));
 

@@ -47,6 +47,7 @@
                 "_extensions/logs",
                 "_extensions/maintenance",
                 "_extensions/memory",
+                "_extensions/pi-agent",
                 "_extensions/pipelines",
                 "_extensions/preview",
                 "_extensions/repo-apps",

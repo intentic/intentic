@@ -108,8 +108,9 @@ survive reconnects. Its subsystems:
 - **Agent backends** — Claude (agent SDK, spawned per turn), Codex, Grok/opencode, Kimi Code, and Gemini. Kimi
   and Google's models are re-served from subscription OAuth through the bundled translator on the Claude Code
   harness
-  ([agent/](_sandbox/sandbox/src/agent/)), plus an anonymous website **webchat** widget over SSE. The four runtimes
-  behind that seam (the Claude Code loop, Codex's exec surface, OpenCode, ACP) do not do the same things, so
+  ([agent/](_sandbox/sandbox/src/agent/)), plus an anonymous website **webchat** widget over SSE. The five runtimes
+  behind that seam (the Claude Code loop, Codex's exec surface, OpenCode, ACP, and Pi's RPC mode under the
+  reserved `pi` capability id — [pi/](_sandbox/sandbox/src/pi/)) do not do the same things, so
   what each one *can* do is **declared**, not inferred: `capabilitiesOf(provider, harness)`
   ([sandbox-contract/agent-catalog.ts](_sandbox/sandbox-contract/src/agent-catalog.ts)) is one row per runtime —
   steering, permissions, questions, MCP, effort, isolation, commands, terminals, recovery — and both sides of

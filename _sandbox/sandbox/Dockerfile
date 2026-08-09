@@ -280,19 +280,21 @@ RUN chmod +x /opt/sandbox/node_modules/@intentic/iq/dist/cli.js \
 # daemon tree, so the pack's copy is the only one and the daemon's adapter drives it via codexPathOverride.
 # Image-baked first-party extensions — one manifest checkout per subdir, enumerated by installedExtensions()
 # via SANDBOX_EXTENSIONS_DIR (the iq-plugin precedent): present in every sandbox, not removable, no capability
-# entry. connectors, social, computers and acp-agents are data-only (manifest + skill packs + client image
-# fragments) so they copy straight from context. The messaging gateways (discord, imap, slack, telegram,
+# entry. connectors, social, computers, acp-agents and pi-agent are data-only (manifest + skill packs + client
+# image fragments) so they copy straight from context. The messaging gateways (discord, imap, slack, telegram,
 # whatsapp) bake their MANIFESTS here — the cards exist in every image — while their deployed runtime trees are
 # the bake-only `messaging` feature pack (packs/messaging.Dockerfile, in the standard profile); on a core image
 # the daemon surfaces "not included in this image" instead of spawning a runtime that isn't there.
 #
-# The four data-only packs are what makes the /capabilities grid: every card that is a ROW over a generic core
-# handler (a cli connector, a social platform, an OS pack, an ACP preset) is one of these manifest entries, so
-# switching a pack off removes exactly its cards. Miss a COPY and those cards silently vanish from the grid.
+# The five data-only packs are what makes the /capabilities grid: every card that is a ROW over a generic core
+# handler (a cli connector, a social platform, an OS pack, an ACP preset, the Pi agent) is one of these manifest
+# entries, so switching a pack off removes exactly its cards. Miss a COPY and those cards silently vanish from
+# the grid.
 COPY _extensions/connectors /opt/extensions/connectors
 COPY _extensions/social /opt/extensions/social
 COPY _extensions/computers /opt/extensions/computers
 COPY _extensions/acp-agents /opt/extensions/acp-agents
+COPY _extensions/pi-agent /opt/extensions/pi-agent
 COPY _extensions/discord/intentic-extension.json /opt/extensions/discord/
 COPY _extensions/imap/intentic-extension.json /opt/extensions/imap/
 COPY _extensions/slack/intentic-extension.json /opt/extensions/slack/

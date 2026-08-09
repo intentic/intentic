@@ -56,8 +56,9 @@ export class SteeringQueue implements AsyncIterable<string> {
 export interface ActiveTurn {
     // Hard-cancels the turn (aborts the SDK/provider adapter).
     readonly abort: () => void;
-    // Present only on turns that support mid-turn injection (the Claude Code harness); a native codex/grok/ACP
-    // turn registers abort alone, so steering it reports NOT_FOUND and the client falls back to a fresh send.
+    // Present only on turns that support mid-turn injection (capabilitiesOf().steering — the Claude Code
+    // harness, and Pi's steer queue); a native codex/grok/ACP turn registers abort alone, so steering it
+    // reports NOT_FOUND and the client falls back to a fresh send.
     readonly steering?: SteeringQueue;
 }
 

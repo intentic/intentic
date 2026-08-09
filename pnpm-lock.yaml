@@ -1548,6 +1548,8 @@ importers:
         specifier: 'catalog:'
         version: 3.3.9(typescript@5.9.3)
 
+  _extensions/pi-agent: {}
+
   _extensions/pipelines:
     dependencies:
       '@intentic/extension-api':

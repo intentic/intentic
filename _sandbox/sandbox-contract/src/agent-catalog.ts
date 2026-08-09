@@ -137,8 +137,8 @@ export const HARNESSES: readonly { label: string; value: AgentHarness }[] = [
 
 /* WHAT A PROVIDER/HARNESS PAIR CAN ACTUALLY DO — one declaration, read by both sides of the wire.
  *
- * Four runtimes serve turns behind one seam (AgentRequest in, AgentEvent frames out): the Claude Code Agent SDK
- * loop, Codex's exec surface, OpenCode, and any ACP agent. They do NOT do the same things, and for a long time
+ * Five runtimes serve turns behind one seam (AgentRequest in, AgentEvent frames out): the Claude Code Agent SDK
+ * loop, Codex's exec surface, OpenCode, any ACP agent, and Pi's RPC surface. They do NOT do the same things, and for a long time
  * the only thing that said so was a comment inside each adapter — "Ignores the Claude-only request fields" —
  * which no surface above it could read. So the composer offered "Ask before each file edit" on a runtime whose
  * every tool call is pre-approved, and offered a reasoning-effort scale to a runtime that drops the field.
@@ -155,7 +155,7 @@ export interface AgentCapabilities {
     // re-served through the translator), so all three run it whatever harness the client sent; only codex/grok
     // have a native runtime to switch away from. Names the session store a finished conversation's transcript is
     // backfilled from, too.
-    readonly runtime: "claude-code" | "codex" | "opencode" | "acp";
+    readonly runtime: "claude-code" | "codex" | "opencode" | "acp" | "pi";
     // Mid-turn injection (the SteeringQueue behind /agent/steer). Needs the SDK's streaming-input mode.
     readonly steering: boolean;
     // How much of the permission-mode axis the runtime honours. "modes" = every PermissionMode, with per-tool
@@ -257,10 +257,37 @@ const ACP: AgentCapabilities = {
     recovery: false,
 };
 
+/* THE PI CAPABILITY ID IS RESERVED, the same way the five native ids are: an `agent`-kind capability installed
+ * under it is served over Pi's own RPC protocol rather than ACP — Pi closed ACP support deliberately (its RPC
+ * mode is the embedding surface), and the two want different records. A bare id rather than a namespace like
+ * `endpoint/`, because there is exactly one Pi runtime to name; capabilitiesOf still answers from the id alone,
+ * which is what keeps it a pure function of (provider, harness). */
+export const PI_PROVIDER = "pi";
+
+// Pi driven over its RPC mode (`pi --mode rpc`, strict-LF JSONL over stdio): above the ACP floor and below the
+// Claude Code ceiling. Its `steer` command is real mid-turn injection; `set_thinking_level` takes the effort
+// tiers; `get_commands` publishes its extension/skill commands. It has no MCP seam (Pi's own extensions are its
+// tool surface), no approval channel (plan is the shared two-phase emulation), and runs bash in-process — no
+// tmux session for the terminal panel to attach to.
+const PI: AgentCapabilities = {
+    runtime: "pi",
+    steering: true,
+    permissions: "plan",
+    questions: false,
+    mcp: "none",
+    effort: true,
+    fastMode: false,
+    isolation: "cwd",
+    commands: true,
+    terminals: false,
+    recovery: false,
+};
+
 // The pair → its record. An `endpoint/<id>` provider is a model API the user configured, driven BY the Claude
 // Code loop on either harness — so it gets that loop's full ceiling, which is the entire point of routing a
-// model through it rather than adopting a second runtime. Any other id that names no native provider is an
-// installed `agent`-kind capability, served over ACP.
+// model through it rather than adopting a second runtime. The reserved `pi` id is the Pi coding agent on its
+// own RPC runtime (harness doesn't apply — Pi is its own loop, like ACP). Any other id that names no native
+// provider is an installed `agent`-kind capability, served over ACP.
 export const capabilitiesOf = (provider: AgentProvider, harness: AgentHarness): AgentCapabilities => {
     if (provider === "codex") {
         return harness === "claude-code" ? CLAUDE_CODE : CODEX;
@@ -270,6 +297,9 @@ export const capabilitiesOf = (provider: AgentProvider, harness: AgentHarness): 
     }
     if (isEndpointProvider(provider)) {
         return CLAUDE_CODE;
+    }
+    if (provider === PI_PROVIDER) {
+        return PI;
     }
     return (NATIVE_PROVIDERS as readonly string[]).includes(provider) ? CLAUDE_CODE : ACP;
 };

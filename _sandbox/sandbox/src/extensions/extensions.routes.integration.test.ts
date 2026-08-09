@@ -104,6 +104,7 @@ test("the extension list carries every first-party extension, compiled-in UI one
         "intentic.logs",
         "intentic.maintenance",
         "intentic.memory",
+        "intentic.pi-agent",
         "intentic.pipelines",
         "intentic.preview",
         "intentic.repo-apps",

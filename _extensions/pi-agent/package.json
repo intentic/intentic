@@ -1,0 +1,8 @@
+{
+    "name": "@intentic/ext-pi-agent",
+    "version": "1.0.0",
+    "description": "The Pi coding agent as a chat provider, driven over its RPC protocol, as a pure-data intentic extension",
+    "license": "MIT",
+    "private": true,
+    "type": "module"
+}

@@ -35,6 +35,8 @@ import { createResidentEngine, type ResidentEngine } from "@intentic/iq-engine";
 import type { Logger } from "pino";
 import { createAcpAgent } from "./acp/acp-agent.js";
 import { type AcpConnections, createAcpConnections } from "./acp/acp-connection.js";
+import { createPiAgent } from "./pi/pi-agent.js";
+import { piSpawner } from "./pi/pi-rpc.js";
 import { type ControlTokens, fileControlTokens } from "./auth/control-tokens.js";
 import { createMediaTickets, type MediaTickets } from "./auth/media-tickets.js";
 import { createWsTickets, type WsTickets } from "./auth/ws-tickets.js";
@@ -411,6 +413,9 @@ export interface Services {
     // streamAgent resolves the capability and passes it in. The pool keeps one warm subprocess per agent.
     readonly acpAgent: (id: string, config: AcpAgentConfig, request: AgentRequest) => AsyncGenerator<AgentEvent>;
     readonly acpConnections: AcpConnections;
+    // The Pi adapter serving the reserved `pi` agent-kind capability over Pi's RPC protocol — one process per
+    // turn, sessions persisted as files under `<authRoot>/pi/sessions` (see pi/pi-agent.ts).
+    readonly piAgent: (config: AcpAgentConfig, request: AgentRequest) => AsyncGenerator<AgentEvent>;
     readonly intentic: (run: IntenticRun, signal?: AbortSignal) => AsyncGenerator<IntenticLine>;
     readonly git: {
         readonly init: (dir: string, separateGitDir?: string) => Promise<void>;
@@ -833,6 +838,9 @@ export const createServices = (config: Config, logger: Logger): Services => {
         grokAgent: createGrokAgent(createGrokRunner(openCode)),
         acpAgent: createAcpAgent(acpConnections),
         acpConnections,
+        // Pi sessions sit beside the other AI-provider state under authRoot, so a dev sandbox pointing
+        // AGENT_AUTH_DIR at a stable dir keeps its Pi conversations resumable across resets too.
+        piAgent: createPiAgent(piSpawner(join(authRoot, "pi", "sessions"))),
         // Bound to the daemon logger so every CLI run's lifecycle (spawn/kill/exit) is attributable from
         // daemon.log — the runs themselves are transient subprocesses whose absence proves nothing.
         intentic: (run, signal) => runIntentic(run, signal, logger),
