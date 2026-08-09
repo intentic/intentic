@@ -1219,6 +1219,26 @@ export class Conversation {
         void this.drainQueue();
     }
 
+    /* Declines a pending browser-help card from the CHAT side — "can't help now", which un-parks the agent to
+     * carry on without the owner's hands. The other half of this card's life happens on /browsers (the banner
+     * over the live stage is where "hand back" lives, beside Take control); when the user resolves it THERE,
+     * the resolved frame freezes this card, so chat offers only the answer that needs no browser. */
+    async declineBrowserHelp(message: ChatMessage): Promise<void> {
+        const help = message.browserHelp;
+        if (help?.status !== `pending`) {
+            return;
+        }
+        const landed = await this.decide(
+            message.id,
+            { kind: `browser_help`, requestId: help.requestId, helped: false },
+            `Could not send that — the turn may have ended.`,
+            { browserHelp: { ...help, status: `declined` } },
+        );
+        if (landed) {
+            void this.drainQueue();
+        }
+    }
+
     /* One folded frame's consequences for the conversation, in the order the frames arrived. Both orderings
      * here matter and neither can be hoisted: `providerRetry` is cleared by any other frame and SET by an
      * effect below, so a batch holding a retry and the frame that answers it would otherwise settle on

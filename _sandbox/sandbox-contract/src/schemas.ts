@@ -1025,6 +1025,17 @@ export const AgentReplySchema = z.discriminatedUnion("kind", [
         decision: z.enum(["once", "always", "deny"]),
         feedback: z.string().optional(),
     }),
+    // A browser help request (the agent parked mid-sign-in on something only a person can clear — a captcha, a
+    // password it does not hold). `helped: true` is "done, hand back": the user took control of the agent's
+    // browser, fixed the step, and the turn continues from the page as they left it. `helped: false` is "can't
+    // help now" — the agent is told so and moves on rather than waiting forever. `note` rides back to the model
+    // either way ("typed the password, don't touch the remember-me box").
+    z.object({
+        kind: z.literal("browser_help"),
+        requestId: z.string().min(1),
+        helped: z.boolean(),
+        note: z.string().optional(),
+    }),
 ]);
 export type AgentReply = z.infer<typeof AgentReplySchema>;
 // Steering: a user message delivered INTO the running turn (injected between tool calls, Claude Code style),
@@ -2917,9 +2928,9 @@ export const DockerConfigSchema = z.object({
     addressPool: z.string().optional(),
 });
 // A logged-in browser session the AGENT drives via Playwright MCP tools — for social platforms whose APIs can't
-// cover "all the actions" (X reads are paywalled; X community-join and YouTube community-posts have no API). No
-// secret in the manifest: the session lives in a persisted Chromium profile under .intentic/browser/<id>,
-// established once through the guided-login WebSocket (/system/browser-login). Chromium itself rides this kind's
+// cover "all the actions" (X reads are paywalled; X community-join and YouTube community-posts have no API). The
+// session lives in a persisted Chromium profile under .intentic/browser/<id>, established through the guided-login
+// WebSocket (/system/browser-login) or by the agent signing in itself. Chromium itself rides this kind's
 // Dockerfile fragment, applied on an owner rebuild.
 //
 // ONE CAPABILITY = ONE ACCOUNT, not one platform: several entries may name the same `platform` (reddit-work and
@@ -2930,12 +2941,20 @@ export const DockerConfigSchema = z.object({
 // and a skill in an installed extension's `contributes.capabilities`, so the set of them is not a fact this
 // contract can know. The add route validates it against the contributed entry instead (see contributions.ts).
 //
+// `username`/`password` are the account's SIGN-IN CREDENTIALS, on every card rather than declared per platform
+// (which box a login form wants filled is the same fact everywhere). Both optional: a profile that signed in by
+// hand needs neither, and the password is the entry's SECRET — stored so the daemon can type it into the page on
+// the agent's behalf (the accounts tools), never so the agent can read it. When the agent signs UP it has the
+// daemon generate and store one here, so the credential outlives the profile's cookies.
+//
 // `catchall`, the `cli` precedent, for the card that carries no site at all: a GENERIC browser session, where the
 // page to open and what the account is for are answered on the form instead of pinned in a manifest. A site card
 // pins its URLs and declares no fields; the generic one declares fields and pins nothing — one kind, because
-// nothing downstream of the URLs differs. Which keys are legal is the CARD's business, checked against its
+// nothing downstream of the URLs differs. Which other keys are legal is the CARD's business, checked against its
 // declared fields at add-time (validateContributionConfig), not this schema's.
-export const BrowserConfigSchema = z.object({ platform: z.string().min(1) }).catchall(z.string());
+export const BrowserConfigSchema = z
+    .object({ platform: z.string().min(1), username: z.string().optional(), password: z.string().optional() })
+    .catchall(z.string());
 /* A connected COMPUTER of the user's own — the inverse of `ssh`, which reaches a server the sandbox can dial.
  * A machine behind NAT can't be dialled, so it dials US: the @intentic/host agent (installed by a one-liner,
  * enrolled with a single-use pairing token) holds one outbound WebSocket to this daemon and serves an MCP tool
@@ -4726,6 +4745,12 @@ export const BrowserSessionSchema = z.object({
     // When that Chromium went away, for the "closed 20m ago" line a finished session leads with. Absent while
     // running, which is the same fact as `running` — but the view needs the timestamp, not just the flag.
     finishedAt: z.number().optional(),
+    // The agent has hit something only a person can clear (a captcha, a password it does not hold, a phone
+    // check) and is PARKED on it: `message` is its own account of what it needs, in the user's language. The
+    // Browsers view renders it as a banner over the live stage — where "Take control" already is — and its
+    // buttons settle the parked card through `POST /agent/reply` with `requestId`, exactly as the chat card
+    // does; the field clears when the waiter settles, never by direct edit. Present only while open.
+    help: z.object({ requestId: z.string(), message: z.string(), requestedAt: z.number() }).optional(),
     pages: z.array(BrowserPageSchema),
 });
 export type BrowserPage = z.infer<typeof BrowserPageSchema>;

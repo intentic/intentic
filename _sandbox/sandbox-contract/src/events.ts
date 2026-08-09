@@ -433,10 +433,22 @@ export const AgentEventSchema = z.discriminatedUnion("kind", [
     z.object({ kind: z.literal("account_usage"), account: z.string().optional(), windows: z.array(UsageWindowSchema) }),
     ContextUsageSchema.extend({ kind: z.literal("context_usage") }),
     z.object({ kind: z.literal("compact"), trigger: z.string(), preTokens: z.number().optional(), postTokens: z.number().optional() }),
-    // The three interactive cards. Each parks the turn until `POST /agent/reply` resolves its `requestId`.
+    // The four interactive cards. Each parks the turn until `POST /agent/reply` resolves its `requestId`.
     z.object({ kind: z.literal("plan"), requestId: z.string(), text: z.string() }),
     z.object({ kind: z.literal("question"), requestId: z.string(), questions: z.array(AskQuestionSchema) }),
     PermissionAskSchema.extend({ kind: z.literal("permission"), requestId: z.string() }),
+    // The agent's browser needs a person: it parked mid-sign-in on something it cannot clear itself (a captcha,
+    // a password it does not hold, a phone check). `session` names the browser session on /browsers — the card's
+    // one action is going THERE, where the live stage and Take control already are; the Browsers banner and this
+    // card resolve the same requestId. `account` is the capability the sign-in is for, so the card can say whose
+    // login is stuck even after the browser has navigated somewhere unrecognizable.
+    z.object({
+        kind: z.literal("browser_help"),
+        requestId: z.string(),
+        session: z.string(),
+        account: z.string(),
+        message: z.string(),
+    }),
     // The card above named by `requestId` is released — the user answered (or dismissed it, or the turn was
     // stopped out from under it), so the turn is executing again. Emitted by whoever parked, the moment its
     // waiter settles, because the park's END is otherwise invisible on this stream: nothing else here says

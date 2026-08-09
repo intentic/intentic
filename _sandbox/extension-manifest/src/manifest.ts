@@ -322,7 +322,9 @@ export const CapabilityContributionSchema = z
          * place to start (signed in, it only redirects). Two fields because for some platforms the login lives on
          * another site entirely (YouTube signs in at accounts.google.com), so one cannot be derived from the other.
          * No `env` and no `fragment`: the browser itself is core (one Chromium install serves every platform),
-         * only the identity is per-entry.
+         * only the identity is per-entry. A card never declares the account's username/password either — those are
+         * CORE form fields on every browser card (the catalog appends them; the daemon's add validation accepts
+         * them), because which box a login form wants filled is the same fact on every site.
          *
          * BOTH URLs ARE OPTIONAL, so that one card can be the GENERIC one: a site card pins them (Reddit knows
          * where Reddit signs in), and the generic "browser session" card asks for them on its form instead, which

@@ -85,13 +85,18 @@ test("a browser is available with no capabilities and no login at all", async ()
     expect(Object.keys((await browserServersOf([github], tempRoot())).servers)).toEqual(["web"]);
 });
 
-// Only the not-logged-in half is assertable here: the logged-in path starts Xvfb, which exists in the sandbox
-// image and not on a dev host, so driving it from a unit test would just hang.
-test("a browser capability contributes nothing extra until it is logged in", async () => {
-    if (!(await chromiumInstalled())) {
+/* A PENDING account's browser mounts too — over the same persisted profile the guided login would write. This
+ * is what lets the agent perform the sign-in (or sign-up) itself and leave the account exactly as connected as
+ * a hand login would have; the connected marker gates nothing here any more, only the profile lock does. Needs
+ * the virtual display like every persisted-profile server, so guarded like the two-accounts test below. */
+test("a browser capability's server mounts before anyone has logged in", async () => {
+    if (!(await chromiumInstalled()) || !existsSync("/usr/bin/Xvfb")) {
         return;
     }
-    expect(Object.keys((await browserServersOf([reddit], tempRoot())).servers)).toEqual(["web"]);
+    const { servers, passkeys } = await browserServersOf([reddit], tempRoot());
+    expect(Object.keys(servers).toSorted()).toEqual(["reddit", "web"]);
+    // The passkey store is armed from the first page: a sign-UP is exactly when the account enrolls its key.
+    expect(passkeys["reddit"]).toBeDefined();
 });
 
 test("a login in progress suppresses that account's server (the profile is locked)", async () => {

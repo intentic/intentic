@@ -1,5 +1,14 @@
 import type { AgentCommand, AgentEvent, AgentReply, ContextUsage, PermissionMode, UsageWindow } from "@intentic/sandbox-contract";
-import { type ChatMessage, type ChatTool, type ChatUsage, mapTool, type PermissionStatus, type PlanStatus, type QuestionStatus } from "./transcript";
+import {
+    type BrowserHelpStatus,
+    type ChatMessage,
+    type ChatTool,
+    type ChatUsage,
+    mapTool,
+    type PermissionStatus,
+    type PlanStatus,
+    type QuestionStatus,
+} from "./transcript";
 
 /* One agent frame applied to the transcript — as a PURE function.
  *
@@ -317,6 +326,8 @@ const permissionStatusOf = (reply: AgentReply | undefined): PermissionStatus => 
     }
     return reply.decision === `deny` ? `denied` : reply.decision === `always` ? `always` : `allowed`;
 };
+const browserHelpStatusOf = (reply: AgentReply | undefined): BrowserHelpStatus =>
+    reply?.kind !== `browser_help` ? `cancelled` : reply.helped ? `helped` : `declined`;
 
 // Freeze the card the frame names, wherever it hangs. Idempotent by construction: the window that answered
 // already wrote this exact status when its reply came back, so the frame only ever changes a transcript that
@@ -336,6 +347,9 @@ const resolveCard = (state: TurnState, event: Extract<AgentEvent, { kind: "resol
         }
         if (message.permission?.requestId === event.requestId) {
             return { ...message, permission: { ...message.permission, status: permissionStatusOf(event.reply) } };
+        }
+        if (message.browserHelp?.requestId === event.requestId) {
+            return { ...message, browserHelp: { ...message.browserHelp, status: browserHelpStatusOf(event.reply) } };
         }
         return message;
     }),
@@ -477,6 +491,14 @@ export const applyTurnFrame = (state: TurnState, event: AgentEvent, context: Tur
             const { kind: _kind, ...ask } = event;
             const opened = withBubble(flushPending(state));
             const attached = mapMessage(opened.state, opened.id, (message) => ({ ...message, permission: { ...ask, status: `pending` } }));
+            return step({ ...attached, bubbleId: null });
+        }
+        case `browser_help`: {
+            // Same flow as the other cards; the card's own action leads AWAY (to /browsers, where the live
+            // stage is), and the resolved frame is what usually freezes it here.
+            const { kind: _kind, ...ask } = event;
+            const opened = withBubble(flushPending(state));
+            const attached = mapMessage(opened.state, opened.id, (message) => ({ ...message, browserHelp: { ...ask, status: `pending` } }));
             return step({ ...attached, bubbleId: null });
         }
         case `resolved`:

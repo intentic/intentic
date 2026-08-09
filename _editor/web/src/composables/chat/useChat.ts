@@ -546,6 +546,8 @@ export const conversationView = (conversation: ComputedRef<Conversation>) => ({
     cancelQuestion: (message: ChatMessage): Promise<void> => conversation.value.cancelQuestion(message),
     decidePermission: (message: ChatMessage, decision: "once" | "always" | "deny", feedback?: string): Promise<void> =>
         conversation.value.decidePermission(message, decision, feedback),
+    // "Can't help now" for a browser-help card; "hand back" lives on /browsers, beside the live stage.
+    declineBrowserHelp: (message: ChatMessage): Promise<void> => conversation.value.declineBrowserHelp(message),
 });
 
 export type ConversationView = ReturnType<typeof conversationView>;

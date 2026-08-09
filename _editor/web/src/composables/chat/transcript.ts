@@ -55,6 +55,21 @@ export interface PermissionRequest extends PermissionAsk {
     readonly status: PermissionStatus;
 }
 
+// The agent's browser parked on something only a person can clear (a captcha, a stored password nobody holds).
+// 'pending' renders the card with its way THERE — the Browsers view, where the live stage and Take control are,
+// and where "hand back" resolves it; 'helped'/'declined' freeze how it ended (mostly via the resolved frame,
+// since the answering surface is usually not this card). 'cancelled' is the turn ending under it.
+export type BrowserHelpStatus = "pending" | "helped" | "declined" | "cancelled";
+
+export interface BrowserHelpRequest {
+    readonly requestId: string;
+    // The browser session on /browsers the owner steps into, and the account whose sign-in is stuck.
+    readonly session: string;
+    readonly account: string;
+    readonly message: string;
+    readonly status: BrowserHelpStatus;
+}
+
 // One tool call the sandbox agent made during a turn, built from its tool_call frame and merged-by-id with
 // every later tool_call_update (status transitions, fresh content/locations — snapshots, not appends).
 export interface ChatTool {
@@ -194,6 +209,8 @@ export interface ChatMessage {
     readonly question?: QuestionRequest;
     // Set when a tool call on this turn needed the user's approval; carries the decision.
     readonly permission?: PermissionRequest;
+    // Set when this turn's browser asked for the owner's hands; carries how the request ended.
+    readonly browserHelp?: BrowserHelpRequest;
     // Tool actions (Bash/Edit/…) the sandbox agent ran during this turn, newest last. A sub-agent's own calls
     // nest under its Agent card (ChatTool.children), so this is a tree, not a flat list. Built immutably
     // (mapTool rewrites by id), so it's readonly to the element level like `attachments`.
@@ -209,7 +226,7 @@ export interface ChatMessage {
  * `pending` until the user answers it, and each can be `cancelled` by a Stop instead. Every site that has to
  * reach "whatever card this bubble is waiting on" derives from this list, so a fourth kind is one edit here
  * rather than a hunt through the three places that used to spell them out. */
-export const CARD_KINDS = ["plan", "question", "permission"] as const;
+export const CARD_KINDS = ["plan", "question", "permission", "browserHelp"] as const;
 export type CardKind = (typeof CARD_KINDS)[number];
 
 // Whether a bubble is holding the turn open on a card the user hasn't answered.
@@ -227,6 +244,7 @@ export const withCancelledCards = (message: ChatMessage): ChatMessage => {
         ...(message.plan?.status === `pending` ? { plan: { ...message.plan, status: `cancelled` } } : {}),
         ...(message.question?.status === `pending` ? { question: { ...message.question, status: `cancelled` } } : {}),
         ...(message.permission?.status === `pending` ? { permission: { ...message.permission, status: `cancelled` } } : {}),
+        ...(message.browserHelp?.status === `pending` ? { browserHelp: { ...message.browserHelp, status: `cancelled` } } : {}),
     };
 };
 

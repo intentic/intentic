@@ -36,6 +36,7 @@ import { relative, sep } from "node:path";
 import { z } from "zod";
 import { daemonMountNs, type IsolationAnchor, nsenterArgv, TMUX_NS_ENV, type TurnPlacement } from "../agents/isolation.js";
 import { worktreeRedirectHooks } from "../agents/worktree-redirect.js";
+import type { AccountsServerFactory } from "../browser/accounts-tools.js";
 import { browserArtifactHooks, screenshotImage } from "../browser/browser-artifacts.js";
 import { browserServerOfTool, browserSessionHooks } from "../browser/browser-sessions.js";
 import { localCommandText, unknownCommandName } from "./agent-commands.js";
@@ -163,6 +164,11 @@ export interface AgentRequest {
     // In-process SDK MCP servers — daemon-side tools whose handlers run in the daemon itself (e.g. the
     // Discord voice session tools). Merged into mcpServers alongside the remote `tools` above.
     readonly sdkServers?: Record<string, McpServerConfig>;
+    // The accounts tools (browser/accounts-tools.ts) as a FACTORY rather than a built server, because two of its
+    // inputs exist only here: the turn's event stream (request_help raises a card on it, the askServer pattern)
+    // and its abort signal. turn-plan closes it over the capability store and this turn's account list; absent ⇒
+    // the turn reaches no browser accounts and gets no accounts tools.
+    readonly accountsServer?: AccountsServerFactory;
     // Where the browser tools' artifacts belong — the same directory `--output-dir` names, threaded here
     // because @playwright/mcp honours it only for the files IT names (browser/browser-artifacts.ts). Drives
     // both the redirect hook and the sentence that tells the agent where to Read a screenshot back from.
@@ -1630,6 +1636,9 @@ export async function* runAgent(
         // question would be asked of a user who is not there, and the turn would wait for them forever.
         mcpServers: {
             ...(request.unattended === true ? {} : { ui: askServer(request, push, shell) }),
+            // The accounts tools get the same two live handles the ask tool does: the stream their help card
+            // rides, and the signal that settles a park when the turn dies under it.
+            ...(request.accountsServer === undefined ? {} : { accounts: request.accountsServer(push, request.signal) }),
             ...request.sdkServers,
             ...mcpServersOf(request.tools ?? []),
         },

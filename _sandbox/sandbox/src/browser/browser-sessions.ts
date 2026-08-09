@@ -3,6 +3,7 @@ import type { HookCallbackMatcher, HookEvent } from "@anthropic-ai/claude-agent-
 import type { BrowserPage, BrowserSession } from "@intentic/sandbox-contract";
 import { browserSessionName } from "@intentic/sandbox-contract/session-names";
 import type { Browser, BrowserContext, Page } from "playwright";
+import { resolveRequest } from "../agent/agent-requests.js";
 import { publishRuntimeChange } from "../system/runtime-watch.js";
 import { armPasskeys } from "./passkeys.js";
 
@@ -84,6 +85,12 @@ interface BrowserSessionRecord {
     lastPageId: string | undefined;
     // Set when the browser went away (turn ended, agent called browser_close, Chromium crashed).
     finishedAt: number | undefined;
+    // The open help request parked on this browser (accounts-tools.ts): the agent hit something only a person
+    // can clear and is waiting. Carried here because the Browsers view is where the person can actually act —
+    // the banner renders from the summary, and its buttons settle the request by its id. Cleared the moment the
+    // waiter settles, and by `finish`: a browser that is gone has nothing left to take control of, so a banner
+    // over its record could only mislead (the parked tool call is settled by its own abort, not from here).
+    help: { readonly requestId: string; readonly message: string; readonly requestedAt: number } | undefined;
     browser: Browser | undefined;
     context: BrowserContext | undefined;
     // The in-flight attach, so a second tool call doesn't start a second one and the view route can await it.
@@ -163,10 +170,49 @@ const watchPage = (record: BrowserSessionRecord, page: Page): void => {
 // Chromium, which is why browserSessionPage refuses a finished session outright.
 const finish = (record: BrowserSessionRecord): void => {
     record.finishedAt ??= Date.now();
+    // A browser that dies UNDER a parked help request settles that request itself, as "not helped": the parked
+    // tool call is waiting on the user, not on Chromium, so nothing else would ever release it — the turn would
+    // sit parked on a banner this same finish just took down. Idempotent against the turn-abort settle racing in.
+    if (record.help !== undefined) {
+        resolveRequest({ kind: "browser_help", requestId: record.help.requestId, helped: false, note: "the browser closed before anyone could help" });
+        record.help = undefined;
+    }
     record.browser = undefined;
     record.context = undefined;
     record.attaching = undefined;
     publishRuntimeChange("browsers");
+};
+
+/* The help-request half the accounts tools drive (accounts-tools.ts holds the waiter; this module holds the
+ * STATE, because the state is what the /system/browsers list and the view's banner render from).
+ *
+ * Addressed BY ACCOUNT rather than by session name: the tool call that parks knows which account's sign-in it
+ * is stuck on, and a persistent profile can only be open once, so at most one RUNNING session drives a given
+ * account at a time — the lookup cannot land on the wrong browser. Returns the session's name (what the chat
+ * card deep-links to), or undefined when that account has no live browser to take control of, which the tool
+ * reports as an error instead of parking the turn on a banner nobody can act on. */
+export const raiseBrowserHelp = (
+    account: string,
+    help: { readonly requestId: string; readonly message: string; readonly requestedAt: number },
+): string | undefined => {
+    const record = [...sessions.values()].find((candidate) => candidate.server === account && candidate.finishedAt === undefined);
+    if (record === undefined) {
+        return undefined;
+    }
+    record.help = help;
+    publishRuntimeChange("browsers");
+    return record.name;
+};
+
+// The waiter settled (answered, dismissed, or the turn aborted under it) — the banner comes down however it
+// ended. By requestId rather than name so a settle can never clear a NEWER request raised on the same session.
+export const clearBrowserHelp = (requestId: string): void => {
+    for (const record of sessions.values()) {
+        if (record.help?.requestId === requestId) {
+            record.help = undefined;
+            publishRuntimeChange("browsers");
+        }
+    }
 };
 
 // Wait for Chromium's DevTools HTTP endpoint, then attach. Deliberately tolerant: an attach that never lands
@@ -235,6 +281,7 @@ export const openBrowserSession = (input: {
         activePageId: undefined,
         lastPageId: undefined,
         finishedAt: undefined,
+        help: undefined,
         browser: undefined,
         context: undefined,
         attaching: undefined,
@@ -264,6 +311,21 @@ export const browserSessionContext = async (name: string): Promise<BrowserContex
         return undefined;
     }
     return record.context ?? (await record.attaching);
+};
+
+/* The page the agent is ON in one account's live browser — the accounts tools' way in (accounts-tools.ts).
+ * Looked up by ACCOUNT for the reason raiseBrowserHelp is: the profile lock means at most one running session
+ * drives an account, so the account names the browser unambiguously where a session name would make the model
+ * relay an identifier it has no other use for. Undefined when that account isn't browsing right now (no
+ * session, finished, or the attach hasn't landed) — the callers' "open the login page first" error. */
+export const browserAccountPage = (account: string): Page | undefined => {
+    const record = [...sessions.values()].find((candidate) => candidate.server === account && candidate.finishedAt === undefined);
+    const activeId = record?.activePageId;
+    if (record === undefined || activeId === undefined) {
+        return undefined;
+    }
+    const entry = record.pages.get(activeId);
+    return entry === undefined || entry.closed ? undefined : entry.page;
 };
 
 // The Playwright Page one `bind` frame names, for the view route to point its screencast at. Undefined once
@@ -316,7 +378,8 @@ const summarize = (record: BrowserSessionRecord): BrowserSession => {
         activityAt: record.activityAt,
         pages: [...record.pages.values()].filter((entry) => !running || !entry.closed).map((entry) => summarizePage(entry, activeId)),
     };
-    return running ? session : { ...session, finishedAt: record.finishedAt };
+    const withHelp = record.help === undefined ? session : { ...session, help: record.help };
+    return running ? withHelp : { ...withHelp, finishedAt: record.finishedAt };
 };
 
 export const listBrowserSessions = (): BrowserSession[] => {

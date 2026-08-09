@@ -179,6 +179,23 @@ describe("capabilityEffects", () => {
         ]);
     });
 
+    // A stored password is a stored credential and the panel says so — from the form value while adding, and
+    // from the masked hasPassword echo on an entry already stored (the raw value never reaches the browser).
+    it("discloses a browser account's stored password as a secret", () => {
+        expect(capabilityEffects({ kind: "browser", id: "reddit-work", config: { platform: "reddit", password: "s3cret!" } })).toContainEqual({
+            kind: "secret",
+            exposure: "disk",
+        });
+        expect(capabilityEffects({ kind: "browser", id: "reddit-work", config: { platform: "reddit", hasPassword: true } })).toContainEqual({
+            kind: "secret",
+            exposure: "disk",
+        });
+        expect(capabilityEffects({ kind: "browser", id: "reddit-work", config: { platform: "reddit" } })).not.toContainEqual({
+            kind: "secret",
+            exposure: "disk",
+        });
+    });
+
     /* A GENERIC SESSION'S ROW NAMES THE SITE, not the card. "Keeps a logged-in website browser profile" would be
      * true of nothing in particular, on the one row where the user decides whether to store a session and a
      * passkey at all — so the address they typed is read down to its host and stands in. */

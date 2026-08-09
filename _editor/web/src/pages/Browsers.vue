@@ -7,6 +7,7 @@ import { activePageOf } from "../composables/browser/activePage";
 import { closeBrowser, useBrowsersQuery } from "../composables/browser/browsersQuery";
 import { useBrowserView } from "../composables/browser/useBrowserView";
 import { relativeTime } from "../composables/chat/catalog";
+import { postTurnControl } from "../composables/chat/turnStream";
 
 /* THE AGENT'S BROWSER, AS A BROWSER. A live screencast of the Chromium a turn is driving through its
  * @playwright/mcp tools, with the pages it has open as a tab strip across the top — because the agent's browser
@@ -29,14 +30,15 @@ const route = useRoute();
 const router = useRouter();
 const { sessions } = useBrowsersQuery();
 
-// The session in the URL, so a reload (or a shared link) reopens the same browser. Falls back to the first
-// listed, which the query already sorts live-first — "show me what is happening now" with no click.
+// The session in the URL, so a reload (or a shared link) reopens the same browser. Falls back to a browser
+// asking for help before the first listed: someone landing here unaddressed almost certainly came for the
+// banner (the rail badge, the push, the chat card all point at it), and the plain fallback is live-first.
 const selected = computed<string | undefined>(() => {
     const named = typeof route.params[`session`] === `string` ? route.params[`session`] : undefined;
     if (named !== undefined && sessions.value.some((session) => session.name === named)) {
         return named;
     }
-    return sessions.value[0]?.name;
+    return (sessions.value.find((session) => session.help !== undefined) ?? sessions.value[0])?.name;
 });
 const current = computed(() => sessions.value.find((session) => session.name === selected.value));
 
@@ -84,6 +86,27 @@ const takeControl = (): void => {
 };
 
 const close = (name: string): void => void closeBrowser(name);
+
+/* THE HELP REQUEST'S ANSWERING END. The agent parked its turn on `request_help` and the daemon flagged this
+ * session; the banner below renders that flag, and these two buttons settle the parked card over the same
+ * /agent/reply side channel the chat's cards use. The banner comes down when the daemon publishes the cleared
+ * flag — the same push that raised it — so nothing here mutates the list. `helpNote` rides back to the agent
+ * either way ("typed the password, don't touch remember-me"). */
+const helpNote = ref(``);
+watch(selected, () => (helpNote.value = ``));
+const resolveHelp = async (helped: boolean): Promise<void> => {
+    const help = current.value?.help;
+    if (help === undefined) {
+        return;
+    }
+    const note = helpNote.value.trim();
+    await postTurnControl(`/agent/reply`, { kind: `browser_help`, requestId: help.requestId, helped, ...(note === `` ? {} : { note }) });
+    helpNote.value = ``;
+    // Handing back while still driving would leave the owner's keystrokes racing the agent's next move.
+    if (helped) {
+        view.driving.value = false;
+    }
+};
 </script>
 
 <template>
@@ -111,8 +134,12 @@ const close = (name: string): void => void closeBrowser(name);
                     @click="selectSession(session.name)"
                 >
                     <!-- A dot rather than a word: liveness is the only thing that separates two otherwise
-                         identical pills, and it has to read at a glance. -->
-                    <span class="size-1.5 rounded-full" :class="session.running ? 'bg-success' : 'bg-muted'" />
+                         identical pills, and it has to read at a glance. A browser asking for help outranks
+                         "running" — that pill is the one the reader came to find. -->
+                    <span
+                        class="size-1.5 rounded-full"
+                        :class="session.help !== undefined ? 'bg-warning' : session.running ? 'bg-success' : 'bg-muted'"
+                    />
                     <span class="max-w-40 truncate">{{ session.label }}</span>
                 </button>
             </div>
@@ -160,6 +187,43 @@ const close = (name: string): void => void closeBrowser(name);
                 >
                     Close
                 </button>
+            </div>
+
+            <!-- The agent asked for hands. The banner sits between the controls and the picture — over the very
+                 stage the user is about to act on — and its buttons settle the parked request; it comes down on
+                 the daemon's own push, the same one that raised it. -->
+            <div v-if="current?.help" class="flex shrink-0 flex-col gap-2 border-b border-line bg-warning/10 px-3 py-2">
+                <div class="flex items-start gap-2">
+                    <Icon name="exclamation-triangle" class="mt-0.5 shrink-0 text-sm text-warning" />
+                    <div class="min-w-0 flex-1 text-xs text-content">
+                        <span class="font-medium">The agent needs your help:</span>
+                        {{ current.help.message }}
+                        <span class="text-muted"> — take control, fix that step, then hand back.</span>
+                    </div>
+                </div>
+                <div class="flex flex-wrap items-center gap-2">
+                    <input
+                        v-model="helpNote"
+                        type="text"
+                        placeholder="Optional note back to the agent"
+                        class="min-w-40 flex-1 rounded border border-line bg-card px-2 py-1 text-xs text-content placeholder:text-subtle"
+                        @keydown.enter="resolveHelp(true)"
+                    />
+                    <button
+                        type="button"
+                        class="shrink-0 rounded bg-primary-600 px-2 py-1 text-xs font-medium text-white transition-opacity hover:opacity-90"
+                        @click="resolveHelp(true)"
+                    >
+                        Done — hand back
+                    </button>
+                    <button
+                        type="button"
+                        class="shrink-0 rounded border border-line px-2 py-1 text-xs text-muted transition-colors hover:text-content"
+                        @click="resolveHelp(false)"
+                    >
+                        Can't help now
+                    </button>
+                </div>
             </div>
 
             <!-- The picture. Keeps the terminal surface (dark in BOTH modes) so a page that doesn't fill the box

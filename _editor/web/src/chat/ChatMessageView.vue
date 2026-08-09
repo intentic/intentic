@@ -3,6 +3,7 @@ import { type IconName, useDevice } from "@intentic/ui";
 import { copyCodeFromEvent } from "@intentic/ui/markdown";
 import { type AskQuestion, planParts } from "@intentic/sandbox-contract";
 import { type ComponentPublicInstance, computed, nextTick, ref, watch } from "vue";
+import { useRouter } from "vue-router";
 import { useQueryClient } from "@tanstack/vue-query";
 import { attachmentPreview } from "../composables/chat/attachmentPreviews";
 import { clearQuestionDraft, OTHER_LABEL, readQuestionDraft, writeQuestionDraft } from "../composables/chat/questionDraft";
@@ -39,7 +40,13 @@ const props = defineProps<{
     folded?: readonly ChatMessage[];
 }>();
 
-const { conversation, decidePlan, answerQuestion, cancelQuestion, decidePermission, openPlanPreview, awaitingDecision } = usePaneView();
+const { conversation, decidePlan, answerQuestion, cancelQuestion, decidePermission, declineBrowserHelp, openPlanPreview, awaitingDecision } =
+    usePaneView();
+
+// The browser-help card's one real action leads AWAY from the chat: the live stage (and "hand back") are on
+// /browsers, so the primary button is a navigation, not a decision — the card resolves from over there.
+const router = useRouter();
+const openHelpBrowser = (session: string): void => void router.push(`/browsers/${session}`);
 const { mobile } = useDevice();
 
 /* The landed notice's one-press offer (ChatMessage.noticeAction): flip THIS agent to holding its future work
@@ -969,6 +976,33 @@ const attachmentsAside = computed(
                         @click="decidePermission(message, 'deny')"
                         >No</ChatDecisionButton
                     >
+                </div>
+            </div>
+
+            <!-- The agent's browser needs a person — a captcha, a sign-in step it cannot clear. The primary
+                 action NAVIGATES rather than decides: the live stage, Take control and "hand back" are all on
+                 /browsers, so the card resolves from over there (the resolved frame freezes it here). Chat
+                 offers only the answer that needs no browser: can't help now. -->
+            <div v-if="message.browserHelp" class="chat-surface w-full overflow-hidden rounded-xl">
+                <div class="flex items-center gap-2 border-b border-line px-3.5 py-2">
+                    <Icon name="desktop" class="text-sm text-warning" />
+                    <span class="min-w-0 flex-1 truncate text-sm font-medium text-content"
+                        >The agent's browser needs you — {{ message.browserHelp.account }}</span
+                    >
+                    <span v-if="message.browserHelp.status === 'helped'" class="text-2xs font-medium text-success">✓ You helped</span>
+                    <span v-else-if="message.browserHelp.status === 'declined'" class="text-2xs font-medium text-muted">✕ Couldn't help</span>
+                    <span v-else-if="message.browserHelp.status === 'cancelled'" class="text-2xs font-medium text-muted">✕ Stopped</span>
+                </div>
+
+                <div class="flex flex-col gap-1 px-3.5 py-3">
+                    <span class="text-xs text-content/85">{{ message.browserHelp.message }}</span>
+                </div>
+
+                <div v-if="message.browserHelp.status === 'pending'" class="flex flex-wrap items-center gap-2 border-t border-line px-3.5 py-2.5">
+                    <ChatDecisionButton tone="primary" icon="desktop" @click="openHelpBrowser(message.browserHelp.session)"
+                        >Open the browser</ChatDecisionButton
+                    >
+                    <ChatDecisionButton tone="secondary" icon="times" @click="declineBrowserHelp(message)">Can't help now</ChatDecisionButton>
                 </div>
             </div>
 

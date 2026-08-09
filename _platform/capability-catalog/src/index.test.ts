@@ -99,10 +99,11 @@ describe("contributionCard", () => {
         expect(keys).toEqual(["platform", "shell", "write", "screen", "control", "sandboxes", "sandboxRemove", "roots"]);
     });
 
-    /* THE GENERIC BROWSER CARD renders like any other: the pinned discriminator, then the three answers that
-     * replace what a site card pins in its manifest. Worth holding, because the whole point of this card is that
-     * the FORM carries the site — a card that lost its URL fields would be an unfillable one, and the failure
-     * would only show up as a login window opening on nothing. */
+    /* THE GENERIC BROWSER CARD renders like any other: the pinned discriminator, the answers that replace what a
+     * site card pins in its manifest, then the core credential pair every browser card gets (what lets the agent
+     * sign the account in itself — the daemon types them, the agent never reads them). Worth holding, because the
+     * whole point of this card is that the FORM carries the site — a card that lost its URL fields would be an
+     * unfillable one, and the failure would only show up as a login window opening on nothing. */
     it("renders the generic browser card's own fields, since the site comes from the form", () => {
         const generic: CapabilityContribution = {
             id: "website",
@@ -116,11 +117,31 @@ describe("contributionCard", () => {
             skill: "skills/website/SKILL.md",
         };
         const card = contributionCard(generic);
-        expect(card.fields.map((field) => field.key)).toEqual(["platform", "homeUrl", "loginUrl", "purpose"]);
+        expect(card.fields.map((field) => field.key)).toEqual(["platform", "homeUrl", "loginUrl", "purpose", "username", "password"]);
         expect(card.fields[0]).toEqual({ key: "platform", label: "", value: "website" });
+        // The credentials are optional and the password is a secret — a card that stored it in the clear, or
+        // demanded it from someone who signs in by hand, would be wrong in two different ways.
+        expect(card.fields.find((field) => field.key === "password")).toMatchObject({ secret: true, optional: true });
         // No brand to borrow — it stands for whatever site the user points it at, so it carries a glyph instead.
         expect(card.logo).toBeUndefined();
         expect(card.icon).toBe("globe");
+    });
+
+    // A card that declares one of the core credential keys itself keeps its own version — the core pair must
+    // not render the same input twice.
+    it("does not duplicate a credential field the browser card declares itself", () => {
+        const declaring: CapabilityContribution = {
+            id: "customsite",
+            kind: "browser",
+            catalog: { name: "Custom", description: "Site with its own username field", category: "extend", icon: "globe" },
+            fields: [{ key: "username", label: "Login handle" }],
+            loginUrl: "https://example.com/login",
+            homeUrl: "https://example.com/",
+            skill: "skills/customsite/SKILL.md",
+        };
+        const keys = contributionCard(declaring).fields.map((field) => field.key);
+        expect(keys).toEqual(["platform", "username", "password"]);
+        expect(contributionCard(declaring).fields.find((field) => field.key === "username")?.label).toBe("Login handle");
     });
 
     it("pins no discriminator for a preset kind, whose cards differ only in their defaults", () => {

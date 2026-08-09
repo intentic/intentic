@@ -178,6 +178,11 @@ const KIND_EFFECTS: Record<CapabilityKind, (input: CapabilityEffectInput) => rea
         if (typeof site === "string" && site !== "") {
             effects.push({ kind: "profile", platform: site });
         }
+        // The account's stored password — typed into the site by the daemon on the agent's behalf, never shown
+        // to the agent. A form value while adding, hasPassword off a stored entry's masked echo.
+        if (filled(input.config["password"]) || input.config["hasPassword"] === true) {
+            effects.push({ kind: "secret", exposure: "disk" });
+        }
         return effects;
     },
     host: (input) => {

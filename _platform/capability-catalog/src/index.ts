@@ -592,8 +592,17 @@ const isCapabilityCategory = (category: string): category is CapabilityCategory 
 /* Fields the CORE contributes to a kind's form rather than the card declaring them. The connected-computer
  * switches are the whole example, and they are here rather than in the manifest on purpose: the grant is about
  * what the agent may DO, which does not vary by OS, so a card that could restate them is a card that could
- * quietly weaken them. Two platform packs therefore cannot drift, and neither can a third-party one. */
-const CORE_FIELDS: Partial<Record<CapabilityKind, readonly CapabilityField[]>> = { host: HOST_SCOPE_FIELDS };
+ * quietly weaken them. Two platform packs therefore cannot drift, and neither can a third-party one.
+ *
+ * The browser credentials are core for the sibling reason: which box a login form wants filled is the same
+ * fact on every site, and they are what lets the AGENT connect the account itself — the daemon types the
+ * stored values into the page (never showing the agent the password), so a site card that forgot to declare
+ * them would be a site the agent cannot sign in to. Both optional: a profile signed in by hand needs neither. */
+const BROWSER_CREDENTIAL_FIELDS: readonly CapabilityField[] = [
+    { key: "username", label: "Username / email", optional: true },
+    { key: "password", label: "Password", secret: true, optional: true },
+];
+const CORE_FIELDS: Partial<Record<CapabilityKind, readonly CapabilityField[]>> = { host: HOST_SCOPE_FIELDS, browser: BROWSER_CREDENTIAL_FIELDS };
 
 /* A contributed capability rendered as a catalog card — the "+" grid derives one card per entry from the
  * ENABLED installed extensions (GET /extensions), so a card exists iff its capability is actually addable, and
@@ -614,7 +623,9 @@ export const contributionCard = (contribution: CapabilityContribution): Capabili
         fields: [
             ...(discriminator === undefined ? [] : [{ key: discriminator, label: "", value: contribution.id }]),
             ...contribution.fields,
-            ...(CORE_FIELDS[contribution.kind] ?? []),
+            // A card that declares one of the core keys itself keeps its own version — a duplicate key would
+            // render the same input twice and let the two answers race for one config slot.
+            ...(CORE_FIELDS[contribution.kind] ?? []).filter((core) => !contribution.fields.some((field) => field.key === core.key)),
         ],
         hint: contribution.catalog.hint,
         guide: contribution.catalog.guide,

@@ -226,14 +226,21 @@ const browserTile = computed<AreaTile | undefined>(() => {
         return undefined;
     }
     const live = browsers.value.filter((session) => session.running).length;
+    const helping = browsers.value.filter((session) => session.help !== undefined).length;
     return {
         id: `browsers`,
         to: `/browsers`,
         label: `Browsers`,
         icon: `desktop`,
         // `neutral`, because "two browsers are open" is an inventory and not a debt: the tile says what the turn
-        // has running, and nothing on the other end of it is waiting for the reader (viewBadge.ts).
-        ...(live > 0 ? { badge: { count: live, tone: `neutral` as const, tooltip: `${live} open` } } : {}),
+        // has running, and nothing on the other end of it is waiting for the reader (viewBadge.ts). A browser
+        // asking for the owner's hands IS a debt — the one moment this tile becomes a claim, it says so in the
+        // warning tone and counts the browsers waiting rather than the ones merely open.
+        ...(helping > 0
+            ? { badge: { count: helping, tone: `warning` as const, tooltip: `the agent needs your help` } }
+            : live > 0
+              ? { badge: { count: live, tone: `neutral` as const, tooltip: `${live} open` } }
+              : {}),
     };
 });
 /* Subagents, on exactly the browsers' terms above: it appears when a turn starts an agent, and its badge counts

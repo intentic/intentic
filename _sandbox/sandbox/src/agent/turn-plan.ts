@@ -10,6 +10,7 @@ import {
     capabilitiesOf,
     withoutResumeNote,
 } from "@intentic/sandbox-contract";
+import { accountsServer } from "../browser/accounts-tools.js";
 import { browserOutputDir } from "../browser/browser-artifacts.js";
 import { browserServersOf } from "../browser/browser-tools.js";
 import { personaCapabilities, personaNote, turnPersona } from "../personas/personas.js";
@@ -464,12 +465,17 @@ export const planHarnessTurn = async (
         // is about to run with no outward accounts and the prompt will read as though it should have had them.
         services.logger.warn({ actsAs: input.actsAs }, "persona: no such card — this turn reaches no logged-in account");
     }
+    // The accounts this turn's persona speaks for — one list feeding both the browser servers and the
+    // accounts tools' scope, so a tool can never reach an account whose browser this turn was refused.
+    const personaInstalled = personaCapabilities(installed, persona);
+    const browserAccountIds = personaInstalled.filter((capability) => capability.kind === "browser").map((capability) => capability.id);
     const [extensionAgentDirs, browser, delegation] = await Promise.all([
         services.perf.track("turn.plan.extensions", {}, () => extensionAgentDirsOf(services)),
-        // Each logged-in browser capability grants the @playwright/mcp browser tools, bound to that platform's
-        // persisted profile so the agent acts as the signed-in owner (read/reply/comment/post/join) — filtered
-        // to the accounts this turn's persona speaks for.
-        services.perf.track("turn.plan.browser", {}, () => browserServersOf(personaCapabilities(installed, persona), services.workspace.root)),
+        // Each browser capability (account) grants the @playwright/mcp browser tools, bound to that account's
+        // persisted profile so the agent acts as the signed-in owner (read/reply/comment/post/join) — or signs
+        // the account in itself when it is still pending — filtered to the accounts this turn's persona
+        // speaks for.
+        services.perf.track("turn.plan.browser", {}, () => browserServersOf(personaInstalled, services.workspace.root)),
         services.perf.track("turn.plan.delegation", {}, () => delegationEnv(services, stableSystemPrompt)),
     ]);
     // The image-baked iq plugin (skill + SessionStart nudge) loads ahead of any user-added plugin-kind
@@ -587,6 +593,19 @@ export const planHarnessTurn = async (
             // Each logged-in server's passkey store, so the observer that watches those pages also plugs the
             // platform's software security key into them (browser/passkeys.ts).
             ...(Object.keys(browser.passkeys).length > 0 ? { browserPasskeys: browser.passkeys } : {}),
+            // The accounts tools ride whenever the turn has browser accounts — the account list is the very set
+            // whose servers were just mounted (persona-filtered), which is the scope those tools enforce.
+            ...(browserAccountIds.length > 0
+                ? {
+                      accountsServer: accountsServer({
+                          capabilities: services.capabilities,
+                          root: services.workspace.root,
+                          accounts: browserAccountIds,
+                          ...(input.conversationId !== undefined ? { conversationId: input.conversationId } : {}),
+                          attended: input.unattended !== true,
+                      }),
+                  }
+                : {}),
             // hashlineEdits owns file mutation via the hashline MCP server above, so drop the native Edit/Write
             // from the model's context (native Read stays for viewing images/PDFs).
             ...(hashlineEdits ? { disallowedTools: ["Edit", "Write"] } : {}),

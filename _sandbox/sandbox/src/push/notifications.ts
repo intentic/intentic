@@ -32,13 +32,14 @@ export const turnFinished = (conversationId: string, prompt: string, outcome: { 
     tag: `turn-${conversationId}`,
 });
 
-const AWAITING: Record<"plan" | "question" | "permission", { title: string; body: string }> = {
+const AWAITING: Record<"plan" | "question" | "permission" | "browser_help", { title: string; body: string }> = {
     plan: { title: "Plan ready for review", body: "The agent proposed a plan and is waiting for your approval." },
     question: { title: "The agent has a question", body: "It stopped to ask you something before continuing." },
     permission: { title: "Permission needed", body: "The agent is waiting for you to allow a tool it wants to run." },
+    browser_help: { title: "The agent's browser needs you", body: "It hit something only a person can clear — a captcha or a sign-in step." },
 };
 
-export const turnAwaiting = (conversationId: string, kind: "plan" | "question" | "permission"): PushNotification => ({
+export const turnAwaiting = (conversationId: string, kind: "plan" | "question" | "permission" | "browser_help"): PushNotification => ({
     ...AWAITING[kind],
     url: conversationUrl(conversationId),
     // One tag across all three kinds: while a turn is parked there is exactly one thing to answer, so a

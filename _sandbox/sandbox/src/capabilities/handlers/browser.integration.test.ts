@@ -149,16 +149,25 @@ test("a browser platform contributed by another extension applies the same way",
     expect(skill).toContain("browser_snapshot");
 });
 
-// The whole config echoes, because none of it is secret (the credential is the profile on disk) and a generic
-// session's row has to be able to say which site it points at.
-test("echoConfig exposes the config as it stands; browser holds no manifest secret", () => {
+// Everything echoes EXCEPT the password — masked to hasPassword (the mcp-token precedent), because it is the
+// one part of a browser config the browser must never see; a generic session's row still has to be able to
+// say which site it points at. The password doubles as the entry's secret, driving the /secrets inventory.
+test("echoConfig masks the stored password; it is the browser entry's one secret", () => {
     expect(echoConfig(reddit, new Map())).toEqual({ platform: "reddit" });
     expect(echoConfig(session("acme", "https://admin.acme.com/dashboard"), new Map())).toEqual({
         platform: "website",
         homeUrl: "https://admin.acme.com/dashboard",
         purpose: "read and reply to supplier tickets",
     });
+    const credentialed: Capability = {
+        id: "reddit-work",
+        kind: "browser",
+        config: { platform: "reddit", username: "workbot", password: "s3cret!" },
+    };
+    expect(echoConfig(credentialed, new Map())).toEqual({ platform: "reddit", username: "workbot", hasPassword: true });
+    // No password stored ⇒ no secret to inventory; stored ⇒ "password" is the rotatable field.
     expect(secretField(reddit, new Map())).toBeUndefined();
+    expect(secretField(credentialed, new Map())).toBe("password");
 });
 
 /* THE GENERIC SESSION: a site nobody shipped a card for. Everything the four site cards get from their manifest,

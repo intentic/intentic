@@ -13,11 +13,12 @@ import { browserUrls, contributedSkill, contributionKey, contributionRegistry, h
 // SKILL.md into .claude/skills/<id> (auto-loaded by the agent's settingSources) and its `fragment` is the
 // browser feature pack — Chromium + Xvfb as one unit (packs/browser.Dockerfile), nothing when the running base
 // image already bakes it (the standard image does; a core image rides it through an owner rebuild).
-// The login itself happens out-of-band over the /system/browser-profile
-// WebSocket, which persists a Chromium profile under .intentic/browser/<id>; the agent's @playwright/mcp
-// (wired in agent.routes) reads that profile so it's already signed in, and the owner can reopen that same
-// profile by hand on the same route. Distinct from `cli` (env credential + curl) — here the credential is a
-// browser session, not an env var.
+// The login lands in a Chromium profile under .intentic/browser/<id> by either of two hands: the owner's own,
+// over the /system/browser-profile WebSocket, or the AGENT's — its @playwright/mcp mounts over the same profile
+// while the account is still pending, signs in (or up) using the stored credentials the daemon types for it
+// (browser/accounts-tools.ts), and marks the account connected. Either way the owner can reopen that same
+// profile by hand on the same route. Distinct from `cli` (env credential + curl) — here the credential is the
+// browser session itself, plus the optional stored password the accounts tools type but never reveal.
 //
 // ONE ENTRY IS ONE ACCOUNT, not one site: several entries may name the same platform (reddit-work and
 // reddit-personal), and everything that carries identity — the profile, the login, the passkey — is keyed by the
@@ -54,9 +55,18 @@ const siteOf = (url: string): string | undefined => {
 };
 
 export const browserHandler: CapabilityHandler = {
-    // The whole config, not just the platform: a browser card holds no secret (its credential is the profile on
-    // disk), and a generic session's page and purpose are exactly what the card's row has to be able to show.
-    echo: (config) => ({ ...(config as BrowserConfig) }),
+    // The account's stored password — what the daemon types into the site on the agent's behalf (the accounts
+    // tools) and what the /secrets inventory rotates. Unset for a profile that signed in by hand.
+    secret: (config) => ((config as BrowserConfig).password !== undefined ? "password" : undefined),
+    // The whole config MINUS the password (masked to hasPassword, the mcp-token precedent): a generic session's
+    // page and purpose are exactly what the card's row has to be able to show, its credential is not.
+    echo: (config) => {
+        const { password, ...rest } = config as BrowserConfig;
+        return {
+            ...(Object.fromEntries(Object.entries(rest).filter(([, value]) => value !== undefined)) as Record<string, string>),
+            ...(password !== undefined ? { hasPassword: true } : {}),
+        };
+    },
     fragment: () => packFragment("browser"),
     apply: async function* (ctx, id, config) {
         const { platform } = config as BrowserConfig;
@@ -83,7 +93,7 @@ export const browserHandler: CapabilityHandler = {
         await ctx.files.write(skillPath(ctx.workspace.root, id), skill);
         yield {
             kind: "log",
-            message: `Connected "${id}" on ${site}. Rebuild the sandbox if prompted, then open "Log in" to sign in — the agent can then act as you there.`,
+            message: `Connected "${id}" on ${site}. Rebuild the sandbox if prompted, then open "Log in" to sign in — or ask the agent to sign in (or sign up) for you. Once connected, the agent acts as you there.`,
         };
     },
     // Two distinct pending states. The web UI (Capabilities.vue) routes the rebuild one to the Environment card
@@ -97,7 +107,7 @@ export const browserHandler: CapabilityHandler = {
             return { state: "pending", detail: "rebuild the sandbox to finish browser setup (Environment card)" };
         }
         if (!hasSession(ctx.workspace.root, id)) {
-            return { state: "pending", detail: "log in to connect your account" };
+            return { state: "pending", detail: "log in to connect your account — or ask the agent to sign in for you" };
         }
         return { state: "active" };
     },

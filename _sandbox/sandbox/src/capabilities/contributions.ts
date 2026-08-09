@@ -180,6 +180,13 @@ export const validateContributionConfig = (spec: CapabilityContribution, config:
     if (discriminator !== undefined) {
         declared.add(discriminator);
     }
+    // Every browser card takes the account's sign-in credentials, whether or not it declared fields: which box a
+    // login form wants filled is the same fact on every site, and they are what the accounts tools type for the
+    // agent (the password doubles as the entry's secret). Core here rather than declared per card so a site
+    // extension cannot forget them — the form offers them on all browser cards alike.
+    if (spec.kind === "browser") {
+        declared.add("username").add("password");
+    }
     const unknown = Object.keys(config).filter((key) => !declared.has(key));
     if (unknown.length > 0) {
         return `unknown ${spec.id} field(s): ${unknown.join(", ")}`;

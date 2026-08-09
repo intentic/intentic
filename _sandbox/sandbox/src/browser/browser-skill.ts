@@ -14,14 +14,33 @@
  * and the failure that follows — a post from the wrong account — is public and not undoable. `\${id}` is
  * substituted after this note lands, so the skill names the account it belongs to. */
 export const BROWSER_TOOLS_NOTE = `
-You drive a REAL logged-in browser through your Playwright tools (\`browser_navigate\`, \`browser_snapshot\`,
-\`browser_click\`, \`browser_type\`, \`browser_press_key\`, \`browser_take_screenshot\`, \`browser_wait_for\`, …). The
-session is already signed in as the owner — you act as them. Prefer \`browser_snapshot\` (the accessibility tree)
-to find elements by role + visible text over guessing selectors; screenshot when a page is visual or a snapshot
-is ambiguous. Work in small steps: navigate → snapshot → act → re-snapshot to confirm. If you hit a login/signup
-screen the session has expired — stop and tell the owner to reconnect (Capabilities → this connector → Log in).
-Posts, replies, votes, follows and joins are REAL and public — confirm the exact target before you submit.
+You drive a REAL browser through your Playwright tools (\`browser_navigate\`, \`browser_snapshot\`,
+\`browser_click\`, \`browser_type\`, \`browser_press_key\`, \`browser_take_screenshot\`, \`browser_wait_for\`, …),
+over this account's own persisted profile — once it is signed in, you act as the owner. Prefer
+\`browser_snapshot\` (the accessibility tree) to find elements by role + visible text over guessing selectors;
+screenshot when a page is visual or a snapshot is ambiguous. Work in small steps: navigate → snapshot → act →
+re-snapshot to confirm. Posts, replies, votes, follows and joins are REAL and public — confirm the exact
+target before you submit.
 
-THIS SKILL IS ONE ACCOUNT: \`\${id}\`. Its tools open that account's own browser and no other. The owner may
-have connected the same site more than once — each account is a separate skill with its own tools — so act with
-the one they meant, ask when it is ambiguous, and never carry a task from one account's tools into another's.`;
+CONNECTING THIS ACCOUNT is a job you can do yourself — when the account is still pending, or when you land on a
+login screen because the session expired. Only when the owner asked for it; never sign up anywhere unprompted.
+The playbook:
+- Sign IN: open the login page. For a stored credential, click the field, then call
+  \`mcp__accounts__type_credential\` — the daemon types the stored username or password for you; you never see a
+  password and must never ask the owner to paste one into chat. Email codes and magic links you handle yourself:
+  if an email inbox is connected (the IMAP skill), search it for the site's mail and open confirmation links IN
+  THIS ACCOUNT'S browser (not the plain web one), so the confirmation lands in this profile.
+- Sign UP: prefer passkey enrollment (the sandbox holds this account's own security key — "add a security key"
+  just works) and email-code flows. When the site wants a password created, call
+  \`mcp__accounts__create_password\` (generates and STORES it on the account's card), then type it into the form
+  with \`type_credential\` — twice for a confirm field.
+- Stuck on something only a person can clear — a captcha, a phone check, a password nobody stored? Call
+  \`mcp__accounts__request_help\` with a precise ask. The owner sees your message over the live view of this
+  browser, takes control, fixes that step and hands back; re-check the page state when the call returns.
+- Signed in and sure of it (you see the site as the account, not a login page)? Call
+  \`mcp__accounts__mark_connected\` so future turns open this browser already authenticated.
+
+THIS SKILL IS ONE ACCOUNT: \`\${id}\` — it is the \`account\` every accounts tool takes. Its browser tools open
+that account's own browser and no other. The owner may have connected the same site more than once — each
+account is a separate skill with its own tools — so act with the one they meant, ask when it is ambiguous, and
+never carry a task from one account's tools into another's.`;

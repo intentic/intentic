@@ -8,7 +8,7 @@ import type { McpServerConfig } from "@anthropic-ai/claude-agent-sdk";
 import type { Capability } from "@intentic/sandbox-contract";
 import { browserOutputDir } from "./browser-artifacts.js";
 import { ensureXvfb } from "./display.js";
-import { hasSession, isProfileOpen, passkeyPath, sessionDir } from "./session-store.js";
+import { isProfileOpen, passkeyPath, sessionDir } from "./session-store.js";
 import { ensureStealthScript } from "./stealth.js";
 
 // The agent's browser tools come from Microsoft's official @playwright/mcp, spawned per turn as stdio MCP
@@ -20,9 +20,10 @@ import { ensureStealthScript } from "./stealth.js";
 //     just changed. This used to require a logged-in browser capability, which meant an agent asked to
 //     "look at this URL" had no browser at all — and one duly spent a quarter of its turn downloading
 //     114 MiB of Chromium through `npx playwright install` to rebuild what was already sitting in the image.
-//   - one per logged-in browser CAPABILITY — bound to that platform's PERSISTED profile, headed on Xvfb with
-//     the stealth patch. Everything here (the login, the persistence, the anti-fingerprinting) is in service
-//     of acting as the owner on a site they authenticated to, which is why it stays gated on that login.
+//   - one per browser CAPABILITY (account) — bound to that account's PERSISTED profile, headed on Xvfb with
+//     the stealth patch. Everything here (the persistence, the anti-fingerprinting) is in service of acting
+//     as the owner on a site — including a site the account has NOT signed into yet, because performing that
+//     sign-in (or sign-up) is now the agent's job too; the accounts tools mark it connected when it lands.
 //
 // The server name becomes the tool prefix, so these surface as `mcp__web__browser_*` and
 // `mcp__<capability-id>__browser_*`.
@@ -240,8 +241,11 @@ export interface BrowserTurnTools {
 }
 
 // Every browser server for this turn. The isolated one is unconditional; a capability's own server is added
-// only once it's logged in, and never while a guided login holds the profile (Chromium locks the
-// --user-data-dir). A capability may take the `web` id, in which case its persisted profile deliberately wins.
+// whether or not the account has signed in yet — a PENDING account's server runs over the very same persisted
+// profile the guided login would write, which is what lets the agent perform the sign-in (or sign-up) itself
+// and leave the account exactly as connected as a hand login would have. The one gate left is the profile lock:
+// never while the owner's own window holds it (Chromium locks the --user-data-dir). A capability may take the
+// `web` id, in which case its persisted profile deliberately wins.
 //
 // One server PER ACCOUNT, keyed by the capability's id — which is also the profile's key, so two accounts of one
 // site (reddit-work, reddit-personal) are two servers over two separate profiles and both are drivable in the
@@ -259,17 +263,15 @@ export const browserServersOf = async (capabilities: readonly Capability[], root
     const servers: Record<string, McpServerConfig> = {
         web: isolatedBrowserSpec(runtime.cli, runtime.executablePath, browserOutputDir(root), await writeBrowserConfig("web", webPort)),
     };
-    const loggedIn = capabilities.filter(
-        (capability) => capability.kind === "browser" && hasSession(root, capability.id) && !isProfileOpen(capability.id),
-    );
-    if (loggedIn.length === 0) {
+    const accounts = capabilities.filter((capability) => capability.kind === "browser" && !isProfileOpen(capability.id));
+    if (accounts.length === 0) {
         return { servers, ports, passkeys };
     }
     // Only the persisted-profile path pays for Xvfb and the stealth script — a turn that never logs in anywhere
     // must not start a virtual display just to have a browser available.
     const display = await ensureXvfb();
     const stealthPath = await ensureStealthScript(root);
-    for (const capability of loggedIn) {
+    for (const capability of accounts) {
         const port = await freePort();
         ports[capability.id] = port;
         passkeys[capability.id] = passkeyPath(root, capability.id);
