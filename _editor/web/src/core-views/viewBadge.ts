@@ -39,7 +39,7 @@ const BADGE_TONE: Record<NonNullable<ViewBadge["tone"]>, string> = {
     neutral: `bg-content/10 text-muted`,
     info: `bg-primary-600/15 text-link`,
     warning: `bg-warning/15 text-warning`,
-    danger: `bg-danger-fill text-fill-content`,
+    danger: `bg-danger-800 text-white`,
 };
 
 // Absent tone means the resting count — the tone every core surface has always left unset.
