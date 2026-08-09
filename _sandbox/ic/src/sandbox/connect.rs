@@ -5,7 +5,9 @@ use crate::docker;
 use crate::health;
 use crate::logfile::Log;
 use crate::platform;
-use crate::sandbox::{container_status, doctor, list_slugs, remove, CONTAINER_PREFIX, TUNNEL_PREFIX};
+use crate::sandbox::{
+    container_status, doctor, list_slugs, remove, CONTAINER_PREFIX, TUNNEL_PREFIX,
+};
 use crate::tty;
 use crate::util::{bail, kv_lines, slug_from_token, Result};
 
@@ -91,10 +93,16 @@ fn connect(
         checks::Check::new("Docker", checks::check_docker),
         checks::Check::new("Disk space", checks::check_disk),
     ];
-    let for_probe = platform_url.to_string();
-    list.push(checks::Check::new("Platform reachable", move || {
-        checks::check_platform(&for_probe)
-    }));
+    // Only when this run actually speaks to the platform — the code's claim, and the wizard's reports that
+    // ride the same code. A codeless run carries its tokens in the env and never calls the origin, so
+    // probing it would fail a setup on an address nothing was going to use. Same shape as the Cloudflare
+    // token below: a prerequisite is checked when it is one.
+    if setup_code.is_some() {
+        let for_probe = platform_url.to_string();
+        list.push(checks::Check::new("Platform reachable", move || {
+            checks::check_platform(&for_probe)
+        }));
+    }
     if !cf_token.is_empty() {
         let token = cf_token.clone();
         list.push(checks::Check::new("Cloudflare token", move || {
@@ -454,8 +462,17 @@ fn connect(
         std::time::Duration::from_secs(120),
     );
     if let Some(summary) = checks::failure_summary(&findings) {
-        reporter.findings_failed("verifying", checks::wire_failures(&findings));
-        bail!("{summary}\nThe sandbox itself is running on this machine — fix the above, then re-check with: ic sandbox doctor {slug}");
+        /* WHOSE VERDICT THIS IS. A code-carrying setup is being watched from a browser that has no other way
+         * to learn the truth, and it ends at a workspace the user opens over the tunnel: a half-reachable
+         * sandbox is a failed setup and has to say so, here and on the wizard. A codeless run is scripted —
+         * its tokens were handed in through the env, its outward links are whoever wrote the script's to
+         * wire, and the sandbox this flow was asked to bring up IS up. Name the broken links, point at the
+         * diagnosis, and let the operator reading the terminal decide. */
+        if setup_code.is_some() {
+            reporter.findings_failed("verifying", checks::wire_failures(&findings));
+            bail!("{summary}\nThe sandbox itself is running on this machine — fix the above, then re-check with: ic sandbox doctor {slug}");
+        }
+        println!("intentic: the sandbox is running, but the links above are not reachable from this machine — re-check any time with: ic sandbox doctor {slug}");
     }
 
     println!("intentic sandbox started.");

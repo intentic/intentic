@@ -21,11 +21,18 @@ use crate::docker;
 pub enum Outcome {
     Pass,
     /// Degraded but workable — named so the user is not surprised later, never fails the run.
-    Warn { problem: String },
+    Warn {
+        problem: String,
+    },
     /// A prerequisite is broken. `remedy` names what to do about it, in the user's terms.
-    Fail { problem: String, remedy: String },
+    Fail {
+        problem: String,
+        remedy: String,
+    },
     /// The probe cannot run here (platform limits, a value not known yet). Never fails the run.
-    Skip { why: String },
+    Skip {
+        why: String,
+    },
 }
 
 pub struct Finding {
@@ -229,13 +236,18 @@ pub fn disk_outcome(avail_kib: Option<u64>, mount: &str) -> Outcome {
     let gib = avail / (1024 * 1024);
     if gib < DISK_FAIL_GIB {
         return Outcome::Fail {
-            problem: format!("only {gib} GiB free on {mount} — the sandbox image alone needs more."),
-            remedy: "free at least 5 GiB (docker system prune reclaims old images), then re-run.".to_string(),
+            problem: format!(
+                "only {gib} GiB free on {mount} — the sandbox image alone needs more."
+            ),
+            remedy: "free at least 5 GiB (docker system prune reclaims old images), then re-run."
+                .to_string(),
         };
     }
     if gib < DISK_WARN_GIB {
         return Outcome::Warn {
-            problem: format!("{gib} GiB free on {mount} — enough to install, tight for a workspace."),
+            problem: format!(
+                "{gib} GiB free on {mount} — enough to install, tight for a workspace."
+            ),
         };
     }
     Outcome::Pass
@@ -360,7 +372,14 @@ mod tests {
 
     #[test]
     fn summary_names_every_failure_with_its_fix() {
-        let findings = vec![fail("Docker"), Finding { name: "Platform", outcome: Outcome::Pass }, fail("Cloudflare token")];
+        let findings = vec![
+            fail("Docker"),
+            Finding {
+                name: "Platform",
+                outcome: Outcome::Pass,
+            },
+            fail("Cloudflare token"),
+        ];
         let summary = failure_summary(&findings).expect("two failures");
         assert!(summary.contains("2 problems"));
         assert!(summary.contains("1. Docker"));
@@ -398,7 +417,10 @@ mod tests {
         };
         assert!(matches!(docker_outcome(&base), Outcome::Pass));
         assert!(matches!(
-            docker_outcome(&DockerFacts { cli_present: false, ..base_clone(&base) }),
+            docker_outcome(&DockerFacts {
+                cli_present: false,
+                ..base_clone(&base)
+            }),
             Outcome::Fail { .. }
         ));
         let group = docker_outcome(&DockerFacts {
@@ -411,7 +433,10 @@ mod tests {
             _ => panic!("group case must fail with the usermod remedy"),
         }
         let platform = docker_outcome(&DockerFacts {
-            platform_problem: Some(("windows containers".into(), "switch to Linux containers".into())),
+            platform_problem: Some((
+                "windows containers".into(),
+                "switch to Linux containers".into(),
+            )),
             ..base_clone(&base)
         });
         match platform {
@@ -435,9 +460,18 @@ mod tests {
 
     #[test]
     fn disk_thresholds_bracket_the_image() {
-        assert!(matches!(disk_outcome(Some(20 * 1024 * 1024), "/"), Outcome::Pass));
-        assert!(matches!(disk_outcome(Some(10 * 1024 * 1024), "/"), Outcome::Warn { .. }));
-        assert!(matches!(disk_outcome(Some(2 * 1024 * 1024), "/"), Outcome::Fail { .. }));
+        assert!(matches!(
+            disk_outcome(Some(20 * 1024 * 1024), "/"),
+            Outcome::Pass
+        ));
+        assert!(matches!(
+            disk_outcome(Some(10 * 1024 * 1024), "/"),
+            Outcome::Warn { .. }
+        ));
+        assert!(matches!(
+            disk_outcome(Some(2 * 1024 * 1024), "/"),
+            Outcome::Fail { .. }
+        ));
         assert!(matches!(disk_outcome(None, "/"), Outcome::Skip { .. }));
     }
 
@@ -446,7 +480,10 @@ mod tests {
         let df = "Filesystem 1024-blocks Used Available Capacity Mounted on\n/dev/sda1 102400000 51200000 46080000 53% /\n";
         assert_eq!(parse_df_avail(df), Some(46_080_000));
         assert_eq!(parse_df_avail(""), None);
-        assert_eq!(parse_df_avail("df: /nope: No such file or directory\n"), None);
+        assert_eq!(
+            parse_df_avail("df: /nope: No such file or directory\n"),
+            None
+        );
     }
 
     #[test]
@@ -459,7 +496,10 @@ mod tests {
             Outcome::Fail { remedy, .. } => assert!(remedy.contains("API origin")),
             _ => panic!("404 is the wrong-origin case"),
         }
-        match platform_outcome(&ProbeResult::Unreachable("dns error".into()), "https://api.intentic.dev") {
+        match platform_outcome(
+            &ProbeResult::Unreachable("dns error".into()),
+            "https://api.intentic.dev",
+        ) {
             Outcome::Fail { remedy, .. } => assert!(remedy.contains("internet connection")),
             _ => panic!("unreachable is the no-network case"),
         }

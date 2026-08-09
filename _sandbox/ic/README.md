@@ -60,6 +60,12 @@ a stale ic still runs a new image correctly.
   invoking user under sudo, and neither can fail the setup. `HOST_PAIR_TOKEN` rides the claim like
   `SYNC_PAIR_TOKEN`; `HOST_PLATFORM` and `HOST_LABEL` ride the container's env because the daemon cannot read
   either for itself — it is in a container with its own hostname, on Linux however this machine is spelled.
+- **A setup code is what makes the platform part of a run**, and both platform-facing gates say so. The
+  preflight probes the platform's origin only when there is a code to redeem against it, and the postflight's
+  broken links fail the setup only then too — that is the run someone is watching from a browser, on a
+  workspace they will open over the tunnel. A codeless run carries its tokens in the env: nothing calls the
+  platform, the outward links belong to whoever wrote the script, and the sandbox it was asked to start is
+  started, so the chain is printed as a diagnosis (`ic sandbox doctor` re-runs it) instead of a verdict.
 - `cleanup.sh` and `cleanup-host.sh` stay full scripts on purpose: removal is the flow you reach for when
   things are broken, and it must not depend on a binary that might itself be what is broken. `ic sandbox
   remove` / `ic machine remove` are their CLI twins — change one, change both.

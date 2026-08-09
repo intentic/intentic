@@ -58,7 +58,12 @@ pub fn verify_chain(slug: &str, public_url: Option<&str>, patience: Duration) ->
         let last_round = Instant::now() >= deadline;
 
         if settled[CONTAINER].is_none() {
-            settle(&mut settled, CONTAINER, probe_container(&container), last_round);
+            settle(
+                &mut settled,
+                CONTAINER,
+                probe_container(&container),
+                last_round,
+            );
         }
         // The daemon and its registration read the same /health document — one exec, two links. Both are
         // unknowable while the container check hasn't passed, and the report says so rather than stacking
@@ -69,19 +74,37 @@ pub fn verify_chain(slug: &str, public_url: Option<&str>, patience: Duration) ->
                     skip_both(&mut settled, "unknowable while the container is down");
                 }
                 _ => {
-                    let health_json = docker::exec_capture(&container, &["curl", "-sf", "http://localhost:8787/health"])
-                        .and_then(|body| serde_json::from_str::<serde_json::Value>(&body).ok());
+                    let health_json = docker::exec_capture(
+                        &container,
+                        &["curl", "-sf", "http://localhost:8787/health"],
+                    )
+                    .and_then(|body| serde_json::from_str::<serde_json::Value>(&body).ok());
                     if settled[DAEMON].is_none() {
-                        settle(&mut settled, DAEMON, classify_daemon(health_json.as_ref(), &container), last_round);
+                        settle(
+                            &mut settled,
+                            DAEMON,
+                            classify_daemon(health_json.as_ref(), &container),
+                            last_round,
+                        );
                     }
                     if settled[ANNOUNCE].is_none() {
-                        settle(&mut settled, ANNOUNCE, classify_announce(health_json.as_ref(), &container), last_round);
+                        settle(
+                            &mut settled,
+                            ANNOUNCE,
+                            classify_announce(health_json.as_ref(), &container),
+                            last_round,
+                        );
                     }
                 }
             }
         }
         if settled[CONNECTOR].is_none() {
-            settle(&mut settled, CONNECTOR, probe_connector(&tunnel_container), last_round);
+            settle(
+                &mut settled,
+                CONNECTOR,
+                probe_connector(&tunnel_container),
+                last_round,
+            );
         }
         match public_url.and_then(host_of) {
             None => {
@@ -136,7 +159,8 @@ pub fn verify_chain(slug: &str, public_url: Option<&str>, patience: Duration) ->
         std::thread::sleep(Duration::from_secs(5));
     }
 
-    LINKS.iter()
+    LINKS
+        .iter()
         .zip(settled)
         .map(|(name, outcome)| Finding {
             name,
@@ -167,7 +191,9 @@ fn skip_both(settled: &mut [Option<Outcome>; 6], why: &str) {
             settle(
                 settled,
                 link,
-                Verdict::Settled(Outcome::Skip { why: why.to_string() }),
+                Verdict::Settled(Outcome::Skip {
+                    why: why.to_string(),
+                }),
                 true,
             );
         }
@@ -190,7 +216,10 @@ fn classify_container(inspect: Option<&str>, container: &str) -> Verdict {
     };
     let mut parts = inspect.split_whitespace();
     let status = parts.next().unwrap_or("?");
-    let restarts: u32 = parts.next().and_then(|count| count.parse().ok()).unwrap_or(0);
+    let restarts: u32 = parts
+        .next()
+        .and_then(|count| count.parse().ok())
+        .unwrap_or(0);
     match status {
         "running" if restarts >= 3 => Verdict::Pending(Outcome::Fail {
             problem: format!("the container is crash-looping ({restarts} restarts)."),
@@ -239,13 +268,18 @@ fn classify_announce(health: Option<&serde_json::Value>, container: &str) -> Ver
             }),
         };
     };
-    let state = announce.get("state").and_then(serde_json::Value::as_str).unwrap_or("");
+    let state = announce
+        .get("state")
+        .and_then(serde_json::Value::as_str)
+        .unwrap_or("");
     let detail = announce
         .get("detail")
         .and_then(serde_json::Value::as_str)
         .unwrap_or("no detail")
         .to_string();
-    let retrying = announce.get("retrying").and_then(serde_json::Value::as_bool);
+    let retrying = announce
+        .get("retrying")
+        .and_then(serde_json::Value::as_bool);
     match state {
         "registered" => Verdict::Settled(Outcome::Pass),
         "off" => Verdict::Settled(Outcome::Skip {
@@ -253,15 +287,22 @@ fn classify_announce(health: Option<&serde_json::Value>, container: &str) -> Ver
         }),
         "pending" => Verdict::Pending(Outcome::Fail {
             problem: "the daemon has not been able to register with the platform yet.".to_string(),
-            remedy: "check the container's outbound network, then re-check with: ic sandbox doctor".to_string(),
+            remedy: "check the container's outbound network, then re-check with: ic sandbox doctor"
+                .to_string(),
         }),
         "rejected" | "unreachable" => {
             let remedy = if retrying == Some(false) {
-                format!("the daemon stopped retrying — restart it to retry: docker restart {container}")
+                format!(
+                    "the daemon stopped retrying — restart it to retry: docker restart {container}"
+                )
             } else {
-                "it is still retrying; if this persists, check the container's outbound network.".to_string()
+                "it is still retrying; if this persists, check the container's outbound network."
+                    .to_string()
             };
-            Verdict::Pending(Outcome::Fail { problem: detail, remedy })
+            Verdict::Pending(Outcome::Fail {
+                problem: detail,
+                remedy,
+            })
         }
         other => Verdict::Settled(Outcome::Skip {
             why: format!("unrecognized registration state '{other}'"),
@@ -276,7 +317,10 @@ fn probe_connector(tunnel_container: &str) -> Verdict {
             problem: format!("no tunnel connector container ({tunnel_container}) on this machine."),
             remedy: "re-run the connect one-liner — it recreates the connector.".to_string(),
         }),
-        Some("running") => classify_connector_logs(docker::logs_tail(tunnel_container, "40").as_deref(), tunnel_container),
+        Some("running") => classify_connector_logs(
+            docker::logs_tail(tunnel_container, "40").as_deref(),
+            tunnel_container,
+        ),
         Some(other) => Verdict::Settled(Outcome::Fail {
             problem: format!("the tunnel connector container is {other}, not running."),
             remedy: format!("start it: docker start {tunnel_container}"),
@@ -295,9 +339,14 @@ fn classify_connector_logs(tail: Option<&str>, tunnel_container: &str) -> Verdic
     };
     let lower = tail.to_lowercase();
     // Order matters: a log can hold an old success ABOVE a fresh auth failure, so refusals win.
-    if lower.contains("unauthorized") || lower.contains("invalid tunnel") || lower.contains("failed to get tunnel") {
+    if lower.contains("unauthorized")
+        || lower.contains("invalid tunnel")
+        || lower.contains("failed to get tunnel")
+    {
         return Verdict::Settled(Outcome::Fail {
-            problem: "Cloudflare rejects the tunnel token — the tunnel was deleted or the token rotated.".to_string(),
+            problem:
+                "Cloudflare rejects the tunnel token — the tunnel was deleted or the token rotated."
+                    .to_string(),
             remedy: "re-run the connect one-liner to mint a fresh tunnel.".to_string(),
         });
     }
@@ -315,8 +364,13 @@ fn classify_connector_logs(tail: Option<&str>, tunnel_container: &str) -> Verdic
 /// The URL's hostname, without pulling a URL crate: scheme stripped, then everything before the first
 /// path/port separator. Enough for the two shapes connect ever writes (https://host and https://host/).
 fn host_of(url: &str) -> Option<String> {
-    let rest = url.strip_prefix("https://").or_else(|| url.strip_prefix("http://"))?;
-    let host: String = rest.chars().take_while(|c| *c != '/' && *c != ':').collect();
+    let rest = url
+        .strip_prefix("https://")
+        .or_else(|| url.strip_prefix("http://"))?;
+    let host: String = rest
+        .chars()
+        .take_while(|c| *c != '/' && *c != ':')
+        .collect();
     (!host.is_empty()).then_some(host)
 }
 
@@ -382,7 +436,9 @@ pub fn run(slug: Option<String>) -> Result<()> {
         Some(summary) => bail!("{summary}"),
         None => {
             match public_url {
-                Some(url) => println!("intentic: every link checks out — the sandbox is reachable at {url}."),
+                Some(url) => {
+                    println!("intentic: every link checks out — the sandbox is reachable at {url}.")
+                }
                 None => println!("intentic: every checkable link checks out."),
             }
             Ok(())
@@ -424,11 +480,15 @@ mod tests {
             Verdict::Settled(Outcome::Pass)
         ));
         match classify_container(Some("running 7"), "c") {
-            Verdict::Pending(Outcome::Fail { problem, .. }) => assert!(problem.contains("7 restarts")),
+            Verdict::Pending(Outcome::Fail { problem, .. }) => {
+                assert!(problem.contains("7 restarts"))
+            }
             _ => panic!("a restart-heavy container is a crash loop"),
         }
         match classify_container(Some("exited 0"), "c") {
-            Verdict::Settled(Outcome::Fail { remedy, .. }) => assert!(remedy.contains("docker start c")),
+            Verdict::Settled(Outcome::Fail { remedy, .. }) => {
+                assert!(remedy.contains("docker start c"))
+            }
             _ => panic!("an exited container must fail with the start command"),
         }
     }
@@ -440,7 +500,9 @@ mod tests {
             "boot": { "steps": [{ "state": "running", "label": "index the workspace" }] }
         });
         match classify_daemon(Some(&health), "c") {
-            Verdict::Pending(Outcome::Warn { problem }) => assert!(problem.contains("index the workspace")),
+            Verdict::Pending(Outcome::Warn { problem }) => {
+                assert!(problem.contains("index the workspace"))
+            }
             _ => panic!("warming is a warn that names the step"),
         }
         assert!(matches!(
@@ -480,7 +542,9 @@ mod tests {
     fn connector_logs_tell_a_dead_token_from_a_blocked_network() {
         let rejected = "ERR Unauthorized: Failed to get tunnel";
         match classify_connector_logs(Some(rejected), "t") {
-            Verdict::Settled(Outcome::Fail { remedy, .. }) => assert!(remedy.contains("mint a fresh tunnel")),
+            Verdict::Settled(Outcome::Fail { remedy, .. }) => {
+                assert!(remedy.contains("mint a fresh tunnel"))
+            }
             _ => panic!("a rejected token is settled — no retry fixes it"),
         }
 
@@ -510,7 +574,10 @@ mod tests {
             Verdict::Pending(Outcome::Fail { remedy, .. }) => assert!(remedy.contains("connector")),
             _ => panic!("530 is the no-connector symptom"),
         }
-        assert!(matches!(classify_public(&Ok(200), "h"), Verdict::Settled(Outcome::Pass)));
+        assert!(matches!(
+            classify_public(&Ok(200), "h"),
+            Verdict::Settled(Outcome::Pass)
+        ));
         assert!(matches!(
             classify_public(&Err("tls handshake".into()), "h"),
             Verdict::Pending(Outcome::Fail { .. })
@@ -519,8 +586,14 @@ mod tests {
 
     #[test]
     fn host_extraction_handles_the_shapes_connect_writes() {
-        assert_eq!(host_of("https://sandbox-x.example.com").as_deref(), Some("sandbox-x.example.com"));
-        assert_eq!(host_of("https://sandbox-x.example.com/").as_deref(), Some("sandbox-x.example.com"));
+        assert_eq!(
+            host_of("https://sandbox-x.example.com").as_deref(),
+            Some("sandbox-x.example.com")
+        );
+        assert_eq!(
+            host_of("https://sandbox-x.example.com/").as_deref(),
+            Some("sandbox-x.example.com")
+        );
         assert_eq!(host_of("not a url"), None);
         assert_eq!(host_of("https://"), None);
     }
