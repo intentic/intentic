@@ -123,7 +123,13 @@ test("an unknown conversation restores with nothing dropped", async () => {
  * on, not to a workspace checkpoint — the same three steps in the same order, in the currency it has. */
 test("an isolated conversation resets its own checkout, per repo, and names no timeline point", async () => {
     const { services, calls, git } = deps({
-        anchor: { kind: "worktree", repos: [{ repo: "root", base: "sha-root" }, { repo: "intent", base: "sha-intent" }] },
+        anchor: {
+            kind: "worktree",
+            repos: [
+                { repo: "root", base: "sha-root" },
+                { repo: "intent", base: "sha-intent" },
+            ],
+        },
     });
 
     const outcome = (await rewindConversation(services, CONVERSATION, 2, git)) as RewindResult;
@@ -131,23 +137,20 @@ test("an isolated conversation resets its own checkout, per repo, and names no t
     // No `snapshot`: this rewind moved the conversation's own branch, and the workspace timeline has no row for
     // it — offering one would select a checkpoint that has nothing to do with what just happened.
     expect(outcome).toEqual({ dropped: 4 });
-    expect(calls).toEqual([
-        "of",
-        "reset:root",
-        "clean:root",
-        "reset:intent",
-        "clean:intent",
-        "truncate:2",
-        "forgetAnchors:3",
-        "clearSession",
-    ]);
+    expect(calls).toEqual(["of", "reset:root", "clean:root", "reset:intent", "clean:intent", "truncate:2", "forgetAnchors:3", "clearSession"]);
 });
 
 // One repo of the composition having lost its checkout is not the end of the rewind: the repos that ARE there
 // are worth putting back, and an anchor covering some of them beats none.
 test("a repo whose checkout is gone is skipped, and the rest still go back", async () => {
     const { services, calls, git } = deps({
-        anchor: { kind: "worktree", repos: [{ repo: "root", base: "sha-root" }, { repo: "gone", base: "sha-gone" }] },
+        anchor: {
+            kind: "worktree",
+            repos: [
+                { repo: "root", base: "sha-root" },
+                { repo: "gone", base: "sha-gone" },
+            ],
+        },
         resetFails: ["gone"],
     });
 

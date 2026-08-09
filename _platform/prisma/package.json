@@ -38,9 +38,10 @@
         "tslib": "catalog:"
     },
     "devDependencies": {
+        "@intentic/constants": "workspace:*",
         "@intentic/tsconfig": "workspace:*",
-        "prisma": "catalog:",
         "@types/node": "catalog:",
-        "@typescript/native-preview": "catalog:"
+        "@typescript/native-preview": "catalog:",
+        "prisma": "catalog:"
     }
 }

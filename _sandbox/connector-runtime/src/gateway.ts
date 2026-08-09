@@ -1,6 +1,7 @@
 import { createServer, type IncomingMessage, type Server } from "node:http";
 import { mkdir, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
+import { STATE_DIR, WORKSPACE_ROOT } from "@intentic/constants";
 import type { ListenerGatewayPhase, ListenerStatus } from "@intentic/sandbox-contract";
 import { type DaemonClient, createDaemonClient } from "./daemon.js";
 import type { GatewayCtx } from "./context.js";
@@ -137,7 +138,7 @@ export const runConnectorGateway = async <TConfig extends { readonly provider: s
     const daemonBase = requireEnv("INTENTIC_DAEMON", missing("INTENTIC_DAEMON"));
     const panelToken = requireEnv("INTENTIC_PANEL_TOKEN", missing("INTENTIC_PANEL_TOKEN"));
     const port = Number(requireEnv("PORT", missing("PORT")));
-    const workspaceRoot = process.env["INTENTIC_WORKSPACE"] ?? "/work";
+    const workspaceRoot = process.env["INTENTIC_WORKSPACE"] ?? WORKSPACE_ROOT;
 
     const daemon: DaemonClient<TConfig> = createDaemonClient(spec.provider, daemonBase, panelToken);
 
@@ -255,7 +256,7 @@ export const runConnectorGateway = async <TConfig extends { readonly provider: s
 
     // Publish the control address for the agent's CLI to read (the discord-voice pattern).
     if (spec.publishGatewayUrl === true) {
-        const urlFile = join(workspaceRoot, ".intentic", "runtime", "extensions", spec.provider, "gateway.url");
+        const urlFile = join(workspaceRoot, STATE_DIR, "runtime", "extensions", spec.provider, "gateway.url");
         await mkdir(dirname(urlFile), { recursive: true });
         await writeFile(urlFile, `http://127.0.0.1:${port}`);
     }

@@ -2,13 +2,14 @@ import { mkdtempSync } from "node:fs";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { STATE_DIR } from "@intentic/constants";
 import type { DraftSummary } from "@intentic/sandbox-contract";
 import { expect, test } from "vitest";
 import { fileDraftsStore } from "./drafts-store.js";
 
 // A store over a fresh temp path (the drafts dir doesn't exist yet — the store must create it on write).
 const tempStore = () => {
-    const dir = join(mkdtempSync(join(tmpdir(), "drafts-")), ".intentic", "drafts");
+    const dir = join(mkdtempSync(join(tmpdir(), "drafts-")), `${STATE_DIR}`, "drafts");
     return { store: fileDraftsStore(dir), dir };
 };
 

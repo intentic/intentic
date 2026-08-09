@@ -1,6 +1,7 @@
 import { existsSync, mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { STATE_DIR, WORKSPACE_ROOT } from "@intentic/constants";
 import type { Capability } from "@intentic/sandbox-contract";
 import { expect, test } from "vitest";
 import { browserServerSpec, browserServersOf, isolatedBrowserSpec } from "./browser-tools.js";
@@ -17,8 +18,8 @@ test("browserServerSpec is a HEADED stdio server bound to the profile + stealth 
     const spec = browserServerSpec(
         "cli.js",
         "/ms/chrome",
-        "/work/.intentic/browser/reddit",
-        "/work/.intentic/browser/stealth.js",
+        `${WORKSPACE_ROOT}/${STATE_DIR}/browser/reddit`,
+        `${WORKSPACE_ROOT}/${STATE_DIR}/browser/stealth.js`,
         ":99",
         "/tmp/cfg.json",
     ) as {
@@ -60,7 +61,7 @@ test("every browser server bounds a single tool call", () => {
 // The credential-free browser carries no identity at all — that is what lets it exist without a login, and
 // what lets two turns run one at once.
 test("isolatedBrowserSpec keeps the profile in memory and needs no display", () => {
-    const spec = isolatedBrowserSpec("cli.js", "/ms/chrome", "/work/.intentic/artifacts/browser", "/tmp/cfg.json") as {
+    const spec = isolatedBrowserSpec("cli.js", "/ms/chrome", `${WORKSPACE_ROOT}/${STATE_DIR}/artifacts/browser`, "/tmp/cfg.json") as {
         args: string[];
         env: Record<string, string>;
     };

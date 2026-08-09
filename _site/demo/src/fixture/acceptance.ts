@@ -1,3 +1,4 @@
+import { STATE_DIR } from "@intentic/constants";
 import { cartPage, checkoutPage, pricingPage } from "./storefront";
 
 /* ACCEPTANCE, RECORDED — acme-shop's user stories and the run that walked three of them through the app.
@@ -91,7 +92,7 @@ clicking anything, or you will report a bug that is only a race in the test.
 
 // ---- the run ---------------------------------------------------------------------------------------------
 
-const RUNS_DIR = `.intentic/artifacts/acceptance`;
+const RUNS_DIR = `${STATE_DIR}/artifacts/acceptance`;
 
 // The stories that run covered — the slug is what `slugOf` derives from the filename, and the conversation id is
 // `xt-<runId>-<slug>`. Both are stored in the manifest rather than re-derived, exactly as a real run stores them.

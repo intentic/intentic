@@ -15,6 +15,7 @@
         "bench:agents": "IQ_BENCH_AGENTS=1 node dist/cli.js agents"
     },
     "dependencies": {
+        "@intentic/constants": "workspace:*",
         "@intentic/iq-engine": "workspace:*",
         "@intentic/sandbox-contract": "workspace:*",
         "zod": "catalog:"

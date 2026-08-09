@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
+import { repoRoot as findRepoRoot } from "@intentic/constants/node";
 import { forgejoApi, type SshResult, sshExecutor } from "@intentic/providers";
 import { adminUsername, deploymentId, forgejoId, komodoId, runnerId, tunnelId } from "@intentic/state-resolver";
 import { e2eTier } from "@intentic/testing/e2e";
@@ -28,7 +29,7 @@ const tier = e2eTier("intentic CLI hermetic end-to-end (DinD, no external servic
 
 const exec = promisify(execFile);
 
-const repoRoot = fileURLToPath(new URL("../../../", import.meta.url));
+const repoRoot = findRepoRoot(import.meta.url);
 const hostContext = fileURLToPath(new URL("../node_modules/@intentic/dind-host", import.meta.url));
 
 // An RFC 2606 reserved TLD: resolvable by no one, so a hermetic run that accidentally reaches for the

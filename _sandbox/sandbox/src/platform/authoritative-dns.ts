@@ -50,11 +50,15 @@ export const resolveTxtAuthoritatively = async (recordName: string): Promise<str
     const nameservers = await nameserversFor(recordName);
     const perNameserver = await Promise.all(
         nameservers.map(async (nameserver) => {
-            const addresses = await resolverFor().resolve4(nameserver).catch(() => []);
+            const addresses = await resolverFor()
+                .resolve4(nameserver)
+                .catch(() => []);
             if (addresses.length === 0) {
                 return [];
             }
-            const records = await resolverFor(addresses).resolveTxt(recordName).catch(() => []);
+            const records = await resolverFor(addresses)
+                .resolveTxt(recordName)
+                .catch(() => []);
             // A TXT record arrives as its 255-byte strings; the value is their concatenation.
             return records.map((chunks) => chunks.join(""));
         }),

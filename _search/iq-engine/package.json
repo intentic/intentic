@@ -56,6 +56,7 @@
         "@ast-grep/napi": "catalog:",
         "@huggingface/hub": "catalog:",
         "@huggingface/transformers": "catalog:",
+        "@intentic/constants": "workspace:*",
         "@intentic/sandbox-contract": "workspace:*",
         "@intentic/workspace-ignore": "workspace:*",
         "tslib": "catalog:",

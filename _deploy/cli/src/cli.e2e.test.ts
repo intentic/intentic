@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
+import { repoRoot as findRepoRoot } from "@intentic/constants/node";
 import { cloudflareApi, forgejoApi, sshExecutor } from "@intentic/providers";
 import { deploymentId, deploymentPort } from "@intentic/state-resolver";
 import { e2eTier } from "@intentic/testing/e2e";
@@ -54,7 +55,7 @@ const KOMODO_DOMAIN = `deploy.${ZONE}`;
 const WILDCARD_PREVIEW = `*.${ZONE}`;
 const PREVIEW_PROBE = `probe.${ZONE}`;
 
-const repoRoot = fileURLToPath(new URL("../../../", import.meta.url));
+const repoRoot = findRepoRoot(import.meta.url);
 const hostContext = fileURLToPath(new URL("../node_modules/@intentic/dind-host", import.meta.url));
 
 // The deterministic host port the resolver assigns this environment's deployment; the seeded app must listen

@@ -4,6 +4,7 @@ import http from "node:http";
 import https from "node:https";
 import net from "node:net";
 import { join } from "node:path";
+import { repoRoot } from "@intentic/constants/node";
 import { LEAF_CRT, LEAF_KEY } from "@intentic-app/localhost-https/paths";
 import { expect, test } from "vitest";
 import { answers, detectScheme } from "./port-probe.js";
@@ -16,7 +17,7 @@ import { answers, detectScheme } from "./port-probe.js";
  * Minted rather than read straight off disk: the pair lives in this user's data directory rather than the repo,
  * so a fresh worktree or a CI runner has none until something asks for one. The generator is idempotent and
  * returns immediately when the pair is already there. */
-const GENERATOR = join(import.meta.dirname, "..", "..", "..", "..", "_tools", "localhost-https", "generate.mjs");
+const GENERATOR = join(repoRoot(import.meta.url), "_tools", "localhost-https", "generate.mjs");
 execFileSync("node", [GENERATOR], { stdio: "ignore" });
 const tls = { cert: readFileSync(LEAF_CRT), key: readFileSync(LEAF_KEY) };
 

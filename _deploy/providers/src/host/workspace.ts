@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { WORKSPACE_ROOT } from "@intentic/constants";
 import { OPTIONAL_DIRECTIVES, runtimeDirectivesOf, sandboxNames, sandboxRunCommand } from "@intentic/sandbox-run";
 import type { Provider, ResolvedInputs } from "@intentic/engine";
 import { z } from "zod";
@@ -201,7 +202,7 @@ export const createWorkspaceProvider = (executor: SshExecutor = sshExecutor): Pr
                 labels: [`intentic.id=${ctx.id}`, `intentic.type=workspace`, `intentic.tools=${digest}`],
                 dns: ["1.1.1.1", "1.0.0.1"],
                 env: [
-                    ["WORKSPACE_ROOT", "/work"],
+                    ["WORKSPACE_ROOT", WORKSPACE_ROOT],
                     ["SANDBOX_HOST", "0.0.0.0"],
                     ["SANDBOX_PORT", String(parsed.daemonPort)],
                     ["PREVIEW_PORT", String(parsed.previewPort)],

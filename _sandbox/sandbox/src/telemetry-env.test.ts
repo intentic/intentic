@@ -1,5 +1,6 @@
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
+import { packageRoot, repoRoot } from "@intentic/constants/node";
 import { expect, test } from "vitest";
 
 /* THE IMAGE'S PRIVACY HARDENING MUST SURVIVE THE TASK RUNNER — a var set in the Dockerfile and dropped before
@@ -17,9 +18,9 @@ import { expect, test } from "vitest";
  * them. A comment asking the next person to update both is what was there before. This is the comparison.
  */
 
-const DOCKERFILE = join(import.meta.dirname, "..", "Dockerfile");
+const DOCKERFILE = join(packageRoot(import.meta.url), "Dockerfile");
 // The root graph, which is what `pnpm dev` / `pnpm build` actually run through — not this package's turbo.json.
-const TURBO_JSON = join(import.meta.dirname, "..", "..", "..", "turbo.json");
+const TURBO_JSON = join(repoRoot(import.meta.url), "turbo.json");
 
 // The two blocks are anchored by their first variable rather than by line number or by "every ENV in the file":
 // the image sets plenty of non-privacy env (WORKSPACE_ROOT, LANG, TRANSLATOR_URL) that has no business being

@@ -2,6 +2,7 @@ import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { HISTORY_ROOT, STATE_DIR, WORKSPACE_ROOT } from "@intentic/constants";
 
 import type { AgentEvent, Capability, Identity } from "@intentic/sandbox-contract";
 import { capabilitiesOf, SandboxSettingsSchema, sandboxContract } from "@intentic/sandbox-contract";
@@ -77,7 +78,7 @@ export const ABSENT_MAIN = join(tmpdir(), "intentic-absent-main");
 
 // Where a conversation's checkout lives, in the layout the daemon uses. Shared by the worktree fake and by the
 // workspace scope composed from it, so the two cannot name different directories for the same conversation.
-const conversationDir = (id: string): string => `/history/worktrees/${id}`;
+const conversationDir = (id: string): string => `${HISTORY_ROOT}/worktrees/${id}`;
 
 // An in-memory capabilities store so the capability routes + turn merge are testable without the fs.
 export const memoryCapabilitiesStore = (initial: Capability[] = []): CapabilitiesStore => {
@@ -298,7 +299,7 @@ export const services = (overrides: ServiceOverrides = {}): Services => {
         { of: () => "idle", refresh: async () => false, forget: () => {} },
         { of: () => undefined, refresh: async () => false, forget: () => {} },
     );
-    const workspace = workspacePaths("/work");
+    const workspace = workspacePaths(WORKSPACE_ROOT);
     /* Completed by `unstubbed`, not spelled out. What follows is only what these suites RELY on; every other
      * member of Services answers with its own name if a route reaches it. That is what takes this file off the
      * blast radius of the daemon growing a service: it used to enumerate all seventy members, so every feature
@@ -429,7 +430,7 @@ export const services = (overrides: ServiceOverrides = {}): Services => {
             turnLimit: async () => ({ spent: 0, withHeadroom: 0 }),
             ...cliProxy,
         }),
-        codexHome: "/work/.intentic/auth/codex",
+        codexHome: `${WORKSPACE_ROOT}/${STATE_DIR}/auth/codex`,
         codexThreadExists: async () => true,
         providerCatalogs: testProviderCatalogs,
         // Held directly too, exactly as in composition — the native Codex turn's model resolution and its
@@ -495,13 +496,17 @@ export const services = (overrides: ServiceOverrides = {}): Services => {
         agents,
         agentWorktrees: {
             conversationDir,
-            worktreeDir: (id, repo) => (repo === "root" ? `/history/worktrees/${id}` : `/history/worktrees/${id}/${repo}`),
+            worktreeDir: (id, repo) => (repo === "root" ? `${HISTORY_ROOT}/worktrees/${id}` : `${HISTORY_ROOT}/worktrees/${id}/${repo}`),
             mainDir: (repo) => (repo === "root" ? ABSENT_MAIN : join(ABSENT_MAIN, repo)),
             exists: async () => false,
             // A live checkout, so the routes read the worktree path — the steady state these fakes model.
             attached: async () => true,
             snapshot: async () => [{ repo: "root", base: "a".repeat(40) }],
-            ensure: async (id) => ({ cwd: `/history/worktrees/${id}`, branch: `agent/${id}`, repos: [{ repo: "root", base: "a".repeat(40) }] }),
+            ensure: async (id) => ({
+                cwd: `${HISTORY_ROOT}/worktrees/${id}`,
+                branch: `agent/${id}`,
+                repos: [{ repo: "root", base: "a".repeat(40) }],
+            }),
             remove: async () => {},
             retire: async () => {},
             prune: async () => {},
@@ -527,12 +532,12 @@ export const services = (overrides: ServiceOverrides = {}): Services => {
         // The isolation.integration.test.ts suite covers the plan these routes would build when it IS available.
         // No mount capability, like a container launched without CAP_SYS_ADMIN — the plan still describes where
         // the worktree is, and the harness enforces it by redirecting tool paths instead of by mounting.
-        turnIsolation: noIsolation("/work"),
+        turnIsolation: noIsolation(WORKSPACE_ROOT),
         // No agent has landed anything into these fake repos, so every changed file is the user's — and with no
         // ids to attribute, `identify` has nobody to resolve.
         agentOrigins: { forRepo: async () => ({}), identify: () => ({}) },
         files: fakeFiles(),
-        workspaceTree: async () => ({ root: "/work", tree: [], hidden: 0 }),
+        workspaceTree: async () => ({ root: WORKSPACE_ROOT, tree: [], hidden: 0 }),
         // Inert resident search — no index, no rg. The search route test overrides `run` with a canned outcome.
         iq: {
             run: async () => ({
@@ -583,7 +588,7 @@ export const services = (overrides: ServiceOverrides = {}): Services => {
                       allowOrigins: [],
                       ...auth,
                   },
-        authRoot: "/work/.intentic",
+        authRoot: `${WORKSPACE_ROOT}/${STATE_DIR}`,
         // A conversation's transcript defaults to the same claude-code-only shape production reads before a
         // provider-native record exists: the SDK session `sessions.read` already stands in for (agent-transcript.ts),
         // keyed off the same registry `sessionIdOf` the route asks. Reads through `merged` (not the pre-override

@@ -1,7 +1,14 @@
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { type ActivityEvent, type AgentEvent, type AgentTurn, type Automation, SandboxSettingsSchema, WEBCHAT_DAILY_MAX_DEFAULT } from "@intentic/sandbox-contract";
+import {
+    type ActivityEvent,
+    type AgentEvent,
+    type AgentTurn,
+    type Automation,
+    SandboxSettingsSchema,
+    WEBCHAT_DAILY_MAX_DEFAULT,
+} from "@intentic/sandbox-contract";
 import { Hono } from "hono";
 import { expect, test, vi } from "vitest";
 import { fileApprovalsStore } from "../automations/approvals-store.js";

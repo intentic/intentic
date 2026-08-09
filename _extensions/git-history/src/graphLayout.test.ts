@@ -69,12 +69,7 @@ describe(`computeGraphLayout`, () => {
     it(`keeps one branch's colour constant even where it changes column`, () => {
         // `b` opens lane 1 as the merge's second parent, then lane 0 frees up and later work reuses it — the
         // colour must track the branch across that move rather than flipping with the column.
-        const layout = computeGraphLayout([
-            commit(`m`, [`a`, `b`]),
-            commit(`a`, [`c`]),
-            commit(`b`, [`c`]),
-            commit(`c`, []),
-        ]);
+        const layout = computeGraphLayout([commit(`m`, [`a`, `b`]), commit(`a`, [`c`]), commit(`b`, [`c`]), commit(`c`, [])]);
         const bySha = new Map(layout.rows.map((row) => [row.sha, row]));
         // `b` sits in lane 1 with its own colour; `c`, which lane 0's branch flows into, keeps lane 0's.
         expect(bySha.get(`b`)?.color).not.toBe(bySha.get(`a`)?.color);

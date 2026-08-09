@@ -1,3 +1,4 @@
+import { STATE_DIR, WORKSPACE_ROOT } from "@intentic/constants";
 import { expect, test } from "vitest";
 import { INTENTIC_PROMPT } from "./intentic-prompt.js";
 import { sdkSystemPrompt, turnPromptPlacement } from "./system-prompt.js";
@@ -53,7 +54,7 @@ test("intentic ships its own prompt as the base, with the harness guidance after
         mode: "intentic",
         custom: undefined,
         append: "extra",
-        browserOutputDir: "/work/.intentic/artifacts/browser",
+        browserOutputDir: `${WORKSPACE_ROOT}/${STATE_DIR}/artifacts/browser`,
     });
     // A string, because Intentic's prompt is not the CLI's preset — the SDK has to be told to drop that.
     expect(typeof prompt).toBe("string");
@@ -83,7 +84,7 @@ test("claude keeps the CLI's preset and hands the same guidance to its append", 
         mode: "claude",
         custom: undefined,
         append: "extra",
-        browserOutputDir: "/work/.intentic/artifacts/browser",
+        browserOutputDir: `${WORKSPACE_ROOT}/${STATE_DIR}/artifacts/browser`,
     });
     expect(preset).toMatchObject({ type: "preset", preset: "claude_code" });
     const { append } = preset as { append: string };

@@ -1,6 +1,7 @@
 import { mkdtemp, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { WORKSPACE_ROOT } from "@intentic/constants";
 import type { HookInput } from "@anthropic-ai/claude-agent-sdk";
 import type { AgentEvent } from "@intentic/sandbox-contract";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -20,7 +21,7 @@ import {
     type SubagentTurn,
 } from "./subagents.js";
 
-const turn = (): SubagentTurn => ({ conversationId: "conv-1", cwd: "/work", sessionId: "sess-1", subagentsDir: undefined });
+const turn = (): SubagentTurn => ({ conversationId: "conv-1", cwd: WORKSPACE_ROOT, sessionId: "sess-1", subagentsDir: undefined });
 
 // A `task_started` as the SDK delivers it. An override spelled out as `undefined` states that the SDK sent the
 // task WITHOUT that field — the case two of these suites are about — which is why the override map admits
@@ -170,7 +171,7 @@ describe("the SDK's own subagents", () => {
     // A record that copied it at birth kept the `undefined` it was born with, and a transcript read with no
     // session id reads nothing.
     it("reads the turn's session id as it stands, not as it was when the child was born", () => {
-        const handle: SubagentTurn = { conversationId: "conv-1", cwd: "/work", sessionId: undefined, subagentsDir: undefined };
+        const handle: SubagentTurn = { conversationId: "conv-1", cwd: WORKSPACE_ROOT, sessionId: undefined, subagentsDir: undefined };
         noteSubagentTask(handle, started());
         handle.sessionId = "sess-late";
         expect(subagentSource("call-1")).toMatchObject({ sessionId: "sess-late" });
@@ -189,7 +190,7 @@ describe("pairing a child to its transcript", () => {
 
     it("resolves the agent id from the session's meta files, and takes what else they say", async () => {
         const dir = await mkdtemp(join(tmpdir(), "subagents-"));
-        const handle: SubagentTurn = { conversationId: "conv-1", cwd: "/work", sessionId: "sess-1", subagentsDir: undefined };
+        const handle: SubagentTurn = { conversationId: "conv-1", cwd: WORKSPACE_ROOT, sessionId: "sess-1", subagentsDir: undefined };
 
         // The start hook's one job: name the directory this session files its children in. It carries the
         // PARENT's transcript path, and the children live in a directory named after it.

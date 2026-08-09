@@ -1,5 +1,6 @@
 import { basename, isAbsolute, join } from "node:path";
 import type { SessionUpdate, ToolCallContent as AcpToolCallContent, ToolCallLocation as AcpToolCallLocation } from "@agentclientprotocol/sdk";
+import { WORKSPACE_ROOT } from "@intentic/constants";
 import type { AgentEvent, ToolCallContent, ToolCallLocation } from "@intentic/sandbox-contract";
 
 /* AgentEvent → ACP session/update, the mechanical reverse of the sandbox's acp-events.ts — mechanical
@@ -14,7 +15,9 @@ import type { AgentEvent, ToolCallContent, ToolCallLocation } from "@intentic/sa
  * (the daemon relays ACP agents' commands — advertising them back out would loop). plan/question/error/done
  * are control flow, handled in bridge.ts, not here. */
 
-const SANDBOX_ROOT = "/work";
+// The container root every path in an ACP message is expressed against. Named once in @intentic/constants
+// rather than spelled here, so a rename of the container's workspace dir moves this with it.
+const SANDBOX_ROOT = WORKSPACE_ROOT;
 
 export const editorPath = (path: string, cwd: string): string => {
     if (isAbsolute(path)) {

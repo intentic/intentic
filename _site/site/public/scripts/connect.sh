@@ -157,6 +157,30 @@ if ! command -v docker >/dev/null 2>&1; then
     done
 fi
 
+# THE CHECKOUT THIS SCRIPT WAS RUN OUT OF, or empty when there isn't one — which is the normal case, since the
+# piped `curl … | sh` form has no path in $0 at all.
+#
+# Found by walking up to the workspace marker rather than counting a fixed number of levels. This file is
+# served from two places in the repo (_site/site/public/scripts and the built _apps/site/dist/scripts), and a
+# fixed `../../../..` is only right while both stay exactly four deep; a walk is right wherever it is served
+# from, and survives being copied, moved or symlinked. Everything below still GATES on finding the specific
+# file it needs, so an unrelated checkout that happens to be a pnpm workspace falls through exactly as before.
+# CANNOT be shared with _tools/scripts/repo-root.sh: this file is downloaded and run on its own.
+checkout_root() {
+    case "$0" in
+        */*) _dir="$(cd "$(dirname "$0")" 2>/dev/null && pwd)" || return 0 ;;
+        *) return 0 ;; # piped curl|sh — no path, no checkout
+    esac
+    while [ -n "$_dir" ] && [ "$_dir" != "/" ]; do
+        if [ -f "$_dir/pnpm-workspace.yaml" ]; then
+            printf '%s\n' "$_dir"
+            return 0
+        fi
+        _dir="$(dirname "$_dir")"
+    done
+}
+CHECKOUT="$(checkout_root)"
+
 # Dev QoL that must live HERE, not in ic: a registry-less SANDBOX_IMAGE (e.g. intentic-sandbox:dev) run BY
 # PATH from a checkout is rebuilt from that checkout on EVERY run — a cached image would otherwise silently
 # outlive Dockerfile or source edits, and docker's layer cache makes an unchanged rebuild near-instant. The
@@ -165,8 +189,7 @@ fi
 case "${SANDBOX_IMAGE:-}" in
     "" | *.*/* | *:*/* | localhost/*) ;; # empty or registry-carrying — nothing to rebuild
     *)
-        repo_root=""
-        case "$0" in */*) repo_root="$(dirname "$0")/../../../.." ;; esac
+        repo_root="$CHECKOUT"
         if [ -n "$repo_root" ] && [ -f "$repo_root/_sandbox/sandbox/Dockerfile" ]; then
             echo "intentic: building the local sandbox image ${SANDBOX_IMAGE} from your checkout (cached when unchanged; the first build takes a few minutes)…"
             if ! (cd "$repo_root" && bash _tools/scripts/prepare-image-trees.sh &&
@@ -188,20 +211,16 @@ IC="${IC_BIN:-}"
 # Run BY PATH from a checkout (the dev platform's one-liners), prefer the checkout's OWN ic — a flow change
 # and its CLI change land in one commit and are tested together, and a released ic may predate both. The
 # piped curl|sh form has no path in $0 and skips this; so does a checkout without cargo.
-if [ -z "$IC" ]; then
-    case "$0" in
-        */*)
-            ic_manifest="$(dirname "$0")/../../../../_sandbox/ic/Cargo.toml"
-            if [ -f "$ic_manifest" ] && command -v cargo >/dev/null 2>&1; then
-                echo "intentic: building the checkout's ic CLI…"
-                if cargo build --quiet --manifest-path "$ic_manifest"; then
-                    IC="$(dirname "$ic_manifest")/target/debug/ic"
-                else
-                    echo "intentic: warning — the checkout's ic build failed; falling back to the released ic." >&2
-                fi
-            fi
-            ;;
-    esac
+if [ -z "$IC" ] && [ -n "$CHECKOUT" ]; then
+    ic_manifest="$CHECKOUT/_sandbox/ic/Cargo.toml"
+    if [ -f "$ic_manifest" ] && command -v cargo >/dev/null 2>&1; then
+        echo "intentic: building the checkout's ic CLI…"
+        if cargo build --quiet --manifest-path "$ic_manifest"; then
+            IC="$CHECKOUT/_sandbox/ic/target/debug/ic"
+        else
+            echo "intentic: warning — the checkout's ic build failed; falling back to the released ic." >&2
+        fi
+    fi
 fi
 if [ -z "$IC" ]; then
     os="$(uname -s | tr '[:upper:]' '[:lower:]')"

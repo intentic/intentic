@@ -1,4 +1,5 @@
 import { join } from "node:path";
+import { WORKSPACE_ROOT } from "@intentic/constants";
 import { fieldsExample, type Loop, LOOP_DIR } from "@intentic/sandbox-contract";
 
 /* WHAT A TURN IS TOLD — the loop's whole specialization surface.
@@ -44,7 +45,7 @@ export const verdictPathIn = (root: string, conversationId: string, iteration: n
     join(loopDirIn(root, conversationId), `iteration-${iteration}.json`);
 
 // The workspace root as every agent sees it, whatever tree it is actually working in.
-const AGENT_ROOT = `/work`;
+const AGENT_ROOT = WORKSPACE_ROOT;
 
 // Each check, in the agent's terms. One line each, because the agent's job is only to know what it is being
 // measured by — and knowing is most of it.

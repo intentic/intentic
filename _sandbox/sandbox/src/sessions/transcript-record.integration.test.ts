@@ -1,6 +1,7 @@
 import { mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { WORKSPACE_ROOT } from "@intentic/constants";
 import { type AgentEvent, type AgentHarness, type AgentProvider, PROVIDERS, HARNESSES, type RestoredMessage } from "@intentic/sandbox-contract";
 import { describe, expect, it } from "vitest";
 import { fileTranscriptRecord } from "./transcript-record.js";
@@ -163,7 +164,7 @@ describe("every provider records a readable transcript", () => {
         const record = fileTranscriptRecord(await dir());
         const id = `${provider}-${harness}`;
         await record.open(id, nothing);
-        await record.append(id, restoredTurn(turn, events, "/work"));
+        await record.append(id, restoredTurn(turn, events, WORKSPACE_ROOT));
         const restored = await record.read(id);
         expect(restored[0]).toEqual({ role: "user", text: "do the thing" });
         expect(restored.map((message) => message.text)).toContain("on it");

@@ -26,6 +26,7 @@
     "devDependencies": {
         "@astrojs/check": "catalog:",
         "@intentic-dev/demo": "workspace:*",
+        "@intentic/constants": "workspace:*",
         "typescript": "catalog:",
         "vite": "catalog:site",
         "wrangler": "catalog:"

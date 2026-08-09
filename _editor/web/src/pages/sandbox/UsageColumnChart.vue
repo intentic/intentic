@@ -66,10 +66,7 @@ const PLOT_HEIGHT = `10rem`;
                     >
                         <!-- Capped at 24px and centred, so a 7-column window gets air around its marks rather
                              than seven slabs. -->
-                        <div
-                            class="flex w-full max-w-6 flex-col justify-end gap-0.5"
-                            :style="{ height: `${(bucket.totals.costUsd / max) * 100}%` }"
-                        >
+                        <div class="flex w-full max-w-6 flex-col justify-end gap-0.5" :style="{ height: `${(bucket.totals.costUsd / max) * 100}%` }">
                             <div
                                 v-for="(segment, index) in stackOf(bucket)"
                                 :key="segment.key"

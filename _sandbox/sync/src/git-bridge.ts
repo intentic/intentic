@@ -1,6 +1,7 @@
 import { spawnSync } from "node:child_process";
 import { existsSync } from "node:fs";
 import { join } from "node:path";
+import { HISTORY_ROOT } from "@intentic/constants";
 import type { Log } from "@intentic/local-agent";
 import type { Pairing } from "./config.js";
 import { sshAlias } from "./ssh.js";
@@ -67,7 +68,7 @@ const isSafeRepoId = (id: string): boolean => {
 // ids. Read over ssh rather than the daemon API: the transport is already enrolled, and it is the same listing
 // the daemon itself consults. undefined ⇒ the sandbox was unreachable (retry next pass).
 export const listSandboxRepos = (exec: BridgeExec, alias: string): string[] | undefined => {
-    const out = exec.run("ssh", ["-o", "BatchMode=yes", alias, "ls", "/history/gits"]);
+    const out = exec.run("ssh", ["-o", "BatchMode=yes", alias, "ls", `${HISTORY_ROOT}/gits`]);
     if (out === undefined) {
         return undefined;
     }

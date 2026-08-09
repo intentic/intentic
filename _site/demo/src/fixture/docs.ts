@@ -1,3 +1,4 @@
+import { STATE_DIR } from "@intentic/constants";
 /* DOCUMENTATION, RECORDED — what agents wrote about acme-shop, and one draft still waiting to be read.
  *
  * Like every other surface in this recording, the documents ARE the state: a published set is
@@ -16,7 +17,7 @@
  * documents are the finished artifact; the run that made them is over. */
 
 const ARCHITECTURE = `docs/architecture`;
-const STAGING = `.intentic/docs`;
+const STAGING = `${STATE_DIR}/docs`;
 
 /* What a page carries before it becomes a README. Authored here only so the fixture can compose the page and the
  * index from ONE source; neither shape exists on disk in a real repository. */
@@ -300,11 +301,20 @@ const API_REPO_DOC = (generatedAt: number): string =>
         {
             repo: `api`,
             components: [
-                { id: `http`, name: `The HTTP surface`, oneLiner: `Every route the storefront and Stripe can call.`, packages: [`src/routes`], accent: `1` },
+                {
+                    id: `http`,
+                    name: `The HTTP surface`,
+                    oneLiner: `Every route the storefront and Stripe can call.`,
+                    packages: [`src/routes`],
+                    accent: `1`,
+                },
                 { id: `data`, name: `The database`, oneLiner: `Where orders, users and subscriptions are kept.`, packages: [`src/db`], accent: `3` },
             ],
             glossary: [
-                { term: `webhook`, means: `Stripe telling us something happened. Retried until we answer 200, so every handler must be safe to run twice.` },
+                {
+                    term: `webhook`,
+                    means: `Stripe telling us something happened. Retried until we answer 200, so every handler must be safe to run twice.`,
+                },
                 { term: `soft delete`, means: `A row is retired by stamping deleted_at, never removed — every read filters on it.` },
             ],
             reading: [`src/routes`, `src/db`],

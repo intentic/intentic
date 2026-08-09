@@ -51,7 +51,10 @@ describe(`the patterns are safe to interpolate`, () => {
         const ids = new Set(IDIOM_RULES.map((rule) => rule.id));
         expect(ids.size).toBe(IDIOM_RULES.length);
         for (const rule of IDIOM_RULES) {
-            expect(UI_FRAMEWORKS.map((framework) => framework.id), rule.id).toContain(rule.framework);
+            expect(
+                UI_FRAMEWORKS.map((framework) => framework.id),
+                rule.id,
+            ).toContain(rule.framework);
         }
     });
 

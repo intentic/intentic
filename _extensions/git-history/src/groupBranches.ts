@@ -51,7 +51,5 @@ export const groupBranches = (locals: readonly GitBranch[], remotes: readonly Gi
 
     // Current branch first — it is the one row the reader is always looking for — then newest tip first, which
     // is the order the daemon already sorts each list in and the one a switcher wants.
-    return [...groups.values()].toSorted(
-        (a, b) => Number(b.local?.current ?? false) - Number(a.local?.current ?? false) || b.at - a.at,
-    );
+    return [...groups.values()].toSorted((a, b) => Number(b.local?.current ?? false) - Number(a.local?.current ?? false) || b.at - a.at);
 };

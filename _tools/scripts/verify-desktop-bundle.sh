@@ -24,8 +24,9 @@
 # Docker and no privileges — and it is the ONLY automated check that reaches inside the Windows NSIS installer,
 # which is cross-built by cargo-xwin and never otherwise opened before it reaches a user.
 set -euo pipefail
+. "$(dirname "$0")/repo-root.sh"
 
-ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
+ROOT="$(repo_root)"
 SOURCE_REL="_site/site/public/scripts"
 
 if [ ! -d "${1:-$ROOT/_editor/desktop-app/dist-bin}" ]; then

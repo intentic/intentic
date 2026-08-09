@@ -1,4 +1,5 @@
 import { homedir } from "node:os";
+import { HOST_STATE_ROOT } from "@intentic/constants";
 import { describe, expect, it } from "vitest";
 import {
     linuxDesktopEntry,
@@ -15,7 +16,7 @@ import type { CliLauncher } from "./launcher.js";
  * tools and are exercised in the field. What is pinned here is that each launches the spec's command at login
  * with the launcher it was handed, VERBATIM. Both launcher shapes are covered because the released install is
  * the compiled one, and it is exactly the shape a hardcoded `execPath + argv[1]` used to corrupt. */
-const NODE: CliLauncher = ["/usr/bin/node", "/opt/intentic/sync/dist/cli.js"];
+const NODE: CliLauncher = ["/usr/bin/node", `${HOST_STATE_ROOT}/sync/dist/cli.js`];
 const BINARY: CliLauncher = ["/home/dev/.intentic/sync/bin/intentic-sync"];
 
 const LAUNCH_AGENT: LaunchAgentSpec = { label: "dev.intentic.sync-mirror", logPath: "/home/dev/.intentic/sync/mirror.log" };

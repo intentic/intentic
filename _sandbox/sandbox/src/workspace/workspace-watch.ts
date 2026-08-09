@@ -1,5 +1,6 @@
 import { sep } from "node:path";
 import { Worker } from "node:worker_threads";
+import { STATE_DIR } from "@intentic/constants";
 import { watch } from "chokidar";
 import type { Logger } from "pino";
 import { IQ_DIR } from "@intentic/iq-engine";
@@ -32,10 +33,10 @@ const IGNORE_SEGMENTS = new Set(IGNORED_DIRS);
 // automations, settings, the environment Dockerfiles, approvals, drafts) stay watched — those changes are
 // exactly how another member's write reaches this browser.
 //
-const DAEMON_STATE_PATHS = [IQ_DIR, ".intentic/auth", ".intentic/sessions", ".intentic/runtime"];
+const DAEMON_STATE_PATHS = [IQ_DIR, `${STATE_DIR}/auth`, `${STATE_DIR}/sessions`, `${STATE_DIR}/runtime`];
 const isDaemonStatePath = (abs: string): boolean => {
     const segments = abs.split(sep);
-    const index = segments.indexOf(".intentic");
+    const index = segments.indexOf(STATE_DIR);
     const path = segments.slice(index).join("/");
     return index !== -1 && DAEMON_STATE_PATHS.some((root) => path === root || path.startsWith(`${root}/`));
 };

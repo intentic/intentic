@@ -1,4 +1,6 @@
 import { readFileSync } from "node:fs";
+import { join } from "node:path";
+import { repoRoot } from "@intentic/constants/node";
 import { describe, expect, it } from "vitest";
 import { REPLAY_ENV } from "./index.js";
 
@@ -10,7 +12,7 @@ import { REPLAY_ENV } from "./index.js";
  * predecessor parsed connect.sh and connect.ps1) and pins that list against the contract's replay allowlist
  * — the one place the two languages must agree. */
 
-const connectSource = readFileSync(new URL("../../../_sandbox/ic/src/sandbox/connect.rs", import.meta.url), "utf8");
+const connectSource = readFileSync(join(repoRoot(import.meta.url), "_sandbox/ic/src/sandbox/connect.rs"), "utf8");
 
 // The env pairs connect.rs frames for `sandbox run-command`: the ("KEY", value) tuples of its nul_frame call.
 const rustKeys = (): Set<string> => {

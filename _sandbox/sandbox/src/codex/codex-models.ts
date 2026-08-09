@@ -102,5 +102,4 @@ export const CODEX_ADVISORY = /defaulting to fallback metadata/i;
 // `gpt-5.6-sol` not found") puts the same two words in a sentence that is not a rejection, and reading it as one
 // would drop a pinned model that is serving turns perfectly well. The rest are unambiguous wherever they land —
 // OpenAI writes the subject first ("The model `x` does not exist"), so anchoring them would only miss.
-export const CODEX_MODEL_INVALID =
-    /model is not supported|\bmodel not found\b|does not exist|no such model|does not have access to|did you mean/i;
+export const CODEX_MODEL_INVALID = /model is not supported|\bmodel not found\b|does not exist|no such model|does not have access to|did you mean/i;

@@ -1,3 +1,4 @@
+import { WORKSPACE_ROOT } from "@intentic/constants";
 import { describe, expect, test } from "vitest";
 import { classifyCommand, createVerificationLedger } from "./agent-verification.js";
 
@@ -36,7 +37,7 @@ describe("command classification", () => {
 describe("the ledger", () => {
     test("a passing check after the last edit clears the verdict", () => {
         const ledger = createVerificationLedger();
-        ledger.noteEdit("/work/src/a.ts");
+        ledger.noteEdit(`${WORKSPACE_ROOT}/src/a.ts`);
         ledger.noteCommand("pnpm test", true, "");
         expect(ledger.verdict()).toBeUndefined();
     });
@@ -45,13 +46,13 @@ describe("the ledger", () => {
     test("a passing check BEFORE the last edit does not", () => {
         const ledger = createVerificationLedger();
         ledger.noteCommand("pnpm test", true, "");
-        ledger.noteEdit("/work/src/a.ts");
+        ledger.noteEdit(`${WORKSPACE_ROOT}/src/a.ts`);
         expect(ledger.verdict()?.paths).toEqual(["/work/src/a.ts"]);
     });
 
     test("a failing check is reported as the reason, distinct from never having checked", () => {
         const ledger = createVerificationLedger();
-        ledger.noteEdit("/work/src/a.ts");
+        ledger.noteEdit(`${WORKSPACE_ROOT}/src/a.ts`);
         ledger.noteCommand("pnpm test", false, "2 failed");
         const verdict = ledger.verdict();
         expect(verdict?.failed?.command).toBe("pnpm test");
@@ -60,22 +61,22 @@ describe("the ledger", () => {
 
     test("editing only prose is not something a check can speak to", () => {
         const ledger = createVerificationLedger();
-        ledger.noteEdit("/work/README.md");
-        ledger.noteEdit("/work/CHANGELOG");
+        ledger.noteEdit(`${WORKSPACE_ROOT}/README.md`);
+        ledger.noteEdit(`${WORKSPACE_ROOT}/CHANGELOG`);
         expect(ledger.verdict()).toBeUndefined();
     });
 
     test("a prose edit alongside a code edit still needs proof", () => {
         const ledger = createVerificationLedger();
-        ledger.noteEdit("/work/README.md");
-        ledger.noteEdit("/work/src/a.ts");
+        ledger.noteEdit(`${WORKSPACE_ROOT}/README.md`);
+        ledger.noteEdit(`${WORKSPACE_ROOT}/src/a.ts`);
         expect(ledger.verdict()?.paths).toEqual(["/work/src/a.ts"]);
     });
 
     test("the same file edited repeatedly is named once", () => {
         const ledger = createVerificationLedger();
-        ledger.noteEdit("/work/src/a.ts");
-        ledger.noteEdit("/work/src/a.ts");
+        ledger.noteEdit(`${WORKSPACE_ROOT}/src/a.ts`);
+        ledger.noteEdit(`${WORKSPACE_ROOT}/src/a.ts`);
         expect(ledger.verdict()?.paths).toEqual(["/work/src/a.ts"]);
     });
 
@@ -91,7 +92,7 @@ describe("the ledger", () => {
      * written. */
     test("prose is remembered as edited even though no check is asked for it", () => {
         const ledger = createVerificationLedger();
-        ledger.noteEdit("/work/docs/intro.md");
+        ledger.noteEdit(`${WORKSPACE_ROOT}/docs/intro.md`);
         expect(ledger.edited()).toEqual(["/work/docs/intro.md"]);
         expect(ledger.verdict()).toBeUndefined();
     });
@@ -100,9 +101,9 @@ describe("the ledger", () => {
     // suite has not invalidated it.
     test("a prose edit after a passing check does not reopen the verdict", () => {
         const ledger = createVerificationLedger();
-        ledger.noteEdit("/work/src/a.ts");
+        ledger.noteEdit(`${WORKSPACE_ROOT}/src/a.ts`);
         ledger.noteCommand("pnpm test", true, "");
-        ledger.noteEdit("/work/README.md");
+        ledger.noteEdit(`${WORKSPACE_ROOT}/README.md`);
         expect(ledger.verdict()).toBeUndefined();
     });
 });

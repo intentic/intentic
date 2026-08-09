@@ -214,9 +214,13 @@ export const sandboxRoutes = {
             throw new ORPCError(`BAD_REQUEST`, { message: `this sandbox has no live setup code — reopen its setup screen and retry` });
         }
         const payload =
-            typeof sandbox.setupPayload === `string` ? (JSON.parse(decryptSecret(context.config, sandbox.setupPayload)) as Record<string, string>) : {};
+            typeof sandbox.setupPayload === `string`
+                ? (JSON.parse(decryptSecret(context.config, sandbox.setupPayload)) as Record<string, string>)
+                : {};
         if (payload[`SANDBOX_HOSTNAME`] === undefined) {
-            throw new ORPCError(`BAD_REQUEST`, { message: `the setup code targets your own Cloudflare — cloud machines need the intentic-provided tunnel` });
+            throw new ORPCError(`BAD_REQUEST`, {
+                message: `the setup code targets your own Cloudflare — cloud machines need the intentic-provided tunnel`,
+            });
         }
         const connectToken = decryptSecret(context.config, sandbox.token);
         const name = `intentic-${sandboxSubdomain(sandboxIdFromToken(connectToken) ?? sandbox.id)}`;

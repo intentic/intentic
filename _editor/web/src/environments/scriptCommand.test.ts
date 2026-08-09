@@ -1,5 +1,6 @@
 import { existsSync } from "node:fs";
-import { fileURLToPath } from "node:url";
+import { join } from "node:path";
+import { repoRoot as findRepoRoot } from "@intentic/constants/node";
 import { expect, test, vi } from "vitest";
 import type { WebEnvironment } from "./environment";
 
@@ -59,8 +60,8 @@ test("a deployed build ignores the preference entirely", async () => {
 
 test("every script key points at a file that exists in the repo", async () => {
     const { SCRIPT_PATHS } = await load(false);
-    const repoRoot = fileURLToPath(new URL(`../../../../`, import.meta.url));
+    const repoRoot = findRepoRoot(import.meta.url);
     for (const path of Object.values(SCRIPT_PATHS)) {
-        expect(existsSync(`${repoRoot}${path}`), `${path} is missing`).toBe(true);
+        expect(existsSync(join(repoRoot, path)), `${path} is missing`).toBe(true);
     }
 });

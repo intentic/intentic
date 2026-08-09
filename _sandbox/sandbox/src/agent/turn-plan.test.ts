@@ -1,3 +1,4 @@
+import { HISTORY_ROOT } from "@intentic/constants";
 import { type AgentTurn, RESUME_NOTES, SandboxSettingsSchema, withResumeNote } from "@intentic/sandbox-contract";
 import { beforeEach, expect, test, vi } from "vitest";
 import type { Services } from "../composition.js";
@@ -303,7 +304,7 @@ test("fast speed is withheld from every runtime that isn't the Claude Code loop"
  * absolute /work path from a memory or an AGENTS.md reaches the SHARED checkout. The note is the only layer
  * left that can keep it inside its own branch — see turn-preamble.ts on why it is second-best. */
 test("a cwd-isolated runtime is told where its worktree is; a namespaced one needs no telling", async () => {
-    const isolated: TurnContext = { ...context, localCwd: "/history/worktrees/abc/work", effectiveCwd: "/history/worktrees/abc/work" };
+    const isolated: TurnContext = { ...context, localCwd: `${HISTORY_ROOT}/worktrees/abc/work`, effectiveCwd: `${HISTORY_ROOT}/worktrees/abc/work` };
 
     const codex = await planTurn(codexServices(), turn({ agent: "codex" }), isolated);
     const prompt = (codex as { request: AgentRequest }).request.prompt;
@@ -325,8 +326,8 @@ test("a main-tree turn has no worktree to name, so it says nothing", async () =>
 test("every runtime hears that its branch was rebased; a main-tree turn has no branch to rebase", async () => {
     const isolated: TurnContext = {
         ...context,
-        localCwd: "/history/worktrees/abc/work",
-        effectiveCwd: "/history/worktrees/abc/work",
+        localCwd: `${HISTORY_ROOT}/worktrees/abc/work`,
+        effectiveCwd: `${HISTORY_ROOT}/worktrees/abc/work`,
         syncNote: "## Your branch moved onto newer main\n\nrebased onto 3 commits",
     };
 
@@ -406,7 +407,11 @@ test("retrieval fires on the opening message and on nothing after it", async () 
  * conversation it was cut from. */
 test("a wake and a fork open conversations that retrieval stays out of", async () => {
     const wake: string[] = [];
-    await planTurn(retrievingServices(wake, 0), turn({ prompt: "sweep the workspace for drifted dependencies", conversationId: "c2", unattended: true }), context);
+    await planTurn(
+        retrievingServices(wake, 0),
+        turn({ prompt: "sweep the workspace for drifted dependencies", conversationId: "c2", unattended: true }),
+        context,
+    );
     expect(wake).toEqual([]);
 
     const fork: string[] = [];
@@ -428,6 +433,10 @@ test("the holdout flips only for turns retrieval applies to", async () => {
     const second = await planTurn(retrievingServices([], 1, 0.5), turn({ prompt: "how does a wake pick its model?", conversationId: "c1" }), context);
     expect(second).not.toHaveProperty("contextArm");
 
-    const wake = await planTurn(retrievingServices([], 0, 0.5), turn({ prompt: "run the nightly sweep", conversationId: "c2", unattended: true }), context);
+    const wake = await planTurn(
+        retrievingServices([], 0, 0.5),
+        turn({ prompt: "run the nightly sweep", conversationId: "c2", unattended: true }),
+        context,
+    );
     expect(wake).not.toHaveProperty("contextArm");
 });

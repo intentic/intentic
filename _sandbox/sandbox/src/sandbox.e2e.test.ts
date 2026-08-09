@@ -1,4 +1,5 @@
 import { randomBytes } from "node:crypto";
+import { STATE_DIR } from "@intentic/constants";
 import { sandboxContract } from "@intentic/sandbox-contract";
 import { e2eTier } from "@intentic/testing/e2e";
 import { createORPCClient } from "@orpc/client";
@@ -115,7 +116,7 @@ describe.skipIf(!tier.runs)(tier.title, () => {
             { name: "tree/.env", content: "SECRET=1" },
             // The control plane is the floor that remains, and skipping it is per-entry: the rest of the drop
             // still lands. A member who could post this one would own the sandbox.
-            { name: ".intentic/owner.json", content: `{"email":"attacker@example.com"}` },
+            { name: `${STATE_DIR}/owner.json`, content: `{"email":"attacker@example.com"}` },
         ]);
         const response = await fetch(`${base}/workspace/upload-archive`, { method: "POST", body: new Uint8Array(archive) });
         expect(response.status).toBe(200);

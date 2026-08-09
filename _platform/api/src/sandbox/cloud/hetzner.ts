@@ -51,13 +51,19 @@ const call = async (token: string, method: string, path: string, body?: unknown)
         // The refusals a user can act on, in their words. uniqueness_error means a previous attempt already
         // created the machine — pointing at the console beats a retry loop that can never succeed.
         if (code === `uniqueness_error`) {
-            throw new CloudProviderError(`A server with this sandbox's name already exists in your Hetzner project — it is probably a previous attempt; delete it in the Hetzner console, then retry.`);
+            throw new CloudProviderError(
+                `A server with this sandbox's name already exists in your Hetzner project — it is probably a previous attempt; delete it in the Hetzner console, then retry.`,
+            );
         }
         if (code === `resource_limit_exceeded`) {
-            throw new CloudProviderError(`Hetzner refused: your project's server limit is reached. Raise the limit in the Hetzner console (or delete an unused server), then retry.`);
+            throw new CloudProviderError(
+                `Hetzner refused: your project's server limit is reached. Raise the limit in the Hetzner console (or delete an unused server), then retry.`,
+            );
         }
         if (code === `resource_unavailable`) {
-            throw new CloudProviderError(`Hetzner has no capacity for that server type in that location right now — pick another location or size and retry.`);
+            throw new CloudProviderError(
+                `Hetzner has no capacity for that server type in that location right now — pick another location or size and retry.`,
+            );
         }
         throw new CloudProviderError(`Hetzner refused: ${message}`);
     }

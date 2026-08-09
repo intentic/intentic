@@ -12,7 +12,12 @@ import type { ChatMessage } from "../composables/chat/transcript";
 
 const forkAt = vi.hoisted(() => vi.fn());
 const rewindTo = vi.hoisted(() => vi.fn(async () => true));
-const state = vi.hoisted(() => ({ messages: [] as ChatMessage[], streaming: false, isolated: true, fleet: [] as { id: string; title?: string; forkedFrom?: { conversationId: string; index: number } }[] }));
+const state = vi.hoisted(() => ({
+    messages: [] as ChatMessage[],
+    streaming: false,
+    isolated: true,
+    fleet: [] as { id: string; title?: string; forkedFrom?: { conversationId: string; index: number } }[],
+}));
 const opened = vi.hoisted(() => ({ ids: [] as string[] }));
 // What the ContextMenu was last handed — the component under test builds it, PrimeVue only draws it.
 const shown = vi.hoisted(() => ({ model: [] as MenuItem[], opened: 0 }));

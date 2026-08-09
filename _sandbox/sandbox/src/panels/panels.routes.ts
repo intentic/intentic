@@ -1,5 +1,6 @@
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
+import { STATE_DIR } from "@intentic/constants";
 import { ARTIFACT_FILE, CONFIG_FILE } from "@intentic/scaffold";
 import { panelsContract, previewLabel, previewUrl, zoneFromUrl } from "@intentic/sandbox-contract";
 import { sandboxIdFromToken } from "@intentic/sandbox-contract/tunnel-ids";
@@ -118,7 +119,7 @@ export const createPanelsRoutes = (services: PanelsRoutesDeps) => {
                         servers,
                         deployConfig: existsSync(join(dir, CONFIG_FILE)),
                         desiredState: existsSync(join(dir, ARTIFACT_FILE)),
-                        directoryUi: existsSync(join(dir, ".intentic", "ui", "index.html")),
+                        directoryUi: existsSync(join(dir, STATE_DIR, "ui", "index.html")),
                         monorepo: existsSync(join(dir, "pnpm-workspace.yaml")) && existsSync(join(dir, "turbo.json")),
                         vitest:
                             existsSync(join(dir, "vitest.config.ts")) ||

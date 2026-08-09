@@ -1,4 +1,5 @@
-import { fileURLToPath } from "node:url";
+import { join } from "node:path";
+import { packageRoot, repoRoot } from "@intentic/constants/node";
 import { defineConfig, type Plugin } from "vite";
 // Relative, not through the package's exports: Vite bundles a config's RELATIVE imports (so the .ts sources
 // behind them are compiled with it) and leaves bare specifiers to Node, which cannot load TypeScript. The
@@ -19,7 +20,10 @@ import { shared } from "../../_editor/web/vite.shared.ts";
  * app boots. `public/demo/` is gitignored, and a site build with no demo in it simply has no /demo/ — the two
  * builds are ordered (the site depends on this package) but not entangled. */
 
-const here = (path: string): string => fileURLToPath(new URL(path, import.meta.url));
+// Paths from the monorepo root, and paths inside this package. Both anchors are FOUND rather than counted, so
+// neither this file's depth nor the number of `../` between here and _editor is part of any answer below.
+const fromRoot = (path: string): string => join(repoRoot(import.meta.url), path);
+const here = (path: string): string => join(packageRoot(import.meta.url), path);
 
 /* Serve `index.html` for every DOCUMENT request, which is the same thing the site's worker is told for
  * production: the demo is a history-mode SPA, so `/demo/agents` and `/demo/workspace/api/src/stripe.ts` are its
@@ -60,20 +64,20 @@ export default defineConfig({
             // The app's entry, source-first — the same treatment `shared` gives every workspace lib, and the
             // mapping this package's tsconfig `paths` already declares. `package.json` names the dependency;
             // this is how it resolves, with no dist between an app edit and the demo showing it.
-            "@intentic-app/web/main": here(`../../_editor/web/src/main.ts`),
+            "@intentic-app/web/main": fromRoot(`_editor/web/src/main.ts`),
             // The extensions THIS app build compiled in, which the fixture's GET /extensions enumerates. Read
             // from the app rather than re-listed here on purpose: a demo whose list is one extension short shows
             // that extension as image/app drift, in the app's own alarmed wording.
-            "@intentic-app/web/builtins": here(`../../_editor/web/src/extension-host/builtins.ts`),
+            "@intentic-app/web/builtins": fromRoot(`_editor/web/src/extension-host/builtins.ts`),
             // The pop-out window's own script, and the only code a floating panel runs in its own realm.
-            "@intentic-app/web/popout-keeper": here(`../../_editor/web/src/popout/keeper.ts`),
+            "@intentic-app/web/popout-keeper": fromRoot(`_editor/web/src/popout/keeper.ts`),
         },
     },
     base: `/demo/`,
     // The app's own static assets — its logo, and the `ext-shims/` modules an extension bundle's bare `vue` /
     // `@intentic/extension-api` imports resolve to through index.html's import map. The demo serves the app, so
     // it serves the app's public dir; nothing of its own belongs here.
-    publicDir: here(`../../_editor/web/public`),
+    publicDir: fromRoot(`_editor/web/public`),
     // Plain http on its own port: the demo talks to nothing real, so there is no cross-origin cookie, no Google
     // client and no mixed content to keep the app's dev certificate for. The app's dev server is untouched.
     // `127.0.0.1` rather than `localhost`, which Node resolves to ::1 on a dual-stack host: the site's dev
@@ -81,12 +85,12 @@ export default defineConfig({
     // 127.0.0.1, so a v6-only listener is refused. Pinning the family makes both ends name the same socket.
     server: { host: `127.0.0.1`, port: 47146, strictPort: true },
     build: {
-        outDir: here(`../site/public/demo`),
+        outDir: fromRoot(`_site/site/public/demo`),
         emptyOutDir: true,
         target: `es2024`,
         // Two documents, the same pair the app builds: the demo, and the page a popped-out panel is teleported
         // into. Naming inputs at all is what makes the second one ship — Vite's default is index.html alone, and
         // a pop-out whose page 404s is a window that can never report in.
-        rolldownOptions: { input: { index: here(`./index.html`), popout: here(`./popout.html`) } },
+        rolldownOptions: { input: { index: here(`index.html`), popout: here(`popout.html`) } },
     },
 });

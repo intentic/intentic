@@ -6,7 +6,8 @@
 # named build context `trees`, so its own layers are pure COPYs.
 #   bash _tools/scripts/prepare-image-trees.sh
 set -euo pipefail
-cd "$(dirname "$0")/../.."
+. "$(dirname "$0")/repo-root.sh"
+cd "$(repo_root)"
 
 # ext-memory and ext-deployments build their BACKEND bundles (dist/server.js) here; they are staged into the
 # trees context below (no deploy tree: the bundles are self-contained, so shipping node_modules would be waste).

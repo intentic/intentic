@@ -16,8 +16,9 @@
 #   bash _tools/scripts/publish-github.sh 1.177.0
 set -euo pipefail
 VERSION="${1:?usage: publish-github.sh <version>}"
+. "$(dirname "$0")/repo-root.sh"
 DIR="$(cd "$(dirname "$0")" && pwd)"
-cd "$DIR/../.."
+cd "$(repo_root)"
 
 REPO="${GITHUB_REPOSITORY:-intentic/intentic}"
 TAG="v${VERSION}"

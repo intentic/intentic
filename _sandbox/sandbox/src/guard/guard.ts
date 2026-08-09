@@ -17,9 +17,7 @@
  */
 
 export type GuardVerdict =
-    | { effect: "allow"; reason: string }
-    | { effect: "hold"; reason: string; autoRunAfterS?: number }
-    | { effect: "deny"; reason: string };
+    { effect: "allow"; reason: string } | { effect: "hold"; reason: string; autoRunAfterS?: number } | { effect: "deny"; reason: string };
 
 export const ALLOW = (reason: string): GuardVerdict => ({ effect: "allow", reason });
 export const DENY = (reason: string): GuardVerdict => ({ effect: "deny", reason });

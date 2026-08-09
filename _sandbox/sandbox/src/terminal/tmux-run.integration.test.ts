@@ -3,6 +3,7 @@ import { mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
+import { packageRoot } from "@intentic/constants/node";
 import { expect, test } from "vitest";
 
 /* Against the REAL bin/tmux-run, because what is being asserted is what the SCRIPT does with tmux — and the
@@ -14,7 +15,7 @@ import { expect, test } from "vitest";
 
 const execFileAsync = promisify(execFile);
 
-const TMUX_RUN = join(import.meta.dirname, "..", "..", "bin", "tmux-run");
+const TMUX_RUN = join(packageRoot(import.meta.url), "bin", "tmux-run");
 
 // A stub on PATH that appends its own argv to `calls` and answers the handful of queries the wrapper makes:
 // a pane id from the window-creating forms, a live pane so the wait loop spins once, and one DEAD pane so the

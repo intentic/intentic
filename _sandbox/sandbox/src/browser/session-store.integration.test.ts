@@ -2,6 +2,7 @@ import { existsSync, mkdtempSync } from "node:fs";
 import { writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { WORKSPACE_ROOT } from "@intentic/constants";
 import { expect, test } from "vitest";
 import {
     acquireProfileLock,
@@ -17,7 +18,7 @@ import {
 const tempRoot = (): string => mkdtempSync(join(tmpdir(), "browser-sess-"));
 
 test("sessionDir is the account's profile under .intentic/browser", () => {
-    const root = "/work";
+    const root = WORKSPACE_ROOT;
     expect(sessionDir(root, "reddit")).toBe(join(root, ".intentic", "browser", "reddit"));
 });
 

@@ -1,11 +1,14 @@
+import { join } from "node:path";
+import { pathToFileURL } from "node:url";
 import { Worker } from "node:worker_threads";
+import { packageRoot } from "@intentic/constants/node";
 import type { QueryWorkerData, QueryWorkerRequest, QueryWorkerResponse } from "./query-worker.js";
 import type { QueryScorer } from "./scorer.js";
 
 // Built javascript, for the same reason index.ts spawns its indexer that way: a raw worker thread has no
 // TypeScript loader, so from `src/` this steps across into the sibling build output and from `dist/` it is the
 // identity. This package's `test` script builds first so a test drives this working tree's worker.
-const WORKER_URL = new URL("../../dist/query/query-worker.js", import.meta.url);
+const WORKER_URL = pathToFileURL(join(packageRoot(import.meta.url), "dist/query/query-worker.js"));
 
 export interface WorkerScorerOptions {
     readonly indexDir: string;

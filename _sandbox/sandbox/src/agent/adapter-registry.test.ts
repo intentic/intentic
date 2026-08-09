@@ -1,3 +1,4 @@
+import { WORKSPACE_ROOT } from "@intentic/constants";
 import { capabilitiesOf, HARNESSES, PROVIDERS } from "@intentic/sandbox-contract";
 import { expect, test, vi } from "vitest";
 
@@ -68,7 +69,7 @@ test("each runtime is asked about a resume by its own session store", async () =
     });
 
     const held = Object.fromEntries(
-        await Promise.all(ADAPTERS.map(async (adapter) => [adapter.runtime, await adapter.holdsSession(stores, "s-1", "/work")])),
+        await Promise.all(ADAPTERS.map(async (adapter) => [adapter.runtime, await adapter.holdsSession(stores, "s-1", WORKSPACE_ROOT)])),
     );
 
     expect(asked.toSorted()).toEqual(["claude:/work:s-1", "codex:s-1", "opencode:s-1:/work"]);

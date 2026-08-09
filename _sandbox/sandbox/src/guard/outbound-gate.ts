@@ -51,8 +51,7 @@ export const outboundGateHooks = (rules: Readonly<Record<string, AdmissionRule>>
                         hookSpecificOutput: {
                             hookEventName: "PreToolUse",
                             permissionDecision: "deny",
-                            permissionDecisionReason:
-                                verdict.effect === "hold" ? `${verdict.reason}. ${DRAFT_REDIRECT}` : verdict.reason,
+                            permissionDecisionReason: verdict.effect === "hold" ? `${verdict.reason}. ${DRAFT_REDIRECT}` : verdict.reason,
                         },
                     };
                 },

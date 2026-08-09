@@ -1,3 +1,4 @@
+import { STATE_DIR } from "@intentic/sandbox-contract";
 import type { ChoreOutcome } from "@intentic/sandbox-contract";
 
 /* A CHORE RUN is one chore, in one repository, started at one moment — and like every other agent-producing
@@ -19,7 +20,7 @@ import type { ChoreOutcome } from "@intentic/sandbox-contract";
  * useRuns.promote). The promotion is idempotent and re-runs on every poll, so a browser that was closed when the
  * turn finished picks it up the next time it opens — nothing is lost by not being watched. */
 
-export const RUNS_DIR = `.intentic/chores/runs`;
+export const RUNS_DIR = `${STATE_DIR}/chores/runs`;
 
 export const runDir = (runId: string): string => `${RUNS_DIR}/${runId}`;
 export const runManifestPath = (runId: string): string => `${runDir(runId)}/run.json`;

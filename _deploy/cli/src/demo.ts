@@ -3,8 +3,9 @@ import { setTimeout as sleep } from "node:timers/promises";
 import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { createRequire } from "node:module";
 import { join } from "node:path";
-import { fileURLToPath, pathToFileURL } from "node:url";
+import { pathToFileURL } from "node:url";
 import { promisify } from "node:util";
+import { packageRoot, repoRoot } from "@intentic/constants/node";
 import { cloudflareApi, forgejoApi, sshExecutor } from "@intentic/providers";
 import { deploymentId, deploymentPort } from "@intentic/state-resolver";
 import { loadConfig } from "./env.config.js";
@@ -27,10 +28,11 @@ const { utils } = createRequire(import.meta.url)("ssh2") as {
 // a dev harness — not a shipped `intentic` command — and reuses exactly what the e2e proved.
 
 const exec = promisify(execFile);
-const repoRoot = fileURLToPath(new URL("../../../", import.meta.url));
-const hostContext = fileURLToPath(new URL("../node_modules/@intentic/dind-host", import.meta.url));
-const cliJs = join(repoRoot, "_deploy/cli/dist/cli.js");
-const stateDir = join(repoRoot, ".demo");
+const root = repoRoot(import.meta.url);
+const cliRoot = packageRoot(import.meta.url);
+const hostContext = join(cliRoot, "node_modules/@intentic/dind-host");
+const cliJs = join(cliRoot, "dist/cli.js");
+const stateDir = join(root, ".demo");
 const stateFile = join(stateDir, "state.json");
 
 const CONTAINER = "intentic-demo-host";
@@ -59,7 +61,7 @@ const log = (message: string): void => {
 
 // The engine reaches Forgejo/Komodo over their public URLs; route the CLI children's lookups for the demo
 // zone through Cloudflare DoH so the just-created records resolve despite this machine's negative cache.
-const dohHook = pathToFileURL(join(repoRoot, "_deploy/cli/doh-lookup.mjs")).href;
+const dohHook = pathToFileURL(join(cliRoot, "doh-lookup.mjs")).href;
 const cliEnv: NodeJS.ProcessEnv = {
     ...process.env,
     DEMO_DOH_ZONE: zone,
@@ -69,7 +71,7 @@ const cliEnv: NodeJS.ProcessEnv = {
 // Stream a child's output so the operator watches the real apply progress; reject on non-zero exit.
 const run = (command: string, args: string[], env: NodeJS.ProcessEnv = process.env): Promise<void> =>
     new Promise((resolve, reject) => {
-        const child = spawn(command, args, { cwd: repoRoot, env, stdio: ["ignore", "inherit", "inherit"] });
+        const child = spawn(command, args, { cwd: root, env, stdio: ["ignore", "inherit", "inherit"] });
         child.on("error", reject);
         child.on("exit", (code) => {
             if (code === 0) {
@@ -93,7 +95,7 @@ const readToken = async (): Promise<string> => {
     if (config.cloudflareApiToken !== "") {
         return config.cloudflareApiToken.replace(/\\/g, "").trim();
     }
-    const envText = await readFile(join(repoRoot, "desired-state/.env"), "utf8");
+    const envText = await readFile(join(root, "desired-state/.env"), "utf8");
     const match = /^CLOUDFLARE_API_TOKEN=(.*)$/m.exec(envText);
     if (match?.[1] === undefined) {
         throw new Error("CLOUDFLARE_API_TOKEN is not set and was not found in desired-state/.env");
@@ -188,7 +190,7 @@ const up = async (): Promise<void> => {
     // Bootstrap into the repo's own gitignored scratch dirs (intent/, desired-state/) instead of a throwaway
     // /tmp workspace, so the generated .secrets.json lands at desired-state/.secrets.json — exactly where
     // `pnpm intentic deploy adopt` (default repo-root paths) reads the Forgejo admin password from.
-    const workspace = repoRoot;
+    const workspace = root;
     const configPath = join(workspace, "intent", "deploy.config.ts");
     const artifactPath = join(workspace, "desired-state", "desired-state.json");
 

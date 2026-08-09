@@ -1,6 +1,7 @@
 import { mkdir, mkdtemp, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { WORKSPACE_ROOT } from "@intentic/constants";
 import type { TemplateManifest } from "@intentic/scaffold";
 import { describe, expect, test } from "vitest";
 import { appPanelKey, buildAppSpec, discoverApps } from "./app-previews.js";
@@ -47,7 +48,7 @@ describe("app-previews", () => {
         // `pkg` is the real package.json name — scoped to the monorepo's OWN scope, not the template's @app_/.
         const spec = buildAppSpec({
             repo: "shop",
-            repoDir: "/work/shop",
+            repoDir: `${WORKSPACE_ROOT}/shop`,
             pkg: "@shop/api",
             app: "api",
             preview: apiPreview,
@@ -69,7 +70,7 @@ describe("app-previews", () => {
         // A renamed instance "admin-api" whose package name the inject engine set to @shop/admin-api.
         const spec = buildAppSpec({
             repo: "shop",
-            repoDir: "/work/shop",
+            repoDir: `${WORKSPACE_ROOT}/shop`,
             pkg: "@shop/admin-api",
             app: "admin-api",
             preview: apiPreview,

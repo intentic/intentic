@@ -77,7 +77,13 @@ describe("secrets.access", () => {
 
 describe("package.publish", () => {
     test("catches the outward, irreversible verbs", () => {
-        for (const command of ["npm publish", "pnpm publish --access public", "cargo publish", "gh release create v1.2.0", "docker push acme/api:1"]) {
+        for (const command of [
+            "npm publish",
+            "pnpm publish --access public",
+            "cargo publish",
+            "gh release create v1.2.0",
+            "docker push acme/api:1",
+        ]) {
             expect(classifyCommand(command), command).toContain("package.publish");
         }
     });

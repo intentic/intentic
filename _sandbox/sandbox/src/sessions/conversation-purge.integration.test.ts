@@ -1,6 +1,7 @@
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { STATE_DIR } from "@intentic/constants";
 import { afterEach, expect, test } from "vitest";
 import { purgeConversationState, type PurgeConversation } from "./conversation-purge.js";
 
@@ -18,8 +19,8 @@ test("purge removes owned transcripts, unshared attachments, and Claude session 
     const workspace = join(root, "work");
     const history = join(root, "history");
     const transcripts = join(history, "transcripts");
-    const projects = join(workspace, ".intentic", "sessions", "claude", "projects", "-work");
-    const attachments = join(workspace, ".intentic", "artifacts", "attachments");
+    const projects = join(workspace, `${STATE_DIR}`, "sessions", "claude", "projects", "-work");
+    const attachments = join(workspace, `${STATE_DIR}`, "artifacts", "attachments");
     await Promise.all([
         mkdir(transcripts, { recursive: true }),
         mkdir(join(projects, "removed-session"), { recursive: true }),
@@ -30,12 +31,12 @@ test("purge removes owned transcripts, unshared attachments, and Claude session 
     await Promise.all([
         writeFile(
             join(transcripts, "removed.jsonl"),
-            `${JSON.stringify({ role: "user", text: "x", attachments: [".intentic/artifacts/attachments/only-removed/a.png"] })}\n` +
-                `${JSON.stringify({ role: "user", text: "y", attachments: [".intentic/artifacts/attachments/shared/b.png"] })}\n`,
+            `${JSON.stringify({ role: "user", text: "x", attachments: [`${STATE_DIR}/artifacts/attachments/only-removed/a.png`] })}\n` +
+                `${JSON.stringify({ role: "user", text: "y", attachments: [`${STATE_DIR}/artifacts/attachments/shared/b.png`] })}\n`,
         ),
         writeFile(
             join(transcripts, "kept.jsonl"),
-            `${JSON.stringify({ role: "user", text: "fork", attachments: [".intentic/artifacts/attachments/shared/b.png"] })}\n`,
+            `${JSON.stringify({ role: "user", text: "fork", attachments: [`${STATE_DIR}/artifacts/attachments/shared/b.png`] })}\n`,
         ),
         writeFile(join(projects, "removed-session.jsonl"), "removed"),
         writeFile(join(projects, "removed-session", "tool.json"), "removed"),

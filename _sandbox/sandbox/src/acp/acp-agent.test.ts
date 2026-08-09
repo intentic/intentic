@@ -1,3 +1,4 @@
+import { WORKSPACE_ROOT } from "@intentic/constants";
 import type { AcpAgentConfig, AgentEvent } from "@intentic/sandbox-contract";
 import { expect, test } from "vitest";
 import { resolveRequest } from "../agent/agent-requests.js";
@@ -17,7 +18,7 @@ const TIMEOUTS: AcpTimeouts = { inactivityMs: 60_000, maxTurnMs: 60_000 };
 
 const request = (prompt: string, overrides: Partial<AgentRequest> = {}): AgentRequest => ({
     prompt,
-    cwd: "/work",
+    cwd: WORKSPACE_ROOT,
     signal: new AbortController().signal,
     ...overrides,
 });

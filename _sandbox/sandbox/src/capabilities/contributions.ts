@@ -88,8 +88,7 @@ export const contributionSecretFields = (spec: CapabilityContribution): Set<stri
 // FIRST secret field when a card declares several (Slack's bot token, the one that expires in practice);
 // rotating a secondary one is a re-add of the capability, as it is for an ipsec tunnel's PSK. undefined when a
 // card carries no secret.
-export const contributionSecretField = (spec: CapabilityContribution): string | undefined =>
-    spec.fields.find((field) => field.secret === true)?.key;
+export const contributionSecretField = (spec: CapabilityContribution): string | undefined => spec.fields.find((field) => field.secret === true)?.key;
 
 /* WHERE A CONNECTED BROWSER OPENS — the sign-in page for a login window, the home page for the owner's own
  * visit — resolved for ONE instance, because the two kinds of browser card answer it in different places: a site

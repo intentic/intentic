@@ -2,6 +2,7 @@ import { execFileSync } from "node:child_process";
 import { chmodSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { repoRoot } from "@intentic/constants/node";
 import { afterEach, expect, test } from "vitest";
 
 /* recreate.sh is a bootstrap shim: the flow lives in the ic CLI (_sandbox/ic), and the script's one job is
@@ -16,8 +17,8 @@ import { afterEach, expect, test } from "vitest";
  * situation it exists for. (The record's arithmetic — rollback swaps the pair, an unchanged base keeps the
  * target — is tested in Rust: _sandbox/ic/src/sandbox/recreate.rs.) */
 
-const SCRIPT = new URL("../../../_site/site/public/scripts/recreate.sh", import.meta.url);
-const RECREATE_RS = new URL("../../../_sandbox/ic/src/sandbox/recreate.rs", import.meta.url);
+const SCRIPT = join(repoRoot(import.meta.url), "_site/site/public/scripts/recreate.sh");
+const RECREATE_RS = join(repoRoot(import.meta.url), "_sandbox/ic/src/sandbox/recreate.rs");
 
 const dirs: string[] = [];
 afterEach(() => {
@@ -40,10 +41,10 @@ const shimArgs = (...args: string[]): { status: number; out: string; err: string
     const dir = mkdtempSync(join(tmpdir(), "intentic-recreate-"));
     dirs.push(dir);
     const fake = join(dir, "fake-ic");
-    writeFileSync(fake, '#!/bin/sh\nprintf \'%s\\n\' "$@"\n');
+    writeFileSync(fake, "#!/bin/sh\nprintf '%s\\n' \"$@\"\n");
     chmodSync(fake, 0o755);
     try {
-        const out = execFileSync("sh", [new URL(SCRIPT).pathname, ...args], {
+        const out = execFileSync("sh", [SCRIPT, ...args], {
             encoding: "utf8",
             stdio: ["ignore", "pipe", "pipe"],
             env: { ...process.env, IC_BIN: fake },

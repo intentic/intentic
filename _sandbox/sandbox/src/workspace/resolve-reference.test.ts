@@ -1,3 +1,4 @@
+import { WORKSPACE_ROOT } from "@intentic/constants";
 import { expect, test } from "vitest";
 import { resolveReference } from "./resolve-reference.js";
 
@@ -12,7 +13,7 @@ const WORKSPACE = [
 const resolve = (reference: string, files: readonly string[] = WORKSPACE, seen: string[] = []) =>
     resolveReference(
         reference,
-        "/work",
+        WORKSPACE_ROOT,
         (relPath) => files.includes(relPath),
         async (glob) => {
             seen.push(glob);

@@ -16,7 +16,6 @@ import { useRefRefresh } from "./useRefRefresh.js";
  * Refreshed off the ref push, since the thing it reports IS a ref move — including the agent's, which is the
  * case where a stale Undo button would be most dangerous: it would name an action the user never took. */
 
-
 // What the button says. Git's reflog subject is the honest description but it is also long and shaped for a log
 // ("commit (amend): fix the parser"), so the KIND names the verb and the subject rides the tooltip.
 const VERBS: Record<UndoableAction["kind"], string> = {

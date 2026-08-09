@@ -1,7 +1,7 @@
 {
     "name": "@intentic/ext-memory",
     "version": "1.0.0",
-    "description": "Memory \u2014 the agent's persistent memory notes, reviewable and editable, as a first-party intentic extension",
+    "description": "Memory — the agent's persistent memory notes, reviewable and editable, as a first-party intentic extension",
     "license": "MIT",
     "private": true,
     "type": "module",
@@ -22,6 +22,7 @@
         "@intentic/extension-api": "workspace:*",
         "@intentic/extension-manifest": "workspace:*",
         "@intentic/extension-ui": "workspace:*",
+        "@intentic/sandbox-contract": "workspace:*",
         "@orpc/contract": "catalog:",
         "@orpc/openapi": "catalog:",
         "@orpc/server": "catalog:",

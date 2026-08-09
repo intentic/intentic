@@ -2,6 +2,7 @@ import { mkdtempSync } from "node:fs";
 
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { STATE_DIR, WORKSPACE_ROOT } from "@intentic/constants";
 
 import type { AgentEvent, Capability, RestoredMessage } from "@intentic/sandbox-contract";
 
@@ -975,7 +976,7 @@ test("agent.run folds attachments into the claude prompt as absolute paths, allo
             }),
         ),
     );
-    await runAgentTurn(client, { prompt: "", attachments: [".intentic/artifacts/attachments/x/shot.png"] });
+    await runAgentTurn(client, { prompt: "", attachments: [`${STATE_DIR}/artifacts/attachments/x/shot.png`] });
     expect(seen?.prompt).toContain("/work/.intentic/artifacts/attachments/x/shot.png");
 });
 
@@ -1042,7 +1043,7 @@ test("environment: members read the state, approve/reject are owner-gated, appro
     // A proposal is custom-section content only (the daemon owns the FROM).
     const proposal = "RUN apt-get install -y cowsay\n";
     const hash = sha256Hex(proposal);
-    disk.set("/work/.intentic/environment.Dockerfile", proposal);
+    disk.set(`${WORKSPACE_ROOT}/${STATE_DIR}/environment.Dockerfile`, proposal);
 
     // A member (bearer passes, owner check refuses as Forbidden) sees the state but can't approve or reject —
     // a verified non-owner is 403, not 401.

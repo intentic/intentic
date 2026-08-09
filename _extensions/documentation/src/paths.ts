@@ -1,3 +1,4 @@
+import { STATE_DIR } from "@intentic/sandbox-contract";
 /* WHERE THE DOCUMENTS LIVE — two trees, and the reason there are two.
  *
  * PUBLISHED: a package's page is its own `README.md`, beside its code; only the repo-level map lives apart, at
@@ -30,7 +31,7 @@ export const DOCS_DIR = "docs/architecture";
 
 // Workspace-root-relative. One prefix for everything this extension stages, which is what makes a single
 // `contributes.files` entry able to cover it.
-export const STAGING_ROOT = ".intentic/docs";
+export const STAGING_ROOT = `${STATE_DIR}/docs`;
 
 /* The tails a document set is made of. The repo-level three are written once per repo; a package page is written
  * once per package, under the package's own dir.

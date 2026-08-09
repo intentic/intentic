@@ -1,5 +1,6 @@
 import { mkdir, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
+import { STATE_DIR } from "@intentic/constants";
 import { RETIRED_WORKSPACE_STATE_DIRS } from "@intentic/sandbox-contract";
 import { afterAll, beforeAll, expect, test } from "vitest";
 import { makeFixtureWorkspace } from "../testing.js";
@@ -53,13 +54,13 @@ test("the reference shelf is skipped by default and reachable via --ignored, lik
 });
 
 test("the agent plane's byproducts are excluded, its manifests are not", async () => {
-    await writeFile(join(root, ".intentic/settings.json"), '{ "theme": "dark" }\n');
+    await writeFile(join(root, `${STATE_DIR}/settings.json`), '{ "theme": "dark" }\n');
     const excluded = [
-        ".intentic/auth/codex/default/auth.json",
-        ".intentic/sessions/claude/projects/session.jsonl",
-        ".intentic/artifacts/attachments/u1/brief.md",
-        ".intentic/runtime/extensions/whatsapp/gateway.url",
-        ".intentic/browser/reddit/Default/Cookies",
+        `${STATE_DIR}/auth/codex/default/auth.json`,
+        `${STATE_DIR}/sessions/claude/projects/session.jsonl`,
+        `${STATE_DIR}/artifacts/attachments/u1/brief.md`,
+        `${STATE_DIR}/runtime/extensions/whatsapp/gateway.url`,
+        `${STATE_DIR}/browser/reddit/Default/Cookies`,
         ...Object.values(RETIRED_WORKSPACE_STATE_DIRS).flatMap((dirs) => dirs.map((dir) => `.intentic/${dir}/retired-state`)),
         // A workspace can contain checkouts that are themselves intentic workspaces — their byproducts are no
         // more searchable than the root's own.

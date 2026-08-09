@@ -1,6 +1,7 @@
 import { mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { STATE_DIR } from "@intentic/constants";
 import { afterEach, expect, test } from "vitest";
 import { z } from "zod";
 import { jsonDir } from "./json-dir.js";
@@ -11,7 +12,7 @@ const tempDir = async (): Promise<string> => {
     dirs.push(dir);
     // Nested, so the mkdir-on-write path is exercised the way every real store uses it (.intentic/ rarely
     // exists on a fresh workspace).
-    return join(dir, ".intentic", "entries");
+    return join(dir, `${STATE_DIR}`, "entries");
 };
 afterEach(async () => {
     for (const dir of dirs.splice(0)) {

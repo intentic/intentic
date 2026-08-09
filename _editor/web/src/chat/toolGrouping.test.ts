@@ -58,12 +58,7 @@ describe(`groupConsecutiveTools`, () => {
     });
 
     it(`breaks a run when the name changes`, () => {
-        const tools = [
-            tool(`Edit`, `a.ts`, `t1`),
-            tool(`Edit`, `a.ts`, `t2`),
-            tool(`Edit`, `a.ts`, `t3`),
-            tool(`Read`, `a.ts`, `t4`),
-        ];
+        const tools = [tool(`Edit`, `a.ts`, `t1`), tool(`Edit`, `a.ts`, `t2`), tool(`Edit`, `a.ts`, `t3`), tool(`Read`, `a.ts`, `t4`)];
         const result = groupConsecutiveTools(tools);
         expect(result).toHaveLength(2);
         expect((result[0] as ToolGroup).tools).toHaveLength(3);

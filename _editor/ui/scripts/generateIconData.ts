@@ -6,7 +6,8 @@
 
 import { getIcons } from "@iconify/utils";
 import { writeFileSync } from "node:fs";
-import { fileURLToPath } from "node:url";
+import { join } from "node:path";
+import { packageRoot } from "@intentic/constants/node";
 import { ICONS } from "../src/icons/iconSets.js";
 
 // The one set the app draws from. An id naming any other prefix fails here rather than rendering as a hole in
@@ -39,6 +40,6 @@ import type { IconifyJSON } from "@iconify/types";
 export const BUNDLED_ICONS: IconifyJSON[] = ${JSON.stringify([trimmed])};
 `;
 
-const outPath = fileURLToPath(new URL("../src/icons/iconData.generated.ts", import.meta.url));
+const outPath = join(packageRoot(import.meta.url), "src/icons/iconData.generated.ts");
 writeFileSync(outPath, out);
 console.log(`Wrote ${outPath} — ${Object.keys(trimmed.icons).length} icons.`);

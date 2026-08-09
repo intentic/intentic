@@ -1,7 +1,8 @@
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { fileURLToPath } from "node:url";
+import { repoRoot } from "@intentic/constants/node";
+import { WORKSPACE_ROOT } from "@intentic/constants";
 import type { Capability } from "@intentic/sandbox-contract";
 import { expect, test } from "vitest";
 import type { ExtensionHost } from "../../extensions/installed-extensions.js";
@@ -12,7 +13,7 @@ import { echoConfig, secretField } from "../summary.js";
 import { hostHandler } from "./host.js";
 
 // The real first-party `computers` extension provides each OS pack; the tool surface it wraps is core.
-const EXTENSIONS_DIR = fileURLToPath(new URL("../../../../../_extensions", import.meta.url));
+const EXTENSIONS_DIR = join(repoRoot(import.meta.url), "_extensions");
 
 // A ctx exposing only what hostHandler touches. The machine is never enrolled here, which is the pre-Connect
 // state every add starts in — enrolling one needs a real socket from a real computer.
@@ -30,7 +31,7 @@ const tempCtx = (): { ctx: CapabilityCtx; root: string } => {
 };
 
 const host: ExtensionHost = {
-    workspace: { root: "/work" },
+    workspace: { root: WORKSPACE_ROOT },
     files: { read: readWorkspaceFile },
     capabilities: { list: async () => [] },
     config: { extensionsDir: EXTENSIONS_DIR },
@@ -85,6 +86,14 @@ test("every contributed OS pack carries both halves' placeholders", async () => 
 test("echoConfig renders the grant back and host holds no manifest secret", () => {
     // Every field is a permission and none is a credential: the enrollment token lives on /history, so rotating
     // it is re-running the installer, not an edit in /secrets.
-    expect(echoConfig(laptop, new Map())).toEqual({ platform: "windows", shell: "on", write: "off", screen: "on", control: "off", sandboxes: "off", sandboxRemove: "off" });
+    expect(echoConfig(laptop, new Map())).toEqual({
+        platform: "windows",
+        shell: "on",
+        write: "off",
+        screen: "on",
+        control: "off",
+        sandboxes: "off",
+        sandboxRemove: "off",
+    });
     expect(secretField(laptop, new Map())).toBeUndefined();
 });

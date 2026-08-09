@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { STATE_DIR } from "@intentic/constants";
 import { clipboardOf, cmp, ConfirmDialog, ContextMenu, type IconName, Segmented } from "@intentic/ui";
 import type { Disposable } from "@intentic/extension-api";
 import Button from "primevue/button";
@@ -190,7 +191,7 @@ onBeforeUnmount(() => reportOpenPath(undefined));
 // A directory declares its own UI via `<dir>/.intentic/ui/index.html`; opening that file renders the directory's
 // interaction surface (sandboxed iframe + action bridge) instead of the raw HTML source. undefined = a normal
 // file, shown in the viewer. `directoryUiDir` is the owning dir, root-relative ("" = /work root).
-const UI_INDEX = `.intentic/ui/index.html`;
+const UI_INDEX = `${STATE_DIR}/ui/index.html`;
 const directoryUiDir = computed<string | undefined>(() => {
     const path = openPath.value;
     if (path === undefined) {

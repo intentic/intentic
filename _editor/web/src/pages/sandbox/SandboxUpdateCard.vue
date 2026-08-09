@@ -41,12 +41,7 @@ const midTurn = computed(() => fleet.value.filter(turnInFlight).length);
             <div class="min-w-0 flex-1">
                 <div class="flex items-center justify-between gap-3">
                     <h2 class="font-semibold leading-tight">{{ updateAvailable ? `Update available` : `Sandbox image` }}</h2>
-                    <StatusBadge
-                        v-if="updateAvailable"
-                        variant="warning"
-                        :label="`${installed ?? '?'} → ${latest}`"
-                        dot
-                    />
+                    <StatusBadge v-if="updateAvailable" variant="warning" :label="`${installed ?? '?'} → ${latest}`" dot />
                     <StatusBadge v-else-if="channel" variant="neutral" :label="channel" />
                 </div>
                 <p v-if="updateAvailable" class="text-2xs text-subtle">
@@ -59,8 +54,8 @@ const midTurn = computed(() => fleet.value.filter(turnInFlight).length);
         </div>
 
         <p v-if="midTurn > 0" class="text-2xs text-warning">
-            {{ midTurn === 1 ? `An agent is` : `${midTurn} agents are` }} mid-turn right now — recreating the sandbox
-            interrupts {{ midTurn === 1 ? `its` : `their` }} work. Wait for the fleet to settle, or continue if that is acceptable.
+            {{ midTurn === 1 ? `An agent is` : `${midTurn} agents are` }} mid-turn right now — recreating the sandbox interrupts
+            {{ midTurn === 1 ? `its` : `their` }} work. Wait for the fleet to settle, or continue if that is acceptable.
         </p>
 
         <template v-if="serverManaged">

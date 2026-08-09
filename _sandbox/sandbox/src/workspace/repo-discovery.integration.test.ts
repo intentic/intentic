@@ -1,6 +1,7 @@
 import { mkdirSync, mkdtempSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { STATE_DIR } from "@intentic/constants";
 import { expect, test } from "vitest";
 import { discoverRepos, isValidRepoId, isValidRepoName } from "./repo-discovery.js";
 
@@ -25,7 +26,7 @@ test("the walk stops at the first .git boundary — a nested repo belongs to its
 
 test("hidden dirs, junk dirs, symlinks, the reserved 'root' name, and the reference shelf are never repos", async () => {
     const root = setup();
-    mkdirSync(join(root, ".intentic", "cache", ".git"), { recursive: true });
+    mkdirSync(join(root, `${STATE_DIR}`, "cache", ".git"), { recursive: true });
     mkdirSync(join(root, "node_modules", "dep", ".git"), { recursive: true });
     mkdirSync(join(root, "root", ".git"), { recursive: true });
     // The reference shelf: a clone dropped there is consulted by path, never a workspace repo.

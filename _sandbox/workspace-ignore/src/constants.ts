@@ -1,3 +1,4 @@
+import { STATE_DIR } from "@intentic/constants";
 // Browser-SAFE ignore constants: NO node imports, so the platform's browser bundle can import them via the
 // `@intentic/workspace-ignore/constants` subpath without pulling this package's node:fs/node:path deps. The
 // package root (index.ts) re-exports these for the daemon, and layers the node-based .gitignore scope on top.
@@ -64,7 +65,7 @@ export const isPublicPath = (relPath: string): boolean => firstSegment(relPath) 
 // served on demand like any other ignored path.
 export const isBrowserProfilePath = (path: string): boolean => {
     const segments = path.split(/[\\/]/).filter((segment) => segment.length > 0);
-    const i = segments.indexOf(".intentic");
+    const i = segments.indexOf(STATE_DIR);
     return i !== -1 && segments[i + 1] === "browser";
 };
 

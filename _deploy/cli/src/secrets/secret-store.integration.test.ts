@@ -1,11 +1,12 @@
 import { mkdtemp, readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { HOST_STATE_ROOT } from "@intentic/constants";
 import type { SshExecutor, SshTarget } from "@intentic/providers";
 import { describe, expect, it } from "vitest";
 import { createHostSecretStore, createLayeredSecretStore, createLocalSecretStore, type SecretStore } from "./secret-store.js";
 
-const HOST_PATH = "/opt/intentic/secrets.json";
+const HOST_PATH = `${HOST_STATE_ROOT}/secrets.json`;
 const target: SshTarget = { address: "10.0.0.1", user: "deploy", privateKey: "k", port: 22 };
 
 // A fake host with a single secrets file, interpreting the two shapes createHostSecretStore emits: a `cat`

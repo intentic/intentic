@@ -1,6 +1,7 @@
 import { mkdirSync, writeFileSync } from "node:fs";
 import http from "node:http";
 import { join } from "node:path";
+import { STATE_DIR } from "@intentic/constants";
 import { panelsContract } from "@intentic/sandbox-contract";
 import { expect, test } from "vitest";
 import { errorCode, fakeProcesses, routesClient, tempWorkspace } from "../route-testing.js";
@@ -84,8 +85,8 @@ test("panels.list reports the content facts extensions detect on", async () => {
     writeFileSync(join(dir, "desired-state.json"), "{}");
     writeFileSync(join(dir, "pnpm-workspace.yaml"), "packages: []");
     writeFileSync(join(dir, "turbo.json"), "{}");
-    mkdirSync(join(dir, ".intentic", "ui"), { recursive: true });
-    writeFileSync(join(dir, ".intentic", "ui", "index.html"), "<html></html>");
+    mkdirSync(join(dir, `${STATE_DIR}`, "ui"), { recursive: true });
+    writeFileSync(join(dir, `${STATE_DIR}`, "ui", "index.html"), "<html></html>");
     mkdirSync(join(dir, "docs", "user-stories"), { recursive: true });
     mkdirSync(join(dir, "docs", "architecture"), { recursive: true });
     const client = panelsClient(workspace);

@@ -39,15 +39,7 @@ const props = defineProps<{
     folded?: readonly ChatMessage[];
 }>();
 
-const {
-    conversation,
-    decidePlan,
-    answerQuestion,
-    cancelQuestion,
-    decidePermission,
-    openPlanPreview,
-    awaitingDecision,
-} = usePaneView();
+const { conversation, decidePlan, answerQuestion, cancelQuestion, decidePermission, openPlanPreview, awaitingDecision } = usePaneView();
 const { mobile } = useDevice();
 
 /* The landed notice's one-press offer (ChatMessage.noticeAction): flip THIS agent to holding its future work
@@ -569,7 +561,6 @@ const attachmentThumbs = computed(() =>
 const attachmentsAside = computed(
     () => props.message.text.length > 0 && attachmentThumbs.value.length === 1 && attachmentThumbs.value[0]?.previewUrl !== undefined,
 );
-
 </script>
 
 <template>

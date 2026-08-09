@@ -1,3 +1,4 @@
+import { WORKSPACE_ROOT } from "@intentic/constants";
 // @vitest-environment jsdom
 //
 // Both the linkifier and DOMPurify need a real document (see renderMarkdown.test.ts for why jsdom rather than
@@ -82,12 +83,12 @@ describe(`file mentions in agent prose`, () => {
     });
 
     it(`maps an absolute container path back to the workspace-relative one`, () => {
-        queryData = [{ root: `/work`, tree: [] }];
+        queryData = [{ root: WORKSPACE_ROOT, tree: [] }];
         expect(linkTo(renderMarkdown(`crashed at /work/src/foo.ts:7`), `src/foo.ts`)?.dataset[`line`]).toBe(`7`);
     });
 
     it(`leaves a path outside the workspace as plain text`, () => {
-        queryData = [{ root: `/work`, tree: [] }];
+        queryData = [{ root: WORKSPACE_ROOT, tree: [] }];
         const html = renderMarkdown(`thrown from /usr/lib/node.js:120`);
         expect(html).toContain(`/usr/lib/node.js:120`);
         expect(html).not.toContain(`md-file-link`);
@@ -99,7 +100,7 @@ describe(`file mentions in agent prose`, () => {
     it(`points an abbreviated mention at the file it names`, () => {
         queryData = [
             {
-                root: `/work`,
+                root: WORKSPACE_ROOT,
                 tree: [
                     {
                         name: `_apps`,
@@ -163,7 +164,7 @@ describe(`references inside a previewed document`, () => {
     });
 
     it(`does not re-root an absolute container path against the document`, () => {
-        queryData = [{ root: `/work`, tree: [] }];
+        queryData = [{ root: WORKSPACE_ROOT, tree: [] }];
         expect(linkTo(renderIn(`docs/`, `/work/src/foo.ts`), `src/foo.ts`)).toBeDefined();
     });
 });

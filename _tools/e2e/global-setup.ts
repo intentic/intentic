@@ -1,8 +1,9 @@
 import { execFile, spawn } from "node:child_process";
 import { mkdirSync, openSync, writeFileSync } from "node:fs";
-import { join, resolve } from "node:path";
+import { join } from "node:path";
 import { promisify } from "node:util";
 import { randomBytes } from "node:crypto";
+import { repoRoot } from "@intentic/constants/node";
 import {
     API_URL,
     BETTER_AUTH_SECRET,
@@ -26,7 +27,7 @@ import {
 // the seed. Anything already running (dev machine) is reused, not restarted.
 
 const run = promisify(execFile);
-const repoRoot = resolve(import.meta.dirname, `../..`);
+const root = repoRoot(import.meta.url);
 const cacheDir = join(import.meta.dirname, `.cache`);
 
 // Every server in this stack rides this machine's own localhost cert, whose root CI has no reason to trust.
@@ -67,8 +68,8 @@ export default async (): Promise<void> => {
     const state: { apiPid?: number; webPid?: number; daemonStarted?: boolean } = {};
 
     // Postgres + schema. Compose is idempotent; a CI-provided postgres just makes this a no-op that fails soft.
-    await run(`docker`, [`compose`, `up`, `-d`, `--wait`, `postgres`], { cwd: repoRoot }).catch(() => undefined);
-    await run(`pnpm`, [`--filter`, `@intentic-app/prisma`, `migrate:deploy`], { cwd: repoRoot, env: { ...process.env, DATABASE_URL } });
+    await run(`docker`, [`compose`, `up`, `-d`, `--wait`, `postgres`], { cwd: root }).catch(() => undefined);
+    await run(`pnpm`, [`--filter`, `@intentic-app/prisma`, `migrate:deploy`], { cwd: root, env: { ...process.env, DATABASE_URL } });
 
     // The daemon under test: the published sandbox image in loopback (no GOOGLE_CLIENT_ID / PLATFORM_URL —
     // that IS the mode). CONNECT_TOKEN + ZONE make GET /system/sync report an sshHostname, which the desktop-
@@ -99,7 +100,7 @@ export default async (): Promise<void> => {
 
     // The API (bun, https via the minted cert — the exact dev shape, so the session cookie is __Secure-).
     if (!(await up(`${API_URL}/api/auth/ok`))) {
-        state.apiPid = spawnServer(`api`, `bun`, [`./src/main.ts`], join(repoRoot, `_platform/api`), {
+        state.apiPid = spawnServer(`api`, `bun`, [`./src/main.ts`], join(root, `_platform/api`), {
             DATABASE_URL,
             BETTER_AUTH_SECRET,
             API_URL,
@@ -113,7 +114,7 @@ export default async (): Promise<void> => {
 
     // The web SPA (vite dev, https :47145).
     if (!(await up(WEB_URL))) {
-        state.webPid = spawnServer(`web`, `pnpm`, [`--filter`, `@intentic-app/web`, `dev`], repoRoot, {});
+        state.webPid = spawnServer(`web`, `pnpm`, [`--filter`, `@intentic-app/web`, `dev`], root, {});
         await waitUp(WEB_URL, `web`, join(cacheDir, `web.log`), 120_000);
     }
 

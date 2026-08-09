@@ -37,7 +37,7 @@ const BROWSER_ALREADY_BAKED =
 // The overlay is the only place an image-scoped tool can outlive the container, so both notices below end by
 // naming it — the same sentence, because they are the same instruction arrived at from opposite directions.
 const OVERLAY_DRAFT =
-    "write the install step to `.intentic/environment.d/<tool>.Dockerfile` (RUN/ENV lines only, no FROM) — the " +
+    "write the install step to `${STATE_DIR}/environment.d/<tool>.Dockerfile` (RUN/ENV lines only, no FROM) — the " +
     "daemon composes those drafts into one proposal for the owner to approve, and the `environment` skill has " +
     "the details.";
 

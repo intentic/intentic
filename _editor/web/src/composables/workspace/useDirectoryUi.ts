@@ -1,3 +1,4 @@
+import { STATE_DIR } from "@intentic/constants";
 import type { BridgeCall } from "./directoryUiVerbs";
 import { resolveBridgeCall } from "./directoryUiVerbs";
 import { readFileWindow } from "./fileWindow";
@@ -25,7 +26,7 @@ import { errorMessage } from "../useAsyncAction";
 // none, which is exactly why the read answers absence instead of failing (see readFileWindow) — this is the
 // most-asked "is it there?" question in the app.
 export const loadDirectoryUi = async (dir: string): Promise<string | undefined> => {
-    const path = dir === `` ? `.intentic/ui/index.html` : `${dir}/.intentic/ui/index.html`;
+    const path = dir === `` ? `${STATE_DIR}/ui/index.html` : `${dir}/.intentic/ui/index.html`;
     try {
         const window = await readFileWindow(path);
         return window.present ? window.content : undefined;

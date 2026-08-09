@@ -1,4 +1,5 @@
-import { fileURLToPath } from "node:url";
+import { join } from "node:path";
+import { repoRoot } from "@intentic/constants/node";
 import { defineConfig } from "vitest/config";
 import { INTEGRATION_SUITE, UNIT_SUITE } from "@intentic/testing/vitest";
 
@@ -7,7 +8,7 @@ import { INTEGRATION_SUITE, UNIT_SUITE } from "@intentic/testing/vitest";
 // project resolves on its own, so a root-level alias would reach neither of them.
 const resolve = {
     alias: {
-        "@intentic/graph": fileURLToPath(new URL("../../_deploy/graph/src/index.ts", import.meta.url)),
+        "@intentic/graph": join(repoRoot(import.meta.url), "_deploy/graph/src/index.ts"),
     },
 };
 

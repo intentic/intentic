@@ -1,6 +1,7 @@
 import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
 import { join } from "node:path";
+import { STATE_DIR } from "@intentic/sandbox-contract";
 import { z } from "zod";
 
 /* When the owner last LOOKED at each Komodo connection's deployments, plus their repo→stack links
@@ -39,7 +40,7 @@ export interface KomodoStore {
     readonly link: (capability: string, repo: string, stack: string) => Promise<void>;
 }
 
-export const komodoStorePath = (workspaceRoot: string): string => join(workspaceRoot, ".intentic/komodo.json");
+export const komodoStorePath = (workspaceRoot: string): string => join(workspaceRoot, `${STATE_DIR}/komodo.json`);
 
 export const fileKomodoStore = (path: string): KomodoStore => {
     const read = async (): Promise<KomodoState> => {

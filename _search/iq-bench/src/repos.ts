@@ -1,14 +1,13 @@
 import { execFileSync, execSync } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync } from "node:fs";
-import { dirname, join, resolve } from "node:path";
-import { fileURLToPath } from "node:url";
+import { join } from "node:path";
+import { packageRoot as findPackageRoot, repoRoot as findRepoRoot } from "@intentic/constants/node";
 import { createEngine, type IndexStatus } from "@intentic/iq-engine";
 import { type RepoLock, ReposLockSchema } from "./schema.js";
 
-// dist/repos.js lives one level below the package root.
-export const packageRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
+export const packageRoot = findPackageRoot(import.meta.url);
 // The monorepo checkout doubles as the "intentic" benchmark repo — no clone step.
-export const monorepoRoot = resolve(packageRoot, "../..");
+export const monorepoRoot = findRepoRoot(import.meta.url);
 export const cacheDir = join(packageRoot, ".cache");
 
 const readReposLock = (): RepoLock[] => ReposLockSchema.parse(JSON.parse(readFileSync(join(packageRoot, "datasets/repos.lock.json"), "utf8")));

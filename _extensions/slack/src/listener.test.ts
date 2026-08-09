@@ -1,3 +1,4 @@
+import { WORKSPACE_ROOT } from "@intentic/sandbox-contract";
 import { expect, test, vi } from "vitest";
 import type { SlackConnection } from "./client.js";
 import type { GatewayCtx } from "@intentic/connector-runtime";
@@ -28,7 +29,7 @@ const fakeCtx = (): { ctx: GatewayCtx; dispatched: object[]; streamed: object[] 
         streamed,
         ctx: {
             log: { info: () => {}, warn: () => {}, error: () => {} },
-            workspaceRoot: "/work",
+            workspaceRoot: WORKSPACE_ROOT,
             daemon: {
                 state: async () => ({ automations: [], connectors: [] }),
                 dispatch: async (message) => void dispatched.push(message),

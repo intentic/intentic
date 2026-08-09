@@ -53,7 +53,7 @@ export const rankRefCandidates = (tail: string, paths: readonly string[]): reado
  * `testimonials/` page or a `latest.ts` is product code, and a false "tests" tag is worse than a missed one —
  * it tells a reviewer not to look. */
 const TEST_DIRS = new Set([`__tests__`, `__fixtures__`, `__mocks__`, `__snapshots__`]);
-const TEST_FILE = /(?:^|\/)(?:[^/]+\.(?:test|spec)\.[^/.]+|[^/]*\.e2e\.[^/]+|e2e-harness\.[^/]+|(?:vitest|jest|playwright)(?:\.[\w-]+)*\.config\.[^/]+)$/;
+const TEST_FILE =
+    /(?:^|\/)(?:[^/]+\.(?:test|spec)\.[^/.]+|[^/]*\.e2e\.[^/]+|e2e-harness\.[^/]+|(?:vitest|jest|playwright)(?:\.[\w-]+)*\.config\.[^/]+)$/;
 
-export const isTestPath = (path: string): boolean =>
-    TEST_FILE.test(path) || path.split(`/`).some((segment) => TEST_DIRS.has(segment));
+export const isTestPath = (path: string): boolean => TEST_FILE.test(path) || path.split(`/`).some((segment) => TEST_DIRS.has(segment));

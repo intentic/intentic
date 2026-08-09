@@ -1,7 +1,8 @@
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { fileURLToPath } from "node:url";
+import { repoRoot } from "@intentic/constants/node";
+import { WORKSPACE_ROOT } from "@intentic/constants";
 import { CapabilityContributionSchema } from "@intentic/extension-manifest";
 import { exec } from "@intentic/scaffold";
 import type { Capability, CliConfig } from "@intentic/sandbox-contract";
@@ -22,7 +23,7 @@ import { linkSshHosts } from "../ssh-hosts.js";
 import { cliHandler } from "./cli.js";
 
 // The real first-party connectors/discord extensions provide every provider's data (fields/env/skill/fragment).
-const EXTENSIONS_DIR = fileURLToPath(new URL("../../../../../_extensions", import.meta.url));
+const EXTENSIONS_DIR = join(repoRoot(import.meta.url), "_extensions");
 
 // A ctx exposing only what cliHandler touches (files + workspace.root + capabilities + extensionsDir + the
 // terminal runner in its no-tmux fallback), over a fresh temp workspace. HOME is a temp dir so the github/gitlab
@@ -42,7 +43,7 @@ const tempCtx = (capabilities: Capability[] = []): { ctx: CapabilityCtx; root: s
 
 const hostFor = (capabilities: Capability[]): ExtensionHost =>
     ({
-        workspace: { root: "/work" },
+        workspace: { root: WORKSPACE_ROOT },
         files: { read: readWorkspaceFile },
         capabilities: { list: async () => capabilities },
         config: { extensionsDir: EXTENSIONS_DIR },
@@ -459,7 +460,7 @@ test("npm: apply writes the auth line + templated skill; a wiped HOME pends unti
     const skill = await readWorkspaceFile(skillPath(root, "npm"));
     expect(skill).toContain("name: npm");
     // The skill's otp examples are minted for THIS instance, and its env var carries the instance suffix.
-    expect(skill).toContain('$(otp npm)');
+    expect(skill).toContain("$(otp npm)");
     expect(skill).toContain("$NPM_TOKEN_NPM");
     expect(readFileSync(join(home, ".npmrc"), "utf8")).toBe("//registry.npmjs.org/:_authToken=npm-tok-1\n");
     expect(statSync(join(home, ".npmrc")).mode & 0o777).toBe(0o600);
@@ -505,7 +506,10 @@ test("a cli contribution whose env references a totp field fails to parse", () =
 test("a skill template's ${field} pass substitutes answers but never a secret", async () => {
     const dir = mkdtempSync(join(tmpdir(), "skill-sub-"));
     mkdirSync(join(dir, "skills", "x"), { recursive: true });
-    writeFileSync(join(dir, "skills", "x", "SKILL.md"), "---\nname: x\ndescription: for ${label}\n---\ntoken=[${token}] label=[${label}] id=[${id}]\n");
+    writeFileSync(
+        join(dir, "skills", "x", "SKILL.md"),
+        "---\nname: x\ndescription: for ${label}\n---\ntoken=[${token}] label=[${label}] id=[${id}]\n",
+    );
     const contribution = {
         spec: {
             id: "x",

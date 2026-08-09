@@ -43,6 +43,7 @@
         "e2e:hermetic": "INTENTIC_E2E_HERMETIC=1 vitest run hermetic.e2e"
     },
     "dependencies": {
+        "@intentic/constants": "workspace:*",
         "@intentic/engine": "workspace:*",
         "@intentic/graph": "workspace:*",
         "@intentic/need-resolver": "workspace:*",

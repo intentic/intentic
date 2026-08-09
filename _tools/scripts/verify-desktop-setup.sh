@@ -25,8 +25,9 @@
 # What this therefore does NOT cover: the setup-code claim round trip against a real platform. That needs
 # CLOUDFLARE_API_TOKEN and belongs with the other gated nightly suites, which self-skip without their secrets.
 set -euo pipefail
+. "$(dirname "$0")/repo-root.sh"
 
-ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
+ROOT="$(repo_root)"
 SANDBOX_IMAGE="${SANDBOX_E2E_IMAGE:-ghcr.io/intentic/sandbox:stable}"
 HOST_IMAGE="${INTENTIC_HOST_IMAGE:-}"
 # An RFC 2606 reserved TLD: resolvable by no one, so anything here that accidentally reaches for the public

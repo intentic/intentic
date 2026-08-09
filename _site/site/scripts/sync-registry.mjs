@@ -1,5 +1,6 @@
 import { writeFile } from "node:fs/promises";
-import { fileURLToPath } from "node:url";
+import { join } from "node:path";
+import { packageRoot } from "@intentic/constants/node";
 import { OFFICIAL_REGISTRY_URL, REGISTRY_FACTS_FILE, REGISTRY_FILE } from "@intentic/registry";
 
 /* Refresh the vendored copy the gallery build falls back to when GitHub can't be reached
@@ -25,6 +26,6 @@ if (file === undefined) {
 }
 const facts = await read(REGISTRY_FACTS_FILE);
 
-const target = fileURLToPath(new URL("../src/lib/registry.fallback.json", import.meta.url));
+const target = join(packageRoot(import.meta.url), "src/lib/registry.fallback.json");
 await writeFile(target, `${JSON.stringify({ file, facts: facts ?? { scannedAt: undefined, entries: [] } }, null, 4)}\n`, "utf8");
 console.log(`vendored ${file.plugins.length} entries into src/lib/registry.fallback.json`);

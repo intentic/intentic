@@ -60,9 +60,7 @@ export const dropSandboxLocalState = (sandboxId: string): void => {
     for (const storage of [(): Storage => localStorage, (): Storage => sessionStorage]) {
         try {
             const store = storage();
-            const doomed = Object.keys(store).filter(
-                (key) => key.includes(sandboxId) && !IDENTITY_PREFIXES.some((prefix) => key.startsWith(prefix)),
-            );
+            const doomed = Object.keys(store).filter((key) => key.includes(sandboxId) && !IDENTITY_PREFIXES.some((prefix) => key.startsWith(prefix)));
             for (const key of doomed) {
                 store.removeItem(key);
             }

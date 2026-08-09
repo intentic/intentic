@@ -1,6 +1,7 @@
 import { mkdir, mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { STATE_DIR } from "@intentic/constants";
 import type { WorkspaceEvent } from "@intentic/sandbox-contract";
 import type { Logger } from "pino";
 import { expect, test, vi } from "vitest";
@@ -37,7 +38,7 @@ const fakeProcesses = (root: string, exitCode: number | undefined, started: stri
         start: async (key: string, _spec: ProcessSpec) => {
             started.push(key);
             live.add(key);
-            const artifacts = join(root, ".intentic/verify");
+            const artifacts = join(root, `${STATE_DIR}/verify`);
             await mkdir(artifacts, { recursive: true });
             await writeFile(join(artifacts, `${key}.log`), "1 test failed\n");
             if (exitCode !== undefined) {
@@ -61,7 +62,7 @@ const deps = (root: string, processes: ManagedProcesses, events: WorkspaceEvent[
     processes,
     agents: { liveSessionIds: () => live },
     logger: silent,
-    verifyStore: fileVerifyStore(join(root, ".intentic/verify.json")),
+    verifyStore: fileVerifyStore(join(root, `${STATE_DIR}/verify.json`)),
     activity: {
         append: async (event) => {
             feed.push(event.type);
@@ -108,7 +109,7 @@ test("a green check after a red one announces deps.fixed; green after green anno
     await ready(root, { verify: "pnpm typecheck && pnpm test" });
     const events: WorkspaceEvent[] = [];
     const feed: string[] = [];
-    const store = fileVerifyStore(join(root, ".intentic/verify.json"));
+    const store = fileVerifyStore(join(root, `${STATE_DIR}/verify.json`));
     await store.record("app", "red", 1);
     queueVerify(deps(root, fakeProcesses(root, 0, []), events, feed), context, ["app"]);
     await settle(() => events.length > 0);
@@ -128,7 +129,7 @@ test("a still-red check advances the attempt the guard caps on", async () => {
     const { queueVerify } = await freshQueue();
     const root = await workspace();
     await ready(root, { test: "vitest run" });
-    const store = fileVerifyStore(join(root, ".intentic/verify.json"));
+    const store = fileVerifyStore(join(root, `${STATE_DIR}/verify.json`));
     await store.record("app", "red", 1);
     const events: WorkspaceEvent[] = [];
     queueVerify(deps(root, fakeProcesses(root, 1, []), events, []), context, ["app"]);
@@ -209,7 +210,7 @@ test("the check command is the project's own word for it: verify first, then tes
 
 test("the verify store remembers red across restarts — its list is the closure re-check's worklist", async () => {
     const root = await workspace();
-    const store = fileVerifyStore(join(root, ".intentic/verify.json"));
+    const store = fileVerifyStore(join(root, `${STATE_DIR}/verify.json`));
     await store.record("app", "red", 1);
     await store.record("lib", "green", 2);
     // A fresh store over the same file: the daemon restarted.

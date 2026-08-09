@@ -75,6 +75,17 @@ export { workspaceContract } from "./contracts/workspace.contract.js";
 export * from "./events.js";
 export * from "./sse.js";
 export * from "./routes.js";
+/* THE CONTAINER'S FIXED DIRECTORY LAYOUT, re-exported so extensions can reach it.
+ *
+ * The names are defined once in @intentic/constants, which sits at the bottom of the dependency graph. An
+ * EXTENSION may not import that package — the boundary rule (.oxlintrc.json, _extensions/README.md) allows
+ * only the SDK halves and this contract, so that an extension cannot couple itself to app or engine internals.
+ * That rule is right, and it left extensions with no way to name the workspace root except by spelling it.
+ *
+ * Re-exporting here is what closes that gap without widening the boundary: the layout is exactly the kind of
+ * thing this package already carries — shared vocabulary both sides of the wire must agree on, alongside the
+ * state-file table below — and there is still one definition, in one place, that everything resolves to. */
+export { HISTORY_ROOT, HOST_STATE_ROOT, STATE_DIR, WORKSPACE_ROOT } from "@intentic/constants";
 export * from "./workspace-state.js";
 export * from "./runtime-state.js";
 export * from "./state-portability.js";

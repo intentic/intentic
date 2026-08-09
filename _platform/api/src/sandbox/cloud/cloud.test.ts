@@ -54,13 +54,44 @@ describe(`hetzner`, () => {
                                   { location: `ash`, price_monthly: { net: `4.1000` } },
                               ],
                           },
-                          { name: `cax11`, cores: 2, memory: 4, disk: 40, deprecated: null, architecture: `arm`, prices: [{ location: `fsn1`, price_monthly: { net: `3.2900` } }] },
-                          { name: `cx11`, cores: 1, memory: 2, disk: 20, deprecated: null, architecture: `x86`, prices: [{ location: `fsn1`, price_monthly: { net: `2.9900` } }] },
+                          {
+                              name: `cax11`,
+                              cores: 2,
+                              memory: 4,
+                              disk: 40,
+                              deprecated: null,
+                              architecture: `arm`,
+                              prices: [{ location: `fsn1`, price_monthly: { net: `3.2900` } }],
+                          },
+                          {
+                              name: `cx11`,
+                              cores: 1,
+                              memory: 2,
+                              disk: 20,
+                              deprecated: null,
+                              architecture: `x86`,
+                              prices: [{ location: `fsn1`, price_monthly: { net: `2.9900` } }],
+                          },
                       ]
-                    : [{ name: `cx32`, cores: 4, memory: 8, disk: 80, deprecated: {}, architecture: `x86`, prices: [{ location: `fsn1`, price_monthly: { net: `6.8000` } }] }],
+                    : [
+                          {
+                              name: `cx32`,
+                              cores: 4,
+                              memory: 8,
+                              disk: 80,
+                              deprecated: {},
+                              architecture: `x86`,
+                              prices: [{ location: `fsn1`, price_monthly: { net: `6.8000` } }],
+                          },
+                      ],
             meta: { pagination: { next_page: page === 1 ? 2 : null } },
         });
-    const locations = json({ locations: [{ name: `ash`, city: `Ashburn`, country: `US` }, { name: `fsn1`, city: `Falkenstein`, country: `DE` }] });
+    const locations = json({
+        locations: [
+            { name: `ash`, city: `Ashburn`, country: `US` },
+            { name: `fsn1`, city: `Falkenstein`, country: `DE` },
+        ],
+    });
 
     it(`walks the pages and curates: x86, current, ≥4 GB, priced from the cheapest location`, async () => {
         stubFetch([
@@ -77,7 +108,9 @@ describe(`hetzner`, () => {
     });
 
     it(`creates the server with Ubuntu, the user-data and the intentic label`, async () => {
-        const calls = stubFetch([{ match: (method, url) => method === `POST` && url.endsWith(`/servers`), respond: () => json({ server: { id: 42 } }) }]);
+        const calls = stubFetch([
+            { match: (method, url) => method === `POST` && url.endsWith(`/servers`), respond: () => json({ server: { id: 42 } }) },
+        ]);
         const created = await hetznerCreate(`tok`, { name: `intentic-sandbox-abc`, location: `fsn1`, size: `cx22`, userData: `#!/bin/sh\n` });
         expect(created.serverId).toBe(`42`);
         expect(calls[0]?.body).toMatchObject({
@@ -127,21 +160,39 @@ describe(`digitalocean`, () => {
             { match: (method, url) => method === `GET` && url.includes(`/regions`), respond: () => regions },
         ]);
         const options = await digitaloceanOptions(`tok`);
-        expect(options.sizes).toEqual([{ id: `s-2vcpu-4gb`, label: `S-2VCPU-4GB`, cpus: 2, memoryGb: 4, diskGb: 80, monthlyPrice: 24, currency: `USD` }]);
+        expect(options.sizes).toEqual([
+            { id: `s-2vcpu-4gb`, label: `S-2VCPU-4GB`, cpus: 2, memoryGb: 4, diskGb: 80, monthlyPrice: 24, currency: `USD` },
+        ]);
         // sgp1 stocks none of the offered sizes; the unavailable s-4vcpu-8gb must not keep nyc1 out.
         expect(options.locations.map((location) => location.id)).toEqual([`fra1`, `nyc1`]);
         expect(options.defaultLocation).toBe(`fra1`);
     });
 
     it(`creates the droplet with Ubuntu, the user-data and the intentic tag; refusals pass through named`, async () => {
-        const calls = stubFetch([{ match: (method, url) => method === `POST` && url.endsWith(`/droplets`), respond: () => json({ droplet: { id: 7 } }, 202) }]);
+        const calls = stubFetch([
+            { match: (method, url) => method === `POST` && url.endsWith(`/droplets`), respond: () => json({ droplet: { id: 7 } }, 202) },
+        ]);
         const created = await digitaloceanCreate(`tok`, { name: `intentic-sandbox-abc`, location: `fra1`, size: `s-2vcpu-4gb`, userData: `#!` });
         expect(created.serverId).toBe(`7`);
-        expect(calls[0]?.body).toMatchObject({ name: `intentic-sandbox-abc`, region: `fra1`, size: `s-2vcpu-4gb`, image: `ubuntu-24-04-x64`, user_data: `#!`, tags: [`intentic`] });
+        expect(calls[0]?.body).toMatchObject({
+            name: `intentic-sandbox-abc`,
+            region: `fra1`,
+            size: `s-2vcpu-4gb`,
+            image: `ubuntu-24-04-x64`,
+            user_data: `#!`,
+            tags: [`intentic`],
+        });
 
         vi.unstubAllGlobals();
-        stubFetch([{ match: () => true, respond: () => json({ id: `unprocessable_entity`, message: `creating this droplet will exceed your droplet limit` }, 422) }]);
-        await expect(digitaloceanCreate(`tok`, { name: `n`, location: `fra1`, size: `s-2vcpu-4gb`, userData: `` })).rejects.toThrowError(/droplet limit/);
+        stubFetch([
+            {
+                match: () => true,
+                respond: () => json({ id: `unprocessable_entity`, message: `creating this droplet will exceed your droplet limit` }, 422),
+            },
+        ]);
+        await expect(digitaloceanCreate(`tok`, { name: `n`, location: `fra1`, size: `s-2vcpu-4gb`, userData: `` })).rejects.toThrowError(
+            /droplet limit/,
+        );
 
         vi.unstubAllGlobals();
         stubFetch([{ match: () => true, respond: () => new Response(``, { status: 401 }) }]);
@@ -155,11 +206,16 @@ describe(`oracle`, () => {
 
     it(`lists availability domains as locations with the one pinned free shape`, async () => {
         stubFetch([
-            { match: (method, url) => method === `GET` && url.includes(`/availabilityDomains/`), respond: () => json([{ name: `fVpF:EU-FRANKFURT-1-AD-1` }, { name: `fVpF:EU-FRANKFURT-1-AD-2` }]) },
+            {
+                match: (method, url) => method === `GET` && url.includes(`/availabilityDomains/`),
+                respond: () => json([{ name: `fVpF:EU-FRANKFURT-1-AD-1` }, { name: `fVpF:EU-FRANKFURT-1-AD-2` }]),
+            },
         ]);
         const options = await oracleOptions(snippet, pem);
         expect(options.locations).toHaveLength(2);
-        expect(options.sizes).toEqual([{ id: `VM.Standard.A1.Flex`, label: `A1.Flex (Always Free)`, cpus: 2, memoryGb: 12, diskGb: 50, monthlyPrice: 0, currency: `USD` }]);
+        expect(options.sizes).toEqual([
+            { id: `VM.Standard.A1.Flex`, label: `A1.Flex (Always Free)`, cpus: 2, memoryGb: 12, diskGb: 50, monthlyPrice: 0, currency: `USD` },
+        ]);
         expect(options.defaultLocation).toBe(`fVpF:EU-FRANKFURT-1-AD-1`);
     });
 
@@ -167,7 +223,10 @@ describe(`oracle`, () => {
         const calls = stubFetch([
             { match: (method, url) => method === `GET` && url.includes(`/images?`), respond: () => json([{ id: `ocid1.image.oc1..ubuntu` }]) },
             { match: (method, url) => method === `GET` && url.includes(`/vcns?`), respond: () => json([]) },
-            { match: (method, url) => method === `POST` && url.endsWith(`/vcns`), respond: () => json({ id: `vcn1`, lifecycleState: `AVAILABLE`, defaultRouteTableId: `rt1` }) },
+            {
+                match: (method, url) => method === `POST` && url.endsWith(`/vcns`),
+                respond: () => json({ id: `vcn1`, lifecycleState: `AVAILABLE`, defaultRouteTableId: `rt1` }),
+            },
             { match: (method, url) => method === `GET` && url.includes(`/internetGateways?`), respond: () => json([]) },
             { match: (method, url) => method === `POST` && url.endsWith(`/internetGateways`), respond: () => json({ id: `igw1` }) },
             { match: (method, url) => method === `GET` && url.includes(`/routeTables/rt1`), respond: () => json({ routeRules: [] }) },
@@ -199,9 +258,15 @@ describe(`oracle`, () => {
     it(`reuses an existing intentic network untouched — no creates, no route rewrite`, async () => {
         const calls = stubFetch([
             { match: (method, url) => method === `GET` && url.includes(`/images?`), respond: () => json([{ id: `img` }]) },
-            { match: (method, url) => method === `GET` && url.includes(`/vcns?`), respond: () => json([{ id: `vcn1`, lifecycleState: `AVAILABLE`, defaultRouteTableId: `rt1` }]) },
+            {
+                match: (method, url) => method === `GET` && url.includes(`/vcns?`),
+                respond: () => json([{ id: `vcn1`, lifecycleState: `AVAILABLE`, defaultRouteTableId: `rt1` }]),
+            },
             { match: (method, url) => method === `GET` && url.includes(`/internetGateways?`), respond: () => json([{ id: `igw1` }]) },
-            { match: (method, url) => method === `GET` && url.includes(`/routeTables/rt1`), respond: () => json({ routeRules: [{ destination: `0.0.0.0/0`, networkEntityId: `igw1` }] }) },
+            {
+                match: (method, url) => method === `GET` && url.includes(`/routeTables/rt1`),
+                respond: () => json({ routeRules: [{ destination: `0.0.0.0/0`, networkEntityId: `igw1` }] }),
+            },
             { match: (method, url) => method === `GET` && url.includes(`/subnets?`), respond: () => json([{ id: `sub1` }]) },
             { match: (method, url) => method === `POST` && url.endsWith(`/instances/`), respond: () => json({ id: `vm` }) },
         ]);
@@ -212,11 +277,20 @@ describe(`oracle`, () => {
     it(`names the A1 capacity refusal honestly and never launches a non-free shape`, async () => {
         stubFetch([
             { match: (method, url) => method === `GET` && url.includes(`/images?`), respond: () => json([{ id: `img` }]) },
-            { match: (method, url) => method === `GET` && url.includes(`/vcns?`), respond: () => json([{ id: `vcn1`, lifecycleState: `AVAILABLE`, defaultRouteTableId: `rt1` }]) },
+            {
+                match: (method, url) => method === `GET` && url.includes(`/vcns?`),
+                respond: () => json([{ id: `vcn1`, lifecycleState: `AVAILABLE`, defaultRouteTableId: `rt1` }]),
+            },
             { match: (method, url) => method === `GET` && url.includes(`/internetGateways?`), respond: () => json([{ id: `igw1` }]) },
-            { match: (method, url) => method === `GET` && url.includes(`/routeTables/rt1`), respond: () => json({ routeRules: [{ destination: `0.0.0.0/0` }] }) },
+            {
+                match: (method, url) => method === `GET` && url.includes(`/routeTables/rt1`),
+                respond: () => json({ routeRules: [{ destination: `0.0.0.0/0` }] }),
+            },
             { match: (method, url) => method === `GET` && url.includes(`/subnets?`), respond: () => json([{ id: `sub1` }]) },
-            { match: (method, url) => method === `POST` && url.endsWith(`/instances/`), respond: () => json({ code: `InternalError`, message: `Out of host capacity.` }, 500) },
+            {
+                match: (method, url) => method === `POST` && url.endsWith(`/instances/`),
+                respond: () => json({ code: `InternalError`, message: `Out of host capacity.` }, 500),
+            },
         ]);
         await expect(oracleCreate(snippet, pem, { name: `n`, location: `ad1`, size: `VM.Standard.A1.Flex`, userData: `` })).rejects.toThrowError(
             /free-tier ARM capacity/,

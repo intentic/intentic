@@ -66,7 +66,9 @@ async function* streamFlow(run: (onLine: (line: string) => void) => Promise<stri
         });
     }
     await finished;
-    yield settled?.ok === true ? { kind: "result", message: settled.message } : { kind: "error", message: settled?.message ?? "The operation stopped without saying why." };
+    yield settled?.ok === true
+        ? { kind: "result", message: settled.message }
+        : { kind: "error", message: settled?.message ?? "The operation stopped without saying why." };
 }
 
 // Which function each op is. Start/stop/restart are a docker call and say one sentence; the rest run `ic` and

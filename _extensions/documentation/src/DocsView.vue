@@ -286,8 +286,10 @@ const openAgent = (id: string): void => api.navigate(`/agents/${id}`);
                          README, and only the map lands in the docs directory. Naming one destination for both
                          would understate what a publish touches. -->
                     {{ publishState.tails.length }} file{{ publishState.tails.length === 1 ? `` : `s` }} will be written — each package's
-                    <span class="font-mono">README.md</span> and the map under <span class="font-mono">docs/architecture/</span> — and
-                    committed<span v-if="publishState.branch !== ``"> on {{ publishState.branch }}</span
+                    <span class="font-mono">README.md</span> and the map under <span class="font-mono">docs/architecture/</span> — and committed<span
+                        v-if="publishState.branch !== ``"
+                    >
+                        on {{ publishState.branch }}</span
                     >.
                 </p>
                 <p v-if="publishState.foreign.length > 0" class="flex items-start gap-2 rounded-lg bg-warning/10 px-2.5 py-2 text-2xs">

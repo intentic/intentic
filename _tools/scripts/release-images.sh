@@ -7,8 +7,9 @@
 #   bash _tools/scripts/release-images.sh <version>
 set -euo pipefail
 VERSION="${1:?usage: release-images.sh <version>}"
+. "$(dirname "$0")/repo-root.sh"
 DIR="$(cd "$(dirname "$0")" && pwd)"
-cd "$DIR/../.."
+cd "$(repo_root)"
 
 bash "$DIR/prepare-image-trees.sh"
 TAGS="$VERSION stable" ARCH_SUFFIX=-amd64 IMAGES=sandbox bash "$DIR/publish-images.sh"

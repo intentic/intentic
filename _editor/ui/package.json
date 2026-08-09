@@ -83,6 +83,7 @@
         "@iconify-json/ri": "catalog:",
         "@iconify/types": "catalog:",
         "@iconify/utils": "catalog:",
+        "@intentic/constants": "workspace:*",
         "@intentic/tsconfig": "workspace:*",
         "typescript": "catalog:",
         "vue-tsc": "catalog:"

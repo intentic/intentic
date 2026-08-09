@@ -51,8 +51,7 @@ export interface AgentStanding {
 // Takes the status alone, like agentStatusMeta and unlike the lane predicates: it is a question about which
 // half of the world the card came from, and the callers that need it most (the tab `open` builds, the detail
 // page's `registered`) hold a status without an attention block to pair it with.
-export const unregistered = (status: AgentStatus | ClientAgentStatus): boolean =>
-    status === `draft` || status === `failed` || status === `resumed`;
+export const unregistered = (status: AgentStatus | ClientAgentStatus): boolean => status === `draft` || status === `failed` || status === `resumed`;
 
 export const agentStatusMeta = (status: AgentStatus | ClientAgentStatus): { icon: IconName; spin?: boolean; label: string; class: string } => {
     // Not `pencil` — that's the card's rename affordance; the draft glyph is a not-yet-started marker.

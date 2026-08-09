@@ -35,7 +35,9 @@ const appOn = async (options: { readonly authed?: true } = {}): Promise<{ app: R
             // Most tests run in loopback shape (no auth at all); the ticket test needs a daemon that actually
             // checks one, because the download route skips the check when there is no auth — same as
             // /workspace/media, and for the same reason.
-            ...(options.authed === true ? { auth: { authorize: async () => ({ email: "owner@example.com", role: "owner" as const }), authorizeOwner: async () => {} } } : {}),
+            ...(options.authed === true
+                ? { auth: { authorize: async () => ({ email: "owner@example.com", role: "owner" as const }), authorizeOwner: async () => {} } }
+                : {}),
         } as Parameters<typeof services>[0]),
     );
     return { app, history: join(dir, "history") };
@@ -49,7 +51,11 @@ afterEach(async () => {
 
 test("a member may not list, start, delete or restore — every direction is owner-gated", async () => {
     // The member's exact position: the bearer verifies, the owner check refuses. A verified non-owner is 403.
-    const app = createApp(services({ auth: { authorize: async () => ({ email: "member@example.com", role: "maintainer" as const }), authorizeOwner: rejectForbidden } }));
+    const app = createApp(
+        services({
+            auth: { authorize: async () => ({ email: "member@example.com", role: "maintainer" as const }), authorizeOwner: rejectForbidden },
+        }),
+    );
     expect((await app.request("/bundles")).status).toBe(403);
     expect((await app.request("/bundles", { method: "POST" })).status).toBe(403);
     expect((await app.request("/bundles?name=x.tar.gz", { method: "DELETE" })).status).toBe(403);

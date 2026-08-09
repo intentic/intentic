@@ -1,6 +1,38 @@
 // Cross-product constants with exactly one source of truth. Shared by the proprietary platform and the
 // public intentic.dev site so hand-synced values can't drift.
 
+/* THE FOUR FIXED DIRECTORY LAYOUTS, for the same reason the ports below are here: a location spelled in two
+ * files is a location that will eventually be two different locations. These are the ones that cross a package
+ * boundary — the container's own dirs, the state folder inside a workspace, and the state root on a
+ * provisioned host — each of which was previously typed out by hand in dozens of places with nothing linking
+ * the copies, so a rename fixed some and silently orphaned the rest.
+ *
+ * These are VALUES, not lookups: this module stays importable from the browser (Setup.vue reads
+ * PLATFORM_WEB_ORIGIN), so nothing here may touch node:fs. Code that has to DISCOVER a directory — the repo
+ * root, a package root — imports the node-only helpers from `@intentic/constants/node` instead.
+ *
+ * WORKSPACE_ROOT and HISTORY_ROOT are DEFAULTS, not laws. The daemon's env.config takes both as overridable
+ * settings and a running daemon must read them from its config, because an isolated turn re-points them; these
+ * constants are what that config defaults to, and what code with no config in reach (contracts, docs strings,
+ * the sync bridge's remote end) names. Anything holding a Config should prefer the config value. */
+
+// The project workspace dir inside the sandbox container — the three repos are cloned under <root>/<role>.
+export const WORKSPACE_ROOT = "/work";
+
+// The daemon-owned snapshot history + protected repo git dirs, deliberately OUTSIDE WORKSPACE_ROOT so agent
+// accidents (rm -rf, git clean) in the workspace can't reach it. A separate named volume.
+export const HISTORY_ROOT = "/history";
+
+/* The daemon's own state folder, relative to whichever workspace root is in force. Never join this by hand
+ * where a typed helper exists: the daemon's `statePath()` takes the literal union of the files the state table
+ * declares, so a store can only name a file that table knows about. This constant is for the callers OUTSIDE
+ * that table — extensions writing under `.intentic/runtime`, ignore lists, path classifiers. */
+export const STATE_DIR = ".intentic";
+
+// Where the deploy CLI and providers keep per-service state on a PROVISIONED HOST (a server reached over ssh),
+// as opposed to inside a sandbox container. Every service composes its own dir under this one.
+export const HOST_STATE_ROOT = "/opt/intentic";
+
 // The clickwrap legal version: the platform (@intentic-app/api) stamps the accepted version on each account
 // at sign-up; intentic.dev renders the /terms and /privacy documents under it. Bump on any material change
 // to the terms or privacy policy — one edit, both sides move together.

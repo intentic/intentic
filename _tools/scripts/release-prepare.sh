@@ -9,6 +9,7 @@
 #   bash _tools/scripts/release-prepare.sh 1.135.0
 set -euo pipefail
 VERSION="${1:?usage: release-prepare.sh <version>}"
+. "$(dirname "$0")/repo-root.sh"
 : "${PLANNED_RELEASE_VERSION:?PLANNED_RELEASE_VERSION is required}"
 : "${PREBUILT_WINDOWS_DESKTOP_DIR:?PREBUILT_WINDOWS_DESKTOP_DIR is required}"
 if [ "$VERSION" != "$PLANNED_RELEASE_VERSION" ]; then
@@ -17,7 +18,7 @@ if [ "$VERSION" != "$PLANNED_RELEASE_VERSION" ]; then
 fi
 DIR="$(cd "$(dirname "$0")" && pwd)"
 source "$DIR/packages.sh"
-cd "$DIR/../.."
+cd "$(repo_root)"
 
 # Fail before anything builds if PUB has drifted from the dependency graph — a listed package depending on an
 # unlisted one publishes an unresolvable specifier, and finding that out mid-publish is a half-shipped release.

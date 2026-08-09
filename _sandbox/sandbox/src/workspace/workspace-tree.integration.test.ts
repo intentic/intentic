@@ -1,6 +1,7 @@
 import { mkdir, mkdtemp, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { STATE_DIR } from "@intentic/constants";
 import type { WorkspaceTreeEntry } from "@intentic/sandbox-contract";
 import { expect, test } from "vitest";
 import { listWorkspaceChildren, walkWorkspaceTree } from "./workspace-tree.js";
@@ -14,13 +15,13 @@ test("walkWorkspaceTree lists everything, graying ignored dirs (node_modules, .g
     await mkdir(join(root, "app", "src"), { recursive: true });
     await mkdir(join(root, "app", "node_modules", "dep"), { recursive: true });
     await mkdir(join(root, "app", ".git"), { recursive: true });
-    await mkdir(join(root, ".intentic"), { recursive: true });
+    await mkdir(join(root, `${STATE_DIR}`), { recursive: true });
     await mkdir(join(root, "desired-state"), { recursive: true });
     await writeFile(join(root, "app", "src", "index.ts"), "console.log(1);");
     await writeFile(join(root, "app", "untracked.tmp"), "scratch"); // untracked — should still show
     await writeFile(join(root, "app", "node_modules", "dep", "index.js"), "module.exports={}");
     await writeFile(join(root, "app", ".git", "config"), "[core]");
-    await writeFile(join(root, ".intentic", "claude.json"), '{"accessToken":"secret"}');
+    await writeFile(join(root, `${STATE_DIR}`, "claude.json"), '{"accessToken":"secret"}');
     await writeFile(join(root, "desired-state", ".env"), "SECRET=1");
     await writeFile(join(root, "desired-state", ".env.example"), "SECRET=");
 

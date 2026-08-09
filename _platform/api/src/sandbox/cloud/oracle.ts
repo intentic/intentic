@@ -74,11 +74,17 @@ const call = async (credential: OciCredential, method: string, url: string, body
 export const oracleOptions = async (config: string, privateKeyPem: string): Promise<CloudOptions> => {
     const credential = parseOciConfig(config, privateKeyPem);
     const domains = availabilityDomainsSchema.parse(
-        await call(credential, `GET`, `${endpoint(credential, `identity`)}/20160918/availabilityDomains/?compartmentId=${encodeURIComponent(credential.tenancy)}`),
+        await call(
+            credential,
+            `GET`,
+            `${endpoint(credential, `identity`)}/20160918/availabilityDomains/?compartmentId=${encodeURIComponent(credential.tenancy)}`,
+        ),
     );
     const first = domains[0];
     if (first === undefined) {
-        throw new CloudProviderError(`Oracle listed no availability domains for this tenancy — check that the config snippet's region is where your account lives.`);
+        throw new CloudProviderError(
+            `Oracle listed no availability domains for this tenancy — check that the config snippet's region is where your account lives.`,
+        );
     }
     return {
         locations: domains.map((domain) => ({ id: domain.name, label: domain.name })),
@@ -107,12 +113,18 @@ const ensureNetwork = async (credential: OciCredential): Promise<{ subnetId: str
     let vcn = existing[0];
     if (vcn === undefined) {
         vcn = vcnSchema.parse(
-            await call(credential, `POST`, `${core}/vcns`, { cidrBlock: `10.0.0.0/16`, compartmentId: credential.tenancy, displayName: NETWORK_NAME }),
+            await call(credential, `POST`, `${core}/vcns`, {
+                cidrBlock: `10.0.0.0/16`,
+                compartmentId: credential.tenancy,
+                displayName: NETWORK_NAME,
+            }),
         );
     }
     for (let attempt = 0; vcn.lifecycleState !== `AVAILABLE`; attempt += 1) {
         if (attempt >= 15) {
-            throw new CloudProviderError(`Oracle's network stayed in ${vcn.lifecycleState} — retry in a minute (the half-made "${NETWORK_NAME}" network will be reused).`);
+            throw new CloudProviderError(
+                `Oracle's network stayed in ${vcn.lifecycleState} — retry in a minute (the half-made "${NETWORK_NAME}" network will be reused).`,
+            );
         }
         await new Promise((resolve) => setTimeout(resolve, 2000));
         vcn = vcnSchema.parse(await call(credential, `GET`, `${core}/vcns/${vcn.id}`));
@@ -136,7 +148,9 @@ const ensureNetwork = async (credential: OciCredential): Promise<{ subnetId: str
             routeRules: [...table.routeRules, { destination: `0.0.0.0/0`, destinationType: `CIDR_BLOCK`, networkEntityId: gateway.id }],
         });
     }
-    const subnets = listOfIdsSchema.parse(await call(credential, `GET`, `${core}/subnets?${compartment}&vcnId=${vcn.id}&displayName=${NETWORK_NAME}`));
+    const subnets = listOfIdsSchema.parse(
+        await call(credential, `GET`, `${core}/subnets?${compartment}&vcnId=${vcn.id}&displayName=${NETWORK_NAME}`),
+    );
     const subnet =
         subnets[0] ??
         idSchema.parse(

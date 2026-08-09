@@ -1,5 +1,6 @@
-import { resolve } from "node:path";
-import { DAEMON_PORT, LOCAL_PORT, PLATFORM_WEB_ORIGIN, PREVIEW_PORT } from "@intentic/constants";
+import { join } from "node:path";
+import { DAEMON_PORT, HISTORY_ROOT, LOCAL_PORT, PLATFORM_WEB_ORIGIN, PREVIEW_PORT, WORKSPACE_ROOT } from "@intentic/constants";
+import { repoRoot } from "@intentic/constants/node";
 import { type ConfigDefinition, cliArgs, env, envFile, loadConfig as loadPuristicConfig } from "@puristic/env/index.js";
 import { z } from "zod";
 
@@ -10,10 +11,10 @@ import { z } from "zod";
 // These names are the fixed contract the connect scripts / providers set, so the schema shape preserves them.
 const configSchema = z.object({
     // The project workspace dir; the three repos (intent / desired-state / app) are cloned under <root>/<role>.
-    workspaceRoot: z.string().default("/work"),
+    workspaceRoot: z.string().default(WORKSPACE_ROOT),
     // Where the daemon-owned snapshot history + protected repo git dirs live — OUTSIDE workspaceRoot so agent
     // accidents (rm -rf, git clean) in the workspace can't reach it. A second named volume in connect.sh.
-    historyRoot: z.string().default("/history"),
+    historyRoot: z.string().default(HISTORY_ROOT),
     // Optional stable root for the AI-provider credential stores (Claude accounts, per-account CODEX_HOMEs,
     // OpenCode's XDG data dir holding xAI's auth.json) so subscription OAuth survives sandbox recreation.
     // Empty ⇒ <workspaceRoot>/.intentic (the production layout). Set by connect.sh's INTENTIC_AGENT_AUTH_VOLUME
@@ -203,10 +204,22 @@ const configSchema = z.object({
         .prefault({}),
 });
 
-// Local dev convenience: when the daemon runs bare (`tsx watch`) instead of inside its container, load the
-// monorepo-root .env — the same file the api reads — so daemon creds (AI keys, CLOUDFLARE_API_TOKEN, …) don't
-// have to be exported by hand. Absent in the container (nothing to read) ⇒ a no-op there.
-const rootEnv = resolve(import.meta.dirname, "../../../.env");
+/* Local dev convenience: when the daemon runs bare (`tsx watch`) instead of inside its container, load the
+ * monorepo-root .env — the same file the api reads — so daemon creds (AI keys, CLOUDFLARE_API_TOKEN, …) don't
+ * have to be exported by hand.
+ *
+ * INSIDE THE CONTAINER THERE IS NO CHECKOUT, so the walk finds no marker and throws — which is why this is
+ * caught rather than propagated. The absent-file case was always a no-op here (the daemon's real config comes
+ * from the container env); an absent REPO is the same no-op, one level further out, and `envFile` treats the
+ * empty path exactly as it treated the container's non-existent one. */
+const rootEnvPath = (): string => {
+    try {
+        return join(repoRoot(import.meta.url), ".env");
+    } catch {
+        return "";
+    }
+};
+const rootEnv = rootEnvPath();
 
 // Sources (later wins): the local .env, then real env (what connect.{sh,ps1}/the provider set at `docker run`), then CLI.
 const definition = {

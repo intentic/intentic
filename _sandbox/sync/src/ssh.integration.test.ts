@@ -1,6 +1,7 @@
 import { mkdtemp, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { WORKSPACE_ROOT } from "@intentic/constants";
 import { describe, expect, it } from "vitest";
 import { mutagenCreateArgs, sessionMatchesSpec, sessionName, type SyncSessionSpec } from "./mutagen.js";
 import {
@@ -139,7 +140,7 @@ describe("resolvedHostname", () => {
     });
 });
 
-const spec: SyncSessionSpec = { name: "intentic-x", localDir: "/home/u/proj", alias: "intentic-sync-x", remoteDir: "/work" };
+const spec: SyncSessionSpec = { name: "intentic-x", localDir: "/home/u/proj", alias: "intentic-sync-x", remoteDir: WORKSPACE_ROOT };
 
 describe("mutagenCreateArgs", () => {
     const args = mutagenCreateArgs(spec, false);
@@ -178,7 +179,7 @@ describe("mutagenCreateArgs", () => {
 describe("sessionMatchesSpec", () => {
     const live = (ignore: { paths?: string[]; vcs?: boolean }) => ({
         alpha: { path: "/home/u/proj" },
-        beta: { host: "intentic-sync-x", path: "/work" },
+        beta: { host: "intentic-sync-x", path: WORKSPACE_ROOT },
         ignore,
     });
 

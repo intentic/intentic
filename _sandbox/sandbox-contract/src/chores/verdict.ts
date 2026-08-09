@@ -116,7 +116,14 @@ export const assessChore = (chore: Chore, context: ChoreContext, ledger: ChoreLe
      * rather than its digest, because a survey run three days into a quarter and one three days before its end
      * are the same period but very different answers to "when was this last read?". */
     if (chore.survey === true && ledger !== undefined && context.nowMs - ledger.ranAt < chore.cadenceMs) {
-        return { ...base, state: `clear`, severity: `info`, headline: clearHeadline(chore, ledger, context.nowMs), detail: finding.detail, digest: finding.digest };
+        return {
+            ...base,
+            state: `clear`,
+            severity: `info`,
+            headline: clearHeadline(chore, ledger, context.nowMs),
+            detail: finding.detail,
+            digest: finding.digest,
+        };
     }
 
     const prompt = chorePrompt(chore, finding, context.repo);
@@ -140,7 +147,16 @@ export const assessChore = (chore: Chore, context: ChoreContext, ledger: ChoreLe
         };
     }
 
-    return { ...base, state: `due`, severity: finding.severity, headline: finding.headline, detail: finding.detail, digest: finding.digest, prompt, settled: sameEvidence };
+    return {
+        ...base,
+        state: `due`,
+        severity: finding.severity,
+        headline: finding.headline,
+        detail: finding.detail,
+        digest: finding.digest,
+        prompt,
+        settled: sameEvidence,
+    };
 };
 
 // The ledger is keyed by repo + chore, which is the grain a verdict is decided at: the same chore in two repos is

@@ -1,7 +1,7 @@
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { fileURLToPath } from "node:url";
+import { repoRoot } from "@intentic/constants/node";
 import type { Capability } from "@intentic/sandbox-contract";
 import { sha256Hex } from "@intentic/sandbox-contract/tunnel-ids";
 import { expect, test } from "vitest";
@@ -28,7 +28,7 @@ const CUSTOM = "RUN apt-get update && apt-get install -y cowsay\n";
 const RELEASE = "ghcr.io/intentic/sandbox:stable";
 
 // The real first-party connectors/discord extensions, so a cli capability's image fragment resolves.
-const EXTENSIONS_DIR = fileURLToPath(new URL("../../../../_extensions", import.meta.url));
+const EXTENSIONS_DIR = join(repoRoot(import.meta.url), "_extensions");
 
 const stubServices = (environmentHashApplied = "", capabilities: Capability[] = [], image = "", baseImage = ""): Services =>
     unstubbed<Services>("services", {

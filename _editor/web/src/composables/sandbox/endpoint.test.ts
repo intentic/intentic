@@ -46,15 +46,45 @@ it(`accepts a loopback candidate only when the daemon behind it names THIS sandb
     const id = await sandboxIdOf(TOKEN);
     const local = { kind: `local` as const, base: localDaemonUrl(id, ZONE)! };
 
-    expect(await probeEndpoint(local, id, vi.fn(async () => health(id)))).toBe(true);
+    expect(
+        await probeEndpoint(
+            local,
+            id,
+            vi.fn(async () => health(id)),
+        ),
+    ).toBe(true);
     // Something is listening, but it is another sandbox — adopting it would point this sandbox's session,
     // uploads and terminals at a different daemon. This is the case a liveness-only probe gets wrong.
-    expect(await probeEndpoint(local, id, vi.fn(async () => health(`0123456789ab`)))).toBe(false);
+    expect(
+        await probeEndpoint(
+            local,
+            id,
+            vi.fn(async () => health(`0123456789ab`)),
+        ),
+    ).toBe(false);
     // A daemon predating the id (nothing to match) is not adopted either — silence is not agreement.
-    expect(await probeEndpoint(local, id, vi.fn(async () => health(undefined)))).toBe(false);
+    expect(
+        await probeEndpoint(
+            local,
+            id,
+            vi.fn(async () => health(undefined)),
+        ),
+    ).toBe(false);
     // Not a daemon at all: some other dev server holding the port.
-    expect(await probeEndpoint(local, id, vi.fn(async () => new Response(`<html>`, { status: 200 })))).toBe(false);
-    expect(await probeEndpoint(local, id, vi.fn(async () => new Response(``, { status: 502 })))).toBe(false);
+    expect(
+        await probeEndpoint(
+            local,
+            id,
+            vi.fn(async () => new Response(`<html>`, { status: 200 })),
+        ),
+    ).toBe(false);
+    expect(
+        await probeEndpoint(
+            local,
+            id,
+            vi.fn(async () => new Response(``, { status: 502 })),
+        ),
+    ).toBe(false);
 });
 
 it(`treats every way a loopback call can be refused as the same instruction: use the tunnel`, async () => {
@@ -76,7 +106,12 @@ it(`never probes the tunnel — it is the fallback, not a candidate to qualify`,
 
 it(`selects the shortcut when it answers as us, and always resolves to something dialable`, async () => {
     const id = await sandboxIdOf(TOKEN);
-    expect(await selectEndpoint({ daemonUrl: TUNNEL, token: TOKEN }, vi.fn(async () => health(id)))).toEqual({
+    expect(
+        await selectEndpoint(
+            { daemonUrl: TUNNEL, token: TOKEN },
+            vi.fn(async () => health(id)),
+        ),
+    ).toEqual({
         kind: `local`,
         base: localDaemonUrl(id, ZONE),
     });

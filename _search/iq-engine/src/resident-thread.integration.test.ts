@@ -1,5 +1,6 @@
 import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
+import { STATE_DIR } from "@intentic/constants";
 import { afterAll, beforeAll, expect, test } from "vitest";
 import { createResidentEngine, type ResidentEngine } from "./index.js";
 import { openIndex } from "./store/db.js";
@@ -65,7 +66,7 @@ test("the index builds while the host thread is blocked solid", () => {
          * wait, and it is the same arrangement the engine itself runs on (host reads, worker writes). Reading it
          * is synchronous like the spin around it, so the block is unbroken across the whole loop: no timer, no
          * microtask, no I/O callback of this thread's has run between construction and the count below. */
-        const db = openIndex(join(root, ".intentic/cache/iq"), "write");
+        const db = openIndex(join(root, `${STATE_DIR}/cache/iq`), "write");
         indexed = Number(db.get("SELECT COUNT(*) AS n FROM files")?.["n"] ?? 0);
         db.close();
     }

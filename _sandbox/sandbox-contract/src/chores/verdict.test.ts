@@ -47,10 +47,18 @@ const probe = (over: Partial<ProbeResult> & Pick<ProbeResult, "id">): ProbeResul
 const auditProbe = (names: readonly string[]): ProbeResult =>
     probe({
         id: `audit`,
-        facts: { id: `audit`, advisories: names.map((name) => ({ name, severity: `high` as const, title: `${name} is bad`, patched: `>=2`, dev: false })) },
+        facts: {
+            id: `audit`,
+            advisories: names.map((name) => ({ name, severity: `high` as const, title: `${name} is bad`, patched: `>=2`, dev: false })),
+        },
     });
 
-const report = (over: Partial<ChoresReport> = {}): ChoresReport => ({ repos: [{ repo: `app`, probes: [], signals: signals() }], ledger: [], node: `v24.18.0`, ...over });
+const report = (over: Partial<ChoresReport> = {}): ChoresReport => ({
+    repos: [{ repo: `app`, probes: [], signals: signals() }],
+    ledger: [],
+    node: `v24.18.0`,
+    ...over,
+});
 
 const verdictFor = (input: ChoresReport, chore: string, repo = `app`) => {
     const found = assessReport(input, NOW).find((verdict) => verdict.chore.id === chore && verdict.repo === repo);
@@ -71,7 +79,9 @@ describe(`what "we have not measured this" means`, () => {
     // does not have is not evidence of anything, and it carries the tool's own reason rather than an invented one.
     test(`a probe the repository cannot run says so, and never badges`, () => {
         const input = report({
-            repos: [{ repo: `app`, probes: [probe({ id: `knip`, state: `unavailable`, reason: `knip is not a devDependency` })], signals: signals() }],
+            repos: [
+                { repo: `app`, probes: [probe({ id: `knip`, state: `unavailable`, reason: `knip is not a devDependency` })], signals: signals() },
+            ],
         });
         const verdict = verdictFor(input, `dead-code`);
         expect(verdict.state).toBe(`unavailable`);
@@ -108,7 +118,10 @@ describe(`the ledger debounces; it cannot hide`, () => {
     // The point of digesting evidence rather than stamping a time: a fix landing, or a NEW advisory arriving,
     // both move the evidence and both deserve to be heard again.
     test(`evidence that has moved since the run is unsettled again`, () => {
-        const moved = report({ repos: [{ repo: `app`, probes: [auditProbe([`left-pad`, `minimist`])], signals: signals() }], ledger: [ledgerEntry()] });
+        const moved = report({
+            repos: [{ repo: `app`, probes: [auditProbe([`left-pad`, `minimist`])], signals: signals() }],
+            ledger: [ledgerEntry()],
+        });
         const verdict = verdictFor(moved, `security-advisories`);
         expect(verdict.state).toBe(`due`);
         expect(verdict.settled).toBe(false);
@@ -179,7 +192,10 @@ describe(`the badge speaks about transitions, not about statistics`, () => {
         const seen = { [ledgerKey(`app`, `security-advisories`)]: first.digest };
         expect(unseenVerdicts([first], seen)).toEqual([]);
 
-        const next = verdictFor(report({ repos: [{ repo: `app`, probes: [auditProbe([`left-pad`, `tar`])], signals: signals() }] }), `security-advisories`);
+        const next = verdictFor(
+            report({ repos: [{ repo: `app`, probes: [auditProbe([`left-pad`, `tar`])], signals: signals() }] }),
+            `security-advisories`,
+        );
         expect(unseenVerdicts([next], seen)).toHaveLength(1);
     });
 
@@ -203,7 +219,15 @@ describe(`the badge speaks about transitions, not about statistics`, () => {
 
 describe(`the findings themselves`, () => {
     test(`complexity reports only files that are load-bearing or out of proportion, never just the ranking's top`, () => {
-        const hotspot = (path: string, complexity: number) => ({ path, commits: 20, adds: 100, dels: 50, complexity, score: complexity * 20, latestMs: NOW });
+        const hotspot = (path: string, complexity: number) => ({
+            path,
+            commits: 20,
+            adds: 100,
+            dels: 50,
+            complexity,
+            score: complexity * 20,
+            latestMs: NOW,
+        });
         // An even ranking has no outlier and no key module in it: a healthy repository, and an empty finding.
         const even = report({
             repos: [{ repo: `app`, probes: [], signals: signals({ hotspots: [hotspot(`a.ts`, 30), hotspot(`b.ts`, 28), hotspot(`c.ts`, 26)] }) }],
@@ -225,7 +249,10 @@ describe(`the findings themselves`, () => {
                 {
                     repo: `app`,
                     probes: [],
-                    signals: signals({ indexed: false, hotspots: [{ path: `a.ts`, commits: 9, adds: 1, dels: 1, complexity: 900, score: 8100, latestMs: NOW }] }),
+                    signals: signals({
+                        indexed: false,
+                        hotspots: [{ path: `a.ts`, commits: 9, adds: 1, dels: 1, complexity: 900, score: 8100, latestMs: NOW }],
+                    }),
                 },
             ],
         });
@@ -260,7 +287,8 @@ describe(`the findings themselves`, () => {
 });
 
 describe(`the prompts`, () => {
-    const dueVerdict = () => verdictFor(report({ repos: [{ repo: `app`, probes: [auditProbe([`left-pad`])], signals: signals() }] }), `security-advisories`);
+    const dueVerdict = () =>
+        verdictFor(report({ repos: [{ repo: `app`, probes: [auditProbe([`left-pad`])], signals: signals() }] }), `security-advisories`);
 
     /* A prompt that counts without NAMING sends the agent off to re-derive a list we are already holding — slowly,
      * and against a tree that has moved since. Every measured chore names its artefacts. */
@@ -284,9 +312,27 @@ describe(`the prompts`, () => {
                         repo: `app`,
                         probes: [
                             auditProbe([`left-pad`]),
-                            probe({ id: `outdated`, facts: { id: `outdated`, packages: [{ name: `vue`, current: `1.0.0`, latest: `2.0.0`, kind: `major`, section: `dependencies` }] } }),
-                            probe({ id: `knip`, facts: { id: `knip`, deadCode: { files: 3, exports: 2, types: 0, dependencies: 1, devDependencies: 0, sample: [`a.ts`] } } }),
-                            probe({ id: `jscpd`, facts: { id: `jscpd`, duplication: { percentage: 9, clones: 4, top: [{ lines: 20, first: `a.ts`, second: `b.ts` }] } } }),
+                            probe({
+                                id: `outdated`,
+                                facts: {
+                                    id: `outdated`,
+                                    packages: [{ name: `vue`, current: `1.0.0`, latest: `2.0.0`, kind: `major`, section: `dependencies` }],
+                                },
+                            }),
+                            probe({
+                                id: `knip`,
+                                facts: {
+                                    id: `knip`,
+                                    deadCode: { files: 3, exports: 2, types: 0, dependencies: 1, devDependencies: 0, sample: [`a.ts`] },
+                                },
+                            }),
+                            probe({
+                                id: `jscpd`,
+                                facts: {
+                                    id: `jscpd`,
+                                    duplication: { percentage: 9, clones: 4, top: [{ lines: 20, first: `a.ts`, second: `b.ts` }] },
+                                },
+                            }),
                         ],
                         signals: signals({ packages: [pkg({ documented: false, dependencies: [`zod`, `joi`] })] }),
                     },
@@ -353,7 +399,9 @@ describe(`what does not apply here`, () => {
     // fires forever in repositories where its subject does not exist. This is the regression that motivated
     // making `applies` a required field on SurveySpec rather than an optional one.
     test(`a tiny repository is not surveyed for cross-cutting patterns it cannot have`, () => {
-        const tiny = report({ repos: [{ repo: `app`, probes: [], signals: signals({ totals: { files: 4, symbols: 10, complexity: 5, hotspots: 0 } }) }] });
+        const tiny = report({
+            repos: [{ repo: `app`, probes: [], signals: signals({ totals: { files: 4, symbols: 10, complexity: 5, hotspots: 0 } }) }],
+        });
         const verdict = verdictFor(tiny, `standardize-patterns`);
         expect(verdict.state).toBe(`not-applicable`);
         expect(verdict.headline).toBe(`only 4 indexed files`);
@@ -397,7 +445,8 @@ describe(`what does not apply here`, () => {
 /* THE FRONT-END CHORES. Four chores over two probes, tested where they decide something — the share that makes a
  * bundle a finding, the names that make two components one component, and above all the digests, because three of
  * these four measure things that move every time anyone writes a line of markup. */
-const uiProbe = (scan: Partial<UiScan> = {}): ProbeResult => probe({ id: `ui`, facts: { id: `ui`, scan: { components: [], bypasses: [], idioms: [], ...scan } } });
+const uiProbe = (scan: Partial<UiScan> = {}): ProbeResult =>
+    probe({ id: `ui`, facts: { id: `ui`, scan: { components: [], bypasses: [], idioms: [], ...scan } } });
 
 const bundleProbe = (assets: Bundle["assets"]): ProbeResult =>
     probe({
@@ -423,7 +472,10 @@ const chunk = (path: string, gzip: number): Bundle["assets"][number] => ({ path,
 
 describe(`what the browser downloads`, () => {
     test(`one chunk over half the transfer is the finding, and the headline names it`, () => {
-        const verdict = verdictFor(withProbes([bundleProbe([chunk(`dist/vendor-DlAUqK2U.js`, 800), chunk(`dist/index-a1.js`, 100), chunk(`dist/s-b2.css`, 50)])]), `bundle-weight`);
+        const verdict = verdictFor(
+            withProbes([bundleProbe([chunk(`dist/vendor-DlAUqK2U.js`, 800), chunk(`dist/index-a1.js`, 100), chunk(`dist/s-b2.css`, 50)])]),
+            `bundle-weight`,
+        );
         expect(verdict.state).toBe(`due`);
         expect(verdict.headline).toContain(`dist/vendor-DlAUqK2U.js`);
         expect(verdict.headline).toContain(`84%`);
@@ -443,14 +495,26 @@ describe(`what the browser downloads`, () => {
      * so rebuilding identical code renames every asset. Digesting the raw paths would mint new evidence on every
      * `pnpm build` and badge forever while reporting nothing new. */
     test(`rebuilding the same code does not read as new evidence`, () => {
-        const before = verdictFor(withProbes([bundleProbe([chunk(`dist/vendor-DlAUqK2U.js`, 800), chunk(`dist/index-a1b2c3d4.js`, 100), chunk(`dist/s.css`, 50)])]), `bundle-weight`);
-        const after = verdictFor(withProbes([bundleProbe([chunk(`dist/vendor-Zq99XxYw.js`, 802), chunk(`dist/index-9z8y7x6w.js`, 101), chunk(`dist/s.css`, 50)])]), `bundle-weight`);
+        const before = verdictFor(
+            withProbes([bundleProbe([chunk(`dist/vendor-DlAUqK2U.js`, 800), chunk(`dist/index-a1b2c3d4.js`, 100), chunk(`dist/s.css`, 50)])]),
+            `bundle-weight`,
+        );
+        const after = verdictFor(
+            withProbes([bundleProbe([chunk(`dist/vendor-Zq99XxYw.js`, 802), chunk(`dist/index-9z8y7x6w.js`, 101), chunk(`dist/s.css`, 50)])]),
+            `bundle-weight`,
+        );
         expect(after.digest).toBe(before.digest);
     });
 
     test(`a genuinely different chunk appearing does`, () => {
-        const before = verdictFor(withProbes([bundleProbe([chunk(`dist/vendor-DlAUqK2U.js`, 800), chunk(`dist/index-a1b2c3d4.js`, 100), chunk(`dist/s.css`, 50)])]), `bundle-weight`);
-        const after = verdictFor(withProbes([bundleProbe([chunk(`dist/vendor-DlAUqK2U.js`, 800), chunk(`dist/charting-a1b2c3d4.js`, 100), chunk(`dist/s.css`, 50)])]), `bundle-weight`);
+        const before = verdictFor(
+            withProbes([bundleProbe([chunk(`dist/vendor-DlAUqK2U.js`, 800), chunk(`dist/index-a1b2c3d4.js`, 100), chunk(`dist/s.css`, 50)])]),
+            `bundle-weight`,
+        );
+        const after = verdictFor(
+            withProbes([bundleProbe([chunk(`dist/vendor-DlAUqK2U.js`, 800), chunk(`dist/charting-a1b2c3d4.js`, 100), chunk(`dist/s.css`, 50)])]),
+            `bundle-weight`,
+        );
         expect(after.digest).not.toBe(before.digest);
     });
 });
@@ -500,7 +564,10 @@ describe(`components built twice`, () => {
     const components = (...paths: readonly string[]) => uiProbe({ components: [...paths] });
 
     test(`a shared name across two directories is a family, whatever each file is called`, () => {
-        const verdict = verdictFor(withProbes([components(`src/ui/BaseButton.vue`, `src/checkout/ButtonV2.tsx`), jscpdProbe([])]), `component-overlap`);
+        const verdict = verdictFor(
+            withProbes([components(`src/ui/BaseButton.vue`, `src/checkout/ButtonV2.tsx`), jscpdProbe([])]),
+            `component-overlap`,
+        );
         expect(verdict.state).toBe(`due`);
         expect(verdict.headline).toBe(`1 name used by more than one component`);
         expect(verdict.detail).toEqual([`button · src/checkout/ButtonV2.tsx, src/ui/BaseButton.vue`]);
@@ -514,8 +581,14 @@ describe(`components built twice`, () => {
     // comparison can reach and jscpd already measured.
     test(`a clone counts only when a component sits on both sides of it`, () => {
         const ui = components(`src/Chart.vue`, `src/Graph.vue`);
-        const shared = verdictFor(withProbes([ui, jscpdProbe([{ lines: 40, first: `./src/Chart.vue`, second: `./src/Graph.vue` }])]), `component-overlap`);
-        const oneSided = verdictFor(withProbes([ui, jscpdProbe([{ lines: 40, first: `./src/Chart.vue`, second: `./src/utils/format.ts` }])]), `component-overlap`);
+        const shared = verdictFor(
+            withProbes([ui, jscpdProbe([{ lines: 40, first: `./src/Chart.vue`, second: `./src/Graph.vue` }])]),
+            `component-overlap`,
+        );
+        const oneSided = verdictFor(
+            withProbes([ui, jscpdProbe([{ lines: 40, first: `./src/Chart.vue`, second: `./src/utils/format.ts` }])]),
+            `component-overlap`,
+        );
         expect(shared.state).toBe(`due`);
         expect(shared.headline).toBe(`1 clone spanning two of them`);
         expect(oneSided.state).toBe(`clear`);
@@ -530,7 +603,17 @@ describe(`components built twice`, () => {
 
 describe(`hard-coded styles`, () => {
     test(`counts the values and leads with the heaviest files`, () => {
-        const verdict = verdictFor(withProbes([uiProbe({ bypasses: [{ path: `src/Checkout.vue`, count: 11 }, { path: `src/Nav.vue`, count: 2 }] })]), `tailwind-arbitrary-values`);
+        const verdict = verdictFor(
+            withProbes([
+                uiProbe({
+                    bypasses: [
+                        { path: `src/Checkout.vue`, count: 11 },
+                        { path: `src/Nav.vue`, count: 2 },
+                    ],
+                }),
+            ]),
+            `tailwind-arbitrary-values`,
+        );
         expect(verdict.state).toBe(`due`);
         expect(verdict.headline).toBe(`13 hard-coded values across 2 files`);
         expect(verdict.detail[0]).toBe(`src/Checkout.vue · 11 values`);
@@ -539,7 +622,10 @@ describe(`hard-coded styles`, () => {
     // Tailwind gates this one alone — a Vue repository with no Tailwind has no theme scale to have bypassed, and
     // a row saying so would be the surface inventing a subject.
     test(`a repository without Tailwind is not asked the question at all`, () => {
-        const verdict = verdictFor(withProbes([uiProbe({ bypasses: [{ path: `src/Nav.vue`, count: 2 }] })], { deps: [`vue`] }), `tailwind-arbitrary-values`);
+        const verdict = verdictFor(
+            withProbes([uiProbe({ bypasses: [{ path: `src/Nav.vue`, count: 2 }] })], { deps: [`vue`] }),
+            `tailwind-arbitrary-values`,
+        );
         expect(verdict.state).toBe(`not-applicable`);
         expect(verdict.headline).toBe(`no Tailwind`);
     });

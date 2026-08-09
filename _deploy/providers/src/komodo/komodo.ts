@@ -1,4 +1,5 @@
 import { setTimeout as sleep } from "node:timers/promises";
+import { HOST_STATE_ROOT } from "@intentic/constants";
 import type { Provider, ResolvedInputs } from "@intentic/engine";
 import { HASH_KEY } from "@intentic/graph";
 import { envLine, shellQuote } from "@intentic/sandbox-run/quote";
@@ -47,7 +48,7 @@ const parse = (inputs: ResolvedInputs): KomodoInputs => parseInputs(komodoSchema
 const CORE = "intentic-komodo-core";
 // The fixed host port Core publishes — the port every engine-side Komodo consumer forwards to over SSH.
 export const KOMODO_CORE_PORT = 9120;
-const STATE_DIR = "/opt/intentic/komodo";
+const STATE_DIR = `${HOST_STATE_ROOT}/komodo`;
 const READY_TIMEOUT_MS = 90_000;
 const READY_INTERVAL_MS = 3_000;
 

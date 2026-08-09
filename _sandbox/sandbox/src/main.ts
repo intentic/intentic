@@ -1,6 +1,7 @@
 import { mkdir, rm } from "node:fs/promises";
 import { createSecureServer } from "node:http2";
 import { join } from "node:path";
+import { STATE_DIR } from "@intentic/constants";
 import { serve, type WebSocketServerLike } from "@hono/node-server";
 import { agentSessionName } from "@intentic/sandbox-contract/session-names";
 import { publicSlotFromToken, sandboxIdFromToken } from "@intentic/sandbox-contract/tunnel-ids";
@@ -133,6 +134,13 @@ const requireAuthWhenReachable = (config: Config): void => {
     );
     process.exit(78); // EX_CONFIG
 };
+
+// A workspace-relative path that is extension SOURCE — the three places a backend extension's code or its
+// enablement can arrive from. Module scope so the watcher's callback doesn't rebuild it on every change batch.
+const extensionSource = (path: string): boolean =>
+    path.startsWith(`${STATE_DIR}/workspace-extensions/`) ||
+    path.startsWith(`${STATE_DIR}/extensions/`) ||
+    path === `${STATE_DIR}/extension-enablement.json`;
 
 const main = async (): Promise<void> => {
     const config = loadConfig();
@@ -706,10 +714,6 @@ const main = async (): Promise<void> => {
      * unloaded, so the restart IS the reload — debounced in the supervisor, and a no-op while no extension
      * ships a backend. */
     subscribeWorkspaceChanges((paths) => {
-        const extensionSource = (path: string): boolean =>
-            path.startsWith(".intentic/workspace-extensions/") ||
-            path.startsWith(".intentic/extensions/") ||
-            path === ".intentic/extension-enablement.json";
         if (paths.some(extensionSource)) {
             services.extensionBackend.restart();
         }

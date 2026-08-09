@@ -13,7 +13,12 @@ import { host } from "./host.js";
  * the tree spells the root directory, and `root` is how the git routes spell the repo sitting on it. */
 
 // The repo ids the git routes accept, root first — the graph's switcher list.
-export const repoIds = (): readonly string[] => [`root`, ...host().workspace.repos().map((facts) => facts.repo)];
+export const repoIds = (): readonly string[] => [
+    `root`,
+    ...host()
+        .workspace.repos()
+        .map((facts) => facts.repo),
+];
 
 // The repo a workspace directory IS, or undefined when the directory is not a repository root. Root-relative
 // paths, forward-slash; "" is the workspace root.
@@ -21,5 +26,9 @@ export const repoAt = (path: string): string | undefined => {
     if (path === ``) {
         return `root`;
     }
-    return host().workspace.repos().some((facts) => facts.repo === path) ? path : undefined;
+    return host()
+        .workspace.repos()
+        .some((facts) => facts.repo === path)
+        ? path
+        : undefined;
 };

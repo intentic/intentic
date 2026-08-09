@@ -1,6 +1,7 @@
 import { mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { STATE_DIR } from "@intentic/constants";
 import { afterEach, expect, test } from "vitest";
 import { z } from "zod";
 import { jsonFile } from "./json-file.js";
@@ -11,7 +12,7 @@ const tempFile = async (name = "state.json"): Promise<string> => {
     dirs.push(dir);
     // Nested, so the mkdir-on-write path is exercised the way every real store uses it (.intentic/ rarely
     // exists on a fresh workspace).
-    return join(dir, ".intentic", name);
+    return join(dir, `${STATE_DIR}`, name);
 };
 afterEach(async () => {
     for (const dir of dirs.splice(0)) {
@@ -20,8 +21,7 @@ afterEach(async () => {
 });
 
 const NumbersSchema = z.array(z.number());
-const numbers = (path: string) =>
-    jsonFile<number[]>(path, { parse: (raw) => NumbersSchema.safeParse(raw).data, fallback: () => [] });
+const numbers = (path: string) => jsonFile<number[]>(path, { parse: (raw) => NumbersSchema.safeParse(raw).data, fallback: () => [] });
 
 test("an absent, unparseable, or schema-rejected file all read as the fallback", async () => {
     const path = await tempFile();

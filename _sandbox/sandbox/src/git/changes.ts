@@ -584,15 +584,9 @@ export const commitLog = async (
     // runs git piped (non-TTY), so without it the HEAD marker and branch/tag names would silently vanish.
     const [branchOut, logOut] = await Promise.all([
         git(dir, ["branch", "--show-current"]),
-        git(dir, [
-            "log",
-            "--all",
-            "--decorate",
-            "--topo-order",
-            `--max-count=${limit + 1}`,
-            `--skip=${skip}`,
-            `--pretty=format:${format}`,
-        ]).catch(() => undefined),
+        git(dir, ["log", "--all", "--decorate", "--topo-order", `--max-count=${limit + 1}`, `--skip=${skip}`, `--pretty=format:${format}`]).catch(
+            () => undefined,
+        ),
     ]);
     const branch = branchOut.stdout.trim();
     if (logOut === undefined) {

@@ -12,8 +12,9 @@
 # contents are covered by verify-desktop-bundle.sh, and its install by @intentic/desktop-smoke-windows on the
 # Windows runner).
 set -euo pipefail
+. "$(dirname "$0")/repo-root.sh"
 
-ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
+ROOT="$(repo_root)"
 CONTEXT="$ROOT/_tools/desktop-smoke"
 IMAGE="${DESKTOP_SMOKE_IMAGE:-intentic-desktop-smoke:local}"
 

@@ -33,7 +33,9 @@ test("picks out the inodes of in-flight DNS queries, skipping the header and non
 });
 
 test("a table with no lookup open yields nothing — the quiet case must not read as a DNS stall", () => {
-    const idle = UDP_TABLE.split("\n").filter((line) => !line.includes(":0035")).join("\n");
+    const idle = UDP_TABLE.split("\n")
+        .filter((line) => !line.includes(":0035"))
+        .join("\n");
     expect(parseDnsSocketInodes(idle)).toEqual([]);
     expect(parseDnsSocketInodes("")).toEqual([]);
 });

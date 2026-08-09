@@ -4,6 +4,7 @@ import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
+import { STATE_DIR, WORKSPACE_ROOT } from "@intentic/constants";
 import { createResidentEngine, type HealthRequest, type QueryRequest } from "@intentic/iq-engine";
 
 import { HEALTH_LIMIT } from "@intentic/sandbox-contract";
@@ -163,7 +164,7 @@ test("user file mutations ping history for a user-authored snapshot", async () =
 });
 
 test("workspace.tree returns the full working tree from the walker", async () => {
-    const tree = { root: "/work", tree: [{ name: "app", path: "app", type: "dir" as const, children: [] }], hidden: 0 };
+    const tree = { root: WORKSPACE_ROOT, tree: [{ name: "app", path: "app", type: "dir" as const, children: [] }], hidden: 0 };
     const client = clientFor(createApp(services({ workspaceTree: async () => tree })));
     expect(await client.workspace.tree({})).toEqual(tree);
 });
@@ -175,9 +176,9 @@ test("workspace.file reads any contained file (former-secret paths included), an
                 files: fakeFiles({
                     readWindow: async (absPath) => {
                         const content =
-                            absPath === "/work/app/src/index.ts"
+                            absPath === `${WORKSPACE_ROOT}/app/src/index.ts`
                                 ? "console.log(1);"
-                                : absPath === "/work/desired-state/.env"
+                                : absPath === `${WORKSPACE_ROOT}/desired-state/.env`
                                   ? "SECRET=1"
                                   : undefined;
                         return content === undefined ? undefined : { content, size: content.length, offset: 0, bytes: content.length };
@@ -268,13 +269,14 @@ test("GET /workspace/raw streams bytes with a content-type, 404s missing, 400s e
     const app = createApp(
         services({
             files: fakeFiles({
-                readBytes: async (absPath) => (absPath === "/work/app/logo.png" ? png : absPath === "/work/desired-state/.env" ? env : undefined),
+                readBytes: async (absPath) =>
+                    absPath === `${WORKSPACE_ROOT}/app/logo.png` ? png : absPath === `${WORKSPACE_ROOT}/desired-state/.env` ? env : undefined,
                 size: async (absPath) =>
-                    absPath === "/work/app/logo.png"
+                    absPath === `${WORKSPACE_ROOT}/app/logo.png`
                         ? png.byteLength
-                        : absPath === "/work/app/huge.png"
+                        : absPath === `${WORKSPACE_ROOT}/app/huge.png`
                           ? MAX_RAW_BYTES + 1
-                          : absPath === "/work/desired-state/.env"
+                          : absPath === `${WORKSPACE_ROOT}/desired-state/.env`
                             ? env.byteLength
                             : undefined,
             }),
@@ -432,22 +434,22 @@ test("the daemon's control plane is unreachable through the generic file API; it
     // The root's own .git joins them: it is the --separate-git-dir pointer to the shadow history repo on /history,
     // and a FILE, so a drop of a repo's CONTENTS at the root would aim a directory at it and 500 the whole upload.
     const controlPlane = [
-        ".intentic/owner.json",
-        ".intentic/members.json",
-        ".intentic/capabilities.json",
-        ".intentic/claude.json",
-        ".intentic/auth/claude/acc.json",
-        ".intentic/auth/codex/acc/auth.json",
-        ".intentic/auth/opencode/auth.json",
-        ".intentic/auth/cliproxy/kimi-user.json",
-        ".intentic/auth/future-provider/token.json",
-        ".intentic/sessions/claude/projects/-work/session.jsonl",
-        ".intentic/browser/reddit/Default/Cookies",
-        ".intentic/claude/retired-account.json",
-        ".intentic/codex/retired-account/auth.json",
-        ".intentic/kimi/retired-key.json",
-        ".intentic/opencode/retired-auth.json",
-        ".intentic/cliproxy/retired-auth.json",
+        `${STATE_DIR}/owner.json`,
+        `${STATE_DIR}/members.json`,
+        `${STATE_DIR}/capabilities.json`,
+        `${STATE_DIR}/claude.json`,
+        `${STATE_DIR}/auth/claude/acc.json`,
+        `${STATE_DIR}/auth/codex/acc/auth.json`,
+        `${STATE_DIR}/auth/opencode/auth.json`,
+        `${STATE_DIR}/auth/cliproxy/kimi-user.json`,
+        `${STATE_DIR}/auth/future-provider/token.json`,
+        `${STATE_DIR}/sessions/claude/projects/-work/session.jsonl`,
+        `${STATE_DIR}/browser/reddit/Default/Cookies`,
+        `${STATE_DIR}/claude/retired-account.json`,
+        `${STATE_DIR}/codex/retired-account/auth.json`,
+        `${STATE_DIR}/kimi/retired-key.json`,
+        `${STATE_DIR}/opencode/retired-auth.json`,
+        `${STATE_DIR}/cliproxy/retired-auth.json`,
         ".git",
         ".git/config",
         ".git/objects/ab/cdef",
@@ -474,7 +476,7 @@ test("POST /workspace/upload with x-intentic-base-hash refuses a stale write and
     const app = createApp(
         services({
             files: fakeFiles({
-                read: async (absPath) => (absPath === "/work/app/index.ts" ? "hello" : undefined),
+                read: async (absPath) => (absPath === `${WORKSPACE_ROOT}/app/index.ts` ? "hello" : undefined),
                 writeStream: async (absPath) => {
                     writes.push(absPath);
                 },
@@ -604,7 +606,7 @@ test("workspace.addRepo clones a repo with a protected git dir, rejects reserved
     expect(await client.workspace.addRepo({ name: "extra", cloneUrl: "https://example.com/extra.git" })).toEqual({ name: "extra", path: "extra" });
     expect(clones).toEqual([
         {
-            parentDir: "/work",
+            parentDir: WORKSPACE_ROOT,
             name: "extra",
             cloneUrl: "https://example.com/extra.git",
             separateGitDir: join(testConfig.historyRoot, "gits", "extra"),

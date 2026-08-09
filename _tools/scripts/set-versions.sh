@@ -6,9 +6,10 @@
 #   bash _tools/scripts/set-versions.sh 1.15.1
 set -euo pipefail
 VERSION="${1:?usage: set-versions.sh <version>}"
+. "$(dirname "$0")/repo-root.sh"
 DIR="$(cd "$(dirname "$0")" && pwd)"
 source "$DIR/packages.sh"
-cd "$DIR/../.."
+cd "$(repo_root)"
 
 for d in "${VERSIONED[@]}"; do
   pnpm --dir "$d" version "$VERSION" --no-git-tag-version --no-git-checks --allow-same-version >/dev/null

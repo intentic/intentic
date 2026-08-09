@@ -20,7 +20,8 @@
 # Artifacts land in _sandbox/ic/dist-bin/ as ic-<os>-<arch>[.exe] (go-style arch, matching what the shims
 # request), from where publish-github.sh attaches them to the GitHub Release.
 set -euo pipefail
-cd "$(dirname "$0")/../.."
+. "$(dirname "$0")/repo-root.sh"
+cd "$(repo_root)"
 
 [ $# -ge 1 ] || { echo "usage: build-ic.sh <target>... (linux-x64 linux-arm64 windows-x64 darwin-x64 darwin-arm64)" >&2; exit 2; }
 

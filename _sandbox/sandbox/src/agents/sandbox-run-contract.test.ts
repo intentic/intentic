@@ -1,5 +1,6 @@
 import { readdir, readFile } from "node:fs/promises";
 import { join } from "node:path";
+import { repoRoot } from "@intentic/constants/node";
 import { IGNORED_DIRS } from "@intentic/workspace-ignore";
 import { expect, test } from "vitest";
 
@@ -17,7 +18,7 @@ import { expect, test } from "vitest";
  * script or compose file may not match at all, because scripts have the verb. A seventh path added anywhere,
  * in any dialect, fails here without anyone remembering this test exists. */
 
-const REPO_ROOT = join(import.meta.dirname, "..", "..", "..", "..");
+const REPO_ROOT = repoRoot(import.meta.url);
 
 // The signature of stating the run shape yourself: starting a container with the workspace volume at /work.
 // Nothing else in the repo mounts that target — backup/restore/tunnel/dind runs mount their own dirs. The

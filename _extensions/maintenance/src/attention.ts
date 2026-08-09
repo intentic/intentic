@@ -1,6 +1,6 @@
 import { assessReport, type ChoreVerdict, ledgerKey, unseenVerdicts } from "@intentic/sandbox-contract/chores";
 import type { Disposable, ViewBadge } from "@intentic/extension-api";
-import { ChoresReportSchema } from "@intentic/sandbox-contract";
+import { ChoresReportSchema, STATE_DIR } from "@intentic/sandbox-contract";
 import { ref } from "vue";
 import { host } from "./host";
 
@@ -40,7 +40,7 @@ const POLL_MS = 10 * 60_000;
 // What the badge has already been shown, keyed repo|chore → the digest last acknowledged. A file rather than an
 // extension setting: the badge is derived from files, so its acknowledgement belongs in the same tree, where it
 // survives a reload and is shared across the owner's browsers without adding a setting no user would ever type.
-export const SEEN_PATH = `.intentic/chores/seen.json`;
+export const SEEN_PATH = `${STATE_DIR}/chores/seen.json`;
 
 const unseen = ref<readonly ChoreVerdict[]>([]);
 

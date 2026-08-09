@@ -622,16 +622,13 @@ const runPending = async (): Promise<void> => {
              reader did not put it; without this the graph shows the aftermath and explains none of it. Git also
              refuses almost every verb in this tab's menu until the operation ends, so the banner is what makes
              those refusals legible instead of mysterious. -->
-        <div
-            v-if="operation.operation.value"
-            class="flex shrink-0 items-start gap-1.5 border-b border-warning/40 bg-warning/10 px-3 py-1.5"
-        >
+        <div v-if="operation.operation.value" class="flex shrink-0 items-start gap-1.5 border-b border-warning/40 bg-warning/10 px-3 py-1.5">
             <Icon name="exclamation-triangle" class="mt-0.5 shrink-0 text-2xs text-warning" />
             <div class="min-w-0 flex-1">
                 <p class="text-2xs font-medium text-warning">A {{ operation.operation.value }} is in progress</p>
                 <p class="text-2xs text-muted">
-                    Resolve the conflicts in the Changes panel and stage them to continue, or abort to return this
-                    repository to where the {{ operation.operation.value }} began.
+                    Resolve the conflicts in the Changes panel and stage them to continue, or abort to return this repository to where the
+                    {{ operation.operation.value }} began.
                 </p>
                 <p v-if="operation.actionError.value" class="text-2xs text-danger">{{ operation.actionError.value }}</p>
             </div>
@@ -739,9 +736,21 @@ const runPending = async (): Promise<void> => {
                         <span class="hidden shrink-0 text-2xs text-subtle sm:block">{{ timeAgo(commit.at) }}</span>
                         <span
                             v-for="verb in [
-                                { label: 'Pop', title: 'Put this work back and remove the stash', run: () => stashes.apply(stashBySha.get(commit.sha)!.ref, true) },
-                                { label: 'Apply', title: 'Put this work back and keep the stash', run: () => stashes.apply(stashBySha.get(commit.sha)!.ref, false) },
-                                { label: 'Drop', title: 'Discard this stash — a restore point is saved first', run: () => stashes.drop(stashBySha.get(commit.sha)!.ref) },
+                                {
+                                    label: 'Pop',
+                                    title: 'Put this work back and remove the stash',
+                                    run: () => stashes.apply(stashBySha.get(commit.sha)!.ref, true),
+                                },
+                                {
+                                    label: 'Apply',
+                                    title: 'Put this work back and keep the stash',
+                                    run: () => stashes.apply(stashBySha.get(commit.sha)!.ref, false),
+                                },
+                                {
+                                    label: 'Drop',
+                                    title: 'Discard this stash — a restore point is saved first',
+                                    run: () => stashes.drop(stashBySha.get(commit.sha)!.ref),
+                                },
                             ]"
                             :key="verb.label"
                             class="shrink-0 cursor-pointer rounded px-1 text-2xs text-subtle transition-colors hover:bg-overlay hover:text-content"

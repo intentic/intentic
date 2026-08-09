@@ -31,8 +31,14 @@ describe(`outdated`, () => {
     });
 
     test(`skips entries pnpm could not resolve, rather than inventing a version for them`, () => {
-        const facts = parse(`outdated`, JSON.stringify({ ok: { current: `1.0.0`, latest: `2.0.0` }, broken: { current: `1.0.0` }, alsoBroken: null }));
-        expect(facts).toEqual({ id: `outdated`, packages: [{ name: `ok`, current: `1.0.0`, latest: `2.0.0`, kind: `major`, section: `dependencies` }] });
+        const facts = parse(
+            `outdated`,
+            JSON.stringify({ ok: { current: `1.0.0`, latest: `2.0.0` }, broken: { current: `1.0.0` }, alsoBroken: null }),
+        );
+        expect(facts).toEqual({
+            id: `outdated`,
+            packages: [{ name: `ok`, current: `1.0.0`, latest: `2.0.0`, kind: `major`, section: `dependencies` }],
+        });
     });
 
     // pnpm prints deprecation and lockfile notices on the same stream in some versions; the JSON still has to be
@@ -95,7 +101,14 @@ describe(`knip`, () => {
             `knip`,
             JSON.stringify({
                 issues: [
-                    { file: `src/a.ts`, exports: [{ name: `x` }, { name: `y` }], types: [{ name: `T` }], dependencies: [{ name: `lodash` }], devDependencies: [], files: [] },
+                    {
+                        file: `src/a.ts`,
+                        exports: [{ name: `x` }, { name: `y` }],
+                        types: [{ name: `T` }],
+                        dependencies: [{ name: `lodash` }],
+                        devDependencies: [],
+                        files: [],
+                    },
                     { file: `src/b.ts`, exports: [{ name: `z` }], types: [], dependencies: [], devDependencies: [{ name: `jest` }], files: [] },
                     { file: `src/old.ts`, exports: [], files: [{ name: `src/old.ts` }] },
                     { file: `src/older.ts`, exports: [], files: [{ name: `src/older.ts` }] },
@@ -225,7 +238,11 @@ describe(`ui`, () => {
     test(`strips the prefix ripgrep prints for a path it was told to walk`, () => {
         expect(parse(`ui`, sweep(`COMPONENT\t./src/Button.vue`, `BYPASS\t./src/Button.vue:3`, `IDIOM\tvue-options-api\t./src/Old.vue`))).toEqual({
             id: `ui`,
-            scan: { components: [`src/Button.vue`], bypasses: [{ path: `src/Button.vue`, count: 3 }], idioms: [{ id: `vue-options-api`, files: [`src/Old.vue`] }] },
+            scan: {
+                components: [`src/Button.vue`],
+                bypasses: [{ path: `src/Button.vue`, count: 3 }],
+                idioms: [{ id: `vue-options-api`, files: [`src/Old.vue`] }],
+            },
         });
     });
 
@@ -264,7 +281,10 @@ describe(`the sweep's composed command`, () => {
 
 describe(`bundle`, () => {
     test(`reads the directory and each asset's raw and gzipped size`, () => {
-        const facts = parse(`bundle`, [`DIR\tdist`, `ASSET\t54038\t41096\tdist/assets/vendor-abc.js`, `ASSET\t2704\t2103\tdist/assets/style.css`].join(`\n`));
+        const facts = parse(
+            `bundle`,
+            [`DIR\tdist`, `ASSET\t54038\t41096\tdist/assets/vendor-abc.js`, `ASSET\t2704\t2103\tdist/assets/style.css`].join(`\n`),
+        );
         expect(facts).toEqual({
             id: `bundle`,
             bundle: {

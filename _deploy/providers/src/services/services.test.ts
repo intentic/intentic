@@ -21,6 +21,7 @@ const fakeSsh = (
             commands.push(command);
             // Simulate an unwritable state dir (e.g. non-root user on root-owned /opt): the mkdir/cat writes exit non-zero.
             if (opts.writeFails && (command.startsWith("mkdir -p /opt/intentic") || command.startsWith("cat > /opt/intentic"))) {
+                // path-literals: content — the stderr a real mkdir would print, quoted as the kernel spells it.
                 return res("", 1, "mkdir: cannot create directory '/opt/intentic': Permission denied");
             }
             if (command.includes("com.docker.compose.project")) {

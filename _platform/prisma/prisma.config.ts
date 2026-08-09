@@ -1,11 +1,12 @@
 import { existsSync } from "node:fs";
-import { resolve } from "node:path";
+import { join } from "node:path";
+import { repoRoot } from "@intentic/constants/node";
 import { env, type PrismaConfig } from "prisma/config";
 
-// Prisma 7 no longer auto-loads .env. Load the monorepo-root .env (where DATABASE_URL
-// lives) before the config is read, using Node's built-in loader. cwd is this package
-// dir when the db:* scripts run, so the root file is two levels up.
-const rootEnv = resolve(import.meta.dirname, "../../.env");
+// Prisma 7 no longer auto-loads .env. Load the monorepo-root .env (where DATABASE_URL lives) before the config
+// is read, using Node's built-in loader. The root is found by walking up to the workspace marker, so neither
+// this file's depth nor the cwd the db:* scripts happen to run from is part of the answer.
+const rootEnv = join(repoRoot(import.meta.url), ".env");
 if (existsSync(rootEnv)) {
     process.loadEnvFile(rootEnv);
 }

@@ -13,6 +13,7 @@ import type {
     WorkspaceSearchSpan,
     WorkspaceTree,
 } from "@intentic/sandbox-contract";
+import { WORKSPACE_ROOT } from "@intentic/constants";
 import { includeGlobs } from "@intentic/sandbox-contract";
 import { acceptanceFiles } from "./acceptance";
 import { choreFiles } from "./chores";
@@ -503,7 +504,7 @@ export const workspaceTree = (): WorkspaceTree => {
     for (const folder of folders.values()) {
         folder.children = folder.children === undefined ? undefined : ordered(folder.children);
     }
-    return { root: `/work`, hidden: 0, tree: ordered(roots) };
+    return { root: WORKSPACE_ROOT, hidden: 0, tree: ordered(roots) };
 };
 
 /** One directory's immediate children — the lazy-load behind an ignored dir, and how every extension walks. */

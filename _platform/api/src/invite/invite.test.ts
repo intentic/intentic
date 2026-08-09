@@ -50,15 +50,31 @@ describe(`invite routes`, () => {
             sandboxMember: { findUnique, upsert, findMany },
         });
 
-        const result = await call(inviteRoutes.create, { sandboxId: `s1`, email: `Guest@Example.com`, role: `collaborator` }, { context: context({ prisma }) });
+        const result = await call(
+            inviteRoutes.create,
+            { sandboxId: `s1`, email: `Guest@Example.com`, role: `collaborator` },
+            { context: context({ prisma }) },
+        );
 
         expect(upsert).toHaveBeenCalledWith({
             where: { sandboxId_email: { sandboxId: `s1`, email: `guest@example.com` } },
-            create: { sandboxId: `s1`, email: `guest@example.com`, role: `collaborator`, inviteToken: expect.any(String), inviteExpiresAt: expect.any(Date) },
+            create: {
+                sandboxId: `s1`,
+                email: `guest@example.com`,
+                role: `collaborator`,
+                inviteToken: expect.any(String),
+                inviteExpiresAt: expect.any(Date),
+            },
             update: { role: `collaborator`, inviteToken: expect.any(String), inviteExpiresAt: expect.any(Date) },
         });
         expect(result.members).toEqual([
-            { email: `guest@example.com`, role: `collaborator`, status: `pending`, invitedAt: `2020-01-01T00:00:00.000Z`, expiresAt: `2099-01-01T00:00:00.000Z` },
+            {
+                email: `guest@example.com`,
+                role: `collaborator`,
+                status: `pending`,
+                invitedAt: `2020-01-01T00:00:00.000Z`,
+                expiresAt: `2099-01-01T00:00:00.000Z`,
+            },
         ]);
     });
 

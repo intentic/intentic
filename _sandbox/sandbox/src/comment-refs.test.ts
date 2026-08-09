@@ -1,5 +1,6 @@
 import { readdir, readFile } from "node:fs/promises";
 import { join } from "node:path";
+import { repoRoot } from "@intentic/constants/node";
 import { IGNORED_DIRS } from "@intentic/workspace-ignore";
 import { expect, test } from "vitest";
 
@@ -25,7 +26,7 @@ import { expect, test } from "vitest";
  * decoration: `Chat.vue` outlived the page it named and was invisible to the other two. Everything else is the
  * prose's own vocabulary — `foo.ts`, `a.ts`, `Foo.vue`, globs like `*.test.ts` — and is left alone. */
 
-const REPO_ROOT = join(import.meta.dirname, "..", "..", "..");
+const REPO_ROOT = repoRoot(import.meta.url);
 
 const SCANNED = new Set([".ts", ".tsx", ".vue", ".mjs"]);
 

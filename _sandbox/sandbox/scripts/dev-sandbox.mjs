@@ -35,12 +35,7 @@ const SLUG_ARGS = process.argv.slice(2);
 
 // The groups holding the daemon and every workspace package it depends on (package.json's workspace: deps
 // live in _sandbox, _deploy, _search — plus @intentic/constants, which sits in _tools).
-const WATCH_PATHS = [
-    join(REPO_ROOT, "_sandbox"),
-    join(REPO_ROOT, "_deploy"),
-    join(REPO_ROOT, "_search"),
-    join(REPO_ROOT, "_tools/constants"),
-];
+const WATCH_PATHS = [join(REPO_ROOT, "_sandbox"), join(REPO_ROOT, "_deploy"), join(REPO_ROOT, "_search"), join(REPO_ROOT, "_tools/constants")];
 
 // chokidar v4 dropped glob support, so we watch dirs and filter build artifacts / vcs dirs by segment.
 const IGNORED_SEGMENTS = new Set(["node_modules", "dist", ".turbo", ".cache", "generated", ".astro", ".git"]);

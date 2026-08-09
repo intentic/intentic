@@ -5,6 +5,7 @@ import { dirname, extname, relative, resolve, sep } from "node:path";
 import { Readable, Transform } from "node:stream";
 import { pipeline } from "node:stream/promises";
 import type { ReadableStream as NodeReadableStream } from "node:stream/web";
+import { STATE_DIR } from "@intentic/constants";
 import { RETIRED_WORKSPACE_STATE_DIRS } from "@intentic/sandbox-contract";
 
 // Resolve a repo-relative path to an absolute one, guarding against escaping the repo dir: the daemon serves
@@ -66,7 +67,7 @@ export const isControlPlanePath = (root: string, absPath: string): boolean => {
     if (segments[0] === ".git") {
         return true;
     }
-    return segments.length >= 2 && segments[0] === ".intentic" && CONTROL_PLANE_ENTRIES.has(segments[1] ?? "");
+    return segments.length >= 2 && segments[0] === STATE_DIR && CONTROL_PLANE_ENTRIES.has(segments[1] ?? "");
 };
 
 /* Read a workspace file's text WHOLE; undefined when it does not exist. For the daemon's own readers, which

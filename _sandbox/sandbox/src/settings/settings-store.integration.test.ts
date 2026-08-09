@@ -2,13 +2,14 @@ import { mkdtempSync } from "node:fs";
 import { mkdir, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
+import { STATE_DIR } from "@intentic/constants";
 import { SandboxSettingsSchema, type SandboxSettings } from "@intentic/sandbox-contract";
 import { expect, test } from "vitest";
 import { fileSandboxSettingsStore } from "./settings-store.js";
 
 // A store over a fresh temp path (the .intentic dir doesn't exist yet — the store must create it on write).
 const tempStore = () => {
-    const path = join(mkdtempSync(join(tmpdir(), "settings-")), ".intentic", "settings.json");
+    const path = join(mkdtempSync(join(tmpdir(), "settings-")), `${STATE_DIR}`, "settings.json");
     return { store: fileSandboxSettingsStore(path), path };
 };
 

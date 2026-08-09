@@ -2,11 +2,12 @@ import { spawnSync } from "node:child_process";
 import { mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { HISTORY_ROOT, WORKSPACE_ROOT } from "@intentic/constants";
 import { type Logger, pino } from "pino";
 import { expect, test } from "vitest";
 import { claimContainerHome } from "./home-owner.js";
 
-const CONTAINER = { workspaceRoot: "/work", historyRoot: "/history" };
+const CONTAINER = { workspaceRoot: WORKSPACE_ROOT, historyRoot: HISTORY_ROOT };
 const DEV_RUN = { workspaceRoot: "/tmp/sbx/work", historyRoot: "/tmp/sbx/history" };
 
 const setup = async (): Promise<{ home: string; lines: object[]; logger: Logger }> => {

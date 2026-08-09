@@ -10,6 +10,7 @@ const notice = (tone: NoticeModel[`tone`], title: string, key?: string): NoticeM
 
 describe(`noticeFrom`, () => {
     it(`leads with the app's sentence and keeps the caught message as evidence`, () => {
+        // path-literals: content — the OS's own error text, quoted as the kernel emits it, not a path this test builds.
         const built = noticeFrom(new Error(`EACCES: permission denied, open '/work/.env'`), `Couldn't save your changes.`);
         expect(built.title).toBe(`Couldn't save your changes.`);
         expect(built.detail).toBe(`EACCES: permission denied, open '/work/.env'`);

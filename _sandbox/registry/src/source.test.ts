@@ -22,7 +22,9 @@ describe(`resolveSource`, () => {
             url: `https://gitlab.com/acme/x.git`,
             ref: SHA,
         });
-        expect(resolveSource({ source: `git-subdir`, url: `https://github.com/acme/tools.git`, path: `ext/a`, sha: SHA }, REGISTRY, undefined)).toEqual({
+        expect(
+            resolveSource({ source: `git-subdir`, url: `https://github.com/acme/tools.git`, path: `ext/a`, sha: SHA }, REGISTRY, undefined),
+        ).toEqual({
             url: `https://github.com/acme/tools.git`,
             path: `ext/a`,
             ref: SHA,

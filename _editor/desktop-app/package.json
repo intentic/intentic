@@ -25,6 +25,7 @@
         "vue": "catalog:"
     },
     "devDependencies": {
+        "@intentic/constants": "workspace:*",
         "@intentic/tsconfig": "workspace:*",
         "@tailwindcss/vite": "catalog:",
         "@tauri-apps/cli": "catalog:",

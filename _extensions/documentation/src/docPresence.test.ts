@@ -1,3 +1,4 @@
+import { STATE_DIR } from "@intentic/sandbox-contract";
 // @vitest-environment jsdom
 //
 // WHAT THIS PROTECTS: the tree-icon poll must not ASK about a repo that documents nothing.
@@ -27,8 +28,8 @@ const hostOver = (): Parameters<typeof bindHost>[0] =>
             reachable: () => true,
             json: async (route: string) => {
                 asked.push(route);
-                return route.includes(encodeURIComponent(`.intentic/docs/api`))
-                    ? { entries: [{ name: `repo.json`, path: `.intentic/docs/api/repo.json`, type: `file` }], hidden: 0 }
+                return route.includes(encodeURIComponent(`${STATE_DIR}/docs/api`))
+                    ? { entries: [{ name: `repo.json`, path: `${STATE_DIR}/docs/api/repo.json`, type: `file` }], hidden: 0 }
                     : { entries: [], hidden: 0 };
             },
         },

@@ -1,3 +1,4 @@
+import { STATE_DIR } from "@intentic/constants";
 import { type AgentEvent, RESUME_NOTES, withResumeNote } from "@intentic/sandbox-contract";
 import { watch } from "vue";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -706,7 +707,7 @@ describe(`Conversation`, () => {
         });
 
         const turn = conversation.send(`start`, settings);
-        await conversation.enqueue(`also the tests`, [{ name: `spec.md`, path: `.intentic/artifacts/attachments/u1/spec.md` }]);
+        await conversation.enqueue(`also the tests`, [{ name: `spec.md`, path: `${STATE_DIR}/artifacts/attachments/u1/spec.md` }]);
         await conversation.enqueue(`and the docs`);
         controller.enqueue(sseFrame({ kind: `end` }));
         controller.close();
@@ -824,7 +825,7 @@ describe(`Conversation`, () => {
 
         sandboxRequestMock.mockResolvedValue({ ok: true } as Response);
         await conversation.decidePlan(planMessage!, false, `this bit is wrong`, [
-            { name: `shot.png`, path: `.intentic/artifacts/attachments/a1/shot.png` },
+            { name: `shot.png`, path: `${STATE_DIR}/artifacts/attachments/a1/shot.png` },
         ]);
 
         const [, body] = sandboxRequestMock.mock.calls.at(-1) as [string, RequestInit];
@@ -848,7 +849,7 @@ describe(`Conversation`, () => {
         const planMessage = conversation.messages.value.find((message) => message.plan !== undefined);
 
         sandboxRequestMock.mockResolvedValue({ ok: true } as Response);
-        await conversation.decidePlan(planMessage!, false, ``, [{ name: `shot.png`, path: `.intentic/artifacts/attachments/a1/shot.png` }]);
+        await conversation.decidePlan(planMessage!, false, ``, [{ name: `shot.png`, path: `${STATE_DIR}/artifacts/attachments/a1/shot.png` }]);
 
         const [, body] = sandboxRequestMock.mock.calls.at(-1) as [string, RequestInit];
         expect(JSON.parse(String(body.body))).toMatchObject({ feedback: `@.intentic/artifacts/attachments/a1/shot.png` });
@@ -2035,7 +2036,7 @@ describe(`Conversation`, () => {
     it(`redraws a restored message's attachments as chips`, () => {
         const conversation = new Conversation(`c1`);
 
-        conversation.restoreMessages([{ role: `user`, text: `analyze this`, attachments: [`.intentic/artifacts/attachments/uuid-1/image.png`] }]);
+        conversation.restoreMessages([{ role: `user`, text: `analyze this`, attachments: [`${STATE_DIR}/artifacts/attachments/uuid-1/image.png`] }]);
 
         expect(conversation.messages.value[0]).toMatchObject({
             role: `user`,

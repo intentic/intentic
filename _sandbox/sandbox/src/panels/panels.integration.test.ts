@@ -1,6 +1,7 @@
 import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { WORKSPACE_ROOT } from "@intentic/constants";
 import { expect, test } from "vitest";
 import type { ListeningPort } from "../ports/port-scan.js";
 import { workspacePaths } from "../workspace/workspace.js";
@@ -87,13 +88,13 @@ const listener = (port: number, cwd?: string, forwardable = true): ListeningPort
 });
 
 test("a repo claims the listeners bound from inside it — one per app for a monorepo's fan-out", () => {
-    const root = "/work";
+    const root = WORKSPACE_ROOT;
     const found = listenersByRepo(
         [
-            listener(47145, "/work/intentic/_editor/web"),
-            listener(6480, "/work/intentic/_platform/api"),
-            listener(4321, "/work/intentic/_site/site"),
-            listener(3000, "/work/shop"),
+            listener(47145, `${WORKSPACE_ROOT}/intentic/_editor/web`),
+            listener(6480, `${WORKSPACE_ROOT}/intentic/_platform/api`),
+            listener(4321, `${WORKSPACE_ROOT}/intentic/_site/site`),
+            listener(3000, `${WORKSPACE_ROOT}/shop`),
         ],
         root,
         ["intentic", "shop"],
@@ -107,16 +108,19 @@ test("listeners nobody can claim are dropped: no cwd, a cwd outside the workspac
         [
             listener(8787), // the daemon's own socket — procfs gave up no cwd
             listener(5432, "/var/lib/postgresql"), // outside the workspace entirely
-            listener(53, "/work/intentic", false), // a loopback alias only answering at its own address
+            listener(53, `${WORKSPACE_ROOT}/intentic`, false), // a loopback alias only answering at its own address
         ],
-        "/work",
+        WORKSPACE_ROOT,
         ["intentic"],
     );
     expect(found.size).toBe(0);
 });
 
 test("a repo cloned inside another keeps its own listeners — the longest matching dir wins", () => {
-    const found = listenersByRepo([listener(3000, "/work/intentic/vendor/widget/src")], "/work", ["intentic", "intentic/vendor/widget"]);
+    const found = listenersByRepo([listener(3000, `${WORKSPACE_ROOT}/intentic/vendor/widget/src`)], WORKSPACE_ROOT, [
+        "intentic",
+        "intentic/vendor/widget",
+    ]);
     expect(found.get("intentic")).toBeUndefined();
     expect(found.get("intentic/vendor/widget")?.map((entry) => entry.port)).toEqual([3000]);
 });
@@ -146,7 +150,9 @@ test("a package's sidecar sockets collapse into the one server the app is on", (
 });
 
 test("servers at the repo root share one slot too — a scaffolded app is its own package", () => {
-    expect(oneServerPerDir<{ url: string; dir?: string }>([{ url: `http://localhost:3000` }, { url: `http://localhost:3001` }])).toEqual([{ url: `http://localhost:3000` }]);
+    expect(oneServerPerDir<{ url: string; dir?: string }>([{ url: `http://localhost:3000` }, { url: `http://localhost:3001` }])).toEqual([
+        { url: `http://localhost:3000` },
+    ]);
 });
 
 test("panelKey maps nested ids to a DNS/tmux-safe label and rejects unsafe names", () => {

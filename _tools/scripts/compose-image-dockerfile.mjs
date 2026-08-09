@@ -15,9 +15,9 @@
 import { createHash } from "node:crypto";
 import { readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
-import { fileURLToPath } from "node:url";
+import { repoRoot } from "@intentic/constants/node";
 
-const root = fileURLToPath(new URL("../..", import.meta.url));
+const root = repoRoot(import.meta.url);
 const packsDir = join(root, "_sandbox/sandbox/packs");
 const corePath = join(root, "_sandbox/sandbox/Dockerfile");
 
@@ -36,10 +36,12 @@ if (profile === undefined) {
     console.error(`unknown profile "${profileName}" — profiles.json defines: ${Object.keys(profiles).join(", ")}`);
     process.exit(2);
 }
-const known = readdirSync(packsDir)
-    .filter((entry) => entry.endsWith(".Dockerfile"))
-    .map((entry) => entry.slice(0, -".Dockerfile".length));
-const unknown = profile.filter((name) => !known.includes(name));
+const known = new Set(
+    readdirSync(packsDir)
+        .filter((entry) => entry.endsWith(".Dockerfile"))
+        .map((entry) => entry.slice(0, -".Dockerfile".length)),
+);
+const unknown = profile.filter((name) => !known.has(name));
 if (unknown.length > 0) {
     console.error(`profile "${profileName}" names packs with no packs/<name>.Dockerfile: ${unknown.join(", ")}`);
     process.exit(2);
@@ -52,11 +54,7 @@ const section = (name) => {
     const hash = createHash("sha256").update(content).digest("hex");
     return {
         postTrees: content.includes("/opt/sandbox") || content.includes("--from=trees"),
-        text: [
-            `# ---- pack: ${name} ----`,
-            content,
-            `RUN mkdir -p /opt/packs && printf '%s' '${hash}' > /opt/packs/${name}`,
-        ].join("\n"),
+        text: [`# ---- pack: ${name} ----`, content, `RUN mkdir -p /opt/packs && printf '%s' '${hash}' > /opt/packs/${name}`].join("\n"),
     };
 };
 const sections = profile.map(section);
@@ -78,6 +76,14 @@ const splice = (lines, marker, texts) => {
 let lines = readFileSync(corePath, "utf8").split("\n");
 // Post-trees first: splicing pre-trees first would shift the post marker's index — and order between the two
 // marker searches must not matter.
-lines = splice(lines, POST_MARKER, sections.filter((entry) => entry.postTrees).map((entry) => entry.text));
-lines = splice(lines, PRE_MARKER, sections.filter((entry) => !entry.postTrees).map((entry) => entry.text));
+lines = splice(
+    lines,
+    POST_MARKER,
+    sections.filter((entry) => entry.postTrees).map((entry) => entry.text),
+);
+lines = splice(
+    lines,
+    PRE_MARKER,
+    sections.filter((entry) => !entry.postTrees).map((entry) => entry.text),
+);
 process.stdout.write(lines.join("\n"));

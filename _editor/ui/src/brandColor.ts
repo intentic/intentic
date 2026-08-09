@@ -87,8 +87,7 @@ interface Lch {
 const srgbToLinear = (c: number): number => (c <= 0.04045 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4));
 const linearToSrgb = (c: number): number => (c <= 0.0031308 ? c * 12.92 : 1.055 * Math.pow(c, 1 / 2.4) - 0.055);
 const clamp01 = (c: number): number => Math.min(1, Math.max(0, c));
-const clampBetween = (value: number, a: number, b: number): number =>
-    Math.min(Math.max(a, b), Math.max(Math.min(a, b), value));
+const clampBetween = (value: number, a: number, b: number): number => Math.min(Math.max(a, b), Math.max(Math.min(a, b), value));
 
 const hexToRgb = (hex: string): readonly [number, number, number] | undefined => {
     const raw = hex.trim().replace(/^#/, ``);
@@ -97,15 +96,17 @@ const hexToRgb = (hex: string): readonly [number, number, number] | undefined =>
     if (!/^[0-9a-fA-F]{6}$/.test(full)) {
         return undefined;
     }
-    return [
-        parseInt(full.slice(0, 2), 16) / 255,
-        parseInt(full.slice(2, 4), 16) / 255,
-        parseInt(full.slice(4, 6), 16) / 255,
-    ] as const;
+    return [parseInt(full.slice(0, 2), 16) / 255, parseInt(full.slice(2, 4), 16) / 255, parseInt(full.slice(4, 6), 16) / 255] as const;
 };
 
 const rgbToHex = (rgb: readonly [number, number, number]): string =>
-    `#${rgb.map((c) => Math.round(clamp01(c) * 255).toString(16).padStart(2, `0`)).join(``)}`;
+    `#${rgb
+        .map((c) =>
+            Math.round(clamp01(c) * 255)
+                .toString(16)
+                .padStart(2, `0`),
+        )
+        .join(``)}`;
 
 // --- sRGB ⇄ OKLab. The matrices are Björn Ottosson's published constants; OKLab is used rather than HSL
 // because lightness there is perceptual, so moving L leaves the hue where the brand put it — and so that a
@@ -196,11 +197,7 @@ const resolve = (brand: Lch, scheme: Scheme): { readonly mark: string; readonly 
     const wanted = brand.C < ACHROMATIC ? scheme.inkLightness : brand.L;
     // The plate goes first, sliding away from the mark as far as the gap needs and its band allows. For most
     // brands the gap is already open and it simply sits where it prefers to.
-    const plateLightness = clampBetween(
-        wanted - scheme.direction * scheme.separation,
-        scheme.plateLightness,
-        scheme.plateLimit,
-    );
+    const plateLightness = clampBetween(wanted - scheme.direction * scheme.separation, scheme.plateLightness, scheme.plateLimit);
     // Then the mark, which keeps its own lightness unless that would bring it inside the gap the plate just
     // opened. `direction` is what lets this read as "no brighter than needed" in dark and its mirror in light.
     const nearest = plateLightness + scheme.direction * scheme.separation;

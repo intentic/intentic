@@ -93,8 +93,8 @@ const voiceMinutes = computed(() => (status.value?.voice === undefined ? 0 : Mat
                     <span class="block text-sm font-medium text-content">Activity</span>
                     <span class="mt-1 block text-xs text-muted">
                         One entry per thing that happened, grouped by <b>who set it off</b>: a connected provider that woke the agent, a schedule, or
-                        you. A turn's whole lifecycle — start, plan, failure, completion, and every provider call it made — is one entry; expand it for
-                        the raw events the daemon recorded.
+                        you. A turn's whole lifecycle — start, plan, failure, completion, and every provider call it made — is one entry; expand it
+                        for the raw events the daemon recorded.
                     </span>
                 </InfoHint>
             </template>

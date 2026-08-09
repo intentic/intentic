@@ -2,6 +2,7 @@ import { mkdtempSync } from "node:fs";
 import { mkdir } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { STATE_DIR } from "@intentic/constants";
 import { defaultGit } from "@intentic/scaffold";
 import { unstubbed } from "@intentic/testing";
 import { SandboxSettingsSchema } from "@intentic/sandbox-contract";
@@ -40,21 +41,21 @@ const harness = async (warned: boolean, narrow: { branch?: string } = {}) => {
     await mkdir(dir, { recursive: true });
     await defaultGit(dir, ["init", "--quiet"]);
     await defaultGit(dir, ["remote", "add", "origin", "https://github.com/acme/web.git"]);
-    const capabilities = fileCapabilitiesStore(join(root, ".intentic", "capabilities.json"));
+    const capabilities = fileCapabilitiesStore(join(root, `${STATE_DIR}`, "capabilities.json"));
     await capabilities.upsert({ id: "github", kind: "cli", config: { provider: "github", token: "T" } });
-    const automations = fileAutomationsStore(join(root, ".intentic", "automations.json"));
+    const automations = fileAutomationsStore(join(root, `${STATE_DIR}`, "automations.json"));
     await automations.upsert({ id: "poll-ci", trigger: { kind: "listener", provider: "ci", ...narrow }, prompt: "handle ci", enabled: true });
     const services = unstubbed<Services>("services", {
         workspace: unstubbed<Services["workspace"]>("workspace", { root }),
         capabilities,
         automations,
-        ciStore: fileCiStore(join(root, ".intentic", "ci.json")),
+        ciStore: fileCiStore(join(root, `${STATE_DIR}`, "ci.json")),
         sandboxSettings: unstubbed<Services["sandboxSettings"]>("sandboxSettings", { get: async () => SandboxSettingsSchema.parse({}) }),
         ciRuns: createRunsCache(60_000),
         ciHooks: unstubbed<Services["ciHooks"]>("ciHooks", {
             warnings: () => new Map(warned ? [["web", "Pipeline webhooks are off: this sandbox has no public URL."]] : []),
         }),
-        threadSessions: fileThreadSessionsStore(join(root, ".intentic", "thread-sessions.json")),
+        threadSessions: fileThreadSessionsStore(join(root, `${STATE_DIR}`, "thread-sessions.json")),
         turnJournal: fileTurnJournal(join(root, "turns")),
         transcripts: unstubbed<Services["transcripts"]>("transcripts", { read: async () => [], open: async () => {}, append: async () => {} }),
         activity: { append: async () => {}, list: async () => [] },

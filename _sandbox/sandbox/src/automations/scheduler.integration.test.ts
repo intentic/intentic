@@ -232,7 +232,9 @@ test("cancelling is just removing the hold — and disabling the automation mid-
 
 test(`requireApproval wins over holdForSeconds: "ask me" never becomes "unless I'm slow"`, async () => {
     const services = fakeServices(mkdtempSync(join(tmpdir(), "sched-")));
-    await services.automations.upsert(automation("gated-fixer", { trigger: { kind: "event", token: "t" }, requireApproval: true, holdForSeconds: 1 }));
+    await services.automations.upsert(
+        automation("gated-fixer", { trigger: { kind: "event", token: "t" }, requireApproval: true, holdForSeconds: 1 }),
+    );
     const prompts: string[] = [];
     const record = (await services.automations.get("gated-fixer")) as AutomationRecord;
     await fireAutomation(services, record, fakeWake(prompts));
@@ -492,7 +494,9 @@ test("a deny refuses even an approved replay — approve-then-tighten does not e
 
 test("the webchat floor keys off its own source — a listener rule does not reach the Doorbell, nor vice versa", async () => {
     const services = fakeServices(mkdtempSync(join(tmpdir(), "sched-")), { admission: { listener: "hold" } });
-    await services.automations.upsert(automation("door", { trigger: { kind: "listener", provider: "webchat", allowedOrigins: ["https://a.example"] } }));
+    await services.automations.upsert(
+        automation("door", { trigger: { kind: "listener", provider: "webchat", allowedOrigins: ["https://a.example"] } }),
+    );
     const prompts: string[] = [];
     const record = (await services.automations.get("door")) as AutomationRecord;
     // listener:hold does not hold a webchat wake — the Doorbell has its own admission key.
@@ -500,7 +504,9 @@ test("the webchat floor keys off its own source — a listener rule does not rea
     expect(prompts).toEqual(["wake:door\n\n--- Event payload ---\nhi"]);
 
     const heldServices = fakeServices(mkdtempSync(join(tmpdir(), "sched-")), { admission: { webchat: "hold" } });
-    await heldServices.automations.upsert(automation("door", { trigger: { kind: "listener", provider: "webchat", allowedOrigins: ["https://a.example"] } }));
+    await heldServices.automations.upsert(
+        automation("door", { trigger: { kind: "listener", provider: "webchat", allowedOrigins: ["https://a.example"] } }),
+    );
     const heldPrompts: string[] = [];
     const heldRecord = (await heldServices.automations.get("door")) as AutomationRecord;
     await fireAutomation(heldServices, heldRecord, fakeWake(heldPrompts), { payload: "hi" });

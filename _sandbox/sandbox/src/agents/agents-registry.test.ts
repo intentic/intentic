@@ -1,3 +1,4 @@
+import { WORKSPACE_ROOT } from "@intentic/constants";
 import type { AgentEvent, AgentSummary } from "@intentic/sandbox-contract";
 import { describe, expect, it } from "vitest";
 import { noteSubagentTask, resetSubagents, type SubagentTaskMessage, type SubagentTurn } from "../agent/subagents.js";
@@ -268,7 +269,7 @@ describe("agents registry", () => {
         const registry = createAgentsRegistry(memoryStore(), standings(), presences());
         await registry.init();
         await registry.begin(turn(), 1_000);
-        const child: SubagentTurn = { conversationId: "c1", cwd: "/work", sessionId: "sess-1", subagentsDir: undefined };
+        const child: SubagentTurn = { conversationId: "c1", cwd: WORKSPACE_ROOT, sessionId: "sess-1", subagentsDir: undefined };
         const frame = (message: SubagentTaskMessage): AgentEvent => {
             const born = noteSubagentTask(child, message);
             if (born === undefined) {

@@ -152,7 +152,13 @@ const verifyProject = async (verify: PendingVerify, dir: string, command: string
         oneShot: true,
     });
     if (!(await watchPanel(deps, key))) {
-        activity(deps, "deps.verify_lost", `Checks for ${whereOf(dir)} (${command}) outran the daemon's watch window — verdict not recorded; see the ${key} terminal.`, "error", context);
+        activity(
+            deps,
+            "deps.verify_lost",
+            `Checks for ${whereOf(dir)} (${command}) outran the daemon's watch window — verdict not recorded; see the ${key} terminal.`,
+            "error",
+            context,
+        );
         return;
     }
     let exitCode = -1;
@@ -199,7 +205,13 @@ const runChain = async (verify: PendingVerify): Promise<void> => {
     const { deps, context } = verify;
     for (const dir of verify.dirs) {
         if (deps.processes.running(installPanelKey(dir)) && !(await watchPanel(deps, installPanelKey(dir)))) {
-            activity(deps, "deps.install_lost", `Install for ${whereOf(dir)} outran the daemon's watch window — checks not run; see the ${installPanelKey(dir)} terminal.`, "error", context);
+            activity(
+                deps,
+                "deps.install_lost",
+                `Install for ${whereOf(dir)} outran the daemon's watch window — checks not run; see the ${installPanelKey(dir)} terminal.`,
+                "error",
+                context,
+            );
             return;
         }
     }
@@ -212,12 +224,24 @@ const runChain = async (verify: PendingVerify): Promise<void> => {
         if (status.state !== "ready") {
             // An install that ran and left the project unready failed; a chore cannot fix a broken install,
             // so this stops at telling the owner rather than waking anyone.
-            activity(deps, "deps.install_failed", `Install for ${whereOf(dir)} finished but the project is still ${status.state} — checks not run; see the ${installPanelKey(dir)} terminal.`, "error", context);
+            activity(
+                deps,
+                "deps.install_failed",
+                `Install for ${whereOf(dir)} finished but the project is still ${status.state} — checks not run; see the ${installPanelKey(dir)} terminal.`,
+                "error",
+                context,
+            );
             continue;
         }
         const command = await checkCommandFor(deps.workspace.root, dir, status.recipe.manager);
         if (command === undefined) {
-            activity(deps, "deps.verify_skipped", `Dependencies installed for ${whereOf(dir)}, but it defines no verify or test script — nothing to check.`, "ok", context);
+            activity(
+                deps,
+                "deps.verify_skipped",
+                `Dependencies installed for ${whereOf(dir)}, but it defines no verify or test script — nothing to check.`,
+                "ok",
+                context,
+            );
             continue;
         }
         await verifyProject(verify, dir, command);

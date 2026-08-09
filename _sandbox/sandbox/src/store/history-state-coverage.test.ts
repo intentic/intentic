@@ -1,5 +1,6 @@
 import { readdir, readFile } from "node:fs/promises";
 import { join } from "node:path";
+import { packageRoot } from "@intentic/constants/node";
 import { HISTORY_STATE_FILES } from "@intentic/sandbox-contract";
 import { expect, test } from "vitest";
 
@@ -19,7 +20,7 @@ import { expect, test } from "vitest";
 // keeps a `join(someOtherRoot, …)` out by construction, the same way the workspace guard does.
 const ROOT_EXPRESSIONS = new Set(["historyRoot", "config.historyRoot"]);
 
-const SOURCE_ROOT = join(import.meta.dirname, "..");
+const SOURCE_ROOT = join(packageRoot(import.meta.url), "src");
 
 const sourceFiles = async (dir: string): Promise<string[]> => {
     const entries = await readdir(dir, { withFileTypes: true });

@@ -1,3 +1,4 @@
+import { WORKSPACE_ROOT } from "@intentic/constants";
 import { expect, test, vi } from "vitest";
 import { withRuntimeHistory } from "../agent/runtime-history.js";
 import { listWorkspaceSessions, readWorkspaceSession, searchWorkspaceSessions } from "./sessions.js";
@@ -27,7 +28,7 @@ const seed = (tag: string, n: number): void => {
 test("title match returns without reading the transcript", async () => {
     seed("t", 3);
     getSessionMessages.mockClear();
-    const hits = await searchWorkspaceSessions("/work", "chat 1");
+    const hits = await searchWorkspaceSessions(WORKSPACE_ROOT, "chat 1");
     expect(hits.map((s) => s.id)).toEqual(["t1"]);
     // t1 matched by title; the other two are read for prompts, t1 is not.
     expect(getSessionMessages).not.toHaveBeenCalledWith("t1", expect.anything());
@@ -37,7 +38,7 @@ test("title match returns without reading the transcript", async () => {
 
 test("a prompt match is found and reports the line it hit, and whose it was", async () => {
     seed("p", 3);
-    const hits = await searchWorkspaceSessions("/work", "body p2");
+    const hits = await searchWorkspaceSessions(WORKSPACE_ROOT, "body p2");
     expect(hits.map((s) => s.id)).toEqual(["p2"]);
     expect(hits[0]?.snippet).toEqual({ text: "body p2", speaker: "user" });
 });
@@ -47,7 +48,7 @@ test("a prompt match is found and reports the line it hit, and whose it was", as
 // tenth chat, which is precisely where "the one I'm looking for" tends to live.
 test("a prompt match past the tenth-newest session is still found", async () => {
     seed("w", 12);
-    const hits = await searchWorkspaceSessions("/work", "body w11");
+    const hits = await searchWorkspaceSessions(WORKSPACE_ROOT, "body w11");
     expect(hits.map((s) => s.id)).toEqual(["w11"]);
 });
 
@@ -114,7 +115,7 @@ test("a long prompt is windowed around the hit rather than cut from the start", 
     const long = `${"filler ".repeat(40)}\n\nthe landAgent bug\n\n${"more ".repeat(40)}`;
     listSessions.mockResolvedValue([{ sessionId: "n0", customTitle: "chat", lastModified: 1 }]);
     getSessionMessages.mockResolvedValue([{ type: "user", message: { content: long } }]);
-    const snippet = (await searchWorkspaceSessions("/work", "landagent"))[0]?.snippet?.text ?? "";
+    const snippet = (await searchWorkspaceSessions(WORKSPACE_ROOT, "landagent"))[0]?.snippet?.text ?? "";
     expect(snippet).toContain("landAgent");
     expect(snippet).not.toContain("\n");
     expect(snippet.startsWith("…")).toBe(true);
@@ -133,7 +134,7 @@ test("rebuilds the turn's tool cards, settled by their results", async () => {
                 content: [
                     { type: "thinking", thinking: "check it first" },
                     { type: "text", text: "Reading the config." },
-                    { type: "tool_use", id: "t1", name: "Read", input: { file_path: "/work/app/config.ts" } },
+                    { type: "tool_use", id: "t1", name: "Read", input: { file_path: `${WORKSPACE_ROOT}/app/config.ts` } },
                     { type: "tool_use", id: "t2", name: "Bash", input: { command: "ls" } },
                 ],
             },
@@ -150,7 +151,7 @@ test("rebuilds the turn's tool cards, settled by their results", async () => {
         { type: "assistant", message: { content: [{ type: "text", text: "Done." }] } },
     ]);
 
-    const messages = await readWorkspaceSession("/work", "s0");
+    const messages = await readWorkspaceSession(WORKSPACE_ROOT, "s0");
 
     // The tool_result-only user message is plumbing, not something the user said — four stored messages, three bubbles.
     expect(messages.map((message) => message.role)).toEqual(["user", "assistant", "assistant"]);
@@ -169,7 +170,7 @@ test("a call whose result never arrived stays in progress rather than claiming i
     getSessionMessages.mockResolvedValue([
         { type: "assistant", message: { content: [{ type: "tool_use", id: "t1", name: "Bash", input: { command: "sleep 100" } }] } },
     ]);
-    const messages = await readWorkspaceSession("/work", "s0");
+    const messages = await readWorkspaceSession(WORKSPACE_ROOT, "s0");
     expect(messages[0]?.tools?.[0]?.status).toBe("in_progress");
 });
 
@@ -180,7 +181,7 @@ test("a session outside the dir scope is found by the all-projects fallback", as
     getSessionMessages.mockImplementation(async (_id: string, options?: { dir?: string }) =>
         options?.dir !== undefined ? [] : [{ type: "user", message: { content: "archived words" } }],
     );
-    const messages = await readWorkspaceSession("/work", "s0");
+    const messages = await readWorkspaceSession(WORKSPACE_ROOT, "s0");
     expect(messages).toEqual([{ role: "user", text: "archived words" }]);
 });
 
@@ -191,12 +192,19 @@ test("a successful edit keeps its call-time diff instead of the result snippet",
         {
             type: "assistant",
             message: {
-                content: [{ type: "tool_use", id: "t1", name: "Edit", input: { file_path: "/work/a.ts", old_string: "one", new_string: "two" } }],
+                content: [
+                    {
+                        type: "tool_use",
+                        id: "t1",
+                        name: "Edit",
+                        input: { file_path: `${WORKSPACE_ROOT}/a.ts`, old_string: "one", new_string: "two" },
+                    },
+                ],
             },
         },
         { type: "user", message: { content: [{ type: "tool_result", tool_use_id: "t1", content: "The file has been updated." }] } },
     ]);
-    const messages = await readWorkspaceSession("/work", "s0");
+    const messages = await readWorkspaceSession(WORKSPACE_ROOT, "s0");
     expect(messages[0]?.tools?.[0]).toMatchObject({
         status: "completed",
         content: [{ type: "diff", path: "a.ts", oldText: "one", newText: "two" }],
@@ -214,7 +222,7 @@ test("restore takes an injected turn preamble off the user's words and keeps it 
         "- intentic: run `pnpm install` there first.",
     ].join("\n");
     getSessionMessages.mockResolvedValue([{ type: "user", message: { content: `${notice}\n\n---\n\nfix the config` } }]);
-    const messages = await readWorkspaceSession("/work", "s0");
+    const messages = await readWorkspaceSession(WORKSPACE_ROOT, "s0");
     expect(messages).toEqual([{ role: "user", text: "fix the config", notes: [{ title: "Dependencies aren't installed yet", text: notice }] }]);
 });
 
@@ -229,7 +237,7 @@ test("a history-list title falling back to firstPrompt names the chat, not the i
         "fix the config",
     ].join("\n");
     listSessions.mockResolvedValue([{ sessionId: "s0", firstPrompt: first, lastModified: 1 }]);
-    const sessions = await listWorkspaceSessions("/work");
+    const sessions = await listWorkspaceSessions(WORKSPACE_ROOT);
     expect(sessions[0]?.title).toBe("fix the config");
 });
 

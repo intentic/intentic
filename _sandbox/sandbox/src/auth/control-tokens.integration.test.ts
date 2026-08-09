@@ -1,6 +1,7 @@
 import { mkdtemp, readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { HISTORY_ROOT } from "@intentic/constants";
 import { expect, test } from "vitest";
 import { CONTROL_SCOPES, controlScoped, fileControlTokens } from "./control-tokens.js";
 
@@ -109,7 +110,7 @@ test("no scope reaches the credentials or the environment — the owner-only flo
         ["GET", "/capabilities"],
         ["POST", "/capabilities"],
         ["POST", "/environment/approve"],
-        ["POST", "/history/restore"],
+        ["POST", `${HISTORY_ROOT}/restore`],
         ["GET", "/system/control/tokens"],
         ["POST", "/system/control/tokens"],
         ["POST", "/system/sessions/revoke"],

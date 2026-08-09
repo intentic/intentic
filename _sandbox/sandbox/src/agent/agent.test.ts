@@ -1,3 +1,4 @@
+import { STATE_DIR, WORKSPACE_ROOT } from "@intentic/constants";
 import type { Options, PermissionResult, PermissionUpdate, SDKMessage, SDKUserMessage } from "@anthropic-ai/claude-agent-sdk";
 import type { AgentEvent, AgentReply } from "@intentic/sandbox-contract";
 import { afterEach, expect, test, vi } from "vitest";
@@ -27,9 +28,9 @@ const collect = async (request: Parameters<typeof runAgent>[0], queryFn: QueryFn
 // absence is the core-image signal that strips the browser guidance, asserted in system-prompt.test.ts.
 const request = {
     prompt: "add a /ping route",
-    cwd: "/work",
+    cwd: WORKSPACE_ROOT,
     signal: new AbortController().signal,
-    browserOutputDir: "/work/.intentic/artifacts/browser",
+    browserOutputDir: `${WORKSPACE_ROOT}/${STATE_DIR}/artifacts/browser`,
 };
 
 // Bash routing through bin/tmux-run is decided by whether the wrapper is baked into the image, so a suite run
@@ -350,7 +351,7 @@ test("plugin checkout dirs are passed to the SDK as local plugins", async () => 
         yield { type: "result", subtype: "success" } as SDKMessage;
     };
 
-    await collect({ ...request, plugins: ["/work/.intentic/plugins/x"] }, capture);
+    await collect({ ...request, plugins: [`${WORKSPACE_ROOT}/${STATE_DIR}/plugins/x`] }, capture);
     expect(captured.at(-1)?.plugins).toEqual([{ type: "local", path: "/work/.intentic/plugins/x" }]);
 
     await collect(request, capture);
@@ -553,7 +554,7 @@ test("a subagent still running holds the rebase off", async () => {
     const conversationId = "c-parked";
     let calls = 0;
     noteDelegation(
-        { conversationId, cwd: "/work", sessionId: undefined, subagentsDir: undefined },
+        { conversationId, cwd: WORKSPACE_ROOT, sessionId: undefined, subagentsDir: undefined },
         { id: "bash-1", command: "codex exec --sandbox danger-full-access --cd /work 'port the tests'", background: false },
     );
 

@@ -5,6 +5,7 @@ import { IGNORED_DIRS } from "@intentic/workspace-ignore";
 import { shellQuote } from "@intentic/sandbox-run/quote";
 import type { Logger } from "pino";
 import { promisify } from "node:util";
+import { STATE_DIR } from "@intentic/constants";
 
 /* WAKING UP IN THE WORKTREE — an isolated turn's own view of the filesystem.
  *
@@ -45,7 +46,7 @@ const execFileAsync = promisify(execFile);
 export const MAIN_MOUNT = "/mnt/intentic-main";
 
 // The workspace subdir that must stay SHARED rather than per-worktree — daemon state, not repo content.
-const SHARED_STATE = ".intentic";
+const SHARED_STATE = STATE_DIR;
 
 /* The reference shelf: repos cloned purely to be read against (`refs/eve`, `refs/t3code`). It is workspace
  * content but not repo content, so a worktree does not carry it, and until now an isolated turn simply had no

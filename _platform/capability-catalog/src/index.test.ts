@@ -72,9 +72,18 @@ describe("contributionCard", () => {
         // handler it can't be separated from (docker's --privileged, vpn's NET_ADMIN, extension's own installer).
         const contributable = new Set(["cli", "browser", "host", "agent"]);
         expect(CAPABILITY_CATALOG.filter((entry) => contributable.has(entry.kind))).toEqual([]);
-        expect(CAPABILITY_CATALOG.map((entry) => entry.kind).toSorted()).toEqual(
-            ["devops", "docker", "endpoint", "extension", "integration", "mcp", "monorepo", "plugin", "ssh", "vpn"],
-        );
+        expect(CAPABILITY_CATALOG.map((entry) => entry.kind).toSorted()).toEqual([
+            "devops",
+            "docker",
+            "endpoint",
+            "extension",
+            "integration",
+            "mcp",
+            "monorepo",
+            "plugin",
+            "ssh",
+            "vpn",
+        ]);
     });
 
     it("appends the core host scope switches to a contributed OS pack, which cannot declare them itself", () => {

@@ -1,3 +1,4 @@
+import { STATE_DIR } from "@intentic/constants";
 import { beforeEach, describe, expect, it } from "vitest";
 
 /* The reader's contract: whatever is on disk, what comes back is a strip that can actually be rendered — every
@@ -103,7 +104,7 @@ describe(`reading a tab snapshot`, () => {
                         harness: `claude-code`,
                         session: { id: `sess-1`, provider: `codex` },
                         title: `Fix the login handler`,
-                        attachments: [{ name: `pic.png`, path: `.intentic/artifacts/attachments/u1/pic.png` }, { name: 42 }],
+                        attachments: [{ name: `pic.png`, path: `${STATE_DIR}/artifacts/attachments/u1/pic.png` }, { name: 42 }],
                         queued: [{ text: `also the tests`, attachments: [] }, { attachments: [] }],
                     },
                 ],

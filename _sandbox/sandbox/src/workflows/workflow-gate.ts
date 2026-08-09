@@ -31,7 +31,8 @@ const NEVER_JUDGED: Record<Exclude<WorkflowStepState, "done">, string> = {
 
 // The step's own title, which the verdict quotes — read off the snapshot rather than the run's step record,
 // since only the workflow definition carries it.
-const titleOf = (run: WorkflowRun, step: WorkflowStepRun): string => run.workflow.steps.find((entry) => entry.id === step.stepId)?.title ?? step.stepId;
+const titleOf = (run: WorkflowRun, step: WorkflowStepRun): string =>
+    run.workflow.steps.find((entry) => entry.id === step.stepId)?.title ?? step.stepId;
 
 /* The declared field, as a single value the `pass` list can be compared against.
  *

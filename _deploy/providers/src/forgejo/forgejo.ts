@@ -1,4 +1,5 @@
 import { setTimeout as sleep } from "node:timers/promises";
+import { HOST_STATE_ROOT } from "@intentic/constants";
 import type { Provider, ResolvedInputs } from "@intentic/engine";
 import { HASH_KEY } from "@intentic/graph";
 import { z } from "zod";
@@ -33,7 +34,7 @@ export const FORGEJO_HTTP_PORT = 3000;
 // persisted on the host, then read back every run, so they are STABLE outputs (re-minting would rotate them,
 // breaking the stateless contract). The git token is what Komodo authenticates with to clone the admin's
 // private app repos; the packages token is what the Forgejo Action pushes images with and Komodo pulls with.
-const STATE_DIR = "/opt/intentic/forgejo";
+const STATE_DIR = `${HOST_STATE_ROOT}/forgejo`;
 const TOKEN_FILE = `${STATE_DIR}/runner-token`;
 const GIT_TOKEN_FILE = `${STATE_DIR}/git-token`;
 const PKG_TOKEN_FILE = `${STATE_DIR}/packages-token`;

@@ -57,10 +57,7 @@ describe(`groupBranches`, () => {
     });
 
     it(`puts the current branch first, then the newest tip`, () => {
-        const groups = groupBranches(
-            [local(`old`, { at: 1 }), local(`new`, { at: 9 }), local(`checked-out`, { at: 5, current: true })],
-            [],
-        );
+        const groups = groupBranches([local(`old`, { at: 1 }), local(`new`, { at: 9 }), local(`checked-out`, { at: 5, current: true })], []);
         expect(groups.map((group) => group.name)).toEqual([`checked-out`, `new`, `old`]);
     });
 

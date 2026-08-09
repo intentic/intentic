@@ -11,7 +11,8 @@
         "test": "vitest run"
     },
     "dependencies": {
-        "@intentic/connector-runtime": "workspace:*"
+        "@intentic/connector-runtime": "workspace:*",
+        "@intentic/sandbox-contract": "workspace:*"
     },
     "devDependencies": {
         "@intentic/tsconfig": "workspace:*",

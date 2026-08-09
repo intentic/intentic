@@ -54,7 +54,10 @@ export const workspaceContract = {
      * it answers a streamed byte RANGE, which oRPC has no shape for). Minting is here rather than beside it so
      * it rides the bearer middleware and the contract's route advertisement: a browser can tell whether the
      * sandbox in front of it can stream video at all, instead of learning it from a 404 mid-playback. */
-    mediaTicket: oc.route({ method: "POST", path: "/workspace/media-ticket" }).input(WorkspaceMediaTicketQuerySchema).output(WorkspaceMediaTicketSchema),
+    mediaTicket: oc
+        .route({ method: "POST", path: "/workspace/media-ticket" })
+        .input(WorkspaceMediaTicketQuerySchema)
+        .output(WorkspaceMediaTicketSchema),
     // Which file a NAMED reference means — the lookup behind every clickable path in the UI. A path an agent
     // wrote in prose is often only a suffix of the real one, so it is matched against the workspace tree rather
     // than trusted as root-relative.

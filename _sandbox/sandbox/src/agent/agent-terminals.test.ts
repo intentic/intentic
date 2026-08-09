@@ -1,3 +1,4 @@
+import { HISTORY_ROOT, WORKSPACE_ROOT } from "@intentic/constants";
 import { agentSessionName } from "@intentic/sandbox-contract/session-names";
 import { expect, test } from "vitest";
 import { shellQuote } from "@intentic/sandbox-run/quote";
@@ -31,7 +32,7 @@ const preToolUse = (toolInput: unknown, hooks = bashTmuxHooks()) =>
             tool_use_id: "tu-1",
             session_id: "3f2a9b1c-0000-0000-0000-000000000000",
             transcript_path: "/tmp/t",
-            cwd: "/work",
+            cwd: WORKSPACE_ROOT,
         },
         "tu-1",
         { signal: new AbortController().signal },
@@ -86,8 +87,8 @@ test("agentSessionName derives the same agent-* name the hook routes commands th
 });
 
 test("an isolated turn's Bash joins the turn's namespace, inside the tmux wrapper", async () => {
-    const plan = { worktree: "/history/worktrees/abc", root: "/work", mirrors: [], overlays: "/history/overlays/abc" };
-    const anchor = { pid: 4321, cwd: "/work", plan, dispose: () => {} };
+    const plan = { worktree: `${HISTORY_ROOT}/worktrees/abc`, root: WORKSPACE_ROOT, mirrors: [], overlays: `${HISTORY_ROOT}/overlays/abc` };
+    const anchor = { pid: 4321, cwd: WORKSPACE_ROOT, plan, dispose: () => {} };
     const command = await rewritten({ command: "sed -i s/a/b/ x.ts", description: "edit" }, bashTmuxHooks([], { plan, anchor }));
     // tmux-run stays OUTSIDE: the server, the pane logs and the terminals panel are daemon-side, and only the
     // command the pane runs crosses into the namespace (with the demotion, which is the command's own).
@@ -103,8 +104,8 @@ test("an isolated turn's Bash joins the turn's namespace, inside the tmux wrappe
  * put ~100 characters of daemon boilerplate at the head of every ledger row and a pid that made no two rows
  * groupable, which emptied the settings page's "un-cleaned (add a handler)" list of anything actionable. */
 test("-c carries the agent's own command, never the wrapper the pane runs", async () => {
-    const plan = { worktree: "/wt", root: "/work", mirrors: [], overlays: "/history/overlays/abc" };
-    const anchor = { pid: 4321, cwd: "/work", plan, dispose: () => {} };
+    const plan = { worktree: "/wt", root: WORKSPACE_ROOT, mirrors: [], overlays: `${HISTORY_ROOT}/overlays/abc` };
+    const anchor = { pid: 4321, cwd: WORKSPACE_ROOT, plan, dispose: () => {} };
     const command = await rewritten({ command: "grep -rn needle src", description: "search" }, bashTmuxHooks([], { plan, anchor }));
     expect(command?.startsWith("/usr/local/bin/tmux-run -c 'grep -rn needle src' ")).toBe(true);
     // The wrapper is still what runs — it just no longer stands in for the command in the ledger.
@@ -114,7 +115,7 @@ test("-c carries the agent's own command, never the wrapper the pane runs", asyn
 // Unanchored isolation rewrites paths into the worktree, and `-c` follows: the redirected line is the one that
 // actually ran, so it is the one the cleaners should be matched against and the one worth reporting.
 test("-c carries the redirected command when an isolated turn has no namespace to join", async () => {
-    const plan = { worktree: "/history/worktrees/abc", root: "/work", mirrors: [], overlays: "/history/overlays/abc" };
+    const plan = { worktree: `${HISTORY_ROOT}/worktrees/abc`, root: WORKSPACE_ROOT, mirrors: [], overlays: `${HISTORY_ROOT}/overlays/abc` };
     const command = await rewritten({ command: "wc -l /work/intentic/x.ts" }, bashTmuxHooks([], { plan }));
     expect(command?.startsWith("/usr/local/bin/tmux-run -c 'wc -l /history/worktrees/abc/intentic/x.ts' ")).toBe(true);
 });
@@ -123,7 +124,12 @@ test("-c carries the redirected command when an isolated turn has no namespace t
  * alone there writes the SHARED tree at the same absolute path whose Edit went to the worktree — the exact
  * disagreement the nsenter hop above exists to prevent. The rewrite is the same substitution by other means. */
 test("without an anchor, an isolated turn's Bash has its main-tree paths rewritten into the worktree", async () => {
-    const plan = { worktree: "/history/worktrees/abc", root: "/work", mirrors: ["intentic/node_modules"], overlays: "/history/overlays/abc" };
+    const plan = {
+        worktree: `${HISTORY_ROOT}/worktrees/abc`,
+        root: WORKSPACE_ROOT,
+        mirrors: ["intentic/node_modules"],
+        overlays: `${HISTORY_ROOT}/overlays/abc`,
+    };
     const command = await rewritten({ command: "sed -i s/a/b/ /work/intentic/x.ts" }, bashTmuxHooks([], { plan }));
     expect(command).toContain("/history/worktrees/abc/intentic/x.ts");
     expect(command).not.toContain("/work/intentic/x.ts");
@@ -132,7 +138,7 @@ test("without an anchor, an isolated turn's Bash has its main-tree paths rewritt
 });
 
 test("the Bash rewrite leaves the shared subtrees and any path that merely starts with the root alone", async () => {
-    const plan = { worktree: "/wt", root: "/work", mirrors: ["intentic/node_modules"], overlays: "/history/overlays/abc" };
+    const plan = { worktree: "/wt", root: WORKSPACE_ROOT, mirrors: ["intentic/node_modules"], overlays: `${HISTORY_ROOT}/overlays/abc` };
     const rewrite = async (command: string): Promise<string | undefined> => rewritten({ command }, bashTmuxHooks([], { plan }));
     // Dependency trees and daemon state resolve to the main checkout on both sides — redirecting them would
     // aim at a path the worktree does not have.

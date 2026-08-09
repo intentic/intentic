@@ -1,3 +1,4 @@
+import { STATE_DIR } from "@intentic/constants";
 import type { AgentEvent } from "@intentic/sandbox-contract";
 import { nextTick } from "vue";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -364,7 +365,7 @@ describe(`per-tab drafts`, () => {
     it(`restores tabs, drafts, attachment metadata, and the active tab from the persisted snapshot`, async () => {
         const chat = useChat();
         chat.draft.value = `draft one`;
-        chat.attachments.value = [{ id: `a1`, name: `pic.png`, path: `.intentic/artifacts/attachments/u1/pic.png`, status: `done`, progress: 1 }];
+        chat.attachments.value = [{ id: `a1`, name: `pic.png`, path: `${STATE_DIR}/artifacts/attachments/u1/pic.png`, status: `done`, progress: 1 }];
         chat.newChat();
         chat.draft.value = `draft two`;
         await nextTick(); // flush the persistence watch
@@ -382,7 +383,7 @@ describe(`per-tab drafts`, () => {
     it(`restores messages queued behind a running turn, with their attachments`, async () => {
         const chat = useChat();
         chat.active.value.queued.value = [
-            { id: `q1`, text: `also update the tests`, attachments: [{ name: `spec.md`, path: `.intentic/artifacts/attachments/u1/spec.md` }] },
+            { id: `q1`, text: `also update the tests`, attachments: [{ name: `spec.md`, path: `${STATE_DIR}/artifacts/attachments/u1/spec.md` }] },
         ];
         await nextTick();
 

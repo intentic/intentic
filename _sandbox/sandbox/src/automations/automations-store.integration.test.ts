@@ -2,13 +2,14 @@ import { mkdtempSync } from "node:fs";
 import { mkdir, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
+import { STATE_DIR } from "@intentic/constants";
 import type { Automation } from "@intentic/sandbox-contract";
 import { expect, test } from "vitest";
 import { type AutomationsStore, consecutiveFailures, fileAutomationsStore } from "./automations-store.js";
 
 // A store over a fresh temp path (the .intentic dir doesn't exist yet — the store must create it on write).
 const tempStore = (): { store: AutomationsStore; path: string } => {
-    const path = join(mkdtempSync(join(tmpdir(), "autos-")), ".intentic", "automations.json");
+    const path = join(mkdtempSync(join(tmpdir(), "autos-")), `${STATE_DIR}`, "automations.json");
     return { store: fileAutomationsStore(path), path };
 };
 

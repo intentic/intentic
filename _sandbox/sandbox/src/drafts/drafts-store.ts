@@ -1,4 +1,5 @@
 import { join } from "node:path";
+import { STATE_DIR } from "@intentic/constants";
 import { DraftSchema, type DraftSummary } from "@intentic/sandbox-contract";
 import type { Services } from "../composition.js";
 import { jsonDir } from "../store/json-dir.js";
@@ -40,13 +41,13 @@ export const fileDraftsStore = (dir: string): DraftsStore => {
 // drafts" routes here without any automation change.
 const DRAFTS_SKILL = `---
 name: drafts
-description: Create post drafts for owner approval by writing JSON files into .intentic/drafts/. Use whenever asked to prepare, draft, propose, or schedule posts (X, Reddit, YouTube, Discord, …) instead of posting immediately.
+description: Create post drafts for owner approval by writing JSON files into ${STATE_DIR}/drafts/. Use whenever asked to prepare, draft, propose, or schedule posts (X, Reddit, YouTube, Discord, …) instead of posting immediately.
 ---
 
 # Post drafts (approval queue)
 
 Proposed or scheduled posts are NEVER posted directly — write a draft file instead; the owner approves it in
-the app and the publish automation posts it when due. One JSON file per draft: .intentic/drafts/<id>.json
+the app and the publish automation posts it when due. One JSON file per draft: ${STATE_DIR}/drafts/<id>.json
 (id: letters, digits, dashes — it names the draft in the UI). Example:
 
 {
@@ -54,7 +55,7 @@ the app and the publish automation posts it when due. One JSON file per draft: .
   "content": "exact post text",
   "title": "…",
   "target": "r/webdev",
-  "media": [".intentic/drafts/media/chart.png"],
+  "media": ["${STATE_DIR}/drafts/media/chart.png"],
   "scheduledAt": 1767950400000,
   "status": "proposed",
   "createdAt": 1767800000000
@@ -63,7 +64,7 @@ the app and the publish automation posts it when due. One JSON file per draft: .
 Only "platform" and "content" are required; everything else is optional.
 - platform: the skill that will post it — "x", "reddit", "youtube", "discord", …
 - title (reddit needs one) and target (subreddit / Discord channel id / community).
-- media: workspace-relative files; put them under .intentic/drafts/media/.
+- media: workspace-relative files; put them under ${STATE_DIR}/drafts/media/.
 - scheduledAt: your SUGGESTED post time in epoch ms — \`date -d "2026-07-10 09:00 +02:00" +%s%3N\` (always give an
   explicit UTC offset; the sandbox clock is UTC). Omit it to let the owner pick the date at approval.
 - status: defaults to "proposed" if omitted; only the owner sets "approved". Only post a draft when the publish

@@ -67,12 +67,24 @@ export function useShellCommands(): void {
             { command: `view.keybindings`, title: `Keyboard Shortcuts`, icon: `sliders-h`, handler: () => router.push(`/settings/keybindings`) },
             // Both terminal commands no-op below maintainer — the daemon refuses the socket there, and a chord that
             // opens a panel only to show it failing to connect reads as breakage, not as a boundary.
-            { command: `terminal.toggle`, title: `Toggle Terminal Panel`, icon: `code`, keybinding: `Ctrl+\``, handler: () => (canShip.value ? terminal.toggle() : undefined) },
+            {
+                command: `terminal.toggle`,
+                title: `Toggle Terminal Panel`,
+                icon: `code`,
+                keybinding: `Ctrl+\``,
+                handler: () => (canShip.value ? terminal.toggle() : undefined),
+            },
             // Global (not panel-scoped like the other terminal.* commands) so it works with the panel closed —
             // spawnShell opens it and routes the create through the mounted panel's spawn hook. Ctrl+Shift+`,
             // VSCode's New Terminal chord, matched by physical key (the Backquote row) so the Shift glyph "~"
             // or a dead-key layout can't break it.
-            { command: `terminal.new`, title: `New Terminal`, icon: `code`, keybinding: `Ctrl+Shift+\``, handler: () => (canShip.value ? terminal.spawnShell() : undefined) },
+            {
+                command: `terminal.new`,
+                title: `New Terminal`,
+                icon: `code`,
+                keybinding: `Ctrl+Shift+\``,
+                handler: () => (canShip.value ? terminal.spawnShell() : undefined),
+            },
             /* MOVING THE CHAT INTO ITS OWN WINDOW, in the words the tab strip's menu row already uses. The old
              * "Toggle Chat Pop-Out" was a third name for it — and the palette matches on the title and the id
              * (QuickOpen), so typing the thing the user actually wants ("window", "new window") found nothing.

@@ -1,4 +1,6 @@
 import { mkdir, writeFile } from "node:fs/promises";
+import { join } from "node:path";
+import { packageRoot } from "@intentic/constants/node";
 import { extensionUiNames } from "../../../_editor/extension-ui/names.mjs";
 
 // Generates public/ext-shims/*.js — the static ESM shims that re-export the host's module instances from
@@ -18,7 +20,8 @@ const targets = [
 
 const isIdentifier = (name) => /^[A-Za-z_$][A-Za-z0-9_$]*$/.test(name);
 
-await mkdir(new URL("../public/ext-shims/", import.meta.url), { recursive: true });
+const shimsDir = join(packageRoot(import.meta.url), "public/ext-shims");
+await mkdir(shimsDir, { recursive: true });
 for (const target of targets) {
     const module = target.names === undefined ? await import(target.specifier) : undefined;
     const names = (target.names ?? Object.keys(module)).filter((name) => name !== "default" && isIdentifier(name)).toSorted();
@@ -30,6 +33,6 @@ for (const target of targets) {
         ...(module !== undefined && "default" in module ? [`export default m["default"];`] : []),
         ``,
     ];
-    await writeFile(new URL(`../public/ext-shims/${target.file}`, import.meta.url), lines.join("\n"));
+    await writeFile(join(shimsDir, target.file), lines.join("\n"));
     console.log(`ext-shims/${target.file}: ${names.length} exports`);
 }

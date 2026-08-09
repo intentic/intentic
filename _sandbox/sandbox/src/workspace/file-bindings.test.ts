@@ -1,5 +1,7 @@
 import { readdir, readFile } from "node:fs/promises";
 import { join } from "node:path";
+import { WORKSPACE_ROOT } from "@intentic/constants";
+import { repoRoot } from "@intentic/constants/node";
 import { ExtensionManifestSchema, type FileContribution } from "@intentic/extension-manifest";
 import { WORKSPACE_STATE_FILES } from "@intentic/sandbox-contract";
 import { expect, test } from "vitest";
@@ -28,10 +30,7 @@ import { isWatchIgnored } from "./workspace-watch.js";
  * against ~593 today — a 20% rise — with 314 continuously-rewritten transcripts inside the newly-watched set, to
  * make ONE directory live. The /memory view polls instead, deliberately.) */
 
-const REPO_ROOT = join(import.meta.dirname, "..", "..", "..", "..");
-const EXTENSIONS_ROOT = join(REPO_ROOT, "_extensions");
-// Any absolute root works: isWatchIgnored's rules are all path-shape, and nothing here touches the disk.
-const WORKSPACE_ROOT = "/work";
+const EXTENSIONS_ROOT = join(repoRoot(import.meta.url), "_extensions");
 
 // The path a real change under this binding would arrive at. A directory entry keeps its trailing slash so it
 // can't prefix-match a sibling (see FileContributionSchema), and a name family ends mid-name — neither is a file

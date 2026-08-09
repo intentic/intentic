@@ -93,7 +93,8 @@ export function useHostRunning(slug: () => string | undefined): ComputedRef<stri
             return undefined;
         }
         return computers.value.find(
-            (computer) => computer.hostId !== undefined && computer.online === true && (computer.report?.sandboxes ?? []).some((box) => box.slug === target),
+            (computer) =>
+                computer.hostId !== undefined && computer.online === true && (computer.report?.sandboxes ?? []).some((box) => box.slug === target),
         )?.hostId;
     });
 }

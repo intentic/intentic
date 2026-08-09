@@ -1,3 +1,4 @@
+import { STATE_DIR, WORKSPACE_ROOT } from "@intentic/constants";
 import type { Event } from "@opencode-ai/sdk";
 import type { AgentEvent } from "@intentic/sandbox-contract";
 import { expect, test } from "vitest";
@@ -17,7 +18,7 @@ const fakeRunner = (...turns: unknown[][]): { runner: GrokRunner; calls: GrokTur
     return { runner, calls };
 };
 
-const request = { prompt: "add a /ping route", cwd: "/work", signal: new AbortController().signal };
+const request = { prompt: "add a /ping route", cwd: WORKSPACE_ROOT, signal: new AbortController().signal };
 
 // Collect all events; `onPlan` schedules a decision for each plan frame AFTER the generator parks on the
 // pending-plan bridge (the yield suspends before wait() registers, hence the macrotask).
@@ -118,7 +119,7 @@ test("a build turn resumes the session on the xai provider, passes the model, an
         ...request,
         sessionId: "s9",
         model: "grok-4.20-0309-non-reasoning",
-        attachments: ["/work/.intentic/artifacts/attachments/a/report.pdf"],
+        attachments: [`${WORKSPACE_ROOT}/${STATE_DIR}/artifacts/attachments/a/report.pdf`],
     });
     expect(calls).toHaveLength(1);
     const turn = calls[0]!;
@@ -378,7 +379,7 @@ const fakeOpenCode = (
     return { openCode: openCode as unknown as OpenCodeService, aborted: () => aborted, recorded, prompts };
 };
 
-const runnerTurn: GrokTurn = { prompt: "hi", cwd: "/work", agent: "build", signal: new AbortController().signal };
+const runnerTurn: GrokTurn = { prompt: "hi", cwd: WORKSPACE_ROOT, agent: "build", signal: new AbortController().signal };
 
 test("createGrokRunner ends the turn on session.error even while the stream stays open", async () => {
     const { openCode } = fakeOpenCode([

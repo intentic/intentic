@@ -80,7 +80,9 @@ test(`every registered extension view mounts`, async ({ page }) => {
             // The owning extension is disabled in this sandbox — a different failure with the same blank result.
             await expect(page.getByText(`is switched off`)).toBeHidden({ timeout: 1_000 });
         } catch (error) {
-            broken.push(`${path} (${activation.id}, expected because ${activation.why}): ${error instanceof Error ? error.message.split(`\n`)[0] : String(error)}`);
+            broken.push(
+                `${path} (${activation.id}, expected because ${activation.why}): ${error instanceof Error ? error.message.split(`\n`)[0] : String(error)}`,
+            );
         }
     }
 

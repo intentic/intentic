@@ -2,14 +2,14 @@ import { setTimeout as sleep } from "node:timers/promises";
 import { execFileSync, spawn } from "node:child_process";
 import { writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { fileURLToPath } from "node:url";
+import { repoRoot } from "@intentic/constants/node";
 import { GenericContainer, type StartedTestContainer, Wait } from "testcontainers";
 
 // Shared harness for the gated *.e2e.test.ts suites (sandbox + discord): boot the REAL sandbox image in
 // loopback mode and play the outside-executor role for overlay builds. Test-only — excluded from the package
 // build (tsconfig `exclude`), like the test files that import it.
 
-const repoRoot = fileURLToPath(new URL("../../../", import.meta.url));
+const root = repoRoot(import.meta.url);
 
 // The from-source image tag — a stable name so docker's layer cache carries across runs (the tag is the
 // cache; it is deliberately NOT removed on teardown).
@@ -21,14 +21,10 @@ const SOURCE_IMAGE_TAG = "intentic-sandbox-e2e:local";
 // packs into .image-out beside the `trees` payload, whose preparation the caller owns exactly as every other
 // from-source build does (prepare-image-trees.sh must have run).
 const buildSourceImage = async (): Promise<void> => {
-    const dockerfile = join(repoRoot, ".image-out/Dockerfile.standard");
-    writeFileSync(dockerfile, execFileSync("node", ["_tools/scripts/compose-image-dockerfile.mjs", "standard"], { cwd: repoRoot }));
+    const dockerfile = join(root, ".image-out/Dockerfile.standard");
+    writeFileSync(dockerfile, execFileSync("node", ["_tools/scripts/compose-image-dockerfile.mjs", "standard"], { cwd: root }));
     await new Promise<void>((resolve, reject) => {
-        const build = spawn(
-            "docker",
-            ["build", "--build-context", "trees=.image-out", "-f", dockerfile, "-t", SOURCE_IMAGE_TAG, "."],
-            { cwd: repoRoot },
-        );
+        const build = spawn("docker", ["build", "--build-context", "trees=.image-out", "-f", dockerfile, "-t", SOURCE_IMAGE_TAG, "."], { cwd: root });
         let output = "";
         build.stdout.on("data", (chunk: Buffer) => (output += chunk.toString()));
         build.stderr.on("data", (chunk: Buffer) => (output += chunk.toString()));

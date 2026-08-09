@@ -2,13 +2,14 @@ import { mkdtempSync } from "node:fs";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
+import { STATE_DIR } from "@intentic/constants";
 import type { Identity } from "@intentic/sandbox-contract";
 import { expect, test } from "vitest";
 import { fileIdentitiesStore, type IdentitiesStore } from "./identities-store.js";
 
 // A store over a fresh temp path (the .intentic dir doesn't exist yet — the store must create it on write).
 const tempStore = (): { store: IdentitiesStore; path: string } => {
-    const path = join(mkdtempSync(join(tmpdir(), "identities-")), ".intentic", "identities.json");
+    const path = join(mkdtempSync(join(tmpdir(), "identities-")), `${STATE_DIR}`, "identities.json");
     return { store: fileIdentitiesStore(path), path };
 };
 
@@ -36,7 +37,7 @@ test("remove returns true when present, false when absent", async () => {
 // One hand-edited card must not take the rest of the cast down with it — least of all on the turn path, where
 // the answer decides what an unattended wake may act through.
 test("an invalid card is skipped and reported; the rest of the cast survives", async () => {
-    const path = join(mkdtempSync(join(tmpdir(), "identities-")), ".intentic", "identities.json");
+    const path = join(mkdtempSync(join(tmpdir(), "identities-")), `${STATE_DIR}`, "identities.json");
     const skipped: string[] = [];
     const store = fileIdentitiesStore(path, (id) => skipped.push(id));
     await mkdir(dirname(path), { recursive: true });

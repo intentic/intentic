@@ -31,7 +31,13 @@ test("green at the head ends the streak", () => {
 });
 
 test("canceled, skipped and running are not verdicts — they neither start nor break a streak", () => {
-    const streaks = failureStreaks([run(1, "canceled", 60), run(2, "failed", 50), run(3, "skipped", 45), run(4, "failed", 40), run(5, "success", 30)]);
+    const streaks = failureStreaks([
+        run(1, "canceled", 60),
+        run(2, "failed", 50),
+        run(3, "skipped", 45),
+        run(4, "failed", 40),
+        run(5, "success", 30),
+    ]);
     expect(streaks[0]).toMatchObject({ since: 40, runs: 2 });
     // A push that supersedes a running pipeline must not read as a recovery.
     expect(failureStreaks([run(1, "running", 60), run(2, "failed", 50)])).toHaveLength(1);

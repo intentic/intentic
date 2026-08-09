@@ -107,9 +107,7 @@ export const aimOf = (input: {
     if (input.remembered === undefined) {
         return inheritable;
     }
-    return !LOOPBACK.test(input.remembered) || input.servers.some((server) => server.url === input.remembered)
-        ? input.remembered
-        : inheritable;
+    return !LOOPBACK.test(input.remembered) || input.servers.some((server) => server.url === input.remembered) ? input.remembered : inheritable;
 };
 
 export function useTargets(

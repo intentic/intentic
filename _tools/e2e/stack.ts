@@ -1,6 +1,7 @@
 import { createHash, createHmac, randomBytes } from "node:crypto";
 import { readFileSync } from "node:fs";
-import { resolve } from "node:path";
+import { join } from "node:path";
+import { repoRoot } from "@intentic/constants/node";
 import { PrismaClient } from "@intentic-app/prisma";
 import { PrismaPg } from "@prisma/adapter-pg";
 
@@ -18,7 +19,7 @@ export const DATABASE_URL = `postgresql://app:app@localhost:5440/app`;
 // backs the from-scratch boot (CI), where global-setup starts the API with exactly this value.
 const envSecret = (): string | undefined => {
     try {
-        return readFileSync(resolve(import.meta.dirname, `../../.env`), `utf8`)
+        return readFileSync(join(repoRoot(import.meta.url), `.env`), `utf8`)
             .match(/^BETTER_AUTH_SECRET=(.+)$/m)?.[1]
             ?.trim();
     } catch {

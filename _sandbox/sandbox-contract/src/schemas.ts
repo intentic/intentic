@@ -1,3 +1,4 @@
+import { STATE_DIR } from "@intentic/constants";
 import { ExtensionManifestSchema } from "@intentic/extension-manifest";
 import { RegistryEntrySchema } from "@intentic/registry";
 import { z } from "zod";
@@ -478,7 +479,7 @@ export const loopCanConverge = (loop: Pick<Loop, "output" | "checks">): boolean 
  * into an isolated turn's worktree, so the agent writes and the browser reads the same tree, with nothing to
  * land and no git noise. `progress.md` is the loop's memory in `fresh` mode and its audit trail in `continue`
  * mode; `iteration-<n>.json` is the verdict a `claim` stop reads. */
-export const LOOP_DIR = ".intentic/artifacts/loops";
+export const LOOP_DIR = `${STATE_DIR}/artifacts/loops`;
 
 // Why an iteration ended, which is not the same question as how the LOOP ended. `continue` is the ordinary
 // "not done yet"; `error` is a turn that surfaced an error frame, which does NOT end the loop by itself — a

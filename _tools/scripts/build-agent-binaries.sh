@@ -8,7 +8,8 @@
 # Targets are explicit per agent rather than a shared list: shipping a binary for a platform no card can hand a
 # command for implies support that does not exist (intentic-host is Windows + Linux; sync also covers macOS).
 set -eu
-cd "$(dirname "$0")/../.."
+. "$(dirname "$0")/repo-root.sh"
+cd "$(repo_root)"
 
 pkg="${1:?usage: build-agent-binaries.sh <package-dir> <binary-name> <bun-target>...}"
 name="${2:?usage: build-agent-binaries.sh <package-dir> <binary-name> <bun-target>...}"

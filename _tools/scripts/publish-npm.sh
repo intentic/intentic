@@ -15,9 +15,10 @@
 #   bash _tools/scripts/publish-npm.sh 1.15.1
 set -euo pipefail
 VERSION="${1:?usage: publish-npm.sh <version>}"
+. "$(dirname "$0")/repo-root.sh"
 DIR="$(cd "$(dirname "$0")" && pwd)"
 source "$DIR/packages.sh"
-cd "$DIR/../.."
+cd "$(repo_root)"
 
 # Versions are stamped by set-versions.sh before the tag is pushed, so by the time this runs every
 # package.json already carries $VERSION. Checked rather than assumed: a mismatch means the tag and the tree

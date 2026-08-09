@@ -1,3 +1,4 @@
+import { STATE_DIR } from "@intentic/constants";
 import type { FileContribution } from "@intentic/extension-manifest";
 import { describe, expect, it } from "vitest";
 import { staleQueryKeys, WORKSPACE_STATE_FILES } from "./workspace-state.js";
@@ -7,8 +8,8 @@ import { staleQueryKeys, WORKSPACE_STATE_FILES } from "./workspace-state.js";
 // the dependency direction, so reaching back for them here would invert it. The real manifests are checked
 // against this rule where they are loaded — web's fileBindings.test.ts and the daemon's file-bindings.test.ts.
 const AUTOMATIONS: readonly FileContribution[] = [
-    { path: `.intentic/automations.json`, invalidates: [`automations`] },
-    { path: `.intentic/approvals/`, invalidates: [`automation-approvals`] },
+    { path: `${STATE_DIR}/automations.json`, invalidates: [`automations`] },
+    { path: `${STATE_DIR}/approvals/`, invalidates: [`automation-approvals`] },
 ];
 
 describe(`staleQueryKeys`, () => {
@@ -71,7 +72,7 @@ describe(`staleQueryKeys`, () => {
         // The two lists are unioned flat, not layered: a narrow extension entry under a broad core entry that
         // invalidates nothing must still fire. Without this, every path beneath one of the daemon's
         // machine-state prefixes would be unreachable to extensions.
-        const nested: readonly FileContribution[] = [{ path: `.intentic/sessions/claude/projects/p/memory/`, invalidates: [`memory`] }];
+        const nested: readonly FileContribution[] = [{ path: `${STATE_DIR}/sessions/claude/projects/p/memory/`, invalidates: [`memory`] }];
         expect(staleQueryKeys([`.intentic/sessions/claude/projects/p/memory/note.md`], nested)).toEqual([`memory`]);
         // …and a sibling under the same core prefix stays ignored.
         expect(staleQueryKeys([`.intentic/sessions/claude/projects/p/session.jsonl`], nested)).toEqual([]);
@@ -79,8 +80,8 @@ describe(`staleQueryKeys`, () => {
 
     it(`dedupes a key two extensions both claim`, () => {
         const twice: readonly FileContribution[] = [
-            { path: `.intentic/automations.json`, invalidates: [`automations`] },
-            { path: `.intentic/automations.json`, invalidates: [`automations`] },
+            { path: `${STATE_DIR}/automations.json`, invalidates: [`automations`] },
+            { path: `${STATE_DIR}/automations.json`, invalidates: [`automations`] },
         ];
         expect(staleQueryKeys([`.intentic/automations.json`], twice)).toEqual([`automations`]);
     });

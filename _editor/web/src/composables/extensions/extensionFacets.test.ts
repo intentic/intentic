@@ -1,3 +1,4 @@
+import { STATE_DIR } from "@intentic/constants";
 import type { ExtensionManifest } from "@intentic/extension-manifest";
 import { describe, expect, it } from "vitest";
 import { facetsOf, searchTextOf } from "./extensionFacets";
@@ -31,7 +32,7 @@ describe(`facetsOf`, () => {
     });
 
     it(`keeps wiring out of the one-line strip but not out of the record`, () => {
-        const [facet] = facetsOf(manifest({ files: [{ path: `.intentic/docs/`, invalidates: [`documentation`] }] }));
+        const [facet] = facetsOf(manifest({ files: [{ path: `${STATE_DIR}/docs/`, invalidates: [`documentation`] }] }));
         expect(facet).toMatchObject({ label: `watched files`, names: [`.intentic/docs/`], surface: false });
     });
 

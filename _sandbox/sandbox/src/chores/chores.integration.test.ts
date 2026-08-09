@@ -83,7 +83,10 @@ describe(`runProbe`, () => {
             1000,
         );
         expect(result.state).toBe(`ok`);
-        expect(result.facts).toEqual({ id: `outdated`, packages: [{ name: `vue`, current: `1.0.0`, latest: `2.0.0`, kind: `major`, section: `dependencies` }] });
+        expect(result.facts).toEqual({
+            id: `outdated`,
+            packages: [{ name: `vue`, current: `1.0.0`, latest: `2.0.0`, kind: `major`, section: `dependencies` }],
+        });
     });
 
     test(`a command that hangs is killed and says so rather than holding the lane forever`, async () => {
@@ -169,7 +172,12 @@ describe(`package signals`, () => {
     test(`read engines and dependency names, and whether the package has a document`, async () => {
         const dir = await scaffold({
             "pnpm-workspace.yaml": `packages:\n  - "_libs/*"\n`,
-            "_libs/one/package.json": JSON.stringify({ name: `@x/one`, engines: { node: `>=22` }, dependencies: { zod: `^4` }, devDependencies: { vitest: `^2` } }),
+            "_libs/one/package.json": JSON.stringify({
+                name: `@x/one`,
+                engines: { node: `>=22` },
+                dependencies: { zod: `^4` },
+                devDependencies: { vitest: `^2` },
+            }),
             "_libs/two/package.json": JSON.stringify({ name: `@x/two` }),
             // A package's architecture document is its own README, so `documented` is a stat on the package dir.
             "_libs/one/README.md": `# one`,
@@ -198,7 +206,7 @@ describe(`repo shape`, () => {
         const dir = await scaffold({
             "package.json": `{}`,
             "pnpm-lock.yaml": ``,
-            "Dockerfile": `FROM node`,
+            Dockerfile: `FROM node`,
             "_apps/web/web.Dockerfile": `FROM nginx`,
             ".github/workflows/ci.yml": `on: push`,
             ".github/workflows/release.yaml": `on: tag`,
@@ -245,14 +253,17 @@ describe(`repo shape`, () => {
     // that skipped them would decide such a package is not a React package while every file in it imports React.
     test(`peer and optional dependencies count, and a name is never repeated`, async () => {
         const dir = await scaffold({
-            "package.json": JSON.stringify({ dependencies: { react: `^19.0.0` }, peerDependencies: { react: `^19.0.0`, "@angular/core": `^19.0.0` } }),
+            "package.json": JSON.stringify({
+                dependencies: { react: `^19.0.0` },
+                peerDependencies: { react: `^19.0.0`, "@angular/core": `^19.0.0` },
+            }),
         });
         expect(choreShape(dir).deps).toEqual([`@angular/core`, `react`]);
     });
 
     // An unparseable manifest is the repository's problem to report; every other gate here still has an answer.
     test(`a manifest that does not parse leaves the rest of the shape intact`, async () => {
-        const found = choreShape(await scaffold({ "package.json": `{ not json`, "Dockerfile": `FROM node` }));
+        const found = choreShape(await scaffold({ "package.json": `{ not json`, Dockerfile: `FROM node` }));
         expect(found.deps).toEqual([]);
         expect(found.dockerfiles).toEqual([`Dockerfile`]);
     });

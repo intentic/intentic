@@ -1,3 +1,4 @@
+import { HOST_STATE_ROOT } from "@intentic/constants";
 import type { SshSession } from "../core/ssh.js";
 import { REPO_VOLUME } from "./backup.js";
 
@@ -7,10 +8,10 @@ import { REPO_VOLUME } from "./backup.js";
 // the caller restores it on the new host. The fixed container names mirror the providers that create them
 // (forgejo.ts / forgejo-runner.ts / workspace.ts / backup.ts / tunnel.ts).
 const BACKUP_CONTAINER = "intentic-backup";
-const BACKUP_SCRIPT = "/opt/intentic/backup/backup.sh";
+const BACKUP_SCRIPT = `${HOST_STATE_ROOT}/backup/backup.sh`;
 // The scratch tarball the repo volume is packed into on each host (a sibling of the backed-up state, not
 // inside /volumes or the repo, so it is never itself captured); removed after the transfer.
-const REPO_TAR = "/opt/intentic/migrate-repo.tgz";
+const REPO_TAR = `${HOST_STATE_ROOT}/migrate-repo.tgz`;
 
 // The intentic-managed containers on a host: our named/labelled ones plus Komodo's compose project. Used to
 // confirm the old host actually carries a deployment to migrate (and to log what is moving).

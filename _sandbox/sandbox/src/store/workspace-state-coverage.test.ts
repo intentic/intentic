@@ -1,5 +1,6 @@
 import { readdir, readFile } from "node:fs/promises";
 import { join } from "node:path";
+import { packageRoot } from "@intentic/constants/node";
 import { WORKSPACE_STATE_FILES } from "@intentic/sandbox-contract";
 import { expect, test } from "vitest";
 
@@ -27,7 +28,7 @@ import { expect, test } from "vitest";
 // REPO is out of scope by construction, which is why this matches on the expression rather than on ".intentic".
 const ROOT_EXPRESSIONS = new Set(["workspace.root", "services.workspace.root", "workspaceRoot", "root", "config.workspaceRoot"]);
 
-const SOURCE_ROOT = join(import.meta.dirname, "..");
+const SOURCE_ROOT = join(packageRoot(import.meta.url), "src");
 
 // The module that REPLACES the raw spelling has to quote it to explain itself, and a doc comment is not a call.
 const EXEMPT = "workspace/state-paths.ts";

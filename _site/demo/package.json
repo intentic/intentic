@@ -16,6 +16,7 @@
     },
     "devDependencies": {
         "@dagrejs/dagre": "catalog:",
+        "@intentic/constants": "workspace:*",
         "@intentic/tsconfig": "workspace:*",
         "@shikijs/langs": "catalog:",
         "@shikijs/themes": "catalog:",

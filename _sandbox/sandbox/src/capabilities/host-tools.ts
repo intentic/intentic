@@ -15,5 +15,7 @@ import type { AgentTool } from "../agent/agent-tools.js";
  * usable in one turn. */
 export const hostToolsOf = (capabilities: readonly Capability[], daemonPort: number, bridgeToken: string): AgentTool[] =>
     capabilities.flatMap((capability) =>
-        capability.kind === "host" ? [{ name: capability.id, url: `http://127.0.0.1:${daemonPort}/mcp/hosts/${capability.id}`, token: bridgeToken }] : [],
+        capability.kind === "host"
+            ? [{ name: capability.id, url: `http://127.0.0.1:${daemonPort}/mcp/hosts/${capability.id}`, token: bridgeToken }]
+            : [],
     );

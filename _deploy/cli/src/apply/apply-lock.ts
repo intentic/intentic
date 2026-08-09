@@ -1,5 +1,6 @@
 import { randomBytes } from "node:crypto";
 import { hostname } from "node:os";
+import { HOST_STATE_ROOT } from "@intentic/constants";
 import type { SshExecutor, SshResult, SshTarget } from "@intentic/providers";
 import { shellQuote } from "@intentic/sandbox-run/quote";
 
@@ -12,7 +13,7 @@ import { shellQuote } from "@intentic/sandbox-run/quote";
 // hint telling OTHER runs when an abandoned lock may be taken over — it never self-invalidates a live holder
 // (verify checks the nonce, not the clock). So a stale-TTL takeover does not silently create two writers:
 // the run whose nonce was overwritten fails its next `verify` and aborts. This is "no blind TTL takeover".
-const LOCK_DIR = "/opt/intentic/apply.lock.d";
+const LOCK_DIR = `${HOST_STATE_ROOT}/apply.lock.d`;
 // Generous — an apply can pull images or run a restic restore for minutes. Crash-recovery only.
 const DEFAULT_TTL_SECONDS = 30 * 60;
 

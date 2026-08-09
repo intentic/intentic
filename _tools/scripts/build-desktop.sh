@@ -18,6 +18,7 @@
 set -euo pipefail
 
 VERSION="${1:?usage: build-desktop.sh <version> [--linux-only|--windows-only|--windows-prebuilt <dir>]}"
+. "$(dirname "$0")/repo-root.sh"
 # Two verification jobs each want ONE side of this build, and the release wants both. One build script either
 # way, so the artifacts a CI job verifies are produced by exactly the path that produces the released ones.
 #
@@ -51,7 +52,7 @@ if [ -n "$WINDOWS_PREBUILT" ] && [ ! -f "$WINDOWS_PREBUILT/Intentic-setup.exe" ]
     echo "error: the tested Windows installer is missing from $WINDOWS_PREBUILT" >&2
     exit 2
 fi
-ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
+ROOT="$(repo_root)"
 APP="$ROOT/_editor/desktop-app"
 TAURI_DIR="$APP/src-tauri"
 OUT="$APP/dist-bin"

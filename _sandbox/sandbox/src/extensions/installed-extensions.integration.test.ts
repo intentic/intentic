@@ -2,6 +2,7 @@ import { mkdtempSync } from "node:fs";
 import { mkdir, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { STATE_DIR } from "@intentic/constants";
 import type { Capability } from "@intentic/sandbox-contract";
 import { expect, test } from "vitest";
 import type { Services } from "../composition.js";
@@ -116,8 +117,8 @@ test("extensionBinDirsOf resolves each contributes.bin to an absolute dir on the
 
 // Write the owner's switch file the way the enablement store does — by publisher.name, not the capability id.
 const writeEnablement = async (root: string, values: Record<string, boolean>): Promise<void> => {
-    await mkdir(join(root, ".intentic"), { recursive: true });
-    await writeFile(join(root, ".intentic", "extension-enablement.json"), JSON.stringify(values));
+    await mkdir(join(root, `${STATE_DIR}`), { recursive: true });
+    await writeFile(join(root, `${STATE_DIR}`, "extension-enablement.json"), JSON.stringify(values));
 };
 
 test("a disabled extension stays listed but drops out of enabledExtensions", async () => {

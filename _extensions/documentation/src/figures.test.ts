@@ -37,7 +37,9 @@ const index = {
 
 const repoDoc = {
     repo: `intentic`,
-    components: [{ id: `deploy`, name: `Deployment engine`, oneLiner: `x`, packages: [`_deploy/graph`, `_deploy/engine`, `_deploy/cli`], accent: `5` }],
+    components: [
+        { id: `deploy`, name: `Deployment engine`, oneLiner: `x`, packages: [`_deploy/graph`, `_deploy/engine`, `_deploy/cli`], accent: `5` },
+    ],
     glossary: [],
     reading: [],
     provenance,

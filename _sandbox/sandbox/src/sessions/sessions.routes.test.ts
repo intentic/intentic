@@ -1,3 +1,4 @@
+import { WORKSPACE_ROOT } from "@intentic/constants";
 import { sessionsContract } from "@intentic/sandbox-contract";
 import { unstubbed } from "@intentic/testing";
 import { expect, test, vi } from "vitest";
@@ -12,7 +13,7 @@ import { type SessionsRoutesDeps, createSessionsRoutes } from "./sessions.routes
  * store is asked about. */
 
 const sessionsClient = (sessions: Partial<SessionsRoutesDeps["sessions"]>) =>
-    routesClient(sessionsContract, createSessionsRoutes({ sessions: unstubbed("sessions", sessions), workspace: workspacePaths("/work") }));
+    routesClient(sessionsContract, createSessionsRoutes({ sessions: unstubbed("sessions", sessions), workspace: workspacePaths(WORKSPACE_ROOT) }));
 
 test("sessions.list returns the full list, and routes to search when a query is given", async () => {
     const all = [{ id: "a", title: "Deploy pipeline", updatedAt: 2 }];

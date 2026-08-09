@@ -116,7 +116,7 @@ test("cleanLines: a deliberate read is not capped at MAX, even behind a `cd … 
 /* What production hands `cleanLines` is the LAUNCHER line, not the shell statement — and every test above this
  * one passed the shell statement, which is how a read detector that never fired on a bare `cat` survived. One
  * day of real commands: 88 of 93 shell reads misread as logs, five gutted reads of the workspace README. */
-const WRAPPED = (inner) => `nsenter --mount=/proc/1/ns/mnt --wd='/work' -- nice -n 10 ionice -c 2 -n 7 bash -c '${inner}'`;
+const WRAPPED = (inner) => `nsenter --mount=/proc/1/ns/mnt --wd=WORKSPACE_ROOT -- nice -n 10 ionice -c 2 -n 7 bash -c '${inner}'`;
 
 test("cleanLines: a read is recognised through the nsenter/bash -c wrapper, with or without a `cd` prefix", () => {
     const lines = Array.from({ length: 400 }, (_, i) => `line ${i}`);

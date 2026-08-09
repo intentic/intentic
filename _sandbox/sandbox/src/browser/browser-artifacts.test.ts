@@ -1,9 +1,10 @@
+import { STATE_DIR, WORKSPACE_ROOT } from "@intentic/constants";
 import type { HookInput } from "@anthropic-ai/claude-agent-sdk";
 import { expect, test } from "vitest";
 import { syncHookOutput } from "../testing.js";
 import { browserArtifactHooks, browserOutputDir, screenshotImage } from "./browser-artifacts.js";
 
-const OUTPUT = browserOutputDir("/work");
+const OUTPUT = browserOutputDir(WORKSPACE_ROOT);
 
 const hooks = browserArtifactHooks(OUTPUT);
 
@@ -56,8 +57,8 @@ test("a capability's own browser is redirected too", async () => {
 });
 
 test.each([
-    ["../../escape.png", "/work/.intentic/artifacts/browser/escape.png"],
-    ["/etc/passwd.png", "/work/.intentic/artifacts/browser/passwd.png"],
+    ["../../escape.png", `${WORKSPACE_ROOT}/${STATE_DIR}/artifacts/browser/escape.png`],
+    ["/etc/passwd.png", `${WORKSPACE_ROOT}/${STATE_DIR}/artifacts/browser/passwd.png`],
 ])("a name that would escape the output dir keeps only its basename: %s", async (filename, expected) => {
     expect(rewritten(await fire("mcp__web__browser_take_screenshot", { filename }))).toBe(expected);
 });

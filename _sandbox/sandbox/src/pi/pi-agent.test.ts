@@ -1,3 +1,4 @@
+import { WORKSPACE_ROOT } from "@intentic/constants";
 import type { AgentEvent } from "@intentic/sandbox-contract";
 import { expect, test, vi } from "vitest";
 import type { AgentRequest } from "../agent/agent.js";
@@ -91,7 +92,7 @@ const fakePi = (prompts: PiEvent[][] = [[{ type: "agent_settled" }]], responses:
 
 const request = (overrides: Partial<AgentRequest> = {}): AgentRequest => ({
     prompt: "add a /ping route",
-    cwd: "/work",
+    cwd: WORKSPACE_ROOT,
     signal: new AbortController().signal,
     ...overrides,
 });

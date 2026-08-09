@@ -193,7 +193,13 @@ export const fileTranscriptRecord = (dir: string): TranscriptRecord => ({
             return 0;
         }
         const temp = `${path}.${process.pid}.tmp`;
-        await writeFile(temp, rows.slice(0, keep).map((line) => `${line}\n`).join(""));
+        await writeFile(
+            temp,
+            rows
+                .slice(0, keep)
+                .map((line) => `${line}\n`)
+                .join(""),
+        );
         await rename(temp, path);
         return rows.length - keep;
     },

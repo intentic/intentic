@@ -1,3 +1,4 @@
+import { WORKSPACE_ROOT } from "@intentic/constants";
 import type { SDKMessage } from "@anthropic-ai/claude-agent-sdk";
 import type { AgentEvent } from "@intentic/sandbox-contract";
 import { afterEach, expect, test, vi } from "vitest";
@@ -22,7 +23,7 @@ const fakeQuery = (...messages: unknown[]): QueryFn =>
 
 const collect = async (queryFn: QueryFn): Promise<AgentEvent[]> => {
     const events: AgentEvent[] = [];
-    for await (const event of runAgent({ prompt: "run ls", cwd: "/work", signal: new AbortController().signal }, queryFn)) {
+    for await (const event of runAgent({ prompt: "run ls", cwd: WORKSPACE_ROOT, signal: new AbortController().signal }, queryFn)) {
         events.push(event);
     }
     return events;

@@ -77,9 +77,20 @@ test("pushScopes reaches a connected machine and reports when there is nobody to
     const hub = createHostHub(logger);
     const machine = fakeMachine();
     hub.attach("laptop", machine.connection);
-    expect(await hub.pushScopes("laptop", { shell: "on", write: "off", screen: "on", control: "off", sandboxes: "off", sandboxRemove: "off" })).toBe(true);
-    expect(machine.client.setScopes).toHaveBeenCalledWith({ shell: "on", write: "off", screen: "on", control: "off", sandboxes: "off", sandboxRemove: "off" });
-    expect(await hub.pushScopes("desktop", { shell: "on", write: "off", screen: "on", control: "off", sandboxes: "off", sandboxRemove: "off" })).toBe(false);
+    expect(await hub.pushScopes("laptop", { shell: "on", write: "off", screen: "on", control: "off", sandboxes: "off", sandboxRemove: "off" })).toBe(
+        true,
+    );
+    expect(machine.client.setScopes).toHaveBeenCalledWith({
+        shell: "on",
+        write: "off",
+        screen: "on",
+        control: "off",
+        sandboxes: "off",
+        sandboxRemove: "off",
+    });
+    expect(await hub.pushScopes("desktop", { shell: "on", write: "off", screen: "on", control: "off", sandboxes: "off", sandboxRemove: "off" })).toBe(
+        false,
+    );
 });
 
 test("disconnect cuts the socket and takes the machine off the roster", async () => {

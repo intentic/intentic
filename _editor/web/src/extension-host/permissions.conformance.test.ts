@@ -1,6 +1,6 @@
 import { existsSync, readdirSync, readFileSync } from "node:fs";
-import { dirname, join, resolve } from "node:path";
-import { fileURLToPath } from "node:url";
+import { join } from "node:path";
+import { repoRoot } from "@intentic/constants/node";
 import { ExtensionManifestSchema, sandboxRouteAllowed } from "@intentic/extension-manifest";
 import { SANDBOX_ROUTES } from "@intentic/sandbox-contract";
 import { describe, expect, test } from "vitest";
@@ -22,7 +22,7 @@ import { describe, expect, test } from "vitest";
  *
  * The string scanner stays until the last extension is converted, and shrinks with each one that is. */
 
-const extensionsRoot = resolve(dirname(fileURLToPath(import.meta.url)), "../../../../_extensions");
+const extensionsRoot = join(repoRoot(import.meta.url), "_extensions");
 
 const sourceFiles = (dir: string): string[] => {
     const out: string[] = [];

@@ -437,8 +437,7 @@ describe("the finished fold", () => {
         updatedAt,
         attention: { plan: false, question: false, permission: false, conflict: false },
     });
-    const shownIds = (): string[] =>
-        windowFinished(useAgents().lanes.value.finished, undefined, (entry) => entry.id).shown.map((entry) => entry.id);
+    const shownIds = (): string[] => windowFinished(useAgents().lanes.value.finished, undefined, (entry) => entry.id).shown.map((entry) => entry.id);
 
     beforeEach(() => {
         resetAgents();
@@ -484,7 +483,11 @@ describe("the finished fold", () => {
             1,
         );
 
-        expect(useAgents().lanes.value.finished.slice(0, 3).map((entry) => entry.id)).toEqual([`a6`, `a7`, `a8`]);
+        expect(
+            useAgents()
+                .lanes.value.finished.slice(0, 3)
+                .map((entry) => entry.id),
+        ).toEqual([`a6`, `a7`, `a8`]);
     });
 });
 

@@ -12,6 +12,7 @@
     },
     "dependencies": {
         "@intentic/connector-runtime": "workspace:*",
+        "@intentic/sandbox-contract": "workspace:*",
         "imapflow": "catalog:",
         "mailparser": "catalog:"
     },

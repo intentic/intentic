@@ -23,7 +23,10 @@ const fold = (text: string): string =>
         .trim()
         .toLowerCase();
 
-export const searchWords = (term: string): readonly string[] => fold(term).split(/\s+/).filter((word) => word !== ``);
+export const searchWords = (term: string): readonly string[] =>
+    fold(term)
+        .split(/\s+/)
+        .filter((word) => word !== ``);
 
 export const matchesSearch = (commit: GitCommit, words: readonly string[]): boolean => {
     if (words.length === 0) {

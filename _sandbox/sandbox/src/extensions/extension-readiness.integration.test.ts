@@ -1,8 +1,8 @@
 import { cpSync, mkdirSync, mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { fileURLToPath } from "node:url";
 import { readFile } from "node:fs/promises";
+import { repoRoot } from "@intentic/constants/node";
 import type { ExtensionManifest } from "@intentic/extension-manifest";
 import { expect, test } from "vitest";
 import { extensionRuntimeAbsent } from "./extension-readiness.js";
@@ -13,7 +13,7 @@ import type { InstalledExtension } from "./installed-extensions.js";
  * copies just the manifest into an empty dir IS the core image's layout — if a gateway's manifest ever stops
  * promising any on-disk path, this is the test that says the probe went blind for it. */
 
-const EXTENSIONS_SRC = fileURLToPath(new URL("../../../../_extensions", import.meta.url));
+const EXTENSIONS_SRC = join(repoRoot(import.meta.url), "_extensions");
 const GATEWAYS = ["discord", "imap", "slack", "telegram", "whatsapp"];
 
 const manifestOf = async (name: string): Promise<ExtensionManifest> =>
@@ -45,7 +45,10 @@ test("a dir carrying everything its manifest promises reads as present", async (
         contributes: { capabilities: [{ kind: "cli", provider: "full", title: "Full", skill: "skills/SKILL.md" }] },
     } as unknown as ExtensionManifest;
     cpSync(join(EXTENSIONS_SRC, "imap", "skills"), join(dir, "skills"), { recursive: true });
-    const withSkill = { ...manifest, contributes: { capabilities: [{ kind: "cli", provider: "x", title: "X", skill: "skills/imap/SKILL.md" }] } } as unknown as ExtensionManifest;
+    const withSkill = {
+        ...manifest,
+        contributes: { capabilities: [{ kind: "cli", provider: "x", title: "X", skill: "skills/imap/SKILL.md" }] },
+    } as unknown as ExtensionManifest;
     expect(await extensionRuntimeAbsent(baked(dir, withSkill))).toBe(false);
 });
 
@@ -53,7 +56,7 @@ test("a dir carrying everything its manifest promises reads as present", async (
 // missing files is a rotted install or work in progress, which pathsCheck reports in the author's terms.
 test("non-builtin sources never read as runtime-absent, whatever is missing", async () => {
     const dir = mkdtempSync(join(tmpdir(), "readiness-src-"));
-    const manifest = (await manifestOf("discord"));
+    const manifest = await manifestOf("discord");
     for (const source of ["installed", "workspace"] as const) {
         expect(await extensionRuntimeAbsent({ ...baked(dir, manifest), source })).toBe(false);
     }

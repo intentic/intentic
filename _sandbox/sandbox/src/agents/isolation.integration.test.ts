@@ -1,6 +1,7 @@
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { HISTORY_ROOT, WORKSPACE_ROOT } from "@intentic/constants";
 import { shellQuote } from "@intentic/sandbox-run/quote";
 import { afterEach, expect, test } from "vitest";
 import {
@@ -28,10 +29,10 @@ afterEach(async () => {
 });
 
 const plan: IsolationPlan = {
-    worktree: "/history/worktrees/abc",
-    root: "/work",
+    worktree: `${HISTORY_ROOT}/worktrees/abc`,
+    root: WORKSPACE_ROOT,
     mirrors: ["node_modules", "_apps/web/node_modules", "_apps/web/dist"],
-    overlays: "/history/overlays/abc",
+    overlays: `${HISTORY_ROOT}/overlays/abc`,
 };
 
 test("the namespace is made private before anything is mounted", () => {
@@ -44,8 +45,8 @@ test("the namespace is made private before anything is mounted", () => {
 
 test("the main root is bound aside before the worktree shadows it", () => {
     const script = isolationScript(plan);
-    const aside = script.indexOf(`mount --bind ${shellQuote("/work")} ${shellQuote(MAIN_MOUNT)}`);
-    const shadow = script.indexOf(`mount --bind ${shellQuote("/history/worktrees/abc")} ${shellQuote("/work")}`);
+    const aside = script.indexOf(`mount --bind ${shellQuote(WORKSPACE_ROOT)} ${shellQuote(MAIN_MOUNT)}`);
+    const shadow = script.indexOf(`mount --bind ${shellQuote(`${HISTORY_ROOT}/worktrees/abc`)} ${shellQuote(WORKSPACE_ROOT)}`);
     expect(aside).toBeGreaterThan(-1);
     expect(shadow).toBeGreaterThan(aside);
 });
@@ -117,7 +118,7 @@ test("the anchor announces readiness only after the mounts, then becomes the nam
 });
 
 test("entrants join the anchor's namespace by pid and start at the workspace root", () => {
-    const { command, args } = nsenterArgv(4321, "/work", "/usr/bin/claude", ["--flag", "value"]);
+    const { command, args } = nsenterArgv(4321, WORKSPACE_ROOT, "/usr/bin/claude", ["--flag", "value"]);
     expect(command).toBe("nsenter");
     expect(args).toEqual(["--mount=/proc/4321/ns/mnt", "--wd=/work", "--", "/usr/bin/claude", "--flag", "value"]);
 });

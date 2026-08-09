@@ -3,6 +3,7 @@ import { existsSync } from "node:fs";
 import { mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { homedir, hostname } from "node:os";
 import { join } from "node:path";
+import { STATE_DIR } from "@intentic/constants";
 import type { Log } from "@intentic/local-agent";
 import { baseDir, knownHostsPath, sshConfigName, sshConfigPath, sshDir, sshKeyPath, userSshConfigPath } from "./config.js";
 
@@ -39,7 +40,7 @@ export const IGNORES = [
     ".secrets.json",
     "claude.json",
     "capabilities.json",
-    ".intentic",
+    STATE_DIR,
     ".git",
     ".pnpm-store",
 ];

@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
+import { STATE_DIR } from "@intentic/constants";
 import type {
     Loop,
     LoopDocument,
@@ -50,7 +51,7 @@ const runIdOf = (): string => randomUUID().slice(0, 8);
 // How much of a step's closing text is kept inline on the record. The complete response is written under
 // shared .intentic state and downstream steps are handed that path, so this is a preview rather than data loss.
 const REPORT_KEPT = 4_000;
-const WORKFLOW_REPORTS_DIR = ".intentic/workflow-runs";
+const WORKFLOW_REPORTS_DIR = `${STATE_DIR}/workflow-runs`;
 
 const reportPreview = (report: string): string => {
     if (report.length <= REPORT_KEPT) {

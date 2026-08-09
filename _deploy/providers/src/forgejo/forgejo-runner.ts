@@ -1,3 +1,4 @@
+import { HOST_STATE_ROOT } from "@intentic/constants";
 import type { Provider, ResolvedInputs } from "@intentic/engine";
 import { HASH_KEY } from "@intentic/graph";
 import { z } from "zod";
@@ -16,7 +17,7 @@ type RunnerInputs = z.infer<typeof runnerSchema>;
 const parse = (inputs: ResolvedInputs): RunnerInputs => parseInputs(runnerSchema, inputs, "forgejo-runner");
 
 const CONTAINER = "intentic-forgejo-runner";
-const CONFIG_DIR = "/opt/intentic/runner";
+const CONFIG_DIR = `${HOST_STATE_ROOT}/runner`;
 
 // act_runner config so each job container builds with the HOST docker: host networking + the daemon socket
 // auto-mounted (docker_host: automount) + the host's static docker CLI and buildx plugin bind-mounted in, so

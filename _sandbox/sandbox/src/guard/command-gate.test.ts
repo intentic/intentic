@@ -32,15 +32,14 @@ const harness = (options: Partial<CommandGateOptions>): Harness => {
         events,
         abort: () => controller.abort(),
         run: (command) =>
-            hook(
-                { hook_event_name: "PreToolUse", tool_name: "Bash", tool_input: { command } } as Parameters<typeof hook>[0],
-                undefined,
-                { signal: controller.signal },
-            ) as Promise<SyncHookJSONOutput>,
+            hook({ hook_event_name: "PreToolUse", tool_name: "Bash", tool_input: { command } } as Parameters<typeof hook>[0], undefined, {
+                signal: controller.signal,
+            }) as Promise<SyncHookJSONOutput>,
     };
 };
 
-const reasonOf = (out: SyncHookJSONOutput): string => (out.hookSpecificOutput as { permissionDecisionReason?: string }).permissionDecisionReason ?? "";
+const reasonOf = (out: SyncHookJSONOutput): string =>
+    (out.hookSpecificOutput as { permissionDecisionReason?: string }).permissionDecisionReason ?? "";
 
 // The card the gate raised, once the hook has parked on it.
 const cardOf = (events: readonly AgentEvent[]): Extract<AgentEvent, { kind: "permission" }> => {

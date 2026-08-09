@@ -2,13 +2,14 @@ import { mkdtempSync } from "node:fs";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
+import { STATE_DIR } from "@intentic/constants";
 import type { Capability } from "@intentic/sandbox-contract";
 import { expect, test } from "vitest";
 import { type CapabilitiesStore, fileCapabilitiesStore } from "./capabilities-store.js";
 
 // A store over a fresh temp path (the .intentic dir doesn't exist yet — the store must create it on write).
 const tempStore = (): { store: CapabilitiesStore; path: string } => {
-    const path = join(mkdtempSync(join(tmpdir(), "caps-")), ".intentic", "capabilities.json");
+    const path = join(mkdtempSync(join(tmpdir(), "caps-")), `${STATE_DIR}`, "capabilities.json");
     return { store: fileCapabilitiesStore(path), path };
 };
 
@@ -50,7 +51,7 @@ test("ONE unreadable entry never takes the rest of the manifest down with it", a
     // devops, docker and every mcp connector too — and the composed overlay collapsed to a bare FROM, which the
     // Environment card then asked the owner to rebuild.
     const invalid: string[] = [];
-    const path = join(mkdtempSync(join(tmpdir(), "caps-")), ".intentic", "capabilities.json");
+    const path = join(mkdtempSync(join(tmpdir(), "caps-")), `${STATE_DIR}`, "capabilities.json");
     const store = fileCapabilitiesStore(path, (id) => invalid.push(id));
     await mkdir(dirname(path), { recursive: true });
     await writeFile(

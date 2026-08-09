@@ -1,5 +1,6 @@
 import { readdir, readFile } from "node:fs/promises";
 import { join } from "node:path";
+import { repoRoot } from "@intentic/constants/node";
 import { expect, test } from "vitest";
 
 /* NOBODY HAND-ROLLS A QUOTE — enforced by discovery, not by a list.
@@ -25,7 +26,7 @@ import { expect, test } from "vitest";
  * a CI runner building three verify jobs at once. prepass.mjs holds machine-touching suites to this name but
  * looks for mkdtemp/child_process/git/docker, and a plain `readdir` sweep is none of those. */
 
-const REPO_ROOT = join(import.meta.dirname, "..", "..", "..");
+const REPO_ROOT = repoRoot(import.meta.url);
 
 // The shape: a value interpolated between a matched pair of quote characters. `'${password}'`, `"${sql}"`.
 const QUOTED_INTERPOLATION = /['"]\$\{[^{}]*\}['"]/;

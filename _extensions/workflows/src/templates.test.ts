@@ -64,7 +64,10 @@ test("the template teaches every shape", () => {
 test("the attempts are unburdened and anonymous in every template", () => {
     for (const { workflow } of WORKFLOW_TEMPLATES) {
         const attempts = workflow.steps.filter((step) => step.id.startsWith(`attempt-`));
-        expect(attempts.every((step) => step.output.kind === `none` && step.checks.length === 0), workflow.id).toBe(true);
+        expect(
+            attempts.every((step) => step.output.kind === `none` && step.checks.length === 0),
+            workflow.id,
+        ).toBe(true);
         expect(new Set(attempts.map((step) => step.title)), workflow.id).toEqual(new Set([`Attempt A`, `Attempt B`]));
     }
 });

@@ -1,3 +1,4 @@
+import { STATE_DIR, WORKSPACE_ROOT } from "@intentic/constants";
 import type { ActivityEvent, AgentEvent } from "@intentic/sandbox-contract";
 import { expect, test } from "vitest";
 import type { Services } from "../composition.js";
@@ -201,7 +202,13 @@ test("a whatsapp CLI send records message.send with the chat and text, whatever 
             channelId: "4915112345678@s.whatsapp.net",
             content: "deploy is out, all green",
         },
-        { provider: "whatsapp", type: "message.send", endpoint: "/send-file", channelId: "1203630000000000@g.us", content: "/work/report.pdf" },
+        {
+            provider: "whatsapp",
+            type: "message.send",
+            endpoint: "/send-file",
+            channelId: "1203630000000000@g.us",
+            content: `${WORKSPACE_ROOT}/report.pdf`,
+        },
     ]);
 });
 
@@ -211,7 +218,7 @@ test("whatsapp reads record nothing, and the word whatsapp in ordinary text is n
     sniffer.observe(tool(`whatsapp chats`, "t1"));
     sniffer.observe(result("...", "t1"));
     sniffer.observe(tool(`whatsapp download ABC123`, "t2"));
-    sniffer.observe(result("/work/.intentic/runtime/extensions/whatsapp/media/ABC123-voice.ogg", "t2"));
+    sniffer.observe(result(`${WORKSPACE_ROOT}/${STATE_DIR}/runtime/extensions/whatsapp/media/ABC123-voice.ogg`, "t2"));
     sniffer.observe(tool(`grep -r "whatsapp send" _extensions/`, "t3"));
     sniffer.observe(result("", "t3"));
     sniffer.flush();

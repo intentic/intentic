@@ -1,5 +1,6 @@
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
+import { packageRoot } from "@intentic/constants/node";
 import { DAEMON_PORT, LOCAL_PORT, PREVIEW_PORT, TRANSLATOR_PORT } from "@intentic/constants";
 import { expect, test } from "vitest";
 
@@ -14,7 +15,7 @@ import { expect, test } from "vitest";
  * ports are the declared ones rather than literals free to drift back into each other.
  */
 
-const DOCKERFILE = join(import.meta.dirname, "..", "Dockerfile");
+const DOCKERFILE = join(packageRoot(import.meta.url), "Dockerfile");
 
 // Keyed by the name so a failure says WHICH pair collided, not just that two numbers matched.
 const FIXED_PORTS = { DAEMON_PORT, PREVIEW_PORT, LOCAL_PORT, TRANSLATOR_PORT };

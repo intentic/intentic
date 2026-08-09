@@ -1,3 +1,4 @@
+import { HOST_STATE_ROOT } from "@intentic/constants";
 import type { Provider, ResolvedInputs } from "@intentic/engine";
 import { dockerEnvLine, shellQuote } from "@intentic/sandbox-run/quote";
 import { z } from "zod";
@@ -32,7 +33,7 @@ type BackupInputs = z.infer<typeof backupSchema>;
 const parse = (inputs: ResolvedInputs): BackupInputs => parseInputs(backupSchema, inputs, "backup");
 
 const CONTAINER = "intentic-backup";
-const STATE_DIR = "/opt/intentic/backup";
+const STATE_DIR = `${HOST_STATE_ROOT}/backup`;
 const ENV_FILE = `${STATE_DIR}/restic.env`;
 const SCRIPT_FILE = `${STATE_DIR}/backup.sh`;
 const CRONTAB_FILE = `${STATE_DIR}/crontab`;

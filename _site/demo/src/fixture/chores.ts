@@ -287,8 +287,15 @@ const evidence = (now: number): ChoresReport["repos"] => [webRepo(now), apiRepo(
  * the same function the panel uses is the only way that cannot rot when a number above changes. */
 const seedLedger = (now: number): ChoreLedgerEntry[] => {
     const verdicts = assessReport({ repos: evidence(now), ledger: [], node: NODE }, now);
-    const digestFor = (repo: string, chore: string): string => verdicts.find((verdict) => verdict.repo === repo && verdict.chore.id === chore)?.digest ?? ``;
-    const entry = (repo: string, chore: string, daysAgo: number, outcome: ChoreLedgerEntry["outcome"], extra: { snoozedUntil?: number } = {}): ChoreLedgerEntry => ({
+    const digestFor = (repo: string, chore: string): string =>
+        verdicts.find((verdict) => verdict.repo === repo && verdict.chore.id === chore)?.digest ?? ``;
+    const entry = (
+        repo: string,
+        chore: string,
+        daysAgo: number,
+        outcome: ChoreLedgerEntry["outcome"],
+        extra: { snoozedUntil?: number } = {},
+    ): ChoreLedgerEntry => ({
         repo,
         chore,
         ranAt: now - daysAgo * DAY,

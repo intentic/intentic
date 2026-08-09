@@ -144,10 +144,7 @@ const confirmDelete = async (name: string): Promise<void> => {
                                 <!-- "gone" is not the same as "no upstream": the branch WAS tracking something
                                      that has since been deleted on the remote, which is the usual sign a PR
                                      merged and this local copy is safe to drop. -->
-                                <span
-                                    v-if="branch.local?.gone"
-                                    class="shrink-0 text-2xs text-warning"
-                                    v-tooltip.top="'Upstream branch was deleted'"
+                                <span v-if="branch.local?.gone" class="shrink-0 text-2xs text-warning" v-tooltip.top="'Upstream branch was deleted'"
                                     >gone</span
                                 >
                                 <span v-if="(branch.local?.behind ?? 0) > 0" class="shrink-0 text-2xs text-subtle">↓{{ branch.local!.behind }}</span>

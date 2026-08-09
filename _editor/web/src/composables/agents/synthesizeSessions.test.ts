@@ -1,3 +1,4 @@
+import { STATE_DIR } from "@intentic/constants";
 // The guarantee under test is the QUALITY CONTRACT of "Synthesize N": every source rides whole (reasoning,
 // tools, diffs, notices — not a summary), the preparation refuses WHOLE when any source can't be captured
 // completely, and the composed chat opens as a draft — prompt in the composer, transcripts as chips, nothing
@@ -145,8 +146,8 @@ describe(`renderTranscript`, () => {
 describe(`synthesisPrompt`, () => {
     it(`names every source and carries the ground rules`, () => {
         const prompt = synthesisPrompt([
-            { label: `A`, title: `Approach one`, path: `.intentic/artifacts/attachments/u1/source-A-approach-one.md` },
-            { label: `B`, title: `Approach two`, path: `.intentic/artifacts/attachments/u2/source-B-approach-two.md` },
+            { label: `A`, title: `Approach one`, path: `${STATE_DIR}/artifacts/attachments/u1/source-A-approach-one.md` },
+            { label: `B`, title: `Approach two`, path: `${STATE_DIR}/artifacts/attachments/u2/source-B-approach-two.md` },
         ]);
 
         expect(prompt).toContain(`Synthesize the 2 attached agent conversations`);

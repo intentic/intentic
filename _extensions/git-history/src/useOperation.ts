@@ -16,7 +16,6 @@ import { useRefRefresh } from "./useRefRefresh.js";
  * or aborting an operation moves refs (or the in-progress markers the watcher also watches) and the frame
  * arrives on its own. */
 
-
 export function useOperation(repo: Ref<string>) {
     const api = host();
     const queryClient = useQueryClient();

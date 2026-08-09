@@ -1,7 +1,8 @@
 import { tmpdir } from "node:os";
 import { basename, join } from "node:path";
-import { fileURLToPath } from "node:url";
+import { HISTORY_ROOT, WORKSPACE_ROOT } from "@intentic/constants";
 import type { HookJSONOutput, SyncHookJSONOutput } from "@anthropic-ai/claude-agent-sdk";
+import { repoRoot } from "@intentic/constants/node";
 import type { ListenerContribution } from "@intentic/extension-manifest";
 import type { IsolatedAgent, PersistedAgent } from "./agents/agents-store.js";
 import type { IsolationPlan, TurnIsolation } from "./agents/isolation.js";
@@ -23,7 +24,7 @@ import type { Config } from "./env.config.js";
 
 // The real first-party connectors/discord extensions, so a cli capability's image fragment and a
 // cli-capability test's provider data both resolve against the tree the daemon actually ships.
-export const EXTENSIONS_DIR = fileURLToPath(new URL("../../../_extensions", import.meta.url));
+export const EXTENSIONS_DIR = join(repoRoot(import.meta.url), "_extensions");
 
 // A manifest listener contribution whose wording is deliberately plain: route/process tests care about the
 // provider and event vocabulary, while the required automation metadata keeps the fixture on the public shape.
@@ -52,7 +53,7 @@ export const listenerContribution = (provider: string, eventTypes: readonly stri
  * no-op the test always meant it to be.
  */
 export const testConfig: Config = {
-    workspaceRoot: "/work",
+    workspaceRoot: WORKSPACE_ROOT,
     historyRoot: join(tmpdir(), "intentic-test-history"),
     extensionsDir: EXTENSIONS_DIR,
     agentAuthDir: "",
@@ -112,7 +113,7 @@ export const syncHookOutput = (output: HookJSONOutput): SyncHookJSONOutput => {
  * about the layout, not about the kernel, and the redirect layer needs the same answer the mounts would have
  * used (isolation.ts, TurnIsolation.planFor).
  */
-export const noIsolation = (root: string, historyRoot: string = "/history"): TurnIsolation => ({
+export const noIsolation = (root: string, historyRoot: string = HISTORY_ROOT): TurnIsolation => ({
     available: async () => false,
     planFor: async (worktree: string): Promise<IsolationPlan> => ({
         worktree,

@@ -13,11 +13,9 @@ const run = async (rules: Parameters<typeof outboundGateHooks>[0], command: unkn
     }
     // The gate only ever answers synchronously — it decides from the command string alone, so it never returns
     // the SDK's `{ async: true }` deferral.
-    return hook(
-        { hook_event_name: "PreToolUse", tool_name: "Bash", tool_input: { command } } as Parameters<typeof hook>[0],
-        undefined,
-        { signal: new AbortController().signal },
-    ) as Promise<SyncHookJSONOutput>;
+    return hook({ hook_event_name: "PreToolUse", tool_name: "Bash", tool_input: { command } } as Parameters<typeof hook>[0], undefined, {
+        signal: new AbortController().signal,
+    }) as Promise<SyncHookJSONOutput>;
 };
 
 describe("outbound gate", () => {

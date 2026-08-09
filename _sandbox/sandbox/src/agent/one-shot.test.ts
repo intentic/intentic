@@ -1,3 +1,4 @@
+import { WORKSPACE_ROOT } from "@intentic/constants";
 import { expect, test, vi } from "vitest";
 import { runOneShot } from "./one-shot.js";
 
@@ -16,7 +17,13 @@ const answering = (result: { readonly result: string; readonly is_error?: boolea
 };
 
 const ask = (): Promise<string> =>
-    runOneShot({ prompt: "Name this session", cwd: "/work", model: "claude-haiku-4-5", credentials: {}, signal: new AbortController().signal });
+    runOneShot({
+        prompt: "Name this session",
+        cwd: WORKSPACE_ROOT,
+        model: "claude-haiku-4-5",
+        credentials: {},
+        signal: new AbortController().signal,
+    });
 
 test("returns the model's answer", async () => {
     answering({ result: "Wire the fleet board broadcast" });

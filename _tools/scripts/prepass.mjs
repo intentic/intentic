@@ -75,11 +75,11 @@
  * one it happens to omit — `@intentic/constants` — was on its own worth 3 phantom errors in the daemon.
  */
 import { existsSync, readdirSync, readFileSync } from "node:fs";
-import { basename, dirname, join, resolve } from "node:path";
-import { fileURLToPath } from "node:url";
+import { basename, dirname, join } from "node:path";
+import { repoRoot } from "@intentic/constants/node";
 import { spawnSync } from "node:child_process";
 
-const root = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
+const root = repoRoot(import.meta.url);
 // Discovered, not listed: every `_`-prefixed root directory is a package group (pnpm-workspace.yaml globs the same set).
 const WORKSPACES = readdirSync(root, { withFileTypes: true })
     .filter((entry) => entry.isDirectory() && entry.name.startsWith("_"))

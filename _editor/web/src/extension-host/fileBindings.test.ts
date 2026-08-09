@@ -1,3 +1,4 @@
+import { STATE_DIR } from "@intentic/constants";
 // @vitest-environment jsdom
 import type { FileContribution } from "@intentic/extension-manifest";
 import { staleQueryKeys } from "@intentic/sandbox-contract";
@@ -28,7 +29,7 @@ vi.hoisted(() => {
 
 const { builtinModules } = await import("./builtins");
 
-const AUTOMATIONS_FILES: readonly FileContribution[] = [{ path: `.intentic/automations.json`, invalidates: [`automations`] }];
+const AUTOMATIONS_FILES: readonly FileContribution[] = [{ path: `${STATE_DIR}/automations.json`, invalidates: [`automations`] }];
 
 describe(`registerFileBindings`, () => {
     // The registry is module state, so each test has to start from empty or ordering decides the result.
@@ -40,7 +41,7 @@ describe(`registerFileBindings`, () => {
 
     it(`unions the bindings of every registered extension`, () => {
         registerFileBindings(`a.one`, AUTOMATIONS_FILES);
-        registerFileBindings(`a.two`, [{ path: `.intentic/approvals/`, invalidates: [`automation-approvals`] }]);
+        registerFileBindings(`a.two`, [{ path: `${STATE_DIR}/approvals/`, invalidates: [`automation-approvals`] }]);
         expect(contributedFileBindings().map((file) => file.path)).toEqual([`.intentic/automations.json`, `.intentic/approvals/`]);
     });
 
@@ -55,7 +56,7 @@ describe(`registerFileBindings`, () => {
     it(`ignores a superseded activation's late dispose`, () => {
         // The disposable a retired activation holds must not evict the replacement that took its place.
         const stale = registerFileBindings(`a.one`, AUTOMATIONS_FILES);
-        registerFileBindings(`a.one`, [{ path: `.intentic/drafts/`, invalidates: [`drafts`] }]);
+        registerFileBindings(`a.one`, [{ path: `${STATE_DIR}/drafts/`, invalidates: [`drafts`] }]);
         stale.dispose();
         expect(contributedFileBindings().map((file) => file.path)).toEqual([`.intentic/drafts/`]);
     });

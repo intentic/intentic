@@ -17,8 +17,8 @@ const WHICH_CAP = [
 <template>
     <InfoDialog title="Subagents">
         <p class="text-sm text-muted">
-            The assistant can hand a piece of work to another agent — a search across the whole repo, a second opinion, a long build it doesn't need to
-            watch. Each one runs on its own and reports back. These three numbers bound how many of them there can be.
+            The assistant can hand a piece of work to another agent — a search across the whole repo, a second opinion, a long build it doesn't need
+            to watch. Each one runs on its own and reports back. These three numbers bound how many of them there can be.
         </p>
 
         <h3 class="mt-5 text-xs font-semibold uppercase tracking-wide text-subtle">Which one you've hit</h3>

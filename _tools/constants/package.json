@@ -11,7 +11,9 @@
     },
     "types": "./dist/index.d.ts",
     "files": [
-        "dist"
+        "dist",
+        "src/node.mjs",
+        "src/node.d.mts"
     ],
     "exports": {
         ".": {
@@ -24,14 +26,24 @@
                 "@intentic/src": "./src/index.ts",
                 "default": "./dist/index.js"
             }
+        },
+        "./node": {
+            "types": "./src/node.d.mts",
+            "default": "./src/node.mjs"
         }
     },
     "scripts": {
         "build": "tsgo",
-        "watch": "tsgo --build --watch"
+        "typecheck": "tsgo --noEmit -p tsconfig.test.json",
+        "watch": "tsgo --build --watch",
+        "test": "vitest run",
+        "test:watch": "vitest"
     },
     "devDependencies": {
+        "@intentic/testing": "workspace:*",
         "@intentic/tsconfig": "workspace:*",
-        "@typescript/native-preview": "catalog:"
+        "@types/node": "catalog:",
+        "@typescript/native-preview": "catalog:",
+        "vitest": "catalog:"
     }
 }

@@ -27,7 +27,11 @@ for arg in "$@"; do
     esac
 done
 
-ROOT="$(cd "$(dirname "$0")/../../.." && pwd)"
+# The checkout, found by walking up to the workspace marker. Inline rather than sourced from
+# _tools/scripts/repo-root.sh, because reaching that file from here would itself need the counted `../../..`
+# this is removing — and every path below is named from the root, so none depends on this script's depth.
+ROOT="$(cd "$(dirname "$0")" && pwd)"
+while [ "$ROOT" != "/" ] && [ ! -f "$ROOT/pnpm-workspace.yaml" ]; do ROOT="$(dirname "$ROOT")"; done
 APP="$ROOT/_editor/desktop-app"
 LINUX_BUNDLES="$APP/src-tauri/target/release/bundle"
 WIN_BUNDLES="$APP/src-tauri/target/x86_64-pc-windows-msvc/release/bundle"

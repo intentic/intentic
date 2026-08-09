@@ -1,3 +1,4 @@
+import { STATE_DIR } from "@intentic/constants";
 import { describe, expect, test } from "vitest";
 import { auditBrief, extensionBrief, publishBrief, tightenBrief, updateBrief } from "./extensionBrief";
 
@@ -6,7 +7,7 @@ import { auditBrief, extensionBrief, publishBrief, tightenBrief, updateBrief } f
 
 const brief = extensionBrief({
     id: `workspace.release-notes`,
-    dir: `.intentic/workspace-extensions/release-notes`,
+    dir: `${STATE_DIR}/workspace-extensions/release-notes`,
     wish: `  a list of what shipped this week, from the git log  `,
 });
 
@@ -42,7 +43,7 @@ describe(`the brief handed to an authoring agent`, () => {
 describe(`the brief for tightening permissions`, () => {
     const tighten = tightenBrief({
         id: `workspace.release-notes`,
-        dir: `.intentic/workspace-extensions/release-notes`,
+        dir: `${STATE_DIR}/workspace-extensions/release-notes`,
         unused: [`POST /agent`, `GET /panels`],
         used: [{ route: `GET /workspace/file`, calls: 1240 }],
     });
@@ -70,7 +71,7 @@ describe(`the brief for tightening permissions`, () => {
 describe(`the brief for publishing`, () => {
     const publish = publishBrief({
         id: `workspace.release-notes`,
-        dir: `.intentic/workspace-extensions/release-notes`,
+        dir: `${STATE_DIR}/workspace-extensions/release-notes`,
         name: `release-notes`,
     });
 

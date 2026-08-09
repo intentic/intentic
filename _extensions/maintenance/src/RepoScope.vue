@@ -139,7 +139,13 @@ const summary = computed(() => {
                  this question here" and "we have not measured it" are the distinction verdict.ts exists to keep,
                  and a reader scanning for the chore they expected needs to know which of the two answers it. -->
             <div v-if="open" class="flex flex-col gap-2 pt-0.5 pl-4">
-                <div v-for="block in [{ label: `Not applicable`, groups: ruledOut }, { label: `Not measured`, groups: unmeasured }]" :key="block.label">
+                <div
+                    v-for="block in [
+                        { label: `Not applicable`, groups: ruledOut },
+                        { label: `Not measured`, groups: unmeasured },
+                    ]"
+                    :key="block.label"
+                >
                     <template v-if="block.groups.length > 0">
                         <p class="text-2xs text-content">{{ block.label }}</p>
                         <dl class="mt-1 grid grid-cols-1 gap-x-4 gap-y-0.5 sm:grid-cols-[max-content_1fr]">

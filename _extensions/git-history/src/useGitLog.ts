@@ -96,6 +96,7 @@ export function useGitLog(repo: Ref<string>) {
         drop: (sha: string): Promise<GitActionResult> => after(api.sandbox.rpc.git.drop({ repo: repo.value, sha })),
         merge: (sha: string): Promise<GitActionResult> => after(api.sandbox.rpc.git.merge({ repo: repo.value, sha })),
         rebase: (sha: string): Promise<GitActionResult> => after(api.sandbox.rpc.git.rebase({ repo: repo.value, sha })),
-        reset: (sha: string, mode: "soft" | "mixed" | "hard"): Promise<GitActionResult> => after(api.sandbox.rpc.git.reset({ repo: repo.value, sha, mode })),
+        reset: (sha: string, mode: "soft" | "mixed" | "hard"): Promise<GitActionResult> =>
+            after(api.sandbox.rpc.git.reset({ repo: repo.value, sha, mode })),
     };
 }

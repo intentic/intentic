@@ -31,6 +31,7 @@
  */
 
 import { randomUUID } from "node:crypto";
+import { STATE_DIR, WORKSPACE_ROOT } from "@intentic/constants";
 import { localDaemonPort } from "@intentic/sandbox-run";
 import { sandboxIdFromToken } from "@intentic/sandbox-contract/tunnel-ids";
 import { CONNECT_TOKEN } from "./constants.js";
@@ -56,7 +57,7 @@ export interface AgentsTierOptions {
 const PROMPT = `Reply with exactly the word: ready`;
 const EXPECTED = `ready`;
 
-const STORE_PATH = `/work/.intentic/control-tokens.json`;
+const STORE_PATH = `${WORKSPACE_ROOT}/${STATE_DIR}/control-tokens.json`;
 
 /** sha256, computed by the container so the digest is the one that container's own code would compute. */
 const seedControlToken = async (container: string, token: string): Promise<boolean> => {

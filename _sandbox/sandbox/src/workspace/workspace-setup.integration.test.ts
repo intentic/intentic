@@ -3,14 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { expect, test } from "vitest";
 import type { ManagedProcesses } from "../processes/managed-processes.js";
-import {
-    discoverProjects,
-    installPanelKey,
-    type ProjectSetupStatus,
-    SETUP_NOTICE_HEADER,
-    setupNoticeFor,
-    setupStateOf,
-} from "./workspace-setup.js";
+import { discoverProjects, installPanelKey, type ProjectSetupStatus, SETUP_NOTICE_HEADER, setupNoticeFor, setupStateOf } from "./workspace-setup.js";
 
 const workspace = async (): Promise<string> => mkdtemp(join(tmpdir(), "setup-"));
 

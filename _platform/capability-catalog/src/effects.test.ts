@@ -162,7 +162,11 @@ describe("capabilityEffects", () => {
             id: "desktop",
             config: { platform: "linux", shell: "off", write: "on", screen: "off", sandboxes: "on" },
         });
-        expect(machine).toEqual({ kind: "machine", platform: "linux", grants: ["read files", "write and trash files", "start and stop its sandboxes"] });
+        expect(machine).toEqual({
+            kind: "machine",
+            platform: "linux",
+            grants: ["read files", "write and trash files", "start and stop its sandboxes"],
+        });
     });
 
     // One profile per CONNECTION, named after the site it is a profile of — so a second account of that site
@@ -200,13 +204,21 @@ describe("capabilityEffects", () => {
 
     // A host with no dot is a real answer, not a typo — an internal panel on the sandbox's own machine.
     it("keeps a schemeless-looking but valid host, port and all", () => {
-        const [, , profile] = capabilityEffects({ kind: "browser", id: "panel", config: { platform: "website", homeUrl: "http://localhost:3000/admin" } });
+        const [, , profile] = capabilityEffects({
+            kind: "browser",
+            id: "panel",
+            config: { platform: "website", homeUrl: "http://localhost:3000/admin" },
+        });
         expect(profile).toEqual({ kind: "profile", platform: "localhost:3000" });
     });
 
     // The sign-in page answers it when that is the only address given.
     it("reads the site off the sign-in page when that is all there is", () => {
-        const [, , profile] = capabilityEffects({ kind: "browser", id: "acme", config: { platform: "website", loginUrl: "https://id.acme.com/signin" } });
+        const [, , profile] = capabilityEffects({
+            kind: "browser",
+            id: "acme",
+            config: { platform: "website", loginUrl: "https://id.acme.com/signin" },
+        });
         expect(profile).toEqual({ kind: "profile", platform: "id.acme.com" });
     });
 });

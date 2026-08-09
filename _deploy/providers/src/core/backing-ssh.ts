@@ -1,4 +1,5 @@
 import { setTimeout as sleep } from "node:timers/promises";
+import { HOST_STATE_ROOT } from "@intentic/constants";
 import type { SshSession } from "./ssh.js";
 import { shellQuote } from "@intentic/sandbox-run/quote";
 
@@ -26,7 +27,7 @@ const slug = (id: string): string => {
 };
 
 // The per-instance host directory holding its compose.yaml + .env, and the compose project name.
-export const stateDir = (kind: string, id: string): string => `/opt/intentic/${kind}/${slug(id)}`;
+export const stateDir = (kind: string, id: string): string => `${HOST_STATE_ROOT}/${kind}/${slug(id)}`;
 const projectName = (kind: string, id: string): string => `intentic-${kind}-${slug(id)}`;
 
 // The id of the container stamped intentic.id=<stamp>, or "" when it is not running. Both an instance (its own

@@ -1,6 +1,15 @@
 import type { Advisory, Bundle, DeadCode, Duplication, OutdatedPackage, ProbeFacts, ProbeId, UiScan } from "../schemas.js";
 import type { IdiomRule } from "./stack.js";
-import { BYPASS_PATTERN, COMPONENT_GLOBS, IDIOM_RULES, MARKUP_GLOBS, normalizePath, SCAN_IGNORES, UI_FRAMEWORKS, TAILWIND_PACKAGES } from "./stack.js";
+import {
+    BYPASS_PATTERN,
+    COMPONENT_GLOBS,
+    IDIOM_RULES,
+    MARKUP_GLOBS,
+    normalizePath,
+    SCAN_IGNORES,
+    UI_FRAMEWORKS,
+    TAILWIND_PACKAGES,
+} from "./stack.js";
 
 /* THE PROBES — the measurements that cost a subprocess, declared once so the daemon that runs them and the panel
  * that explains them cannot disagree about what "outdated" meant.
@@ -70,7 +79,11 @@ const countOf = (value: unknown): number => (Array.isArray(value) ? value.length
 
 // Which semver step separates two versions. Compared as leading integers rather than by a semver library: the
 // only question is which position first differs, and prerelease/build metadata cannot change that answer.
-const versionParts = (version: string): number[] => version.replace(/^[^\d]*/, ``).split(`.`).map((part) => Number.parseInt(part, 10) || 0);
+const versionParts = (version: string): number[] =>
+    version
+        .replace(/^[^\d]*/, ``)
+        .split(`.`)
+        .map((part) => Number.parseInt(part, 10) || 0);
 
 const semverKind = (current: string, latest: string): OutdatedPackage["kind"] => {
     const [currentMajor = 0, currentMinor = 0] = versionParts(current);
@@ -197,12 +210,17 @@ const parseJscpd = (stdout: string): ProbeFacts | undefined => {
     const total = (statistics as Record<string, unknown>)[`total`];
     const percentage = typeof total === `object` && total !== null ? (total as Record<string, unknown>)[`percentage`] : undefined;
     const duplicates = Array.isArray(root?.[`duplicates`]) ? (root[`duplicates`] as Record<string, unknown>[]) : [];
-    const pathOf = (side: unknown): string => (typeof side === `object` && side !== null ? (asString((side as Record<string, unknown>)[`name`]) ?? `?`) : `?`);
+    const pathOf = (side: unknown): string =>
+        typeof side === `object` && side !== null ? (asString((side as Record<string, unknown>)[`name`]) ?? `?`) : `?`;
     const duplication: Duplication = {
         percentage: typeof percentage === `number` ? percentage : 0,
         clones: duplicates.length,
         top: duplicates
-            .map((clone) => ({ lines: typeof clone[`lines`] === `number` ? clone[`lines`] : 0, first: pathOf(clone[`firstFile`]), second: pathOf(clone[`secondFile`]) }))
+            .map((clone) => ({
+                lines: typeof clone[`lines`] === `number` ? clone[`lines`] : 0,
+                first: pathOf(clone[`firstFile`]),
+                second: pathOf(clone[`secondFile`]),
+            }))
             .toSorted((left, right) => right.lines - left.lines)
             .slice(0, DUPLICATION_SAMPLE),
     };
@@ -442,8 +460,7 @@ export const PROBES: readonly ProbeSpec[] = [
         // A build directory that actually contains something a browser would download. `-d` alone would pass on
         // the empty `dist/` a cleaned checkout leaves behind, and the measurement would report a zero-byte bundle
         // as a fact about the application.
-        available:
-            `find ${BUILD_DIRS.join(` `)} -maxdepth 4 -type f \\( -name '*.js' -o -name '*.mjs' -o -name '*.css' \\) 2>/dev/null | head -n 1 | grep -q .`,
+        available: `find ${BUILD_DIRS.join(` `)} -maxdepth 4 -type f \\( -name '*.js' -o -name '*.mjs' -o -name '*.css' \\) 2>/dev/null | head -n 1 | grep -q .`,
         // Says what is missing AND that this never builds, because the obvious reading of "no build output" is
         // that we tried and it failed. The owner running their own build once is the whole fix.
         unavailable: `no build output on disk — this reads the last build, it never runs one`,

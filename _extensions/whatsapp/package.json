@@ -12,6 +12,7 @@
     },
     "dependencies": {
         "@intentic/connector-runtime": "workspace:*",
+        "@intentic/sandbox-contract": "workspace:*",
         "baileys": "7.0.0-rc14"
     },
     "devDependencies": {

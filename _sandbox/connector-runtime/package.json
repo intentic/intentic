@@ -34,6 +34,7 @@
         "watch": "tsgo --build --watch"
     },
     "dependencies": {
+        "@intentic/constants": "workspace:*",
         "@intentic/sandbox-contract": "workspace:*",
         "tslib": "catalog:"
     },

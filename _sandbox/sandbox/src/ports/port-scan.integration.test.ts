@@ -1,6 +1,7 @@
 import { mkdirSync, mkdtempSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { WORKSPACE_ROOT } from "@intentic/constants";
 import { expect, test } from "vitest";
 import { parentPid, portKind, scanListeningPorts, withOwningSessions } from "./port-scan.js";
 
@@ -37,7 +38,7 @@ const fixture = (): string => {
     symlinkSync("socket:[1001]", join(root, "123", "fd", "3"));
     symlinkSync("socket:[1004]", join(root, "123", "fd", "4"));
     writeFileSync(join(root, "123", "cmdline"), "node\0/work/app/node_modules/.bin/vite\0");
-    symlinkSync("/work/app", join(root, "123", "cwd"));
+    symlinkSync(`${WORKSPACE_ROOT}/app`, join(root, "123", "cwd"));
     return root;
 };
 

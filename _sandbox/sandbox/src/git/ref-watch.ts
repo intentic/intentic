@@ -152,7 +152,7 @@ export const createRefWatch = (
 };
 
 // Boot-time singleton the /events handler subscribes to, mirroring repo-watch's pattern.
-let instance: RefWatch & { close: () => void } | undefined;
+let instance: (RefWatch & { close: () => void }) | undefined;
 export const startRefWatch = (root: string, repos: (listener: (repos: string[]) => void) => () => void, logger: Logger): void => {
     instance ??= createRefWatch(root, repos, logger);
 };

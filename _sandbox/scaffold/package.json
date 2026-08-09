@@ -36,6 +36,7 @@
         "test": "vitest run"
     },
     "dependencies": {
+        "@intentic/constants": "workspace:*",
         "@intentic/graph": "workspace:*",
         "@intentic/sandbox-contract": "workspace:*",
         "tslib": "catalog:"

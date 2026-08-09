@@ -1,6 +1,7 @@
 import { access, mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { WORKSPACE_ROOT } from "@intentic/constants";
 import { expect, test } from "vitest";
 import type { GitRunner } from "./exec.js";
 import { gitClone, gitCommitAll, gitInit, gitStatus, gitSync } from "./git.js";
@@ -45,7 +46,7 @@ test("gitClone forwards the auth header, branch, and separate git dir flags, and
     const separateGitDir = join(historyRoot, "gits", "extra");
     const { git, calls } = recordingGit({});
     await gitClone(
-        "/work",
+        WORKSPACE_ROOT,
         "extra",
         "https://example.com/extra.git",
         { branch: "main", authHeader: "Authorization: Basic abc", separateGitDir },
@@ -70,7 +71,7 @@ test("gitClone forwards the auth header, branch, and separate git dir flags, and
 
 test("gitClone with no options is a bare clone", async () => {
     const { git, calls } = recordingGit({});
-    await gitClone("/work", "extra", "https://example.com/extra.git", undefined, git);
+    await gitClone(WORKSPACE_ROOT, "extra", "https://example.com/extra.git", undefined, git);
     expect(calls).toEqual([["/work", "clone", "https://example.com/extra.git", "extra"]]);
 });
 
@@ -86,7 +87,7 @@ test("gitStatus on a clean tree is not dirty", async () => {
 
 test("gitCommitAll stages, commits with the author identity, and reports a commit was made", async () => {
     const { git, calls } = recordingGit({ "diff --cached --name-only -z": "src/app.ts\0" });
-    const committed = await gitCommitAll("/work/app", "agent edit", { name: "intentic", email: "agent@intentic.dev" }, git);
+    const committed = await gitCommitAll(`${WORKSPACE_ROOT}/app`, "agent edit", { name: "intentic", email: "agent@intentic.dev" }, git);
     expect(committed).toBe(true);
     expect(calls).toContainEqual(["/work/app", "add", "-A"]);
     // `--no-verify` is deliberate: this commit is provenance, and the repo's own hooks must not make an agent's
@@ -108,7 +109,7 @@ test("gitCommitAll stages, commits with the author identity, and reports a commi
 // a nested repo — the case that used to fail the commit outright) are the same no-op path.
 test("gitCommitAll is a no-op (returns false, never commits) when staging leaves the index empty", async () => {
     const { git, calls } = recordingGit({ "status --porcelain": " m nested\n", "diff --cached --name-only -z": "" });
-    const committed = await gitCommitAll("/work/app", "agent edit", { name: "intentic", email: "agent@intentic.dev" }, git);
+    const committed = await gitCommitAll(`${WORKSPACE_ROOT}/app`, "agent edit", { name: "intentic", email: "agent@intentic.dev" }, git);
     expect(committed).toBe(false);
     expect(calls).toContainEqual(["/work/app", "add", "-A"]);
     expect(calls.some((call) => call.includes("commit"))).toBe(false);

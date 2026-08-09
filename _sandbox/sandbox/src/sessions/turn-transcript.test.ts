@@ -1,3 +1,4 @@
+import { WORKSPACE_ROOT } from "@intentic/constants";
 import type { AgentEvent } from "@intentic/sandbox-contract";
 import { describe, expect, it } from "vitest";
 import { withRuntimeHistory } from "../agent/runtime-history.js";
@@ -61,7 +62,7 @@ describe("restoredTurn", () => {
             { kind: "delta", text: "meanwhile" },
             { kind: "tool_call_update", id: "t1", status: "failed", content: [{ type: "text", text: "1 failed" }] },
         ];
-        const [card] = restoredTurn({ prompt: "test" }, events, "/work").flatMap((message) => message.tools ?? []);
+        const [card] = restoredTurn({ prompt: "test" }, events, WORKSPACE_ROOT).flatMap((message) => message.tools ?? []);
         expect(card).toEqual({
             id: "t1",
             name: "Bash",

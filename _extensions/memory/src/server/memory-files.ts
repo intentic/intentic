@@ -1,5 +1,6 @@
 import { mkdir, readdir, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { dirname, join, relative, resolve, sep } from "node:path";
+import { STATE_DIR } from "@intentic/sandbox-contract";
 import type { MemoryFileEntry } from "../contract.js";
 
 /* The agent's persistent memory notes: <workspace>/.intentic/sessions/claude/projects/<project>/memory/*.md — MEMORY.md
@@ -9,7 +10,7 @@ import type { MemoryFileEntry } from "../contract.js";
  * is ever listed, read, written, or deleted, and only .md files can be written. This runs in the extension's
  * BACKEND half (server.ts) with plain fs — full trust, same container, same rules as when it was core. */
 
-export const memoryRoot = (workspaceRoot: string): string => join(workspaceRoot, ".intentic/sessions/claude/projects");
+export const memoryRoot = (workspaceRoot: string): string => join(workspaceRoot, `${STATE_DIR}/sessions/claude/projects`);
 
 // A caller-supplied relative path resolved inside `dir`, or undefined when it escapes (the daemon's
 // resolveWithin, carried along with the code that depends on it).

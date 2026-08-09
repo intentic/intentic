@@ -554,6 +554,12 @@ const main = (argv) => {
         const at = argv.indexOf(`--${name}`);
         return at === -1 || argv[at + 1] === undefined ? fallback : argv[at + 1];
     };
+    /* The container workspace root, and the ONE place in this repo that still spells it as a literal rather
+     * than reading @intentic/constants WORKSPACE_ROOT. This file ships as a raw directory onto the agent's
+     * PATH (contributes.bin) with no node_modules beside it, so its imports are `node:` builtins and nothing
+     * else — a bare specifier here would resolve to nothing and take the whole tool down on first run. Same
+     * bargain the connect/recreate scripts make, and the same obligation: if WORKSPACE_ROOT ever moves, this
+     * default moves with it. The path guard knows about this line by name. */
     const root = flag(`root`, `/work`);
     const repo = flag(`repo`, ``);
     const from = flag(`from`, `staging`) === `published` ? `published` : `staging`;
@@ -564,7 +570,9 @@ const main = (argv) => {
      * an empty index into a tree it had just invented — twice, and someone had to notice and delete it by hand
      * both times. The absolute path is the obvious thing to type; the only defence is refusing it. */
     if (isAbsolute(repo) || repo.split(`/`).includes(`..`)) {
-        process.stderr.write(`--repo is relative to --root, so pass \`${relative(root, repo) || `.`}\` rather than \`${repo}\`.\nOmit it entirely for the root repository itself.\n`);
+        process.stderr.write(
+            `--repo is relative to --root, so pass \`${relative(root, repo) || `.`}\` rather than \`${repo}\`.\nOmit it entirely for the root repository itself.\n`,
+        );
         return 2;
     }
 
@@ -591,7 +599,9 @@ const main = (argv) => {
          * documents went behind a toggle. Refusing costs a re-run with the right flag; writing costs the reader
          * the whole area. */
         if (write && from === `staging` && !existsSync(mapBase(root, repo, from))) {
-            process.stderr.write(`no draft at ${mapBase(root, repo, from)} — nothing to index there.\nIf you edited a README in the repository, this is \`--from published\`.\n`);
+            process.stderr.write(
+                `no draft at ${mapBase(root, repo, from)} — nothing to index there.\nIf you edited a README in the repository, this is \`--from published\`.\n`,
+            );
             return 1;
         }
         const index = checkDocs(root, repo, from, write);
@@ -600,7 +610,9 @@ const main = (argv) => {
             return 0;
         }
         const stale = index.entries.filter((entry) => entry.stale).length;
-        process.stdout.write(`${index.entries.length} documented, ${stale} stale, ${index.undocumented.length} undocumented, ${index.orphans.length} orphaned\n`);
+        process.stdout.write(
+            `${index.entries.length} documented, ${stale} stale, ${index.undocumented.length} undocumented, ${index.orphans.length} orphaned\n`,
+        );
         return 0;
     }
     process.stderr.write(USAGE);

@@ -1,3 +1,4 @@
+import { WORKSPACE_ROOT } from "@intentic/constants";
 import { portsContract, portUrl } from "@intentic/sandbox-contract";
 import { portSlotsFromToken, sandboxIdFromToken } from "@intentic/sandbox-contract/tunnel-ids";
 import { expect, test } from "vitest";
@@ -24,7 +25,7 @@ const routedConfig = { ...testConfig, zone: "example.com", connectToken: "tok" }
 
 const portsDeps = (overrides: Partial<PortsRoutesDeps> = {}): PortsRoutesDeps => ({
     config: routedConfig,
-    workspace: workspacePaths("/work"),
+    workspace: workspacePaths(WORKSPACE_ROOT),
     portForwards: createPortForwards(portSlotsFromToken("tok"), async () => "http"),
     scanPorts: async () => [],
     ensurePreviewRoutes: async () => {},
@@ -37,7 +38,7 @@ test("ports.list scans on demand, hides the daemon's own listeners, and marks fo
         portForwards,
         scanPorts: async () => [
             { port: 22, host: "127.0.0.1", forwardable: true },
-            { port: 3000, host: "127.0.0.1", forwardable: true, pid: 7, command: "vite", cwd: "/work/app" },
+            { port: 3000, host: "127.0.0.1", forwardable: true, pid: 7, command: "vite", cwd: `${WORKSPACE_ROOT}/app` },
             { port: 5173, host: "127.0.0.1", forwardable: true },
             { port: 8787, host: "127.0.0.1", forwardable: true },
         ],
@@ -58,7 +59,7 @@ test("ports.list scans on demand, hides the daemon's own listeners, and marks fo
                 kind: "workspace",
                 pid: 7,
                 command: "vite",
-                cwd: "/work/app",
+                cwd: `${WORKSPACE_ROOT}/app`,
                 forwarded: true,
                 previewUrl: portUrl(SLOT, "example.com", sandboxIdFromToken("tok")),
             },

@@ -103,7 +103,9 @@ describe(`parseDocIndex`, () => {
     });
 
     it(`drops an anchor with no reason, because the reason is the point of an anchor`, () => {
-        const index = parseDocIndex(JSON.stringify({ repo: `r`, entries: [{ dir: `d`, anchors: [{ path: `a.ts`, what: `Kept.` }, { path: `b.ts` }] }] }));
+        const index = parseDocIndex(
+            JSON.stringify({ repo: `r`, entries: [{ dir: `d`, anchors: [{ path: `a.ts`, what: `Kept.` }, { path: `b.ts` }] }] }),
+        );
         expect(index?.entries[0]?.anchors).toEqual([{ path: `a.ts`, what: `Kept.`, line: undefined }]);
     });
 

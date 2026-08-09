@@ -83,7 +83,13 @@ test("joins the scanner's facts file onto the curated entries and sorts verified
             plugins: [
                 { name: "popular", kind: "extension", source: { source: "github", repo: "acme/popular", sha: "a".repeat(40) } },
                 { name: "checked", kind: "extension", trust: "verified", source: { source: "github", repo: "acme/checked", sha: "b".repeat(40) } },
-                { name: "evil", kind: "extension", trust: "blocked", trustReason: "exfiltrates secrets", source: { source: "github", repo: "bad/evil" } },
+                {
+                    name: "evil",
+                    kind: "extension",
+                    trust: "blocked",
+                    trustReason: "exfiltrates secrets",
+                    source: { source: "github", repo: "bad/evil" },
+                },
             ],
         }),
         JSON.stringify({

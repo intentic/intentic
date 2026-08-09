@@ -4,7 +4,6 @@ import { computed, type Ref, watch } from "vue";
 import { sinceOf, type TimeWindow } from "@intentic/extension-ui";
 import { host } from "./host";
 
-
 /* The activity audit feed, via the daemon's /activity routes: the durable event log (inbound wakes, sniffed
  * outbound provider calls, turn lifecycle, failures) plus the live connection/voice status probe. Plain polling —
  * an audit feed doesn't need sub-second freshness. All daemon access goes through the host api.

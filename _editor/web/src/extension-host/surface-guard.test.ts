@@ -1,6 +1,6 @@
 import { existsSync, readFileSync } from "node:fs";
-import { dirname, resolve } from "node:path";
-import { fileURLToPath } from "node:url";
+import { join, resolve } from "node:path";
+import { repoRoot } from "@intentic/constants/node";
 import { extensionApiVersion } from "@intentic/extension-api";
 import { ExtensionManifestSchema } from "@intentic/extension-manifest";
 import { expect, test } from "vitest";
@@ -25,7 +25,7 @@ import { expect, test } from "vitest";
  * The grain is TOP-LEVEL KEYS on purpose. That is precisely where a mismatch is silent: an unknown key inside a
  * contribution entry fails the parse loudly and the author sees it, an unknown key at the top is dropped. */
 
-const sdkRoot = resolve(dirname(fileURLToPath(import.meta.url)), `../../../../_sandbox/extension-api`);
+const sdkRoot = join(repoRoot(import.meta.url), `_sandbox/extension-api`);
 
 interface RecordedSurface {
     readonly manifest: readonly string[];

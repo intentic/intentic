@@ -2,6 +2,7 @@ import { execFileSync } from "node:child_process";
 import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { STATE_DIR } from "@intentic/sandbox-contract";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 /* `intentic-docs` against a real git repository, because the two things worth proving about it cannot be proved
@@ -18,8 +19,17 @@ const BIN = join(import.meta.dirname, `..`, `bin`, `intentic-docs`);
 
 let root: string;
 const git = (...args: string[]): void => void execFileSync(`git`, args, { cwd: root, stdio: `ignore` });
-const check = (): { entries: { dir: string; oneLiner: string; anchors: { path: string; what: string; line?: number }[]; behind: number; stale: boolean; reason?: string }[]; undocumented: string[] } =>
-    JSON.parse(execFileSync(`node`, [BIN, `check`, `--root`, root, `--from`, `published`], { encoding: `utf8` }));
+const check = (): {
+    entries: {
+        dir: string;
+        oneLiner: string;
+        anchors: { path: string; what: string; line?: number }[];
+        behind: number;
+        stale: boolean;
+        reason?: string;
+    }[];
+    undocumented: string[];
+} => JSON.parse(execFileSync(`node`, [BIN, `check`, `--root`, root, `--from`, `published`], { encoding: `utf8` }));
 // The bin's exit code and whichever stream carried its answer — a refusal is the point of several of these, so a
 // non-zero exit is a result to assert on rather than a throw.
 const run = (...args: string[]): { status: number; output: string } => {
@@ -109,7 +119,10 @@ describe(`intentic-docs against a real repository`, () => {
      * with nothing to bump and nothing to remember. */
     it(`returns to zero when the README moves in the same commit as the code`, () => {
         write(`_deploy/graph/src/compile.ts`, `export const compile = () => 3;\n`);
-        write(`_deploy/graph/README.md`, `# @t/graph\n\nStill the core data structure.\n\n## Key files\n\n- [src/types.ts](src/types.ts) — the IR types.\n`);
+        write(
+            `_deploy/graph/README.md`,
+            `# @t/graph\n\nStill the core data structure.\n\n## Key files\n\n- [src/types.ts](src/types.ts) — the IR types.\n`,
+        );
         git(`add`, `-A`);
         git(`commit`, `-qm`, `change the code and its page together`);
         expect(check().entries.find((candidate) => candidate.dir === `_deploy/graph`)).toMatchObject({ behind: 0, stale: false });
@@ -147,7 +160,7 @@ describe(`intentic-docs against a real repository`, () => {
     });
 
     it(`writes the staged index once a draft is actually there`, () => {
-        write(`.intentic/docs/root/repo.json`, `{ "repo": "", "provenance": { "sourceRev": "x", "generatedAt": 1 } }\n`);
+        write(`${STATE_DIR}/docs/root/repo.json`, `{ "repo": "", "provenance": { "sourceRev": "x", "generatedAt": 1 } }\n`);
         execFileSync(`node`, [BIN, `check`, `--root`, root, `--write`], { encoding: `utf8` });
         expect(existsSync(join(root, `.intentic/docs/root/index.json`))).toBe(true);
     });

@@ -3,6 +3,7 @@ import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { promisify } from "node:util";
+import { STATE_DIR } from "@intentic/constants";
 import { afterEach, expect, test } from "vitest";
 import { rootExcludes } from "../history/history.js";
 import { workspacePaths } from "../workspace/workspace.js";
@@ -38,8 +39,8 @@ test("provision inits /work with a separate git dir, a baseline commit, and the 
     await writeFile(join(work, "notes.md"), "hello\n");
     await mkdir(join(work, "intent", ".git"), { recursive: true });
     await writeFile(join(work, "intent", "deploy.config.ts"), "v1\n");
-    await mkdir(join(work, ".intentic"), { recursive: true });
-    await writeFile(join(work, ".intentic", "owner.json"), "{}\n");
+    await mkdir(join(work, `${STATE_DIR}`), { recursive: true });
+    await writeFile(join(work, `${STATE_DIR}`, "owner.json"), "{}\n");
 
     expect(await ensureRootRepo(workspacePaths(work), historyRoot)).toBe(true);
     await commitRootBaseline(workspacePaths(work));
@@ -64,14 +65,14 @@ test("provision inits /work with a separate git dir, a baseline commit, and the 
  * assertion is on git's own answer. */
 test("the baseline commits an identity card and still refuses every credential beside it", async () => {
     const { work, historyRoot } = await tempBase();
-    await mkdir(join(work, ".intentic", "browser", "reddit-work"), { recursive: true });
-    await mkdir(join(work, ".intentic", "claude"), { recursive: true });
-    await writeFile(join(work, ".intentic", "identities.json"), `[{"id":"work","capabilities":["reddit-work"]}]\n`);
-    await writeFile(join(work, ".intentic", "capabilities.json"), `[{"id":"reddit-work","kind":"browser","config":{}}]\n`);
-    await writeFile(join(work, ".intentic", "owner.json"), "{}\n");
-    await writeFile(join(work, ".intentic", "settings.json"), "{}\n");
-    await writeFile(join(work, ".intentic", "claude", "token.json"), "{}\n");
-    await writeFile(join(work, ".intentic", "browser", "reddit-work", "Cookies"), "secret\n");
+    await mkdir(join(work, `${STATE_DIR}`, "browser", "reddit-work"), { recursive: true });
+    await mkdir(join(work, `${STATE_DIR}`, "claude"), { recursive: true });
+    await writeFile(join(work, `${STATE_DIR}`, "identities.json"), `[{"id":"work","capabilities":["reddit-work"]}]\n`);
+    await writeFile(join(work, `${STATE_DIR}`, "capabilities.json"), `[{"id":"reddit-work","kind":"browser","config":{}}]\n`);
+    await writeFile(join(work, `${STATE_DIR}`, "owner.json"), "{}\n");
+    await writeFile(join(work, `${STATE_DIR}`, "settings.json"), "{}\n");
+    await writeFile(join(work, `${STATE_DIR}`, "claude", "token.json"), "{}\n");
+    await writeFile(join(work, `${STATE_DIR}`, "browser", "reddit-work", "Cookies"), "secret\n");
 
     expect(await ensureRootRepo(workspacePaths(work), historyRoot)).toBe(true);
     await commitRootBaseline(workspacePaths(work));

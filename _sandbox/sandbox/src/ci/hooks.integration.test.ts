@@ -2,6 +2,7 @@ import { mkdtempSync } from "node:fs";
 import { mkdir } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { STATE_DIR } from "@intentic/constants";
 import { defaultGit } from "@intentic/scaffold";
 import { expect, test } from "vitest";
 import { fileCapabilitiesStore } from "../capabilities/capabilities-store.js";
@@ -21,12 +22,12 @@ const workspaceWith = async (remote: string): Promise<string> => {
 };
 
 const servicesFor = async (root: string, publicUrl: string) => {
-    const capabilities = fileCapabilitiesStore(join(root, ".intentic", "capabilities.json"));
+    const capabilities = fileCapabilitiesStore(join(root, `${STATE_DIR}`, "capabilities.json"));
     await capabilities.upsert({ id: "github", kind: "cli", config: { provider: "github", token: "T" } });
     return {
         workspace: { root },
         capabilities,
-        ciStore: fileCiStore(join(root, ".intentic", "ci.json")),
+        ciStore: fileCiStore(join(root, `${STATE_DIR}`, "ci.json")),
         config: { sandbox: { publicUrl } },
         logger,
     };

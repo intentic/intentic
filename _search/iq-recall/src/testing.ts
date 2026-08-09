@@ -1,7 +1,7 @@
 import { cp, mkdir, mkdtemp, readdir, readFile, rm, utimes, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { dirname, join } from "node:path";
-import { fileURLToPath } from "node:url";
+import { join } from "node:path";
+import { packageRoot } from "@intentic/constants/node";
 import { slugOf } from "./transcript/slug.js";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -15,8 +15,9 @@ export const makeRecallFixture = async (): Promise<{ root: string; claudeDir: st
     const tmp = await mkdtemp(join(tmpdir(), "iq-recall-fixture-"));
     const root = join(tmp, "workspace");
     const claudeDir = join(tmp, "claude");
-    // ../src/__fixtures__ resolves from dist/testing.js and src/testing.ts alike (fixtures are never compiled).
-    const fixtures = join(dirname(fileURLToPath(import.meta.url)), "../src/__fixtures__");
+    // Anchored to the package root, so it resolves from dist/testing.js and src/testing.ts alike (fixtures are
+    // never compiled) without either layout's depth being part of the answer.
+    const fixtures = join(packageRoot(import.meta.url), "src/__fixtures__");
     await cp(join(fixtures, "workspace"), root, { recursive: true });
     const backdated = new Date(Date.now() - 30 * DAY_MS);
     for (const entry of await readdir(root, { recursive: true, withFileTypes: true })) {

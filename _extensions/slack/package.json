@@ -12,6 +12,7 @@
     },
     "dependencies": {
         "@intentic/connector-runtime": "workspace:*",
+        "@intentic/sandbox-contract": "workspace:*",
         "@slack/socket-mode": "catalog:",
         "@slack/web-api": "catalog:"
     },

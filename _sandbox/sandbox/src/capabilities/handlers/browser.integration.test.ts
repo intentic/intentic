@@ -1,7 +1,8 @@
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { fileURLToPath } from "node:url";
+import { repoRoot } from "@intentic/constants/node";
+import { WORKSPACE_ROOT } from "@intentic/constants";
 import type { Capability } from "@intentic/sandbox-contract";
 import { expect, test } from "vitest";
 import type { CapabilityContribution } from "@intentic/extension-manifest";
@@ -15,7 +16,7 @@ import { echoConfig, secretField } from "../summary.js";
 import { browserHandler } from "./browser.js";
 
 // The real first-party `social` extension provides every platform's data (card, login URL, skill).
-const EXTENSIONS_DIR = fileURLToPath(new URL("../../../../../_extensions", import.meta.url));
+const EXTENSIONS_DIR = join(repoRoot(import.meta.url), "_extensions");
 
 // A ctx exposing only what browserHandler touches (files + workspace.root + extensionsDir), over a fresh temp
 // workspace. `capabilities.list` is what enabledExtensions reads to resolve git-installed extensions.
@@ -31,7 +32,7 @@ const tempCtx = (): { ctx: CapabilityCtx; root: string } => {
 };
 
 const host: ExtensionHost = {
-    workspace: { root: "/work" },
+    workspace: { root: WORKSPACE_ROOT },
     files: { read: readWorkspaceFile },
     capabilities: { list: async () => [] },
     config: { extensionsDir: EXTENSIONS_DIR },
@@ -198,7 +199,14 @@ test("a session's sign-in page falls back to the page it opens on", () => {
     });
     // A site card's pinned pages still win where the form says nothing, and the form still overrides them — a
     // preset pointed at a self-hosted instance of the same software.
-    const pinned = { kind: "browser", id: "npmjs", fields: [], skill: "s", loginUrl: "https://a/login", homeUrl: "https://a/" } as unknown as CapabilityContribution;
+    const pinned = {
+        kind: "browser",
+        id: "npmjs",
+        fields: [],
+        skill: "s",
+        loginUrl: "https://a/login",
+        homeUrl: "https://a/",
+    } as unknown as CapabilityContribution;
     expect(browserUrls(pinned, { platform: "npmjs" })).toEqual({ loginUrl: "https://a/login", homeUrl: "https://a/" });
     expect(browserUrls(pinned, { platform: "npmjs", homeUrl: "https://mine/" })?.homeUrl).toBe("https://mine/");
     // Neither answered is the one case that cannot be papered over.

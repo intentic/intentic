@@ -1,3 +1,4 @@
+import { WORKSPACE_ROOT } from "@intentic/constants";
 import { agent, type AgentApp, client, methods, type SessionUpdate } from "@agentclientprotocol/sdk";
 import type { AgentCapabilities } from "@agentclientprotocol/sdk";
 import { decidePermission } from "../acp-permissions.js";
@@ -37,8 +38,8 @@ export const fakeAcpAgentApp = (): AgentApp => {
                     title: "Edit",
                     kind: "edit",
                     status: "in_progress",
-                    locations: [{ path: "/work/src/app.ts", line: 3 }],
-                    content: [{ type: "diff", path: "/work/src/app.ts", oldText: "a", newText: "b" }],
+                    locations: [{ path: `${WORKSPACE_ROOT}/src/app.ts`, line: 3 }],
+                    content: [{ type: "diff", path: `${WORKSPACE_ROOT}/src/app.ts`, oldText: "a", newText: "b" }],
                 });
                 await push({ sessionUpdate: "tool_call_update", toolCallId: "t1", status: "completed" });
             }

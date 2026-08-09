@@ -22,7 +22,12 @@ export const asPercent = (fraction: number | undefined): number => Math.round((f
 // A plain whole number with its own floor and ceiling — the subagent caps. The bounds are the schema's, passed
 // in rather than looked up here: the daemon rejects anything outside them, and a box that lets you type a number
 // the save will refuse is a box that appears to have taken your answer.
-export const commitCount = (event: Event, saved: number, bounds: { readonly min: number; readonly max: number }, apply: (value: number) => void): void => {
+export const commitCount = (
+    event: Event,
+    saved: number,
+    bounds: { readonly min: number; readonly max: number },
+    apply: (value: number) => void,
+): void => {
     const input = event.target as HTMLInputElement;
     const typed = Number(input.value);
     const count = input.value === `` || !Number.isFinite(typed) ? saved : Math.min(bounds.max, Math.max(bounds.min, Math.round(typed)));

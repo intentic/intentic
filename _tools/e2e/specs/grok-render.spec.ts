@@ -47,7 +47,9 @@ test("a streamed Grok turn renders (partial markdown, table, code, tool) without
     // Mock only the provider endpoints + the turn: Grok connected with a live model; the other providers empty
     // so the composer auto-selects Grok. Everything else (liveness, /system/*) hits the real loopback daemon.
     await page.route("**/grok/accounts", (route) => route.fulfill({ json: { accounts: [{ id: "grok-1", label: "Grok" }] } }));
-    await page.route("**/providers/grok/models", (route) => route.fulfill({ json: { models: [{ id: "grok-4", label: "Grok 4" }], default: "grok-4" } }));
+    await page.route("**/providers/grok/models", (route) =>
+        route.fulfill({ json: { models: [{ id: "grok-4", label: "Grok 4" }], default: "grok-4" } }),
+    );
     await page.route("**/claude/accounts", (route) => route.fulfill({ json: { accounts: [] } }));
     await page.route("**/codex/accounts", (route) => route.fulfill({ json: { accounts: [] } }));
 

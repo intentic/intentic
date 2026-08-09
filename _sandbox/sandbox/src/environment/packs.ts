@@ -1,5 +1,6 @@
 import { readdir, readFile } from "node:fs/promises";
 import { join } from "node:path";
+import { packageRoot } from "@intentic/constants/node";
 import { sha256Hex } from "@intentic/sandbox-contract/tunnel-ids";
 
 /* Feature packs — the single unit of image growth. A pack is a checked-in Dockerfile fragment
@@ -23,9 +24,10 @@ import { sha256Hex } from "@intentic/sandbox-contract/tunnel-ids";
  *     (the Dockerfile's post-trees marker); everything else splices before them, where pinned-install layers
  *     stay cache-stable across source changes. */
 
-// packs/ ships inside the deployed package (package.json has no `files` allowlist), so ../../packs resolves
-// from dist/environment in the image (/opt/sandbox/packs) and from src/environment in a dev run alike.
-const packsDir = new URL("../../packs/", import.meta.url);
+// packs/ ships inside the deployed package (package.json has no `files` allowlist). Anchored to the package's
+// OWN root rather than counted back from this file, so it resolves from dist/environment in the image
+// (/opt/sandbox/packs) and from src/environment in a dev run alike — and keeps doing so if this file moves.
+const packsDir = join(packageRoot(import.meta.url), "packs");
 
 // Where the image-compose splice stamps what the BASE image bakes (content hash per pack). An absent stamp —
 // core image, dev run, or a pack newer than this base — reads as "not baked".
@@ -53,13 +55,13 @@ const packOf = (name: string, raw: string): Pack => {
 };
 
 export const readPack = async (name: string): Promise<Pack | undefined> => {
-    const raw = await readFile(new URL(`${name}.Dockerfile`, packsDir), "utf8").catch(() => undefined);
+    const raw = await readFile(join(packsDir, `${name}.Dockerfile`), "utf8").catch(() => undefined);
     return raw === undefined ? undefined : packOf(name, raw);
 };
 
 export const listPacks = async (): Promise<Pack[]> => {
     const entries = (await readdir(packsDir)).filter((entry) => entry.endsWith(".Dockerfile")).toSorted();
-    const raws = await Promise.all(entries.map((entry) => readFile(new URL(entry, packsDir), "utf8")));
+    const raws = await Promise.all(entries.map((entry) => readFile(join(packsDir, entry), "utf8")));
     return entries.map((entry, index) => packOf(entry.slice(0, -".Dockerfile".length), raws[index] ?? ""));
 };
 

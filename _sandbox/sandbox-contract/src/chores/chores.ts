@@ -235,7 +235,10 @@ const security: Chore = {
             headline: `${plural(blocking.length, `advisory`, `advisories`)}, ${patchable.length} with a published fix`,
             detail: blocking
                 .toSorted((left, right) => left.name.localeCompare(right.name))
-                .map((advisory) => `${advisory.severity} · ${advisory.name} — ${advisory.title}${advisory.patched === undefined ? ` (no patch yet)` : ``}`),
+                .map(
+                    (advisory) =>
+                        `${advisory.severity} · ${advisory.name} — ${advisory.title}${advisory.patched === undefined ? ` (no patch yet)` : ``}`,
+                ),
             // Identities, not counts: every advisory that appears or is fixed is genuinely news, and there is no
             // ordinary drift here to absorb.
             digest: digestOf(...blocking.map((advisory) => `${advisory.name}@${advisory.severity}`).toSorted()),
@@ -576,7 +579,9 @@ const runtime: Chore = {
         // Which packages would have to be argued with, so the finding names the work rather than only the fact.
         const pinned = context.signals.packages.filter((entry) => entry.engines?.[`node`] !== undefined);
         return {
-            headline: past ? `Node ${major} stopped receiving security patches ${days} days ago` : `Node ${major} reaches end of life in ${days} days`,
+            headline: past
+                ? `Node ${major} stopped receiving security patches ${days} days ago`
+                : `Node ${major} reaches end of life in ${days} days`,
             detail: [
                 `running · ${context.node}`,
                 `end of life · ${eol}`,
@@ -741,16 +746,27 @@ const bundleWeight: Chore = {
         }
         return {
             headline: `${largest.path} is ${Math.round(share)}% of the ${bytesLabel(totalGzip)} this build ships`,
-            detail: ranked.slice(0, DETAIL_LIMIT).map((asset) => `${bytesLabel(asset.gzip)} gzipped · ${asset.path} (${bytesLabel(asset.bytes)} on disk)`),
+            detail: ranked
+                .slice(0, DETAIL_LIMIT)
+                .map((asset) => `${bytesLabel(asset.gzip)} gzipped · ${asset.path} (${bytesLabel(asset.bytes)} on disk)`),
             // The bucketed total and the hash-stripped identities of the biggest chunks. A rebuild of the same
             // code is silent; a new heavy chunk appearing, or the whole thing doubling, is not.
-            digest: digestOf(`total:${bucketOf(totalGzip)}`, ...ranked.slice(0, 5).map((asset) => stableAsset(asset.path)).toSorted()),
+            digest: digestOf(
+                `total:${bucketOf(totalGzip)}`,
+                ...ranked
+                    .slice(0, 5)
+                    .map((asset) => stableAsset(asset.path))
+                    .toSorted(),
+            ),
             // Not a risk being carried, however large. `warning` is reserved for something with a clock on it.
             severity: `info`,
             why:
                 `The build output in ${dir}/ of ${repoLabel(context.repo)} is ${bytesLabel(totalGzip)} gzipped across ` +
                 `${plural(assets.length, `asset`)}, and ${largest.path} alone is ${bytesLabel(largest.gzip)} of it — ${Math.round(share)}%. ` +
-                `The next largest are ${ranked.slice(1, 4).map((asset) => `${asset.path} (${bytesLabel(asset.gzip)})`).join(`, `)}. ` +
+                `The next largest are ${ranked
+                    .slice(1, 4)
+                    .map((asset) => `${asset.path} (${bytesLabel(asset.gzip)})`)
+                    .join(`, `)}. ` +
                 `This is the last build someone ran, read off disk; nothing rebuilt it to measure.`,
         };
     },
@@ -817,7 +833,10 @@ const frameworkIdiom: Chore = {
             why:
                 `${repoLabel(context.repo)} still uses ${plural(found.length, `idiom`)} its framework has replaced: ` +
                 `${ranked.map((entry) => `${entry.rule.label} in ${plural(entry.files.length, `file`)} (replaced by ${entry.rule.replacement})`).join(`; `)}. ` +
-                `A sample of the files: ${ranked.flatMap((entry) => entry.files.slice(0, 3)).slice(0, DETAIL_LIMIT).join(`, `)}.`,
+                `A sample of the files: ${ranked
+                    .flatMap((entry) => entry.files.slice(0, 3))
+                    .slice(0, DETAIL_LIMIT)
+                    .join(`, `)}.`,
         };
     },
     diagnosis: `A retired idiom keeps working until the major release that drops it, and then it is an emergency inside somebody else's upgrade.`,
@@ -877,7 +896,9 @@ const componentOverlap: Chore = {
         // is the duplication chore's finding, not this one, and reporting it here would be two rows lighting for
         // one fact.
         const inventory = new Set(ui.scan.components.map(normalizePath));
-        const pairs = jscpd.duplication.top.filter((clone) => inventory.has(normalizePath(clone.first)) && inventory.has(normalizePath(clone.second)));
+        const pairs = jscpd.duplication.top.filter(
+            (clone) => inventory.has(normalizePath(clone.first)) && inventory.has(normalizePath(clone.second)),
+        );
         if (families.length === 0 && pairs.length === 0) {
             return undefined;
         }
@@ -900,7 +921,14 @@ const componentOverlap: Chore = {
             severity: `info`,
             why:
                 `${repoLabel(context.repo)} has ${parts.join(` and `)}, out of ${plural(ui.scan.components.length, `component file`)} scanned. ` +
-                `${families.length === 0 ? `` : `The names: ${families.slice(0, DETAIL_LIMIT).map((family) => `${family.stem} (${family.paths.join(`, `)})`).join(`; `)}. `}` +
+                `${
+                    families.length === 0
+                        ? ``
+                        : `The names: ${families
+                              .slice(0, DETAIL_LIMIT)
+                              .map((family) => `${family.stem} (${family.paths.join(`, `)})`)
+                              .join(`; `)}. `
+                }` +
                 `${pairs.length === 0 ? `` : `The clones: ${pairs.map((clone) => `${normalizePath(clone.first)} ↔ ${normalizePath(clone.second)}, ${clone.lines} lines`).join(`; `)}.`}`,
         };
     },
@@ -957,7 +985,10 @@ const tailwindBypass: Chore = {
             why:
                 `${repoLabel(context.repo)} has ${plural(total, `Tailwind class`, `Tailwind classes`)} hard-coding a colour or a pixel size ` +
                 `across ${plural(bypasses.length, `file`)}; the heaviest are ` +
-                `${worst.slice(0, 5).map((entry) => `${entry.path} (${entry.count})`).join(`, `)}.`,
+                `${worst
+                    .slice(0, 5)
+                    .map((entry) => `${entry.path} (${entry.count})`)
+                    .join(`, `)}.`,
         };
     },
     diagnosis: `Every inline colour is a place the theme cannot reach — a palette change lands everywhere except the files that opted out of it.`,

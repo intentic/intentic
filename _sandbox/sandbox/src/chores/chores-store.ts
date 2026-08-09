@@ -1,3 +1,4 @@
+import { STATE_DIR } from "@intentic/constants";
 import type { ChoreLedgerEntry, ProbeId, ProbeResult } from "@intentic/sandbox-contract";
 import { ChoreLedgerEntrySchema, ProbeResultSchema } from "@intentic/sandbox-contract";
 import { z } from "zod";
@@ -17,7 +18,7 @@ import { jsonFile } from "../store/json-file.js";
  * probe cache holds a handful of results per repo and the ledger holds one row per repo × chore, capped by the
  * catalog's size rather than by time. Nothing here grows without bound. */
 
-export const CHORES_DIR = ".intentic/chores";
+export const CHORES_DIR = `${STATE_DIR}/chores`;
 export const PROBES_FILE = `${CHORES_DIR}/probes.json`;
 export const LEDGER_FILE = `${CHORES_DIR}/ledger.json`;
 

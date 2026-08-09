@@ -75,4 +75,5 @@ export const priceLabel = (size: CloudSize): string => {
 };
 
 // One line a picker row can carry: what the machine is, then what it costs.
-export const sizeLabel = (size: CloudSize): string => `${size.label} — ${size.cpus} vCPU · ${size.memoryGb} GB RAM · ${size.diskGb} GB disk · ${priceLabel(size)}`;
+export const sizeLabel = (size: CloudSize): string =>
+    `${size.label} — ${size.cpus} vCPU · ${size.memoryGb} GB RAM · ${size.diskGb} GB disk · ${priceLabel(size)}`;

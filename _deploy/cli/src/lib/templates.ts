@@ -1,12 +1,13 @@
-import { fileURLToPath } from "node:url";
+import { join } from "node:path";
+import { packageRoot } from "@intentic/constants/node";
 import { Eta } from "eta";
 
 // Generated files (Forgejo Actions YAML, scaffolded TS/Dockerfile, access.md, .env.example) are rendered from
 // .eta templates instead of hand-concatenated strings, so a stray space or newline can't silently break the
 // output. Templates ship beside dist/ at the package root (package.json "files": ["dist", "templates"]) — never
-// under src/, which tsc would not copy. This module lives at <root>/{src,dist}/lib/templates.{ts,js}, so the
-// package root (and its templates/) is two levels up in BOTH the source (vitest) and compiled (shipped) layouts.
-const views = fileURLToPath(new URL("../../templates", import.meta.url));
+// under src/, which tsc would not copy. Anchored to the package root by finding it, so the source (vitest) and
+// compiled (shipped) layouts resolve alike without this file's depth being part of the answer.
+const views = join(packageRoot(import.meta.url), "templates");
 
 // autoEscape OFF: we render YAML / TS / Markdown / dotenv, never HTML — HTML-escaping would corrupt `${{ … }}`,
 // quotes, and angle brackets. autoTrim OFF: the output is whitespace-sensitive (YAML especially), so each

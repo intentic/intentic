@@ -2,11 +2,11 @@ import { execFileSync } from "node:child_process";
 import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { fileURLToPath } from "node:url";
+import { repoRoot as findRepoRoot } from "@intentic/constants/node";
 import { expect, test } from "vitest";
 import { bakedPackHash, listPacks, packFragment, readPack } from "./packs.js";
 
-const repoRoot = fileURLToPath(new URL("../../../../", import.meta.url));
+const repoRoot = findRepoRoot(import.meta.url);
 const sandboxRoot = join(repoRoot, "_sandbox/sandbox");
 
 // What the mechanism trusts about the shipped pack set: every profile name resolves, and the two

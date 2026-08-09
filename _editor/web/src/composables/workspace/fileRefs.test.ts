@@ -1,3 +1,4 @@
+import { WORKSPACE_ROOT } from "@intentic/constants";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 // The module reaches for the workspace-tree query (container root + the file index a reference is matched
@@ -76,7 +77,7 @@ describe(`toWorkspacePath`, () => {
     });
 
     it(`maps an absolute path under the container root to root-relative, and rejects paths outside it`, () => {
-        queryData = [treeOf(`/work`)];
+        queryData = [treeOf(WORKSPACE_ROOT)];
         expect(toWorkspacePath(`/work/src/foo.ts`)).toBe(`src/foo.ts`);
         expect(toWorkspacePath(`/usr/lib/node.js`)).toBeUndefined();
         // A sibling directory whose name merely starts with the root is not inside it — and nothing in the
@@ -86,7 +87,7 @@ describe(`toWorkspacePath`, () => {
 
     it(`maps an isolated turn's worktree path onto the file it mirrors`, () => {
         // An isolated agent runs in /history/worktrees/<id>, which mirrors the workspace layout below its lead.
-        queryData = [treeOf(`/work`, `_editor/web/src/foo.ts`)];
+        queryData = [treeOf(WORKSPACE_ROOT, `_editor/web/src/foo.ts`)];
         expect(toWorkspacePath(`/history/worktrees/agent-7/_editor/web/src/foo.ts`)).toBe(`_editor/web/src/foo.ts`);
     });
 
@@ -99,22 +100,22 @@ describe(`toWorkspacePath`, () => {
  * tail of its path, and read literally that opens nothing. */
 describe(`resolveInTree`, () => {
     it(`matches an abbreviated path onto the file it names`, () => {
-        queryData = [treeOf(`/work`, `_editor/web/src/pages/workspace/WorkspaceDesktop.vue`)];
+        queryData = [treeOf(WORKSPACE_ROOT, `_editor/web/src/pages/workspace/WorkspaceDesktop.vue`)];
         expect(resolveInTree(`pages/workspace/WorkspaceDesktop.vue`)).toBe(`_editor/web/src/pages/workspace/WorkspaceDesktop.vue`);
     });
 
     it(`keeps a path that already names a real file, even where a deeper file shares its tail`, () => {
-        queryData = [treeOf(`/work`, `src/foo.ts`, `_editor/web/src/foo.ts`)];
+        queryData = [treeOf(WORKSPACE_ROOT, `src/foo.ts`, `_editor/web/src/foo.ts`)];
         expect(resolveInTree(`src/foo.ts`)).toBe(`src/foo.ts`);
     });
 
     it(`takes the shallowest of several matches — the app's file, not a copy buried in a fixture tree`, () => {
-        queryData = [treeOf(`/work`, `_editor/web/test/fixtures/deep/pages/Foo.vue`, `_editor/web/src/pages/Foo.vue`)];
+        queryData = [treeOf(WORKSPACE_ROOT, `_editor/web/test/fixtures/deep/pages/Foo.vue`, `_editor/web/src/pages/Foo.vue`)];
         expect(resolveInTree(`pages/Foo.vue`)).toBe(`_editor/web/src/pages/Foo.vue`);
     });
 
     it(`answers nothing when no file ends in the reference, leaving the daemon to try`, () => {
-        queryData = [treeOf(`/work`, `src/foo.ts`)];
+        queryData = [treeOf(WORKSPACE_ROOT, `src/foo.ts`)];
         expect(resolveInTree(`src/bar.ts`)).toBeUndefined();
     });
 

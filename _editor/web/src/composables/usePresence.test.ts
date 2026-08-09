@@ -9,7 +9,11 @@ const requestMock = vi.mocked(sandboxRequest);
 const { presenceOthers, presenceStreamOpened, reportOpenPath, reportView, resetPresence, setPresenceUsers, viewersOfPath, viewersOfSession } =
     await import("./usePresence");
 
-const tab = (overrides: Partial<PresenceUser> & { clientId: string; email: string }): PresenceUser => ({ idle: false, role: `collaborator`, ...overrides });
+const tab = (overrides: Partial<PresenceUser> & { clientId: string; email: string }): PresenceUser => ({
+    idle: false,
+    role: `collaborator`,
+    ...overrides,
+});
 
 describe(`presence roster`, () => {
     afterEach(() => resetPresence());

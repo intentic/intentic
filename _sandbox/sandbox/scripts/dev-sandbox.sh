@@ -19,6 +19,13 @@ set -eu
 
 SCRIPT_DIR="$(dirname "$0")"
 
+# The checkout, found by walking up to the workspace marker. Inline rather than sourced from
+# _tools/scripts/repo-root.sh, because reaching that file from here would itself need the counted `../../../`
+# this is removing. Everything below is then named from the root, so no path depends on how deep this script
+# sits. (A sibling like dev-mounts.mjs stays $SCRIPT_DIR-relative — same directory is not a depth claim.)
+ROOT="$(cd "$SCRIPT_DIR" && pwd)"
+while [ "$ROOT" != "/" ] && [ ! -f "$ROOT/pnpm-workspace.yaml" ]; do ROOT="$(dirname "$ROOT")"; done
+
 # Bind the compiled JS from the working tree over the copies baked into the image, so a later daemon edit
 # needs only `tsgo` + `docker restart` (dev-reload.sh, seconds) instead of a full image rebuild (minutes).
 # Skipped silently when node isn't on PATH or nothing is compiled yet — the container then runs the baked
@@ -37,12 +44,12 @@ export INTENTIC_DEV_MOUNTS
 # when cargo isn't on PATH; the shim then downloads the released binary, which is the old behaviour.
 if [ -z "${IC_BIN:-}" ] && command -v cargo >/dev/null 2>&1; then
     echo "intentic: building the checkout's ic CLI…"
-    if cargo build --quiet --manifest-path "$SCRIPT_DIR/../../ic/Cargo.toml"; then
-        IC_BIN="$SCRIPT_DIR/../../ic/target/debug/ic"
+    if cargo build --quiet --manifest-path "$ROOT/_sandbox/ic/Cargo.toml"; then
+        IC_BIN="$ROOT/_sandbox/ic/target/debug/ic"
         export IC_BIN
     else
         echo "intentic: warning — the checkout's ic build failed; falling back to the released ic." >&2
     fi
 fi
 
-exec sh "$SCRIPT_DIR/../../../_site/site/public/scripts/recreate.sh" --dev "$@"
+exec sh "$ROOT/_site/site/public/scripts/recreate.sh" --dev "$@"

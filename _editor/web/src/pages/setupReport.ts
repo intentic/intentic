@@ -8,14 +8,14 @@ import type { SetupReport } from "@intentic-app/api-contract";
 // The connect flow's real phases (SetupReportSchema.stage), said the way the wait reads them. The pull
 // carries its own expectation-setting because it is the one honest multi-minute stage.
 const STAGE_LABELS: Record<SetupReport[`stage`], string> = {
-    "preflight": `checking the machine`,
+    preflight: `checking the machine`,
     "pulling-image": `pulling the sandbox image — the first time takes a few minutes`,
     "creating-tunnel": `creating its tunnel`,
     "starting-sandbox": `starting the sandbox`,
     "starting-connector": `starting the tunnel connector`,
     "waiting-health": `waiting for it to come up`,
-    "verifying": `verifying it is reachable end to end`,
-    "done": `finishing up`,
+    verifying: `verifying it is reachable end to end`,
+    done: `finishing up`,
 };
 
 export interface SetupReportView {

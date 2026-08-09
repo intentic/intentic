@@ -1,6 +1,7 @@
 import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { STATE_DIR } from "@intentic/constants";
 import { workspacePaths } from "../workspace/workspace.js";
 import type { Capability } from "@intentic/sandbox-contract";
 
@@ -69,14 +70,14 @@ test("secrets.inventory merges artifact requirements, .env keys, credentialed ca
             revealable: true,
         },
         { key: "EXTRA_TOKEN", kind: "env", status: "set", requiredBy: [], storedAt: "desired-state/.env", revealable: true },
-        { key: "github", kind: "capability", status: "connected", requiredBy: [], storedAt: ".intentic/capabilities.json", revealable: true },
+        { key: "github", kind: "capability", status: "connected", requiredBy: [], storedAt: `${STATE_DIR}/capabilities.json`, revealable: true },
         {
             key: "claude:default",
             kind: "provider",
             label: "Claude · Claude",
             status: "connected",
             requiredBy: [],
-            storedAt: ".intentic/auth/claude/default.json",
+            storedAt: `${STATE_DIR}/auth/claude/default.json`,
             revealable: false,
         },
     ]);

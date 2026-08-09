@@ -1,6 +1,7 @@
 import { type SpawnSyncReturns, spawnSync } from "node:child_process";
 import { chmod, mkdir, rename, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
+import { WORKSPACE_ROOT } from "@intentic/constants";
 import type { Log } from "@intentic/local-agent";
 import { binDir, type Pairing } from "./config.js";
 import { IGNORES, sanitizeId, sshAlias } from "./ssh.js";
@@ -115,7 +116,7 @@ const sessionSpec = (pairing: Pairing & { readonly localDir: string }): SyncSess
     name: sessionName(pairing.sandboxId),
     localDir: pairing.localDir,
     alias: sshAlias(pairing.sandboxId),
-    remoteDir: "/work",
+    remoteDir: WORKSPACE_ROOT,
 });
 
 // `mutagen sync create` args: two-way-safe (flags conflicts rather than clobber), our ignore set, and

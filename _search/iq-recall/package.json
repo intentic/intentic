@@ -48,6 +48,7 @@
         "test:watch": "vitest"
     },
     "dependencies": {
+        "@intentic/constants": "workspace:*",
         "tslib": "catalog:"
     },
     "devDependencies": {

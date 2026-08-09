@@ -1,9 +1,10 @@
+import { HOST_STATE_ROOT } from "@intentic/constants";
 import type { SshSession } from "./ssh.js";
 import { shellQuote } from "@intentic/sandbox-run/quote";
 
 // The restic env-file the backup provider writes (RESTIC_PASSWORD + backend creds). A guarded update reuses
 // it rather than re-threading the secrets onto every service node.
-const RESTIC_ENV = "/opt/intentic/backup/restic.env";
+const RESTIC_ENV = `${HOST_STATE_ROOT}/backup/restic.env`;
 
 export interface GuardedUpdateOpts {
     readonly session: SshSession;

@@ -247,7 +247,8 @@ export const obtainCertificate = async (options: AcmeOptions): Promise<{ certifi
             throw new Error(`ACME finalize failed: ${await problemOf(finalized)}`);
         }
         // Issuance is asynchronous: the order goes `processing` until the certificate URL appears.
-        let certificateUrl = typeof (await jsonOf(finalized.clone()))["certificate"] === "string" ? String((await jsonOf(finalized))["certificate"]) : undefined;
+        let certificateUrl =
+            typeof (await jsonOf(finalized.clone()))["certificate"] === "string" ? String((await jsonOf(finalized))["certificate"]) : undefined;
         if (certificateUrl === undefined) {
             await pollUntil(
                 async () => {

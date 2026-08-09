@@ -1,3 +1,4 @@
+import { WORKSPACE_ROOT } from "@intentic/constants";
 import { expect, test } from "vitest";
 import { createPiEventMapper, type PiTurnCapture } from "./pi-events.js";
 
@@ -5,7 +6,7 @@ import { createPiEventMapper, type PiTurnCapture } from "./pi-events.js";
  * out. The adapter's loop (pi-agent.test.ts) trusts these shapes, so drift between Pi's wire vocabulary and
  * the contract's is caught here, next to the mapping that owns it. */
 
-const CWD = "/work";
+const CWD = WORKSPACE_ROOT;
 
 test("assistant text streams as deltas with a text_end boundary; thinking rides its own frame", () => {
     const mapper = createPiEventMapper(CWD);

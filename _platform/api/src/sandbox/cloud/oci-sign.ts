@@ -49,7 +49,9 @@ export const parseOciConfig = (config: string, privateKeyPem: string): OciCreden
     try {
         createPrivateKey(privateKeyPem);
     } catch {
-        throw new CloudCredentialError(`The Oracle private key is not a readable PEM — paste the full unencrypted key file the console had you download.`);
+        throw new CloudCredentialError(
+            `The Oracle private key is not a readable PEM — paste the full unencrypted key file the console had you download.`,
+        );
     }
     return {
         user: values.get(`user`) ?? ``,
@@ -62,7 +64,8 @@ export const parseOciConfig = (config: string, privateKeyPem: string): OciCreden
 
 // The exact string that gets signed — its composition is the testable half of the scheme, so it is its own
 // export: one wrong space here is a 401 with no further diagnostics from Oracle.
-export const signingString = (headers: readonly (readonly [string, string])[]): string => headers.map(([name, value]) => `${name}: ${value}`).join(`\n`);
+export const signingString = (headers: readonly (readonly [string, string])[]): string =>
+    headers.map(([name, value]) => `${name}: ${value}`).join(`\n`);
 
 // The headers for one signed request: what fetch must send, Authorization included. `date` is injectable for
 // tests; body presence (not method) decides the content headers, matching what is actually transmitted.

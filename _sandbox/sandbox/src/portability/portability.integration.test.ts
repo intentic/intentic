@@ -1,6 +1,7 @@
 import { chmod, mkdir, mkdtemp, readFile, rm, stat, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { STATE_DIR } from "@intentic/constants";
 import { RETIRED_WORKSPACE_STATE_DIRS, type Capability } from "@intentic/sandbox-contract";
 import { expect, test } from "vitest";
 import type { Services } from "../composition.js";
@@ -116,9 +117,9 @@ test("every repo's real git dir travels, and its in-tree pointer is rewritten fo
 test("identity never travels and is refused on the way in even when a bundle carries it", async () => {
     const source = await makeRoots();
     await writeFile(join(source.history, "session-secret"), "signing-key");
-    await mkdir(join(source.work, ".intentic"), { recursive: true });
-    await writeFile(join(source.work, ".intentic/owner.json"), `{"email":"owner@example.com"}`);
-    await writeFile(join(source.work, ".intentic/settings.json"), `{"autoLand":true}`);
+    await mkdir(join(source.work, `${STATE_DIR}`), { recursive: true });
+    await writeFile(join(source.work, `${STATE_DIR}/owner.json`), `{"email":"owner@example.com"}`);
+    await writeFile(join(source.work, `${STATE_DIR}/settings.json`), `{"autoLand":true}`);
 
     const target = await makeRoots();
     const report = await restoreBundle(await bundleOf(source, true), { workspaceRoot: target.work, historyRoot: target.history }, LIMIT);
@@ -135,9 +136,9 @@ test("identity never travels and is refused on the way in even when a bundle car
 
 test("secrets obey the owner's export choice, in both directions", async () => {
     const source = await makeRoots();
-    await mkdir(join(source.work, ".intentic"), { recursive: true });
-    await writeFile(join(source.work, ".intentic/capabilities.json"), `[{"id":"mcp1","kind":"mcp","config":{"token":"t"}}]`);
-    await writeFile(join(source.work, ".intentic/ci.json"), `{"secret":"webhook"}`);
+    await mkdir(join(source.work, `${STATE_DIR}`), { recursive: true });
+    await writeFile(join(source.work, `${STATE_DIR}/capabilities.json`), `[{"id":"mcp1","kind":"mcp","config":{"token":"t"}}]`);
+    await writeFile(join(source.work, `${STATE_DIR}/ci.json`), `{"secret":"webhook"}`);
 
     const withoutSecrets = await makeRoots();
     await restoreBundle(await bundleOf(source, false), { workspaceRoot: withoutSecrets.work, historyRoot: withoutSecrets.history }, LIMIT);
@@ -153,8 +154,8 @@ test("secrets obey the owner's export choice, in both directions", async () => {
 
 test("conversation state travels while every provider runtime home stays secret", async () => {
     const source = await makeRoots();
-    await mkdir(join(source.work, ".intentic/sessions/claude/projects/-history-gits-root/memory"), { recursive: true });
-    await writeFile(join(source.work, ".intentic/sessions/claude/projects/-history-gits-root/memory/MEMORY.md"), "# what I learned\n");
+    await mkdir(join(source.work, `${STATE_DIR}/sessions/claude/projects/-history-gits-root/memory`), { recursive: true });
+    await writeFile(join(source.work, `${STATE_DIR}/sessions/claude/projects/-history-gits-root/memory/MEMORY.md`), "# what I learned\n");
     const providerFiles = [
         ["claude", "default.json"],
         ["codex", "auth.json"],
@@ -162,12 +163,12 @@ test("conversation state travels while every provider runtime home stays secret"
         ["cliproxy", "config.yaml"],
     ] as const;
     for (const [provider, file] of providerFiles) {
-        await mkdir(join(source.work, ".intentic/auth", provider), { recursive: true });
-        await writeFile(join(source.work, ".intentic/auth", provider, file), "secret");
+        await mkdir(join(source.work, `${STATE_DIR}/auth`, provider), { recursive: true });
+        await writeFile(join(source.work, `${STATE_DIR}/auth`, provider, file), "secret");
     }
     for (const provider of RETIRED_WORKSPACE_STATE_DIRS.secret) {
-        await mkdir(join(source.work, ".intentic", provider), { recursive: true });
-        await writeFile(join(source.work, ".intentic", provider, "retired-secret.json"), "retired secret");
+        await mkdir(join(source.work, `${STATE_DIR}`, provider), { recursive: true });
+        await writeFile(join(source.work, `${STATE_DIR}`, provider, "retired-secret.json"), "retired secret");
     }
 
     const target = await makeRoots();
@@ -196,11 +197,11 @@ test("conversation state travels while every provider runtime home stays secret"
 
 test("the composed overlay is left for the target to recompose; its source section travels", async () => {
     const source = await makeRoots();
-    await mkdir(join(source.work, ".intentic/environment.d"), { recursive: true });
-    await writeFile(join(source.work, ".intentic/environment.custom.Dockerfile"), "RUN apt-get install -y ffmpeg\n");
-    await writeFile(join(source.work, ".intentic/environment.d/rust.Dockerfile"), "RUN rustup default stable\n");
+    await mkdir(join(source.work, `${STATE_DIR}/environment.d`), { recursive: true });
+    await writeFile(join(source.work, `${STATE_DIR}/environment.custom.Dockerfile`), "RUN apt-get install -y ffmpeg\n");
+    await writeFile(join(source.work, `${STATE_DIR}/environment.d/rust.Dockerfile`), "RUN rustup default stable\n");
     // Composed from a base image the target may not even be on — restoring it would pin the wrong FROM.
-    await writeFile(join(source.work, ".intentic/environment.approved.Dockerfile"), "FROM registry.example/sandbox:old\n");
+    await writeFile(join(source.work, `${STATE_DIR}/environment.approved.Dockerfile`), "FROM registry.example/sandbox:old\n");
 
     const target = await makeRoots();
     const report = await restoreBundle(await bundleOf(source, false), { workspaceRoot: target.work, historyRoot: target.history }, LIMIT);
@@ -229,19 +230,19 @@ test("the report names the capabilities a no-secrets bundle left behind", async 
 
 test("derived trees are left out while durable artifacts travel", async () => {
     const source = await makeRoots();
-    await mkdir(join(source.work, ".intentic/cache/iq"), { recursive: true });
-    await writeFile(join(source.work, ".intentic/cache/iq/index.bin"), "cache");
-    await mkdir(join(source.work, ".intentic/browser/chromium"), { recursive: true });
-    await writeFile(join(source.work, ".intentic/browser/chromium/Cookies"), "cookies");
-    await mkdir(join(source.work, ".intentic/artifacts/attachments/u1"), { recursive: true });
-    await writeFile(join(source.work, ".intentic/artifacts/attachments/u1/shot.png"), "attachment");
-    await mkdir(join(source.work, ".intentic/artifacts/browser"), { recursive: true });
-    await writeFile(join(source.work, ".intentic/artifacts/browser/viewport.png"), "screenshot");
-    await mkdir(join(source.work, ".intentic/runtime/extensions/whatsapp"), { recursive: true });
-    await writeFile(join(source.work, ".intentic/runtime/extensions/whatsapp/gateway.url"), "http://127.0.0.1:1");
+    await mkdir(join(source.work, `${STATE_DIR}/cache/iq`), { recursive: true });
+    await writeFile(join(source.work, `${STATE_DIR}/cache/iq/index.bin`), "cache");
+    await mkdir(join(source.work, `${STATE_DIR}/browser/chromium`), { recursive: true });
+    await writeFile(join(source.work, `${STATE_DIR}/browser/chromium/Cookies`), "cookies");
+    await mkdir(join(source.work, `${STATE_DIR}/artifacts/attachments/u1`), { recursive: true });
+    await writeFile(join(source.work, `${STATE_DIR}/artifacts/attachments/u1/shot.png`), "attachment");
+    await mkdir(join(source.work, `${STATE_DIR}/artifacts/browser`), { recursive: true });
+    await writeFile(join(source.work, `${STATE_DIR}/artifacts/browser/viewport.png`), "screenshot");
+    await mkdir(join(source.work, `${STATE_DIR}/runtime/extensions/whatsapp`), { recursive: true });
+    await writeFile(join(source.work, `${STATE_DIR}/runtime/extensions/whatsapp/gateway.url`), "http://127.0.0.1:1");
     for (const dir of RETIRED_WORKSPACE_STATE_DIRS.derived) {
-        await mkdir(join(source.work, ".intentic", dir), { recursive: true });
-        await writeFile(join(source.work, ".intentic", dir, "retired-cache.bin"), "retired cache");
+        await mkdir(join(source.work, `${STATE_DIR}`, dir), { recursive: true });
+        await writeFile(join(source.work, `${STATE_DIR}`, dir, "retired-cache.bin"), "retired cache");
     }
     await mkdir(join(source.history, "worktrees/abc/repo"), { recursive: true });
     await writeFile(join(source.history, "worktrees/abc/repo/file.ts"), "checkout");

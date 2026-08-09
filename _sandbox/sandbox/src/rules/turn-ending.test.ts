@@ -1,3 +1,4 @@
+import { WORKSPACE_ROOT } from "@intentic/constants";
 import type { HookInput } from "@anthropic-ai/claude-agent-sdk";
 import type { Rule } from "@intentic/sandbox-contract";
 import { describe, expect, test } from "vitest";
@@ -86,7 +87,7 @@ describe("no rules", () => {
 describe("the verify-edits built-in", () => {
     test("edited code with no check is asked to run the workspace's own script", async () => {
         const hooks = armed([VERIFY]);
-        await edit(hooks, "/work/src/a.ts");
+        await edit(hooks, `${WORKSPACE_ROOT}/src/a.ts`);
         const nudge = await stop(hooks);
         expect(nudge).toContain("/work/src/a.ts");
         expect(nudge).toContain("`pnpm test`");
@@ -97,21 +98,21 @@ describe("the verify-edits built-in", () => {
 
     test("a passing check means the turn ends silently", async () => {
         const hooks = armed([VERIFY]);
-        await edit(hooks, "/work/src/a.ts");
+        await edit(hooks, `${WORKSPACE_ROOT}/src/a.ts`);
         await bash(hooks, "pnpm test", PASSED);
         expect(await stop(hooks)).toBeUndefined();
     });
 
     test("a non-zero exit in the footer is not a pass", async () => {
         const hooks = armed([VERIFY]);
-        await edit(hooks, "/work/src/a.ts");
+        await edit(hooks, `${WORKSPACE_ROOT}/src/a.ts`);
         await bash(hooks, "pnpm test", FAILED);
         expect(await stop(hooks)).toContain("did NOT pass");
     });
 
     test("a Bash tool failure counts as a failed check", async () => {
         const hooks = armed([VERIFY]);
-        await edit(hooks, "/work/src/a.ts");
+        await edit(hooks, `${WORKSPACE_ROOT}/src/a.ts`);
         await bashFailed(hooks, "pnpm test", "exit 1: 2 failed");
         expect(await stop(hooks)).toContain("2 failed");
     });
@@ -126,7 +127,7 @@ describe("the verify-edits built-in", () => {
 
     test("a check that fixes the failure clears the second stop", async () => {
         const hooks = armed([VERIFY]);
-        await edit(hooks, "/work/src/a.ts");
+        await edit(hooks, `${WORKSPACE_ROOT}/src/a.ts`);
         await bash(hooks, "pnpm test", FAILED);
         expect(await stop(hooks)).toContain("did NOT pass");
         await edit(hooks, "/work/src/a.ts");
@@ -138,7 +139,7 @@ describe("the verify-edits built-in", () => {
 describe("the follow-up budget", () => {
     test("at most two asks per turn — the third stop is silent", async () => {
         const hooks = armed([VERIFY]);
-        await edit(hooks, "/work/src/a.ts");
+        await edit(hooks, `${WORKSPACE_ROOT}/src/a.ts`);
         expect(await stop(hooks)).toBeDefined();
         expect(await stop(hooks)).toBeDefined();
         expect(await stop(hooks)).toBeUndefined();
@@ -146,7 +147,7 @@ describe("the follow-up budget", () => {
 
     test("the SDK's own re-entry flag suppresses the ask on its own", async () => {
         const hooks = armed([VERIFY]);
-        await edit(hooks, "/work/src/a.ts");
+        await edit(hooks, `${WORKSPACE_ROOT}/src/a.ts`);
         expect(await stop(hooks, true)).toBeUndefined();
     });
 
@@ -154,7 +155,7 @@ describe("the follow-up budget", () => {
     // things. Counting per rule would let a turn be sent back once per rule, forever.
     test("several rules speaking at one stop spend one ask between them", async () => {
         const hooks = armed([VERIFY, rule({ id: "changelog", action: { kind: "instruct", text: "Update the changelog." } })]);
-        await edit(hooks, "/work/src/a.ts");
+        await edit(hooks, `${WORKSPACE_ROOT}/src/a.ts`);
         const first = await stop(hooks);
         expect(first).toContain("no check has passed");
         expect(first).toContain("Update the changelog.");
@@ -168,12 +169,12 @@ describe("conditions", () => {
     // which files the turn will touch, so a path condition resolved then could never hold.
     test("a path condition is read against what the turn actually edited", async () => {
         const sql = rule({ id: "sql", when: { paths: ["**/*.sql"] }, action: { kind: "instruct", text: "Mention the migration." } });
-        const touched = armed([sql], { cwd: "/work" });
-        await edit(touched, "/work/db/0001.sql");
+        const touched = armed([sql], { cwd: WORKSPACE_ROOT });
+        await edit(touched, `${WORKSPACE_ROOT}/db/0001.sql`);
         expect(await stop(touched)).toContain("Mention the migration.");
 
         const untouched = armed([sql], { cwd: "/work" });
-        await edit(untouched, "/work/src/a.ts");
+        await edit(untouched, `${WORKSPACE_ROOT}/src/a.ts`);
         expect(await stop(untouched)).toBeUndefined();
     });
 
@@ -181,8 +182,8 @@ describe("conditions", () => {
     // has to mean the same thing here as it does at the landing moment.
     test("paths are relativised to the turn's tree before a glob sees them", async () => {
         const docs = rule({ id: "docs", when: { paths: ["docs/**"] }, action: { kind: "instruct", text: "Check the docs build." } });
-        const hooks = armed([docs], { cwd: "/work/repo" });
-        await edit(hooks, "/work/repo/docs/intro.md");
+        const hooks = armed([docs], { cwd: `${WORKSPACE_ROOT}/repo` });
+        await edit(hooks, `${WORKSPACE_ROOT}/repo/docs/intro.md`);
         expect(await stop(hooks)).toContain("Check the docs build.");
     });
 

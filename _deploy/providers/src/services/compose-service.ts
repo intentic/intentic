@@ -1,4 +1,5 @@
 import { setTimeout as sleep } from "node:timers/promises";
+import { HOST_STATE_ROOT } from "@intentic/constants";
 import type { Provider, ResolvedInputs } from "@intentic/engine";
 import { HASH_KEY } from "@intentic/graph";
 import { envLine, shellQuote } from "@intentic/sandbox-run/quote";
@@ -63,7 +64,7 @@ const running = async (session: SshSession, id: string): Promise<boolean> => {
 };
 
 export const createComposeServiceProvider = <S extends typeof serviceSchema>(spec: ComposeServiceSpec<S>, executor: SshExecutor): Provider => {
-    const stateDir = `/opt/intentic/${spec.kind}`;
+    const stateDir = `${HOST_STATE_ROOT}/${spec.kind}`;
     const readyTimeoutMs = spec.readyTimeoutMs ?? 300_000;
     const parse = (inputs: ResolvedInputs): z.infer<S> => parseInputs(spec.schema, inputs, spec.kind);
     const internalUrl = (parsed: z.infer<S>): string => `http://${parsed.internalIp}:${spec.port}`;

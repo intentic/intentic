@@ -1,4 +1,5 @@
 import { setTimeout as sleep } from "node:timers/promises";
+import { HOST_STATE_ROOT } from "@intentic/constants";
 import type { Provider, ResolvedInputs } from "@intentic/engine";
 import { HASH_KEY } from "@intentic/graph";
 import { z } from "zod";
@@ -31,7 +32,7 @@ const UI_PORT = 8080;
 // `otlpEndpoint` output (http://<internalIp>:4318); it is host-internal, never tunnel-routed.
 const OTLP_GRPC_PORT = 4317;
 const OTLP_HTTP_PORT = 4318;
-const STATE_DIR = "/opt/intentic/signoz";
+const STATE_DIR = `${HOST_STATE_ROOT}/signoz`;
 const READY_TIMEOUT_MS = 300_000;
 const READY_INTERVAL_MS = 4_000;
 // The histogram-quantile UDF release the init step fetches into ClickHouse's user_scripts (SigNoz needs it

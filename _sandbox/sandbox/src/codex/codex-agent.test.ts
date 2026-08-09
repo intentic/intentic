@@ -1,3 +1,4 @@
+import { STATE_DIR, WORKSPACE_ROOT } from "@intentic/constants";
 import type { ThreadEvent } from "@openai/codex-sdk";
 import type { AgentEvent } from "@intentic/sandbox-contract";
 import { expect, test } from "vitest";
@@ -15,7 +16,7 @@ const fakeRunner = (...turns: ThreadEvent[][]): { runner: CodexRunner; calls: Co
     return { runner, calls };
 };
 
-const request = { prompt: "add a /ping route", cwd: "/work", signal: new AbortController().signal };
+const request = { prompt: "add a /ping route", cwd: WORKSPACE_ROOT, signal: new AbortController().signal };
 
 // Collect all events; `onPlan` (when given) schedules a decision for each plan frame AFTER the generator has
 // parked on the pending-plan bridge (the yield suspends before wait() registers, hence the macrotask).
@@ -53,7 +54,7 @@ test("a turn maps thread events onto session, deltas, thinking, tools, todos, us
             usage: { input_tokens: 10, cached_input_tokens: 3, cache_write_input_tokens: 0, output_tokens: 5, reasoning_output_tokens: 2 },
         },
     ]);
-    const events = await collect(createCodexAgent("/work/.intentic/auth/codex", runner), request);
+    const events = await collect(createCodexAgent(`${WORKSPACE_ROOT}/${STATE_DIR}/auth/codex`, runner), request);
     expect(events).toEqual([
         { kind: "session", sessionId: "thr-1" },
         { kind: "thinking", text: "planning the edit" },
@@ -79,7 +80,7 @@ test("a turn maps thread events onto session, deltas, thinking, tools, todos, us
 
 test("the turn runs full-access with approvals off, resumes the session, and pins CODEX_HOME", async () => {
     const { runner, calls } = fakeRunner([]);
-    await collect(createCodexAgent("/work/.intentic/auth/codex", runner), {
+    await collect(createCodexAgent(`${WORKSPACE_ROOT}/${STATE_DIR}/auth/codex`, runner), {
         ...request,
         sessionId: "thr-9",
         model: "gpt-5-codex",
@@ -104,7 +105,7 @@ test("the turn runs full-access with approvals off, resumes the session, and pin
 
 test("a subscription-served turn (codexEndpoint) rides the translator provider block on the local bearer, no auth.json", async () => {
     const { runner, calls } = fakeRunner([]);
-    await collect(createCodexAgent("/work/.intentic/auth/codex", runner), {
+    await collect(createCodexAgent(`${WORKSPACE_ROOT}/${STATE_DIR}/auth/codex`, runner), {
         ...request,
         model: "gpt-5.5",
         codexEndpoint: { baseUrl: "http://127.0.0.1:8788", authToken: "intentic-translator-local" },
@@ -129,7 +130,7 @@ test("a subscription-served turn (codexEndpoint) rides the translator provider b
 
 test("a native (account) turn carries no provider config — Codex uses its own credential resolution", async () => {
     const { runner, calls } = fakeRunner([]);
-    await collect(createCodexAgent("/work/.intentic/auth/codex", runner), { ...request, model: "gpt-5-codex" });
+    await collect(createCodexAgent(`${WORKSPACE_ROOT}/${STATE_DIR}/auth/codex`, runner), { ...request, model: "gpt-5-codex" });
     expect(calls[0]!.config).toBeUndefined();
     expect(calls[0]!.env["CODEX_API_KEY"]).toBeUndefined();
 });
@@ -152,7 +153,10 @@ test("attached images ride as native inputs while other files are referenced in 
     const { runner, calls } = fakeRunner([]);
     await collect(createCodexAgent("/home", runner), {
         ...request,
-        attachments: ["/work/.intentic/artifacts/attachments/a/shot.png", "/work/.intentic/artifacts/attachments/b/report.pdf"],
+        attachments: [
+            `${WORKSPACE_ROOT}/${STATE_DIR}/artifacts/attachments/a/shot.png`,
+            `${WORKSPACE_ROOT}/${STATE_DIR}/artifacts/attachments/b/report.pdf`,
+        ],
     });
     expect(calls[0]!.images).toEqual(["/work/.intentic/artifacts/attachments/a/shot.png"]);
     expect(calls[0]!.prompt).toContain("/work/.intentic/artifacts/attachments/b/report.pdf");
@@ -167,9 +171,13 @@ test("a plan turn sends attached images on the first planning turn only — the 
         ],
         [{ type: "item.completed", item: { id: "m2", type: "agent_message", text: "Done." } }],
     );
-    await collect(createCodexAgent("/home", runner), { ...request, permissionMode: "plan" as const, attachments: ["/work/a/shot.png"] }, () => ({
-        approve: true,
-    }));
+    await collect(
+        createCodexAgent("/home", runner),
+        { ...request, permissionMode: "plan" as const, attachments: [`${WORKSPACE_ROOT}/a/shot.png`] },
+        () => ({
+            approve: true,
+        }),
+    );
     expect(calls).toHaveLength(2);
     expect(calls[0]!.images).toEqual(["/work/a/shot.png"]);
     expect(calls[1]!.images).toBeUndefined();

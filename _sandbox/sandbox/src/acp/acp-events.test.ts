@@ -1,7 +1,8 @@
+import { WORKSPACE_ROOT } from "@intentic/constants";
 import { expect, test } from "vitest";
 import { sessionUpdateEvent } from "./acp-events.js";
 
-const CWD = "/work";
+const CWD = WORKSPACE_ROOT;
 
 test("agent message and thought chunks map to delta/thinking; non-text summarizes by type", () => {
     expect(sessionUpdateEvent({ sessionUpdate: "agent_message_chunk", content: { type: "text", text: "hi" } }, CWD)).toEqual({
@@ -27,9 +28,9 @@ test("tool_call passes ACP's vocabulary through: kind, status, relativized locat
                 title: "Edit app.ts",
                 kind: "edit",
                 status: "in_progress",
-                rawInput: { file_path: "/work/src/app.ts" },
-                locations: [{ path: "/work/src/app.ts", line: 3 }],
-                content: [{ type: "diff", path: "/work/src/app.ts", oldText: "a", newText: "b" }],
+                rawInput: { file_path: `${WORKSPACE_ROOT}/src/app.ts` },
+                locations: [{ path: `${WORKSPACE_ROOT}/src/app.ts`, line: 3 }],
+                content: [{ type: "diff", path: `${WORKSPACE_ROOT}/src/app.ts`, oldText: "a", newText: "b" }],
             },
             CWD,
         ),
@@ -39,7 +40,7 @@ test("tool_call passes ACP's vocabulary through: kind, status, relativized locat
         name: "Edit app.ts",
         category: "edit",
         status: "in_progress",
-        target: "/work/src/app.ts",
+        target: `${WORKSPACE_ROOT}/src/app.ts`,
         locations: [{ path: "src/app.ts", line: 3 }],
         content: [{ type: "diff", path: "src/app.ts", oldText: "a", newText: "b" }],
     });

@@ -1,6 +1,7 @@
 import { existsSync } from "node:fs";
 import { readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
+import { HOST_STATE_ROOT } from "@intentic/constants";
 import { createStore, resolveInputs } from "@intentic/engine";
 import type { DesiredStateGraph } from "@intentic/graph";
 import { hostTarget, type SshExecutor, type SshTarget } from "@intentic/providers";
@@ -35,7 +36,7 @@ export const createLocalSecretStore = (dir: string): SecretStore => {
 // so every operator reads the SAME value instead of minting its own from a laptop-local cache. Stored at
 // /opt/intentic/secrets.json (mode 0600, root-only), the same writable convention the backing providers use.
 // A per-instance cache makes one read serve a whole ensure() pass; writes are read-modify-write of that cache.
-const HOST_SECRETS_PATH = "/opt/intentic/secrets.json";
+const HOST_SECRETS_PATH = `${HOST_STATE_ROOT}/secrets.json`;
 export const createHostSecretStore = (target: SshTarget, executor: SshExecutor): SecretStore => {
     // Memoize the load PROMISE — success and failure alike. One connect attempt serves the whole run: an
     // unreachable host must cost one connect timeout total, not one per generated key (the layered store

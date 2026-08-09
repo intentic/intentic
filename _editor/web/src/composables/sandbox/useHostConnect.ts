@@ -56,7 +56,10 @@ export function useHostConnect() {
         try {
             const response = await sandboxRequest(`/system/hosts/pair?id=${encodeURIComponent(id)}`, { method: `POST` });
             if (!response.ok) {
-                error.value = response.status === 403 ? `Only the sandbox's owner can connect a computer.` : `Couldn't start the connection (${response.status}).`;
+                error.value =
+                    response.status === 403
+                        ? `Only the sandbox's owner can connect a computer.`
+                        : `Couldn't start the connection (${response.status}).`;
                 return;
             }
             pairToken.value = ((await response.json()) as { token: string }).token;

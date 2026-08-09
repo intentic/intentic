@@ -1,13 +1,14 @@
+import { HISTORY_ROOT, WORKSPACE_ROOT } from "@intentic/constants";
 import type { HookCallbackMatcher, HookEvent, HookInput } from "@anthropic-ai/claude-agent-sdk";
 import { expect, test } from "vitest";
 import { inWorktree, type IsolationPlan } from "./isolation.js";
 import { redirectCommand, worktreeRedirectHooks } from "./worktree-redirect.js";
 
 const plan: IsolationPlan = {
-    worktree: "/history/worktrees/abc",
-    root: "/work",
+    worktree: `${HISTORY_ROOT}/worktrees/abc`,
+    root: WORKSPACE_ROOT,
     mirrors: ["node_modules", "intentic/node_modules", "intentic/_editor/web/node_modules", "intentic/_editor/web/dist"],
-    overlays: "/history/overlays/abc",
+    overlays: `${HISTORY_ROOT}/overlays/abc`,
 };
 
 // The tool input a PreToolUse hook actually returns, or undefined when it declined to rewrite anything.
@@ -108,6 +109,8 @@ test("a heredoc body is left alone — its workspace paths are content, not targ
 test("heredoc detection covers the forms agents actually write", () => {
     // Unquoted delimiter, indented terminator (`<<-`), a second heredoc later in the same command, and the
     // command word before the body still being rewritten.
+    // Heredoc bodies are shell source the rewriter must leave byte-for-byte alone, so they stay spelled out:
+    // path-literals: content — this is the text under test, not a path the test builds.
     const unquoted = ["python3 /work/x.py <<EOF", "path = '/work/a'", "EOF"].join("\n");
     expect(redirectCommand(unquoted, plan)).toBe(["python3 /history/worktrees/abc/x.py <<EOF", "path = '/work/a'", "EOF"].join("\n"));
     const indented = ["cat <<-'END'", "\t/work/b", "\tEND", "ls /work/c"].join("\n");

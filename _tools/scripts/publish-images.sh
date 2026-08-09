@@ -14,6 +14,7 @@
 # (unpinned — always the latest release, no digest to maintain). The GHCR packages must be made public once so
 # tenant hosts can pull them unauthenticated.
 set -euo pipefail
+. "$(dirname "$0")/repo-root.sh"
 
 TAGS="${TAGS:?set TAGS (space-separated, e.g. "0.1.0" or "latest sha-abc1234")}"
 # Which of the two images to build — the multi-arch flow builds `sandbox` per arch on different runners while
@@ -34,7 +35,7 @@ ARCH_SUFFIX="${ARCH_SUFFIX:-}"
 REGISTRIES="${REGISTRIES:-ghcr.io/intentic}"
 # Monorepo root (_tools/scripts -> up two). The sandbox image's build context is the whole monorepo so
 # `pnpm install --frozen-lockfile` resolves the root lockfile; `pnpm deploy` prunes the final image to core.
-root="$(cd "$(dirname "$0")/../.." && pwd)"
+root="$(repo_root)"
 
 # A docker-container buildx builder. The default `docker` driver exports no cache beyond inline and pushes
 # over an untested path here, so this stays — but it is best-effort: a build must NEVER fail over builder setup.

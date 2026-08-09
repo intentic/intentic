@@ -61,13 +61,21 @@ const CTA_Y = 530;
 
 export const pricingPage = (step: number): string => {
     const pressed = step >= 2;
-    const cta = `${box(CTA_X, CTA_Y, 236, 46, pressed ? `#c94a20` : `#e2582a`)}${text(CTA_X + 118, CTA_Y + 29, step >= 3 ? `Redirecting…` : `Start free trial`, {
-        size: 15,
-        weight: 600,
-        fill: `#fff`,
-        anchor: `middle`,
-    })}`;
-    const spinner = step >= 3 ? `<circle cx="${CTA_X + 30}" cy="${CTA_Y + 23}" r="8" fill="none" stroke="#ffffff" stroke-width="3" stroke-dasharray="12 8" />` : ``;
+    const cta = `${box(CTA_X, CTA_Y, 236, 46, pressed ? `#c94a20` : `#e2582a`)}${text(
+        CTA_X + 118,
+        CTA_Y + 29,
+        step >= 3 ? `Redirecting…` : `Start free trial`,
+        {
+            size: 15,
+            weight: 600,
+            fill: `#fff`,
+            anchor: `middle`,
+        },
+    )}`;
+    const spinner =
+        step >= 3
+            ? `<circle cx="${CTA_X + 30}" cy="${CTA_Y + 23}" r="8" fill="none" stroke="#ffffff" stroke-width="3" stroke-dasharray="12 8" />`
+            : ``;
     const pointer = cursor(step === 0 ? 900 : step === 1 ? CTA_X + 150 : CTA_X + 118, step === 0 ? 640 : step === 1 ? CTA_Y + 60 : CTA_Y + 24);
     return page(
         `${siteHeader(`pricing`)}${text(48, 160, `Plans that grow with your shop`, { size: 34, weight: 700 })}${text(
@@ -85,10 +93,15 @@ export const checkoutPage = (step: number): string => {
     const typed = [``, `4242 4242 4242 4242`, `4242 4242 4242 4242`, `4242 4242 4242 4242`][step] ?? ``;
     const paying = step >= 3;
     return page(
-        `${box(0, 0, 640, HEIGHT, `#f6f9fc`)}${text(80, 96, `acme`, { size: 20, weight: 700, fill: `#e2582a` })}${text(80, 168, `Subscribe to Growth`, {
-            size: 15,
-            fill: `#4a4744`,
-        })}${text(80, 216, `$49.00`, { size: 40, weight: 700 })}${text(80, 246, `per month`, { size: 14, fill: `#6c6862` })}${box(
+        `${box(0, 0, 640, HEIGHT, `#f6f9fc`)}${text(80, 96, `acme`, { size: 20, weight: 700, fill: `#e2582a` })}${text(
+            80,
+            168,
+            `Subscribe to Growth`,
+            {
+                size: 15,
+                fill: `#4a4744`,
+            },
+        )}${text(80, 216, `$49.00`, { size: 40, weight: 700 })}${text(80, 246, `per month`, { size: 14, fill: `#6c6862` })}${box(
             80,
             300,
             480,
@@ -198,10 +211,15 @@ export const cartPage = (options: { readonly coupon: string; readonly rejected: 
             140,
             `Order summary`,
             { size: 20, weight: 600 },
-        )}${text(760, 190, `Subtotal`, { size: 15, fill: `#4a4744` })}${text(1_180, 190, `$49.00`, { size: 15, anchor: `end` })}${text(760, 222, `Discount`, {
-            size: 15,
-            fill: `#4a4744`,
-        })}${text(1_180, 222, `—`, { size: 15, anchor: `end`, fill: `#8a7f78` })}${field}${error}${box(
+        )}${text(760, 190, `Subtotal`, { size: 15, fill: `#4a4744` })}${text(1_180, 190, `$49.00`, { size: 15, anchor: `end` })}${text(
+            760,
+            222,
+            `Discount`,
+            {
+                size: 15,
+                fill: `#4a4744`,
+            },
+        )}${text(1_180, 222, `—`, { size: 15, anchor: `end`, fill: `#8a7f78` })}${field}${error}${box(
             760,
             420,
             420,

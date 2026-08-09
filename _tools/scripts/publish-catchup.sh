@@ -19,9 +19,10 @@
 set -euo pipefail
 
 VERSION="${1:?usage: publish-catchup.sh <version>   e.g. 2.0.0 (must be > 1.125.1 for a clean set)}"
+. "$(dirname "$0")/repo-root.sh"
 DIR="$(cd "$(dirname "$0")" && pwd)"
 source "$DIR/packages.sh"   # PUB — the shared publish list, so this can't drift from the CI release
-cd "$DIR/../.."
+cd "$(repo_root)"
 
 command -v pnpm >/dev/null || { echo "pnpm not found on PATH."; exit 1; }
 command -v node >/dev/null || { echo "node not found on PATH."; exit 1; }

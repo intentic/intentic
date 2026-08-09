@@ -1,6 +1,6 @@
 import { existsSync } from "node:fs";
 import { dirname, join } from "node:path";
-import { fileURLToPath } from "node:url";
+import { packageRoot } from "@intentic/constants/node";
 import { CONFIG_FILE, ENV_FILE, LAST_APPLIED_FILE, SECRETS_FILE } from "./workspace-layout.js";
 
 // Keep secret + local-only files out of the PR-managed desired-state repo: the user-supplied `.env`, the
@@ -25,8 +25,9 @@ export const INTENT_TSCONFIG = `${JSON.stringify(
 )}\n`;
 
 // `--link` resolves @intentic/* to this monorepo's local source instead of the registry, so the CLI can be
-// dogfooded against unpublished packages. Computed from this compiled module's location: {src,dist} → scaffold → its parent.
-const SCAFFOLD_PARENT = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
+// dogfooded against unpublished packages. The directory this package SITS IN — found by locating the package
+// root and stepping out of it, so neither the {src,dist} split nor this file's depth is part of the answer.
+const SCAFFOLD_PARENT = dirname(packageRoot(import.meta.url));
 
 // A `link:` spec to a local graph/sdk, scaffold-relative. In the CLI bundle both land BESIDE scaffold
 // (node_modules/@intentic/*); in the monorepo scaffold sits in _sandbox and both live in _deploy — the sibling

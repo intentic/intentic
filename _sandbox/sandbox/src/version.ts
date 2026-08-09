@@ -2,10 +2,11 @@ import { readdirSync, statSync } from "node:fs";
 import { createRequire } from "node:module";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { packageRoot } from "@intentic/constants/node";
 
 // The release flow bumps package versions before building the stable image, so this is the readable version
 // behind ghcr.io/intentic/sandbox:stable.
-export const { version } = createRequire(import.meta.url)("../package.json") as { version: string };
+export const { version } = createRequire(import.meta.url)(join(packageRoot(import.meta.url), "package.json")) as { version: string };
 
 // Only semantic-release's prepareCmd stamps a real version into package.json; everything built from a working
 // tree (local `pnpm dev`, the CI sha-/latest images) keeps the repo's unpublished 0.0.0 sentinel. That sentinel

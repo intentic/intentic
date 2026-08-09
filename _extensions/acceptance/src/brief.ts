@@ -1,3 +1,4 @@
+import { STATE_DIR, WORKSPACE_ROOT } from "@intentic/sandbox-contract";
 import { reportPath, resultPath, type RunStory, storyDir } from "./runs";
 
 /* THE BRIEF — what makes a test session a test session.
@@ -104,11 +105,11 @@ const tooling = (shots: string): string =>
         ``,
         `### Screenshots — read this before you take the first one`,
         ``,
-        `Every screenshot lands in \`/work/.intentic/artifacts/browser\` whatever filename you pass; the harness rewrites ` +
+        `Every screenshot lands in \`${WORKSPACE_ROOT}/${STATE_DIR}/artifacts/browser\` whatever filename you pass; the harness rewrites ` +
             `it and that directory is SHARED with the other tests running right now. So:`,
         ``,
         `- Name each shot \`${"<NN>"}-${"<short-step>"}.png\` — \`01-signin-form.png\`, \`02-validation-error.png\`. Numbers in the order you took them.`,
-        `- Immediately after each shot, copy it into your own directory: \`cp /work/.intentic/artifacts/browser/${"<name>"}.png ${shots}/${"<name>"}.png\`. Do it per shot, not in a batch at the end — after the fact you cannot tell which step a file belonged to.`,
+        `- Immediately after each shot, copy it into your own directory: \`cp ${WORKSPACE_ROOT}/${STATE_DIR}/artifacts/browser/${"<name>"}.png ${shots}/${"<name>"}.png\`. Do it per shot, not in a batch at the end — after the fact you cannot tell which step a file belonged to.`,
         `- Reference shots in your report by the path relative to your report file: \`![](shots/01-signin-form.png)\`.`,
     ].join(`\n`);
 
@@ -158,7 +159,7 @@ const output = (params: {
     ].join(`\n`);
 
 export const briefFor = (input: BriefInput): string => {
-    const dir = `/work/${storyDir(input.runId, input.story.slug)}`;
+    const dir = `${WORKSPACE_ROOT}/${storyDir(input.runId, input.story.slug)}`;
     const sections = [
         HEADER,
         [
@@ -185,8 +186,8 @@ export const briefFor = (input: BriefInput): string => {
             slug: input.story.slug,
             title: input.story.title,
             dir,
-            report: `/work/${reportPath(input.runId, input.story.slug)}`,
-            result: `/work/${resultPath(input.runId, input.story.slug)}`,
+            report: `${WORKSPACE_ROOT}/${reportPath(input.runId, input.story.slug)}`,
+            result: `${WORKSPACE_ROOT}/${resultPath(input.runId, input.story.slug)}`,
             criteria: input.story.criteria,
         }),
     ];

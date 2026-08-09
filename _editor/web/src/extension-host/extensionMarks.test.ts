@@ -1,6 +1,6 @@
 import { readdirSync, readFileSync } from "node:fs";
-import { dirname, join, resolve } from "node:path";
-import { fileURLToPath } from "node:url";
+import { join } from "node:path";
+import { repoRoot } from "@intentic/constants/node";
 import { ExtensionManifestSchema } from "@intentic/extension-manifest";
 import { isIconName } from "@intentic/ui/icons";
 import { describe, expect, it } from "vitest";
@@ -22,7 +22,7 @@ import { describe, expect, it } from "vitest";
  * reaches a CDN fails on a train. A dead slug is the one tier that degrades on its own — the mark underneath is
  * already painted. */
 
-const EXTENSIONS_DIR = resolve(dirname(fileURLToPath(import.meta.url)), "../../../../_extensions");
+const EXTENSIONS_DIR = join(repoRoot(import.meta.url), "_extensions");
 
 const manifests = readdirSync(EXTENSIONS_DIR, { withFileTypes: true })
     .filter((entry) => entry.isDirectory())

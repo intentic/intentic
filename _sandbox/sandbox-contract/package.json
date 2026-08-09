@@ -71,6 +71,7 @@
         "test:watch": "vitest"
     },
     "dependencies": {
+        "@intentic/constants": "workspace:*",
         "@intentic/extension-manifest": "workspace:*",
         "@intentic/registry": "workspace:*",
         "@orpc/contract": "catalog:",

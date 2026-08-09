@@ -16,10 +16,11 @@
 import { createReadStream, existsSync, mkdirSync, statSync } from "node:fs";
 import { createServer, type Server } from "node:http";
 import { extname, join, normalize, resolve } from "node:path";
+import { repoRoot } from "@intentic/constants/node";
 import { chromium, type Browser, type Page } from "@playwright/test";
 
-const DEMO_DIR = resolve(import.meta.dirname, "../../../_site/site/public/demo");
-const OUT_DIR = resolve(import.meta.dirname, "../../../_site/site/src/assets/product");
+const DEMO_DIR = join(repoRoot(import.meta.url), "_site/site/public/demo");
+const OUT_DIR = join(repoRoot(import.meta.url), "_site/site/src/assets/product");
 const PORT = 47_147;
 const ORIGIN = `http://localhost:${PORT}`;
 /* The demo builds under a base, because it ships inside the site's own deploy rather than on an origin of its
@@ -153,7 +154,7 @@ const TYPES: Record<string, string> = {
  * takes. The endpoints are stubs because the shot's subject is the WIDGET — what it renders, on someone else's
  * page — and a real daemon behind it would change nothing a reader can see. The bundle is not a stub: it is the
  * built artifact, so a regression in the widget's own rendering shows up here as a wrong screenshot. */
-const WIDGET_BUNDLE = resolve(import.meta.dirname, "../../../_sandbox/webchat-widget/dist/widget.js");
+const WIDGET_BUNDLE = join(repoRoot(import.meta.url), "_sandbox/webchat-widget/dist/widget.js");
 
 const DOORBELL_CONFIG = {
     automationId: "website-concierge",

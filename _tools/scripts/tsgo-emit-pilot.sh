@@ -12,7 +12,8 @@
 set -euo pipefail
 
 PKG="${1:-_deploy/graph}"
-ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+. "$(dirname "$0")/repo-root.sh"
+ROOT="$(repo_root)"
 cd "$ROOT"
 
 TSCONFIG="$PKG/tsconfig.json"

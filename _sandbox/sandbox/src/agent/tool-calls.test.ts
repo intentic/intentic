@@ -1,7 +1,8 @@
+import { WORKSPACE_ROOT } from "@intentic/constants";
 import { expect, test } from "vitest";
 import { displayNameOf, editDiffContent, isSearchCall, toolCategoryOf, toolLocations, toolTarget } from "./tool-calls.js";
 
-const CWD = "/work";
+const CWD = WORKSPACE_ROOT;
 
 test("displayNameOf maps OpenCode's lowercase ids and passes Claude names through", () => {
     expect(displayNameOf("bash")).toBe("Bash");
@@ -125,7 +126,7 @@ test("editDiffContent derives a whole-file diff (no oldText) from Write and Note
 
 test("editDiffContent caps oversized sides and flags truncation", () => {
     const big = "x".repeat(40_000);
-    const diff = editDiffContent("Write", { file_path: "/work/big.txt", content: big }, CWD);
+    const diff = editDiffContent("Write", { file_path: `${WORKSPACE_ROOT}/big.txt`, content: big }, CWD);
     expect(diff?.type).toBe("diff");
     if (diff?.type === "diff") {
         expect(diff.newText.length).toBe(32_000);

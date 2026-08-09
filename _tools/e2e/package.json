@@ -10,6 +10,7 @@
     "devDependencies": {
         "@intentic-app/api-contract": "workspace:*",
         "@intentic-app/prisma": "workspace:*",
+        "@intentic/constants": "workspace:*",
         "@intentic/tsconfig": "workspace:*",
         "@playwright/test": "catalog:",
         "@prisma/adapter-pg": "catalog:",

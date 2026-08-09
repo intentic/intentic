@@ -105,15 +105,31 @@ export const background: BackgroundItem[] = [
 ];
 
 export const openSource: OpenSourceProject[] = [
-    { name: "ts-import", body: "Import TypeScript files into plain Node.js at runtime, with no compile step.", href: "https://github.com/radarsu/ts-import" },
-    { name: "rpc-websocket-client", body: "A small, typed JSON-RPC 2.0 client over WebSockets with async/await.", href: "https://github.com/radarsu/rpc-websocket-client" },
-    { name: "validate-polish", body: "Validators for Polish identifiers (PESEL, NIP, REGON) that actually pass the checksum tests.", href: "https://github.com/radarsu/validate-polish" },
-    { name: "options-defaults", body: "Deep-merge options objects with their defaults, predictably.", href: "https://github.com/radarsu/options-defaults" },
+    {
+        name: "ts-import",
+        body: "Import TypeScript files into plain Node.js at runtime, with no compile step.",
+        href: "https://github.com/radarsu/ts-import",
+    },
+    {
+        name: "rpc-websocket-client",
+        body: "A small, typed JSON-RPC 2.0 client over WebSockets with async/await.",
+        href: "https://github.com/radarsu/rpc-websocket-client",
+    },
+    {
+        name: "validate-polish",
+        body: "Validators for Polish identifiers (PESEL, NIP, REGON) that actually pass the checksum tests.",
+        href: "https://github.com/radarsu/validate-polish",
+    },
+    {
+        name: "options-defaults",
+        body: "Deep-merge options objects with their defaults, predictably.",
+        href: "https://github.com/radarsu/options-defaults",
+    },
 ];
 
 export const whyIntentic = [
     "Agents got good enough to do real work, and the tools around them did not. The only layer you are allowed to change is the prompt; the environment the agent works in is somebody else's, and so is the machine.",
-    "That trade is fine until the agent needs your database password to do the job. Then \"whose computer is this?\" stops being a philosophical question. intentic is the other answer: the workspace is yours, the hardware is yours, and the vendor is architecturally unable to reach either.",
+    'That trade is fine until the agent needs your database password to do the job. Then "whose computer is this?" stops being a philosophical question. intentic is the other answer: the workspace is yours, the hardware is yours, and the vendor is architecturally unable to reach either.',
 ];
 
 export const aboutMeta = {

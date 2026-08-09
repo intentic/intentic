@@ -1,9 +1,11 @@
+import { repoRoot } from "@intentic/constants/node";
 import { type ConfigDefinition, cliArgs, env, envFile, loadConfig as loadPuristicConfig } from "@puristic/env/index.js";
-import { resolve } from "node:path";
+import { join } from "node:path";
 import { z } from "zod";
 
-// Root .env, resolved relative to this file so loading is cwd-independent (dev runs from _platform/api).
-const rootEnv = resolve(import.meta.dirname, "../../../.env");
+// Root .env, found by walking up to the workspace marker so loading is cwd-independent (dev runs from
+// _platform/api) AND depth-independent — this file's distance from the root is no longer part of the answer.
+const rootEnv = join(repoRoot(import.meta.url), ".env");
 
 // Nested schema. @puristic/env derives env var names by SCREAMING_SNAKE-casing each path segment and joining
 // with "_": database.url → DATABASE_URL, betterAuth.secret → BETTER_AUTH_SECRET, google.clientId →

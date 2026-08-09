@@ -1,7 +1,8 @@
+import { WORKSPACE_ROOT } from "@intentic/sandbox-contract";
 import { describe, expect, test } from "vitest";
 import { composeProjectName, rankStacks, repoLinks } from "./komodo-repos.js";
 
-const ROOT = "/work";
+const ROOT = WORKSPACE_ROOT;
 // A fake filesystem: path → contents. Anything absent reads as undefined, exactly like services.files.read.
 const fs = (files: Record<string, string>) => ({ root: ROOT, read: async (path: string) => files[path] });
 
@@ -56,7 +57,12 @@ describe("rankStacks", () => {
 
 describe("repoLinks", () => {
     test("uses the compose file's own name and reports where it looked", async () => {
-        const links = await repoLinks(fs({ "/work/intentic/docker-compose.yml": `name: intentic\n` }), ["/work/intentic"], ["intentic-platform"], {});
+        const links = await repoLinks(
+            fs({ [`${WORKSPACE_ROOT}/intentic/docker-compose.yml`]: `name: intentic\n` }),
+            [`${WORKSPACE_ROOT}/intentic`],
+            ["intentic-platform"],
+            {},
+        );
         expect(links).toEqual([
             {
                 repo: "intentic",
@@ -68,13 +74,18 @@ describe("repoLinks", () => {
     });
 
     test("falls back to the directory name, the way docker compose does", async () => {
-        const links = await repoLinks(fs({ "/work/shop/compose.yaml": `services:\n  api:\n` }), ["/work/shop"], ["shop"], {});
+        const links = await repoLinks(
+            fs({ [`${WORKSPACE_ROOT}/shop/compose.yaml`]: `services:\n  api:\n` }),
+            [`${WORKSPACE_ROOT}/shop`],
+            ["shop"],
+            {},
+        );
         expect(links[0]?.projectName).toBe("shop");
         expect(links[0]?.suggestions).toEqual(["shop"]);
     });
 
     test("prefers the compose file docker would pick first", async () => {
-        const files = { "/work/a/compose.yaml": `name: first\n`, "/work/a/docker-compose.yml": `name: second\n` };
+        const files = { [`${WORKSPACE_ROOT}/a/compose.yaml`]: `name: first\n`, [`${WORKSPACE_ROOT}/a/docker-compose.yml`]: `name: second\n` };
         expect((await repoLinks(fs(files), ["/work/a"], [], {}))[0]?.projectName).toBe("first");
     });
 
@@ -83,8 +94,8 @@ describe("repoLinks", () => {
     });
 
     test("carries the owner's link through, and supports several at once", async () => {
-        const files = { "/work/a/compose.yaml": `name: a\n`, "/work/b/compose.yaml": `name: b\n` };
-        const links = await repoLinks(fs(files), ["/work/a", "/work/b"], ["prod-a", "prod-b"], { a: "prod-a", b: "prod-b" });
+        const files = { [`${WORKSPACE_ROOT}/a/compose.yaml`]: `name: a\n`, [`${WORKSPACE_ROOT}/b/compose.yaml`]: `name: b\n` };
+        const links = await repoLinks(fs(files), [`${WORKSPACE_ROOT}/a`, `${WORKSPACE_ROOT}/b`], ["prod-a", "prod-b"], { a: "prod-a", b: "prod-b" });
         expect(links.map((link) => [link.repo, link.linkedStack])).toEqual([
             ["a", "prod-a"],
             ["b", "prod-b"],
@@ -94,7 +105,9 @@ describe("repoLinks", () => {
     // A link to a stack that has since been deleted must not render as a working link: dropping it returns the
     // row to its suggestion state, which is the one the owner can act on.
     test("drops a link to a stack Komodo no longer has", async () => {
-        const links = await repoLinks(fs({ "/work/a/compose.yaml": `name: a\n` }), ["/work/a"], ["still-here"], { a: "deleted-stack" });
+        const links = await repoLinks(fs({ [`${WORKSPACE_ROOT}/a/compose.yaml`]: `name: a\n` }), [`${WORKSPACE_ROOT}/a`], ["still-here"], {
+            a: "deleted-stack",
+        });
         expect(links[0]?.linkedStack).toBeUndefined();
     });
 });
