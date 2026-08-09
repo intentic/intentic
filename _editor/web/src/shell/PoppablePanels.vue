@@ -16,12 +16,25 @@ import { chatDock, terminalDock } from "./dockSlots";
  * WHAT THIS COMPONENT'S OWN LIFETIME MEANS. It owns the panels, so it is the one thing whose going away really
  * does orphan a floating window — and it now goes away only when the workspace itself does: a lost session
  * bounced to /login, the last sandbox deselected, the viewport crossing into the mobile shell (which has no
- * docked panel to come home to). Docking on unmount is therefore still right; it is just no longer something an
- * ordinary navigation triggers. Signing out is not on that list because it reloads the page outright — that
- * window is handled by its keeper, which closes a window no live page will answer for. */
+ * docked panel to come home to). Signing out is not on that list because it reloads the page outright — that
+ * window is handled by its keeper, which closes a window no live page will answer for.
+ *
+ * So this is where each floating window learns whether it is still a view of the app: the holds below say "a
+ * panel is being rendered into you right now", for exactly as long as it is (composables/usePopout.ts has the
+ * contract, and why a window told anything less honest than this ends up frozen on its last frame). Saying it
+ * as a HOLD rather than as a dock() on unmount is what lets a remount cross without casualties — the previous
+ * shape decided the window's fate at the first frame of a teardown, and a teardown that turned out to be the
+ * first half of a remount had already closed the user's floating chat, or latched a refusal that kept the panel
+ * from ever floating again on that page. Nothing here decides anything now: it reports, and the window acts. */
 
-const { restoring: chatRestoring, body: chatPopoutBody, dock: dockChat } = useChatPopout();
-const { poppedOut: terminalPoppedOut, restoring: terminalRestoring, body: terminalPopoutBody, dock: dockTerminal } = useTerminalPopout();
+const { restoring: chatRestoring, body: chatPopoutBody, holdWhile: holdChat } = useChatPopout();
+const {
+    poppedOut: terminalPoppedOut,
+    restoring: terminalRestoring,
+    body: terminalPopoutBody,
+    dock: dockTerminal,
+    holdWhile: holdTerminal,
+} = useTerminalPopout();
 const terminal = useTerminalPanel();
 
 /* THE PARKING STAGE — where a docked panel waits out a route that has no shell to dock into. Offscreen rather
@@ -38,20 +51,19 @@ onUnmounted(() => park.remove());
 const chatTarget = computed(() => chatPopoutBody.value ?? chatDock.value ?? park);
 const terminalTarget = computed(() => terminalPopoutBody.value ?? terminalDock.value ?? park);
 
-// Closing the panel (its ×, Ctrl+`) while floating also retires the otherwise-empty pop-out window.
+// Closing the panel (its ×, Ctrl+`) while floating also retires the otherwise-empty pop-out window. A decision
+// by the reader, so it is a dock and not merely a released hold: the window goes now rather than after a grace.
 watch(terminal.open, (open) => {
     if (!open) {
         dockTerminal();
     }
 });
 
-onUnmounted(() => {
-    // Nothing can drive a floating window once the panel behind it is gone — see the three ways that happens
-    // above. The keeper out there would close it on its own eventually; this is the same decision, taken at
-    // the moment it becomes true instead of twelve seconds later.
-    dockChat();
-    dockTerminal();
-});
+// What each window is told about itself, in the same terms as the `v-if` below — because that condition IS
+// whether the panel exists to be drawn. Held until this component's scope ends, which is the only honest
+// account of "the app stopped rendering into you" available anywhere in the page.
+holdChat(() => !chatRestoring.value);
+holdTerminal(() => terminal.open.value && !terminalRestoring.value);
 </script>
 
 <template>

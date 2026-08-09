@@ -1,4 +1,16 @@
-import { computed, type ComputedRef, nextTick, ref, type Ref, shallowRef, type ShallowRef } from "vue";
+import {
+    computed,
+    type ComputedRef,
+    getCurrentScope,
+    nextTick,
+    onScopeDispose,
+    ref,
+    type Ref,
+    shallowRef,
+    type ShallowRef,
+    watch,
+    watchEffect,
+} from "vue";
 import { traceFocus } from "./chat/focusTrace";
 import { unwatchOnScreen, watchOnScreen } from "./onScreen";
 
@@ -38,20 +50,33 @@ import { unwatchOnScreen, watchOnScreen } from "./onScreen";
  * that has since been swept sits there focused. Every "the popped-out window is out of sync" report is this,
  * because two windows CANNOT hold divergent state while one realm drives both.
  *
- * So the keeper's tick is a question, not an announcement, and the answer below is the whole contract: a live
- * page holding this window answers true, and anything else — no page, a page that has since docked the panel,
- * a realm torn down mid-reload — answers false or doesn't answer at all. A window nobody answers for veils
- * itself ("Reconnecting…") within a tick and closes itself if no page takes it over, so a stale panel is
- * visibly stale for ~200ms and gone for good in seconds. It can never sit there looking live. */
+ * So the keeper's tick is a question, not an announcement, and the answer below is the whole contract. It has
+ * three values because the window needs two facts and a boolean carries one: whether a live page is behind it
+ * at all, and whether that page is actually DRAWING in it.
+ *   · `live`    — a panel is being rendered into this window right now. Nothing to do.
+ *   · `waiting` — this page owns the window and means to draw in it, but has not yet: the app is still booting,
+ *                 or the host that renders the panel is between mounts. Proof of life, so the window stays —
+ *                 veiled, because a window with nothing in it must never read as the app.
+ *   · `none`    — nobody here drives this window.
+ *
+ * `live` IS THE PANEL, NOT THE CLAIM, and that distinction is the whole reason this contract has three values.
+ * It used to be answered from bookkeeping — "I attached to this window once" — which is a fact about this store
+ * and not about the screen. Anything that left a store attached to a window it had stopped drawing into (a page
+ * that adopted the window before its panel host had mounted; a dev hot update leaving a second copy of this
+ * store behind to claim the same window) produced a window told it was alive forever: never veiled, never
+ * closed, frozen on the last frame it was handed, while the panel itself sat docked in the app. The answer now
+ * comes from whatever renders the panel (holdWhile), which is the only party that can tell the two apart. */
+
+/** What a pop-out window is told when its keeper asks whether anyone is driving it — see the contract above. */
+export type PopoutAnswer = `live` | `waiting` | `none`;
 
 declare global {
     interface Window {
-        /* The question a pop-out window's keeper puts to its opener on every tick: "is a live page driving me?"
-         * Installed by this module on every load, so a window opened by the PREVIOUS page finds it on the next
-         * one. The BOOLEAN is what makes it a liveness check rather than only a re-adoption hook — and it is
-         * answered by running this page's own code, which is the only proof of life that can't be faked by a
-         * document still sitting on screen. */
-        __intentic?: { readonly adoptPopout: (name: string, win: Window) => boolean };
+        /* The question a pop-out window's keeper puts to its opener on every tick: "is a live page drawing in
+         * me?" Installed by this module on every load, so a window opened by the PREVIOUS page finds it on the
+         * next one — and answered by running this page's own code, which is the only proof of life that cannot
+         * be faked by a document still sitting on screen. */
+        __intentic?: { readonly adoptPopout: (name: string, win: Window) => PopoutAnswer };
     }
 
     /* The one fact the Window Management API gives a page without asking permission: whether the desktop spans
@@ -83,6 +108,12 @@ const CLONE_ATTR = `data-intentic-clone`;
 // column for a moment, and undershooting only means the panel shows docked until the window reports in — it is
 // no longer a deadline the window has to beat to survive (see stopWaiting).
 const RECLAIM_GRACE_MS = 2500;
+
+// How long a window whose panel has just left is kept before it is handed back and closed. The same span as the
+// reclaim above, for the same reason read from the other end: a host that unmounts is usually about to mount
+// again, and the two graces together mean a panel can cross a remount in either direction without the window
+// under it being torn down.
+const HANDBACK_GRACE_MS = 2500;
 
 // What the design system keys off <html>: the color scheme (the PrimeVue dark preset and the role tokens), the
 // brand theme (themes.css token overrides), and the base text size (tokens.css's root font-size, which every
@@ -178,10 +209,10 @@ const onSomeScreen = (frame: Frame): boolean =>
 
 // Every pop-out store on the page, by window name — a keeper knows only its own name, and the page it calls
 // back may be a completely fresh load, so the hook resolves the store at call time. An unknown name answers
-// false rather than nothing: this page drives no window by that name, which is exactly what the asker needs
+// `none` rather than nothing: this page drives no window by that name, which is exactly what the asker needs
 // to hear.
-const adopters = new Map<string, (win: Window) => boolean>();
-window.__intentic = { adoptPopout: (name, win) => adopters.get(name)?.(win) === true };
+const adopters = new Map<string, (win: Window) => PopoutAnswer>();
+window.__intentic = { adoptPopout: (name, win) => adopters.get(name)?.(win) ?? `none` };
 
 /* DISMISSAL, IN THE WINDOW THE USER ACTUALLY CLICKED IN — FOR THE OVERLAYS WE DON'T OWN.
  *
@@ -346,6 +377,11 @@ export interface Popout {
     // Ask the window for at least this much width — what the chat panel does when it has just added a pane the
     // current frame has no room for. Never shrinks, never leaves the screen, and does nothing while docked.
     readonly fit: (width: number) => void;
+    /* Held by whatever RENDERS the panel, for exactly as long as it is rendering it — the fact the window's
+     * liveness answer is derived from (see the contract at the top of this file). Called once from the host's
+     * setup with a getter for "am I drawing the panel right now"; the hold is released with the host's own
+     * scope, so an unmount needs no bookkeeping of its own. */
+    readonly holdWhile: (rendering: () => boolean) => void;
 }
 
 // One pop-out store. `name` is the panel's slug, and every identity the window has is that one string: its
@@ -357,6 +393,32 @@ export const createPopout = (name: string, title: string, size: () => { width: n
     const body = shallowRef<HTMLElement>();
     let popoutWindow: Window | undefined;
     let rootObserver: MutationObserver | undefined;
+
+    /* WHO IS ACTUALLY DRAWING IN THE WINDOW. The host that renders the panel is the only party that knows, and
+     * this store cannot work it out for itself: `body` says where the panel WOULD go, never that anything went
+     * there. Everything the window is told about its own liveness comes from here.
+     *
+     * A COUNT rather than a flag, because a host can be replaced by its successor before it is torn down — a
+     * hot update re-creating the component, a shell swapping — and a window that dipped to `waiting` in the
+     * overlap would veil itself mid-swap for no reason the reader can see. */
+    const holders = ref(0);
+
+    const holdWhile = (rendering: () => boolean): void => {
+        let holding = false;
+        const set = (next: boolean): void => {
+            if (next === holding) {
+                return;
+            }
+            holding = next;
+            holders.value += next ? 1 : -1;
+        };
+        watchEffect(() => set(rendering()));
+        // The host's own scope releases the hold: a component that goes away stops answering for the window by
+        // construction, rather than by remembering to say so on the way out.
+        if (getCurrentScope() !== undefined) {
+            onScopeDispose(() => set(false));
+        }
+    };
 
     /* "This TAB had the panel floating when it went away" — the note the fresh page reads to know a window is
      * on its way back, so it can hold the panel's docked slot shut instead of flashing it open. sessionStorage
@@ -471,38 +533,49 @@ export const createPopout = (name: string, title: string, size: () => { width: n
         rootObserver.observe(document.documentElement, { attributes: true, attributeFilter: [...ROOT_ATTRIBUTES, `class`] });
     };
 
+    /* What this store tells a window it owns. `live` is the panel being DRAWN out there and nothing else — a
+     * store that has claimed the window but has nothing to put in it says `waiting` instead, and the window
+     * veils rather than presenting an empty canvas as the app. Between the two, every state this store can be
+     * left in by a hiccup is one the window can act on by itself. */
+    const answer = (): PopoutAnswer => (holders.value > 0 ? `live` : `waiting`);
+
     /* The keeper's question, answered for this store's window. It arrives from the moment the window's page
-     * loads and every 200ms after, so the common case by far is "yes, still mine, still alive" — and answering
-     * it at all is the proof, since a torn-down realm never gets here. The ways to say no each mean something
-     * different to the asker: a window this page no longer holds (docked deliberately, or replaced by another)
-     * is told to close, while a page that simply isn't driving it — because it never adopted it — lets the
-     * keeper veil the panel and keep asking. */
+     * loads and every 200ms after, so the common case by far is "still mine, still drawing" — and answering it
+     * at all is the proof of life, since a torn-down realm never gets here. The ways to say `none` each mean
+     * something different to the asker: a window this page no longer holds (docked deliberately, or replaced by
+     * another) is told to close, while a page that simply isn't driving it — because it never adopted it — lets
+     * the keeper veil the panel and keep asking. */
     adopters.set(name, (win) => {
         if (win.closed) {
-            return false;
+            return `none`;
         }
         if (popoutWindow === win) {
             // Ours — unless the document beneath it has been swapped for a new one, which is a reload out there
             // whose unload never reached us. The panel is in the old document, so this is a window to take over
-            // again rather than one to reassure: answering yes would leave it holding an empty page.
-            if (body.value === win.document.body) {
-                return true;
+            // again rather than one to reassure: answering for it would leave it holding an empty page.
+            if (body.value !== win.document.body) {
+                released();
+                attach(win);
             }
-            released();
-        } else if (dismissed || poppedOut.value) {
+            return answer();
+        }
+        if (dismissed || poppedOut.value) {
             win.close();
-            return false;
+            return `none`;
         }
         attach(win);
-        return true;
+        return answer();
     });
 
-    /* The two ways a panel leaves a window differ in exactly one thing — what happens to the window:
+    /* The three ways a panel leaves a window, which differ in what happens to the window and in what is decided
+     * about the next one:
      *   · released() — the window is going away on its own, so there is nothing to close. It is also the path a
      *     RELOAD out there takes, and closing the window on that would abort the navigation and take the panel
      *     with it; left alone, the reloading window comes back, reports in and is re-adopted, so the panel spends
      *     a beat in its column and pops straight back out.
-     *   · dock() — the user asked for the panel in its column, so the window has no reason to exist: close it. */
+     *   · dock() — the user asked for the panel in its column, so the window has no reason to exist: close it,
+     *     and refuse the leftovers that report in afterwards.
+     *   · relinquish() — the app stopped drawing the panel. Close it, but rule on nothing: see below. */
     const released = (): void => {
         if (!poppedOut.value) {
             return;
@@ -544,6 +617,50 @@ export const createPopout = (name: string, title: string, size: () => { width: n
         released();
         win?.close();
     };
+
+    /* Give the window back, having decided nothing about the panel's future — which is the whole difference
+     * from dock(). A store that has merely lost the host drawing for it must stay adoptable: latch a refusal
+     * there and a remount (a hot update, a sign-in blip, a shell swap) leaves the panel unable to float again
+     * for the rest of the page's life, and the window it was in closed under the user. */
+    const relinquish = (): void => {
+        const win = popoutWindow;
+        released();
+        win?.close();
+    };
+
+    /* THE WINDOW OUTLIVING ITS PANEL. A host going away is not a decision about the window — from here it is
+     * indistinguishable from the first half of a remount — so it starts a clock instead of closing anything:
+     * a host back within the grace picks the window up again and the reader sees at most a blink of the veil,
+     * and only a window still empty when it expires is handed back and closed.
+     *
+     * It arms on the panel LEAVING, never on its not having arrived yet (`held === 0`): before the first hold
+     * this is a page still booting, and a boot slower than this grace is ordinary — a cold dev server, a
+     * session fetched over a tunnel. Bounding THAT case is the keeper's job, because only the window knows how
+     * long it has actually sat empty. */
+    let handBack: number | undefined;
+    const stopHandBack = (): void => {
+        if (handBack !== undefined) {
+            window.clearTimeout(handBack);
+            handBack = undefined;
+        }
+    };
+    // Synchronous, because this is a clock rather than a paint: a hold released and re-taken inside one flush
+    // (a component swapped for its successor) must leave the timer exactly as it found it, and a hold released
+    // for good must start it at the moment it happened rather than at the next render.
+    watch(
+        [holders, poppedOut],
+        ([count, floating], [held]) => {
+            stopHandBack();
+            if (count > 0 || !floating || held === 0) {
+                return;
+            }
+            handBack = window.setTimeout(() => {
+                handBack = undefined;
+                relinquish();
+            }, HANDBACK_GRACE_MS);
+        },
+        { flush: `sync` },
+    );
 
     /* Opening the window is the whole of popping out: the page it loads asks to be adopted (src/popout/keeper.ts)
      * and the hook above teleports the panel into it, so there is no second path for pushing a panel out and no
@@ -589,5 +706,5 @@ export const createPopout = (name: string, title: string, size: () => { width: n
 
     const overlayTarget = computed<HTMLElement | "body">(() => (poppedOut.value ? (body.value ?? `body`) : `body`));
 
-    return { poppedOut, restoring, body, overlayTarget, popOut, dock, toggle, fit };
+    return { poppedOut, restoring, body, overlayTarget, popOut, dock, toggle, fit, holdWhile };
 };
