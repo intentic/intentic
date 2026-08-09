@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { WEBCHAT_DAILY_MAX_DEFAULT } from "@intentic/sandbox-contract";
-import { cmp, formatDateTime, Icon, ToggleSwitch } from "@intentic/extension-ui";
+import { cmp, formatDateTime, Icon, ProseField, ResizeSeam, ToggleSwitch } from "@intentic/extension-ui";
 import { useQuery } from "@tanstack/vue-query";
 import { computed, ref } from "vue";
 import { host } from "./host";
@@ -88,10 +88,24 @@ const DELIVERY_ICON = {
     none: `exclamation-triangle`,
 } as const;
 
-// Exposed so a submitting parent can send the user to the first field that needs fixing.
+// Exposed so a submitting parent can send the user to the first field that needs fixing. The prompt is a
+// <ProseField> rather than a bare textarea, so what a caller wants — the element to put a caret in — is the
+// field inside it rather than the component.
 const nameInput = ref<HTMLInputElement>();
-const promptInput = ref<HTMLTextAreaElement>();
+const promptField = ref<InstanceType<typeof ProseField>>();
+const promptInput = computed(() => promptField.value?.field);
 defineExpose({ nameInput, promptInput });
+
+/* HOW TALL THE PROMPT STARTS, and the floor a drag on the seam under it sets.
+ *
+ * It is a MINIMUM rather than a height, because the box also stretches to whatever the trigger column beside
+ * it happens to be: a Doorbell is eight fields tall, and a prompt that ignored that would end its column 400px
+ * short — the dead rectangle that made this panel look broken before the two halves were made to meet. So the
+ * drag says "at least this tall" and the layout keeps the rest: on a schedule (a short trigger column) the
+ * drag is the whole height and moves the edge pixel for pixel, and on a Doorbell it only bites once dragged
+ * past the column. Double-clicking the seam comes back to PROMPT_HEIGHT. */
+const PROMPT_HEIGHT = 208;
+const promptHeight = ref(PROMPT_HEIGHT);
 
 // Small selectable pills (Repeats, Days, Events, Source, Access) — borderless; selection = a muted brand tint with readable brand text.
 const CHIP_BASE = `rounded-md px-3 py-1.5 text-xs font-medium transition-colors`;
@@ -589,20 +603,60 @@ const setProvider = (provider: string): void => {
                             · {{ listenerSource.label }} starter — edit it, or leave it and it follows the source
                         </span>
                     </span>
-                    <!-- IT TAKES WHATEVER HEIGHT THE TRIGGER LEAVES, rather than a fixed six rows. It is the
-                         longest thing on the form — a listener's starter is a paragraph describing a payload —
-                         and it is the field the whole automation turns on, yet it was the one field showing part
-                         of itself behind a scrollbar. Six rows was also the number that made a Doorbell (eight
-                         trigger fields beside it) end this column 350px short of the other, which is the dead
-                         rectangle that made the panel look broken. Growing to meet the trigger column fixes both
-                         at once: the prompt gets exactly the room the branch was wasting. -->
-                    <textarea
-                        ref="promptInput"
-                        v-model="form.prompt"
-                        placeholder="Check the inbox and summarize anything urgent."
-                        :class="[cmp.input('min-h-32 flex-1'), touched.has('prompt') && promptError ? 'ui-field-input-error' : '']"
-                        @blur="markTouched('prompt')"
-                    ></textarea>
+                    <!-- IT IS A WRITING SURFACE, not a form control. What goes in it is the longest text on
+                         this page by an order of magnitude — a briefing with numbered steps, the thing the whole
+                         automation turns on — and it was typeset as a name field: `cmp.input()`'s bordered box
+                         at the form's own leading, its content behind a native scrollbar, and a resize grip that
+                         did nothing because `flex-1` overrode every height a drag could set. So it is the same
+                         field the story and workflow-step editors write into (<ProseField>): prose leading, no
+                         chrome of its own, and a height that follows the words without JavaScript.
+                         THE BOX AROUND IT IS WHAT SCROLLS, and the field grows freely inside it — which is what
+                         keeps a forty-line prompt from turning this panel into a page nobody can reach Save on,
+                         while still letting the whole prompt be read by dragging the seam below it. It stretches
+                         to meet the trigger column beside it exactly as before; see PROMPT_HEIGHT. -->
+                    <div class="flex min-h-0 flex-1 flex-col">
+                        <div
+                            class="relative flex-1 rounded-md border bg-canvas transition-colors"
+                            :class="
+                                touched.has('prompt') && promptError
+                                    ? 'ui-field-input-error border-line'
+                                    : 'border-line hover:border-line-strong focus-within:border-line-strong'
+                            "
+                            :style="{ minHeight: `${promptHeight}px` }"
+                        >
+                            <!-- THE PROSE IS TAKEN OUT OF THE FLOW, which is the whole reason this box has a
+                                 scrollbar rather than a height that tracks the words. A scroller in normal flow
+                                 still OFFERS its content height to the grid row above it, so a forty-line prompt
+                                 sized the row to forty lines, scrolled nothing, and left the trigger column
+                                 beside it as 1,200px of empty panel with Save somewhere below the fold. Out of
+                                 flow it offers nothing, so the box is exactly `minHeight` or the height of the
+                                 trigger column — whichever is greater — and the words scroll inside it.
+                                 No padding of its own either: the field's own is the box's, so the writing
+                                 surface reaches the border on every side and the tint it takes when focused is
+                                 the whole box lighting up rather than a second rectangle inside the first. -->
+                            <div class="absolute inset-0 cursor-text overflow-y-auto">
+                                <ProseField
+                                    ref="promptField"
+                                    v-model="form.prompt"
+                                    placeholder="Check the inbox and summarize anything urgent."
+                                    class="min-h-full"
+                                    @blur="markTouched('prompt')"
+                                />
+                            </div>
+                        </div>
+                        <!-- ON the bottom edge rather than under it — the seam lays out as 0px and hangs 3px over
+                             the border it sizes, so the affordance is the edge of the box itself, which is where
+                             a pointer looking for one goes. Grouped with the box for that reason: in the field's
+                             own stack it would have sat a gap below, resizing an edge it wasn't touching.
+                             The click's DEFAULT ACTION is cancelled because the <label> around all of this has
+                             one: focus the field and put the caret at its very end. Left alone, every drag of
+                             this seam ended by scrolling a long prompt to its last line. `.prevent` rather than
+                             `.stop` — the label activates from the click's default action, which propagation
+                             stopped anywhere below it does not reach. -->
+                        <div @click.prevent>
+                            <ResizeSeam v-model="promptHeight" axis="y" pane="before" :min="128" :max="720" :reset="PROMPT_HEIGHT" />
+                        </div>
+                    </div>
                     <span v-if="touched.has('prompt') && promptError" class="ui-field-error">
                         <Icon name="exclamation-triangle" class="text-2xs" />
                         {{ promptError }}
