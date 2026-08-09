@@ -36,6 +36,6 @@ defineProps<{
         <!-- Unboxed, unlike the two panels above it. It is prose about the card rather than a list of facts
              about the sandbox, and a third bordered box here turns a column of reference into a stack of
              equally-weighted cards with nothing telling the reader which one to read first. -->
-        <p v-if="entry.hint" class="px-1 text-xs leading-relaxed text-muted">{{ entry.hint }}</p>
+        <p v-if="entry.hint" class="px-1 text-sm leading-relaxed text-muted">{{ entry.hint }}</p>
     </div>
 </template>

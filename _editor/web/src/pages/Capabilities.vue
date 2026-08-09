@@ -1266,7 +1266,11 @@ const submitLabel = computed(() =>
                  screen. Below that width the row collapses and the context moves inline into the form. -->
             <div v-if="selected" class="scrollbar-thin scrollbar-stable @container min-h-0 flex-1 overflow-y-auto pr-2">
                 <div class="mx-auto flex max-w-xl flex-col @3xl:max-w-none @3xl:flex-row @3xl:items-start @3xl:justify-center @3xl:gap-6">
-                    <div class="flex min-w-0 flex-1 flex-col @3xl:max-w-xl">
+                    <!-- CAPPED BELOW THE READING MEASURE, because this column does not hold reading — it holds a
+                         stack of single-line inputs, and a text box is no easier to fill in at 36rem than at 32.
+                         The room it was taking came out of the column beside it, which holds the opposite kind of
+                         text: five numbered steps a reader works through before the first keystroke. -->
+                    <div class="flex min-w-0 flex-1 flex-col @3xl:max-w-lg">
                         <!-- Back to the slice the card was picked out of, named — "All capabilities" was a lie the
                              moment the rail could be pointing at one category. -->
                         <button type="button" class="mb-4 inline-flex w-fit items-center gap-1 text-xs text-muted hover:text-content" @click="back">
@@ -1860,8 +1864,14 @@ const submitLabel = computed(() =>
                          both worse than not pinning it: leave it sticky and its foot — where "this will add to
                          your sandbox" now lives — is unreachable; cap it and give it its own scrollbar and the
                          page has three nested scroll regions, which is the thing this whole pass is undoing.
-                         Flowing, one scrollbar moves the whole page and nothing is hidden anywhere. -->
-                    <aside class="hidden @3xl:block @3xl:w-72 @3xl:shrink-0">
+                         Flowing, one scrollbar moves the whole page and nothing is hidden anywhere.
+
+                         AND IT WIDENS WITH THE PANE rather than holding one narrow width at every size. 18rem was
+                         set when this column held a four-line hint; it now holds the how-to somebody reads BEFORE
+                         they can answer the first field, and a five-step how-to broken across an 18rem measure is
+                         a wall of text no amount of leading fixes. It grows where there is room to grow into —
+                         which, on a page whose form column is capped, is exactly where the slack was sitting. -->
+                    <aside class="hidden @3xl:block @3xl:w-80 @3xl:shrink-0 @4xl:w-96 @5xl:w-112">
                         <CapabilityContext :entry="selected" :values="values" :effects="liveEffects" />
                     </aside>
                 </div>

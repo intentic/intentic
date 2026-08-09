@@ -2,7 +2,7 @@
      how-to-get-it, and a deep "Create a token ↗" link straight to the provider's token page. Data comes from
      the card's `guide` metadata (CAPABILITY_CATALOG). The CALL SITE decides whether there is a guide to
      render — a card without one (devops/monorepo/stripe, the browser-kind ones) must not reach here, since
-     the docked placement would otherwise hold a 288px column open around nothing.
+     the docked placement would otherwise hold its whole column open around nothing.
 
      NOTHING HERE IS BEHIND A DISCLOSURE, AND IT SITS BESIDE THE FORM RATHER THAN IN IT. Two shapes came before
      this one and both failed the same way. First an InfoHint — a hover card teleported to <body> — which
@@ -44,9 +44,20 @@ const tokenUrl = computed<string | undefined>(() => {
     return guide.url;
 });
 
-// A scope name, a menu item, a hostname, a port. Monospace at the surrounding size rather than a smaller one,
-// so a chip mid-sentence doesn't change the line's height — a step with three of them would otherwise ripple.
-const literal = `rounded bg-overlay px-1 font-mono text-content`;
+/* A scope name, a menu item, a hostname, a port. A STEP UNDER the sans around it and tinted low — which is
+ * prose.css's rule for the same chip inside markdown, arrived at for the two reasons visible here as well.
+ * Mono reads optically LARGER than sans at the same nominal size, so a chip that matched the sentence's size
+ * came out bigger than the sentence carrying it. And at a solid surface tint a step holding three literals
+ * stopped being a sentence at all and became a row of boxes with words between them.
+ *
+ * Sized in `em` rather than a fixed step so the chip tracks whatever line it lands in, and so its own leading
+ * stays comfortably inside the paragraph's — which is what keeps a three-literal step from rippling the
+ * line height, the thing the previous same-size rule was written to avoid.
+ *
+ * `box-decoration-clone` because these wrap: a menu path is three chips in one sentence and a narrow column
+ * breaks them mid-token. Without it the fragment left on the first line keeps the chip's left corners and
+ * padding and the rest arrives with a square, flush edge — one literal drawn as two half-boxes. */
+const literal = `box-decoration-clone rounded-sm bg-content/10 px-1 py-px font-mono text-[0.8125em] text-content`;
 
 const linkLabel = computed(() => entry.guide?.linkLabel ?? `Create a token`);
 const scopes = computed(() => entry.guide?.scopes);
@@ -58,9 +69,14 @@ const steps = computed<readonly string[]>(() => entry.guide?.steps ?? []);
         <p class="text-sm font-semibold text-content">How to get it</p>
 
         <!-- The permissions line comes BEFORE the steps: it is what decides whether the token you are about to
-             make is the right one, and reading it after step four is reading it too late. -->
-        <p v-if="scopes" class="flex items-start gap-2 text-xs text-muted">
-            <Icon name="key" class="mt-0.5 shrink-0 text-link" />
+             make is the right one, and reading it after step four is reading it too late.
+
+             Its glyph is sized and toned like the ones in <CapabilityEffects> directly below it — small, muted,
+             hung off the first line. Drawn at the link colour and at full text size it stopped reading as a UI
+             icon and started reading as an emoji dropped in front of the sentence, which is the one thing a
+             mark in this position must not do: it is labelling a fact, not decorating one. -->
+        <p v-if="scopes" class="flex items-start gap-2 text-sm leading-relaxed text-muted">
+            <Icon name="key" class="mt-1 shrink-0 text-xs text-subtle" />
             <span class="min-w-0">
                 <span class="text-subtle">Needs </span>
                 <span v-for="(part, index) in guideParts(scopes)" :key="index" :class="part.literal ? literal : ''">{{ part.text }}</span>
@@ -68,8 +84,13 @@ const steps = computed<readonly string[]>(() => entry.guide?.steps ?? []);
         </p>
 
         <!-- break-words, because the literals are hostnames, scopes and commands with no spaces to break at,
-             and the docked column is narrower than several of them. -->
-        <ol v-if="steps.length > 0" class="flex list-decimal flex-col gap-2 pl-4 text-xs leading-relaxed break-words text-muted marker:text-subtle">
+             and the docked column is narrower than several of them.
+
+             AT THE PROSE SIZE, not the chrome size. These steps are read in paragraphs — five of them, before
+             a single field is filled in — and the design system puts the floor for something read that way at
+             0.875rem (prose.css). A step under it, in a docked column, the five of them arrived as one grey
+             slab: the size that is right for a badge or a status line is not the size for instructions. -->
+        <ol v-if="steps.length > 0" class="flex list-decimal flex-col gap-2.5 pl-5 text-sm leading-relaxed break-words text-muted marker:text-subtle">
             <li v-for="(step, index) in steps" :key="index">
                 <span v-for="(part, partIndex) in guideParts(step)" :key="partIndex" :class="part.literal ? literal : ''">{{ part.text }}</span>
             </li>
@@ -83,7 +104,7 @@ const steps = computed<readonly string[]>(() => entry.guide?.steps ?? []);
             :href="tokenUrl"
             target="_blank"
             rel="noreferrer"
-            class="inline-flex items-center gap-1 border-t border-line pt-3 text-xs text-link hover:underline"
+            class="inline-flex items-center gap-1 border-t border-line pt-3 text-sm text-link hover:underline"
         >
             {{ linkLabel }} <Icon name="external-link" />
         </a>
