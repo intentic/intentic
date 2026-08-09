@@ -5,8 +5,8 @@
 // cloned workspace, and painting it as working is how someone schedules a wake that silently cannot post. A
 // face is also not per-site — one card holds a Reddit account AND an X account — and a form that quietly sent
 // one of them would look identical in the list and behave differently at 3am.
-import type { CapabilitySummary } from "@intentic-app/api-contract";
 import type { Identity } from "@intentic/sandbox-contract";
+import type { BrowserAccount } from "../../composables/extensions/useBrowserAccounts";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { type App, createApp, defineComponent, h, nextTick, ref } from "vue";
 
@@ -38,13 +38,16 @@ vi.mock(`../../composables/sandbox/useIdentities`, () => ({
     }),
 }));
 
-const capabilities = ref<CapabilitySummary[]>([]);
-vi.mock(`../../composables/extensions/useCapabilities`, () => ({ useCapabilities: () => ({ capabilities }) }));
+const accounts = ref<BrowserAccount[]>([]);
+vi.mock(`../../composables/extensions/useBrowserAccounts`, () => ({
+    useBrowserAccounts: () => ({ accounts, accountOf: (id: string) => accounts.value.find((entry) => entry.id === id) }),
+}));
 
 const { default: SandboxIdentities } = await import("./SandboxIdentities.vue");
 
-const account = (id: string, platform: string): CapabilitySummary =>
-    ({ id, kind: `browser`, status: { state: `active` }, config: { platform } }) as CapabilitySummary;
+// A logo slug is deliberately absent: <BrandMark> falls to the glyph tier, which is what a site the manifest
+// has no card for actually does, and pinning the happy path only would hide that this surface still reads.
+const account = (id: string, platform: string): BrowserAccount => ({ id, platform, site: platform, logo: undefined, icon: `globe` });
 
 let app: App | undefined;
 // Icon and RouterLink are registered app-wide in the real app; stand-ins keep this off the whole UI plugin and
@@ -86,7 +89,7 @@ beforeEach(() => {
     remove.mockClear();
     identities.value = [];
     connected.value = [];
-    capabilities.value = [account(`reddit-work`, `reddit`), account(`x-company`, `x`), account(`reddit-personal`, `reddit`)];
+    accounts.value = [account(`reddit-work`, `reddit`), account(`x-company`, `x`), account(`reddit-personal`, `reddit`)];
 });
 
 afterEach(() => {

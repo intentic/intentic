@@ -1,10 +1,11 @@
 <script setup lang="ts">
 import type { Identity } from "@intentic/sandbox-contract";
-import { cmp, ConfirmDialog, Row, RowGroup, StatusBadge } from "@intentic/ui";
+import { Avatar, BrandMark, cmp, ConfirmDialog, Row, RowGroup, StatusBadge } from "@intentic/ui";
 import Button from "primevue/button";
 import { computed, ref } from "vue";
 import IdentityForm, { type IdentityDraft } from "./IdentityForm.vue";
-import { useCapabilities } from "../../composables/extensions/useCapabilities";
+import { useBrowserAccounts } from "../../composables/extensions/useBrowserAccounts";
+import { identityHue } from "../../composables/identityHue";
 import { useIdentities } from "../../composables/sandbox/useIdentities";
 import { errorMessage } from "../../composables/useAsyncAction";
 
@@ -25,16 +26,16 @@ import { errorMessage } from "../../composables/useAsyncAction";
  * the Reddit wrong. */
 
 const { identities, connected, isConnected, error, isLoading, save, remove } = useIdentities();
-const { capabilities } = useCapabilities();
+// The accounts a card can name: the logged-in browser profiles, each carrying the brand of the site it is an
+// account of. One capability = one account, so a site the owner connected twice appears twice and exactly one
+// of them belongs on any given card.
+const { accounts, accountOf } = useBrowserAccounts();
 
-// The accounts a card can name: the logged-in browser profiles. One capability = one account, so a site the
-// owner connected twice appears twice and exactly one of them belongs on any given card.
-const accounts = computed(() => capabilities.value.filter((capability) => capability.kind === `browser`));
-
-const accountLabel = (id: string): string => {
-    const platform = accounts.value.find((account) => account.id === id)?.config[`platform`];
-    return typeof platform === `string` && platform !== id ? `${id} · ${platform}` : id;
-};
+/* The marks a row shows for the accounts its card names — the fastest way to read that a face spans two sites,
+ * and the reason the row does not spell them out in a comma-joined line. An id the manifest has no capability
+ * for still gets an entry: a card may name an account nobody has added HERE, and dropping it would make the
+ * row claim a face reaches less than it was written to. */
+const marks = (identity: Identity) => identity.capabilities.map((id) => ({ id, account: accountOf(id), signedIn: isConnected(id) }));
 
 /* Whether a card can act AT ALL right now. A face naming three accounts with one signed in is still usable —
  * the turn simply reaches the one — so this marks only the face that can reach nothing, which is every face on
@@ -121,10 +122,10 @@ const confirmRemove = async (): Promise<void> => {
 
 <template>
     <div>
-        <p class="mb-4 max-w-2xl text-xs text-muted">
-            A face is who this sandbox is when it acts outside — a name, the accounts it speaks through, and whether it may publish on its own. One
-            face can hold accounts on several sites, because it stands for a person rather than a platform. The names are part of your workspace and
-            travel with it; the logins stay in this sandbox.
+        <!-- One sentence. The rest of what a face is — that it spans sites, that the names travel and the
+             logins don't — is shown by the surface itself rather than explained above it. -->
+        <p class="mb-5 max-w-2xl text-sm text-muted">
+            A face is who this sandbox is when it acts outside: a name, the accounts it speaks through, and whether it may publish on its own.
         </p>
 
         <div v-if="error" :class="cmp.alertDanger('mb-4')">{{ error }}</div>
@@ -143,7 +144,23 @@ const confirmRemove = async (): Promise<void> => {
                 <span class="ml-auto inline-flex items-center gap-1 font-medium">Connect <Icon name="arrow-right" class="text-2xs" /></span>
             </RouterLink>
 
-            <RowGroup label="Your cast" :count="identities.length > 0 ? identities.length : undefined">
+            <!-- NO CAST AND NOTHING BEING WRITTEN gets a real empty state rather than a group with one line of
+                 apology in it. It says what is true right now — automations are mute, chats are unrestricted —
+                 because that is the consequence someone is here to change, and offers the one action. -->
+            <div v-if="identities.length === 0 && draft === undefined" :class="cmp.emptyState('flex flex-col items-center gap-3 py-8')">
+                <Avatar :size="40" />
+                <div class="flex flex-col gap-1">
+                    <span class="text-sm font-medium text-content">No faces yet</span>
+                    <span class="max-w-md text-xs text-muted">
+                        Until there is one, an automation you schedule can't post anywhere — and a chat reaches every account you've connected.
+                    </span>
+                </div>
+                <Button label="Add a face" size="small" :disabled="accounts.length === 0" @click="startAdd">
+                    <template #icon><Icon name="plus" /></template>
+                </Button>
+            </div>
+
+            <RowGroup v-else label="Your cast" :count="identities.length > 0 ? identities.length : undefined">
                 <template #actions>
                     <Button
                         v-if="identities.length > 0 && draft === undefined"
@@ -156,26 +173,53 @@ const confirmRemove = async (): Promise<void> => {
                     </Button>
                 </template>
 
-                <p v-if="identities.length === 0 && draft === undefined" class="px-4 pb-1 pt-2.5 text-xs text-subtle">
-                    No faces yet. Until there is one, an automation you schedule can't post anywhere — and a chat reaches every account you've
-                    connected.
-                </p>
-
-                <Row
-                    v-for="identity in identities"
-                    :key="identity.id"
-                    :title="identity.label ?? identity.id"
-                    :description="
-                        identity.capabilities.length === 0
-                            ? `No accounts — this face can't post anywhere`
-                            : identity.capabilities.map(accountLabel).join(`, `)
-                    "
-                    density="compact"
-                >
-                    <template #meta>
-                        <StatusBadge v-if="identity.posture === `draft`" variant="info" size="xs">Drafts only</StatusBadge>
-                        <StatusBadge v-if="!ready(identity)" variant="neutral" size="xs" dot>Not signed in</StatusBadge>
+                <Row v-for="identity in identities" :key="identity.id" :title="identity.label ?? identity.id" density="comfortable">
+                    <!-- A face is a person, so it gets a person's mark and keeps the same colour on every
+                         surface it appears on. Keyed by the id, not the label, so renaming does not recolour
+                         somebody you have learned to recognise. -->
+                    <template #lead>
+                        <Avatar :size="32" :name="identity.label ?? identity.id" :hue="identityHue(identity.id)" :idle="!ready(identity)" />
                     </template>
+
+                    <!-- THE ACCOUNTS BY NAME, under the face's own. The marks on the right say which platforms
+                         at a glance, but a mark cannot tell `reddit-work` from `reddit-personal` — and those
+                         two being different is the entire problem this feature exists to solve, so the names
+                         are not something the row can leave to a tooltip. -->
+                    <template #description>
+                        <span v-if="identity.capabilities.length === 0" class="text-warning">No accounts — this face can't post anywhere</span>
+                        <!-- Separated, because two account names running together read as one. A signed-out
+                             account is dimmed rather than struck through: a line through it says REMOVED, and
+                             what is true is that it is listed and cannot act yet — which the badge names. -->
+                        <span v-else class="flex flex-wrap items-center gap-x-1 gap-y-0.5">
+                            <template v-for="(mark, at) in marks(identity)" :key="mark.id">
+                                <span v-if="at > 0" class="text-subtle">·</span>
+                                <span :class="mark.signedIn ? `` : `text-subtle`" :title="mark.signedIn ? undefined : `Not signed in yet`">
+                                    {{ mark.id }}
+                                </span>
+                            </template>
+                        </span>
+                    </template>
+
+                    <template #meta>
+                        <!-- The sites this face speaks on, as marks: two logos side by side say "spans
+                             platforms" faster than any wording under them can. -->
+                        <span v-if="identity.capabilities.length > 0" class="flex items-center gap-1">
+                            <BrandMark
+                                v-for="mark in marks(identity)"
+                                :key="mark.id"
+                                :size="20"
+                                :name="mark.account?.site ?? mark.id"
+                                :logo="mark.account?.logo"
+                                :icon="mark.account?.icon ?? `globe`"
+                                :idle="!mark.signedIn"
+                            />
+                        </span>
+                        <StatusBadge v-if="identity.posture === `draft`" variant="info" size="xs">Drafts only</StatusBadge>
+                        <StatusBadge v-if="identity.capabilities.length > 0 && !ready(identity)" variant="neutral" size="xs" dot>
+                            Not signed in
+                        </StatusBadge>
+                    </template>
+
                     <template #control>
                         <button type="button" :class="cmp.iconButton()" aria-label="Edit this face" @click="startEdit(identity)">
                             <Icon name="pencil" class="text-xs" />
@@ -189,7 +233,7 @@ const confirmRemove = async (): Promise<void> => {
                          subject you have to remember. -->
                     <template v-if="draft !== undefined && draft.original === identity.id" #below>
                         <IdentityForm
-                            class="pt-3"
+                            class="pt-4"
                             :draft="draft"
                             :accounts="accounts"
                             :connected="connected"
@@ -205,7 +249,7 @@ const confirmRemove = async (): Promise<void> => {
                 </Row>
 
                 <!-- A new card has no row to open inside, so it gets one of its own at the tail of the group. -->
-                <div v-if="draft !== undefined && draft.original === undefined" class="px-4 py-3">
+                <div v-if="draft !== undefined && draft.original === undefined" class="px-4 py-4">
                     <IdentityForm
                         :draft="draft"
                         :accounts="accounts"
@@ -218,13 +262,6 @@ const confirmRemove = async (): Promise<void> => {
                         @submit="submit"
                         @cancel="cancelEdit"
                     />
-                </div>
-
-                <!-- The empty cast's own way in; once there are rows, the group header's button takes over. -->
-                <div v-else-if="identities.length === 0" class="px-4 pb-2.5 pt-1">
-                    <button type="button" class="flex items-center gap-2 text-xs text-muted transition-colors hover:text-content" @click="startAdd">
-                        <Icon name="plus" class="text-2xs" /> Add a face
-                    </button>
                 </div>
             </RowGroup>
         </template>
