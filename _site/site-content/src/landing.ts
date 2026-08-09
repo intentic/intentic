@@ -108,11 +108,11 @@ export const landingContent: LandingContent = {
     },
     hero: {
         headlineLines: ["Workstation for your agents.", "A window for you."],
-        // Short on purpose: the hero states the claim, and the verbs are where each half of it gets shown.
-        // "Look away", not "log off" — nothing has to be ended for the runs to continue; the browser
-        // simply holds nothing they depend on.
+        // Plain, high-signal words: the three differentiators are ownership (your hardware), persistence
+        // (survives the browser closing) and control (nothing lands unread) — name exactly those and stop.
+        // "Close the browser", not "log off": nothing is ended for the runs to continue.
         subhead:
-            "Your agents live on hardware you own and keep running when you look away. Every browser is one window onto the same fleet — steer, approve, land.",
+            "Your agents run on hardware you own and keep working after you close the browser. Reopen from any device to steer the fleet — and read every change before it lands.",
         chips: ["Free and open source", "Bring your own agent", "Runs on your hardware"],
         shot: {
             name: "fleet-board",
@@ -130,8 +130,8 @@ export const landingContent: LandingContent = {
     // everywhere, because no honest capture of an automations screen exists.
     verbs: {
         eyebrow: "What you do",
-        heading: "The whole product, in five verbs.",
-        sub: "Not a longer feature list — one line and one screen each. Every card opens the page that proves it.",
+        heading: "Run a fleet. Stay in control.",
+        sub: "Ten agents at once, wired into your systems, woken by events, and reviewed change by change before anything lands.",
         items: [
             {
                 verb: "Orchestrate",
