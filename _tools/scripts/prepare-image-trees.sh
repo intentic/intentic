@@ -18,7 +18,7 @@ pnpm turbo run build --filter=@intentic/sandbox --filter=@intentic/cli \
 out=.image-out
 # Regenerate the deploy trees but PRESERVE the cached model dir (and its completeness marker).
 rm -rf "$out/sandbox" "$out/cli" "$out/extensions"
-# Seven independent trees, each pruned out of the same content-addressed store into a directory of its own —
+# Eight independent trees, each pruned out of the same content-addressed store into a directory of its own —
 # which is what a store is for, so they are pruned at once rather than one after another (1m26s in series,
 # measured in the images job of pipeline 2725042409, and paid again by the release).
 # @intentic/lsp and @intentic/iq are NOT trees of their own: both are dependencies of @intentic/sandbox, so
@@ -37,6 +37,7 @@ deploy @intentic/ext-imap "$out/extensions/imap"
 deploy @intentic/ext-slack "$out/extensions/slack"
 deploy @intentic/ext-telegram "$out/extensions/telegram"
 deploy @intentic/ext-whatsapp "$out/extensions/whatsapp"
+deploy @intentic/ext-google-workspace "$out/extensions/google-workspace"
 
 failed=0
 for pid in "${pids[@]}"; do

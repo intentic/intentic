@@ -91,6 +91,7 @@ export * from "./runtime-state.js";
 export * from "./state-portability.js";
 export * from "./history-state.js";
 export * from "./agent-catalog.js";
+export * from "./capability-env.js";
 export * from "./host-protocol.js";
 export * from "./listener-protocol.js";
 export * from "./hostnames.js";

@@ -8,6 +8,7 @@ import {
     PI_PROVIDER,
     SandboxSettingsSchema,
     capabilitiesOf,
+    envSuffix,
     withoutResumeNote,
 } from "@intentic/sandbox-contract";
 import { accountsServer } from "../browser/accounts-tools.js";
@@ -22,7 +23,6 @@ import {
     turnPersona,
 } from "../personas/personas.js";
 import { personaScopeOf } from "../personas/persona-scope.js";
-import { envSuffix } from "../capabilities/cli-env.js";
 import { resolveWithin } from "../workspace/workspace-files.js";
 import { hostToolsOf } from "../capabilities/host-tools.js";
 import { mcpToolsOf } from "../capabilities/mcp-tools.js";

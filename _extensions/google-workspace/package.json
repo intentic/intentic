@@ -1,0 +1,24 @@
+{
+    "name": "@intentic/ext-google-workspace",
+    "version": "1.0.0",
+    "description": "Google Workspace — Gmail, Calendar, Drive, Docs, Sheets and Contacts as one authenticated agent CLI, plus the polling watcher as a baked extension process",
+    "license": "MIT",
+    "private": true,
+    "type": "module",
+    "scripts": {
+        "build": "tsgo",
+        "typecheck": "tsgo --noEmit -p tsconfig.test.json",
+        "test": "vitest run"
+    },
+    "dependencies": {
+        "@intentic/connector-runtime": "workspace:*",
+        "@intentic/sandbox-contract": "workspace:*"
+    },
+    "devDependencies": {
+        "@intentic/testing": "workspace:*",
+        "@intentic/tsconfig": "workspace:*",
+        "@types/node": "catalog:",
+        "@typescript/native-preview": "catalog:",
+        "vitest": "catalog:"
+    }
+}

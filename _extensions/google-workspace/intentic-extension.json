@@ -1,0 +1,124 @@
+{
+    "publisher": "intentic",
+    "name": "google-workspace",
+    "version": "1.0.0",
+    "category": "connections",
+    "logo": "google",
+    "engines": {
+        "intentic": "^2.0.0"
+    },
+    "contributes": {
+        "listener": {
+            "provider": "google",
+            "events": [
+                { "type": "mail", "label": "New mail" },
+                { "type": "event", "label": "Calendar event starting" }
+            ],
+            "automation": {
+                "label": "Google Workspace",
+                "mentionLabel": "Only mail addressed directly to you (your address in To)",
+                "channel": { "label": "Gmail label or calendar id (optional)", "placeholder": "every watched inbox and calendar" },
+                "starterPrompt": "Google Workspace events just arrived — each line of the payload is one JSON event. Type `mail` is new Gmail: the author is the sender, content holds the subject and a text excerpt, and extra carries the message id, thread id, labels and attachment names (`gw mail read <id>` for the whole thing). Type `event` is a calendar event about to start: content holds the title, time and location, and extra carries the event id, calendar, attendees and any meeting link. Triage what arrived and act on it — `gw` is on your PATH for the whole of Gmail, Calendar, Drive, Docs, Sheets and Contacts."
+            }
+        },
+        "processes": [
+            {
+                "name": "watcher",
+                "command": "node dist/gateway.js",
+                "autoStart": true
+            }
+        ],
+        "bin": "bin",
+        "capabilities": [
+            {
+                "id": "google",
+                "kind": "cli",
+                "catalog": {
+                    "name": "Google Workspace",
+                    "logo": "google",
+                    "description": "Gmail, Calendar, Drive, Docs, Sheets and Contacts.",
+                    "category": "communication",
+                    "hint": "One connection covers all six. Connect as YOUR ACCOUNT (a personal Gmail address or a single Workspace one) with an OAuth client you make in Google's console, or as a WHOLE COMPANY (a Workspace admin's service account with domain-wide delegation, where each card acts as one named person). The read-only setting is real, not cosmetic: it asks Google for the read-only scopes AND refuses every command that sends, edits, moves or deletes. Add the card again for a second account.",
+                    "guide": {
+                        "url": "https://console.cloud.google.com/apis/credentials",
+                        "linkLabel": "Open Google Cloud credentials",
+                        "scopes": "read & write: `gmail.modify` `gmail.send` `calendar` `drive` `documents` `spreadsheets` `contacts` — read only: the `.readonly` form of each",
+                        "steps": [
+                            "In `console.cloud.google.com`, create a project (or pick one), then under `APIs & Services` → `Library` enable `Gmail API`, `Google Calendar API`, `Google Drive API`, `Google Docs API`, `Google Sheets API` and `People API`.",
+                            "YOUR ACCOUNT — `APIs & Services` → `OAuth consent screen`: user type `External`, add yourself as a test user, and add the scopes above.",
+                            "YOUR ACCOUNT — on that same screen set the publishing status to `In production`. This one matters: a screen left in `Testing` hands out refresh tokens that STOP WORKING AFTER 7 DAYS, and the connection then dies for no visible reason. `In production` without Google's verification is fine for your own account — you click through an `unverified app` warning once.",
+                            "YOUR ACCOUNT — `Credentials` → `Create credentials` → `OAuth client ID` → `Web application`, and add `https://developers.google.com/oauthplayground` as an authorized redirect URI. Copy the client ID and client secret.",
+                            "YOUR ACCOUNT — open `developers.google.com/oauthplayground`, click the gear, tick `Use your own OAuth credentials` and paste the pair. Select the scopes above, `Authorize APIs`, approve, then `Exchange authorization code for tokens` and copy the REFRESH token. Paste all three here.",
+                            "WHOLE COMPANY — `IAM & Admin` → `Service Accounts` → create one → `Keys` → `Add key` → `JSON`, and note the service account's numeric `Client ID`.",
+                            "WHOLE COMPANY — in `admin.google.com` → `Security` → `Access and data control` → `API controls` → `Domain-wide delegation`, add that client ID with the full scope URLs (`https://www.googleapis.com/auth/` + each scope above). Paste the JSON key here and the address the agent should act as.",
+                            "Prefer not to use the playground? Connect with the client ID and secret and run `gw auth login` in a chat — the agent walks you through approving in the sandbox's own browser and hands you the refresh token to paste."
+                        ]
+                    }
+                },
+                "fields": [
+                    {
+                        "key": "mode",
+                        "label": "Connect as",
+                        "default": "user",
+                        "options": [
+                            { "value": "user", "label": "Your Google account" },
+                            { "value": "domain", "label": "Whole company (Workspace admin)" }
+                        ]
+                    },
+                    {
+                        "key": "email",
+                        "label": "Google account",
+                        "placeholder": "you@example.com",
+                        "hint": "The address this connection acts as. In company mode it is the person the service account impersonates."
+                    },
+                    {
+                        "key": "clientId",
+                        "label": "OAuth client ID",
+                        "placeholder": "…apps.googleusercontent.com",
+                        "when": { "key": "mode", "value": "user" }
+                    },
+                    {
+                        "key": "refreshToken",
+                        "label": "Refresh token",
+                        "secret": true,
+                        "when": { "key": "mode", "value": "user" },
+                        "hint": "Rotate this here when Google revokes it — a password change, six months idle, or a hundredth token on the same client all do that."
+                    },
+                    {
+                        "key": "clientSecret",
+                        "label": "OAuth client secret",
+                        "secret": true,
+                        "when": { "key": "mode", "value": "user" }
+                    },
+                    {
+                        "key": "serviceAccountKey",
+                        "label": "Service account key (JSON)",
+                        "secret": true,
+                        "multiline": true,
+                        "when": { "key": "mode", "value": "domain" },
+                        "hint": "The whole downloaded JSON file, pasted."
+                    },
+                    {
+                        "key": "access",
+                        "label": "What the agent may do",
+                        "default": "write",
+                        "options": [
+                            { "value": "write", "label": "Read & write" },
+                            { "value": "read", "label": "Read only" }
+                        ]
+                    }
+                ],
+                "env": {
+                    "GOOGLE_MODE": "${mode}",
+                    "GOOGLE_EMAIL": "${email}",
+                    "GOOGLE_CLIENT_ID": "${clientId}",
+                    "GOOGLE_CLIENT_SECRET": "${clientSecret}",
+                    "GOOGLE_REFRESH_TOKEN": "${refreshToken}",
+                    "GOOGLE_SERVICE_ACCOUNT_KEY": "${serviceAccountKey}",
+                    "GOOGLE_ACCESS": "${access}"
+                },
+                "skill": "skills/google/SKILL.md"
+            }
+        ]
+    }
+}

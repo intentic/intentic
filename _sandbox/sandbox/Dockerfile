@@ -281,10 +281,13 @@ RUN chmod +x /opt/sandbox/node_modules/@intentic/iq/dist/cli.js \
 # Image-baked first-party extensions — one manifest checkout per subdir, enumerated by installedExtensions()
 # via SANDBOX_EXTENSIONS_DIR (the iq-plugin precedent): present in every sandbox, not removable, no capability
 # entry. connectors, social, computers, acp-agents and pi-agent are data-only (manifest + skill packs + client
-# image fragments) so they copy straight from context. The messaging gateways (discord, imap, slack, telegram,
-# whatsapp) bake their MANIFESTS here — the cards exist in every image — while their deployed runtime trees are
-# the bake-only `messaging` feature pack (packs/messaging.Dockerfile, in the standard profile); on a core image
-# the daemon surfaces "not included in this image" instead of spawning a runtime that isn't there.
+# image fragments) so they copy straight from context. The gateway extensions (discord, imap, slack, telegram,
+# whatsapp, google-workspace) bake their MANIFESTS here — the cards exist in every image — while their deployed
+# runtime trees are the bake-only `messaging` feature pack (packs/messaging.Dockerfile, in the standard
+# profile); on a core image the daemon surfaces "not included in this image" instead of spawning a runtime that
+# isn't there. google-workspace is in that group for its `bin` as much as its watcher: the manifest promises
+# both, and extensionRuntimeAbsent is all-or-nothing per extension, so shipping the CLI from context here would
+# make the watcher's absence on a core image invisible rather than stated.
 #
 # The five data-only packs are what makes the /capabilities grid: every card that is a ROW over a generic core
 # handler (a cli connector, a social platform, an OS pack, an ACP preset, the Pi agent) is one of these manifest
@@ -300,6 +303,7 @@ COPY _extensions/imap/intentic-extension.json /opt/extensions/imap/
 COPY _extensions/slack/intentic-extension.json /opt/extensions/slack/
 COPY _extensions/telegram/intentic-extension.json /opt/extensions/telegram/
 COPY _extensions/whatsapp/intentic-extension.json /opt/extensions/whatsapp/
+COPY _extensions/google-workspace/intentic-extension.json /opt/extensions/google-workspace/
 # documentation is a UI extension with daemon-side contributions, so it sits between the two groups: its views are
 # compiled into the web bundle like the manifest-only ones below, but `contributes.bin` (the intentic-docs CLI the
 # agent runs) and `contributes.agent` (the documenting skill) are read from the image, so those two directories have
@@ -311,7 +315,7 @@ COPY _extensions/documentation/bin /opt/extensions/documentation/bin
 COPY _extensions/documentation/plugin /opt/extensions/documentation/plugin
 # The web-builtin UI extensions bake their MANIFEST ONLY — their code is compiled into the web bundle
 # (extension-host/builtins.ts), so there is nothing daemon-side to ship. The manifest is what makes them exist
-# for the daemon: `GET /extensions` then enumerates all twenty-three first-party extensions through one enumerator,
+# for the daemon: `GET /extensions` then enumerates all twenty-four first-party extensions through one enumerator,
 # so the Extensions tab is a complete list with a working on/off switch instead of a view of one load path.
 # The pairing is checked both ways — a manifest here with no compiled-in module shows as "missing" in the tab
 # (image and web bundle built from different commits), and a module with no manifest shows as "unlisted".

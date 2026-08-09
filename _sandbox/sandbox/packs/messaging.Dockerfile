@@ -17,3 +17,7 @@ COPY --from=trees extensions/slack /opt/extensions/slack
 COPY --from=trees extensions/telegram /opt/extensions/telegram
 # The whatsapp gateway is JS + WASM (baileys' crypto bridge ships compiled wasm) — no native build step either.
 COPY --from=trees extensions/whatsapp /opt/extensions/whatsapp
+# google-workspace ships more than a gateway: the same tree carries `gw`, the agent's Google CLI (contributes.bin
+# → bin/gw, a launcher over the built dist/). Dependency-free like telegram — Google's APIs are fetch and JSON —
+# so its tree is its own dist plus the two workspace packages it types against.
+COPY --from=trees extensions/google-workspace /opt/extensions/google-workspace

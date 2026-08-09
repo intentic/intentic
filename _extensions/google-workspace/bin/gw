@@ -1,0 +1,10 @@
+#!/usr/bin/env node
+/* `gw` — the agent's Google Workspace command, on its PATH every turn (contributes.bin: the daemon prepends
+ * this directory, and the files here are approved code because they ride the sha-pinned checkout).
+ *
+ * A launcher rather than the tool itself, which is the opposite of the other agent CLIs in this repo. Those
+ * are plain ESM because they must run with no build step; this one is TypeScript because the same auth, the
+ * same request layer and the same six service modules are also what the watcher process runs, and a second
+ * hand-maintained copy of them in JavaScript is exactly the drift the repo's own rules forbid. The extension
+ * ships as a built tree, so dist/ is beside bin/ wherever bin/ is. */
+import "../dist/cli.js";

@@ -144,7 +144,7 @@ export const personaCapabilities = (capabilities: readonly Capability[], persona
     capabilities.filter((capability) => persona.allows(capability));
 
 /* The shell environment as this turn may see it. A connector's credentials are suffixed with its capability id
- * (cli-env.ts envSuffix), so removing an ungranted connector means removing every variable carrying its suffix
+ * (envSuffix, in the contract), so removing an ungranted connector means removing every variable carrying its suffix
  * — which takes the token out of the environment rather than asking the agent not to use it.
  *
  * Driven by the DENIED list rather than the granted one, because this environment carries more than connector

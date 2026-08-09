@@ -78,6 +78,7 @@ fails any extension that reaches `/{provider}/models` or `/{provider}/accounts` 
 | `telegram` | daemon gateway | A `process` + `listener` bridging Telegram to the daemon over long polling (outbound HTTPS — no public URL, no webhook), plus the telegram connector. Dependency-free: the Bot API is `fetch` and JSON. Replies are painted into the chat live. |
 | `whatsapp` | daemon gateway | A `process` + `listener` bridging WhatsApp to the daemon as a paired **linked device** (baileys, outbound WebSocket), plus the whatsapp connector and the agent's `whatsapp` CLI (`contributes.bin`). Unofficial by nature — the card says so and asks for a dedicated number. Replies send once, complete, behind a typing indicator; the pairing code rides the status route onto the capability card. |
 | `imap` | daemon gateway | A `process` + `listener` watching an IMAP mailbox (new-mail / flags / expunge wakes), plus the imap connector. |
+| `google-workspace` | daemon gateway + agent CLI | One connected Google account as Gmail, Calendar, Drive, Docs, Sheets and Contacts: the `gw` CLI (`contributes.bin`), a card that authenticates either as one person (OAuth) or as a whole company (a Workspace service account impersonating a named user), and a `process` + `listener` polling for new mail and imminent events. The read-only setting on the card is enforced twice — narrower scopes at Google, and a per-command refusal here. |
 | `rtk` | environment fragment | Ships the rtk binary into the sandbox image overlay (output-filter benchmarking); git-install opt-in. |
 
 ## How they load — four paths, one list
@@ -97,7 +98,7 @@ renders and what the on/off switch acts on. The paths differ only in where the *
   `_editor/web/src/core-views/coreViews.ts` are **not** extensions — they're privileged in-app views coupled to
   platform internals; see that file and ARCHITECTURE.md.)
 - **Baked into the sandbox image** (`connectors`, `social`, `computers`, `acp-agents`, `discord`, `slack`,
-  `telegram`, `whatsapp`, `imap`): the whole checkout copied to `/opt/extensions` by the sandbox
+  `telegram`, `whatsapp`, `imap`, `google-workspace`): the whole checkout copied to `/opt/extensions` by the sandbox
   [Dockerfile](../_sandbox/sandbox/Dockerfile) and read via `EXTENSIONS_DIR` — present in every sandbox,
   `builtin: true` on `GET /extensions`, not removable, no capability entry. This is how the `/capabilities`
   grid's derived cards exist out of the box — and why switching one of these packs off removes exactly its

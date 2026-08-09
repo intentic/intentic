@@ -1,11 +1,10 @@
 import { join } from "node:path";
-import type { CliConfig } from "@intentic/sandbox-contract";
+import { type CliConfig, envSuffix } from "@intentic/sandbox-contract";
 import { extensionRuntimeAbsent, RUNTIME_ABSENT_DETAIL } from "../../extensions/extension-readiness.js";
 import { listenerStatus } from "../../extensions/listener-status.js";
 import { terminalExec } from "../../terminal/terminal-run.js";
 import { capabilityJobSession } from "../../terminal/terminal-session.js";
 import type { CapabilityHandler } from "../capability.js";
-import { envSuffix } from "../cli-env.js";
 import {
     contributedSkill,
     contributionKey,

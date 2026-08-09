@@ -1,0 +1,14 @@
+/* Two emitted entry points, both run by `node`: dist/cli.js (the agent's `gw`, reached through bin/gw) and
+ * dist/gateway.js (the watcher process the daemon starts). Tests are excluded from the emit. */
+{
+    "compilerOptions": {
+        "types": ["node"],
+        "outDir": "./dist",
+        "rootDir": "./src",
+        "tsBuildInfoFile": "./.cache/tsbuildinfo",
+        "skipLibCheck": true
+    },
+    "include": ["./src/**/*"],
+    "exclude": ["./src/**/*.test.ts"],
+    "extends": "@intentic/tsconfig/tsconfig.base.json"
+}
