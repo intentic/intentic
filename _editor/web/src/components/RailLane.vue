@@ -31,7 +31,11 @@ defineProps<{
 
 <template>
     <section class="lane flex min-w-0 flex-col rounded-xl p-1">
-        <header class="lane-header sticky top-0 z-10 -mx-1 -mt-1 flex items-center gap-2 rounded-t-xl px-3.5 pb-2 pt-2.5">
+        <!-- The cap's last 4px are a MARGIN rather than padding, which changes nothing to look at (the header
+             is painted in the lane's own fill, so the strip is the same colour either way) and everything for
+             the first card: an opaque header that ends exactly where the card begins paints over whatever the
+             card draws at its top edge, and the lane's leading card is the one every list opens on. -->
+        <header class="lane-header sticky top-0 z-10 -mx-1 -mt-1 mb-1 flex items-center gap-2 rounded-t-xl px-3.5 pb-1 pt-2.5">
             <span v-if="dot !== undefined" class="h-2 w-2 shrink-0 rounded-full" :class="dot"></span>
             <Icon v-else-if="icon !== undefined" :name="icon" class="shrink-0 text-2xs text-subtle" />
             <span class="text-2xs font-semibold uppercase tracking-wide text-muted">{{ label }}</span>

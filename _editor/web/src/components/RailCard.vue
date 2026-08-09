@@ -127,40 +127,79 @@ const titleRuns = computed(() => markSegments(props.title, props.needle ?? ``));
  * leaving nothing but the 1px border.
  *
  * Border WIDTH is the utility's (so `border-dashed` can restyle it); the colour is here, where the states
- * below can move it. */
+ * below can move it.
+ *
+ * EVERY STATE IS A VARIABLE, not a property — border colour, fill, and the three shadows. Written as plain
+ * properties, `.rail-card:hover` (a class AND a pseudo-class) outranked `.rail-card-on` (one class), so
+ * putting the pointer on the SELECTED card repainted its accent border grey: the list erased the mark for
+ * the chat it was pointing at, for as long as the cursor rested there. Through variables the states can be
+ * ordered after hover and win the tie, and hover keeps a channel of its own on a card that already wears the
+ * accent — the halo below, rather than a second opinion about the edge. */
 .rail-card {
     color: var(--color-muted);
     cursor: pointer;
-    border-color: var(--color-line);
-    background: var(--color-card);
+    border-color: var(--rail-border);
+    background: var(--rail-fill);
+    --rail-border: var(--color-line);
+    --rail-fill: var(--color-card);
+    /* Three independent marks on one box-shadow: the attention bar (left edge), the selection ring, and the
+       halo that lifts a selected card off its lane. Held as variables because a second box-shadow rule would
+       REPLACE the first, which is what once forced the first two into an either/or.
+       All three keep their INSET-NESS across every state — `inset 0 0 #0000` rather than a bare `0 0 #0000`
+       for the two inset slots — because box-shadow only interpolates between lists that agree on it, and a
+       transition that cannot interpolate snaps. */
+    --rail-accent: inset 0 0 #0000;
+    --rail-ring: inset 0 0 #0000;
+    --rail-lift: 0 0 #0000;
+    box-shadow: var(--rail-accent), var(--rail-ring), var(--rail-lift);
+    /* The shadows transition WITH the colours. They used not to, so selecting a card faded its border over
+       150ms while the ring snapped in on the first frame — one gesture arriving as two. The curve is the
+       app's standard one (Tailwind's `transition-*` default), so a card animates like every other control. */
     transition:
-        background-color 0.15s,
-        color 0.15s,
-        border-color 0.15s;
-    /* Two independent marks on one box-shadow: the attention bar (inset, left edge) and the active ring
-       (outset, all round). Held as variables because a second box-shadow rule would REPLACE the first, which
-       is what once forced these two into an either/or. */
-    --rail-accent: 0 0 #0000;
-    --rail-ring: 0 0 #0000;
-    box-shadow: var(--rail-accent), var(--rail-ring);
+        color 150ms cubic-bezier(0.4, 0, 0.2, 1),
+        background-color 150ms cubic-bezier(0.4, 0, 0.2, 1),
+        border-color 150ms cubic-bezier(0.4, 0, 0.2, 1),
+        box-shadow 150ms cubic-bezier(0.4, 0, 0.2, 1);
 }
 .rail-card:hover {
     color: var(--color-content);
-    border-color: var(--color-line-strong);
-    background: var(--color-overlay);
+    --rail-border: var(--color-line-strong);
+    --rail-fill: var(--color-overlay);
 }
-.rail-card-shown {
-    border-color: color-mix(in srgb, var(--color-primary-500) 45%, var(--color-line));
-    --rail-ring: 0 0 0 1px color-mix(in srgb, var(--color-primary-500) 30%, transparent);
+/* THE SELECTION RING IS INSET, and that is what keeps it whole. Drawn outwards it lay OUTSIDE the card's own
+ * box, where two things ate it: the lane's pinned header, which is opaque and painted over the top of the
+ * first card in every lane — the reported "the top border is cut" — and the 6px between cards, which a 2px
+ * ring on each neighbour closed to 2. Inside the box nothing can clip it, it follows the card's radius
+ * exactly, and the accent is one even weight the whole way round.
+ *
+ * The ring is a hairline against a border of the same colour, so the edge reads as a solid 2px of accent
+ * rather than as the old 1px line under a 50%-opacity wash — a translucent ring picks up whatever it lies on,
+ * which is why the edge looked soft on the lane and muddy between cards. */
+.rail-card.rail-card-shown {
+    --rail-border: color-mix(in srgb, var(--color-primary-500) 50%, var(--color-line));
+    --rail-ring: inset 0 0 0 1px color-mix(in srgb, var(--color-primary-500) 22%, transparent);
 }
-.rail-card-on {
+.rail-card.rail-card-on {
     color: var(--color-content);
-    border-color: var(--color-primary-500);
-    background: var(--color-overlay);
-    --rail-ring: 0 0 0 2px color-mix(in srgb, var(--color-primary-500) 50%, transparent);
+    --rail-border: var(--color-primary-500);
+    --rail-fill: var(--color-overlay);
+    --rail-ring: inset 0 0 0 1px var(--color-primary-500);
+    /* Offset down and pulled in by its spread, so it is a shadow under the card rather than a glow around it:
+       it reaches barely a pixel above the card, which is the one direction a pinned lane header can cover. */
+    --rail-lift: 0 1px 3px -1px color-mix(in srgb, var(--color-primary-500) 28%, transparent);
+}
+/* Hover on a card that already wears the accent deepens the halo instead of recolouring the edge. Its fill is
+   already the hover fill, so without this a selected card was the one row in the list that answered the
+   pointer with nothing at all. */
+.rail-card.rail-card-shown:hover {
+    --rail-lift: 0 1px 5px -1px color-mix(in srgb, var(--color-primary-500) 25%, transparent);
+}
+.rail-card.rail-card-on:hover {
+    --rail-lift: 0 1px 6px -1px color-mix(in srgb, var(--color-primary-500) 45%, transparent);
 }
 /* An inset shadow rather than a wider left border: no layout shift, so a lane's cards keep their text on one
-   axis whether or not one of them needs the user. */
+   axis whether or not one of them needs the user. First in the list, so it paints OVER the selection ring —
+   a card that is both selected and waiting on you must not lose the reason it is in the lane. */
 .rail-card-attention {
     --rail-accent: inset 3px 0 0 0 var(--color-warning);
 }
