@@ -366,6 +366,18 @@ const clipPaths = (): string[] => (selection.value.size > 0 ? [...selection.valu
 // A row's own affordances, or none when the parent supplied no source (the mobile listing, a test).
 const actionsFor = (path: string): readonly RowAction[] => rowActions?.(path) ?? [];
 
+/* How much of an icon is showing when the pointer is somewhere else. Hover (and the selected row) brings every
+ * one of them up to full; this is only about the resting state, and there are three of them:
+ *
+ *   hidden   an ACTION — what you can do to a repo. Revealed on hover, because fifty-five rows of cogs is the
+ *            noise that stops the eye reading the names, and nobody hunts for an action they haven't decided on.
+ *   dimmed   EVIDENCE — the row has a page to read. Hiding this hides the fact itself: a documented monorepo
+ *            looked exactly like an undocumented one, so the per-package documentation nobody could see was
+ *            documentation nobody had.
+ *   full     the row the user is on. */
+const restingClass = (action: RowAction, path: string): string =>
+    selection.value.has(path) ? `opacity-100` : action.standing ? `opacity-40` : `pointer-events-none opacity-0`;
+
 // Running one selects its row first, so the highlight follows what the user just opened — the behaviour all
 // three hardcoded affordances used to repeat, now stated once.
 const runAction = (entry: WorkspaceTreeEntry, action: RowAction): void => {
@@ -964,11 +976,12 @@ const openMenu = (event: MouseEvent, entry: WorkspaceTreeEntry | undefined): voi
                          graph, its management panel — whatever rowActions gives it (the tree doesn't know which).
                          Root has no row, so its own pair sits on the explorer toolbar instead.
 
-                         REVEALED ON HOVER, and kept on the selected row. Always-on was affordable while only the
-                         two or three repo rows had any; a documented monorepo puts one on fifty-five package rows,
-                         and a permanent icon column is exactly the noise that stops the eye reading the names. The
-                         space is reserved either way, so nothing shifts as the pointer sweeps down the tree, and
-                         a hidden icon takes no clicks — invisible-but-clickable is worse than absent.
+                         REVEALED ON HOVER, and kept on the selected row — except for the ones that are standing
+                         (see restingClass). Always-on for ALL of them was affordable while only the two or three
+                         repo rows had any; a documented monorepo puts one on fifty-five package rows, and a
+                         permanent icon column is exactly the noise that stops the eye reading the names. The space
+                         is reserved either way, so nothing shifts as the pointer sweeps down the tree, and a
+                         hidden icon takes no clicks — invisible-but-clickable is worse than absent.
 
                          An icon with a handler rather than a <button>: the ROW is the button (role="treeitem"),
                          and an interactive element inside one is invalid. The keyboard reaches these through the
@@ -979,7 +992,7 @@ const openMenu = (event: MouseEvent, entry: WorkspaceTreeEntry | undefined): voi
                         :name="action.icon"
                         aria-hidden="true"
                         class="shrink-0 cursor-pointer text-2xs text-subtle transition-opacity hover:text-content group-hover:pointer-events-auto group-hover:opacity-100 group-focus:pointer-events-auto group-focus:opacity-100"
-                        :class="selection.has(row.entry.path) ? 'opacity-100' : 'pointer-events-none opacity-0'"
+                        :class="restingClass(action, row.entry.path)"
                         v-tooltip.right="action.tooltip"
                         @click.stop="runAction(row.entry, action)"
                     />

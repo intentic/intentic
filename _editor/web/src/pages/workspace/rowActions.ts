@@ -18,6 +18,11 @@ export interface RowAction {
     readonly icon: IconName;
     // Names the ACTION, since that is how a tooltip on an icon is read: "Open git history", not "Git history".
     readonly tooltip: string;
+    /* Drawn on the row at rest rather than revealed under the pointer. True only where the icon's presence is
+     * itself the answer to a question — "which of these packages has a page?" — because a hidden icon can only be
+     * found by someone already looking for it. Everything you DO to a repo stays on hover; see the tree's own
+     * comment for why that column is not permanent. */
+    readonly standing: boolean;
     readonly run: () => void;
 }
 
@@ -47,13 +52,28 @@ export const rowActionsFor = (dir: string, sources: RowActionSources): readonly 
         // name renders the icon set's fallback rather than failing the row.
         icon: offer.icon as IconName,
         tooltip: offer.tooltip,
+        // The provider says whether its offer is evidence about the directory (a page exists) rather than an
+        // affordance every directory of its kind has; only evidence is worth a permanent glyph.
+        standing: offer.evidence === true,
         run: (): void => sources.openDocument(provider.owner, provider.id, dir, offer.title, offer.icon),
     }));
     if (sources.repoDirs.has(dir)) {
-        actions.push({ id: `health`, icon: `wave-pulse`, tooltip: `Open codebase health`, run: (): void => sources.openHealth(dir) });
+        actions.push({
+            id: `health`,
+            icon: `wave-pulse`,
+            tooltip: `Open codebase health`,
+            standing: false,
+            run: (): void => sources.openHealth(dir),
+        });
     }
     if (sources.manageableDirs.has(dir)) {
-        actions.push({ id: `directory`, icon: `cog`, tooltip: `Open management panel`, run: (): void => sources.openDirectory(dir) });
+        actions.push({
+            id: `directory`,
+            icon: `cog`,
+            tooltip: `Open management panel`,
+            standing: false,
+            run: (): void => sources.openDirectory(dir),
+        });
     }
     return actions;
 };

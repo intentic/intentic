@@ -116,6 +116,15 @@ export interface DocumentOffer {
     readonly tooltip: string;
     // The tab's label. Short: the strip already shows the directory's own name beside it.
     readonly title: string;
+    /* Whether the row keeps this icon when the pointer is elsewhere. A tree row's icons are revealed on hover,
+     * because a permanent column of them is what stops the eye reading names — but that rule assumes an icon is
+     * an ACTION you already know you want. An offer that is EVIDENCE is the opposite case: "there is a page about
+     * this package" is a fact nobody can act on until they see it, and finding it by sweeping fifty-five rows with
+     * the mouse is not finding it. Such an offer sets this, and the row carries it dimmed until hover.
+     *
+     * Left off (the default) by an offer every directory of its kind gets — a repo's git history is always there,
+     * so a permanent glyph states nothing and costs the same attention. */
+    readonly evidence?: boolean;
 }
 
 /* A DOCUMENT PROVIDER — an extension's answer to "there is something to READ about this directory".

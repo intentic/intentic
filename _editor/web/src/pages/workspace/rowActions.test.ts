@@ -16,14 +16,15 @@ const sources = (over: Partial<RowActionSources> = {}): RowActionSources => ({
 });
 
 const disposables: { dispose(): void }[] = [];
-const provider = (id: string, at: string) =>
+const provider = (id: string, at: string, evidence = false) =>
     disposables[
         disposables.push(
             registerDocumentProvider({
                 owner: `acme.docs`,
                 id,
                 label: `Architecture`,
-                detect: (path) => (path === at ? { icon: `question-circle`, tooltip: `Open architecture doc`, title: `Architecture` } : undefined),
+                detect: (path) =>
+                    path === at ? { icon: `question-circle`, tooltip: `Open architecture doc`, title: `Architecture`, evidence } : undefined,
                 component: () => Promise.resolve({}),
             }),
         ) - 1
@@ -68,6 +69,26 @@ describe(`rowActionsFor`, () => {
             `Architecture`,
             `question-circle`,
         );
+    });
+
+    /* WHICH ICONS SURVIVE THE POINTER BEING SOMEWHERE ELSE. A row's icons are revealed on hover, and an offer
+     * that is evidence ("this package has a page") opts out of that — hiding it hides the fact, which is how a
+     * documented monorepo came to look exactly like an undocumented one. What you can DO to a repo does not. */
+    it(`lets an offer stand on the row, and never the repo's own affordances`, () => {
+        provider(`architecture`, `intentic/_deploy/graph`, true);
+        expect(rowActionsFor(`intentic/_deploy/graph`, sources()).map((action) => action.standing)).toEqual([true]);
+        expect(
+            rowActionsFor(`intentic`, sources({ repoDirs: new Set([`intentic`]), manageableDirs: new Set([`intentic`]) })).map(
+                (action) => action.standing,
+            ),
+        ).toEqual([false, false]);
+    });
+
+    // An offer every directory of its kind gets (a repo always has git history) says nothing by being permanent,
+    // so it waits for the pointer like the affordances beside it.
+    it(`leaves an offer that is not evidence on hover`, () => {
+        provider(`history`, `intentic`);
+        expect(rowActionsFor(`intentic`, sources()).map((action) => action.standing)).toEqual([false]);
     });
 
     it(`drops a provider whose detect throws, keeping the rest of the row`, () => {

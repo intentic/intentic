@@ -92,6 +92,12 @@ export const activate = (api: IntenticApi, context: ExtensionContext): void => {
                     icon: `question-circle`,
                     tooltip: present.oneLiner === `` ? `Open architecture doc${draft}` : `${present.oneLiner}${draft}`,
                     title: `Architecture`,
+                    /* THE ICON IS THE ANSWER TO "WHICH OF THESE HAS A PAGE?", so the row keeps it at rest. Every
+                     * row icon used to be revealed on hover, which is right for an action and wrong for this: a
+                     * repo's row is one row and gets found, while fifty-five package rows that look identical to
+                     * fifty-five undocumented ones hide the whole per-package layer. Reading the tree now also
+                     * reads the coverage — and a package that is missing one is visible too. */
+                    evidence: true,
                 };
             },
             view: async () => (await import(`./DocTab.vue`)).default,

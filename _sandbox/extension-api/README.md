@@ -45,7 +45,10 @@ Three surfaces, at three different grains, and the grain is what picks one. A **
 off the facts (`rail`, `directory`, `sandbox`). A **viewer** takes over a *file extension*. A **document**
 answers per *directory* — `detect(path)` marks the rows it can explain in the Workspace tree, and the host
 opens the provider's component as a tab beside the code. A monorepo is one repo with fifty-five documented
-packages, which is exactly the case a per-repo `detect()` cannot express.
+packages, which is exactly the case a per-repo `detect()` cannot express. An offer that is EVIDENCE about the
+directory rather than an affordance every directory of its kind has says so (`evidence: true`), and the tree
+keeps its icon on the row instead of revealing it on hover — the difference between a reader seeing which
+packages have a page and a reader having to go looking for one.
 - **[stream.ts](src/stream.ts)**, **[version.ts](src/version.ts)** — SSE/ndjson helpers and the host API
   version (`engines.intentic` is checked against it before activation).
 

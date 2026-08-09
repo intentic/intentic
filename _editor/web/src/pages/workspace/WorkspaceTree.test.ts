@@ -7,6 +7,7 @@
 // gone, on a view whose whole job is telling them where they are.
 import type { WorkspaceTreeEntry } from "@intentic-app/api-contract";
 import { VueQueryPlugin } from "@tanstack/vue-query";
+import type { RowAction } from "./rowActions";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { type App, createApp, defineComponent, h, nextTick, ref } from "vue";
 
@@ -82,7 +83,11 @@ const restoreFrom = (expanded: readonly string[]): void => {
     resetWorkspaceTreeState();
 };
 
-const mount = async (props: { tree: WorkspaceTreeEntry[]; selectedPath?: string }): Promise<HTMLElement> => {
+const mount = async (props: {
+    tree: WorkspaceTreeEntry[];
+    selectedPath?: string;
+    rowActions?: (dir: string) => readonly RowAction[];
+}): Promise<HTMLElement> => {
     const el = document.createElement(`div`);
     document.body.append(el);
     app = createApp({ render: () => h(WorkspaceTree, props) });
@@ -194,6 +199,39 @@ describe(`the ignored-entry toggle`, () => {
         const el = await mount({ tree: IGNORED_TREE });
 
         expect(rows(el)).toEqual([`src`, `main.ts`, `main.js`, `dist`, `README.md`]);
+    });
+});
+
+/* WHAT A ROW SHOWS WHILE THE POINTER IS SOMEWHERE ELSE. jsdom has no pointer, and hover is a CSS variant, so the
+ * subject is the resting class each icon is rendered with — which is the whole of the behaviour anyway: a
+ * documented directory that only reveals its page under the mouse is indistinguishable from an undocumented one,
+ * and that is exactly what made per-package documentation invisible in a fifty-five package monorepo. */
+describe(`a row's icons at rest`, () => {
+    const ACTIONS = (dir: string): readonly RowAction[] =>
+        dir === `src`
+            ? [
+                  { id: `document:acme.docs:architecture`, icon: `question-circle`, tooltip: `What src is`, standing: true, run: () => {} },
+                  { id: `health`, icon: `wave-pulse`, tooltip: `Open codebase health`, standing: false, run: () => {} },
+              ]
+            : [];
+
+    it(`keeps a document on screen and leaves the repo's affordances for the hover`, async () => {
+        const el = await mount({ tree: TREE, rowActions: ACTIONS });
+
+        const row = el.querySelector(`[role="treeitem"]`) as HTMLElement;
+        expect(row.querySelector(`[data-icon="question-circle"]`)?.className).toContain(`opacity-40`);
+        expect(row.querySelector(`[data-icon="wave-pulse"]`)?.className).toContain(`pointer-events-none opacity-0`);
+    });
+
+    // Every icon comes up to full on the row the user is on, standing or not — the same rule the hover follows.
+    it(`shows all of them on the selected row`, async () => {
+        const el = await mount({ tree: TREE, rowActions: ACTIONS });
+
+        (el.querySelector(`[role="treeitem"]`) as HTMLElement).click(); // selects src
+        await nextTick();
+        const row = el.querySelector(`[role="treeitem"]`) as HTMLElement;
+        expect(row.querySelector(`[data-icon="question-circle"]`)?.className).toContain(`opacity-100`);
+        expect(row.querySelector(`[data-icon="wave-pulse"]`)?.className).toContain(`opacity-100`);
     });
 });
 

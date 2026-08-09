@@ -128,6 +128,14 @@ a document is per package — dozens of them in this monorepo, each mirroring a 
 file tree. So it rides `contributes.documents` (a path-keyed contribution point in the extension API), and it opens
 in the Workspace's own editor area as a tab rather than navigating away from the files it describes.
 
+**That icon stays on the row when the pointer is elsewhere** (`evidence: true` on the offer), which is the one
+place this surface departs from every other icon in the tree. The rest are revealed on hover, rightly: they are
+things you can DO to a repository, and a permanent column of them is what stops the eye reading the names. This
+one is not an action but a FACT — there is a page about this package — and a fact only visible under the mouse is
+a fact nobody has. Hidden, a documented monorepo looked exactly like an undocumented one: the repository's row got
+found because there is one of it, and the per-package layer under it was invisible. Standing, the tree also reads
+as coverage — a package with no page is now the row without a mark.
+
 The presence of a document is module state on a slow poll ([src/docPresence.ts](src/docPresence.ts)), not a query:
 the host asks `detect(path)` while nothing of this extension is mounted, and nothing observes an unmounted view —
 so neither a vue-query nor the file-change push could answer. One index read per repository covers every package it
