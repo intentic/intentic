@@ -1,118 +1,73 @@
-<!-- THE POST, OPEN FOR CHANGES. A draft arrives written by the agent and is usually most of the way right;
-     often it is one word away, and until this existed the only ways to fix that word were to reject the draft
-     and hope the next proposal was better, or to go and edit the JSON file by hand. Both throw away a decision
-     the reviewer had already made. Approve/reject is a verdict on someone else's sentence; this is the seam
-     where it becomes the owner's own.
+<!-- THE POST, OPEN FOR CHANGES — and deliberately the same object it was a moment ago.
 
-     IT IS THE SAME COLUMN THE POST IS READ IN — the measure, the size and the leading of DraftPost, because the
-     whole reason this page typesets a draft as a post is that the reviewer is approving these exact bytes. A
-     box that reflowed the words the moment you clicked into it would be showing you a second, different post
-     and asking you to trust that they match.
+     IT REPLACES THE POST WITHOUT MOVING IT. Same measure, same size, same leading, same left edge as
+     <DraftPost> beside it, so clicking the pencil does not redraw the row — the words stay exactly where your
+     eye left them and simply become typeable. The first version put a bordered `cmp.input()` textarea here,
+     which is the FORM field: a boxed control of a fixed height, right for a name or a shell command and wrong
+     for the only thing on this page that is read in sentences. <ProseField> is the writing field — no border
+     and no fill until the caret is in it, and it grows with the text through a hidden replica rather than a
+     measure-and-set that the webfont swap would leave one line short.
 
-     THE COUNT IS LIVE, AND ONLY HERE DOES IT HAVE TO BE. The row's footer states a length you can only accept
-     or reject; while you are typing it is the thing you are steering by, so it sits under the box and turns as
-     you cross the platform's cap — 281 characters on X is not a worse post, it is no post.
+     THE PADDING IS CANCELLED BY THE MARGIN, on both axes. ProseField insets its text so the focus fill has
+     room to breathe; `-mx-2 -my-1` pulls exactly that inset back off the column, so the fill still bleeds
+     around the words while the words themselves keep the pixel they occupied while being read — measured, not
+     assumed: without the vertical half the first line dropped 4.4px, which is small, visible, and precisely
+     what makes an in-place editor feel like a different screen.
 
-     ESCAPE CANCELS, BLUR DOES NOT — the one place this deliberately parts company with ScheduleControl beside
-     it. A date input holds a single token you can retype in a second, so closing it on blur costs nothing; a
-     paragraph someone has spent a minute rewriting is not that, and a stray click on the page behind must not
-     be able to throw it away. Nor may it be saved out from under them: while a row is open for editing, its
-     Approve and Reject actions are gone, because a post approved with unsaved words in the box would publish
-     the sentence the owner had just replaced. -->
+     NO SAVE, NO CANCEL, and their absence is what fixed this row. They used to appear under the post while the
+     row's own Approve and Reject disappeared, so one click on the pencil moved four controls at once. Typing
+     writes the draft (useDraftEdit.ts) — the file is the post, unpublished until a separate decision, which is
+     the same argument the acceptance panel makes for stories. Escape closes the editor; the last words are
+     written on the way out, never dropped. -->
 <script setup lang="ts">
 import type { DraftSummary } from "@intentic-app/api-contract";
-import { cmp } from "@intentic/ui";
-import Button from "primevue/button";
-import { type ComponentPublicInstance, computed, ref } from "vue";
-import { limitOf, type PostEdit, postEdit, postsATitle } from "./postText";
+import { ProseField } from "@intentic/ui";
+import { type ComponentPublicInstance, computed, onBeforeUnmount } from "vue";
+import { postsATitle } from "./postText";
 
-const { draft, saving = false } = defineProps<{
-    draft: DraftSummary;
-    /** The queue's own mutation state — one save at a time, and the box stays open until that one lands. */
-    saving?: boolean;
-}>();
+const { draft } = defineProps<{ draft: DraftSummary }>();
+const emit = defineEmits<{ close: []; touch: [] }>();
 
-const emit = defineEmits<{ cancel: []; save: [changes: PostEdit] }>();
-
-const content = ref(draft.content);
-const title = ref(draft.title ?? ``);
+const content = defineModel<string>(`content`, { required: true });
+const title = defineModel<string>(`title`, { required: true });
 
 // A headline box only where the platform publishes one. Everywhere else `title` is the agent's note about the
 // draft (postText.ts) — it is shown under the post, and editing the post has no business rewriting it.
 const headlined = computed(() => postsATitle(draft.platform, draft.target));
 
-const limit = limitOf(draft.platform);
-const over = computed(() => content.value.length > (limit ?? Infinity));
-const counter = computed(() =>
-    limit === undefined
-        ? `${content.value.length.toLocaleString()} characters`
-        : `${content.value.length.toLocaleString()} / ${limit.toLocaleString()}`,
-);
-
-// An empty post is not a post, and a platform that publishes headlines will not take a blank one. Over the cap
-// is left saveable on purpose: the draft is being worked on, and a half-finished edit you cannot park is worse
-// than one the footer will keep calling too long.
-const incomplete = computed(() => content.value.trim() === `` || (headlined.value && title.value.trim() === ``));
-
-// The box exists only after the click, so `autofocus` — an initial-page-load attribute — would never fire. The
-// caret goes to the end rather than selecting everything: this is a change to a post, not a replacement of it.
-const focusOnMount = (el: Element | ComponentPublicInstance | null): void => {
-    if (el instanceof HTMLTextAreaElement) {
-        el.focus();
-        el.setSelectionRange(el.value.length, el.value.length);
+/* The field exists only after the click, so `autofocus` — an initial-page-load attribute — would never fire.
+ * The caret goes to the end rather than selecting everything: this is a change to a post, not a replacement of
+ * it, and a stray keystroke over a full selection would wipe one. */
+const caretAtEnd = (el: Element | ComponentPublicInstance | null): void => {
+    const field = (el as { field?: HTMLTextAreaElement } | null)?.field;
+    if (field !== undefined) {
+        field.focus();
+        field.setSelectionRange(field.value.length, field.value.length);
     }
 };
 
-const commit = (): void => {
-    if (incomplete.value || saving) {
-        return;
-    }
-    const changes = postEdit(draft, { content: content.value, title: title.value });
-    // Untouched: close it rather than re-post an identical draft and flash the row for a click that did nothing.
-    if (changes === undefined) {
-        emit(`cancel`);
-        return;
-    }
-    emit(`save`, changes);
-};
+// The row disappearing out from under an open editor — approved, rejected, refetched away — must not be what
+// loses the last sentence someone typed.
+onBeforeUnmount(() => emit(`touch`));
 </script>
 
 <template>
-    <div class="max-w-[64ch]">
-        <input
+    <div class="-mx-2 -my-1 max-w-[calc(64ch+1rem)]">
+        <ProseField
             v-if="headlined"
             v-model="title"
-            type="text"
-            :class="cmp.input(`mb-2 block w-full text-base font-semibold leading-snug`)"
+            variant="heading"
             aria-label="Post title"
-            @keydown.escape="emit(`cancel`)"
-            @keydown.enter.prevent="commit"
+            @input="emit(`touch`)"
+            @keydown.escape="emit(`close`)"
         />
-        <!-- `field-sizing-content` grows the box with the post so a long draft isn't edited through a four-line
-             porthole; `rows` is its floor, and the cap keeps a YouTube description from pushing the queue's
-             other sections off the screen. -->
-        <textarea
-            :ref="focusOnMount"
+        <ProseField
+            :ref="headlined ? undefined : caretAtEnd"
             v-model="content"
-            rows="4"
-            :class="
-                cmp.input(
-                    `field-sizing-content block max-h-[60vh] w-full resize-y text-[0.9375rem] leading-[1.7]`,
-                    over ? `border-danger/60 hover:border-danger focus:border-danger` : ``,
-                )
-            "
+            variant="post"
             aria-label="Post text"
-            @keydown.escape="emit(`cancel`)"
-            @keydown.ctrl.enter="commit"
-            @keydown.meta.enter="commit"
-        ></textarea>
-
-        <div class="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1">
-            <Button label="Save" size="small" :disabled="incomplete || saving" @click="commit">
-                <template #icon><Icon name="check" /></template>
-            </Button>
-            <button type="button" :class="cmp.linkButton(`text-muted hover:text-content`)" :disabled="saving" @click="emit(`cancel`)">Cancel</button>
-            <span class="ml-auto text-xs" :class="over ? `text-danger` : `text-muted`">{{ counter }}</span>
-        </div>
+            @input="emit(`touch`)"
+            @keydown.escape="emit(`close`)"
+        />
     </div>
 </template>

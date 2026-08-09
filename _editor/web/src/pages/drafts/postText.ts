@@ -74,7 +74,12 @@ export const postEdit = (
     draft: { readonly platform: string; readonly target?: string; readonly title?: string; readonly content: string },
     next: { readonly content: string; readonly title: string },
 ): PostEdit | undefined => {
-    const headlined = postsATitle(draft.platform, draft.target);
+    /* A BLANK HEADLINE IS NEVER WRITTEN. The editor saves as it is typed, so there is no Save button left to
+     * disable while a required field is empty — and the moment someone selects a headline to retype it, the
+     * field is empty. Writing that would put a draft on disk that cannot post at all (reddit and YouTube both
+     * refuse an untitled one), for the sake of a keystroke that was on its way somewhere. So an emptied
+     * headline means "unchanged": the post keeps the title it had until a new one is actually typed. */
+    const headlined = postsATitle(draft.platform, draft.target) && next.title.trim() !== ``;
     const title = next.title.trim();
     const changed = next.content !== draft.content || (headlined && title !== (draft.title ?? ``));
     if (!changed) {

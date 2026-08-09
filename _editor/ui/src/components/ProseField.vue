@@ -28,8 +28,11 @@
 import { computed, ref, useAttrs } from "vue";
 
 const { variant = `prose` } = defineProps<{
-    /** `heading` is the document's own title — the `# Heading` the field writes. `prose` is everything else. */
-    variant?: `heading` | `prose`;
+    /** `heading` is the document's own title — the `# Heading` the field writes. `prose` is everything else.
+     *  `post` is prose one step up, for a surface that also DISPLAYS the same text unedited (the drafts queue
+     *  sets a post at 0.9375rem and swaps this field in on the spot) — the tier exists so the two halves of
+     *  that swap cannot drift, which is the same reason the other two are variants rather than class strings. */
+    variant?: `heading` | `prose` | `post`;
     placeholder?: string;
 }>();
 
@@ -53,6 +56,7 @@ const TAIL = `​`;
 const BOX = {
     heading: `[grid-area:1/1] whitespace-pre-wrap break-words px-2 py-0.5 text-lg font-semibold leading-snug tracking-tight`,
     prose: `[grid-area:1/1] whitespace-pre-wrap break-words px-2 py-1 text-sm leading-[1.7]`,
+    post: `[grid-area:1/1] whitespace-pre-wrap break-words px-2 py-1 text-[0.9375rem] leading-[1.7]`,
 };
 
 // Exposed as the element rather than as a focus() wrapper: callers that reach for this are placing a CARET

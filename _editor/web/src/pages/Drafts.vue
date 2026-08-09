@@ -23,9 +23,10 @@ import { useDrafts } from "../composables/extensions/useDrafts";
 import { useExtensions } from "../composables/extensions/useExtensions";
 import DraftMeta from "./drafts/DraftMeta.vue";
 import DraftPost from "./drafts/DraftPost.vue";
-import { countdownWords, limitOf, type PostEdit, postsATitle } from "./drafts/postText";
+import { countdownWords, limitOf, postsATitle } from "./drafts/postText";
 import PostEditor from "./drafts/PostEditor.vue";
 import ScheduleControl from "./drafts/ScheduleControl.vue";
+import { useDraftEdit } from "./drafts/useDraftEdit";
 import { useNow } from "../composables/useNow";
 
 /* Drafts: the approval inbox for posts the agent proposed during its scheduled work. The agent writes one JSON
@@ -151,16 +152,6 @@ const isEmpty = computed(() => drafts.value.length === 0 && invalid.value.length
 const rejecting = ref<DraftSummary | undefined>(undefined);
 const approvingAll = ref(false);
 
-// One post is edited at a time — the queue is read top to bottom and a second open box is a second unsaved
-// thing to lose track of. Held as the id rather than the draft, because the list refetches under it.
-const editing = ref<string | undefined>(undefined);
-const isEditing = (draft: DraftSummary): boolean => editing.value === draft.id;
-
-// Approve-all is gone while a post in that section is open for editing, for the reason the row's own Approve
-// is: a bulk yes would commit the text the owner is in the middle of replacing. Read off the live list rather
-// than off `editing` alone, so a draft that vanishes underneath an open box cannot leave the link suppressed.
-const editingInReview = computed(() => needsReview.value.some(isEditing));
-
 // Approve, retry, put-back and reschedule are all a re-post of the whole file with one field changed (the
 // daemon upserts by id). Errors surface in the strip at the top; the query refetch reconciles the row.
 const patch = (draft: DraftSummary, changes: Partial<DraftSummary>): Promise<void> =>
@@ -168,12 +159,29 @@ const patch = (draft: DraftSummary, changes: Partial<DraftSummary>): Promise<voi
         await save.mutateAsync({ ...draft, ...changes });
     }, `Could not update the draft.`);
 
+/* ONE POST EDITED AT A TIME, saved as it is typed (useDraftEdit.ts). One at a time because the queue is read
+ * top to bottom and a second open field is a second thing to keep track of; saved as typed because the row must
+ * not have to rearrange itself around a Save button. */
+const edit = useDraftEdit(async (draft, changes) => void (await save.mutateAsync({ ...draft, ...changes })));
+
+// Every action on a post's TEXT writes the pending keystrokes first. The window between the last one and the
+// debounce firing is precisely where someone fixes a word and immediately approves, and a post published from
+// the list's copy would go out with that word still wrong.
+const settled = (act: () => Promise<unknown>): Promise<void> =>
+    run(async () => {
+        await edit.flush();
+        await act();
+    }, `Could not update the draft.`);
+
+const approve = (draft: DraftSummary): Promise<void> => settled(() => save.mutateAsync({ ...draft, status: `approved` }));
+
 // The list it was fired against, not the live one: each approval moves a row out of `needsReview`, so reading
 // the computed inside the loop would walk a list shrinking underneath it.
 const approveAll = (): Promise<void> => {
     const queue = needsReview.value;
     approvingAll.value = false;
     return run(async () => {
+        await edit.flush();
         for (const draft of queue) {
             await save.mutateAsync({ ...draft, status: `approved` });
         }
@@ -186,6 +194,13 @@ const rejectDraft = (draft: DraftSummary): Promise<void> => {
         await remove.mutateAsync(draft.id);
     }, `Could not remove the draft.`);
 };
+
+// The pencil is a toggle, and it is the ONLY thing the click changes: open, and the words become typeable
+// where they already are; close, and the last of them is written on the way out.
+const toggleEdit = (draft: DraftSummary): Promise<void> =>
+    run(async () => {
+        await (edit.isEditing(draft) ? edit.close() : edit.open(draft));
+    }, `Could not save your changes.`);
 
 /* CALLING IT BACK — the other half of a hold, and the reason the hold is worth having. It puts the post back in
  * review AND CLEARS THE DATE, which is the part that would be silently wrong if it were left out: the date on a
@@ -229,15 +244,6 @@ const goingOutNotice = computed<NoticeModel | undefined>(() => {
     };
 });
 
-// The box closes only once the write has landed. Clearing it first would be the one failure mode an editor
-// must not have: a rejected save leaving the row showing the text the owner had just replaced, with the
-// replacement gone.
-const saveEdit = (draft: DraftSummary, changes: PostEdit): Promise<void> =>
-    run(async () => {
-        await save.mutateAsync({ ...draft, ...changes });
-        editing.value = undefined;
-    }, `Could not save your changes.`);
-
 // What a draft is called where it has to be named in one line — a confirm's list, an action's accessible name.
 // The title if the platform wanted one, else the post's opening line.
 const headline = (draft: DraftSummary): string => draft.title ?? draft.content.split(`\n`)[0] ?? draft.id;
@@ -248,15 +254,18 @@ const headline = (draft: DraftSummary): string => draft.title ?? draft.content.s
  * reason the draft will fail. Platforms with no well-known cap (postText.ts) get a plain count, and only once
  * the post is long enough for its size to be a question at all. */
 const OVERSIZED = 280;
+// Counted off the FIELD while one is open (useDraftEdit.ts), so the number moves with the words being typed —
+// it is the one fact on the row that has to, since going over is the reason a post fails outright, and it
+// updating in place is also what makes a separate editor footer unnecessary.
 const lengthOf = (draft: DraftSummary): string | undefined => {
     const limit = limitOf(draft.platform);
-    const count = draft.content.length;
+    const count = edit.liveLength(draft);
     if (limit !== undefined) {
         return `${count.toLocaleString()} / ${limit.toLocaleString()}`;
     }
-    return count > OVERSIZED ? `${count.toLocaleString()} characters` : undefined;
+    return count > OVERSIZED || edit.isEditing(draft) ? `${count.toLocaleString()} characters` : undefined;
 };
-const isOver = (draft: DraftSummary): boolean => draft.content.length > (limitOf(draft.platform) ?? Infinity);
+const isOver = (draft: DraftSummary): boolean => edit.liveLength(draft) > (limitOf(draft.platform) ?? Infinity);
 
 /* THE AGENT'S OWN NOTE about the draft, which is what `title` holds everywhere the platform doesn't publish one
  * (postText.ts): why this post, which thread, what it is not saying. Worth keeping — it is the reasoning behind
@@ -280,10 +289,16 @@ const FACTS = `mt-3 flex max-w-[64ch] flex-wrap items-center gap-x-3 gap-y-1 tex
 // is the agent talking ABOUT the post — a reader who mistakes it for the post has read the wrong thing.
 const NOTE = `mt-1.5 line-clamp-2 max-w-[64ch] text-2xs leading-relaxed text-subtle`;
 
-// The way into the editor, shaped exactly like ScheduleControl's resting state next to it: a muted phrase in
-// the footer that opens a field. Rewriting a post is rarer than approving one and must not draw like a rival
-// to the Approve button — the same reasoning that took the date pickers out of this column.
-const EDIT_TRIGGER = `flex cursor-pointer items-center gap-1.5 transition-colors hover:text-content`;
+/* THE PENCIL SITS WITH THE OTHER ACTIONS, which is the fix for where it used to be. It began life as a muted
+ * phrase in the row's footer, on the reasoning that rewriting a post is rarer than approving one and should not
+ * draw like a rival to Approve. The reasoning was fine and the placement was not: it put one of the row's three
+ * actions at the bottom-left while the other two sat at the top-right, so "what can I do to this post" had two
+ * answers in two places. Quiet is a matter of WEIGHT, not of distance — a bare icon button beside the trash is
+ * quiet and still findable, and the cluster now answers the question once.
+ *
+ * IT IS A TOGGLE, AND IT LIGHTS UP. The pressed state is the only thing on the row that changes when editing
+ * opens; everything else — the trash, Approve, the schedule, the count — stays exactly where it was. */
+const EDIT_ACTIVE = `bg-overlay text-content`;
 </script>
 
 <template>
@@ -319,18 +334,21 @@ const EDIT_TRIGGER = `flex cursor-pointer items-center gap-1.5 transition-colors
                     <template #lead><BrandMark :size="28" :name="platformName(draft)" :logo="platformLogo(draft)" /></template>
                     <template #description><DraftMeta :name="platformName(draft)" :target="draft.target" /></template>
                     <template #control>
-                        <Button
-                            v-if="canShip && !isEditing(draft)"
-                            label="Retry"
-                            size="small"
-                            severity="secondary"
-                            :disabled="save.isPending.value"
-                            @click="patch(draft, { status: `approved` })"
-                        >
-                            <template #icon><Icon name="refresh" /></template>
-                        </Button>
+                        <!-- A post that failed for being too long can only be retried at the length that failed,
+                             unless the words themselves can be changed — so the pencil is here too. -->
                         <button
-                            v-if="canShip && !isEditing(draft)"
+                            v-if="canShip"
+                            type="button"
+                            :class="cmp.iconButton(`h-8 w-8`, edit.isEditing(draft) ? EDIT_ACTIVE : ``)"
+                            :aria-label="`Edit ${headline(draft)}`"
+                            :aria-pressed="edit.isEditing(draft)"
+                            v-tooltip.top="edit.isEditing(draft) ? `Done editing` : `Edit the post`"
+                            @click="toggleEdit(draft)"
+                        >
+                            <Icon name="pencil" />
+                        </button>
+                        <button
+                            v-if="canShip"
                             type="button"
                             :class="cmp.iconButton(`h-8 w-8 hover:bg-danger/10 hover:text-danger`)"
                             :aria-label="`Reject ${headline(draft)}`"
@@ -339,37 +357,34 @@ const EDIT_TRIGGER = `flex cursor-pointer items-center gap-1.5 transition-colors
                         >
                             <Icon name="trash" />
                         </button>
+                        <Button
+                            v-if="canShip"
+                            label="Retry"
+                            size="small"
+                            severity="secondary"
+                            :disabled="save.isPending.value"
+                            @click="settled(() => save.mutateAsync({ ...draft, status: `approved` }))"
+                        >
+                            <template #icon><Icon name="refresh" /></template>
+                        </Button>
                     </template>
                     <template #below>
                         <div :class="POST_COLUMN">
-                            <!-- A post that failed for being too long can only be retried at the length that
-                                 failed, unless the words themselves can be changed. -->
                             <PostEditor
-                                v-if="isEditing(draft)"
+                                v-if="edit.isEditing(draft)"
                                 :draft="draft"
-                                :saving="save.isPending.value"
-                                @cancel="editing = undefined"
-                                @save="saveEdit(draft, $event)"
+                                v-model:content="edit.content.value"
+                                v-model:title="edit.title.value"
+                                @touch="edit.touch()"
+                                @close="toggleEdit(draft)"
                             />
-                            <template v-else>
-                                <DraftPost :draft="draft" />
-                                <!-- The reason, in the row. It used to live in a tooltip on the status badge — the
-                                     one state whose entire content is an explanation, hidden behind a hover. -->
-                                <p :class="cmp.alertDanger(`mt-3 max-w-[64ch]`)">{{ draft.error ?? `The publisher did not say why.` }}</p>
-                                <div :class="FACTS">
-                                    <span v-if="lengthOf(draft)" :class="isOver(draft) ? `text-danger` : ``">{{ lengthOf(draft) }}</span>
-                                    <button
-                                        v-if="canShip"
-                                        type="button"
-                                        :class="EDIT_TRIGGER"
-                                        :aria-label="`Edit ${headline(draft)}`"
-                                        @click="editing = draft.id"
-                                    >
-                                        <Icon name="pencil" />
-                                        <span>Edit</span>
-                                    </button>
-                                </div>
-                            </template>
+                            <DraftPost v-else :draft="draft" />
+                            <!-- The reason, in the row. It used to live in a tooltip on the status badge — the
+                                 one state whose entire content is an explanation, hidden behind a hover. -->
+                            <p :class="cmp.alertDanger(`mt-3 max-w-[64ch]`)">{{ draft.error ?? `The publisher did not say why.` }}</p>
+                            <div :class="FACTS">
+                                <span v-if="lengthOf(draft)" :class="isOver(draft) ? `text-danger` : ``">{{ lengthOf(draft) }}</span>
+                            </div>
                             <!-- The agent's own note about the draft, under everything it is a note about. -->
                             <p v-if="noteOf(draft)" :class="NOTE" v-tooltip.top="noteOf(draft)">{{ noteOf(draft) }}</p>
                         </div>
@@ -379,13 +394,7 @@ const EDIT_TRIGGER = `flex cursor-pointer items-center gap-1.5 transition-colors
 
             <RowGroup v-if="needsReview.length > 0" label="Needs your review" :count="needsReview.length">
                 <template v-if="needsReview.length > 1" #actions>
-                    <button
-                        v-if="canShip && !editingInReview"
-                        type="button"
-                        :class="cmp.linkButton()"
-                        :disabled="save.isPending.value"
-                        @click="approvingAll = true"
-                    >
+                    <button v-if="canShip" type="button" :class="cmp.linkButton()" :disabled="save.isPending.value" @click="approvingAll = true">
                         Approve all {{ needsReview.length }}
                     </button>
                 </template>
@@ -398,9 +407,24 @@ const EDIT_TRIGGER = `flex cursor-pointer items-center gap-1.5 transition-colors
                             :note="draft.createdAt === undefined ? undefined : `proposed ${timeAgo(draft.createdAt)}`"
                         />
                     </template>
+                    <!-- THE ROW'S THREE ACTIONS, TOGETHER AND FIXED. Edit, reject, approve — in the order they
+                         escalate, and none of them moves, hides or swaps when the editor opens. Approving with
+                         a field still open is safe because the click writes the pending keystrokes first
+                         (`settled`), which is what let the mid-edit disappearing act go. -->
                     <template #control>
                         <button
-                            v-if="canShip && !isEditing(draft)"
+                            v-if="canShip"
+                            type="button"
+                            :class="cmp.iconButton(`h-8 w-8`, edit.isEditing(draft) ? EDIT_ACTIVE : ``)"
+                            :aria-label="`Edit ${headline(draft)}`"
+                            :aria-pressed="edit.isEditing(draft)"
+                            v-tooltip.top="edit.isEditing(draft) ? `Done editing` : `Edit the post`"
+                            @click="toggleEdit(draft)"
+                        >
+                            <Icon name="pencil" />
+                        </button>
+                        <button
+                            v-if="canShip"
                             type="button"
                             :class="cmp.iconButton(`h-8 w-8 hover:bg-danger/10 hover:text-danger`)"
                             :aria-label="`Reject ${headline(draft)}`"
@@ -409,55 +433,32 @@ const EDIT_TRIGGER = `flex cursor-pointer items-center gap-1.5 transition-colors
                         >
                             <Icon name="trash" />
                         </button>
-                        <!-- Absent mid-edit, not merely disabled: approving with unsaved words in the box would
-                             publish the sentence the owner had just replaced. -->
-                        <Button
-                            v-if="canShip && !isEditing(draft)"
-                            label="Approve"
-                            size="small"
-                            :disabled="save.isPending.value"
-                            @click="patch(draft, { status: `approved` })"
-                        >
+                        <Button v-if="canShip" label="Approve" size="small" :disabled="save.isPending.value" @click="approve(draft)">
                             <template #icon><Icon name="check" /></template>
                         </Button>
                     </template>
                     <template #below>
                         <div :class="POST_COLUMN">
+                            <!-- The post, or the same post with a caret in it — same column, same measure, same
+                                 type. Unclamped up to a screenful either way: this is the section where a
+                                 decision is owed, and the post's own words are what the decision is about. -->
                             <PostEditor
-                                v-if="isEditing(draft)"
+                                v-if="edit.isEditing(draft)"
                                 :draft="draft"
-                                :saving="save.isPending.value"
-                                @cancel="editing = undefined"
-                                @save="saveEdit(draft, $event)"
+                                v-model:content="edit.content.value"
+                                v-model:title="edit.title.value"
+                                @touch="edit.touch()"
+                                @close="toggleEdit(draft)"
                             />
-                            <template v-else>
-                                <!-- Unclamped up to a screenful, deliberately: this is the section where a decision
-                                     is owed, and the post's own words are what the decision is about. -->
-                                <DraftPost :draft="draft" />
+                            <DraftPost v-else :draft="draft" />
 
-                                <!-- The three facts that DECIDE the post rather than describe it: when it goes,
-                                     whether it fits where it is going, and what the agent said it was for — and
-                                     the way into the words themselves, since a proposal one word off is worth
-                                     fixing rather than throwing back. -->
-                                <div :class="FACTS">
-                                    <ScheduleControl
-                                        :at="draft.scheduledAt"
-                                        :label="headline(draft)"
-                                        @change="patch(draft, { scheduledAt: $event })"
-                                    />
-                                    <span v-if="lengthOf(draft)" :class="isOver(draft) ? `text-danger` : ``">{{ lengthOf(draft) }}</span>
-                                    <button
-                                        v-if="canShip"
-                                        type="button"
-                                        :class="EDIT_TRIGGER"
-                                        :aria-label="`Edit ${headline(draft)}`"
-                                        @click="editing = draft.id"
-                                    >
-                                        <Icon name="pencil" />
-                                        <span>Edit</span>
-                                    </button>
-                                </div>
-                            </template>
+                            <!-- The facts that DECIDE the post rather than describe it: when it goes, and
+                                 whether it fits where it is going. Present in both states and unmoved by the
+                                 switch — the count simply starts following the keystrokes. -->
+                            <div :class="FACTS">
+                                <ScheduleControl :at="draft.scheduledAt" :label="headline(draft)" @change="patch(draft, { scheduledAt: $event })" />
+                                <span v-if="lengthOf(draft)" :class="isOver(draft) ? `text-danger` : ``">{{ lengthOf(draft) }}</span>
+                            </div>
                             <!-- The agent's own note about the draft, under everything it is a note about. -->
                             <p v-if="noteOf(draft)" :class="NOTE" v-tooltip.top="noteOf(draft)">{{ noteOf(draft) }}</p>
                         </div>
