@@ -3,6 +3,7 @@ import { mkdirSync, openSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { promisify } from "node:util";
 import { randomBytes } from "node:crypto";
+import { LEAF_CRT, LEAF_KEY } from "@intentic-app/localhost-https/paths";
 import { repoRoot } from "@intentic/constants/node";
 import {
     API_URL,
@@ -105,8 +106,12 @@ export default async (): Promise<void> => {
             BETTER_AUTH_SECRET,
             API_URL,
             WEB_ORIGIN: WEB_URL,
-            API_HTTPS_KEY: `./node_modules/@intentic-app/localhost-https/localhost.key`,
-            API_HTTPS_CERT: `./node_modules/@intentic-app/localhost-https/localhost.crt`,
+            // The minted pair, from the package that mints it. It used to be named by a path inside that
+            // package, and the certificate has since moved OUT of the repository to the OS's per-user data
+            // directory (localhost-https/paths.mjs says at length why) — leaving this pointing at a file
+            // nothing writes any more, so the API died on ENOENT before a single spec ran.
+            API_HTTPS_KEY: LEAF_KEY,
+            API_HTTPS_CERT: LEAF_CRT,
             LOG_PRETTY: `false`,
         });
         await waitUp(`${API_URL}/api/auth/ok`, `api`, join(cacheDir, `api.log`), 60_000);

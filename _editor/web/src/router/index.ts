@@ -1,5 +1,6 @@
 import { useDevice } from "@intentic/ui";
 import { createRouter, createWebHistory, type RouteLocationNormalized, type RouteLocationRaw, type RouteRecordRaw } from "vue-router";
+import { agentStarted } from "../composables/agents/firstRun";
 import { restorePersistedQueries } from "../composables/queryPersistence";
 import { useAuth } from "../composables/useAuth";
 import { useSandbox } from "../composables/sandbox/useSandbox";
@@ -93,9 +94,18 @@ const routes: RouteRecordRaw[] = [
         beforeEnter: [requireAuth, requireSetup],
         component: () => import(`../shell/WorkspaceShell.vue`),
         children: [
-            // Mobile lands on the agent fleet — glance at every running agent, tap in to drive one; desktop
-            // keeps the workspace (its chat is docked).
-            { path: ``, redirect: () => (useDevice().mobile.value ? `/agents` : `/workspace`) },
+            /* Mobile lands on the agent fleet — glance at every running agent, tap in to drive one; desktop
+             * keeps the workspace (its chat is docked).
+             *
+             * EXCEPT ON A WORKSPACE NOBODY HAS DELEGATED ANYTHING IN YET, where the desktop lands on the fleet
+             * too. Setup ends at the highest-motivation moment this product has, and spending it on an empty
+             * file tree shows the user the one screen that cannot explain why they signed up; the board can,
+             * and its first-run state asks them for a task outright. It reverts to the workspace the moment
+             * they start their first agent — see agents/firstRun.ts. */
+            {
+                path: ``,
+                redirect: () => (useDevice().mobile.value || !agentStarted(useSandbox().activeSandboxId.value) ? `/agents` : `/workspace`),
+            },
             { path: `agents`, name: `agents`, meta: { title: `Agents` }, component: () => import(`../pages/Agents.vue`) },
             // Drill-in for one agent: full-screen chat + isolated diff review. The old mobile /chat tab folded
             // in here (an agent's conversation IS the chat surface).

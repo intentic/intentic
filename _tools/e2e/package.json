@@ -9,6 +9,7 @@
     },
     "devDependencies": {
         "@intentic-app/api-contract": "workspace:*",
+        "@intentic-app/localhost-https": "workspace:*",
         "@intentic-app/prisma": "workspace:*",
         "@intentic/constants": "workspace:*",
         "@intentic/tsconfig": "workspace:*",

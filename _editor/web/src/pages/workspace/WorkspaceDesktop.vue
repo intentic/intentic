@@ -1015,7 +1015,10 @@ const endResize = (event: PointerEvent): void => {
                         :title="activeTab.title"
                     />
                 </div>
-                <WorkspaceEmptyState v-else @pick="fileInput?.click()" />
+                <!-- `empty` splits the two silences this pane covers: a workspace with nothing in it gets every
+                     way of getting code in, a workspace between files gets the drop target. Gated on the tree
+                     having LOADED, so the first paint of a full workspace never flashes the newcomer's screen. -->
+                <WorkspaceEmptyState v-else :empty="!isLoading && tree.length === 0" @pick="fileInput?.click()" />
                 <!-- Drop-to-root hint over the viewer, shown only for external file drags (an internal move is
                      guided by the row rings instead). pointer-events-none so the drop still reaches the body. -->
                 <div

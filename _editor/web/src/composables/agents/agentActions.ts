@@ -7,8 +7,9 @@ import { queryClient } from "../queryPersistence";
 import { router } from "../../router";
 import { sandboxJson } from "../sandbox/sandboxClient";
 import { jsonBody } from "../sandbox/jsonBody";
-import { sandboxKey } from "../sandbox/useSandbox";
+import { sandboxKey, useSandbox } from "../sandbox/useSandbox";
 import { agentBlockers, blockersOf, resolvePrompt, userBlockers } from "./conflictResolution";
+import { markAgentStarted } from "./firstRun";
 import { useAgents } from "./useAgents";
 
 /* The fleet's mutations, addressed by agent id — the true source for both surfaces that invoke them: the
@@ -34,6 +35,10 @@ import { useAgents } from "./useAgents";
 // Templates must therefore write `@click="startAgent()"`, not `@click="startAgent"`: Vue hands a bare handler
 // reference the MouseEvent, which would arrive here as the prompt and be sent to the agent as its first turn.
 export const startAgent = (prompt?: string): void => {
+    // This workspace has now been delegated to, which is what the desktop's first landing waits for: from here
+    // on, opening the app lands on the workspace rather than the board (firstRun.ts). Recorded on the press
+    // rather than on the turn completing — the user has seen what the board is for either way.
+    markAgentStarted(useSandbox().activeSandboxId.value);
     const conversation = useChat().newChat();
     revealConversation(conversation);
     if (prompt !== undefined) {

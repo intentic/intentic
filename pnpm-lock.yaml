@@ -2848,6 +2848,9 @@ importers:
       '@intentic-app/api-contract':
         specifier: workspace:*
         version: file:_platform/api-contract(@opentelemetry/api@1.9.1)
+      '@intentic-app/localhost-https':
+        specifier: workspace:*
+        version: link:../localhost-https
       '@intentic-app/prisma':
         specifier: workspace:*
         version: link:../../_platform/prisma

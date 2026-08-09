@@ -8,6 +8,10 @@ import type { MenuItem } from "primevue/menuitem";
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { startAgent } from "../composables/agents/agentActions";
+import { markAgentStarted } from "../composables/agents/firstRun";
+import { usePanels } from "../composables/extensions/usePanels";
+import { useChanges } from "../composables/workspace/useChanges";
+import { useSandbox } from "../composables/sandbox/useSandbox";
 import { synthesizeSessions, synthesizing } from "../composables/agents/synthesizeSessions";
 import { dropActionLabel, dropRejection, type PendingAction } from "../composables/agents/laneDrop";
 import { useAgentDrag } from "../composables/agents/useAgentDrag";
@@ -593,6 +597,24 @@ const LANES: readonly { key: FleetLane; label: string; dot: string; empty: strin
 const total = computed(
     () => LANES.reduce((sum, lane) => sum + boardLanes.value[lane.key].length, 0) + boardRunRows.value.length + heldWakes.value.length,
 );
+/* HAS ANYTHING EVER HAPPENED HERE — a different question from `total`, and the one the first-run screen and the
+ * desktop's first landing both turn on. The docked chat always holds one conversation, and a conversation the
+ * fleet has never heard of is a `draft` CARD on this board (useAgents.fleet): so a workspace where nobody has
+ * done anything still counts one, `total` is never 0 on it, and both features built on that count would be dead
+ * on exactly the workspace they exist for — the first-run screen never drawn, and the landing flag set by the
+ * first page load rather than by the first agent.
+ *
+ * An untouched draft is the empty composer one column over, not work. Anything else counts, the archive
+ * included: agents that ran and were filed away are a history, and this board should show a person with one the
+ * ordinary lanes and the door to it rather than a pitch for a product they already use. */
+const started = computed(
+    () =>
+        LANES.reduce((sum, lane) => sum + boardLanes.value[lane.key].filter((agent) => agent.status !== `draft`).length, 0) +
+            boardRunRows.value.length +
+            heldWakes.value.length +
+            archiveSize.value >
+        0,
+);
 // The header's tally. Summed over the same cardsFor and runsFor the lanes render, so it can never disagree
 // with the `n of m` counts under it.
 const kept = computed(() => LANES.reduce((sum, lane) => sum + cardsFor(lane.key).length + runsFor(lane.key).length, 0));
@@ -603,6 +625,87 @@ const noMatches = computed(() => filtering.value && !archiveOpen.value && kept.v
 // "Clear" only appears when it would do something — the Finished lane holds the archivable set exactly (it is
 // landed-or-idle by construction), so its length is the answer.
 const clearable = computed(() => lanes.value.finished.length);
+
+/* --- The first run --------------------------------------------------------------------------------------
+ * A BARE BOARD IS THE ONE SCREEN THAT HAS TO TEACH. On a fresh workspace this is where the desktop now lands
+ * (router/index.ts), straight out of setup, and what stood here was a sentence describing the board and a
+ * button that opened an empty composer somewhere else — which hands the whole burden of imagination to
+ * somebody who has been using the product for four seconds. So the empty state IS a composer: one question,
+ * one box, and a few tasks worth pressing, which is the shape every tool that solves this problem converges on.
+ *
+ * A chip FILLS the box, it does not send. One rule for all of them, because they are not all complete: "bring
+ * in my code" ends mid-sentence waiting for a repository, and a chip that sometimes dispatches an agent and
+ * sometimes doesn't is a control nobody can predict. It also leaves the text there to be edited, which is the
+ * point of suggesting it rather than doing it. */
+const firstTask = ref(``);
+const firstTaskField = ref<HTMLTextAreaElement | undefined>(undefined);
+// The workspace facts the suggestions turn on, both already in flight for the rail — the board adds no fetch.
+const { panels: workspaceRepos } = usePanels();
+const workspaceChanges = useChanges();
+// Whether there is anything here to work ON. Repos are the plain case; uncommitted changes cover the other one
+// — files dropped into /work without a git of their own still land as changes on the workspace's own repo, and
+// telling that user their workspace is empty would be the suggestion contradicting what they are looking at.
+const hasWork = computed(() => workspaceRepos.value.length > 0 || workspaceChanges.count.value > 0);
+/* Tasks worth a first press, phrased as the ladder the quickstarts of this product's neighbours all use:
+ * understand it, then a small safe change with a stop before anything is written. Concrete sentences rather
+ * than feature names — "Explain this codebase" is a thing to press; "code understanding" is a brochure. */
+const starters = computed<readonly { readonly label: string; readonly prompt: string }[]>(() => {
+    if (!hasWork.value) {
+        return [
+            // Left deliberately unfinished: the repository is the one thing only the user can supply, and a
+            // chip that guessed at it would send an agent after something that does not exist.
+            { label: `Bring in my code`, prompt: `Clone my repository into this workspace: ` },
+            {
+                label: `Start a new project`,
+                prompt: `Start a new project in this workspace. Ask me what I want to build before you scaffold anything.`,
+            },
+        ];
+    }
+    return [
+        // Uncommitted work is the most urgent thing on a workspace that has any, so it leads when it exists.
+        ...(workspaceChanges.count.value > 0
+            ? [{ label: `Review my changes`, prompt: `Review my uncommitted changes and flag anything risky before I commit them.` }]
+            : []),
+        {
+            label: `Explain this codebase`,
+            prompt: `Explain this codebase — what it does, where the entry points are, and which files I should read first.`,
+        },
+        {
+            label: `Find something to improve`,
+            prompt: `Suggest three small, safe improvements to this codebase. Wait for me to choose one before you change anything.`,
+        },
+    ];
+});
+// Fill and focus, caret at the end — an unfinished prompt has to leave the user typing where the sentence stops.
+const useStarter = async (prompt: string): Promise<void> => {
+    firstTask.value = prompt;
+    await nextTick();
+    const field = firstTaskField.value;
+    field?.focus();
+    field?.setSelectionRange(prompt.length, prompt.length);
+};
+const sendFirstTask = (): void => {
+    const task = firstTask.value.trim();
+    if (task.length === 0) {
+        return;
+    }
+    firstTask.value = ``;
+    startAgent(task);
+};
+/* AGENTS ON THE BOARD MEAN THIS IS NOT A FIRST RUN, whatever this browser's storage says — a workspace driven
+ * from another machine, or from before the flag existed, has already been delegated to, and the desktop should
+ * go back to opening on the workspace for it. startAgent records the same fact on the press; this is the other
+ * end, for the runs it never saw. Keyed on `started`, so the docked chat's untouched draft does not record it. */
+const { activeSandboxId } = useSandbox();
+watch(
+    started,
+    (ever) => {
+        if (ever) {
+            markAgentStarted(activeSandboxId.value);
+        }
+    },
+    { immediate: true },
+);
 // Card click FOCUSES, it does not navigate: on desktop it only points the docked chat (the ONE chat surface)
 // at this agent and highlights the card — cheap and reversible, so the user can click down a lane to skim.
 // The view-change to the review detail is a deliberate, separate act (reviewAgent, below). Mobile has no dock,
@@ -950,13 +1053,61 @@ const grabCard = (event: PointerEvent, agent: FleetAgent, card: HTMLElement): vo
         <span class="sr-only" aria-live="polite">{{ announcement }}</span>
         <!-- Nothing on the board AND nothing archived is the only true empty state. With an archive behind it,
              the same screen would otherwise be a dead end: every agent the user ever ran, and no door to it. -->
-        <div v-if="total === 0 && !archiveOpen" class="flex min-h-0 flex-1 flex-col items-center justify-center gap-3 p-4 text-center">
-            <Icon name="sparkles" class="text-3xl text-subtle" />
-            <p class="max-w-sm text-xs text-muted">
-                No agents yet. Start a conversation here or in the workspace; both appear on this board, and isolated work remains reviewable on its
-                own branch.
-            </p>
-            <Button size="small" label="Start an agent" @click="startAgent()" />
+        <div v-if="(!started || total === 0) && !archiveOpen" class="flex min-h-0 flex-1 flex-col items-center justify-center gap-4 p-4 text-center">
+            <!-- THE FIRST RUN: nothing has ever happened here, so the screen asks for a task. The question
+                 comes first, and it is a QUESTION — this screen's job is to be answered, not read. -->
+            <template v-if="!started">
+                <div class="flex w-full max-w-xl flex-col gap-2">
+                    <h2 class="text-sm font-semibold text-content">What should the first agent do?</h2>
+                    <p class="text-2xs text-muted">
+                        Describe a task and it runs on its own branch while you carry on — you review what it did before anything lands in your
+                        workspace.
+                    </p>
+                </div>
+            </template>
+            <!-- A BOARD THAT HAS BEEN CLEARED, which is a different silence: this user knows what agents are,
+                 and what they need is the way back to the ones they filed away (the pill below). -->
+            <template v-else>
+                <Icon name="sparkles" class="text-3xl text-subtle" />
+                <p class="max-w-sm text-xs text-muted">
+                    Nothing on the board. Start a conversation here or in the workspace; both appear on this board, and isolated work remains
+                    reviewable on its own branch.
+                </p>
+            </template>
+            <template v-if="!started">
+                <!-- The composer. Enter sends and Shift+Enter breaks the line, which is the docked chat's contract
+                     one column over; a first box that answered those two keys differently would teach the wrong
+                     reflex on the very first press. -->
+                <div class="flex w-full max-w-xl flex-col gap-2 rounded-xl border border-line bg-card p-2 text-left focus-within:border-primary-500">
+                    <textarea
+                        ref="firstTaskField"
+                        v-model="firstTask"
+                        rows="3"
+                        aria-label="What should the first agent do?"
+                        placeholder="e.g. Explain this codebase and point me at the entry points"
+                        class="scrollbar-thin block max-h-40 w-full resize-none bg-transparent px-2 pt-1 text-xs leading-relaxed text-content placeholder:text-subtle focus:outline-none"
+                        @keydown.enter.exact.prevent="sendFirstTask"
+                    ></textarea>
+                    <div class="flex items-center justify-end">
+                        <Button size="small" :disabled="firstTask.trim().length === 0" class="gap-1 px-2.5 py-1 text-2xs" @click="sendFirstTask">
+                            <Icon name="sparkles" class="text-2xs" />Start agent
+                        </Button>
+                    </div>
+                </div>
+                <!-- Tasks worth pressing, read off what is actually in the workspace (see `starters`). They fill the
+                     box rather than dispatching, so the user sends their own first turn. -->
+                <div class="flex max-w-xl flex-wrap items-center justify-center gap-1.5">
+                    <button
+                        v-for="starter in starters"
+                        :key="starter.label"
+                        type="button"
+                        class="rounded-full border border-line px-2.5 py-1 text-2xs text-muted transition-colors hover:border-line-strong hover:bg-overlay hover:text-content"
+                        @click="useStarter(starter.prompt)"
+                    >
+                        {{ starter.label }}
+                    </button>
+                </div>
+            </template>
             <!-- Clearing the last lane lands the user here, so the empty state carries the pulse too — it is
                  the only archive affordance left on screen once the board is bare. -->
             <button
