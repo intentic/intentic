@@ -695,6 +695,20 @@ Per-kind mechanics ([handlers/](_sandbox/sandbox/src/capabilities/handlers/)):
 | `agent` | An ACP agent as a chat provider. `apply`/`status` are a spawn + initialize probe, so a command that doesn't actually speak ACP is caught (with its stderr) before the first chat turn depends on it; the warm turn-serving connection lives in the acp pool. |
 | `endpoint` | A model API the user pointed us at. `apply` and `status` are the SAME probe and neither is fatal: adding an endpoint whose server isn't up yet is the ordinary case, so the entry is stored either way and the card carries the truth ("3 models" vs "no models" — the usual way an Ollama install disappoints its owner). |
 
+### Personas
+
+A `browser` capability is ONE ACCOUNT; a **persona** is the card that says which of those accounts are the
+same someone (`.intentic/personas.json` — the one file under `.intentic` that is committed, because it holds
+no secret). A turn names one via `actsAs`, and `turnPersona()`
+([personas.ts](_sandbox/sandbox/src/personas/personas.ts)) resolves it in one place: an attended turn naming
+none keeps every account, an **unattended** one naming none gets NONE, a named card gets exactly its accounts,
+and a named card that does not exist gets none — fail-closed, because falling back to "all" would turn a typo
+into the one mistake that cannot be undone. The narrowing filters the MANIFEST before the browser servers are
+built, so a disallowed account has no MCP server, no Chromium and no opened profile. It bounds logged-in
+browsers only — `cli` connector credentials still reach every turn's shell — and `posture: "draft"` is a
+sentence in the turn's instructions, not a tool gate. Full model, diagrams and the honest limits:
+[docs/accounts-and-personas.md](docs/accounts-and-personas.md).
+
 ### VPN
 
 A VPN is the one capability whose *stored* form and *live* form come apart, so it is modelled as two surfaces
