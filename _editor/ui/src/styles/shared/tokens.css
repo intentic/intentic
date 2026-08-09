@@ -46,7 +46,7 @@
     --ui-radius: var(--radius-lg);
 
     --ui-page-padding: calc(var(--spacing) * 6);
-    --ui-page-max-width: 48rem;
+    --ui-page-max-width: 56rem;
 
     --ui-card-padding: calc(var(--spacing) * 5);
     --ui-card-gap: calc(var(--spacing) * 4);

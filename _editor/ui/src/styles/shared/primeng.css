@@ -207,7 +207,7 @@
         padding: var(--ui-page-padding);
     }
     .ui-page[data-width="wide"] {
-        max-width: 72rem;
+        max-width: 80rem;
     }
     .ui-page[data-width="full"] {
         max-width: none;

@@ -19,7 +19,7 @@
 
      Mobile keeps the strip, unchanged. At phone width there is no column to put beside anything, and a
      scrolling row of pills is the idiom every mobile tab bar already uses; the failure above is a desktop
-     failure, caused by a 48rem content cap that does not apply once the page is the whole screen. -->
+     failure, caused by a 56rem content cap that does not apply once the page is the whole screen. -->
 <script setup lang="ts">
 import { type IconName, type NavGroup, NavRail, Row, Segmented, SplitView } from "@intentic/ui";
 import { computed, watch } from "vue";
@@ -88,7 +88,7 @@ watch(
 </script>
 
 <template>
-    <!-- Wide because the index spends 14rem of it: at the 48rem default the body would be left narrower than it
+    <!-- Wide because the index spends 14rem of it: at the 56rem default the body would be left narrower than it
          was before the column arrived. `scroll="page"` because a hub's body is a long FORM, not a document beside
          an index — Usage and Secrets both run past a screen, and clamping them would put a scrollbar inside a
          card inside a page. The rail sticks instead, which is how you leave the section you are in.
