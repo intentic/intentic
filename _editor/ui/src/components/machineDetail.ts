@@ -35,9 +35,21 @@ export interface MachineWatcherState {
     pid?: number | undefined;
 }
 
-/* ONE SANDBOX'S SHARE OF THE MACHINE — its folder, if it syncs one, and every port it asked for. */
+/* One sandbox CONTAINER on the machine — the docker half of the same sandbox the two lists above describe. */
+export interface MachineSandboxRow {
+    slug: string;
+    name?: string | undefined;
+    running: boolean;
+    image: string;
+    tunnelRunning?: boolean | undefined;
+}
+
+/* ONE SANDBOX'S SHARE OF THE MACHINE — its container, its folder if it syncs one, and every port it asked for. */
 export interface MachineSandboxGroup {
     sandboxId: string;
+    /** What to call it: the container's display name where there is one, else the id the sync agent knows. */
+    title: string;
+    sandbox?: MachineSandboxRow | undefined;
     folder?: MachineFolderRow | undefined;
     ports: MachinePortRow[];
 }
@@ -54,15 +66,31 @@ const byOutcomeThenNumber = (a: MachinePortRow, b: MachinePortRow): number =>
  * rows agree on, and `localhost` is the name the reader types either way. */
 const twinKey = (port: MachinePortRow): string => `${port.port}:${port.state}:${port.heldBy ?? ``}:${port.command ?? ``}`;
 
-/* The report's two lists, folded into one block per sandbox.
+/* THE CONTAINER AND THE PAIRING ARE THE SAME SANDBOX, and the two halves of the report name it differently: the
+ * sync agent keys its folder and its ports by the sandbox's HOST with the punctuation flattened
+ * (`sandbox-0738cd6b5027-intentic-dev`), while docker knows the container by the leading label of that host
+ * alone (`sandbox-0738cd6b5027`). So one is the other with a suffix, which is exactly the correspondence the
+ * Computers view already trusts when it decides which row is the sandbox you are reading this in.
+ *
+ * Matched conservatively — equal, or the id continues past the slug at a separator — because the cost of a
+ * wrong match is a folder shown against the wrong container, and the cost of a missed one is the pair rendering
+ * as two rows, which is what every surface did before this. */
+const isSameSandbox = (sandboxId: string, slug: string): boolean => sandboxId === slug || sandboxId.startsWith(`${slug}-`);
+
+/* The report's lists, folded into one block per sandbox.
  *
  * Driven by the PAIRINGS, in their own order: a pairing is what the user set up, and it stays on screen through
  * a restart that has not re-mirrored a single port yet. A sandbox that appears only in the port list still gets
  * a block — a report that lists a port for a pairing it did not send is a report worth showing as it is, not
- * one worth silently dropping half of. */
-export const sandboxGroups = (pairings: readonly MachineFolderRow[], ports: readonly MachinePortRow[]): MachineSandboxGroup[] => {
+ * one worth silently dropping half of. Containers come last, and only the ones nothing was paired with: a
+ * machine runs sandboxes this one has never heard of, and they are still sandboxes on that computer. */
+export const sandboxGroups = (
+    pairings: readonly MachineFolderRow[],
+    ports: readonly MachinePortRow[],
+    sandboxes: readonly MachineSandboxRow[] = [],
+): MachineSandboxGroup[] => {
     const ids = [...new Set([...pairings.map((folder) => folder.sandboxId), ...ports.map((port) => port.sandboxId)])];
-    return ids.map((sandboxId) => {
+    const paired = ids.map((sandboxId): MachineSandboxGroup => {
         const seen = new Set<string>();
         const mine: MachinePortRow[] = [];
         for (const port of ports) {
@@ -71,8 +99,19 @@ export const sandboxGroups = (pairings: readonly MachineFolderRow[], ports: read
                 mine.push(port);
             }
         }
-        return { sandboxId, folder: pairings.find((folder) => folder.sandboxId === sandboxId), ports: mine.toSorted(byOutcomeThenNumber) };
+        const sandbox = sandboxes.find((box) => isSameSandbox(sandboxId, box.slug));
+        return {
+            sandboxId,
+            title: sandbox?.name ?? sandbox?.slug ?? sandboxId,
+            ...(sandbox === undefined ? {} : { sandbox }),
+            folder: pairings.find((folder) => folder.sandboxId === sandboxId),
+            ports: mine.toSorted(byOutcomeThenNumber),
+        };
     });
+    const unpaired = sandboxes
+        .filter((box) => !ids.some((sandboxId) => isSameSandbox(sandboxId, box.slug)))
+        .map((sandbox): MachineSandboxGroup => ({ sandboxId: sandbox.slug, title: sandbox.name ?? sandbox.slug, sandbox, ports: [] }));
+    return [...paired, ...unpaired];
 };
 
 /* What a file sync is doing, in Mutagen's own words. Not mapped onto a traffic light: its halted states name

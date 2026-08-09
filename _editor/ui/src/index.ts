@@ -49,7 +49,13 @@ export { default as InfoTable } from "./components/InfoTable.vue";
 // One computer's desktop-sync detail — folders, localhost ports, watcher liveness. The BODY only: the desktop
 // app and the web's Computers tab frame it differently and state exactly the same facts inside.
 export { default as MachineDetail } from "./components/MachineDetail.vue";
-export { type MachineFolderRow, type MachinePortRow, type MachineWatcherState } from "./components/machineDetail.js";
+export {
+    type MachineFolderRow,
+    type MachinePortRow,
+    type MachineSandboxGroup,
+    type MachineSandboxRow,
+    type MachineWatcherState,
+} from "./components/machineDetail.js";
 export { default as Markdown } from "./components/Markdown.vue";
 export { default as MarkdownFigure } from "./components/MarkdownFigure.vue";
 // The index column: a filter, pinned rows, grouped selectable rows, a footnote. Owns the chrome; the row stays
