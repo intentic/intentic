@@ -33,6 +33,7 @@
 import { randomUUID } from "node:crypto";
 import { STATE_DIR, WORKSPACE_ROOT } from "@intentic/constants";
 import { localDaemonPort } from "@intentic/sandbox-run";
+import { shellQuote } from "@intentic/sandbox-run/quote";
 import { sandboxIdFromToken } from "@intentic/sandbox-contract/tunnel-ids";
 import { CONNECT_TOKEN } from "./constants.js";
 import type { Harness } from "./harness.js";
@@ -61,7 +62,7 @@ const STORE_PATH = `${WORKSPACE_ROOT}/${STATE_DIR}/control-tokens.json`;
 
 /** sha256, computed by the container so the digest is the one that container's own code would compute. */
 const seedControlToken = async (container: string, token: string): Promise<boolean> => {
-    const digest = await run(`docker`, [`exec`, container, `sh`, `-c`, `printf %s "${token}" | sha256sum | cut -d" " -f1`]);
+    const digest = await run(`docker`, [`exec`, container, `sh`, `-c`, `printf %s ${shellQuote(token)} | sha256sum | cut -d" " -f1`]);
     if (digest.code !== 0) {
         return false;
     }

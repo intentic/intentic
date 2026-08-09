@@ -167,6 +167,11 @@ export const REPLAY_ENV = [
     "HOST_SSH_KEY",
     "SELF_HOST_USER",
     "SYNC_PAIR_TOKEN",
+    // The connected-computer seed. It describes the MACHINE, which a recreate does not move off, and the
+    // daemon cannot re-derive any of it from inside the container — dropping it here unpairs the computer.
+    "HOST_PAIR_TOKEN",
+    "HOST_PLATFORM",
+    "HOST_LABEL",
     "SELF_HOST_ADDRESS",
     "SELF_HOST_VIA",
 ] as const;

@@ -1,4 +1,5 @@
 import { appendFile, mkdir, readFile, readdir } from "node:fs/promises";
+import { loadavg } from "node:os";
 import { join } from "node:path";
 import { monitorEventLoopDelay, performance, PerformanceObserver } from "node:perf_hooks";
 import { getHeapSpaceStatistics, getHeapStatistics } from "node:v8";
@@ -254,7 +255,7 @@ const systemSnapshot = async (): Promise<{
             cpu: parsePressure(cpuPressure),
             io: parsePressure(ioPressure),
         },
-        loadAverage: process.loadavg(),
+        loadAverage: loadavg(),
     };
 };
 
