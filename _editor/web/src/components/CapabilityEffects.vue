@@ -99,18 +99,18 @@ const rows = computed<readonly EffectRow[]>(() => effects.map(describe));
         </span>
     </div>
     <!-- The full panel stands beside <CredentialGuide> in the same reference column, so it is built out of the
-         same three parts: the app's own card (not a hand-rolled near-copy of it, which is what this was — one
-         step of padding off), a heading in the same tier as "How to get it", and rows at the size text meant to
-         be READ is set at here. A list of consequences somebody weighs before pressing Add is not chrome. -->
+         same parts: the app's own card (not a hand-rolled near-copy of it, which is what this was — one step of
+         padding off) and a heading in the same tier as "How to get it". The rows stay at the chrome size, like
+         the guide's steps: this column is read beside the form, not instead of it. -->
     <div v-else-if="rows.length > 0" class="ui-card">
         <div class="mb-3 text-sm font-semibold text-content">This will add to your sandbox</div>
         <ul class="flex flex-col gap-2">
             <li
                 v-for="(row, index) in rows"
                 :key="index"
-                :class="['flex items-start gap-2 text-sm leading-relaxed', row.warn ? 'text-warning' : 'text-muted']"
+                :class="['flex items-start gap-2 text-xs leading-relaxed', row.warn ? 'text-warning' : 'text-muted']"
             >
-                <Icon :name="row.icon" class="mt-1 shrink-0 text-xs" />
+                <Icon :name="row.icon" class="mt-0.5 shrink-0 text-2xs" />
                 <span class="min-w-0 break-words">{{ row.label }}</span>
             </li>
         </ul>

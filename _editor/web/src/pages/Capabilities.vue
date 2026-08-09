@@ -1866,12 +1866,12 @@ const submitLabel = computed(() =>
                          page has three nested scroll regions, which is the thing this whole pass is undoing.
                          Flowing, one scrollbar moves the whole page and nothing is hidden anywhere.
 
-                         AND IT WIDENS WITH THE PANE rather than holding one narrow width at every size. 18rem was
-                         set when this column held a four-line hint; it now holds the how-to somebody reads BEFORE
-                         they can answer the first field, and a five-step how-to broken across an 18rem measure is
-                         a wall of text no amount of leading fixes. It grows where there is room to grow into —
-                         which, on a page whose form column is capped, is exactly where the slack was sitting. -->
-                    <aside class="hidden @3xl:block @3xl:w-80 @3xl:shrink-0 @4xl:w-96 @5xl:w-112">
+                         AND IT WIDENS WITH THE PANE, up to a measure and no further. 18rem was set when this
+                         column held a four-line hint; it now holds the how-to somebody reads BEFORE they can
+                         answer the first field, and five steps broken across 18rem is a wall of text no amount
+                         of leading fixes. 24rem is where it stops: past roughly 70 characters a line costs more
+                         in finding the next one than it wins in fitting the last, and this text is small. -->
+                    <aside class="hidden @3xl:block @3xl:w-80 @3xl:shrink-0 @4xl:w-96">
                         <CapabilityContext :entry="selected" :values="values" :effects="liveEffects" />
                     </aside>
                 </div>
