@@ -23,6 +23,7 @@
         "@tailwindcss/vite": "catalog:",
         "@vitejs/plugin-vue": "catalog:",
         "@vue-flow/core": "catalog:",
+        "mermaid": "catalog:",
         "shiki": "catalog:",
         "typescript": "catalog:",
         "vite": "catalog:",

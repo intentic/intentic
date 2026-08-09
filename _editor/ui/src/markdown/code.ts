@@ -1,7 +1,7 @@
 import { ref } from "vue";
 import { clipboardOf } from "../clipboard.js";
 import type { ShikiLang } from "../composables/shikiLangs.js";
-import { FIGURE_LANGS } from "./figures.js";
+import { JSON_FIGURE_LANGS } from "./figures.js";
 
 /* Fenced code blocks inside rendered markdown: Shiki colouring plus a copy button.
  *
@@ -28,12 +28,13 @@ export const escapeHtml = (text: string): string => text.replace(/&/g, `&amp;`).
 /* Fence infos agents actually write, mapped onto the grammar ids the app ships (see shikiLangs.ts). Anything
  * not listed is tried as-is and, if we don't ship it, remembered as unsupported after one attempt.
  *
- * A FIGURE fence (figures.ts) is here because it is not always drawn as a figure: a surface that renders prose
- * to one v-html string cannot hold a component, and a malformed body degrades to a code block by design. Its
- * body is JSON either way, so it is coloured as JSON rather than left a grey blob. Derived from FIGURE_LANGS so
- * a new figure kind cannot pick up one behaviour and miss the other. */
+ * A JSON FIGURE fence (figures.ts) is here because it is not always drawn as a figure: a surface that renders
+ * prose to one v-html string cannot hold a component, and a malformed body degrades to a code block by design.
+ * Its body is JSON either way, so it is coloured as JSON rather than left a grey blob. Derived from
+ * JSON_FIGURE_LANGS so a new data figure kind cannot pick up one behaviour and miss the other — and so a
+ * ```mermaid fence, whose body is a diagram language and not JSON, is not dressed up as one. */
 const ALIASES: Record<string, ShikiLang> = {
-    ...Object.fromEntries(FIGURE_LANGS.map((lang) => [lang, `json`])),
+    ...Object.fromEntries(JSON_FIGURE_LANGS.map((lang) => [lang, `json`])),
     "c++": `cpp`,
     cjs: `javascript`,
     console: `bash`,

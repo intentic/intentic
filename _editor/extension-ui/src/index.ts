@@ -125,6 +125,7 @@ export type {
     DagFigureNode,
     Figure,
     FigureAccent,
+    MermaidFigure,
     StatsFigure,
     StatsFigureItem,
 } from "@intentic/ui/markdown";

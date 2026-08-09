@@ -26,10 +26,12 @@ export const shared = {
         // which the optimizer leaves un-prebundled — it then serves 504 for every grammar chunk, so the
         // <Code> highlighter (and Monaco) silently fall back to unhighlighted text. Pre-bundle them all.
         // Vue Flow + dagre reach the graph the same way (lazy views importing DagGraph from the source-linked
-        // ui lib), so they need the same treatment.
+        // ui lib), so they need the same treatment, and so does mermaid — which MermaidDiagram imports lazily
+        // on the first document that holds a diagram, and which un-prebundled costs hundreds of separate
+        // grammar requests before it draws anything.
         //
         // The names are resolved from the consuming config's `root`, which is why the demo package declares
-        // these five itself: pnpm does not hoist, so its root cannot see what it never asked for.
+        // these six itself: pnpm does not hoist, so its root cannot see what it never asked for.
         include: [
             `shiki/core`,
             `shiki/engine/javascript`,
@@ -37,6 +39,7 @@ export const shared = {
             `@shikijs/themes/dark-plus`,
             `@vue-flow/core`,
             `@dagrejs/dagre`,
+            `mermaid`,
             ...shikiLangDeps,
         ],
     },

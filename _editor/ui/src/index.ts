@@ -58,6 +58,10 @@ export {
 } from "./components/machineDetail.js";
 export { default as Markdown } from "./components/Markdown.vue";
 export { default as MarkdownFigure } from "./components/MarkdownFigure.vue";
+// A mermaid diagram, drawn from the fence body by mermaid itself and dressed in the app's tokens. Exported
+// because a view holding a diagram outside prose (a stored architecture note, a generated report) should not
+// have to wrap it in a markdown document to get one.
+export { default as MermaidDiagram } from "./components/MermaidDiagram.vue";
 // The index column: a filter, pinned rows, grouped selectable rows, a footnote. Owns the chrome; the row stays
 // the caller's, because a rail's rows differ for good reasons and its scrollbar never did.
 export { default as NavRail } from "./components/NavRail.vue";

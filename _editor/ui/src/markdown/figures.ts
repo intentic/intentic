@@ -18,6 +18,10 @@
  * renders as an ordinary code block: the reader sees the source instead of a blank space, and a malformed
  * figure costs one figure rather than the page. That is the property a JSON document model cannot have.
  *
+ * ```mermaid IS A FIGURE KIND TOO, and the exception to "the body is data": it carries a diagram language this
+ * module cannot read, so it is passed through whole and judged by mermaid's own parser at render time. See
+ * MermaidFigure below for why a hand-written notation belongs beside the generated ones.
+ *
  * This module is pure TypeScript with no Vue and no DOM — it ships on the `@intentic/ui/markdown` subpath
  * and is unit-tested without mounting anything. MarkdownFigure.vue owns the component switch. */
 
@@ -91,10 +95,35 @@ export interface StatsFigure {
     readonly items: readonly StatsFigureItem[];
 }
 
-export type Figure = DagFigure | BarsFigure | StatsFigure;
+/* A mermaid diagram, carried as the fence body VERBATIM.
+ *
+ * Every other figure here is data this module can judge — it reads the JSON and answers with a value or with
+ * "leave it as a code block". Mermaid is a language, and the only thing that can say whether a body is valid
+ * mermaid is mermaid's own parser, which is a megabyte of diagram grammars behind a lazy import. So the
+ * judgement moves to render time: MermaidDiagram.vue asks the parser, and falls back to the code block itself
+ * when the answer is no. The degrade-instead-of-fail contract is the same one, kept in a different place.
+ *
+ * WHY MERMAID AT ALL, next to `dag`. The two answer different questions. `dag` is what a document GENERATES —
+ * data the app lays out, themes and keeps consistent across a doc set. Mermaid is what a repository already
+ * HAS: READMEs, architecture notes and design docs written long before this app opened them, and it is the
+ * notation people reach for when they write a diagram by hand. Refusing to draw those would mean the file
+ * preview shows a wall of arrow syntax where every other tool shows a picture. */
+export interface MermaidFigure {
+    readonly kind: "mermaid";
+    readonly code: string;
+}
 
-// The fence languages that mean "figure". Everything else stays a code block.
-export const FIGURE_LANGS: readonly string[] = [`dag`, `bars`, `stats`];
+export type Figure = DagFigure | BarsFigure | StatsFigure | MermaidFigure;
+
+/* The fence languages whose body is JSON — the figure kinds this module parses into data. Named apart from
+ * mermaid because code.ts colours exactly these as JSON when one of them degrades to a code block, and
+ * colouring a mermaid fence as JSON would be a lie about what the reader is looking at. */
+export const JSON_FIGURE_LANGS: readonly string[] = [`dag`, `bars`, `stats`];
+
+export const MERMAID_LANG = `mermaid`;
+
+// Every fence language that means "figure". Everything else stays a code block.
+export const FIGURE_LANGS: readonly string[] = [...JSON_FIGURE_LANGS, MERMAID_LANG];
 
 // ---- narrow, total validation ------------------------------------------------------------------------------
 
@@ -218,7 +247,12 @@ const statsFigure = (body: Record<string, unknown>): StatsFigure | undefined => 
 /* One fence → a figure, or undefined for "leave it as a code block". `lang` is the fence's info string as
  * marked reports it (already lowercased by the caller); `code` is the raw body. */
 export const parseFigure = (lang: string, code: string): Figure | undefined => {
-    if (!FIGURE_LANGS.includes(lang)) {
+    if (lang === MERMAID_LANG) {
+        // Nothing to validate but emptiness: an empty ```mermaid fence has no diagram in it, and handing the
+        // renderer a blank body would draw an error card where the author wrote nothing at all.
+        return code.trim() === `` ? undefined : { kind: `mermaid`, code };
+    }
+    if (!JSON_FIGURE_LANGS.includes(lang)) {
         return undefined;
     }
     let body: unknown;

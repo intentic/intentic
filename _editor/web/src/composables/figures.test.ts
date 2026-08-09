@@ -126,6 +126,18 @@ describe(`parseFigure`, () => {
         expect(parseFigure(`dag`, `"a string"`)).toBeUndefined();
         expect(parseFigure(`dag`, ``)).toBeUndefined();
     });
+
+    /* Mermaid is the one kind this module does not read: its body is a diagram language, and only mermaid's own
+     * parser (a lazy import, so nowhere near here) can say whether it is valid. So the body is carried whole and
+     * the ONLY thing rejected is emptiness. Syntax that is obvious nonsense still becomes a figure here, and
+     * degrades to a code block at render time instead — same contract, later. */
+    it(`carries a mermaid body through verbatim and rejects only an empty one`, () => {
+        const diagram = `flowchart LR\n    a["One"] --> b["Two"]`;
+        expect(parseFigure(`mermaid`, diagram)).toEqual({ kind: `mermaid`, code: diagram });
+        expect(parseFigure(`mermaid`, `not a diagram at all`)).toEqual({ kind: `mermaid`, code: `not a diagram at all` });
+        expect(parseFigure(`mermaid`, `   \n  `)).toBeUndefined();
+        expect(parseFigure(`mermaid`, ``)).toBeUndefined();
+    });
 });
 
 describe(`splitFigureSegments`, () => {
@@ -174,6 +186,18 @@ describe(`splitFigureSegments`, () => {
         const one = `\`\`\`dag\n{ "nodes": [{ "id": "a" }] }\n\`\`\``;
         const two = `\`\`\`bars\n{ "items": [{ "label": "a", "value": 1 }] }\n\`\`\``;
         expect(figureCount(`${one}\n${two}`)).toBe(2);
+    });
+
+    it(`splits a mermaid fence out of the prose around it`, () => {
+        const source = [`Read it as:`, ``, `\`\`\`mermaid`, `flowchart LR`, `    a --> b`, `\`\`\``, ``, `After.`].join(`\n`);
+        const segments = splitFigureSegments(source);
+        expect(segments.map((segment) => segment.kind)).toEqual([`prose`, `figure`, `prose`]);
+        expect(segments[1]).toMatchObject({ figure: { kind: `mermaid`, code: `flowchart LR\n    a --> b` } });
+    });
+
+    it(`leaves an unclosed mermaid fence as prose, so a half-written diagram never draws`, () => {
+        const source = `\`\`\`mermaid\nflowchart LR\n    a --> b`;
+        expect(figureCount(source)).toBe(0);
     });
 
     it(`accepts tilde fences and an uppercased language`, () => {

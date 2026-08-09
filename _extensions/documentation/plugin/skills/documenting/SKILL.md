@@ -130,6 +130,11 @@ valid.
 `bars` and `stats` fences still render, and `repo.md` uses them for repository-wide measures the package graph
 does not hold. In a package README they are almost always a fact the tool already computes.
 
+A `mermaid` fence renders as a diagram too — the app draws it in the same palette as the figures above, so a
+page that arrived with one (or a repository that writes its diagrams that way) reads correctly and nothing has
+to be converted. For a figure you are WRITING here, prefer `dag`: it is data the app lays out, so it cannot
+drift into a hand-positioned picture, and it looks the same on every page in the set.
+
 ## When you are generating a whole set
 
 The map comes first and is one job: `repo.json` + `repo.md`, deciding the components, the glossary and the

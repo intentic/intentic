@@ -73,6 +73,7 @@
         "@vue-flow/core": "catalog:",
         "dompurify": "catalog:",
         "marked": "catalog:",
+        "mermaid": "catalog:",
         "primevue": "catalog:",
         "shiki": "catalog:",
         "tailwind-merge": "catalog:",

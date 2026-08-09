@@ -9,6 +9,7 @@ import type { DagEdge, DagNode } from "./dagLayout.js";
 import type { Figure } from "../markdown/figures.js";
 import BarChart from "./BarChart.vue";
 import DagGraph from "./DagGraph.vue";
+import MermaidDiagram from "./MermaidDiagram.vue";
 import StatRow from "./StatRow.vue";
 import { seriesColor } from "./seriesAccent.js";
 
@@ -44,7 +45,10 @@ const dagHeight = computed(() => (figure.kind !== `dag` ? 0 : Math.min(30, Math.
 </script>
 
 <template>
-    <BarChart v-if="figure.kind === `bars`" :items="figure.items" :title="figure.title" />
+    <!-- Mermaid draws itself, palette and all (mermaidTheme.ts) — the only figure kind whose picture this file
+         does not compose, because the author wrote the diagram in a notation with its own renderer. -->
+    <MermaidDiagram v-if="figure.kind === `mermaid`" :code="figure.code" />
+    <BarChart v-else-if="figure.kind === `bars`" :items="figure.items" :title="figure.title" />
     <StatRow v-else-if="figure.kind === `stats`" :items="figure.items" />
     <figure v-else class="my-4 flex flex-col gap-2">
         <figcaption v-if="figure.title !== undefined" class="text-xs font-medium text-content">{{ figure.title }}</figcaption>
