@@ -19,10 +19,14 @@ import type { ViewBadge } from "@intentic/extension-api";
  * The old wash also FAILED WCAG AA outright in light mode: danger-600 text on a 15% danger wash measured
  * 3.67:1 against the 4.5:1 floor (dark scraped by at 4.95:1). So this is a contrast fix, not only a loudness one.
  *
- * `*-fill` + `fill-content` is the pairing built for exactly this. Each scheme picks the fill and the label that
- * sits on it TOGETHER (danger-700 on white in light, danger-400 on surface-900 in dark) and those values carry a
- * WCAG AA contract when used solid — measured 6.64:1 light, 6.25:1 dark. A hand-picked `bg-danger text-white`
- * would not: the `danger` role token LIGHTENS in dark mode (red-400), leaving white text near 3:1.
+ * The fill is solid, but NOT the shared `*-fill` + `fill-content` pairing: that role lightens to red-400 in
+ * dark (so a dark label can sit on it), and on the rail that read as a neon dot detached from everything
+ * around it — an alarm even when the breakage was one pipeline. A fixed numeric shade instead — red-800 with
+ * a white label in BOTH schemes — keeps the solid silhouette that separates "your CI is broken" from a
+ * resting count while sitting in the deep-red family the rest of the dark chrome already uses. The numeric
+ * scales don't flip between schemes, so the pairing is stable: white on red-800 measures ~5.6:1 in dark and
+ * higher in light, both above the AA floor. The `danger` ROLE with a white label would not be: that token
+ * lightens in dark mode, leaving white text near 3:1.
  *
  * `neutral` IS THE ONE THAT IS NOT A CLAIM AT ALL, and it is the newest for the reason the others needed it: an
  * inventory ("docker is running", "one browser is open") was drawn in `info`, which is also what a debt wears, so
