@@ -76,7 +76,14 @@
  */
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { basename, dirname, join } from "node:path";
-import { repoRoot } from "@intentic/constants/node";
+/* BY FILE, NOT BY PACKAGE NAME. The walker is the same one `@intentic/constants/node` exports, but a BARE
+ * specifier is resolved through `node_modules`, and the two callers that matter most here run before there is
+ * one: the `preflight` job checks out and runs this immediately (no `pnpm install`), and the `pre-push` hook
+ * fires on a clone that may never have installed. Both died on ERR_MODULE_NOT_FOUND before reaching a single
+ * invariant. A relative specifier is resolved by the filesystem alone, so it works at every point in the
+ * build — and unlike a counted root it cannot go quietly wrong: move either file and the import fails loudly.
+ * One `..` to a sibling package, and still one copy of the walk. */
+import { repoRoot } from "../constants/src/node.mjs";
 import { spawnSync } from "node:child_process";
 
 const root = repoRoot(import.meta.url);

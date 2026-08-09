@@ -34,6 +34,11 @@ by nothing. Walking up to a marker has no such coupling, so a file can move anyw
   helper importable only from `dist/` is one they cannot import at all, which is how a second copy of the walk
   gets written. It is also why the root `package.json` depends on this package: without that link, scripts under
   `_tools/scripts/` cannot resolve it by name.
+- **The name only resolves once `pnpm install` has run**, because a bare specifier is looked up through
+  `node_modules`. The two callers that run before any install — `prepass.mjs --checks-only`, which the `pre-push`
+  hook and the CI `preflight` job invoke on a bare checkout — therefore import `../constants/src/node.mjs` by
+  path. Same file, same single copy of the walk, no install required. Everything that runs after the install
+  imports it by name.
 - **Extensions cannot import this package** — the boundary rule (`.oxlintrc.json`, `_extensions/README.md`) allows
   them only the SDK halves and `@intentic/sandbox-contract`, so an extension can't couple itself to app or engine
   internals. That rule stands; the contract package re-exports the four layout constants so extensions can still

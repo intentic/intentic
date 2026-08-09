@@ -20,6 +20,11 @@ import { fileURLToPath } from "node:url";
  * which is exactly how the second copy of this walk gets written. Plain .mjs with a hand-written .d.mts beside
  * it is importable at every point in the build, so there only has to be one.
  *
+ * A caller that runs before `pnpm install` has one more constraint: `@intentic/constants/node` is a BARE
+ * specifier and bare specifiers resolve through node_modules, which a bare checkout has none of. Those callers
+ * — `prepass.mjs`, run by the pre-push hook and by CI's preflight job — import THIS FILE by relative path
+ * instead. Still one walk; only the way in differs.
+ *
  * NOT EXPORTED FROM THE PACKAGE INDEX, and that is deliberate: the index is imported by browser code
  * (Setup.vue reads PLATFORM_WEB_ORIGIN) and must never pull in node:fs. Path VALUES live there; path DISCOVERY
  * lives here, behind the `@intentic/constants/node` subpath. */
