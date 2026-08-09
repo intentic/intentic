@@ -267,22 +267,22 @@ export const landingContent: LandingContent = {
                     label: "Wakes on",
                     items: ["a push", "a Sentry alert", "a Stripe payment", "inbound email", "a chat message", "plain cron"],
                 },
-                href: docsHref("autonomous-employees"),
+                href: productHref("automate"),
             },
             {
                 name: "Discord & Slack",
                 body: "Assign work with an @mention. It replies in the thread, with receipts.",
-                href: productHref("capabilities"),
+                href: productHref("empower"),
             },
             {
                 name: "Doorbell",
                 body: "Put an agent on your own website behind one script tag.",
-                href: productHref("doorbell"),
+                href: productHref("empower"),
             },
             {
                 name: "Team sharing",
                 body: "Invite teammates into one sandbox, each signed in as themselves.",
-                href: productHref("sandbox"),
+                href: productHref("delegate"),
             },
             {
                 name: "Memory & pipelines",

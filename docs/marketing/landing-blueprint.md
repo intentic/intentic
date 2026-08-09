@@ -26,7 +26,7 @@ automations, Discord, Slack, IMAP, memory, pipelines and the Doorbell webchat re
 bolt on. Result: **9,592 px, five arguments and one index** — 10,298 px once `#trust` joined it.
 
 **The environment argument did not die — it was demoted.** It rides in loop beat 02's sandbox
-figure, in the FAQ's "How is this different from a custom GPT", on `/product/sandbox/` (the
+figure, in the FAQ's "How is this different from a custom GPT", on `/product/supervise/` (the
 `prompt-vs-environment` figure), and across `/compare/`. What it no longer gets is four bands of the
 landing page.
 
@@ -36,12 +36,12 @@ infrastructure buys — persistence and reach — instead of the IDE frame: the 
 the old first line and the reason), and the loop gained beat ③, the continuity beat. Nothing else moved:
 same bands, same order, same quiet `#extend` index — this was a re-center, not a re-cut.
 
-**Deliberately not on this page (all of it has a home).** The seven-card product-tour grid (the nav
-mega-menu and `/product/` already list every surface), the prompt-vs-environment argument
-(`/product/sandbox/`), the four-layer anatomy (same page), the integrations hub (`/product/capabilities/`),
-the Discord teammate mock (same page), team sharing (`/product/sandbox/`), the workforce triptych and
+**Deliberately not on this page (all of it has a home).** The product-tour grid (the nav
+mega-menu and `/product/` already list every verb), the prompt-vs-environment argument
+(`/product/supervise/`), the four-layer anatomy (same page), the integrations hub (`/product/empower/`),
+the Discord teammate mock (same page), team sharing (`/product/delegate/`), the workforce triptych and
 the company topology (`/docs/autonomous-employees/`, `/docs/reference-architecture/`), and Doorbell
-(`/product/doorbell/`, `/docs/doorbell/`). Adding any of them back as a band is a regression, not an
+(`/product/empower/`, `/docs/doorbell/`). Adding any of them back as a band is a regression, not an
 improvement — the `#extend` band exists to carry the link instead.
 
 **Deployment is not part of the product (do not re-add).** The monorepo happens to include a
@@ -64,9 +64,9 @@ this page.
   "acme-shop" workspace the live demo runs on), so the site, the demo and the shots tell one story and a
   re-shoot needs no database, API or tunnel. Whole surfaces are captured; a page that wants a detail crops
   in CSS.
-- Product pages: `_site/site-content/src/product.ts` — a `productPages` array rendered by
-  `_site/site/src/pages/product/[slug].astro`. Adding a surface there gives it a page, a nav row, a footer
-  link, page meta and an llms.txt entry.
+- Feature pages: `_site/site-content/src/product.ts` — a `productPages` array (five verbs) rendered by
+  `_site/site/src/pages/product/[slug].astro`. Adding a verb there gives it a page, a nav row, a footer
+  link, a card on `/product/`, page meta and an llms.txt entry.
 
 ## Conversion model
 
@@ -161,25 +161,41 @@ the `run-a-fleet` answer with a link to the guide that owns it). It is not part 
 page: a visitor self-selects into a band, the answers carry the arguments the bands no longer make, and
 it is the page's only FAQPage-eligible content. Do not trim it for length.
 
-## The product pages (`/product/*`)
+## The feature pages (`/product/*`)
 
-The landing page sells the claim; these seven pages show the product, one surface each — **Fleet board,
-Chat & plan mode, Review & land** (the `run` group), **Workspace & editor, Capabilities, Sandbox &
-ownership** (the `environment` group), and **Doorbell** (the `extend` group). They exist because the nav
-used to be five anchors into this page: nothing linkable, nothing rankable, and no room for more than a
-paragraph per surface.
+The landing page sells the claim; these pages show the product — and **they are named as VERBS, not
+surfaces**, because the old surface names (Fleet board, Chat & plan mode, Review & land, the editor…)
+read as table stakes any agentic editor has, and half the menu undersold the product. Five pages, in
+menu order:
 
-**The `extend` group is a positioning decision, not alphabetising.** Doorbell headed the "Run agents"
-column and the landing's card grid, which read as a claim that a website chat widget is what this
-product is for — a different buyer from the one who wants a fleet of coding agents. It now sits in a
-third mega-menu column beside the extension gallery, and `page.group` drives both the menu and the
-footer order.
+- **Orchestrate** — run the whole fleet, get pulled in only when one needs you (was Fleet board).
+- **Empower** — wire agents into your systems and onto your own website (was Capabilities, Doorbell folded in).
+- **Automate** — agents that wake on an event under permissions you set (NEW — this had no page before).
+- **Supervise** — plan, approve, review every diff, curate the context (was Chat & plan mode + Review & land + the shared editor).
+- **Delegate** — give the sandbox a server of its own and hand off operation (was Sandbox & ownership).
+
+**Recorded decision (2026-08-09): surfaces → verbs (do not quietly revert).** The shelf used to be seven
+surface pages grouped run / environment / extend; those noun names filed us next to ordinary editors and
+buried the differentiators. The `page.group` field is gone — the menu and the `/product/` index are one
+flat ordered list of verbs, and each verb folds the relevant surfaces underneath it as proof.
+
+**Two positioning guards baked into the cut:**
+
+- **Delegate is not a deploy product.** It is about running the *sandbox itself* on a server you own and
+  letting it operate autonomously — ownership + autonomy. The deployment engine is still never a pillar
+  (see messaging.md); Delegate never means "ship your app with our deployer", and ownership leads the page
+  so the moat stays legible.
+- **Doorbell folded into Empower, not deleted.** A website chat widget is one thing you empower an agent to
+  do, not a product of its own — it is a block on `/product/empower/`, and `/docs/doorbell/` still owns the
+  deep guide.
 
 Rules that keep them honest:
 
-- **Screenshot-first.** Each block leads with a real screen and follows with ≤60 words. Where a surface
-  has no honest screenshot (isolation, event triggers, the platform boundary), the block carries a
-  DIAGRAM (`ProductFigure.astro`) — never a mockup of a screen the app does not render.
+- **Screenshot-first, with one sanctioned exception.** Each block leads with a real screen and follows
+  with ≤60 words. Where a surface has no honest screenshot (isolation, the platform boundary), the block
+  carries a DIAGRAM (`ProductFigure.astro`) — never a mockup. **Automate is diagram-led**: there is no
+  captured automations screen, so its hero is the `triggers` figure and its index card is a mini-diagram.
+  If an automations/personas screen becomes capturable, give it a real hero and demote the figure to a block.
 - **No invented numbers.** The facts strip under each hero carries only things that are true by
   construction (three lanes, one branch per agent, two fields stored by the platform, 25 catalog
   entries). The repo has no benchmark worth quoting yet: the offline cleaner bench measures ~2% over a

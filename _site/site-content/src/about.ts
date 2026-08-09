@@ -71,7 +71,7 @@ export const trustCards: TrustCard[] = [
     {
         title: "Why trust intentic?",
         body: "Built by a verifiable person, and built so that trusting the person is optional. The platform holds your identity and a URL, with no path to your code, your keys, or your sandbox.",
-        href: productHref("sandbox"),
+        href: productHref("delegate"),
         linkLabel: "What the platform actually holds",
     },
     {

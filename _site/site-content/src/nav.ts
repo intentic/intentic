@@ -45,19 +45,20 @@ export type NavEntry =
       }
     | { type: "link"; label: string; href: string; prefix: string; external?: boolean };
 
-/* Every feature page as a menu row, in the tree's own order — which already runs "what it is" before "what
- * else it can do", so Doorbell lands last without a header having to say so.
+/* Every feature page as a menu row, in the shelf's own order — five verbs (Orchestrate, Empower, Automate,
+ * Supervise, Delegate) rather than a list of surfaces, so the menu reads as what you DO with a fleet, not the
+ * furniture any editor has.
  *
- * ONE COLUMN, no group labels: three headers over 3/3/2 rows was more scaffolding than the eight links under
- * it, and the grouping they carried is what the /product/ index page is for, at a size where a band of cards
- * can actually hold a blurb. What the menu is FOR is the preview rail beside it — a visitor who has installed
- * nothing seeing the real surfaces — and that survives the headers going. */
+ * ONE COLUMN, no group labels: a verb is its own grouping, so the run/environment/extend headers that once
+ * sorted seven surfaces would be more scaffolding than the rows under them. What the menu is FOR is the
+ * preview rail beside it — a visitor who has installed nothing seeing the real surfaces — and Automate carries
+ * no shot because it is diagram-led (no captured automations screen), so its row simply has no preview. */
 const productItems = (): MenuItem[] =>
     productPages.map((page) => ({
         label: page.navLabel,
         href: productHref(page.slug),
         description: page.menuBlurb,
-        shot: { name: page.hero.name, alt: page.hero.alt },
+        ...(page.hero ? { shot: { name: page.hero.name, alt: page.hero.alt } } : {}),
     }));
 
 export const navEntries: NavEntry[] = [
