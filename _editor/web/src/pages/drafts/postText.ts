@@ -55,13 +55,46 @@ export const isReply = (target?: string): boolean => target?.startsWith(`http`) 
 
 export const postsATitle = (platform: string, target?: string): boolean => TITLED.has(platform.toLowerCase()) && !isReply(target);
 
+/* WHAT AN EDIT IS ALLOWED TO CARRY. The owner gets two boxes at most — the post, and the headline where the
+ * platform publishes one — while the row is saved by re-posting the whole draft, so this decides which of the
+ * draft's fields a rewrite may touch. Both rules are the kind that get got wrong once and then never noticed:
+ *
+ * A `title` THAT ISN'T PUBLISHED IS THE AGENT'S NOTE (postsATitle above), the editor never draws a box for it,
+ * and a naive "send back both fields" would post an empty headline over that note.
+ *
+ * NOTHING CHANGED IS NOT A SAVE. Re-posting an identical body still rewrites the file, refetches the queue and
+ * flashes the row — a click that did nothing, reported as if it did. An untouched edit resolves to `undefined`
+ * and the caller just closes the box. */
+export interface PostEdit {
+    readonly content: string;
+    readonly title?: string;
+}
+
+export const postEdit = (
+    draft: { readonly platform: string; readonly target?: string; readonly title?: string; readonly content: string },
+    next: { readonly content: string; readonly title: string },
+): PostEdit | undefined => {
+    const headlined = postsATitle(draft.platform, draft.target);
+    const title = next.title.trim();
+    const changed = next.content !== draft.content || (headlined && title !== (draft.title ?? ``));
+    if (!changed) {
+        return undefined;
+    }
+    return headlined ? { content: next.content, title } : { content: next.content };
+};
+
 /* WHERE A DRAFT IS GOING, in the words the platform uses for it. A target is free text by contract and arrives
  * in three shapes: a place you already recognise (`r/webdev`, `#releases`, `@ada@hachyderm.io`), a URL of the
  * thing being replied to, or something a connector made up. Only the URL needs help — a 90-character thread
  * address rendered in full is the noisiest thing on the row and says less than "reply in r/ClaudeAI" does.
  *
  * The URL survives as the link and as the tooltip, so nothing is lost: the label is what you read, the address
- * is what you follow. */
+ * is what you follow.
+ *
+ * A COMMENT AND A THREAD ARE DIFFERENT DECISIONS, and on Reddit they are the same URL with one more segment on
+ * the end. Replying under a post is talking to the room; replying to a comment is talking to one person about
+ * what they just said, and whether the reply lands depends on which — so the queue says which, rather than
+ * making the reviewer count slashes or open the link to find out. */
 export interface Destination {
     /** What the reader sees: a place on the platform, or the host when that is all the URL tells us. */
     readonly label: string;
@@ -71,15 +104,20 @@ export interface Destination {
     readonly href?: string;
 }
 
-const REDDIT_THREAD = /^https?:\/\/(?:[\w-]+\.)?reddit\.com\/(r\/[\w-]+)/i;
+// The trailing capture is the comment id: a thread permalink ends after /comments/<id>/<slug>/, and one more
+// segment past it means the target is a single comment (both reddit's `/…/<slug>/<id>/` and its newer
+// `/…/comment/<id>/` land here). Any query string — reddit hands out `?context=3` — stops the match, which is
+// the right answer: it is still the thread's address.
+const REDDIT_THREAD = /^https?:\/\/(?:[\w-]+\.)?reddit\.com\/(r\/[\w-]+)(?:\/comments\/\w+\/[^/]*\/(\w+))?/i;
 
 export const destinationOf = (target: string): Destination => {
     if (!isReply(target)) {
         return { label: target };
     }
-    const subreddit = REDDIT_THREAD.exec(target)?.[1];
+    const reddit = REDDIT_THREAD.exec(target);
+    const subreddit = reddit?.[1];
     if (subreddit !== undefined) {
-        return { label: subreddit, verb: `reply in`, href: target };
+        return { label: subreddit, verb: reddit?.[2] === undefined ? `reply in` : `reply to a comment in`, href: target };
     }
     try {
         // The host alone: a reply's path is an id and a slug, which is the part a reader gains nothing from.
@@ -88,6 +126,25 @@ export const destinationOf = (target: string): Destination => {
         // A target that starts with "http" and still isn't a URL — show it as written rather than swallow it.
         return { label: target };
     }
+};
+
+/* HOW LONG IS LEFT TO STOP IT. Approving does not send a post, it starts a minute — so for that minute the
+ * queue has one urgent readout, and it is counted in the unit the decision is made in. Seconds, because that is
+ * what the window is made of: "in a minute" is not something you act on, "34s" is.
+ *
+ * IT NEVER SAYS ZERO. The last tick before a post goes out reads as the post going out, not as a countdown
+ * that reached the end and stopped — a "0s" sitting next to a Stop button is a promise nobody can keep, since
+ * by the time it renders the publisher already has it. Anything past due, or a draft the daemon is already
+ * sending, says the same thing.
+ *
+ * The minutes form exists for the wider window the section covers (a post someone dated for two minutes' time
+ * is also about to go out, and belongs in the same group), not for the hold itself. */
+export const countdownWords = (msLeft: number): string => {
+    if (msLeft <= 0) {
+        return `any moment now`;
+    }
+    const seconds = Math.ceil(msLeft / 1_000);
+    return seconds < 60 ? `${seconds}s` : `${Math.floor(seconds / 60)}m ${String(seconds % 60).padStart(2, `0`)}s`;
 };
 
 /* WHEN A POST IS LONG ENOUGH TO FOLD. Above this the card is taller than the decision it is asking for, and a

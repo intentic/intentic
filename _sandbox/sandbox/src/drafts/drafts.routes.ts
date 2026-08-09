@@ -1,56 +1,51 @@
 import type { DraftSummary } from "@intentic/sandbox-contract";
-import { draftsContract, PUBLISH_DRAFTS_AUTOMATION } from "@intentic/sandbox-contract";
+import { APPROVAL_HOLD_MS, draftsContract } from "@intentic/sandbox-contract";
 import { implement, ORPCError } from "@orpc/server";
-import { streamAgent } from "../agent/agent.routes.js";
-import { fireAutomation } from "../automations/scheduler.js";
 import type { Services } from "../composition.js";
 import type { OrpcContext } from "../context.js";
+import { draftsPublisherFor } from "./drafts-publisher.js";
 
-// Approved-and-due: the one state the publisher exists to act on. No file yet is simply "not yet".
-const dueNow = (draft: DraftSummary | undefined, now: number): boolean =>
-    draft !== undefined && draft.status === "approved" && (draft.scheduledAt ?? 0) <= now;
-
-// Did THIS edit put the draft into approved-and-due? True for the approve click on an undated or past-dated
-// draft, and for a reschedule that pulls an already-approved draft's date into the past — the two edits after
-// which the owner is watching for the post to go out. False when it already was due (the publisher has it) and
-// when the approval is for a future date (the sweep owns the calendar). Exported for its truth table.
-export const becameDue = (prior: DraftSummary | undefined, next: DraftSummary, now: number): boolean => !dueNow(prior, now) && dueNow(next, now);
+/* WHAT APPROVAL ACTUALLY WRITES. An approved draft carrying no date of its own is dated one hold into the
+ * future, and that date is the entire countdown: the queue renders it, the publisher sleeps until it, and
+ * "put it back in review" cancels it. Storing the hold as a plain scheduledAt rather than as a fifth status is
+ * what makes all three of those free — nothing new to persist, nothing new to reason about after a restart,
+ * and one number in the place a scheduled post's date is already read.
+ *
+ * A DATE THE OWNER OR THE AGENT CHOSE IS LEFT ALONE, whether it is next Tuesday or ten minutes ago. Adding a
+ * minute to a post already an hour late is not caution, it is a bug; and a post dated for Tuesday is held by
+ * its own date already. Only the undated case is ambiguous, and only it gets the hold. */
+export const withApprovalHold = (draft: DraftSummary, now: number): DraftSummary =>
+    draft.status === "approved" && draft.scheduledAt === undefined ? { ...draft, scheduledAt: now + APPROVAL_HOLD_MS } : draft;
 
 /* The drafts-queue routes — the OWNER's side of the agent-written draft files. `upsert` covers approve, edit,
- * and retry in one shape (a re-post with a field changed, like the automations enabled toggle); `remove` is
- * reject.
+ * reschedule and retry in one shape (a re-post with a field changed, like the automations enabled toggle);
+ * `remove` is reject.
  *
- * APPROVAL IS ALSO THE MOMENT PUBLISHING IS OWED. An edit that makes a draft approved-and-due fires the
- * publisher automation right here instead of leaving the approval to wait for the sweep's next pass. The click
- * is the consent, so the fire carries the same clearance a by-hand Run-now does (`cleared: "approval"`); the
- * guard still re-reads the files, so a fire whose draft was deleted in the same breath skips instead of waking.
- * The publisher's own cron stays the net for everything a click cannot cover — future-dated drafts coming due,
- * and fires dropped because the publisher was already mid-turn. Deleted or disabled the automation? Then the
- * owner has switched publishing off, and approval goes back to meaning "ready whenever something posts it" —
- * the Automations page is where that state is visible. */
+ * EVERY WRITE RE-ARMS THE PUBLISHER, and it is every write rather than the interesting ones because the
+ * publisher's deadline is derived from the whole queue: approving adds one, rescheduling moves one, rejecting
+ * removes one, and putting a held post back in review takes the nearest deadline away entirely. Working out
+ * which of those changed the soonest due time is the same read that arming already does, so the route does not
+ * try to be clever about it — it says "something moved" and lets the publisher re-answer. Detached, because
+ * the owner's click should return the moment the file is written, not after a directory read. */
 export const createDraftsRoutes = (services: Services) => {
     const i = implement(draftsContract).$context<OrpcContext>();
+    const rearm = (): void => {
+        void draftsPublisherFor(services)
+            .arm()
+            .catch((error: unknown) => services.logger.error({ err: error }, "re-arming the drafts publisher failed"));
+    };
     return {
         list: i.list.handler(() => services.drafts.list()),
         upsert: i.upsert.handler(async ({ input }) => {
-            const now = Date.now();
-            const prior = (await services.drafts.list()).drafts.find((draft) => draft.id === input.id);
-            await services.drafts.upsert(input);
-            if (becameDue(prior, input, now)) {
-                const publisher = await services.automations.get(PUBLISH_DRAFTS_AUTOMATION.id);
-                if (publisher !== undefined && publisher.enabled) {
-                    // Detached like every dispatcher's fire — the publish turn outlives this request.
-                    void fireAutomation(services, publisher, streamAgent, { cleared: "approval" }).catch((error: unknown) =>
-                        services.logger.error({ err: error, automation: publisher.id }, "publish-on-approval fire failed"),
-                    );
-                }
-            }
+            await services.drafts.upsert(withApprovalHold(input, Date.now()));
+            rearm();
             return { ok: true } as const;
         }),
         remove: i.remove.handler(async ({ input }) => {
             if (!(await services.drafts.remove(input.id))) {
                 throw new ORPCError("NOT_FOUND", { message: "no draft with that id" });
             }
+            rearm();
             return { ok: true } as const;
         }),
     };

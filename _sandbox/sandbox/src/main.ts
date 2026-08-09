@@ -28,6 +28,7 @@ import { createCiPoller } from "./ci/poller.js";
 import { reconnectVpns } from "./vpn/vpn-links.js";
 import { writeCodexConfig } from "./codex/codex-config.js";
 import { createServices } from "./composition.js";
+import { draftsPublisherFor } from "./drafts/drafts-publisher.js";
 import { ensureDraftsSkill } from "./drafts/drafts-store.js";
 import { startAllExtensionProcesses } from "./extensions/extension-processes.js";
 import { runGitMaintenance } from "./git/maintenance.js";
@@ -655,6 +656,13 @@ const main = async (): Promise<void> => {
     const scheduler = createAutomationsScheduler(services, streamAgent);
     scheduler.start();
 
+    /* The post publisher, armed rather than polled: it reads the drafts queue, works out the soonest approved
+     * post's due time, and sleeps until exactly that. Arming here is what carries a hold across a restart — a
+     * post approved a minute before the daemon went down is due the moment it is back, and this is the read
+     * that notices. Nothing approved means no timer at all. */
+    const draftsPublisher = draftsPublisherFor(services);
+    void draftsPublisher.arm().catch((error: unknown) => logger.warn({ err: error }, "drafts publisher not armed"));
+
     // CI webhooks: keep every mapped workspace repo's github/gitlab hook pointing at this sandbox (boot pass +
     // interval), so completed pipelines wake `ci` automations and freshen the Pipelines view.
     services.ciHooks.start();
@@ -783,6 +791,9 @@ const main = async (): Promise<void> => {
         clearInterval(sessionSweep);
         leftovers.stop();
         scheduler.stop();
+        // Nothing is lost by dropping the armed timer: the deadline it was holding is the draft's own
+        // scheduledAt on disk, and the next boot arms from that.
+        draftsPublisher.stop();
         // A pre-push check is a suite running on the main tree — a daemon that exits without killing it leaves
         // it burning CPU with nothing left to report the result to.
         prepushCheck(services).cancel();

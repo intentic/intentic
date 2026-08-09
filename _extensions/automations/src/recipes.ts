@@ -1,5 +1,5 @@
 import { CHORES, choreAutomationPrompt, FIX_DEPS_AUTOMATION } from "@intentic/sandbox-contract/chores";
-import { PUBLISH_DRAFTS_AUTOMATION, type WorkspaceEventKind } from "@intentic/sandbox-contract";
+import type { WorkspaceEventKind } from "@intentic/sandbox-contract";
 import type { IconName } from "@intentic/extension-ui";
 
 /* "Start from" suggestions in the new-automation dialog, shown only when the matching capability provider is
@@ -230,19 +230,6 @@ export const AUTOMATION_RECIPES: readonly AutomationRecipe[] = [
             "New email just arrived — each payload line is one JSON event with the sender, subject and a text excerpt. Summarize anything urgent; " +
             "fetch the full message over IMAP (curl imaps://, by extra.uid) when you need more than the excerpt.",
         note: "instant",
-    },
-    {
-        // No provider — posting uses whatever platform skills the sandbox has (X/Reddit/YouTube browser, Discord
-        // CLI). Seeded like the fix chore (the daemon's default-automations.ts), so this recipe exists for the
-        // owner who deleted it and wants it back. The definition lives in the contract because THREE surfaces
-        // must agree on it: the seeder, this gallery, and the drafts routes, which fire it by id the moment a
-        // draft is approved and due — the cron is only the sweep for future-dated drafts and dropped fires.
-        title: PUBLISH_DRAFTS_AUTOMATION.title,
-        id: PUBLISH_DRAFTS_AUTOMATION.id,
-        trigger: { kind: "schedule", cron: PUBLISH_DRAFTS_AUTOMATION.cron },
-        guard: PUBLISH_DRAFTS_AUTOMATION.guard,
-        prompt: PUBLISH_DRAFTS_AUTOMATION.prompt,
-        note: "posts the moment you approve",
     },
     ...CHORE_RECIPES,
 ];

@@ -1,5 +1,4 @@
 import type { Automation } from "@intentic/sandbox-contract";
-import { PUBLISH_DRAFTS_AUTOMATION } from "@intentic/sandbox-contract";
 import { FIX_DEPS_AUTOMATION } from "@intentic/sandbox-contract/chores";
 import { z } from "zod";
 import { jsonFile } from "../store/json-file.js";
@@ -14,9 +13,12 @@ import type { AutomationsStore } from "./automations-store.js";
  * made, and every fire is HELD with a visible countdown before it starts (holdForSeconds), which is the
  * per-run consent that replaces the arm-first click.
  *
- * The drafts publisher arrives enabled without bending the rule at all: everything it may ever act on is a
- * draft the owner has ALREADY approved — the approval is the per-run consent — and without it the Drafts
- * page's approve button would be a button wired to nothing until someone discovered a recipe gallery.
+ * PUBLISHING IS NOT ONE OF THESE ANY MORE, and the reason is the argument that used to justify it. It was
+ * seeded enabled so the Drafts page's approve button would not be wired to nothing — which conceded the real
+ * problem: a button whose meaning depended on a row in a list the owner never asked for, and which silently
+ * stopped meaning anything the moment they deleted it. The daemon publishes drafts itself now
+ * (drafts/drafts-publisher.ts), on a timer armed for the exact due moment rather than a cron asking "yet?"
+ * every few minutes, so approval means the same thing in every workspace and there is nothing here to delete.
  *
  * THE LEDGER IS WHAT MAKES DELETION FINAL. "Seed when absent" alone would resurrect an automation on every
  * boot after the owner deleted it — an offer that cannot be refused. So each seed's id is written down once,
@@ -34,13 +36,6 @@ const DEFAULT_AUTOMATIONS: readonly Automation[] = [
         guard: FIX_DEPS_AUTOMATION.guard,
         holdForSeconds: FIX_DEPS_AUTOMATION.holdForSeconds,
         chore: true,
-        enabled: true,
-    },
-    {
-        id: PUBLISH_DRAFTS_AUTOMATION.id,
-        trigger: { kind: "schedule", cron: PUBLISH_DRAFTS_AUTOMATION.cron },
-        prompt: PUBLISH_DRAFTS_AUTOMATION.prompt,
-        guard: PUBLISH_DRAFTS_AUTOMATION.guard,
         enabled: true,
     },
 ];

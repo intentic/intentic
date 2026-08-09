@@ -1,7 +1,6 @@
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { PUBLISH_DRAFTS_AUTOMATION } from "@intentic/sandbox-contract";
 import { FIX_DEPS_AUTOMATION } from "@intentic/sandbox-contract/chores";
 import { expect, test } from "vitest";
 import { fileAutomationsStore } from "./automations-store.js";
@@ -24,17 +23,13 @@ test("a fresh workspace is seeded the fix chore — enabled, held per fire, visi
     });
 });
 
-test("a fresh workspace is seeded the drafts publisher — enabled, guarded, on its sweep cron", async () => {
+test("publishing is not seeded as an automation — the daemon owns it", async () => {
+    // It used to be a cron here, which made the Drafts page's approve button conditional on a row the owner
+    // never asked for and could delete without ever being told what it was wired to.
     const { automations, ledger } = stores();
     await seedDefaultAutomations(automations, ledger);
-    const seeded = await automations.get(PUBLISH_DRAFTS_AUTOMATION.id);
-    expect(seeded).toMatchObject({
-        enabled: true,
-        guard: PUBLISH_DRAFTS_AUTOMATION.guard,
-        trigger: { kind: "schedule", cron: PUBLISH_DRAFTS_AUTOMATION.cron },
-    });
-    // Not a chore: it reacts to the owner's approvals, not to this codebase — it belongs in the main list.
-    expect(seeded?.chore).toBeUndefined();
+    expect(await automations.get("publish-drafts")).toBeUndefined();
+    expect((await automations.list()).map((automation) => automation.id)).toEqual([FIX_DEPS_AUTOMATION.id]);
 });
 
 test("deleting the seed is final — the offer is made once, not on every boot", async () => {

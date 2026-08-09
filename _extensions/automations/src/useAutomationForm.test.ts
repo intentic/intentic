@@ -96,15 +96,15 @@ describe(`a template's own text`, () => {
     });
 
     it(`goes, with its guard, when the trigger moves off it`, async () => {
-        const drafts = recipe(`publish-drafts`);
+        const review = recipe(`review-agent-work`);
         const { form, loadRecipe } = formState();
-        loadRecipe(drafts);
+        loadRecipe(review);
         await nextTick();
-        expect(form.guard).toBe(drafts.guard);
+        expect(form.guard).toBe(review.guard);
         form.kind = `listener`;
         await nextTick();
         expect(form.prompt).toBe(DISCORD.starterPrompt);
-        // A jq over .intentic/drafts/ left on a Discord listener is a row that never fires and never says why.
+        // A diff-size jq left on a Discord listener is a row that never fires and never says why.
         expect(form.guard).toBe(``);
     });
 });

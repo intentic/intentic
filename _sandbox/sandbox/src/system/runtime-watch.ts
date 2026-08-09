@@ -49,6 +49,9 @@ const THROTTLE_MS: Record<RuntimeDomain, number> = {
     ports: 250,
     browsers: 1000,
     subagents: 2000,
+    // A publish sweep settles a whole batch in a burst of file writes; one frame at the end of it is the whole
+    // news. Nothing here changes more often than a post going out.
+    drafts: 250,
 };
 
 const subscribers = new Set<(domains: RuntimeDomain[]) => void>();

@@ -23,15 +23,21 @@ import { useDrafts } from "../composables/extensions/useDrafts";
 import { useExtensions } from "../composables/extensions/useExtensions";
 import DraftMeta from "./drafts/DraftMeta.vue";
 import DraftPost from "./drafts/DraftPost.vue";
-import { limitOf, postsATitle } from "./drafts/postText";
+import { countdownWords, limitOf, type PostEdit, postsATitle } from "./drafts/postText";
+import PostEditor from "./drafts/PostEditor.vue";
 import ScheduleControl from "./drafts/ScheduleControl.vue";
+import { useNow } from "../composables/useNow";
 
 /* Drafts: the approval inbox for posts the agent proposed during its scheduled work. The agent writes one JSON
  * file per draft into .intentic/drafts/ (taught by the daemon's drafts skill); this page is the owner's
- * approve / reschedule / reject side. Approving fires the "Publish approved drafts" automation immediately
- * (the daemon's drafts routes own that moment); a draft approved for a future scheduledAt is picked up by the
- * same automation's sweep when its time comes. There is no create dialog here — drafts originate with the
- * agent, never the UI.
+ * approve / edit / reschedule / reject side. There is no create dialog here — drafts originate with the agent,
+ * never the UI.
+ *
+ * APPROVING DOES NOT SEND IT. It starts a minute (publish-drafts.ts): the daemon dates the draft one hold into
+ * the future and sleeps until exactly then, and for that minute the post sits in Going out with a live count
+ * and one button that calls it back. A post is public and permanent the instant it lands, and the gap between
+ * realising and reaching for the mouse is about two seconds — so the whole design of this page's second half is
+ * that the seconds exist and are visible. A draft carrying a date of its own keeps it and simply waits.
  *
  * THE POST IS THE SUBJECT OF THE ROW, and it is READ rather than glanced at. Everything about where a draft is
  * going lives on one muted line beneath a brand mark; under it the post is set as a post — a capped measure,
@@ -49,15 +55,24 @@ import ScheduleControl from "./drafts/ScheduleControl.vue";
  * wrong, so it is stated rather than left to be counted.
  *
  * ONE SECTION PER DECISION, in the order the queue owes them: something broke, something is waiting on you,
- * something is on its way, something already went out. A status badge survives only where its section does not
- * already state it (`posting`, inside Scheduled) — every other badge was re-labelling its own group. The
- * sections also settle an ordering the flat list never had: the daemon's store is a directory of files, so
- * rows arrived in filesystem order. Each section sorts by the field it is actually read for — soonest first
- * while something can still be changed, newest first once it is history.
+ * something is seconds from being public, something is on the calendar, something already went out. A status
+ * badge survives only where its section does not already state it (`sending`, inside Going out) — every other
+ * badge was re-labelling its own group. The sections also settle an ordering the flat list never had: the
+ * daemon's store is a directory of files, so rows arrived in filesystem order. Each section sorts by the field
+ * it is actually read for — soonest first while something can still be changed, newest first once it is
+ * history.
  *
  * WEIGHT MARKS PRIORITY. Only the section that owes a decision carries labelled buttons; scheduled and posted
  * rows get bare icon actions and a smaller mark. A queue with nothing to review should look like nothing to
- * do. */
+ * do.
+ *
+ * THE WORDS CAN BE CHANGED, in the two sections where changing them is still worth anything: something waiting
+ * on a yes, and something that already went out wrong. Approve/reject alone made every draft a verdict on
+ * someone else's sentence — a proposal that was one word off had to be thrown away and re-asked for, and a post
+ * that failed for being thirty characters long could only be retried at exactly the length that failed. Editing
+ * is a plain field on the same upsert every other action here uses (PostEditor.vue). Rows that are already on
+ * their way deliberately do NOT get it: their "back to review" is the way in, so nothing can be rewritten on
+ * the same row the publisher may already be reading. */
 
 const { drafts, invalid, error: listError, save, remove } = useDrafts();
 // The list query knows it failed and nothing else; this page knows what the user came for.
@@ -96,9 +111,36 @@ const bySoonest = (left: DraftSummary, right: DraftSummary): number => due(left)
 
 const ofStatus = (...statuses: DraftSummary[`status`][]): DraftSummary[] => drafts.value.filter((draft) => statuses.includes(draft.status));
 
+/* GOING OUT vs SCHEDULED — one section became two, because approving stopped meaning "sent" and started
+ * meaning "sending in a minute unless you stop me" (publish-drafts.ts). Those are not the same row. A post
+ * dated for Tuesday is a calendar entry: the thing to offer is a date control. A post forty seconds from being
+ * public is the only thing on this page with a deadline, and the thing to offer is one obvious way to stop it.
+ * Folding both into "Scheduled" put a countdown nobody was watching next to a date nobody was in a hurry about.
+ *
+ * THE WINDOW IS WIDER THAN THE HOLD, deliberately. A post someone dated for two minutes' time is every bit as
+ * imminent as one that was just approved, and it would be strange for it to sit under a heading that implies
+ * there is time. Anything already handed to the publisher (`posting`) is here too — it is the most imminent
+ * thing there is. */
+const GOING_OUT_WINDOW = 2 * 60_000;
+const imminent = (draft: DraftSummary, at: number): boolean => draft.status === `posting` || (draft.scheduledAt ?? 0) - at <= GOING_OUT_WINDOW;
+
+/* The clock, armed only while this page has something approved on it — an idle queue costs no tick. The
+ * condition is deliberately NOT "is anything counting down", which is a function of `now` and would have this
+ * ref arming itself. */
+const now = useNow(() => ofStatus(`approved`, `posting`).length > 0);
+
 const failed = computed(() => ofStatus(`failed`).toSorted(bySoonest));
 const needsReview = computed(() => ofStatus(`proposed`).toSorted(bySoonest));
-const scheduled = computed(() => ofStatus(`approved`, `posting`).toSorted(bySoonest));
+const goingOut = computed(() =>
+    ofStatus(`approved`, `posting`)
+        .filter((draft) => imminent(draft, now.value))
+        .toSorted(bySoonest),
+);
+const scheduled = computed(() =>
+    ofStatus(`approved`)
+        .filter((draft) => !imminent(draft, now.value))
+        .toSorted(bySoonest),
+);
 // History, newest first. postedAt is optional in the contract, so a record without one sorts last rather than
 // leaping to the top on a 0.
 const posted = computed(() => ofStatus(`posted`).toSorted((left, right) => (right.postedAt ?? 0) - (left.postedAt ?? 0)));
@@ -108,6 +150,16 @@ const isEmpty = computed(() => drafts.value.length === 0 && invalid.value.length
 // Reject destroys a file and Approve-all commits the whole queue; each holds the thing it is asking about.
 const rejecting = ref<DraftSummary | undefined>(undefined);
 const approvingAll = ref(false);
+
+// One post is edited at a time — the queue is read top to bottom and a second open box is a second unsaved
+// thing to lose track of. Held as the id rather than the draft, because the list refetches under it.
+const editing = ref<string | undefined>(undefined);
+const isEditing = (draft: DraftSummary): boolean => editing.value === draft.id;
+
+// Approve-all is gone while a post in that section is open for editing, for the reason the row's own Approve
+// is: a bulk yes would commit the text the owner is in the middle of replacing. Read off the live list rather
+// than off `editing` alone, so a draft that vanishes underneath an open box cannot leave the link suppressed.
+const editingInReview = computed(() => needsReview.value.some(isEditing));
 
 // Approve, retry, put-back and reschedule are all a re-post of the whole file with one field changed (the
 // daemon upserts by id). Errors surface in the strip at the top; the query refetch reconciles the row.
@@ -134,6 +186,57 @@ const rejectDraft = (draft: DraftSummary): Promise<void> => {
         await remove.mutateAsync(draft.id);
     }, `Could not remove the draft.`);
 };
+
+/* CALLING IT BACK — the other half of a hold, and the reason the hold is worth having. It puts the post back in
+ * review AND CLEARS THE DATE, which is the part that would be silently wrong if it were left out: the date on a
+ * held post is a deadline the daemon wrote, not something the owner chose, and a draft carrying it back into
+ * review would be re-approved into a deadline that had already passed — published instantly, with no second
+ * minute to stop it. The one gesture on this page whose failure is a post nobody meant to send. */
+const holdBack = (draft: DraftSummary): Promise<void> => patch(draft, { status: `proposed`, scheduledAt: undefined });
+
+const holdBackAll = (): Promise<void> => {
+    const queue = goingOut.value.filter((draft) => draft.status === `approved`);
+    return run(async () => {
+        for (const draft of queue) {
+            await save.mutateAsync({ ...draft, status: `proposed`, scheduledAt: undefined });
+        }
+    }, `Could not hold those posts back.`);
+};
+
+/* THE COUNTDOWN, SAID ONCE AT THE TOP OF THE PAGE. The section below states it per row, which is right when you
+ * are looking at that row — and the whole point of a hold is the case where you are NOT: you approved, your eye
+ * moved on, and the thing you want back is already three rows up. So while anything is counting down the page
+ * carries one line saying what is about to happen and one button that stops all of it.
+ *
+ * `info`, not `warning`. Nothing is wrong: this is the system doing exactly what was asked, out loud. And an
+ * explicit `key` so the stack treats each tick as the same notice re-worded rather than a new one arriving
+ * every second. Absent below the ship tier, where there would be no way to act on it. */
+const goingOutNotice = computed<NoticeModel | undefined>(() => {
+    const holding = goingOut.value.filter((draft) => draft.status === `approved`);
+    const soonest = holding[0];
+    if (!canShip.value || soonest === undefined) {
+        return undefined;
+    }
+    const when = countdownWords((soonest.scheduledAt ?? 0) - now.value);
+    return {
+        tone: `info`,
+        title:
+            holding.length === 1
+                ? `This post goes out ${when === `any moment now` ? when : `in ${when}`}.`
+                : `${holding.length} posts go out, the first ${when === `any moment now` ? when : `in ${when}`}.`,
+        action: { label: holding.length === 1 ? `Hold it back` : `Hold them back`, run: () => void holdBackAll() },
+        key: `drafts-going-out`,
+    };
+});
+
+// The box closes only once the write has landed. Clearing it first would be the one failure mode an editor
+// must not have: a rejected save leaving the row showing the text the owner had just replaced, with the
+// replacement gone.
+const saveEdit = (draft: DraftSummary, changes: PostEdit): Promise<void> =>
+    run(async () => {
+        await save.mutateAsync({ ...draft, ...changes });
+        editing.value = undefined;
+    }, `Could not save your changes.`);
 
 // What a draft is called where it has to be named in one line — a confirm's list, an action's accessible name.
 // The title if the platform wanted one, else the post's opening line.
@@ -176,6 +279,11 @@ const FACTS = `mt-3 flex max-w-[64ch] flex-wrap items-center gap-x-3 gap-y-1 tex
 // And the note under it: two lines at most, the rest on hover. Below the post rather than above it, because it
 // is the agent talking ABOUT the post — a reader who mistakes it for the post has read the wrong thing.
 const NOTE = `mt-1.5 line-clamp-2 max-w-[64ch] text-2xs leading-relaxed text-subtle`;
+
+// The way into the editor, shaped exactly like ScheduleControl's resting state next to it: a muted phrase in
+// the footer that opens a field. Rewriting a post is rarer than approving one and must not draw like a rival
+// to the Approve button — the same reasoning that took the date pickers out of this column.
+const EDIT_TRIGGER = `flex cursor-pointer items-center gap-1.5 transition-colors hover:text-content`;
 </script>
 
 <template>
@@ -185,14 +293,14 @@ const NOTE = `mt-1.5 line-clamp-2 max-w-[64ch] text-2xs leading-relaxed text-sub
                 <InfoHint label="How drafts are published">
                     <span class="block text-xs font-semibold text-content">From proposal to post</span>
                     <span class="mt-2 block text-xs text-muted">
-                        Your agent writes drafts while it works and never posts one by itself. Approve one and it posts right away through that
-                        platform's connector — or, if you gave it a date, when that date comes up. Rejecting deletes the draft file.
+                        Your agent writes drafts while it works and never posts one by itself. Approving one starts a short countdown you can stop —
+                        when it runs out the post goes to that platform, or waits for the date you gave it. Rejecting deletes the draft.
                     </span>
                 </InfoHint>
             </template>
         </PageHeader>
 
-        <NoticeStack :of="[actionError, listNotice]" class="mb-4" />
+        <NoticeStack :of="[actionError, listNotice, goingOutNotice]" class="mb-4" />
         <div v-if="invalid.length > 0" :class="cmp.alertWarning(`mb-4`)">
             <Icon name="exclamation-triangle" class="mr-1.5" />{{ invalid.length }} draft file{{ invalid.length === 1 ? "" : "s" }} couldn't be read
             and won't post: <span class="font-mono">{{ invalid.join(", ") }}</span>
@@ -212,7 +320,7 @@ const NOTE = `mt-1.5 line-clamp-2 max-w-[64ch] text-2xs leading-relaxed text-sub
                     <template #description><DraftMeta :name="platformName(draft)" :target="draft.target" /></template>
                     <template #control>
                         <Button
-                            v-if="canShip"
+                            v-if="canShip && !isEditing(draft)"
                             label="Retry"
                             size="small"
                             severity="secondary"
@@ -222,7 +330,7 @@ const NOTE = `mt-1.5 line-clamp-2 max-w-[64ch] text-2xs leading-relaxed text-sub
                             <template #icon><Icon name="refresh" /></template>
                         </Button>
                         <button
-                            v-if="canShip"
+                            v-if="canShip && !isEditing(draft)"
                             type="button"
                             :class="cmp.iconButton(`h-8 w-8 hover:bg-danger/10 hover:text-danger`)"
                             :aria-label="`Reject ${headline(draft)}`"
@@ -234,13 +342,34 @@ const NOTE = `mt-1.5 line-clamp-2 max-w-[64ch] text-2xs leading-relaxed text-sub
                     </template>
                     <template #below>
                         <div :class="POST_COLUMN">
-                            <DraftPost :draft="draft" />
-                            <!-- The reason, in the row. It used to live in a tooltip on the status badge — the
-                                 one state whose entire content is an explanation, hidden behind a hover. -->
-                            <p :class="cmp.alertDanger(`mt-3 max-w-[64ch]`)">{{ draft.error ?? `The publisher did not say why.` }}</p>
-                            <div :class="FACTS">
-                                <span v-if="lengthOf(draft)" :class="isOver(draft) ? `text-danger` : ``">{{ lengthOf(draft) }}</span>
-                            </div>
+                            <!-- A post that failed for being too long can only be retried at the length that
+                                 failed, unless the words themselves can be changed. -->
+                            <PostEditor
+                                v-if="isEditing(draft)"
+                                :draft="draft"
+                                :saving="save.isPending.value"
+                                @cancel="editing = undefined"
+                                @save="saveEdit(draft, $event)"
+                            />
+                            <template v-else>
+                                <DraftPost :draft="draft" />
+                                <!-- The reason, in the row. It used to live in a tooltip on the status badge — the
+                                     one state whose entire content is an explanation, hidden behind a hover. -->
+                                <p :class="cmp.alertDanger(`mt-3 max-w-[64ch]`)">{{ draft.error ?? `The publisher did not say why.` }}</p>
+                                <div :class="FACTS">
+                                    <span v-if="lengthOf(draft)" :class="isOver(draft) ? `text-danger` : ``">{{ lengthOf(draft) }}</span>
+                                    <button
+                                        v-if="canShip"
+                                        type="button"
+                                        :class="EDIT_TRIGGER"
+                                        :aria-label="`Edit ${headline(draft)}`"
+                                        @click="editing = draft.id"
+                                    >
+                                        <Icon name="pencil" />
+                                        <span>Edit</span>
+                                    </button>
+                                </div>
+                            </template>
                             <!-- The agent's own note about the draft, under everything it is a note about. -->
                             <p v-if="noteOf(draft)" :class="NOTE" v-tooltip.top="noteOf(draft)">{{ noteOf(draft) }}</p>
                         </div>
@@ -250,7 +379,13 @@ const NOTE = `mt-1.5 line-clamp-2 max-w-[64ch] text-2xs leading-relaxed text-sub
 
             <RowGroup v-if="needsReview.length > 0" label="Needs your review" :count="needsReview.length">
                 <template v-if="needsReview.length > 1" #actions>
-                    <button v-if="canShip" type="button" :class="cmp.linkButton()" :disabled="save.isPending.value" @click="approvingAll = true">
+                    <button
+                        v-if="canShip && !editingInReview"
+                        type="button"
+                        :class="cmp.linkButton()"
+                        :disabled="save.isPending.value"
+                        @click="approvingAll = true"
+                    >
                         Approve all {{ needsReview.length }}
                     </button>
                 </template>
@@ -265,7 +400,7 @@ const NOTE = `mt-1.5 line-clamp-2 max-w-[64ch] text-2xs leading-relaxed text-sub
                     </template>
                     <template #control>
                         <button
-                            v-if="canShip"
+                            v-if="canShip && !isEditing(draft)"
                             type="button"
                             :class="cmp.iconButton(`h-8 w-8 hover:bg-danger/10 hover:text-danger`)"
                             :aria-label="`Reject ${headline(draft)}`"
@@ -274,8 +409,10 @@ const NOTE = `mt-1.5 line-clamp-2 max-w-[64ch] text-2xs leading-relaxed text-sub
                         >
                             <Icon name="trash" />
                         </button>
+                        <!-- Absent mid-edit, not merely disabled: approving with unsaved words in the box would
+                             publish the sentence the owner had just replaced. -->
                         <Button
-                            v-if="canShip"
+                            v-if="canShip && !isEditing(draft)"
                             label="Approve"
                             size="small"
                             :disabled="save.isPending.value"
@@ -286,16 +423,41 @@ const NOTE = `mt-1.5 line-clamp-2 max-w-[64ch] text-2xs leading-relaxed text-sub
                     </template>
                     <template #below>
                         <div :class="POST_COLUMN">
-                            <!-- Unclamped up to a screenful, deliberately: this is the section where a decision
-                                 is owed, and the post's own words are what the decision is about. -->
-                            <DraftPost :draft="draft" />
+                            <PostEditor
+                                v-if="isEditing(draft)"
+                                :draft="draft"
+                                :saving="save.isPending.value"
+                                @cancel="editing = undefined"
+                                @save="saveEdit(draft, $event)"
+                            />
+                            <template v-else>
+                                <!-- Unclamped up to a screenful, deliberately: this is the section where a decision
+                                     is owed, and the post's own words are what the decision is about. -->
+                                <DraftPost :draft="draft" />
 
-                            <!-- The three facts that DECIDE the post rather than describe it: when it goes,
-                                 whether it fits where it is going, and what the agent said it was for. -->
-                            <div :class="FACTS">
-                                <ScheduleControl :at="draft.scheduledAt" :label="headline(draft)" @change="patch(draft, { scheduledAt: $event })" />
-                                <span v-if="lengthOf(draft)" :class="isOver(draft) ? `text-danger` : ``">{{ lengthOf(draft) }}</span>
-                            </div>
+                                <!-- The three facts that DECIDE the post rather than describe it: when it goes,
+                                     whether it fits where it is going, and what the agent said it was for — and
+                                     the way into the words themselves, since a proposal one word off is worth
+                                     fixing rather than throwing back. -->
+                                <div :class="FACTS">
+                                    <ScheduleControl
+                                        :at="draft.scheduledAt"
+                                        :label="headline(draft)"
+                                        @change="patch(draft, { scheduledAt: $event })"
+                                    />
+                                    <span v-if="lengthOf(draft)" :class="isOver(draft) ? `text-danger` : ``">{{ lengthOf(draft) }}</span>
+                                    <button
+                                        v-if="canShip"
+                                        type="button"
+                                        :class="EDIT_TRIGGER"
+                                        :aria-label="`Edit ${headline(draft)}`"
+                                        @click="editing = draft.id"
+                                    >
+                                        <Icon name="pencil" />
+                                        <span>Edit</span>
+                                    </button>
+                                </div>
+                            </template>
                             <!-- The agent's own note about the draft, under everything it is a note about. -->
                             <p v-if="noteOf(draft)" :class="NOTE" v-tooltip.top="noteOf(draft)">{{ noteOf(draft) }}</p>
                         </div>
@@ -303,18 +465,53 @@ const NOTE = `mt-1.5 line-clamp-2 max-w-[64ch] text-2xs leading-relaxed text-sub
                 </Row>
             </RowGroup>
 
-            <!-- Approved and on its way. Quiet by design: the decision is made, so the row's job is to say when
-                 it goes and otherwise stay out of the way of the section above it. -->
+            <!-- ABOUT TO BE PUBLIC, and the only thing on this page with a deadline. Directly under the review
+                 queue rather than at the top of the page, because that is where an approved row LANDS: it
+                 leaves the section above and appears immediately below it, which reads as the post moving one
+                 step along rather than as the page rearranging itself under the click. The strip at the very
+                 top is what covers the case where you are no longer looking here at all.
+
+                 ONE LABELLED BUTTON, where the sections around it use bare icons — the page's weight rule
+                 applied to the state it was written for. Stopping a post is urgent, singular, and cannot be
+                 something you go hunting for behind a tooltip. -->
+            <RowGroup v-if="goingOut.length > 0" label="Going out" :count="goingOut.length">
+                <Row v-for="draft in goingOut" :key="draft.id" density="compact">
+                    <template #lead><BrandMark :size="22" :name="platformName(draft)" :logo="platformLogo(draft)" /></template>
+                    <template #description><DraftMeta :name="platformName(draft)" :target="draft.target" /></template>
+                    <template #meta>
+                        <!-- Handed over: the daemon is mid-send, so there is nothing left to stop and the row
+                             says so instead of offering a button that would lose the race. -->
+                        <StatusBadge v-if="draft.status === `posting`" variant="info" label="sending" size="xs" :dot="true" />
+                        <span v-else class="tabular-nums text-warning">{{ countdownWords((draft.scheduledAt ?? 0) - now) }}</span>
+                    </template>
+                    <template v-if="draft.status === `approved`" #control>
+                        <Button
+                            v-if="canShip"
+                            label="Stop"
+                            size="small"
+                            severity="secondary"
+                            :disabled="save.isPending.value"
+                            :aria-label="`Stop ${headline(draft)} and put it back in review`"
+                            v-tooltip.top="`Back to review — nothing is sent`"
+                            @click="holdBack(draft)"
+                        >
+                            <template #icon><Icon name="undo" /></template>
+                        </Button>
+                    </template>
+                    <template #below>
+                        <div :class="QUIET_COLUMN"><DraftPost :draft="draft" tone="quiet" /></div>
+                    </template>
+                </Row>
+            </RowGroup>
+
+            <!-- Approved and waiting for a date that is still some way off. Quiet by design: the decision is
+                 made and there is time, so the row's job is to say when it goes and otherwise stay out of the
+                 way of the sections above it. -->
             <RowGroup v-if="scheduled.length > 0" label="Scheduled" :count="scheduled.length">
                 <Row v-for="draft in scheduled" :key="draft.id" density="compact">
                     <template #lead><BrandMark :size="22" :name="platformName(draft)" :logo="platformLogo(draft)" /></template>
                     <template #description><DraftMeta :name="platformName(draft)" :target="draft.target" /></template>
-                    <!-- Handed to the publisher: nothing here can change it any more, so the row states that
-                         instead of offering controls that would race the post going out. -->
-                    <template #meta>
-                        <StatusBadge v-if="draft.status === `posting`" variant="info" label="posting" size="xs" :dot="true" />
-                    </template>
-                    <template v-if="draft.status === `approved`" #control>
+                    <template #control>
                         <div v-if="canShip" class="text-2xs text-subtle">
                             <ScheduleControl :at="draft.scheduledAt" :label="headline(draft)" @change="patch(draft, { scheduledAt: $event })" />
                         </div>
@@ -324,7 +521,7 @@ const NOTE = `mt-1.5 line-clamp-2 max-w-[64ch] text-2xs leading-relaxed text-sub
                             :class="cmp.iconButton()"
                             :aria-label="`Put ${headline(draft)} back in review`"
                             v-tooltip.top="`Put back in review`"
-                            @click="patch(draft, { status: `proposed` })"
+                            @click="holdBack(draft)"
                         >
                             <Icon name="undo" />
                         </button>

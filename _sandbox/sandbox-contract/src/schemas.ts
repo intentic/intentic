@@ -4240,7 +4240,10 @@ export const DraftSchema = z.object({
     content: z.string().min(1),
     // Reddit posts / YouTube uploads need one.
     title: z.string().optional(),
-    // Where on the platform: subreddit / Discord channel id / community.
+    /* Where on the platform: subreddit / Discord channel id / community — OR the URL of the thing this draft
+     * replies to. A URL target means the draft is a reply, and on reddit the difference between a thread's
+     * address and one comment's permalink is the difference between talking to the room and answering the
+     * person: the publisher opens exactly this and replies where it lands. */
     target: z.string().optional(),
     // Workspace-relative attachment paths, e.g. ".intentic/drafts/media/chart.png".
     media: z.array(z.string()).optional(),
@@ -4251,8 +4254,16 @@ export const DraftSchema = z.object({
     // well-formed proposal never lands in `invalid` just for omitting bookkeeping fields.
     status: DraftStatusSchema.default("proposed"),
     createdAt: z.number().optional(),
+    // When sending STARTED, stamped with status "posting". The publisher needs it to tell a send that is under
+    // way from one whose run died mid-flight, and those two are indistinguishable from the due time — a post
+    // scheduled for last week is not a post that has been sending since last week.
+    postingAt: z.number().optional(),
     postedAt: z.number().optional(),
-    // Why posting failed; set with status "failed".
+    // Where it landed, when the platform hands back an address for it. The one thing a posted row can offer
+    // that reading the draft cannot: the post itself, to go and look at.
+    postedUrl: z.string().optional(),
+    // Why posting failed; set with status "failed". Written for the owner to read in the queue, so it is a
+    // sentence rather than a code.
     error: z.string().optional(),
 });
 export type Draft = z.infer<typeof DraftSchema>;

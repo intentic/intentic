@@ -1,9 +1,10 @@
 import type { DraftSummary } from "@intentic/sandbox-contract";
+import { APPROVAL_HOLD_MS } from "@intentic/sandbox-contract";
 import { expect, test } from "vitest";
-import { becameDue } from "./drafts.routes.js";
+import { withApprovalHold } from "./drafts.routes.js";
 
-// The truth table behind publish-on-approval: exactly the edits that put a draft into approved-and-due may
-// fire the publisher. Everything else either already belonged to the publisher or belongs to the sweep.
+// What approval writes. The hold IS the countdown — the publisher sleeps on this number and the queue draws
+// it — so the cases that must NOT get one matter as much as the case that must.
 
 const NOW = 1_700_000_000_000;
 
@@ -15,37 +16,27 @@ const draft = (overrides: Partial<DraftSummary>): DraftSummary => ({
     ...overrides,
 });
 
-test("the approve click on an undated draft fires", () => {
-    expect(becameDue(draft({}), draft({ status: "approved" }), NOW)).toBe(true);
+test("approving an undated draft holds it for the countdown rather than sending it", () => {
+    expect(withApprovalHold(draft({ status: "approved" }), NOW).scheduledAt).toBe(NOW + APPROVAL_HOLD_MS);
 });
 
-test("the approve click on a past-dated draft fires", () => {
-    expect(becameDue(draft({ scheduledAt: NOW - 1 }), draft({ status: "approved", scheduledAt: NOW - 1 }), NOW)).toBe(true);
+test("a date somebody chose is left alone", () => {
+    // Next Tuesday already holds itself; a minute added to it would be the daemon overruling the owner.
+    expect(withApprovalHold(draft({ status: "approved", scheduledAt: NOW + 86_400_000 }), NOW).scheduledAt).toBe(NOW + 86_400_000);
+    // And a post that is already late is late — padding it is a bug wearing caution's coat.
+    expect(withApprovalHold(draft({ status: "approved", scheduledAt: NOW - 60_000 }), NOW).scheduledAt).toBe(NOW - 60_000);
 });
 
-test("approving for a future date waits for the sweep", () => {
-    expect(becameDue(draft({}), draft({ status: "approved", scheduledAt: NOW + 60_000 }), NOW)).toBe(false);
+test("nothing that isn't an approval is touched", () => {
+    // A proposal being edited, a failed post sitting there, a record of one already sent — none is about to go
+    // out, and a date on any of them would put it in front of the publisher.
+    expect(withApprovalHold(draft({}), NOW).scheduledAt).toBeUndefined();
+    expect(withApprovalHold(draft({ status: "failed" }), NOW).scheduledAt).toBeUndefined();
+    expect(withApprovalHold(draft({ status: "posted", postedAt: NOW }), NOW).scheduledAt).toBeUndefined();
 });
 
-test("rescheduling an approved draft into the past fires — the owner just asked for it to go out", () => {
-    const approved = draft({ status: "approved" });
-    expect(becameDue({ ...approved, scheduledAt: NOW + 60_000 }, { ...approved, scheduledAt: NOW }, NOW)).toBe(true);
-});
-
-test("editing a draft that is already due does not re-fire — the publisher already has it", () => {
-    const due = draft({ status: "approved" });
-    expect(becameDue(due, { ...due, content: "edited" }, NOW)).toBe(false);
-});
-
-test("a retry — failed back to approved — fires again", () => {
-    expect(becameDue(draft({ status: "failed" }), draft({ status: "approved" }), NOW)).toBe(true);
-});
-
-test("a draft created directly in approved-and-due state fires", () => {
-    expect(becameDue(undefined, draft({ status: "approved" }), NOW)).toBe(true);
-});
-
-test("ordinary proposals and rejections never fire", () => {
-    expect(becameDue(undefined, draft({}), NOW)).toBe(false);
-    expect(becameDue(draft({ status: "approved" }), draft({ status: "proposed" }), NOW)).toBe(false);
+test("editing a post that is already counting down does not restart the count", () => {
+    // The hold is a deadline, not a debounce on typing: a queue being tidied has to still reach its own.
+    const held = withApprovalHold(draft({ status: "approved" }), NOW);
+    expect(withApprovalHold({ ...held, content: "edited" }, NOW + 30_000).scheduledAt).toBe(NOW + APPROVAL_HOLD_MS);
 });

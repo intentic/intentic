@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { destinationOf, isReply, limitOf, LONG_POST, paragraphsOf, postsATitle } from "./postText";
+import { countdownWords, destinationOf, isReply, limitOf, LONG_POST, paragraphsOf, postEdit, postsATitle } from "./postText";
 
 // No mocks: postText is a leaf of pure functions over a draft's own fields, which is why the page can ask the
 // same questions from four sections without four answers.
@@ -62,6 +62,17 @@ describe("destinationOf", () => {
         expect(destinationOf(`https://reddit.com/r/webdev/comments/abc/title/`).label).toBe(`r/webdev`);
     });
 
+    /* TALKING TO THE ROOM VS TALKING TO ONE PERSON — the same URL with one more segment on it, and a different
+     * decision for the reviewer. Both of reddit's permalink shapes say so, and a `?context=` on a thread does
+     * not: that is still the thread's own address. */
+    it("says when the target is one comment rather than the thread", () => {
+        expect(destinationOf(`https://www.reddit.com/r/mcp/comments/1abc23/some_slug/kx9y8z7/`).verb).toBe(`reply to a comment in`);
+        expect(destinationOf(`https://www.reddit.com/r/mcp/comments/1abc23/comment/kx9y8z7/`).verb).toBe(`reply to a comment in`);
+        expect(destinationOf(`https://www.reddit.com/r/mcp/comments/1abc23/some_slug/kx9y8z7/`).label).toBe(`r/mcp`);
+        expect(destinationOf(`https://www.reddit.com/r/mcp/comments/1abc23/some_slug/?context=3`).verb).toBe(`reply in`);
+        expect(destinationOf(`https://www.reddit.com/r/mcp/comments/1abc23/some_slug`).verb).toBe(`reply in`);
+    });
+
     it("falls back to the host for a reply anywhere else", () => {
         expect(destinationOf(`https://x.com/intentic_dev/status/1234567890`)).toEqual({
             label: `x.com`,
@@ -82,6 +93,64 @@ describe("isReply", () => {
         expect(isReply(`https://www.reddit.com/r/webdev/comments/abc/x/`)).toBe(true);
         expect(isReply(`r/webdev`)).toBe(false);
         expect(isReply(undefined)).toBe(false);
+    });
+});
+
+describe("postEdit", () => {
+    const reply = {
+        platform: `reddit`,
+        target: `https://www.reddit.com/r/mcp/comments/1abc23/slug/`,
+        title: `Reply on r/mcp — why`,
+        content: `as written`,
+    };
+    const article = { platform: `reddit`, target: `r/webdev`, title: `Ship it on Friday`, content: `as written` };
+
+    it("carries the rewritten post", () => {
+        expect(postEdit(reply, { content: `rewritten`, title: `` })).toEqual({ content: `rewritten` });
+    });
+
+    // The one that would be got wrong and never noticed: on a reply, `title` is the AGENT'S NOTE about the
+    // draft. The editor draws no box for it, so sending the field back would post an empty headline over it.
+    it("never touches a title the platform does not publish", () => {
+        expect(postEdit(reply, { content: `rewritten`, title: `` })).not.toHaveProperty(`title`);
+        // Even a title that somehow arrived changed is not a reason to save: the post itself is untouched.
+        expect(postEdit(reply, { content: `as written`, title: `something else` })).toBeUndefined();
+    });
+
+    it("carries a published headline, trimmed", () => {
+        expect(postEdit(article, { content: `as written`, title: `  Ship it on Monday  ` })).toEqual({
+            content: `as written`,
+            title: `Ship it on Monday`,
+        });
+    });
+
+    // An identical re-post would still rewrite the file, refetch the queue and flash the row — a click that did
+    // nothing, reported as if it did.
+    it("is not a save when nothing changed", () => {
+        expect(postEdit(article, { content: `as written`, title: `Ship it on Friday` })).toBeUndefined();
+        expect(postEdit(reply, { content: `as written`, title: `` })).toBeUndefined();
+    });
+});
+
+describe("countdownWords", () => {
+    it("counts the hold down in the unit the decision is made in", () => {
+        expect(countdownWords(43_000)).toBe(`43s`);
+        // Rounded UP, so a countdown never shows a second the post still has: 0.4s left reads as 1s, not 0s.
+        expect(countdownWords(400)).toBe(`1s`);
+        expect(countdownWords(59_000)).toBe(`59s`);
+    });
+
+    it("never counts to zero", () => {
+        // By the time a "0s" rendered next to a Stop button, the publisher already has the post — the button
+        // would be promising something nobody can deliver.
+        expect(countdownWords(0)).toBe(`any moment now`);
+        expect(countdownWords(-5_000)).toBe(`any moment now`);
+    });
+
+    it("spells out the wider window the section covers", () => {
+        // A post someone dated two minutes out is as imminent as a freshly approved one and shares the group.
+        expect(countdownWords(90_000)).toBe(`1m 30s`);
+        expect(countdownWords(61_000)).toBe(`1m 01s`);
     });
 });
 

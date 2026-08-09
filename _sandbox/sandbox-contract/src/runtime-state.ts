@@ -61,6 +61,13 @@ const RUNTIME_DOMAINS = [
     // changes while nothing starts or stops: a working child reports tool uses and tokens continuously, which
     // is why the daemon rate-limits this domain rather than pushing every mutation (see runtime-watch.ts).
     { domain: "subagents", invalidates: ["subagents"] },
+
+    /* The post queue, when the DAEMON moves it rather than the owner. Approving is the owner's own mutation and
+     * refetches itself, but everything after that happens while nobody is touching the page: a held post coming
+     * due, a Discord send landing, a publish turn writing back what went out. Those are the moments the row on
+     * screen stops being true — and this queue is watched precisely because its rows go out in public, so it is
+     * the last place to leave someone reading a stale one. */
+    { domain: "drafts", invalidates: ["drafts"] },
 ] as const satisfies readonly RuntimeDomainBinding[];
 
 export const RUNTIME_DOMAIN_BINDINGS: readonly RuntimeDomainBinding[] = RUNTIME_DOMAINS;
