@@ -518,8 +518,25 @@ const commitFiles = computed(() => commitGroups.value.reduce((total, group) => t
 // commit per repo sharing a message, and git would refuse the conflicted one halfway through — leaving the
 // others committed under a message that describes work that didn't all land. Better to not start.
 const blockedByConflicts = computed(() => scannable.value.some((repo) => repo.conflicted.length > 0));
+/* --- the commit that is already running ------------------------------------------------------------------------
+ * A commit is a request that outlives the tab that fired it, and the panel used to say so with one flag that
+ * died with the page. Reload mid-commit and the button re-armed itself over rows the commit was already
+ * recording: it invited a second click at the exact moment it could do the least good, and then the rows changed
+ * under the user a second later with nothing having explained why.
+ *
+ * So this reads the daemon's answer (unioned with this tab's own in-flight batch — see useChanges), narrowed to
+ * the repos THIS BOX would commit. Narrowed rather than panel-wide because the two can genuinely differ: a
+ * commit running in a repo the current filter excludes is not this button's business, and blanking the button
+ * for it would be the same over-reach the old "an agent is running" gate was. */
+const committingNow = computed(() => commitTarget.value.filter((repo) => changes.committing.value.includes(repo)));
+const commitRunning = computed(() => committingNow.value.length > 0);
 const commitReady = computed(
-    () => commitTarget.value.length > 0 && commitMessage.value.trim().length > 0 && !blockedByConflicts.value && !changes.actionBusy.value,
+    () =>
+        commitTarget.value.length > 0 &&
+        commitMessage.value.trim().length > 0 &&
+        !blockedByConflicts.value &&
+        !changes.actionBusy.value &&
+        !commitRunning.value,
 );
 // The count rides the LABEL rather than the readout beside it. This is the one shape whose scope is stated
 // nowhere else on the panel — a bare "Commit" over a list that is hiding rows says nothing about which ones it
@@ -597,6 +614,11 @@ const runCommit = async (target: readonly RepoPaths[]): Promise<void> => {
 const commitBlocker = computed<string | undefined>(() => {
     if (blockedByConflicts.value) {
         return `Resolve the conflicts first — git cannot commit while a path is unmerged.`;
+    }
+    // Ahead of "nothing to commit": mid-commit the rows are still listed, so this is the honest reason rather
+    // than a count that is about to change. It is also the state a reloaded tab lands in.
+    if (commitRunning.value) {
+        return `Still committing ${committingNow.value.join(`, `)} — this finishes on its own.`;
     }
     if (commitTarget.value.length === 0) {
         return `Nothing to commit.`;
@@ -981,6 +1003,13 @@ const WARNING = `flex items-start gap-1.5 rounded-md border border-warning/40 bg
                 <span v-if="blockedByConflicts" class="min-w-0 flex-1 truncate whitespace-nowrap text-2xs text-danger">
                     Resolve conflicts first
                 </span>
+                <!-- WHERE the commit is happening, which is the one thing the button next to it cannot say.
+                     Ahead of the draft readout and the staged count on purpose: both describe a commit that is
+                     no longer being composed, and "Drafted with Haiku · Undo" beside a running commit invites an
+                     undo of a message git has already recorded. -->
+                <span v-else-if="commitRunning" class="min-w-0 flex-1 truncate whitespace-nowrap text-2xs text-muted">
+                    Committing {{ committingNow.join(`, `) }}…
+                </span>
                 <!-- Why the button just refused a Ctrl+Enter. It takes the readout's place rather than adding a
                      line, because it answers the same question the readout does — what will this commit do. -->
                 <span
@@ -1027,6 +1056,10 @@ const WARNING = `flex items-start gap-1.5 rounded-md border border-warning/40 bg
                     >
                     <template v-else>nothing staged</template>
                 </span>
+                <!-- Mid-commit the button SAYS SO rather than just going flat. The wait is real — a stage, a
+                     commit that runs the repo's own hooks, a re-read, and sometimes a queue behind an agent's
+                     land — and a dimmed button with no spinner reads as a click that missed. It survives a
+                     reload because the state it reads comes from the daemon, not from this page. -->
                 <Button
                     size="small"
                     severity="success"
@@ -1034,16 +1067,20 @@ const WARNING = `flex items-start gap-1.5 rounded-md border border-warning/40 bg
                     :disabled="!commitReady"
                     @click="doCommit"
                     v-tooltip.right="
-                        blockedByConflicts
-                            ? 'A path is unmerged — stage each conflicted file to mark it resolved'
-                            : commitAll
-                              ? 'Stages every change, then commits'
-                              : commitFiles > 0
-                                ? `Stages the ${plural(commitFiles, 'file')} from ${filterLabel}, then commits — nothing else goes in`
-                                : 'One commit per repo'
+                        commitRunning
+                            ? `Recording ${committingNow.join(', ')} — the rows clear when git is done`
+                            : blockedByConflicts
+                              ? 'A path is unmerged — stage each conflicted file to mark it resolved'
+                              : commitAll
+                                ? 'Stages every change, then commits'
+                                : commitFiles > 0
+                                  ? `Stages the ${plural(commitFiles, 'file')} from ${filterLabel}, then commits — nothing else goes in`
+                                  : 'One commit per repo'
                     "
                 >
-                    <Icon name="check" class="mr-1 text-2xs" />{{ commitLabel }}
+                    <Icon :name="commitRunning ? `spinner` : `check`" :spin="commitRunning" class="mr-1 text-2xs" />{{
+                        commitRunning ? `Committing…` : commitLabel
+                    }}
                 </Button>
             </div>
             <!-- An agent is writing, in a repo this commit would stage from the worktree. A WARNING, not a
@@ -1249,7 +1286,17 @@ const WARNING = `flex items-start gap-1.5 rounded-md border border-warning/40 bg
                 </div>
             </div>
 
-            <div v-for="group in scannable" :key="group.repo" class="group/repo border-b border-line/50">
+            <!-- A REPO BEING RECORDED READS AS PENDING. Its rows are still genuinely uncommitted until git
+                 returns, so they stay listed rather than being optimistically swept — but staging, discarding or
+                 pulling one of them now would act on a tree mid-commit, and the daemon's repo lock would queue
+                 the request behind it anyway. Dimming the whole group says that in one gesture, and it is the
+                 only thing on screen that tells a reloaded tab WHICH rows the running commit is about to take. -->
+            <div
+                v-for="group in scannable"
+                :key="group.repo"
+                class="group/repo border-b border-line/50 transition-opacity"
+                :class="changes.committing.value.includes(group.repo) && `pointer-events-none opacity-50`"
+            >
                 <!-- One row per repo, carrying everything about it: identity on the left, then sync state, the
                      change count, and the two actions that don't depend on state. The pills ARE the verbs —
                      clicking "↓2" pulls those two commits — so a repo that is in sync costs exactly this row

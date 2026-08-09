@@ -30,5 +30,8 @@ export const spliceRepoChanges = (held: GitChangesResponse, repo: string, result
     // MERGED, never replaced: the answer names only the agents of the ONE repo it scanned, and every other
     // repo's rows still carry ids of their own that would lose their titles and fall back to "Agent 1a2b3c".
     const originAgents = { ...held.originAgents, ...result.originAgents };
-    return { repos, ...(Object.keys(originAgents).length > 0 ? { originAgents } : {}) };
+    // Everything else the response carries is left as it was — `committing` above all, which is about the OTHER
+    // repos still being recorded and is not this one commit's to answer for. It is the daemon's fact and the
+    // next changes response is what updates it.
+    return { ...held, repos, ...(Object.keys(originAgents).length > 0 ? { originAgents } : {}) };
 };

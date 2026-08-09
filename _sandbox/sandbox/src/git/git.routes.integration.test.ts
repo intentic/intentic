@@ -266,6 +266,50 @@ test("git.commit answers with the committed repo's post-commit rows, and omits t
     expect(await client.git.commit({ repo: "spent", message: "m2" })).toEqual({ committed: true });
 });
 
+/* WHO IS COMMITTING, ON THE REVIEW ITSELF — the fact a browser cannot hold on its own.
+ *
+ * A commit outlives the tab that fired it. Reload mid-commit and that tab's busy flag went with the page: the
+ * button re-armed over rows the commit was already recording, and the rows then changed under the user a second
+ * later with nothing having said why. Answering it from the daemon is what makes a reload, a second tab and a
+ * phone agree — and the clearing half is as load-bearing as the setting half, since a panel that latched on
+ * "Committing…" with no way out would be the worse bug. */
+test("a running commit rides the changes response, and leaves it when it lands", async () => {
+    const workspace = tempWorkspace([{ name: "intent" }]);
+    let release: (() => void) | undefined;
+    let reached: (() => void) | undefined;
+    const inCommit = new Promise<void>((resolve) => {
+        reached = resolve;
+    });
+    const held = new Promise<void>((resolve) => {
+        release = resolve;
+    });
+    const client = clientFor(
+        createApp(
+            services({
+                workspace,
+                git: {
+                    ...services().git,
+                    // Something to review, so the repos stay in the response either side of the commit.
+                    changedFiles: async () => ({ branch: "main", conflicted: [], staged: [{ path: "a.ts", status: "modified" }], unstaged: [] }),
+                    commitIndex: async () => {
+                        reached?.();
+                        await held;
+                        return true;
+                    },
+                },
+            }),
+        ),
+    );
+    const commit = client.git.commit({ repo: "intent", message: "m" });
+    await inCommit;
+    // Asked WHILE git is inside the commit — the exact request a reloaded page makes.
+    expect((await client.git.changes()).committing).toEqual(["intent"]);
+    release?.();
+    await commit;
+    // Absent, not empty: nothing is committing, and the panel re-arms off exactly this.
+    expect((await client.git.changes()).committing).toBeUndefined();
+});
+
 // The reason the browser no longer refuses to commit while an agent runs: the ONE thing that was genuinely
 // unsafe about it — a commit interleaving with the `git apply` an agent's land performs on the same tree — is
 // prevented here instead, on the same per-repo chain `land` already takes. A UI gate could only guess at this

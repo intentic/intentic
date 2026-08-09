@@ -113,6 +113,25 @@ export const createGitRoutes = (services: Services) => {
     const onRepo = <T>(repo: string, task: (dir: string) => Promise<T>): Promise<T> =>
         services.agentWorktrees.withRepoLock(repo, async () => task(await repoDir(repo)));
 
+    /* WHICH REPOS ARE MID-COMMIT — the one piece of panel state that cannot live in the browser.
+     *
+     * The commit request outlives the tab: reload while one is running and that tab's own busy flag went with
+     * the page, so the button re-armed over rows the commit was already recording. Held here instead, and put
+     * on every /git/changes response, so a reload, a second tab and a phone all say the same thing. Per repo
+     * because a commit is per repo, and the panel blocks only the box whose target overlaps.
+     *
+     * In memory on purpose: a daemon that restarts mid-commit has no commit running any more, and an empty set
+     * is exactly the right answer for the browser that reconnects to it. */
+    const committing = new Set<string>();
+    const whileCommitting = async <T>(repo: string, run: () => Promise<T>): Promise<T> => {
+        committing.add(repo);
+        try {
+            return await run();
+        } finally {
+            committing.delete(repo);
+        }
+    };
+
     // The coalesced Changes scan's memo (built below). Every mutation this router performs is one the user just
     // asked for and expects to see at once, so it drops the memo: the panel's own post-action refetch must never
     // be answered from a scan that predates the action it is refetching for.
@@ -297,7 +316,13 @@ export const createGitRoutes = (services: Services) => {
     };
 
     return {
-        changes: i.changes.handler(coalescedScan),
+        /* The review set, plus what is happening to it right now. `committing` is read AFTER the scan settles,
+         * never inside it: the scan is shared and memoized for half a second, and a commit that started or
+         * finished inside that window has to reach the browser on this response rather than the next one. */
+        changes: i.changes.handler(async () => {
+            const scanned = await coalescedScan();
+            return { ...scanned, ...(committing.size > 0 ? { committing: [...committing] } : {}) };
+        }),
         /* Drafts the message for the commit the panel is about to make, on the sandbox's quick model. Reads
          * only — it spends a model call and touches neither the index nor the worktree, which is also why it
          * takes no repo lock: a concurrent land can change what the diff says, and the worst outcome is a
@@ -496,49 +521,55 @@ export const createGitRoutes = (services: Services) => {
         status: i.status.handler(async ({ input }) => services.git.status(await repoDir(input.repo))),
         // Two commit shapes, both whole-repo (see CommitSchema): `all` stages every change first, otherwise the
         // index is recorded as it stands. No path-scoped variant — staging is how the user chooses.
+        // Marked as committing from the moment the request arrives, OUTSIDE the lock rather than inside it: a
+        // commit queued behind an agent's land has not started and is absolutely running as far as the user is
+        // concerned, and that wait is the longest part of the slow case the panel most needs to narrate.
         commit: i.commit.handler(({ input }) =>
-            onRepo(input.repo, async (dir) => {
-                // git's own refusals are the useful ones here — "Committing is not possible because you have
-                // unmerged files", a pre-commit hook's failure, a missing identity. Carried as a CONFLICT with
-                // git's verdict line so the panel prints the reason; a bare throw would reach the browser as an
-                // opaque 500 and the user would read "Commit failed." with nothing to act on.
-                try {
-                    // Nothing was staged, and the caller has said what to stage — so this commit stages first,
-                    // INSIDE the repo lock rather than as a second request the panel makes: a land slipping
-                    // between an add and a commit is exactly the half-a-patch race the lock exists to close.
-                    // A whole-index commit follows, never a partial one (see CommitSchema).
-                    if (input.paths !== undefined) {
-                        await services.git.stagePaths(dir, input.paths);
+            whileCommitting(input.repo, () =>
+                onRepo(input.repo, async (dir) => {
+                    // git's own refusals are the useful ones here — "Committing is not possible because you have
+                    // unmerged files", a pre-commit hook's failure, a missing identity. Carried as a CONFLICT with
+                    // git's verdict line so the panel prints the reason; a bare throw would reach the browser as an
+                    // opaque 500 and the user would read "Commit failed." with nothing to act on.
+                    try {
+                        // Nothing was staged, and the caller has said what to stage — so this commit stages first,
+                        // INSIDE the repo lock rather than as a second request the panel makes: a land slipping
+                        // between an add and a commit is exactly the half-a-patch race the lock exists to close.
+                        // A whole-index commit follows, never a partial one (see CommitSchema).
+                        if (input.paths !== undefined) {
+                            await services.git.stagePaths(dir, input.paths);
+                        }
+                        const committed =
+                            input.all === true
+                                ? await services.git.commitAll(dir, input.message, AGENT_GIT_AUTHOR)
+                                : await services.git.commitIndex(dir, input.message, AGENT_GIT_AUTHOR);
+                        invalidateScan();
+                        /* AND WHAT THE REPO LOOKS LIKE NOW, still inside the lock — the panel's replacement for
+                         * the workspace-wide rescan it used to fire the moment this returned. One repo's rows
+                         * re-read here beats six repos' re-read there, and the rows the user just committed
+                         * disappear with the response rather than one contended scan later (see
+                         * CommitResultSchema).
+                         *
+                         * Inside the lock is what makes it worth carrying at all: a land landing between the
+                         * commit and the read would make this answer describe a tree the commit did not produce,
+                         * which is a worse lie than the staleness it replaces. `scanRepo` takes no lock of its
+                         * own — it is all reads — so this is not the reentrancy `onRepo` forbids. */
+                        const changes = await scanRepo(input.repo, dir);
+                        if (changes === undefined) {
+                            // Nothing left for the panel to show in this repo — the scan's own inclusion rule, so
+                            // the client drops the row exactly as the next scan would have.
+                            return { committed };
+                        }
+                        const originAgents = identifyOrigins([changes]);
+                        return { committed, changes, ...(Object.keys(originAgents).length > 0 ? { originAgents } : {}) };
+                    } catch (error) {
+                        // The index may have moved even on a failure (`commit -a` stages before it commits), so
+                        // the panel's view is stale either way.
+                        invalidateScan();
+                        throw new ORPCError("CONFLICT", { message: gitFailureReason(error, "git refused the commit") });
                     }
-                    const committed =
-                        input.all === true
-                            ? await services.git.commitAll(dir, input.message, AGENT_GIT_AUTHOR)
-                            : await services.git.commitIndex(dir, input.message, AGENT_GIT_AUTHOR);
-                    invalidateScan();
-                    /* AND WHAT THE REPO LOOKS LIKE NOW, still inside the lock — the panel's replacement for the
-                     * workspace-wide rescan it used to fire the moment this returned. One repo's rows re-read
-                     * here beats six repos' re-read there, and the rows the user just committed disappear with
-                     * the response rather than one contended scan later (see CommitResultSchema).
-                     *
-                     * Inside the lock is what makes it worth carrying at all: a land landing between the commit
-                     * and the read would make this answer describe a tree the commit did not produce, which is a
-                     * worse lie than the staleness it replaces. `scanRepo` takes no lock of its own — it is all
-                     * reads — so this is not the reentrancy `onRepo` forbids. */
-                    const changes = await scanRepo(input.repo, dir);
-                    if (changes === undefined) {
-                        // Nothing left for the panel to show in this repo — the scan's own inclusion rule, so
-                        // the client drops the row exactly as the next scan would have.
-                        return { committed };
-                    }
-                    const originAgents = identifyOrigins([changes]);
-                    return { committed, changes, ...(Object.keys(originAgents).length > 0 ? { originAgents } : {}) };
-                } catch (error) {
-                    // The index may have moved even on a failure (`commit -a` stages before it commits), so the
-                    // panel's view is stale either way.
-                    invalidateScan();
-                    throw new ORPCError("CONFLICT", { message: gitFailureReason(error, "git refused the commit") });
-                }
-            }),
+                }),
+            ),
         ),
         // Index-only moves: the worktree is untouched, so no checkpoint and no history notification — only the
         // panel's view of what's staged changes.

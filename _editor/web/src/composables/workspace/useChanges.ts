@@ -80,6 +80,14 @@ interface ScopedTask {
 const actionBusy = ref(false);
 const failures = ref<ReadonlyMap<string, ActionFailure>>(new Map());
 
+/* THE REPOS THIS TAB IS COMMITTING RIGHT NOW, beside the daemon's own answer to the same question.
+ *
+ * Both halves are needed and neither is redundant. This one is instant — it is set before the request leaves,
+ * so the button changes on the click rather than a round-trip later. The daemon's (on the changes response)
+ * is the one that SURVIVES: a commit outlives the tab that fired it, so a reload, a second tab or a phone
+ * learns about it from the daemon or not at all. Unioned at the read below. */
+const committingHere = ref<readonly string[]>([]);
+
 const dismissFailure = (scope: string): void => {
     if (!failures.value.has(scope)) {
         return;
@@ -94,6 +102,13 @@ const dismissFailure = (scope: string): void => {
  * strand work the user asked for behind a failure they cannot act on. Re-entry while busy is a no-op, so a
  * double-click fires once. `settle` runs whatever happened — the cache must match the worktree even when only
  * half the batch landed.
+ *
+ * THE TASKS RUN AT ONCE, because every batch here is one task PER REPO and git cannot span repos: the daemon
+ * holds a separate lock per repo and scans them concurrently already, so running them one after another only
+ * ever added up their waits. A workspace-wide commit paid that sum in full — six repos, each a stage, a commit
+ * and a re-read, the last one starting after the first five had finished — and the whole batch now costs the
+ * slowest repo instead. Each task still files its own failure against its own scope, and a rejection cannot
+ * escape the wrapper, so one repo failing neither cancels nor is cancelled by the others.
  *
  * THE SPAN COVERS THE WRITES, NOT THE REFRESH. Every button in the panel is disabled off this flag, and `settle`
  * is a refetch of the most expensive read the daemon serves — a workspace-wide rescan that measured seconds
@@ -116,16 +131,18 @@ const runBatch = async (tasks: readonly ScopedTask[], settle: () => Promise<unkn
     const scopes = new Set(tasks.map((task) => task.scope));
     failures.value = new Map([...failures.value].filter(([scope]) => !scopes.has(scope)));
     try {
-        for (const task of tasks) {
-            try {
-                await task.run();
-            } catch (caught) {
-                failures.value = new Map(failures.value).set(task.scope, {
-                    action: task.action,
-                    detail: errorMessage(caught, `git gave no reason.`),
-                });
-            }
-        }
+        await Promise.all(
+            tasks.map(async (task) => {
+                try {
+                    await task.run();
+                } catch (caught) {
+                    failures.value = new Map(failures.value).set(task.scope, {
+                        action: task.action,
+                        detail: errorMessage(caught, `git gave no reason.`),
+                    });
+                }
+            }),
+        );
     } finally {
         actionBusy.value = false;
     }
@@ -247,21 +264,31 @@ const applyCommitResult = async (repo: string, result: CommitResult): Promise<vo
 // contended path, while the user watched the rows they had just committed sit there. A REFUSED commit is the
 // one case with nothing to splice and a repo that may still have moved (`commit -a` stages before it commits),
 // so that alone falls back to the full read.
-const commitRepos = (groups: readonly RepoPaths[], message: string, stageFirst: boolean): Promise<void> =>
-    runBatch(
-        groups.map((group) => ({
-            scope: COMMIT_SCOPE,
-            action: `Commit failed`,
-            run: async (): Promise<void> => {
-                const result = await post<CommitResult>(group.repo, `commit`, {
-                    message,
-                    ...(!stageFirst ? {} : group.paths === undefined ? { all: true } : { paths: group.paths }),
-                });
-                await applyCommitResult(group.repo, result);
-            },
-        })),
-        () => (failures.value.has(COMMIT_SCOPE) ? invalidateChanges() : Promise.resolve()),
-    );
+//
+// MARKED WHILE IT RUNS, so the panel can say so. The daemon reports the same fact on every changes response and
+// the two are unioned at the read — this half is what makes the button change on the click instead of a
+// round-trip later, and the daemon's half is what a reloaded tab has instead of this one.
+const commitRepos = async (groups: readonly RepoPaths[], message: string, stageFirst: boolean): Promise<void> => {
+    committingHere.value = groups.map((group) => group.repo);
+    try {
+        await runBatch(
+            groups.map((group) => ({
+                scope: COMMIT_SCOPE,
+                action: `Commit failed`,
+                run: async (): Promise<void> => {
+                    const result = await post<CommitResult>(group.repo, `commit`, {
+                        message,
+                        ...(!stageFirst ? {} : group.paths === undefined ? { all: true } : { paths: group.paths }),
+                    });
+                    await applyCommitResult(group.repo, result);
+                },
+            })),
+            () => (failures.value.has(COMMIT_SCOPE) ? invalidateChanges() : Promise.resolve()),
+        );
+    } finally {
+        committingHere.value = [];
+    }
+};
 
 // Discard a selection: tracked content returns to HEAD, untracked files are deleted. A group with no `paths`
 // discards the whole repo. Drop edit buffers + refresh the tree (the worktree changed under any open file).
@@ -403,8 +430,25 @@ const syncAll = (targets: readonly SyncTarget[]): Promise<void> =>
         () => Promise.all([invalidateChanges(), queryClient.invalidateQueries({ queryKey: [`git`, `log`] })]),
     );
 
+/* How often to re-ask while SOMEONE ELSE'S commit is running — a second tab's, or this tab's own from before a
+ * reload. The tab that fired the commit needs none of this: its own request answers with the committed rows and
+ * splices them.
+ *
+ * It exists because the alternative is waiting on a ref moving. The panel learns about out-of-band git through
+ * the ref watcher, which fires only when a ref actually MOVES — so a commit git refused, or one that turned out
+ * to have nothing to record, moved nothing and the panel would have sat reading "Committing…" with no end. The
+ * interval matches the ref feed's own refresh throttle, so this costs the daemon no more per second than a
+ * workspace being written to already does, and it stops the moment the commit clears. */
+const COMMIT_WATCH_MS = 1000;
+
 export function useChanges() {
-    const { query, error } = useSandboxQuery({ queryKey: changesKey(), queryFn: fetchChanges });
+    const { query, error } = useSandboxQuery({
+        queryKey: changesKey(),
+        queryFn: fetchChanges,
+        // Off the CACHED response rather than a computed, so this cannot close over the query it configures.
+        refetchInterval: (cached) =>
+            committingHere.value.length === 0 && (cached.state.data?.committing?.length ?? 0) > 0 ? COMMIT_WATCH_MS : false,
+    });
 
     // `repos` also carries the repos git could NOT scan (empty change lists + a one-line `error`; the panel
     // renders them as their own rows) and repos that are merely out of sync with their remote (clean tree,
@@ -430,11 +474,18 @@ export function useChanges() {
     // What a clean tree still owes its remotes — the other half of "is there anything to do here", which the
     // count above deliberately says nothing about. See outgoingWork.ts for why it is outgoing-only.
     const outgoing = computed(() => outgoingWork(repos.value));
+    /* Which repos have a commit RUNNING — this tab's, and anyone's. The union is the whole point: the local half
+     * answers on the click, the daemon's half answers after a reload and for a second tab, and a repo in either
+     * is one whose rows are being recorded right now. Rows the daemon reports as committing are still LISTED —
+     * they are genuinely still uncommitted until the commit returns — so the panel dims them and takes their
+     * verbs away rather than guessing them gone. */
+    const committing = computed<readonly string[]>(() => [...new Set([...committingHere.value, ...(query.data.value?.committing ?? [])])]);
 
     return {
         repos,
         originAgents,
         count,
+        committing,
         stagedCount,
         outgoing,
         loading: query.isFetching,

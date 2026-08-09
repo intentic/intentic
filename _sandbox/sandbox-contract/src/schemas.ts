@@ -1962,6 +1962,19 @@ export const GitChangesSchema = z.object({
     // entry whose landed lines are somehow still uncommitted — and the panel keeps its id-shaped fallback for
     // exactly that, rather than dropping the chip and re-attributing the file to the user.
     originAgents: z.record(z.string(), OriginAgentSchema).optional(),
+    /* WHICH REPOS HAVE A COMMIT RUNNING RIGHT NOW — the daemon's answer, not the browser's.
+     *
+     * A commit is one request that outlives the tab that fired it. Reload the page mid-commit and that tab's
+     * "a git action is running" flag went with it: the button re-armed itself over rows the commit was already
+     * recording, the panel invited a second click at the exact moment it could do the least good, and the rows
+     * then changed under the user a second later with nothing having said why. A second device watching the
+     * same workspace never knew at all.
+     *
+     * So the fact lives where the commit does. Read at RESPONSE time rather than folded into the scan, because
+     * the scan is memoized for half a second and this must describe the instant it is sent. Absent ⇒ nothing is
+     * committing, which is the overwhelmingly common case and the reason it is optional rather than an empty
+     * array on every response. */
+    committing: z.array(z.string()).optional(),
 });
 export type GitChanges = z.infer<typeof GitChangesSchema>;
 
