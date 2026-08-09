@@ -1,4 +1,12 @@
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
+// Statically imported for its LOAD COST alone — every test re-imports it through `load()` below, and the first
+// of those used to pull the whole graph (useEndpoint, the storage layer, vue) inside the first test's 20s
+// budget: ~0.6s idle, but ten times that on a runner where every core is busy, which is how this file failed
+// with the first test timing out and the other eleven passing in a second each. Collection is bounded by the
+// run rather than by a test, so paying it here costs the same and can't time anything out. Nothing is bound:
+// `load()` resets the module registry and re-executes the (already transformed) graph fresh for each test.
+// oxlint-disable-next-line import/no-unassigned-import -- imported for its load cost alone, not for a binding
+import "./sandboxSession";
 
 /* useSandboxSession decides which bearer a daemon call presents. The contract under test: a valid stored
  * session needs neither Google nor the network; establishing one is a single shared Google mint + exchange;
