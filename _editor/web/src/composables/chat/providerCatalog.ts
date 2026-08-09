@@ -85,6 +85,20 @@ export const providerCommands = ref<Record<AgentProvider, readonly AgentCommand[
 // seam as accounts/models (useChat.loadCapabilityProviders) so the picker lists them. Empty until the first load.
 export const acpProviders = ref<readonly { id: string; label: string }[]>([]);
 
+/* WHAT IS LEFT OF TODAY'S FREE TRIAL, or that there isn't one. Module state beside the catalogs for the same
+ * reason they are: the allowance belongs to the ACCOUNT, not to a conversation, so every tab and every picker
+ * must show the same number and a second conversation must not re-fetch it.
+ *
+ * `available` false is the ordinary answer — most sandboxes run against a platform that serves no trial — and
+ * it is also the pre-load state, which is the safe way round: a picker that has not heard yet offers no trial
+ * rather than promising an allowance that may not exist. */
+export const trialStatus = ref<{ available: boolean; allowance: number; used: number; remaining: number; resetsAt?: string }>({
+    available: false,
+    allowance: 0,
+    used: 0,
+    remaining: 0,
+});
+
 // Installed model endpoints (endpoint-kind capabilities), as their `endpoint/<id>` provider ids — loaded on the
 // same seam and from the same /capabilities read. Unlike an ACP agent, each of these HAS a catalog: the models
 // come from the endpoint's own server, so they land in providerModels like every other provider's.

@@ -5,6 +5,7 @@ import {
     type EditorContext,
     endpointIdOf,
     endpointProvider,
+    isTrialProvider,
     type KeyedProvider,
     type MatchSnippet,
     type Model,
@@ -14,7 +15,9 @@ import {
     providerLabel,
     type ProviderRefusals,
     type RestoredMessage,
+    TRIAL_LABEL,
     type TranslatorAccounts,
+    type TrialStatusResponse,
     type UsageAccount,
 } from "@intentic/sandbox-contract";
 import { computed, type ComputedRef, inject, type InjectionKey, ref, shallowRef, watch } from "vue";
@@ -32,6 +35,7 @@ import {
     providerDefaultModel,
     providerModels,
     providerModelsState,
+    trialStatus,
 } from "./providerCatalog";
 import { rememberedModelFor, startingMode, turnDefaults } from "./turnDefaults";
 import { providerReady } from "./access";
@@ -1799,6 +1803,30 @@ export const loadAccountStatus = async (): Promise<void> => {
  *
  * An endpoint's provider id carries the `endpoint/` prefix — that is what tells every surface it runs the full
  * Claude Code loop rather than the ACP floor (capabilitiesOf), and it is what the turn is sent as. */
+/* Read the free trial's remaining allowance. Separate from the capability read that discovers the trial exists,
+ * because the two answer to different clocks — which endpoints exist changes when someone adds one, while this
+ * changes with every message anyone on this account sends, from any tab.
+ *
+ * A failure leaves the previous figures rather than zeroing them: the count is a courtesy, and a picker that
+ * flashed "0 left" because one poll missed would tell a user their trial had ended when it had not. */
+const loadTrialStatus = async (): Promise<void> => {
+    try {
+        trialStatus.value = (await sandboxJson(`/endpoints/trial/status`)) as TrialStatusResponse;
+    } catch {
+        // Left as-is; the next reachable load asks again.
+    }
+};
+
+/* Re-read the allowance the moment a turn settles, so the badge reflects the message that was just sent rather
+ * than the state before it. Only for a turn that actually spent the trial: every other provider runs on the
+ * user's own account and its count is none of this meter's business, and polling the platform after a Claude
+ * turn would be a request that can only ever return the same number. */
+watch(streaming, (isStreaming, was) => {
+    if (was === true && !isStreaming && isTrialProvider(provider.value)) {
+        void loadTrialStatus();
+    }
+});
+
 const loadCapabilityProviders = async (): Promise<void> => {
     let entries: { id: string; kind: string; config: Record<string, unknown> }[];
     try {
@@ -1812,10 +1840,18 @@ const loadCapabilityProviders = async (): Promise<void> => {
         .filter((entry) => entry.kind === `agent`)
         .map((entry) => ({ id: entry.id, label: typeof entry.config[`name`] === `string` ? (entry.config[`name`] as string) : entry.id }));
     // Labelled by the name the user gave the capability — there is no vendor to name here, and the id is the
-    // word they will recognise ("ollama", "gpu-box").
+    // word they will recognise ("ollama", "gpu-box"). The one exception is the trial, which the user did not
+    // name because they did not add it: the daemon provisioned it, so it carries the product's own words.
     endpointProviders.value = entries
         .filter((entry) => entry.kind === `endpoint`)
-        .map((entry) => ({ id: endpointProvider(entry.id), label: entry.id }));
+        .map((entry) => {
+            const id = endpointProvider(entry.id);
+            return { id, label: isTrialProvider(id) ? TRIAL_LABEL : entry.id };
+        });
+    // The trial's allowance moves with every message, so it is read on the same seam that discovered the trial
+    // exists. Failure leaves the last figures — a picker that briefly shows a stale count is better than one
+    // that drops the row a user is mid-conversation on.
+    void loadTrialStatus();
     // Each endpoint's catalog is daemon-owned like every other provider's, so load them on the same seam. Not
     // part of loadAllProviderModels: that one runs over a fixed list, and which endpoints exist is what we have
     // only just learned.

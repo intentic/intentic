@@ -8,6 +8,7 @@ import {
     endpointIdOf,
     endpointProvider,
     fastAllowed,
+    FREE_PROVIDERS,
     HARNESSES,
     isEndpointProvider,
     limitationsOf,
@@ -248,5 +249,29 @@ describe("offering fast speed", () => {
             expect(fastAllowed(capabilitiesOf(provider, "native"), provider, ["fast"])).toBe(false);
         }
         expect(fastAllowed(capabilitiesOf("some-installed-agent", "native"), "some-installed-agent", ["fast"])).toBe(false);
+    });
+});
+
+/* THE FREE ROW IS THE PRODUCT'S FRONT DOOR, so the list of free providers is derived from the access table and
+ * guarded here rather than typed out where it is used. Two things can break it and both are silent: the table
+ * losing its last `free` row (the connect gate then has no headline and quietly falls back to pitching a paid
+ * subscription to a user who has none), and a `free` row acquiring a requirement that costs money. */
+describe("the free providers", () => {
+    it("is exactly the access table's free rows, and is never empty", () => {
+        expect(FREE_PROVIDERS.length).toBeGreaterThan(0);
+        for (const provider of PROVIDERS) {
+            const isFree = accessFor(provider.value)?.kind === "free";
+            expect(FREE_PROVIDERS.includes(provider.value)).toBe(isFree);
+        }
+    });
+
+    it("carries the words the connect gate puts on screen", () => {
+        // The gate names the provider and states what connecting it runs; a row with either missing would put an
+        // empty headline or a dangling sentence in front of the user who has connected nothing.
+        for (const provider of FREE_PROVIDERS) {
+            const access = accessFor(provider);
+            expect(access?.requirement).toBeTruthy();
+            expect(access?.runs).toBeTruthy();
+        }
     });
 });

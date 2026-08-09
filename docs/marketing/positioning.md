@@ -57,7 +57,8 @@ workspace is included. The whole product is MIT open source (`LICENSE`, GitHub).
 **Primary — the professional dev adopting agents who won't hand over their code.**
 Wants Devin/Cursor-agent-style autonomy but refuses to ship source, credentials, and prod access
 into someone else's cloud sandbox. intentic's answer: the agent's sandbox runs on *their* machine;
-the platform stores only identity + a URL and sits off the command path. Job to be done: *"When I
+the platform stores only identity + a URL and sits off the command path (bar the optional free trial, which
+is labelled wherever it is offered). Job to be done: *"When I
 put an agent to work on my real systems, keep the code, secrets, and blast radius under my control,
 so I can use full autonomy without betting the company on a vendor's security."*
 
@@ -79,7 +80,7 @@ payment event, a GitHub push, a new email — with a guard command deciding whet
 
 | # | Pain | Promise | Proof |
 |---|------|---------|-------|
-| P1 | Cloud AI dev environments want your code, secrets, and prod access on their servers | The agent's sandbox runs on your machine; the platform stores only identity + a sandbox URL, sits off the command path, and cannot reach your daemon | `README.md`, `ARCHITECTURE.md` |
+| P1 | Cloud AI dev environments want your code, secrets, and prod access on their servers | The agent's sandbox runs on your machine; the platform stores only identity + a sandbox URL, sits off the command path (except the optional, clearly-labelled free trial), and cannot reach your daemon | `README.md`, `ARCHITECTURE.md` |
 | P2 | A generic chat box isn't an autonomous employee — no real tools, no persistent context, no way to supervise it on real work | A specialized agent: dev-tools really installed, wired to your systems, context curated for one job — configured and steered from a real workspace (IDE + observability), not a prompt window | `_editor/web/src/pages/workspace/`, `_editor/web/src/pages/Agents.vue`, `_platform/capability-catalog/src/index.ts` |
 | P3 | Setting up a private agent environment is an evening of DevOps | Minutes to a live sandbox: Google sign-in → one copy-paste command. No Cloudflare account required; Docker auto-installed; no open inbound ports | `_editor/web/src/pages/Setup.vue` |
 | P4 | Agent autonomy is scary on real systems — you can't just fire-and-forget | Co-piloting: every agent works in its own branch and lands nothing until you accept it — a changes-review panel (diff → discard or commit), per-edit permission modes (plan / accept edits / ask before edits, the default on the shared tree), owner-approved environment changes, a transcript per run | `_editor/web/src/composables/chat/catalog.ts`, `_editor/web/src/pages/workspace/ReviewPanel.vue`, `_editor/web/src/pages/sandbox/EnvironmentCard.vue` |

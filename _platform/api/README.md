@@ -1,18 +1,20 @@
 # @intentic-app/api
 
-The **platform backend** — Hono + oRPC + Prisma + Better Auth. The platform is an **identity + sandbox-URL store only**: it authenticates the user (Google) and stores the sandbox URL the browser tells it so the browser can reach the sandbox directly. It never probes the sandbox or tracks liveness, owns no infrastructure, no infra secrets, and sits **off the command path** — the browser talks to the sandbox daemon directly over the sandbox's own Cloudflare tunnel. Runs under `tsx` in dev on :6480 (the web dev-server proxies to it). Consumes [`@intentic-app/api-contract`](../../_platform/api-contract) (`implement`) + [`@intentic-app/prisma`](../../_platform/prisma).
+The **platform backend** — Hono + oRPC + Prisma + Better Auth. The platform is an **identity + sandbox-URL store**: it authenticates the user (Google) and stores the sandbox URL the browser tells it so the browser can reach the sandbox directly. It never probes the sandbox or tracks liveness and owns no infrastructure; it sits **off the command path with exactly one exception** — the free trial ([src/trial/](src/trial/)) — and the browser otherwise talks to the sandbox daemon directly over the sandbox's own Cloudflare tunnel. Runs under `tsx` in dev on :6480 (the web dev-server proxies to it). Consumes [`@intentic-app/api-contract`](../../_platform/api-contract) (`implement`) + [`@intentic-app/prisma`](../../_platform/prisma).
 
 ## Responsibilities
 
 - Authenticate the user (Better Auth + Google) and expose the typed oRPC surface (`me`, `setup.*`).
 - Mint the per-user connection token + serve the setup one-liner. The workspace gate is enforced in the browser, which probes the daemon's `/health` directly — the platform never decides liveness.
 - Store the sandbox's public `daemonUrl` the **browser** derives (`sandbox-<sha256(token)[:12]>.<zone>`) and writes (`setup.bind`), and serve it back (`setup.binding`) so the browser knows where to reach it. Persist nothing else about the sandbox.
+- Serve the **free trial** ([src/trial/](src/trial/)): an OpenAI-compatible model API on intentic's own free-tier keys, so a user can chat before connecting any AI account. Metered per signed-in account per UTC day (`TrialUsage`), authenticated by the sandbox's connect token. **Off by default** — no `TRIAL_KEYS`, no trial.
 - The setup wizard's **cloud lane** ([src/sandbox/cloud/](src/sandbox/cloud/)): create ONE VM in the **user's own** cloud account (Hetzner / DigitalOcean / Oracle Always-Free) whose first boot runs the sandbox's setup code. The pasted provider credential is request-scoped like the Cloudflare zone listing — spent on the provider's catalog + create calls, never persisted — so the platform keeps no way back into the machine; only display metadata (`Sandbox.cloud`) survives.
 
 ## Routes (see [src/app.ts](src/app.ts))
 
 - `/api/auth/**` — Better Auth (Google OAuth, session).
 - `${API_BASE_PATH}/*` — the oRPC OpenAPI handler ([src/router.ts](src/router.ts): `me`, `setup.connect`, `setup.zones`, `setup.bind`, `setup.binding`). `bind` stores the browser-derived `daemonUrl`; `binding` reads it back.
+- `/trial/*` — the free trial's model API (`/trial/status`, `/trial/v1/models`, `/trial/v1/chat/completions`), authenticated by the sandbox connect token. 404s entirely when `TRIAL_KEYS` is unset.
 - `/health` — DB connectivity.
 
 ## Key files
@@ -25,6 +27,7 @@ The **platform backend** — Hono + oRPC + Prisma + Better Auth. The platform is
 
 ## Conventions & gotchas
 
-- The platform is **off the command path** — there is no relay, no socket to the sandbox, and no sandbox-originated calls. The browser calls the sandbox daemon directly (authenticated by the user's Google ID token); the platform only holds the stored URL.
+- The platform is **off the command path except for the free trial** — there is no relay, no socket to the sandbox, and no sandbox-originated calls other than the daemon's announce and its trial probe. The browser calls the sandbox daemon directly (authenticated by the user's Google ID token); the platform only holds the stored URL. Trial turns are the one thing that passes through, they are labelled as such in every surface that offers them ([`TRIAL_NOTICE`](../../_sandbox/sandbox-contract/src/agent-catalog.ts)), and connecting any account takes the user off that path for good.
+- **Two documented secret exceptions**, both intentic's own credentials and both optional: `INTENTIC_CLOUDFLARE_API_TOKEN` (provisioning sandbox tunnels for users who bring no Cloudflare) and `TRIAL_KEYS` (the free-trial pool). Everything else — Claude/git tokens, SSH keys, the user's Cloudflare — lives in the sandbox.
 - `setup.connect` returns only the connection token + the connect-script URLs. The sandbox's public URL is **derived deterministically** from that token + the chosen zone (`sandbox-<sha256(token)[:12]>.<zone>`, matching the CLI's tunnel hostname) and written by the browser via `setup.bind` — the sandbox never calls the platform.
 - Config is nested + SCREAMING_SNAKE-derived by `@puristic/env`; secrets are plaintext in the DB for now. No platform test harness — verify with `pnpm build` + `pnpm lint`.

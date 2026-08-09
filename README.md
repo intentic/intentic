@@ -115,7 +115,9 @@ workspace and never shown in the file tree.
 - **Automations** — wake an agent on a schedule, a webhook, or a live event (a push, an alert, a payment, an
   email), each run leaving a transcript.
 - **Ownership by construction** — code and credentials never leave your machine. The platform stores your
-  identity, the sandbox's URL and the secrets that pair the two, and sits off the command path.
+  identity, the sandbox's URL and the secrets that pair the two, and sits off the command path. The one
+  exception is the optional free trial, which lets you chat before connecting any AI account: those messages
+  run on intentic's keys and pass through intentic, and every screen that offers it says so.
 - **Your subscriptions, your hardware, free** — each agent runs on your own Claude, ChatGPT or SuperGrok plan.
   intentic charges nothing and never meters your model usage.
 

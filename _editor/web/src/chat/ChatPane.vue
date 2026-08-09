@@ -2,7 +2,8 @@
 import { Icon, ResponsiveOverlay, useDevice } from "@intentic/ui";
 import { computed, nextTick, onBeforeUnmount, provide, reactive, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
-import { type AgentCommand, providerLabel, type Workflow } from "@intentic/sandbox-contract";
+import { type AgentCommand, isTrialProvider, providerLabel, TRIAL_NOTICE, type Workflow } from "@intentic/sandbox-contract";
+import { trialExhausted } from "../composables/chat/access";
 import { turnInFlight } from "../composables/agents/agentStatus";
 import { useAgents } from "../composables/agents/useAgents";
 import { useWorkflowRuns } from "../composables/agents/useWorkflowRuns";
@@ -200,6 +201,21 @@ const activeLoading = useLoadingReveal(
 const activeAccountReauth = computed(() => {
     const id = account.value ?? accounts.value[0]?.id;
     return accounts.value.find((entry) => entry.id === id && entry.needsReauth === true);
+});
+
+/* What the trial strip above the composer says, or nothing at all when this conversation isn't on the trial.
+ *
+ * Two sentences, because there are two states worth interrupting for and they want opposite things from the
+ * reader. While there is allowance left the message is the DISCLOSURE — these messages pass through intentic —
+ * which the user needs before typing, not after. Once it is spent the disclosure is moot and the only useful
+ * sentence is where to go next, which is the free Google sign-in: no daily cap, still no subscription. */
+const trialNotice = computed(() => {
+    if (!isTrialProvider(provider.value)) {
+        return undefined;
+    }
+    return trialExhausted(provider.value)
+        ? `Free trial used up for today. Connect a Google account to keep going free — no subscription, no daily cap.`
+        : TRIAL_NOTICE;
 });
 
 /* The outage banner (Conversation.failures.outageResume). A spent usage limit gets no equivalent: it has a known reset
@@ -1257,6 +1273,20 @@ watch(
                             </button>
                         </div>
                         <ChatAccountPanel />
+                        <!-- THE TRIAL'S STANDING DISCLOSURE. The picker says it once, at the moment of choosing;
+                             this says it for as long as the choice is in force, because the person typing may not
+                             be the person who picked, and a conversation can outlive the click that started it.
+                             Exhausted, the same strip becomes the signpost to the free Google sign-in — the next
+                             rung, and the one with no daily cap. -->
+                        <button
+                            v-if="trialNotice"
+                            type="button"
+                            class="flex items-start gap-2 rounded-xl border border-line bg-overlay/40 px-3 py-2 text-left text-2xs text-muted"
+                            @click="router.push({ path: '/sandbox/agent', query: { connect: 'gemini' } })"
+                        >
+                            <Icon name="sparkles" class="mt-0.5 shrink-0 text-link" />
+                            <span>{{ trialNotice }}</span>
+                        </button>
                         <!-- Proactive re-auth prompt: the account is connected (a credential exists) but can no longer be
                          refreshed, so surface it here — before a send fails opaquely — with a jump to reconnect. -->
                         <button

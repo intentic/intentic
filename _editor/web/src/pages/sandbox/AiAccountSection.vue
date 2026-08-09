@@ -2,6 +2,7 @@
 import {
     type AccountUsage,
     type AgentProvider,
+    isFreeProvider,
     type KeyedProvider,
     type OauthAccount,
     type TranslatorAccount,
@@ -389,6 +390,17 @@ onUnmounted(() => clearTimeout(ringTimer));
                         :aria-label="!accountsLoaded ? `checking` : providerReady(tab.value) ? `connected` : `not connected`"
                     />
                     {{ tab.label }}
+                    <!-- The one chip that costs nothing, said on the chip itself. The card behind it has always
+                         led with "Free", but only after a click — so a user pricing up five identical-looking
+                         chips had to open each one to find the answer that decides which they press. Dropped
+                         once it IS connected: a connected provider should read as the plain default rather than
+                         keep advertising, which is the same rule accessBadge follows. -->
+                    <span
+                        v-if="accountsLoaded && isFreeProvider(tab.value) && !providerReady(tab.value)"
+                        class="shrink-0 rounded-sm bg-success/15 px-1 font-semibold text-success"
+                    >
+                        Free
+                    </span>
                 </button>
             </div>
         </template>

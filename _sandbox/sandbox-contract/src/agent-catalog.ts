@@ -54,6 +54,17 @@ export const PROVIDER_ACCESS: Record<NativeProvider, ProviderAccess> = {
     gemini: { kind: "free", requirement: "Google sign-in", runs: "Gemini, Claude and GPT-OSS under Claude Code" },
 };
 
+/* THE PROVIDERS THAT COST NOTHING — derived from the table above rather than named a second time, and read by
+ * every surface that LEADS with a free option instead of merely labelling one.
+ *
+ * The distinction is worth the export. `accessBadge` answers "what does this row cost" for a row the user is
+ * already looking at; this answers "which row should a user who has connected nothing be shown FIRST", which is
+ * the connect gate's whole job. Ranking the one free channel fifth among five equal buttons is how a user with
+ * no subscription concluded the product needed one. Deriving the list keeps that promotion honest: a channel
+ * that stops being free stops being promoted, from one edit to PROVIDER_ACCESS. */
+export const FREE_PROVIDERS: readonly NativeProvider[] = NATIVE_PROVIDERS.filter((provider) => PROVIDER_ACCESS[provider].kind === "free");
+export const isFreeProvider = (provider: AgentProvider): boolean => FREE_PROVIDERS.includes(provider as NativeProvider);
+
 /* WHOSE ALLOWANCE A TURN ON THIS PROVIDER SPENDS, as the subject of a sentence — a third naming of the same
  * five ids, and the third is not redundancy. PROVIDERS names the RUNTIME the user picks ("Claude Code", "Kimi
  * Code") and PROVIDER_ACCESS.requirement names the thing they CONNECT ("Claude subscription", "Google sign-in");
@@ -89,6 +100,26 @@ export const ACCESS_COST: Record<AccessKind, number> = { free: 0, subscription: 
  * splits a pinned selection on the FIRST colon. `endpoint:ollama:qwen3` would parse as provider "endpoint" with
  * model "ollama:qwen3" — a pin that silently resolves to nothing. The capability id (entryId) excludes both
  * characters, so `endpoint/<id>` stays unambiguous in either direction. */
+/* THE FREE TRIAL'S ENDPOINT ID IS RESERVED, the way `pi` is — an `endpoint`-kind capability like any model API
+ * the user configured, except that this one is provisioned by the DAEMON rather than added by a person, and it
+ * points at intentic's own pool (see the sandbox's trial/ and the platform's /trial routes).
+ *
+ * Riding the endpoint kind is the entire reason the trial needed no new turn path, no new provider and no new
+ * adapter: the translator already re-serves an OpenAI-compatible upstream to the Claude Code loop, so a trial
+ * turn is an endpoint turn and everything downstream — catalog, picker, routing — works unchanged.
+ *
+ * What the reserved id buys is the part that must NOT look the same. A trial turn passes through intentic's
+ * servers, which no other provider in this product does, and a user cannot consent to something they were not
+ * told. So every surface that names a provider asks `isTrialProvider` and says so, and the id is here — beside
+ * the vocabulary those surfaces already read — rather than spelled out in each of them. */
+export const TRIAL_ENDPOINT_ID = "free-trial";
+export const TRIAL_PROVIDER = "endpoint/free-trial";
+export const isTrialProvider = (provider: AgentProvider): boolean => provider === TRIAL_PROVIDER;
+// What the picker calls it, and the sentence the surfaces put underneath. One wording, so the composer's notice
+// and the picker's row cannot end up describing different bargains.
+export const TRIAL_LABEL = "Free trial";
+export const TRIAL_NOTICE = "Trial messages pass through intentic's servers. Connect an account to chat directly.";
+
 export const ENDPOINT_PROVIDER_PREFIX = "endpoint/";
 export const endpointProvider = (id: string): AgentProvider => `${ENDPOINT_PROVIDER_PREFIX}${id}`;
 export const isEndpointProvider = (provider: AgentProvider): boolean => provider.startsWith(ENDPOINT_PROVIDER_PREFIX);

@@ -2,8 +2,8 @@
 import { SearchBar, useDevice, useListNavigation } from "@intentic/ui";
 import { computed, nextTick, onMounted, ref } from "vue";
 import { useRouter } from "vue-router";
-import { type AgentProvider, capabilitiesOf, PROVIDERS } from "@intentic/sandbox-contract";
-import { accessBadge, accessStateFor, providerReady } from "../composables/chat/access";
+import { type AgentProvider, capabilitiesOf, PROVIDERS, TRIAL_NOTICE } from "@intentic/sandbox-contract";
+import { accessBadge, accessStateFor, providerReady, trialBadge } from "../composables/chat/access";
 import { BADGE_META } from "../composables/chat/catalog";
 import { acpProviders, endpointProviders, providerDisplayLabel, providerModelsState } from "../composables/chat/providerCatalog";
 import { customEntryFor, filterEntries, type PickerEntry, pickerBlocks, pickerEntries, pickerSections } from "../composables/chat/modelPicker";
@@ -84,6 +84,9 @@ const sections = computed<
         // What this provider costs, when it isn't connected yet. Undefined while searching (one flat section
         // spanning every provider) — there, each row carries its own lock instead.
         badge: string | undefined;
+        // The free trial's remaining allowance. A separate field from `badge` because it is a different kind of
+        // statement — a count, not a price — and because it must NOT drag the "Connect" button along with it.
+        trial: string | undefined;
     }[]
 >(() => {
     let index = 0;
@@ -103,6 +106,7 @@ const sections = computed<
                 expanded: false,
                 collapsible: false,
                 badge: undefined,
+                trial: undefined,
             },
         ];
     }
@@ -121,6 +125,7 @@ const sections = computed<
             // Offered only when it would actually change the list, so a short group never grows a dead control.
             collapsible: isExpanded || section.total > rowCount,
             badge: accessBadge(section.provider),
+            trial: trialBadge(section.provider),
         };
     });
 });
@@ -363,7 +368,20 @@ onMounted(() => {
                                 Connect
                             </button>
                         </template>
+                        <!-- The trial's count. No Connect beside it on purpose: this provider already works, and
+                             offering a handshake for it would be offering to fix something that isn't broken. -->
+                        <span
+                            v-if="section.trial !== undefined"
+                            class="rounded bg-primary-500/15 px-1 py-px text-[0.6rem] font-medium normal-case tracking-normal text-primary-500"
+                            >{{ section.trial }}</span
+                        >
                     </div>
+                    <!-- SAID BEFORE THE FIRST MESSAGE, not after. A trial turn is the one kind this product
+                         serves that does not go straight from the sandbox to the model vendor, and a user cannot
+                         weigh that once they have already typed into it. -->
+                    <p v-if="section.trial !== undefined" class="px-3 pb-1 text-2xs normal-case tracking-normal text-muted">
+                        {{ TRIAL_NOTICE }}
+                    </p>
                     <template v-for="block in section.blocks" :key="block.key">
                         <!-- A family header, shown only for the older-versions blocks a disclosure reveals: the
                          latest band needs none (the provider header above it already names the group). -->

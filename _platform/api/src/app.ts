@@ -16,6 +16,7 @@ import { decryptSecret } from "./crypto.js";
 import type { Logger } from "pino";
 import { router } from "./router.js";
 import { createTracingHttpMiddleware } from "./tracing.js";
+import { trialRoutes } from "./trial/trial.routes.js";
 import { Prisma, type PrismaClient } from "@intentic-app/prisma";
 
 type AppEnv = { Variables: { logger: Logger } };
@@ -409,6 +410,12 @@ export const createApp = (config: Config, prisma: PrismaClient, logger: Logger):
             },
         ],
     });
+
+    /* The free trial's model API — the one route family the platform serves ON the command path, mounted as its
+     * own sub-app so that exception has a boundary you can point at (see trial/trial.routes.ts). Off unless
+     * TRIAL_KEYS is set, which is the default and the only sane setting for a self-hosted platform: with no keys
+     * every route under here 404s and the daemon provisions no trial endpoint. */
+    app.route(`/trial`, trialRoutes({ config, prisma }));
 
     // Everything under /rpc flows through the oRPC OpenAPI handler, with the request logger on the context.
     app.all(`${API_BASE_PATH}/*`, async (c) => {

@@ -48,7 +48,14 @@ flowchart TB
   operator's account (Better Auth), one secret-free per-user connection token, the sandbox's public `daemonUrl` (announced
   by the **daemon** on boot), member invites (a discovery mirror — the daemon is the enforcer), and
   a pool of pre-provisioned tunnels (`ReservedSandbox`) so setup pays no Cloudflare round-trips
-  inline. It never probes the sandbox, owns no infrastructure, and sits **off the command path**.
+  inline. It never probes the sandbox, owns no infrastructure, and sits **off the command path — with
+  one exception, the free trial**. The trial ([_platform/api/src/trial/](_platform/api/src/trial/)) lets
+  someone chat before connecting any AI account, on intentic's own free-tier keys, metered per
+  signed-in account per day; those turns therefore pass *through* the platform, which no other turn in
+  this product does. It is off unless the operator configures keys, every surface that offers it says so
+  in the same words (`TRIAL_NOTICE`), and connecting any account moves the user onto the direct path
+  permanently. Nothing else changes: the trial holds no ability to drive a sandbox, so the blast radius
+  below is unchanged.
 - **Sandbox** — one per user, run **unprivileged by default**; container privileges come only from
   `# intentic:runtime` directives in the owner-approved overlay, applied by the allowlisted rebuild executors
   (the `docker` capability's `--privileged` wakes the image-baked, otherwise-dormant isolated Docker Engine so

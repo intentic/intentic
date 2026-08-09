@@ -73,6 +73,33 @@ const configSchema = z.object({
             poolSize: z.coerce.number().int().nonnegative().default(1), // INTENTIC_CLOUDFLARE_POOL_SIZE
         })
         .prefault({}),
+    /* THE FREE-TRIAL POOL — intentic's OWN model keys, and the SECOND documented exception to the secret-free
+     * model above (intenticCloudflare is the first). It is a larger exception than that one and says so here
+     * rather than in a commit message: a tunnel token is spent provisioning DNS, while these keys serve model
+     * turns, so for as long as a user is on the trial their prompts pass through the platform. That is the whole
+     * cost of letting someone chat before they own any AI subscription, it is bounded to the trial, and every
+     * surface that offers the trial says it in those words.
+     *
+     * `keys` is the switch. Empty (the default, and the only sane one for a self-hosted platform) disables the
+     * trial outright: the routes 404, the daemon provisions nothing, and the chat's front door is the free
+     * Google sign-in alone. Several keys are a POOL — Google's free tier is sized for one developer, so a launch
+     * day exhausts one project's quota and the next key takes the turn rather than the user meeting a 429. */
+    trial: z
+        .object({
+            // Comma-separated Google AI Studio API keys, tried in order. TRIAL_KEYS.
+            keys: z.string().default(``).meta({ secret: true }),
+            // Google's OpenAI-compatible surface. Any OpenAI-shaped upstream works; this is the one whose free
+            // tier is meant for serving end users. TRIAL_BASE_URL.
+            baseUrl: z.url().default(`https://generativelanguage.googleapis.com/v1beta/openai`),
+            // Comma-separated model ids the trial may serve. Empty = whatever the upstream publishes, which is
+            // the honest default (a curated list here goes stale the day Google ships a model). Set it to keep
+            // the trial off the expensive end of a free tier. TRIAL_MODELS.
+            models: z.string().default(``),
+            // Messages per signed-in account per UTC day. Enough to judge the product, far too few to work on.
+            // TRIAL_DAILY_MESSAGES.
+            dailyMessages: z.coerce.number().int().nonnegative().default(12),
+        })
+        .prefault({}),
     // Where the connect bootstrap scripts are served from — the cloud lane bakes `${scriptOrigin}/connect`
     // into a new VM's first-boot script (sandbox/cloud/user-data.ts), the same URL the setup wizard's
     // copy-paste command uses. A self-hosted platform points this at its own site. SCRIPT_ORIGIN.
@@ -120,6 +147,7 @@ export const CONFIG_SECRETS = [
     `google.clientSecret`,
     `email.apiKey`,
     `intenticCloudflare.apiToken`,
+    `trial.keys`,
 ];
 
 export const loadConfig = (): Config => loadPuristicConfig(definition);

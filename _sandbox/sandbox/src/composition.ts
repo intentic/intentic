@@ -51,6 +51,8 @@ import { fileWorkflowRunsStore, fileWorkflowsStore, type WorkflowRunsStore, type
 import { type ChoresStore, fileChoresStore, LEDGER_FILE, PROBES_FILE } from "./chores/chores-store.js";
 import { createProbeRunner, type ProbeRunner } from "./chores/probe-runner.js";
 import { type CapabilitiesStore, fileCapabilitiesStore } from "./capabilities/capabilities-store.js";
+import { createTrialService, type TrialService } from "./trial/trial.js";
+import { withTrialEndpoint } from "./trial/trial-endpoint.js";
 import { type DismissalsStore, fileDismissalsStore } from "./capabilities/dismissals-store.js";
 import { filePersonasStore, type PersonasStore } from "./personas/personas-store.js";
 import { type CiStore, fileCiStore } from "./ci/ci-store.js";
@@ -278,8 +280,13 @@ export interface Services {
         | undefined;
     // Intent-declared internal MCP tools (constant for the sandbox), merged with mcp-kind capabilities each turn.
     readonly tools: readonly AgentTool[];
-    // The unified capability manifest (.intentic/capabilities.json) — DevOps/mcp/service/integration.
+    // The unified capability manifest (.intentic/capabilities.json) — DevOps/mcp/service/integration. Reads also
+    // carry the daemon-provisioned free-trial endpoint when the platform serves one (trial/trial-endpoint.ts);
+    // it is never written to the file.
     readonly capabilities: CapabilitiesStore;
+    // Whether this sandbox can chat before any AI account is connected, and how much of today's allowance is
+    // left. Answered by the platform, so a sandbox with no platform never has one.
+    readonly trial: TrialService;
     // Recommendations the owner has declined (.intentic/capability-dismissals.json), so a "no" survives the
     // page load that would otherwise re-derive the same suggestion straight back onto the catalog.
     readonly capabilityDismissals: DismissalsStore;
@@ -729,8 +736,17 @@ export const createServices = (config: Config, logger: Logger): Services => {
         createLandedPresences(agentWorktrees, logger),
     );
     // Hoisted: the CI hook reconciler reads the same manifest the routes edit.
-    const capabilities = fileCapabilitiesStore(statePath(workspace.root, ".intentic/capabilities.json"), (id, reason) =>
-        logger.warn(`capabilities: skipping unreadable entry "${id}" (${reason}) — the rest of the manifest is unaffected`),
+    /* The free trial is laid OVER the manifest, never into it (trial/trial-endpoint.ts): every consumer of
+     * `capabilities` — the translator's compat entries, the endpoint catalog, the picker's provider list —
+     * therefore sees the trial as an ordinary endpoint and needs no knowledge of it, while the file on disk
+     * stays exactly what the user put there. Availability is the platform's answer, probed on boot below. */
+    const trial = createTrialService(config);
+    const capabilities = withTrialEndpoint(
+        fileCapabilitiesStore(statePath(workspace.root, ".intentic/capabilities.json"), (id, reason) =>
+            logger.warn(`capabilities: skipping unreadable entry "${id}" (${reason}) — the rest of the manifest is unaffected`),
+        ),
+        config,
+        trial,
     );
     const personas = filePersonasStore(statePath(workspace.root, ".intentic/personas.json"), (id, reason) =>
         logger.warn(`personas: skipping unreadable card "${id}" (${reason}) — the rest are unaffected`),
@@ -818,6 +834,7 @@ export const createServices = (config: Config, logger: Logger): Services => {
         info,
         tools: internalTools(config.intenticAgentTools),
         capabilities,
+        trial,
         capabilityDismissals: fileDismissalsStore(statePath(workspace.root, ".intentic/capability-dismissals.json")),
         personas,
         ciStore,

@@ -347,6 +347,13 @@ const main = async (): Promise<void> => {
         services.announcer.start();
     }
 
+    /* Ask the platform whether this sandbox gets a free trial, and how much of today's allowance is left. The
+     * answer IS the trial endpoint's existence (trial/trial-endpoint.ts), so this runs beside the announce
+     * rather than inside the boot chain: a user whose first act is to open the chat must find the trial already
+     * there, not appear a sweep later. Unawaited and self-swallowing — a platform that never answers leaves the
+     * sandbox with no trial, which is the failure that costs the user nothing. */
+    void services.trial.refresh();
+
     // Every awaited step below runs through the tracker: it stamps the step's state and elapsed time, logs the
     // slow ones (a boot that takes minutes has ONE slow step, and until it is named every slow boot reads as
     // "the daemon is just slow"), and streams the transition to whatever browser is watching. Narrowed to the

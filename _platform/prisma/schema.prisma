@@ -28,8 +28,32 @@ model User {
     sessions         Session[]
     accounts         Account[]
     sandboxes        Sandbox[]
+    trialUsage       TrialUsage[]
 
     @@map("user")
+}
+
+// The free-trial allowance this account has spent today. The trial is the one thing the platform serves ON the
+// command path (api config.ts `trial`), so it is also the one thing that needs a per-account meter: the pool is
+// intentic's own free-tier keys, and without a counter one enthusiastic visitor spends the day's quota for
+// everyone. Counted per UTC day as a plain `YYYY-MM-DD` string rather than a timestamp range, because that is
+// exactly the granularity the allowance resets on and it makes the unique key do the work — an upsert on
+// (userId, day) is the whole increment, with no read-modify-write to race.
+//
+// Rows are disposable: nothing reads a past day, so retention.ts sweeps them. Cascades with the user.
+model TrialUsage {
+    id        String   @id @default(cuid())
+    userId    String
+    user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+    day       String
+    messages  Int      @default(0)
+    createdAt DateTime @default(now())
+    updatedAt DateTime @updatedAt
+
+    @@unique([userId, day])
+    // The sweep deletes by day; the unique index above is on (userId, day), whose leading column it can't use.
+    @@index([day])
+    @@map("trial_usage")
 }
 
 model Session {

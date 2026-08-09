@@ -1,8 +1,9 @@
 <script setup lang="ts">
+import type { AgentProvider } from "@intentic/sandbox-contract";
 import Button from "primevue/button";
 import { computed } from "vue";
 import { useRouter } from "vue-router";
-import { connectPitch } from "../composables/chat/access";
+import { connectPitch, freeOffer } from "../composables/chat/access";
 import { providerTabs } from "../composables/chat/providerCatalog";
 import { useChat, usePaneView } from "../composables/chat/useChat";
 
@@ -11,7 +12,14 @@ import { useChat, usePaneView } from "../composables/chat/useChat";
  * the same one the model picker's locks and chips read — the gate and the lock a user just clicked past must
  * name the SAME credential, and they drifted when each surface carried its own copy. The "Connect" button
  * deep-links to the Sandbox ▸ Agent tab, where the handshake lives; the picked provider rides along as
- * `?connect=<provider>` so that tab opens on its card and flashes it into view. */
+ * `?connect=<provider>` so that tab opens on its card and flashes it into view.
+ *
+ * IT LEADS WITH THE FREE CHANNEL, and that ordering is the panel's main job rather than a decoration. This gate
+ * is the first thing a user with no AI subscription meets, and it used to answer for whichever provider the pane
+ * happened to be pointed at — in practice a paid one — with the single channel that costs nothing sitting fifth
+ * in a row of five identical buttons. The honest reading of that screen is "this product needs a subscription",
+ * which is false. So the free offer is the headline and the primary button, and the subscriptions become a
+ * quiet second row that still says exactly what it said before once one is picked. */
 
 const { connected, provider, harness, selectProvider } = usePaneView();
 // Whether the daemon has answered about connections AT ALL is the sandbox's fact, not this conversation's.
@@ -19,6 +27,25 @@ const { accountsLoaded } = useChat();
 const router = useRouter();
 
 const pitch = computed(() => connectPitch(provider.value, harness.value));
+const free = computed(() => freeOffer());
+// The second row is everything the headline isn't. Derived from the same tab list rather than a second literal,
+// so it keeps the tabs' order and inherits a provider added there.
+const otherTabs = computed(() => providerTabs.filter((tab) => tab.value !== free.value?.provider));
+/* The second row's connect line. Suppressed for exactly one case — the pane already points at the free channel,
+ * whose headline button IS that action — because two buttons for one handshake is how a user ends up wondering
+ * which of them is the real one. Every other case keeps the button the panel has always shown, including a
+ * provider that is connected but not on THIS conversation's harness. */
+const otherPitch = computed(() => (provider.value === free.value?.provider ? undefined : pitch.value));
+
+/* Point the chat at a provider AND open its card, for the two buttons whose whole purpose is the handshake.
+ * The chips in the second row deliberately do not do this: a provider that is already connected only needs
+ * selecting (the gate then disappears on its own, which is the fastest path there is), and one that isn't
+ * raises the connect line below — so a chip always visibly does something without ever navigating a user away
+ * from a chat they could have started by staying put. */
+const connect = (target: AgentProvider) => {
+    selectProvider(target);
+    router.push({ path: `/sandbox/agent`, query: { connect: target } });
+};
 </script>
 
 <template>
@@ -34,30 +61,48 @@ const pitch = computed(() => connectPitch(provider.value, harness.value));
     </div>
     <div v-else-if="!connected" class="flex flex-col items-center gap-3 rounded-2xl border border-line bg-overlay/40 px-4 py-7 text-center">
         <Icon name="sparkles" class="text-xl text-link" />
+        <!-- THE HEADLINE: the one way in that costs nothing. Absent only when there is no free channel left to
+             offer, and then the panel is exactly what it always was — the selected provider's own pitch. -->
+        <template v-if="free">
+            <p class="text-sm font-medium text-body">{{ free.headline }}</p>
+            <p class="text-xs text-muted">{{ free.copy }}</p>
+            <Button :label="free.action" size="small" @click="connect(free.provider)">
+                <template #icon><Icon name="sparkles" /></template>
+            </Button>
+        </template>
         <!-- An ACP agent carries its own credentials, so it never reaches this gate and has no pitch to show. -->
-        <p v-if="pitch" class="text-xs text-muted">{{ pitch.copy }}</p>
-        <!-- Point this chat at whichever provider is connected, straight from the gate, so picking a
-             not-yet-connected provider is never a dead end. -->
-        <!-- Wraps rather than overflowing: the gate sits in a narrow side panel, where five tabs never fit on one row. -->
-        <div class="flex flex-wrap items-center justify-center gap-1">
+        <p v-else-if="pitch" class="text-xs text-muted">{{ pitch.copy }}</p>
+
+        <!-- The subscriptions, demoted but never hidden: a user who already pays for one must not have to read
+             past a free pitch to find it, and picking one here re-points this chat immediately — which is the
+             whole answer when that provider is already connected. -->
+        <div class="flex w-full flex-col items-center gap-1.5 border-t border-line pt-3">
+            <p v-if="free" class="text-2xs text-muted">Have a subscription?</p>
+            <!-- Wraps rather than overflowing: the gate sits in a narrow side panel, where five tabs never fit on one row. -->
+            <div class="flex flex-wrap items-center justify-center gap-1">
+                <button
+                    v-for="tab in otherTabs"
+                    :key="tab.value"
+                    type="button"
+                    class="composer-ghost h-7 shrink-0 whitespace-nowrap px-2.5 text-2xs font-medium"
+                    :class="{ 'composer-active': provider === tab.value }"
+                    @click="selectProvider(tab.value)"
+                    :aria-pressed="provider === tab.value"
+                >
+                    {{ tab.label }}
+                </button>
+            </div>
+            <!-- Named for the provider the chips just selected, so the second row is never a set of buttons that
+                 appear to do nothing. A link rather than a filled button: the free channel above owns the one
+                 filled button on this panel, and two of them would make the panel ask twice. -->
             <button
-                v-for="tab in providerTabs"
-                :key="tab.value"
+                v-if="otherPitch"
                 type="button"
-                class="composer-ghost h-7 shrink-0 whitespace-nowrap px-2.5 text-2xs font-medium"
-                :class="{ 'composer-active': provider === tab.value }"
-                @click="selectProvider(tab.value)"
-                :aria-pressed="provider === tab.value"
+                class="inline-flex items-center gap-1 text-2xs font-medium text-link hover:underline"
+                @click="connect(provider)"
             >
-                {{ tab.label }}
+                <Icon name="link" />{{ otherPitch.action }}
             </button>
         </div>
-        <Button
-            :label="pitch?.action ?? `Connect account`"
-            size="small"
-            @click="router.push({ path: '/sandbox/agent', query: { connect: provider } })"
-        >
-            <template #icon><Icon name="link" /></template>
-        </Button>
     </div>
 </template>
