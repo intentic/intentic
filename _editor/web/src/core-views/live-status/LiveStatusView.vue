@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ResourceGroupSchema, type Deployment } from "@intentic-app/api-contract";
-import { Card, cmp, CopyButton, InfoHint, Page, PageAction, PageHeader, StatusBadge } from "@intentic/ui";
+import { Card, cmp, CopyButton, InfoHint, Notice, type NoticeModel, Page, PageAction, PageHeader, StatusBadge } from "@intentic/ui";
 import Button from "primevue/button";
 import { computed, reactive, ref } from "vue";
 import PlanStepRow from "../../components/PlanStepRow.vue";
@@ -12,7 +12,7 @@ import { jsonBody } from "../../composables/sandbox/jsonBody";
 import { useDeployments } from "../../composables/extensions/useDeployments";
 import { useWorkspaceState } from "../../composables/extensions/useWorkspaceState";
 import { useSandbox } from "../../composables/sandbox/useSandbox";
-import { errorMessage } from "../../composables/useAsyncAction";
+import { noticeFrom } from "../../composables/useAsyncAction";
 import DependencyGraph from "./DependencyGraph.vue";
 import ResourceDetails from "./ResourceDetails.vue";
 
@@ -23,7 +23,15 @@ import ResourceDetails from "./ResourceDetails.vue";
  * per-resource drift. Read-only; everything is relayed THROUGH the sandbox. */
 
 const { state, error: wsError, isLoading: wsLoading, refetch: refetchState } = useWorkspaceState();
+// The two queries below report bare messages. This page knows what each was for, so it writes the sentence
+// and keeps their message as evidence underneath.
+const wsNotice = computed<NoticeModel | undefined>(() =>
+    wsError.value === undefined ? undefined : { tone: `danger`, title: `Couldn't read this workspace's state.`, detail: wsError.value },
+);
 const { deployments, komodoReachable, error: appsError, isLoading: appsLoading, refetch: refetchDeployments } = useDeployments();
+const appsNotice = computed<NoticeModel | undefined>(() =>
+    appsError.value === undefined ? undefined : { tone: `danger`, title: `Couldn't list what's running.`, detail: appsError.value },
+);
 
 // Shared with the dependency graph: selecting a node highlights its matching actual-state card.
 const selectedId = ref<string | undefined>(undefined);
@@ -32,7 +40,7 @@ const selectedNode = computed(() => state.value?.resources.find((r) => r.id === 
 // Live `intentic deploy plan` stream state.
 const checking = ref(false);
 const liveRan = ref(false);
-const liveError = ref<string | null>(null);
+const liveError = ref<NoticeModel | null>(null);
 const liveActions = ref<PlanStep[]>([]);
 const liveOrphans = ref<PlanOrphan[]>([]);
 
@@ -61,7 +69,7 @@ const runLiveCheck = async (): Promise<void> => {
         liveOrphans.value = orphans;
         liveRan.value = true;
     } catch (err) {
-        liveError.value = errorMessage(err, `Live check failed.`);
+        liveError.value = noticeFrom(err, `Live check failed.`);
     } finally {
         checking.value = false;
     }
@@ -81,7 +89,7 @@ const envList = (deployment: Deployment): { key: string; label: string }[] =>
 const isOwner = computed(() => useSandbox().active.value?.role === `owner`);
 const access = computed(() => state.value?.access ?? []);
 const revealedAccess = reactive(new Map<string, string>());
-const accessError = ref<string | undefined>(undefined);
+const accessError = ref<NoticeModel | undefined>(undefined);
 const toggleAccessReveal = async (key: string): Promise<void> => {
     accessError.value = undefined;
     if (revealedAccess.has(key)) {
@@ -91,7 +99,7 @@ const toggleAccessReveal = async (key: string): Promise<void> => {
     try {
         revealedAccess.set(key, await reveal(key));
     } catch (err) {
-        accessError.value = errorMessage(err, `Could not reveal the password.`);
+        accessError.value = noticeFrom(err, `Could not reveal the password.`);
     }
 };
 </script>
@@ -115,7 +123,7 @@ const toggleAccessReveal = async (key: string): Promise<void> => {
                 </template>
             </PageHeader>
 
-            <div v-if="wsError" :class="cmp.alertDanger('mb-4 px-4 py-3 text-sm')">{{ wsError }}</div>
+            <Notice v-if="wsNotice" :of="wsNotice" class="mb-4" />
 
             <!-- The deployment engine is DECLARED but down, on a previously-applied setup: every "Not deployed"
                  below is meaningless until it's back. Never shown on services-only or never-applied setups. -->
@@ -163,9 +171,7 @@ const toggleAccessReveal = async (key: string): Promise<void> => {
                 <section class="rounded-lg border border-line bg-card p-4">
                     <h3 :class="cmp.sectionLabel('mb-3 flex items-baseline gap-2')">Running now</h3>
 
-                    <div v-if="appsError" :class="cmp.alertDanger('mb-3')">
-                        {{ appsError }}
-                    </div>
+                    <Notice v-if="appsNotice" :of="appsNotice" class="mb-3" />
 
                     <div class="flex flex-col gap-2">
                         <Card
@@ -238,9 +244,7 @@ const toggleAccessReveal = async (key: string): Promise<void> => {
                                 <span class="text-2xs text-subtle">Reading live infrastructure…</span>
                             </template>
                         </div>
-                        <div v-if="liveError" :class="cmp.alertDanger()">
-                            {{ liveError }}
-                        </div>
+                        <Notice v-if="liveError" :of="liveError" />
                         <div v-else-if="liveRan && !checking" class="flex flex-col gap-1.5">
                             <PlanStepRow v-for="item in liveActions" :key="item.id" :id="item.id" :action="item.action" :reason="item.reason" />
                             <p v-if="liveActions.length === 0" class="text-2xs text-subtle">No resources read.</p>
@@ -256,7 +260,7 @@ const toggleAccessReveal = async (key: string): Promise<void> => {
                      A generated password reveals on click through the daemon (owner only); members see its name. -->
                 <section v-if="access.length > 0" class="rounded-lg border border-line bg-card p-4">
                     <h3 :class="cmp.sectionLabel('mb-3')">Access</h3>
-                    <div v-if="accessError" :class="cmp.alertDanger('mb-2')">{{ accessError }}</div>
+                    <Notice v-if="accessError" :of="accessError" class="mb-2" />
                     <div class="flex flex-col gap-2">
                         <div v-for="entry in access" :key="entry.id" class="flex flex-col gap-1.5 rounded-lg border border-line px-3 py-2.5">
                             <div class="flex flex-wrap items-center gap-2">

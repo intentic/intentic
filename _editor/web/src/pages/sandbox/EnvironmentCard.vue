@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { EnvironmentSchema } from "@intentic-app/api-contract";
-import { Card, Code, StatusBadge } from "@intentic/ui";
+import { Card, Code, Notice, type NoticeModel, StatusBadge } from "@intentic/ui";
 import { useQueryClient } from "@tanstack/vue-query";
 import Button from "primevue/button";
 import { computed } from "vue";
@@ -22,10 +22,14 @@ import DiffView from "../workspace/viewers/DiffView.vue";
  * overlay or a proposal. */
 
 const queryClient = useQueryClient();
-const { busy, error, run } = useAsyncAction();
-// The daemon's owner-gate message deserves friendlier phrasing; anything else surfaces verbatim.
-const actionError = computed(() =>
-    error.value === `not the sandbox owner` ? `Only the sandbox owner can decide on environment changes.` : error.value,
+const { busy, notice, run } = useAsyncAction();
+/* The daemon's owner-gate refusal is not a fault, so it is not reported as one: a member pressing Approve is
+ * being told how the sandbox is arranged, which is a warning at most, and the daemon's own four words are no
+ * use to them. Everything else keeps the sentence the action wrote for it. */
+const actionNotice = computed<NoticeModel | undefined>(() =>
+    notice.value?.detail === `not the sandbox owner`
+        ? { tone: `warning`, title: `Only the sandbox owner can decide on environment changes.` }
+        : notice.value,
 );
 
 // Only the owner can decide on a proposal — the daemon is the real gate (it 403s a non-owner approve), but we
@@ -110,6 +114,6 @@ const reject = (): Promise<void> => decide(`/environment/reject`);
         <!-- The active overlay the running container was built from. -->
         <Code v-if="applied && !proposal && !pending" :code="applied.content" lang="docker" label="Active overlay" />
 
-        <p v-if="actionError" class="text-2xs text-danger">{{ actionError }}</p>
+        <Notice v-if="actionNotice" :of="actionNotice" />
     </Card>
 </template>

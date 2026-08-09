@@ -204,7 +204,7 @@ export function useAgentChanges(agentId: Ref<string>) {
         viewedByAgent.value = { ...viewedByAgent.value, [agentId.value]: next };
     };
 
-    const { busy: actionBusy, error: actionError, run } = useAsyncAction();
+    const { busy: actionBusy, notice: actionError, run } = useAsyncAction();
 
     // Paths a `merge` land wrote into the workspace with conflict markers on them, for the panel to hand back
     // to the user as work to finish. Local, because unlike `conflicts` it describes an attempt rather than a

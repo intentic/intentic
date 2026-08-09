@@ -68,9 +68,14 @@ export const statusLabel = (status: ConversationStatus): string => {
 
 // Desktop tab title color by status — layered UNDER statusIcon's glyph rather than replacing it: colour alone
 // is invisible to colourblind users and near-illegible on a truncated 2xs string.
+//
+// COLOUR ONLY, no pulse. `statusIcon` puts a turning spinner immediately to the left of this text, so a title
+// that also breathed was the second animation saying the one thing the first had already said — running for as
+// long as the turn does, in the strip the user looks at most. One live element per state: the spinner moves,
+// the title just changes colour.
 export const statusTabClass = (status: ConversationStatus): string => {
     if (status === `streaming`) {
-        return `text-link animate-pulse`;
+        return `text-link`;
     }
     if (status === `awaiting`) {
         return `text-primary-500`;

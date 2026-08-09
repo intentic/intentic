@@ -12,11 +12,11 @@
      always a mistake: people drive servers from Termius and Blink, and for them the phone IS the terminal.
      That path is simply folded away until someone says it is theirs. -->
 <script setup lang="ts">
-import { cmp } from "@intentic/ui";
+import { cmp, Notice, type NoticeModel } from "@intentic/ui";
 import Button from "primevue/button";
 import { ref } from "vue";
 import { apiClient } from "../composables/useApi";
-import { errorMessage } from "../composables/useAsyncAction";
+import { noticeFrom } from "../composables/useAsyncAction";
 
 // `email` is shown, not sent: the server addresses this to the session's own account and takes no recipient,
 // so what the caller passes here is only what the confirmation line reads back.
@@ -28,7 +28,7 @@ const emit = defineEmits<{ sent: [] }>();
 
 const sending = ref(false);
 const sent = ref(false);
-const error = ref<string | undefined>(undefined);
+const error = ref<NoticeModel | undefined>(undefined);
 
 const send = async (): Promise<void> => {
     if (sending.value) {
@@ -41,7 +41,7 @@ const send = async (): Promise<void> => {
         sent.value = true;
         emit(`sent`);
     } catch (err) {
-        error.value = errorMessage(err, `Couldn't send that email — try again.`);
+        error.value = noticeFrom(err, `Couldn't send that email — try again.`);
     } finally {
         sending.value = false;
     }
@@ -89,6 +89,6 @@ const send = async (): Promise<void> => {
             <template #icon><Icon name="envelope" /></template>
         </Button>
 
-        <p v-if="error" :class="cmp.alertDanger()">{{ error }}</p>
+        <Notice v-if="error" :of="error" />
     </div>
 </template>

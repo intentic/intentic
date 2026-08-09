@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { cmp } from "@intentic/ui";
+import { cmp, Notice } from "@intentic/ui";
 import Button from "primevue/button";
 import { computed, ref } from "vue";
 import { devFillGet } from "../composables/devFill";
@@ -48,7 +48,7 @@ if (value.value === ``) {
 const { set } = useSecrets();
 const setCapabilitySecret = useCapabilitySecret();
 const show = ref(false);
-const { busy: saving, error, run } = useAsyncAction();
+const { busy: saving, notice, run } = useAsyncAction();
 const canSave = computed(() => !props.disabled && value.value.trim().length > 0);
 
 const save = async (): Promise<void> => {
@@ -110,7 +110,7 @@ const onEnter = (event: KeyboardEvent): void => {
                 <template #icon><Icon name="times" /></template>
             </Button>
         </div>
-        <p v-if="error" :class="cmp.alertDanger()">{{ error }}</p>
+        <Notice v-if="notice" :of="notice" />
         <p v-else-if="!noHint" class="text-xs text-muted">
             Stored in your sandbox's <span class="font-mono">.env</span> as <span class="font-mono">{{ secretKey }}</span> — never on the platform.
         </p>

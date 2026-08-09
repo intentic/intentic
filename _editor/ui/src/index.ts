@@ -56,6 +56,12 @@ export { default as MarkdownFigure } from "./components/MarkdownFigure.vue";
 // the caller's, because a rail's rows differ for good reasons and its scrollbar never did.
 export { default as NavRail } from "./components/NavRail.vue";
 export { type NavGroup } from "./components/navRail.js";
+// How the app says something went wrong: a sentence it wrote, the raw cause underneath, at most one way out.
+// The stack is what a view with more than one thing wrong renders — it ranks by severity and collapses repeats,
+// so the reading order stops being an accident of where the boxes sit in the template.
+export { default as Notice } from "./components/Notice.vue";
+export { default as NoticeStack } from "./components/NoticeStack.vue";
+export { type NoticeAction, type NoticeModel, type NoticeTone } from "./components/notice.js";
 export { default as Page } from "./components/Page.vue";
 // The button that goes in <PageHeader #actions>, and the only thing that should — the named recipe that keeps
 // PrimeVue Button's variant matrix out of the one slot every view fills.

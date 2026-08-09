@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Card, cmp } from "@intentic/ui";
+import { Card, cmp, Notice, type NoticeModel } from "@intentic/ui";
 import Button from "primevue/button";
 import { computed } from "vue";
 import { type PlanStep, statusDot } from "../../composables/extensions/reconcileStatus";
@@ -12,6 +12,10 @@ import type { usePlanPreview } from "./usePlanPreview";
  * missing-secrets checklist that gates resolve → plan. */
 const { preview } = defineProps<{ preview: ReturnType<typeof usePlanPreview> }>();
 const { running, ran, stale, error, steps, orphans, activity, missingSecrets, awaitingSecrets } = preview;
+// Same bargain as the apply card: the plan run says what broke, the view says what was being asked for.
+const previewNotice = computed<NoticeModel | undefined>(() =>
+    error.value === undefined ? undefined : { tone: `danger`, title: `Couldn't work out what would change.`, detail: error.value },
+);
 
 // The three things a plan can do, in the order a reviewer cares: additions, changes, removals. Each section
 // keys on a canonical action so statusDot stays the one color vocabulary.
@@ -88,7 +92,7 @@ const hasChanges = computed(() => sections.value.length > 0);
             </div>
         </template>
 
-        <div v-else-if="error" :class="cmp.alertDanger()">{{ error }}</div>
+        <Notice v-else-if="previewNotice" :of="previewNotice" />
 
         <!-- Live narration of the run (which node is being checked) + a way OUT — never a dead-end spinner. -->
         <div v-else-if="running" class="flex items-center justify-between gap-2">

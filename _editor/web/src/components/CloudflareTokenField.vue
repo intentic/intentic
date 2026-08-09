@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { cmp, Picker, type PickerOption } from "@intentic/ui";
+import { cmp, Notice, type NoticeModel, Picker, type PickerOption } from "@intentic/ui";
 import { computed } from "vue";
 import { CF_TOKEN_KEY, type useCloudflareZones } from "../composables/extensions/useCloudflareZones";
 import SecretField from "./SecretField.vue";
@@ -30,6 +30,10 @@ import SecretField from "./SecretField.vue";
 const { cf } = defineProps<{ cf: ReturnType<typeof useCloudflareZones>; storageNote: string }>();
 
 // Zones are domains — monospace rows behind a filterable picker, since an account-wide token can carry dozens.
+// The zone lookup reports whatever Cloudflare said; this field knows the user is trying to pick a domain.
+const zonesNotice = computed<NoticeModel | undefined>(() =>
+    cf.zonesError.value === undefined ? undefined : { tone: `danger`, title: `Couldn't read your Cloudflare zones.`, detail: cf.zonesError.value },
+);
 const zoneOptions = computed<PickerOption[]>(() => cf.zones.value.map((zone) => ({ value: zone, label: zone, icon: `globe`, mono: true })));
 
 // Bridges SecretField's v-model onto the composable's setter, which is what drives the debounced zone lookup.
@@ -49,7 +53,7 @@ const token = computed({ get: () => cf.cfToken.value, set: cf.setToken });
     <p v-else-if="cf.zonesLoading.value" class="text-xs text-muted">
         <Icon name="spinner" spin /> Checking which Cloudflare zones this token can use…
     </p>
-    <div v-else-if="cf.zonesError.value" :class="cmp.alertDanger('text-2xs')">{{ cf.zonesError.value }}</div>
+    <Notice v-else-if="zonesNotice" :of="zonesNotice" />
     <label v-else-if="cf.zones.value.length > 1" class="ui-field">
         <span class="ui-field-label">Cloudflare zone</span>
         <Picker

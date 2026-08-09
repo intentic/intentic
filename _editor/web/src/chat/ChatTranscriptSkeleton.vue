@@ -56,7 +56,7 @@ onScopeDispose(() => clearTimeout(timer));
             <div
                 v-for="(turn, index) in OUTLINE"
                 :key="index"
-                class="flex shrink-0 animate-pulse flex-col gap-1 motion-reduce:animate-none"
+                class="flex shrink-0 animate-pulse flex-col gap-1"
                 aria-hidden="true"
             >
                 <!-- The prompt bubble, carrying .chat-prompt's own vertical padding so the turn keeps its rhythm. -->

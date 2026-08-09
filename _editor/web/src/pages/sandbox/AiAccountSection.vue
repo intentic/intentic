@@ -7,7 +7,7 @@ import {
     type TranslatorAccount,
     providerLabel,
 } from "@intentic/sandbox-contract";
-import { cmp, formatTokens, InfoHint, Row, RowGroup } from "@intentic/ui";
+import { cmp, formatTokens, InfoHint, Notice, type NoticeModel, Row, RowGroup } from "@intentic/ui";
 import Button from "primevue/button";
 import { computed, onMounted, onUnmounted, ref, watch } from "vue";
 import { useRoute } from "vue-router";
@@ -65,6 +65,10 @@ const {
     cancelTranslatorConnect,
     disconnectTranslator,
 } = useChat();
+// The chat store reports a bare message; this section knows the user is here to connect an account.
+const chatNotice = computed<NoticeModel | undefined>(() =>
+    chatError.value === null ? undefined : { tone: `danger`, title: `Couldn't reach your AI accounts.`, detail: chatError.value },
+);
 
 // The subscription connections, served by the sandbox's translator (CLIProxyAPI). For ChatGPT, Kimi Code and
 // Google they are the only connections. For Grok they're secondary rows beneath the native account
@@ -389,7 +393,7 @@ onUnmounted(() => clearTimeout(ringTimer));
             </div>
         </template>
 
-        <p v-if="chatError" :class="cmp.alertDanger('m-3')">{{ chatError }}</p>
+        <Notice v-if="chatNotice" :of="chatNotice" class="m-3" />
 
         <!-- The provider's own words, the last time it refused a turn (see `refusal` above). An alert while it
              is the newest thing known about this provider; once something taken since has answered it, a quiet

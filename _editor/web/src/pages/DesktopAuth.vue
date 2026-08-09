@@ -1,10 +1,10 @@
 <script setup lang="ts">
-import { cmp } from "@intentic/ui";
+import { cmp, Notice, type NoticeModel } from "@intentic/ui";
 import Button from "primevue/button";
 import { onMounted, ref } from "vue";
 import { useRoute } from "vue-router";
 import { apiClient } from "../composables/useApi";
-import { errorMessage } from "../composables/useAsyncAction";
+import { noticeFrom, noticeOf } from "../composables/useAsyncAction";
 import { useAuth } from "../composables/useAuth";
 import { useGoogleIdentity } from "../composables/useGoogleIdentity";
 
@@ -26,7 +26,7 @@ const route = useRoute();
 const { user } = useAuth();
 const { getIdToken } = useGoogleIdentity();
 
-const error = ref<string | undefined>(undefined);
+const error = ref<NoticeModel | undefined>(undefined);
 const handedOff = ref(false);
 const working = ref(false);
 
@@ -34,7 +34,7 @@ const hand = async (): Promise<void> => {
     const state = route.query[`state`];
     const challenge = route.query[`challenge`];
     if (typeof state !== `string` || state === `` || typeof challenge !== `string` || challenge === ``) {
-        error.value = `This link is missing the value that ties it to your app — open Intentic and sign in from there.`;
+        error.value = noticeOf(`This link is missing the value that ties it to your app — open Intentic and sign in from there.`);
         return;
     }
     working.value = true;
@@ -44,14 +44,14 @@ const hand = async (): Promise<void> => {
         // Google gate appearing here is the thing they asked for rather than an interruption.
         const idToken = await getIdToken();
         if (idToken === undefined) {
-            error.value = `Intentic needs your Google sign-in to reach your sandbox.`;
+            error.value = noticeOf(`Intentic needs your Google sign-in to reach your sandbox.`);
             return;
         }
         const { handoff } = await apiClient.desktop.handoff({ idToken, challenge });
         handedOff.value = true;
         globalThis.location.href = `intentic://auth?handoff=${encodeURIComponent(handoff)}&state=${encodeURIComponent(state)}`;
     } catch (err) {
-        error.value = errorMessage(err, `Couldn't finish signing in to the app.`);
+        error.value = noticeFrom(err, `Couldn't finish signing in to the app.`);
     } finally {
         working.value = false;
     }
@@ -77,7 +77,7 @@ onMounted(() => void hand());
                 </div>
             </header>
 
-            <div v-if="error" :class="cmp.alertDanger('text-xs')">{{ error }}</div>
+            <Notice v-if="error" :of="error" />
             <p v-else-if="handedOff" class="flex items-start gap-2 text-xs text-muted">
                 <Icon name="check-circle" class="mt-0.5 shrink-0 text-success" />
                 <span>Sent to the app — you can close this tab. If nothing happened, make sure Intentic is running and try again.</span>

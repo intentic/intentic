@@ -1,11 +1,11 @@
 <script setup lang="ts">
 import Button from "primevue/button";
-import { cmp, Segmented } from "@intentic/ui";
+import { cmp, Notice, type NoticeModel, Segmented } from "@intentic/ui";
 import type { Loop, LoopContext } from "@intentic/sandbox-contract";
 import Dialog from "primevue/dialog";
 import { computed, ref, watch } from "vue";
 import { startLoop } from "../composables/agents/useLoops";
-import { errorMessage } from "../composables/useAsyncAction";
+import { noticeFrom } from "../composables/useAsyncAction";
 
 /* "LOOP UNTIL…" — the form that turns an ordinary conversation into a Ralph loop.
  *
@@ -40,7 +40,7 @@ const maxIterations = ref(8);
 const maxSpendUsd = ref(5);
 const stallLimit = ref(2);
 const busy = ref(false);
-const failure = ref<string>();
+const failure = ref<NoticeModel>();
 
 // Re-opening the dialog on a different agent must not inherit the last one's goal — a loop started from a
 // stale field is the one mistake here that costs real money.
@@ -119,7 +119,7 @@ const start = async (): Promise<void> => {
         open.value = false;
         emit(`started`);
     } catch (error) {
-        failure.value = errorMessage(error, `The loop could not be started.`);
+        failure.value = noticeFrom(error, `The loop could not be started.`);
     } finally {
         busy.value = false;
     }
@@ -187,7 +187,7 @@ const start = async (): Promise<void> => {
                 </span>
             </div>
 
-            <p v-if="failure" :class="cmp.alertDanger()">{{ failure }}</p>
+            <Notice v-if="failure" :of="failure" />
         </div>
 
         <template #footer>

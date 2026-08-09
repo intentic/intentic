@@ -155,14 +155,41 @@
     }
 }
 
-/* A placeholder is by definition content the reader cannot act on yet, so its motion is pure decoration —
-   the first thing to drop for anyone who asked the OS for less of it. The fill stays: it is what says
-   "something is coming here". The checkbox's tick is the same bargain: the state it reports is carried by
-   the mark and the fill, so dropping the flourish costs nothing anyone needs. */
+/* EVERY LOOPING ANIMATION IN THE APP, ANSWERED IN ONE PLACE.
+
+   This was `motion-reduce:animate-none` written at the call site, which meant it was written at three call
+   sites and forgotten at thirty — a preference the OS states plainly, honoured by whoever remembered. It
+   cannot be a habit. Unlayered on purpose: an unlayered rule outranks every `@layer`, so this beats both
+   Tailwind's `utilities` and the `components` layer below without an `!important` anywhere.
+
+   The bargain differs by what the motion is FOR, which is the only distinction that matters here:
+
+   A placeholder is by definition content the reader cannot act on yet, so its motion is pure decoration — the
+   first thing to drop. The fill stays: it is what says "something is coming here". The checkbox's tick is the
+   same bargain, and so is `animate-pulse` wherever it survives: the state it reports is carried by the mark
+   and the fill, so dropping the flourish costs nothing anyone needs.
+
+   The SPINNER is the exception, and it is slowed rather than stopped. It is the app's only running indicator
+   on a dozen surfaces, and a frozen spinner does not read as "reduced motion" — it reads as hung, which is a
+   worse thing to tell someone than the truth. At 3s it has left the range that triggers anyone and still
+   plainly turns.
+
+   An ENTRANCE that only fades is left alone: opacity is not movement and nobody asked to be denied it. The one
+   that also travels 8px is re-pointed at the fade-only keyframes, so it keeps its arrival and loses its
+   journey. */
 @media (prefers-reduced-motion: reduce) {
     .skeleton,
+    .animate-pulse,
     .p-checkbox-checked .p-checkbox-icon {
         animation: none;
+    }
+
+    .animate-spin {
+        animation-duration: 3s;
+    }
+
+    .animate-fade-in-up {
+        animation-name: ui-fade-in;
     }
 }
 

@@ -2,14 +2,26 @@
 import type { SandboxSummary, SetupCode, SetupCodeTarget, SetupReport } from "@intentic-app/api-contract";
 import { PLATFORM_WEB_ORIGIN } from "@intentic/constants";
 import { sandboxSubdomain, syncFolder } from "@intentic/sandbox-contract";
-import { cmp, Code, commandLang, CopyButton, InfoHint, Segmented, StepSection, useDevice, useOsPreference } from "@intentic/ui";
+import {
+    cmp,
+    Code,
+    commandLang,
+    CopyButton,
+    InfoHint,
+    Notice,
+    type NoticeModel,
+    Segmented,
+    StepSection,
+    useDevice,
+    useOsPreference,
+} from "@intentic/ui";
 import Button from "primevue/button";
 import Checkbox from "primevue/checkbox";
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { track } from "../composables/analytics";
 import { apiClient } from "../composables/useApi";
-import { errorMessage } from "../composables/useAsyncAction";
+import { noticeFrom, noticeOf } from "../composables/useAsyncAction";
 import { useAuth } from "../composables/useAuth";
 import { useGoogleIdentity } from "../composables/useGoogleIdentity";
 import { useNow } from "../composables/useNow";
@@ -89,7 +101,7 @@ const resuming = ref(false);
 // The name on screen: the created row's, until the user edits it in the rename box (or the attach lane's field).
 const name = ref(``);
 const creating = ref(false);
-const error = ref<string | null>(null);
+const error = ref<NoticeModel | null>(null);
 
 // The rename box, open only when asked for. The name is a default nobody typed, so changing it has to be one
 // click away — and it must never be a gate: setup runs to completion whether or not this is ever touched.
@@ -110,7 +122,7 @@ const intenticAvailable = ref(true);
 // --- setup code state (both paths) ---
 // The minted {code, hostname, expiresAt} for the currently chosen target; the command carries only the code.
 const setup = ref<SetupCode | null>(null);
-const setupError = ref<string | undefined>(undefined);
+const setupError = ref<NoticeModel | undefined>(undefined);
 // The target key `setup` was minted for, so watcher re-fires don't re-mint and a stale mint is discarded.
 const mintedFor = ref<string | undefined>(undefined);
 let mintTimer: ReturnType<typeof setTimeout> | undefined;
@@ -624,7 +636,7 @@ const autoCreate = async (): Promise<void> => {
         created.value = row;
         name.value = row.name;
     } catch (err) {
-        error.value = errorMessage(err, `Could not create your sandbox.`);
+        error.value = noticeFrom(err, `Could not create your sandbox.`);
     } finally {
         creating.value = false;
     }
@@ -656,7 +668,7 @@ const saveName = async (): Promise<void> => {
         created.value = await sandbox.update(row.id, { name: trimmed });
         renaming.value = false;
     } catch (err) {
-        error.value = errorMessage(err, `Could not rename your sandbox.`);
+        error.value = noticeFrom(err, `Could not rename your sandbox.`);
     } finally {
         savingName.value = false;
     }
@@ -684,7 +696,7 @@ const connectDomain = async (): Promise<void> => {
     try {
         const idToken = await getIdToken();
         if (idToken === undefined) {
-            error.value = `Sign in with Google to reach your sandbox.`;
+            error.value = noticeOf(`Sign in with Google to reach your sandbox.`);
             return;
         }
         // The pasted token wins: it is the one the daemon is actually gating first-bind on. Otherwise present
@@ -716,7 +728,7 @@ const connectDomain = async (): Promise<void> => {
         sandbox.select(row.id);
         await router.push(`/`);
     } catch (err) {
-        error.value = errorMessage(err, `Could not connect your sandbox.`);
+        error.value = noticeFrom(err, `Could not connect your sandbox.`);
     } finally {
         attaching.value = false;
     }
@@ -758,7 +770,7 @@ const mint = async (chosen: SetupCodeTarget, key: string): Promise<void> => {
             intenticAvailable.value = false;
             mode.value = `own`;
         } else if (key === targetKey.value) {
-            setupError.value = errorMessage(err, `Couldn't prepare your install command — try again.`);
+            setupError.value = noticeFrom(err, `Couldn't prepare your install command — try again.`);
         }
     }
 };
@@ -1189,9 +1201,12 @@ watch(commandReady, (ready) => {
                                 <span>{{ attachOutcome.message }}</span>
                                 <span class="text-2xs opacity-80">Ask its owner to invite {{ user?.email }}, then connect it again.</span>
                             </div>
-                            <div v-else-if="attachOutcome?.kind === `rejected`" :class="cmp.alertDanger()">{{ attachOutcome.message }}</div>
+                            <Notice
+                                v-else-if="attachOutcome?.kind === `rejected`"
+                                :of="{ tone: `danger`, title: `That sandbox refused the connection.`, detail: attachOutcome.message }"
+                            />
 
-                            <div v-if="error" :class="cmp.alertDanger()">{{ error }}</div>
+                            <Notice v-if="error" :of="error" />
                             <!-- With a row already in hand, going back CONTINUES that sandbox through steps 2-4 rather
                          than setting a new one up — the label has to say which of the two it is. -->
                             <button type="button" :class="cmp.linkButton(`text-muted underline hover:text-content`)" @click="setLane(`provision`)">
@@ -1207,7 +1222,7 @@ watch(commandReady, (ready) => {
                                 Setting one up for you — nothing to fill in.
                             </p>
                             <template v-else>
-                                <div v-if="error" :class="cmp.alertDanger()">{{ error }}</div>
+                                <Notice v-if="error" :of="error" />
                                 <Button label="Try again" class="w-full justify-center md:w-auto" @click="autoCreate">
                                     <template #icon><Icon name="refresh" /></template>
                                 </Button>
@@ -1276,7 +1291,7 @@ watch(commandReady, (ready) => {
                                     Rename this sandbox
                                 </button>
                             </template>
-                            <div v-if="error" :class="cmp.alertDanger()">{{ error }}</div>
+                            <Notice v-if="error" :of="error" />
                             <!-- Offered from EVERY created state, not just a resumed one: the realisation that this
                          sandbox is already running somewhere the platform never heard from (a daemon with no
                          PLATFORM_URL) arrives just as often while staring at step 3's install command. Attaching
@@ -1462,7 +1477,7 @@ watch(commandReady, (ready) => {
                                 <SetupCloud v-else-if="created" :sandbox-id="created.id" @provisioned="onProvisioned" />
                             </template>
                             <template v-else>
-                            <!-- Inside the desktop app the terminal is gone: one click hands this same setup code to the
+                                <!-- Inside the desktop app the terminal is gone: one click hands this same setup code to the
                                  app, which runs the same connect script on this machine and streams what it says into
                                  its manager window. So in the app this IS the step — a line of consequence, the button
                                  that causes it, and a way out for someone who wanted a server after all.
@@ -1472,45 +1487,45 @@ watch(commandReady, (ready) => {
                                  border. The title above names the machine, so the button only has to name the verb —
                                  which is also the shape the app's other two handoffs use (HostRecreate, the
                                  environment card), and there is no reason onboarding should be the loud one. -->
-                            <template v-if="desktop">
-                                <p class="text-xs text-muted">
-                                    Installs Docker if you need it, starts your sandbox and its tunnel, and opens your workspace the moment it answers
-                                    — no terminal.
-                                </p>
-                                <Button label="Set it up now" class="self-start" @click="runHere">
-                                    <template #icon><Icon name="bolt" /></template>
-                                </Button>
-                            </template>
+                                <template v-if="desktop">
+                                    <p class="text-xs text-muted">
+                                        Installs Docker if you need it, starts your sandbox and its tunnel, and opens your workspace the moment it
+                                        answers — no terminal.
+                                    </p>
+                                    <Button label="Set it up now" class="self-start" @click="runHere">
+                                        <template #icon><Icon name="bolt" /></template>
+                                    </Button>
+                                </template>
 
-                            <!-- On a phone, the step's actual next move — see SetupHandoff.vue. It goes ABOVE the
+                                <!-- On a phone, the step's actual next move — see SetupHandoff.vue. It goes ABOVE the
                                  command because the command is the thing it is redirecting people away from, and a
                                  correction printed underneath what it corrects is read second or not at all. It is
                                  no longer gated on the command being on screen: it is what the step IS here, and the
                                  command is the thing folded behind it. -->
-                            <SetupHandoff v-if="mobile && created" :sandbox-id="created.id" :email="user?.email ?? ``" @sent="onEmailed" />
+                                <SetupHandoff v-if="mobile && created" :sandbox-id="created.id" :email="user?.email ?? ``" @sent="onEmailed" />
 
-                            <!-- ONE LINE WHERE THERE USED TO BE A SECTION. Both devices that don't run the command
+                                <!-- ONE LINE WHERE THERE USED TO BE A SECTION. Both devices that don't run the command
                                  here get the same offer, worded for the reader who takes it: a server the app can't
                                  reach, or a shell app on the phone (Termius, Blink, a tmux session someone never
                                  closed). Everything the command needs — its tabs, its options, its dev note — lives
                                  inside the disclosure, so a phone that isn't driving a server never sees any of it. -->
-                            <button
-                                v-if="desktop || mobile"
-                                type="button"
-                                :class="cmp.linkButton(`gap-2 text-muted hover:text-content hover:no-underline`)"
-                                @click="showCommand = !showCommand"
-                            >
-                                <Icon name="terminal" class="shrink-0" />
-                                <span class="min-w-0">
-                                    <template v-if="showCommand">Hide the command</template>
-                                    <template v-else-if="desktop">Running it on a server instead? Show the command</template>
-                                    <template v-else>Have a terminal here? Show the command</template>
-                                </span>
-                                <Icon :name="showCommand ? `chevron-up` : `chevron-down`" class="shrink-0 text-subtle" />
-                            </button>
+                                <button
+                                    v-if="desktop || mobile"
+                                    type="button"
+                                    :class="cmp.linkButton(`gap-2 text-muted hover:text-content hover:no-underline`)"
+                                    @click="showCommand = !showCommand"
+                                >
+                                    <Icon name="terminal" class="shrink-0" />
+                                    <span class="min-w-0">
+                                        <template v-if="showCommand">Hide the command</template>
+                                        <template v-else-if="desktop">Running it on a server instead? Show the command</template>
+                                        <template v-else>Have a terminal here? Show the command</template>
+                                    </span>
+                                    <Icon :name="showCommand ? `chevron-up` : `chevron-down`" class="shrink-0 text-subtle" />
+                                </button>
 
-                            <div v-if="commandVisible" class="flex flex-col gap-2">
-                                <!-- One line, because the title already gave the instruction and nobody reads the second
+                                <div v-if="commandVisible" class="flex flex-col gap-2">
+                                    <!-- One line, because the title already gave the instruction and nobody reads the second
                              sentence of a step they are trying to get through. All this adds is the bit the title
                              can't: WHICH machine — which is why it belongs to the COMMAND and not to the step, and
                              why it is no longer above a button whose whole selling point is that there is no
@@ -1518,27 +1533,27 @@ watch(commandReady, (ready) => {
                              that runs this is by construction not the one reading it.
                              Not on a phone: the line that opened this disclosure already said who copying is for,
                              and repeating it here would be the third sentence in a card about a fourth device. -->
-                                <p v-if="!mobile" class="flex items-start gap-2.5 text-xs text-muted">
-                                    <Icon name="terminal" class="mt-0.5 shrink-0 text-link" />
-                                    <span class="min-w-0">
-                                        <template v-if="desktop"
-                                            >Copy it, then paste it into a terminal on the machine that will host your sandbox.</template
-                                        >
-                                        <template v-else>Paste it into a terminal — this computer, or any server you have a shell on.</template>
-                                    </span>
-                                </p>
-                                <!-- On a phone the picker takes a full row of its own: three pill tabs sharing a
+                                    <p v-if="!mobile" class="flex items-start gap-2.5 text-xs text-muted">
+                                        <Icon name="terminal" class="mt-0.5 shrink-0 text-link" />
+                                        <span class="min-w-0">
+                                            <template v-if="desktop"
+                                                >Copy it, then paste it into a terminal on the machine that will host your sandbox.</template
+                                            >
+                                            <template v-else>Paste it into a terminal — this computer, or any server you have a shell on.</template>
+                                        </span>
+                                    </p>
+                                    <!-- On a phone the picker takes a full row of its own: three pill tabs sharing a
                              340px line wrapped every label to two lines. The copy button leaves that row with
                              it — a chip stranded on a line of its own under the tabs, one row above the thing
                              it copies, was the loose end on this card. Beside the tabs on a desktop, under the
                              command on a phone; either way it is next to what it acts on. -->
-                                <div class="flex flex-col gap-2 md:flex-row md:flex-wrap md:items-center md:justify-between">
-                                    <Segmented v-model="runTab" :options="runTabOptions" :stretch="mobile" />
-                                    <CopyButton v-if="!mobile && runTab !== `compose`" :text="selectedCommand" label="Copy" @copied="onCopied" />
-                                </div>
-                                <SetupCompose v-if="runTab === `compose` && composeArgs" :args="composeArgs" />
-                                <template v-else>
-                                    <!-- Clamped on a phone: the command is a thing to COPY, and wrapped in full it is
+                                    <div class="flex flex-col gap-2 md:flex-row md:flex-wrap md:items-center md:justify-between">
+                                        <Segmented v-model="runTab" :options="runTabOptions" :stretch="mobile" />
+                                        <CopyButton v-if="!mobile && runTab !== `compose`" :text="selectedCommand" label="Copy" @copied="onCopied" />
+                                    </div>
+                                    <SetupCompose v-if="runTab === `compose` && composeArgs" :args="composeArgs" />
+                                    <template v-else>
+                                        <!-- Clamped on a phone: the command is a thing to COPY, and wrapped in full it is
                                  nine lines of env vars between the button that copies it and the step that
                                  comes next. The dev command is the long one, but even the hosted one-liner
                                  wraps to four lines at 390px.
@@ -1546,48 +1561,48 @@ watch(commandReady, (ready) => {
                                  documentation snippet — but the line above the block already says to paste this
                                  into a terminal, so it was a heading restating the sentence directly above it,
                                  and a row of chrome between the Copy button and the thing it copies. -->
-                                    <Code
-                                        :code="selectedCommand"
-                                        :lang="selectedCommandLang"
-                                        :wrap="true"
-                                        :copyable="false"
-                                        :clamp-lines="mobile ? 4 : undefined"
-                                    />
-                                    <!-- Full width and touch-sized, directly under the command: the reader who
+                                        <Code
+                                            :code="selectedCommand"
+                                            :lang="selectedCommandLang"
+                                            :wrap="true"
+                                            :copyable="false"
+                                            :clamp-lines="mobile ? 4 : undefined"
+                                        />
+                                        <!-- Full width and touch-sized, directly under the command: the reader who
                                  opened this disclosure came for the clipboard, so here — and only here — copying
                                  is the action. `secondary`, because the primary on this card is the email
                                  handoff above it and two filled buttons make the reader choose twice. -->
-                                    <CopyButton
-                                        v-if="mobile"
-                                        :text="selectedCommand"
-                                        label="Copy command"
-                                        :stretch="true"
-                                        severity="secondary"
-                                        @copied="onCopied"
-                                    />
-                                    <!-- Local dev only: platformEnv() injects SANDBOX_IMAGE=intentic-sandbox:dev — connect.sh
+                                        <CopyButton
+                                            v-if="mobile"
+                                            :text="selectedCommand"
+                                            label="Copy command"
+                                            :stretch="true"
+                                            severity="secondary"
+                                            @copied="onCopied"
+                                        />
+                                        <!-- Local dev only: platformEnv() injects SANDBOX_IMAGE=intentic-sandbox:dev — connect.sh
                                  rebuilds it from this checkout on every run (layer-cached), so the pasted command is
                                  self-sufficient and never runs a stale image after sandbox edits. Folded shut: it is a
                                  note to whoever is developing intentic itself, not a step in setting a sandbox up.
                                  Gated on the same condition as the tag it describes: asked for the released script,
                                  this command builds nothing, and a note promising otherwise would be the only thing
                                  on screen still claiming it. -->
-                                    <details v-if="buildsFromCheckout" class="text-xs text-warning">
-                                        <summary class="flex cursor-pointer list-none items-center gap-2 [&::-webkit-details-marker]:hidden">
-                                            <Icon name="box" class="shrink-0" />
-                                            <span class="min-w-0">Local dev: builds from your checkout</span>
-                                            <Icon name="chevron-down" class="shrink-0 text-subtle" />
-                                        </summary>
-                                        <p class="mt-1 pl-6 text-2xs">
-                                            This command builds <code>{{ DEV_SANDBOX_IMAGE }}</code> from your checkout and runs that — every run
-                                            rebuilds, so sandbox edits are always picked up (cached when unchanged; the first build takes a few
-                                            minutes). For a live edit loop, keep <code>pnpm dev:sandbox</code> running.
-                                        </p>
-                                    </details>
-                                </template>
-                            </div>
+                                        <details v-if="buildsFromCheckout" class="text-xs text-warning">
+                                            <summary class="flex cursor-pointer list-none items-center gap-2 [&::-webkit-details-marker]:hidden">
+                                                <Icon name="box" class="shrink-0" />
+                                                <span class="min-w-0">Local dev: builds from your checkout</span>
+                                                <Icon name="chevron-down" class="shrink-0 text-subtle" />
+                                            </summary>
+                                            <p class="mt-1 pl-6 text-2xs">
+                                                This command builds <code>{{ DEV_SANDBOX_IMAGE }}</code> from your checkout and runs that — every run
+                                                rebuilds, so sandbox edits are always picked up (cached when unchanged; the first build takes a few
+                                                minutes). For a live edit loop, keep <code>pnpm dev:sandbox</code> running.
+                                            </p>
+                                        </details>
+                                    </template>
+                                </div>
 
-                            <!-- EVERY OPTION THAT REWRITES THE COMMAND, AS ONE GROUP OF CHIPS UNDER IT. These are the
+                                <!-- EVERY OPTION THAT REWRITES THE COMMAND, AS ONE GROUP OF CHIPS UNDER IT. These are the
                                  one thing that does not belong in the reference panel — a checkbox whose reason is a
                                  hover (or a column) away is a checkbox nobody ticks — and each chip's pressed state
                                  is visibly answered by the command one row up.
@@ -1600,46 +1615,46 @@ watch(commandReady, (ready) => {
                                  stays on screen there with the command folded away. On a phone it does not: nothing
                                  is enrolled from here, and the machine that opens the emailed link asks again. Only
                                  the compose tab drops it outright, because that file declares its own env. -->
-                            <!-- The <label> stops at the option's NAME rather than wrapping the whole row: a
+                                <!-- The <label> stops at the option's NAME rather than wrapping the whole row: a
                                  label toggles on any click inside it, and these captions carry a folder path
                                  and a `sudo` mention — text people select and read. Clicking a row's name still
                                  hits a 200px target; selecting its caption no longer rewrites the command. -->
-                            <div v-if="!composeShown && (commandVisible || desktop)" class="flex flex-col gap-1.5 text-2xs text-muted">
-                                <div class="flex flex-wrap items-center gap-x-2 gap-y-1">
-                                    <label class="flex cursor-pointer items-center gap-2">
-                                        <Checkbox v-model="syncEnabled" :binary="true" size="small" />
-                                        <span :class="optionLabel">Also sync a local folder</span>
-                                    </label>
-                                    <!-- On, the folder IS the news; off, the reason is. Saying both at once was one
+                                <div v-if="!composeShown && (commandVisible || desktop)" class="flex flex-col gap-1.5 text-2xs text-muted">
+                                    <div class="flex flex-wrap items-center gap-x-2 gap-y-1">
+                                        <label class="flex cursor-pointer items-center gap-2">
+                                            <Checkbox v-model="syncEnabled" :binary="true" size="small" />
+                                            <span :class="optionLabel">Also sync a local folder</span>
+                                        </label>
+                                        <!-- On, the folder IS the news; off, the reason is. Saying both at once was one
                                          clause of each, and the clause that mattered was never the one being read. -->
-                                    <span class="min-w-0">
-                                        <template v-if="syncEnabled && syncDir !== ``"
-                                            >Mirrors to <code class="break-words">{{ syncDir }}</code></template
-                                        >
-                                        <template v-else>Edit this sandbox's files in your own editor.</template>
-                                    </span>
-                                </div>
-                                <!-- Unix only, because `sudo` is: PowerShell has no equivalent to drop, so on Windows
+                                        <span class="min-w-0">
+                                            <template v-if="syncEnabled && syncDir !== ``"
+                                                >Mirrors to <code class="break-words">{{ syncDir }}</code></template
+                                            >
+                                            <template v-else>Edit this sandbox's files in your own editor.</template>
+                                        </span>
+                                    </div>
+                                    <!-- Unix only, because `sudo` is: PowerShell has no equivalent to drop, so on Windows
                              there is no switch here and the Docker prerequisite is left to the panel, which
                              names the reboot a first Windows install may want. And only while the command is on
                              screen — it rewrites one token of a line, which is no kind of offer when the line
                              itself is folded away. -->
-                                <div
-                                    v-if="environment.production && commandVisible && runTab === `unix`"
-                                    class="flex flex-wrap items-center gap-x-2 gap-y-1"
-                                >
-                                    <label class="flex cursor-pointer items-center gap-2">
-                                        <Checkbox v-model="hasDocker" :binary="true" size="small" />
-                                        <span :class="optionLabel">I already have Docker</span>
-                                    </label>
-                                    <span class="min-w-0">
-                                        <template v-if="hasDocker">Runs as you, no <code>sudo</code>.</template>
-                                        <template v-else><code>sudo</code> is there for one job: installing Docker if it's missing.</template>
-                                    </span>
+                                    <div
+                                        v-if="environment.production && commandVisible && runTab === `unix`"
+                                        class="flex flex-wrap items-center gap-x-2 gap-y-1"
+                                    >
+                                        <label class="flex cursor-pointer items-center gap-2">
+                                            <Checkbox v-model="hasDocker" :binary="true" size="small" />
+                                            <span :class="optionLabel">I already have Docker</span>
+                                        </label>
+                                        <span class="min-w-0">
+                                            <template v-if="hasDocker">Runs as you, no <code>sudo</code>.</template>
+                                            <template v-else><code>sudo</code> is there for one job: installing Docker if it's missing.</template>
+                                        </span>
+                                    </div>
                                 </div>
-                            </div>
 
-                            <!-- Read in an ordinary browser: the same handoff is one click away IF the app is
+                                <!-- Read in an ordinary browser: the same handoff is one click away IF the app is
                                  already installed (the OS routes the link), and one download away if it isn't.
                                  Deliberately the quietest thing on the card — the command above is the path that
                                  works on every machine, and this is an offer, not a redirect. Compose declares its
@@ -1648,36 +1663,36 @@ watch(commandReady, (ready) => {
                                  that follows one downloads a .msi it cannot open. The app is worth offering to
                                  this person — just on the machine they are about to open the emailed link on,
                                  where this same block is waiting and the download actually runs. -->
-                            <div
-                                v-if="!desktop && !mobile && runTab !== `compose`"
-                                class="flex flex-col gap-1 border-t border-line pt-3 text-2xs text-subtle"
-                            >
-                                <span>
-                                    Rather not use a terminal? The
-                                    <button type="button" class="text-link hover:underline" @click="runHere">Intentic desktop app</button>
-                                    does this in one click — and updates your sandbox with a button afterwards.
-                                </span>
-                                <span class="flex flex-wrap items-center gap-x-3 gap-y-1">
-                                    Get it:
-                                    <a :href="DESKTOP_DOWNLOADS.windows" class="inline-flex items-center gap-1 text-link hover:underline">
-                                        Windows <Icon name="external-link" />
-                                    </a>
-                                    <a :href="DESKTOP_DOWNLOADS.linuxAppImage" class="inline-flex items-center gap-1 text-link hover:underline">
-                                        Linux AppImage <Icon name="external-link" />
-                                    </a>
-                                    <a :href="DESKTOP_DOWNLOADS.linuxDeb" class="text-link hover:underline">.deb</a>
-                                    <a :href="DESKTOP_DOWNLOADS.linuxRpm" class="text-link hover:underline">.rpm</a>
-                                </span>
-                                <!-- Local dev: these point at the local site's /desktop/ assets, so the links serve
+                                <div
+                                    v-if="!desktop && !mobile && runTab !== `compose`"
+                                    class="flex flex-col gap-1 border-t border-line pt-3 text-2xs text-subtle"
+                                >
+                                    <span>
+                                        Rather not use a terminal? The
+                                        <button type="button" class="text-link hover:underline" @click="runHere">Intentic desktop app</button>
+                                        does this in one click — and updates your sandbox with a button afterwards.
+                                    </span>
+                                    <span class="flex flex-wrap items-center gap-x-3 gap-y-1">
+                                        Get it:
+                                        <a :href="DESKTOP_DOWNLOADS.windows" class="inline-flex items-center gap-1 text-link hover:underline">
+                                            Windows <Icon name="external-link" />
+                                        </a>
+                                        <a :href="DESKTOP_DOWNLOADS.linuxAppImage" class="inline-flex items-center gap-1 text-link hover:underline">
+                                            Linux AppImage <Icon name="external-link" />
+                                        </a>
+                                        <a :href="DESKTOP_DOWNLOADS.linuxDeb" class="text-link hover:underline">.deb</a>
+                                        <a :href="DESKTOP_DOWNLOADS.linuxRpm" class="text-link hover:underline">.rpm</a>
+                                    </span>
+                                    <!-- Local dev: these point at the local site's /desktop/ assets, so the links serve
                                      YOUR build once staged — the same story as the dev sandbox image above. -->
-                                <p v-if="platformUrlOverride" class="flex items-center gap-2 text-warning">
-                                    <Icon name="box" class="shrink-0" />
-                                    <span
-                                        >Local dev: stage installers with <code>pnpm --filter @intentic/desktop-app stage:downloads</code>, then run
-                                        the site.</span
-                                    >
-                                </p>
-                            </div>
+                                    <p v-if="platformUrlOverride" class="flex items-center gap-2 text-warning">
+                                        <Icon name="box" class="shrink-0" />
+                                        <span
+                                            >Local dev: stage installers with <code>pnpm --filter @intentic/desktop-app stage:downloads</code>, then
+                                            run the site.</span
+                                        >
+                                    </p>
+                                </div>
                             </template>
                         </template>
 
@@ -1701,7 +1716,11 @@ watch(commandReady, (ready) => {
                         <div v-if="waiting" class="flex flex-col gap-2 border-t border-line pt-3">
                             <!-- The spinner is a promise that something is moving, so it does not survive a failure
                                  report: a spinner beside "here is what broke" is the page contradicting itself. -->
-                            <p v-if="reportFailures === null" class="flex items-start gap-2 text-xs" :class="handoff === `claimed` ? `text-content` : `text-muted`">
+                            <p
+                                v-if="reportFailures === null"
+                                class="flex items-start gap-2 text-xs"
+                                :class="handoff === `claimed` ? `text-content` : `text-muted`"
+                            >
                                 <Icon
                                     name="spinner"
                                     spin

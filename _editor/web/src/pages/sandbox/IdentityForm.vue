@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Avatar, BrandMark, cmp, Segmented } from "@intentic/ui";
+import { Avatar, BrandMark, cmp, Notice, type NoticeModel, Segmented } from "@intentic/ui";
 import Button from "primevue/button";
 import { computed } from "vue";
 import type { BrowserAccount } from "../../composables/extensions/useBrowserAccounts";
@@ -36,7 +36,7 @@ const { draft, accounts, connected, valid, saving, submitLabel, error, nameHint 
     valid: boolean;
     saving: boolean;
     submitLabel: string;
-    error?: string;
+    error?: NoticeModel;
     /** Why the name is not usable yet, when it isn't. */
     nameHint?: string;
 }>();
@@ -141,7 +141,7 @@ const POSTURES = [
             </div>
         </div>
 
-        <div v-if="error !== undefined" :class="cmp.alertDanger()">{{ error }}</div>
+        <Notice v-if="error !== undefined" :of="error" />
         <div class="flex items-center gap-3">
             <Button :label="submitLabel" size="small" :loading="saving" :disabled="!valid" @click="emit('submit')" />
             <button type="button" :class="cmp.linkButton('text-muted hover:text-content')" @click="emit('cancel')">Cancel</button>

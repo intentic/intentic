@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { providerLabel } from "@intentic/sandbox-contract";
-import { BarChart, Card, cmp, Segmented } from "@intentic/ui";
+import { BarChart, Card, cmp, Notice, type NoticeModel, NoticeStack, Segmented } from "@intentic/ui";
 import { computed, ref } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { useAgents } from "../../composables/agents/useAgents";
@@ -62,6 +62,9 @@ import {
 const route = useRoute();
 const router = useRouter();
 const { rows, isLoading, isFetching, refetch, error } = useUsage();
+const usageNotice = computed<NoticeModel | undefined>(() =>
+    error.value === undefined ? undefined : { tone: `danger`, title: `Couldn't read this sandbox's usage.`, detail: error.value },
+);
 const { fleet } = useAgents();
 
 // ---- filters: one row, above everything, scoping everything -----------------------------------------------
@@ -186,7 +189,7 @@ const hasSpend = computed(() => current.value.length > 0);
 
 <template>
     <div class="flex flex-col gap-6">
-        <p v-if="error !== undefined" :class="cmp.alertDanger()">{{ error }}</p>
+        <Notice v-if="usageNotice" :of="usageNotice" />
 
         <!-- ONE filter row, above everything, scoping everything below it. Date first: it is the control every
              reader reaches for. -->

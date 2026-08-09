@@ -1,13 +1,13 @@
 <script setup lang="ts">
 import type { Identity } from "@intentic/sandbox-contract";
-import { Avatar, BrandMark, cmp, ConfirmDialog, Row, RowGroup, StatusBadge } from "@intentic/ui";
+import { Avatar, BrandMark, cmp, ConfirmDialog, Notice, type NoticeModel, Row, RowGroup, StatusBadge } from "@intentic/ui";
 import Button from "primevue/button";
 import { computed, ref } from "vue";
 import IdentityForm, { type IdentityDraft } from "./IdentityForm.vue";
 import { useBrowserAccounts } from "../../composables/extensions/useBrowserAccounts";
 import { identityHue } from "../../composables/identityHue";
 import { useIdentities } from "../../composables/sandbox/useIdentities";
-import { errorMessage } from "../../composables/useAsyncAction";
+import { noticeFrom } from "../../composables/useAsyncAction";
 
 /* THE CAST — the faces this sandbox wears when it acts outside, and the one place they are created and edited.
  *
@@ -26,6 +26,10 @@ import { errorMessage } from "../../composables/useAsyncAction";
  * the Reddit wrong. */
 
 const { identities, connected, isConnected, error, isLoading, save, remove } = useIdentities();
+// The list query reports a bare message; this page knows the user came to see their cast.
+const listNotice = computed<NoticeModel | undefined>(() =>
+    error.value === undefined ? undefined : { tone: `danger`, title: `Couldn't read your faces.`, detail: error.value },
+);
 // The accounts a card can name: the logged-in browser profiles, each carrying the brand of the site it is an
 // account of. One capability = one account, so a site the owner connected twice appears twice and exactly one
 // of them belongs on any given card.
@@ -45,7 +49,7 @@ const ready = (identity: Identity): boolean => identity.capabilities.some((id) =
 // ── The editor ──────────────────────────────────────────────────────────────────────────────────────────────
 // One draft at a time, opened either by "Add a face" (`original` undefined) or by a row's pencil.
 const draft = ref<IdentityDraft | undefined>(undefined);
-const saveError = ref<string | undefined>(undefined);
+const saveError = ref<NoticeModel | undefined>(undefined);
 
 /* The id comes from the name so nobody types one, and once a card exists it is FROZEN: automations pin to the
  * id, and a rename that silently re-keyed the card would unpin them without saying so. Renaming the label is
@@ -105,7 +109,7 @@ const submit = async (): Promise<void> => {
         });
         draft.value = undefined;
     } catch (err) {
-        saveError.value = errorMessage(err, `Could not save this face.`);
+        saveError.value = noticeFrom(err, `Could not save this face.`);
     }
 };
 
@@ -128,7 +132,7 @@ const confirmRemove = async (): Promise<void> => {
             A face is who this sandbox is when it acts outside: a name, the accounts it speaks through, and whether it may publish on its own.
         </p>
 
-        <div v-if="error" :class="cmp.alertDanger('mb-4')">{{ error }}</div>
+        <Notice v-if="listNotice" :of="listNotice" class="mb-4" />
         <div v-if="isLoading" :class="cmp.emptyState('py-6')"><Icon name="spinner" spin /> Reading your sandbox's faces…</div>
 
         <template v-else>

@@ -1,12 +1,12 @@
 <script setup lang="ts">
 import { HostTunnelSchema, type HostTunnel } from "@intentic-app/api-contract";
-import { cmp, Code, commandLang, InfoHint, OS_OPTIONS, Segmented, useOsPreference } from "@intentic/ui";
+import { cmp, Code, commandLang, InfoHint, Notice, type NoticeModel, OS_OPTIONS, Segmented, useOsPreference } from "@intentic/ui";
 import Button from "primevue/button";
 import { computed, onUnmounted, ref } from "vue";
 import { sandboxJson } from "../../composables/sandbox/sandboxClient";
 import { useInventory } from "../../composables/extensions/useInventory";
 import { useSandbox } from "../../composables/sandbox/useSandbox";
-import { errorMessage } from "../../composables/useAsyncAction";
+import { noticeFrom, noticeOf } from "../../composables/useAsyncAction";
 import { bashCommand, psCommand } from "../../environments/scriptCommand";
 import ScriptSourceSwitch from "../../components/ScriptSourceSwitch.vue";
 import { zoneFromUrl } from "@intentic/sandbox-contract";
@@ -52,7 +52,7 @@ const zone = computed(() => zoneFromUrl(daemonUrl.value));
 const minted = ref<HostTunnel | undefined>(undefined);
 const mintedName = ref(``);
 const minting = ref(false);
-const mintError = ref<string | undefined>(undefined);
+const mintError = ref<NoticeModel | undefined>(undefined);
 const mintCurrent = computed(() => minted.value !== undefined && mintedName.value === canonicalHostName.value);
 const canMint = computed(() => canonicalHostName.value !== `` && active.value !== undefined);
 
@@ -80,8 +80,8 @@ const mint = async (): Promise<void> => {
     } catch (err) {
         mintError.value =
             err instanceof DOMException && err.name === `TimeoutError`
-                ? `Timed out preparing this host's tunnel — try again.`
-                : errorMessage(err, `Couldn't prepare this host's tunnel — try again.`);
+                ? noticeOf(`Timed out preparing this host's tunnel — try again.`)
+                : noticeFrom(err, `Couldn't prepare this host's tunnel — try again.`);
     } finally {
         minting.value = false;
     }
@@ -275,9 +275,7 @@ onUnmounted(() => clearInterval(timer));
             >
                 <template #icon><Icon name="bolt" /></template>
             </Button>
-            <p v-if="mintError !== undefined" :class="cmp.alertDanger()">
-                {{ mintError }}
-            </p>
+            <Notice v-if="mintError !== undefined" :of="mintError" />
 
             <div v-if="commandReady" class="flex items-center gap-2 text-2xs text-subtle">
                 <Icon name="spinner" class="text-info" spin />

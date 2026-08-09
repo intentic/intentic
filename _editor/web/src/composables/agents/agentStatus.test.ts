@@ -119,6 +119,18 @@ describe("unfinishedMark", () => {
         }
     });
 
+    // There is one of these per contributing session, so whatever the mark does, a busy review does four times
+    // at once. It has to say "unfinished" while standing perfectly still; the ring is what tells it apart from
+    // a chip's flat identity tint now that the pulse is gone.
+    it("stands still — a per-chip mark may not animate", () => {
+        for (const status of STATUSES) {
+            for (const attention of FLAGS) {
+                expect(unfinishedMark({ status, attention })?.dot ?? ``).not.toMatch(/\banimate-/);
+            }
+        }
+        expect(unfinishedMark({ status: `running`, attention: none })?.dot).toContain(`ring-2`);
+    });
+
     it("names why, in the board's own words", () => {
         expect(unfinishedMark({ status: `running`, attention: none })?.label).toBe(`Still working`);
         expect(unfinishedMark({ status: `running`, attention: { ...none, question: true } })?.label).toBe(`Question for you`);

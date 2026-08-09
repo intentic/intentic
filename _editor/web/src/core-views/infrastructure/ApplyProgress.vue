@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { Card, cmp } from "@intentic/ui";
+import { computed } from "vue";
+import { Card, cmp, Notice, type NoticeModel } from "@intentic/ui";
 import Button from "primevue/button";
 import PlanStepRow from "../../components/PlanStepRow.vue";
 import { ProgressRing } from "@intentic/ui";
@@ -11,6 +12,10 @@ import type { useApplyProgress } from "./useApplyProgress";
  * survives a refresh). The terminal stays the detailed log surface, reachable via "View logs". */
 const { progress } = defineProps<{ progress: ReturnType<typeof useApplyProgress> }>();
 const { applying, reattaching, error, nodes, readiness, iterations, prunes, orphans, converged, applyPhaseDone, progressPct } = progress;
+// The runner reports a bare message and no idea what it was applying; this card does.
+const applyNotice = computed<NoticeModel | undefined>(() =>
+    error.value === undefined ? undefined : { tone: `danger`, title: `Applying your changes failed.`, detail: error.value },
+);
 </script>
 
 <template>
@@ -93,6 +98,6 @@ const { applying, reattaching, error, nodes, readiness, iterations, prunes, orph
             }}
         </p>
 
-        <div v-if="error" :class="cmp.alertDanger()">{{ error }}</div>
+        <Notice v-if="applyNotice" :of="applyNotice" />
     </Card>
 </template>

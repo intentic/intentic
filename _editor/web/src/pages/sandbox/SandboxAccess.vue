@@ -1,14 +1,14 @@
 <script setup lang="ts">
 import type { InviteRecord } from "@intentic-app/api-contract";
 import type { GrantedRole, MemberRole } from "@intentic/sandbox-contract";
-import { Avatar, cmp, RowGroup, Segmented } from "@intentic/ui";
+import { Avatar, cmp, Notice, type NoticeModel, NoticeStack, RowGroup, Segmented } from "@intentic/ui";
 import Button from "primevue/button";
 import Select from "primevue/select";
 import { computed, onMounted, ref } from "vue";
 import { sandboxJson } from "../../composables/sandbox/sandboxClient";
 import { jsonBody } from "../../composables/sandbox/jsonBody";
 import { apiClient } from "../../composables/useApi";
-import { errorMessage } from "../../composables/useAsyncAction";
+import { noticeFrom } from "../../composables/useAsyncAction";
 import { useAuth } from "../../composables/useAuth";
 import { useSandbox } from "../../composables/sandbox/useSandbox";
 import { identityHue } from "../../composables/identityHue";
@@ -47,7 +47,7 @@ const ROLE_BLURB: Record<GrantedRole, string> = {
 const roleLabel = (role: MemberRole): string => role.charAt(0).toUpperCase() + role.slice(1);
 const inviteRole = ref<GrantedRole>(`collaborator`);
 const busy = ref(false);
-const error = ref<string>();
+const error = ref<NoticeModel>();
 const emailTouched = ref(false);
 
 const validEmail = (value: string): boolean => /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(value);
@@ -71,7 +71,7 @@ const load = async (): Promise<void> => {
     try {
         members.value = (await apiClient.invite.list({ sandboxId: id })).members;
     } catch (err) {
-        error.value = errorMessage(err, `Couldn't load the access list.`);
+        error.value = noticeFrom(err, `Couldn't load the access list.`);
     }
 };
 
@@ -93,7 +93,10 @@ const invite = async (): Promise<void> => {
     try {
         // Push to the daemon first (owner-gated, enforced), then record the invite + send the email. sandboxJson
         // throws on a non-2xx daemon reply (403/401/offline), so an unenforced grant is never recorded as sent.
-        await sandboxJson<{ members: { email: string; role: GrantedRole }[] }>(`/members`, jsonBody(`POST`, { email: value, role: inviteRole.value }));
+        await sandboxJson<{ members: { email: string; role: GrantedRole }[] }>(
+            `/members`,
+            jsonBody(`POST`, { email: value, role: inviteRole.value }),
+        );
         members.value = (await apiClient.invite.create({ sandboxId: id, email: value, role: inviteRole.value })).members;
         email.value = ``;
         emailTouched.value = false;
@@ -101,7 +104,7 @@ const invite = async (): Promise<void> => {
         // The daemon push (or an offline sandbox) can fail before the invite is recorded; resync so a pending
         // invite created just before an email failure still shows with a Resend action.
         void load();
-        error.value = errorMessage(err, `Couldn't send the invite — is the sandbox online?`);
+        error.value = noticeFrom(err, `Couldn't send the invite — is the sandbox online?`);
     } finally {
         busy.value = false;
     }
@@ -117,7 +120,7 @@ const resend = async (target: string): Promise<void> => {
     try {
         members.value = (await apiClient.invite.resend({ sandboxId: id, email: target })).members;
     } catch (err) {
-        error.value = errorMessage(err, `Couldn't resend the invite.`);
+        error.value = noticeFrom(err, `Couldn't resend the invite.`);
     } finally {
         busy.value = false;
     }
@@ -142,7 +145,7 @@ const revokeSessions = async (): Promise<void> => {
         await sandboxJson<{ ok: boolean }>(`/system/sessions/revoke`, { method: `POST` });
         sessionsRevoked.value = true;
     } catch (err) {
-        error.value = errorMessage(err, `Couldn't sign other browsers out — is the sandbox online?`);
+        error.value = noticeFrom(err, `Couldn't sign other browsers out — is the sandbox online?`);
     } finally {
         revokingSessions.value = false;
     }
@@ -162,7 +165,7 @@ const setRole = async (target: string, role: GrantedRole): Promise<void> => {
         members.value = (await apiClient.invite.setRole({ sandboxId: id, email: target, role })).members;
     } catch (err) {
         void load();
-        error.value = errorMessage(err, `Couldn't change the role — is the sandbox online?`);
+        error.value = noticeFrom(err, `Couldn't change the role — is the sandbox online?`);
     } finally {
         busy.value = false;
     }
@@ -181,7 +184,7 @@ const revoke = async (target: string): Promise<void> => {
         await sandboxJson<{ members: { email: string; role: GrantedRole }[] }>(`/members`, jsonBody(`DELETE`, { email: target }));
         members.value = (await apiClient.invite.revoke({ sandboxId: id, email: target })).members;
     } catch (err) {
-        error.value = errorMessage(err, `Couldn't revoke access — is the sandbox online?`);
+        error.value = noticeFrom(err, `Couldn't revoke access — is the sandbox online?`);
     } finally {
         busy.value = false;
     }
@@ -245,7 +248,7 @@ const revoke = async (target: string): Promise<void> => {
                         People you invite get an email to open
                         <span class="font-medium text-content">{{ sandbox.active.value?.name }}</span> and sign in with their own Google account.
                     </p>
-                    <div v-if="error" :class="cmp.alertDanger()">{{ error }}</div>
+                    <Notice v-if="error" :of="error" />
                     <form class="flex flex-col gap-2" @submit.prevent="invite">
                         <!-- The tier goes with the address: an invite IS a role decision, and the sentence
                              under the picker is where the model is taught. Collaborator preselected. -->
@@ -330,7 +333,9 @@ const revoke = async (target: string): Promise<void> => {
                         <div class="truncate text-xs text-muted">{{ presenceActivity(member) }}</div>
                     </div>
                     <!-- The role rides presence: who may do what is a fact every member gets to see. -->
-                    <span class="shrink-0 rounded-full bg-content/10 px-1.5 py-0.5 text-2xs font-medium text-subtle">{{ roleLabel(member.role) }}</span>
+                    <span class="shrink-0 rounded-full bg-content/10 px-1.5 py-0.5 text-2xs font-medium text-subtle">{{
+                        roleLabel(member.role)
+                    }}</span>
                     <span v-if="member.idle" class="shrink-0 text-2xs text-subtle">idle</span>
                 </div>
             </template>

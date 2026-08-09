@@ -1,11 +1,11 @@
 <script setup lang="ts">
 import { INVENTORY_SERVICES } from "@intentic-app/capability-catalog";
 import { type InventoryEntry } from "@intentic-app/api-contract";
-import { Card, cmp, Code, ConfirmDialog, InfoHint, StatusBadge } from "@intentic/ui";
+import { Card, cmp, Code, ConfirmDialog, InfoHint, Notice, type NoticeModel, StatusBadge } from "@intentic/ui";
 import Button from "primevue/button";
 import { computed, onMounted, onUnmounted, ref, watch } from "vue";
 import SecretField from "../../components/SecretField.vue";
-import { errorMessage } from "../../composables/useAsyncAction";
+import { noticeFrom } from "../../composables/useAsyncAction";
 import { bashCommand } from "../../environments/scriptCommand";
 import { useCapabilities } from "../../composables/extensions/useCapabilities";
 import { useDeployments } from "../../composables/extensions/useDeployments";
@@ -101,8 +101,12 @@ const haveSummary = computed(() => {
 });
 
 // Add/remove failures (useInventory.error only covers the read query); surfaced alongside it at the top.
-const actionError = ref<string | null>(null);
-const topError = computed(() => actionError.value ?? queryError.value);
+const actionError = ref<NoticeModel | null>(null);
+const topError = computed<NoticeModel | undefined>(
+    () =>
+        actionError.value ??
+        (queryError.value === undefined ? undefined : { tone: `danger`, title: `Couldn't read your inventory.`, detail: queryError.value }),
+);
 
 // The display chip for an entry: the service label for an i.want.service, "App" for an i.want.app, else
 // "Server" (the backends list excludes every credential provider, so what remains is hosts).
@@ -130,7 +134,7 @@ const removeEntry = async (entryName: string): Promise<void> => {
             void preview.run();
         }
     } catch (err) {
-        actionError.value = errorMessage(err, `Could not remove the entry.`);
+        actionError.value = noticeFrom(err, `Could not remove the entry.`);
     }
 };
 
@@ -168,7 +172,7 @@ const submitGithub = async (): Promise<void> => {
         showGithub.value = false;
         ghToken.value = ``;
     } catch (err) {
-        actionError.value = errorMessage(err, `Could not link GitHub.`);
+        actionError.value = noticeFrom(err, `Could not link GitHub.`);
     } finally {
         ghSubmitting.value = false;
     }
@@ -194,7 +198,7 @@ const submitGitlab = async (): Promise<void> => {
         glToken.value = ``;
         glUrl.value = ``;
     } catch (err) {
-        actionError.value = errorMessage(err, `Could not link GitLab.`);
+        actionError.value = noticeFrom(err, `Could not link GitLab.`);
     } finally {
         glSubmitting.value = false;
     }
@@ -217,7 +221,7 @@ const submitStripe = async (): Promise<void> => {
         showStripe.value = false;
         stripeKey.value = ``;
     } catch (err) {
-        actionError.value = errorMessage(err, `Could not connect Stripe.`);
+        actionError.value = noticeFrom(err, `Could not connect Stripe.`);
     } finally {
         stripeSubmitting.value = false;
     }
@@ -271,7 +275,7 @@ onUnmounted(progress.stopWatching);
 </script>
 
 <template>
-    <div v-if="topError" :class="cmp.alertDanger('mb-6 px-4 py-3 text-sm')">{{ topError }}</div>
+    <Notice v-if="topError" :of="topError" class="mb-6" />
 
     <!-- The deployment engine on the host is down — the single most load-bearing health fact of this page. -->
     <div v-if="komodoDown" class="mb-6 flex items-center gap-2 rounded-lg border border-warning/40 bg-warning/10 px-4 py-3 text-sm text-warning">

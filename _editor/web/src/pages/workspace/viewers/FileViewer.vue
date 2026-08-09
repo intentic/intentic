@@ -385,7 +385,7 @@ const onEditorSave = (value: string): void =>
             throw err;
         }
         edit.markSaved(path, value);
-    });
+    }, `Couldn't save your changes.`);
 </script>
 
 <template>

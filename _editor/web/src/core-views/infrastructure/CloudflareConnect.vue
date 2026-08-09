@@ -1,12 +1,12 @@
 <script setup lang="ts">
-import { cmp, InfoHint } from "@intentic/ui";
+import { cmp, InfoHint, Notice, type NoticeModel } from "@intentic/ui";
 import Button from "primevue/button";
 import { computed, ref } from "vue";
 import CloudflareTokenField from "../../components/CloudflareTokenField.vue";
 import { CF_TOKEN_KEY, useCloudflareZones } from "../../composables/extensions/useCloudflareZones";
 import { useInventory } from "../../composables/extensions/useInventory";
 import { useSecretKeys, useSecrets } from "../../composables/secrets/useSecrets";
-import { errorMessage } from "../../composables/useAsyncAction";
+import { noticeFrom } from "../../composables/useAsyncAction";
 
 /* The reusable "Connect Cloudflare" step. Collects a Cloudflare API token (unless the sandbox already has
  * one) plus the zone it manages, writes CLOUDFLARE_API_TOKEN to the sandbox .env and declares the
@@ -25,7 +25,7 @@ const { add } = useInventory();
 // missing is the backend declaration; we can't re-list zones since we only know the key exists, not its value.
 const tokenAlreadySet = computed(() => hasKey(CF_TOKEN_KEY));
 const submitting = ref(false);
-const error = ref<string | undefined>(undefined);
+const error = ref<NoticeModel | undefined>(undefined);
 
 const canConnect = computed(() => tokenAlreadySet.value || (cfTokenValid.value && selectedZone.value !== undefined));
 
@@ -50,7 +50,7 @@ const connect = async (): Promise<void> => {
         });
         emit(`connected`);
     } catch (err) {
-        error.value = errorMessage(err, `Could not connect Cloudflare.`);
+        error.value = noticeFrom(err, `Could not connect Cloudflare.`);
     } finally {
         submitting.value = false;
     }
@@ -59,7 +59,7 @@ const connect = async (): Promise<void> => {
 
 <template>
     <div class="flex flex-col gap-3">
-        <div v-if="error" :class="cmp.alertDanger()">{{ error }}</div>
+        <Notice v-if="error" :of="error" />
 
         <!-- Token already in the sandbox: just declare the backend. -->
         <template v-if="tokenAlreadySet">

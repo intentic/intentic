@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { cmp, Row, RowGroup, StatusBadge, type StatusVariant } from "@intentic/ui";
+import { cmp, Notice, type NoticeModel, Row, RowGroup, StatusBadge, type StatusVariant } from "@intentic/ui";
 import type { VpnLink } from "@intentic/sandbox-contract";
 import Button from "primevue/button";
 import { computed, reactive, ref } from "vue";
@@ -15,6 +15,10 @@ import { useVpn } from "../composables/sandbox/useVpn";
  * without anything having to synchronise the two. */
 
 const { links, connect, disconnect, error: listError } = useVpn();
+// The list query reports a bare message; this card knows the user came to see their VPN links.
+const listNotice = computed<NoticeModel | undefined>(() =>
+    listError.value === undefined ? undefined : { tone: `danger`, title: `Couldn't list your VPN links.`, detail: listError.value },
+);
 
 // Per-tunnel local UI state: the in-flight action, the last streamed line, and any error — keyed by id so one
 // failing tunnel never blanks another's row.
@@ -105,7 +109,7 @@ const caption = computed(() =>
 
 <template>
     <RowGroup label="VPN" :caption="caption">
-        <div v-if="listError" :class="cmp.alertDanger('m-4')">{{ listError }}</div>
+        <Notice v-if="listNotice" :of="listNotice" class="m-4" />
         <div v-else-if="links.length === 0" class="px-4 py-6 text-center text-xs text-muted">
             No VPN configured.
             <RouterLink to="/capabilities/vpn" class="text-link hover:underline">Add one</RouterLink>

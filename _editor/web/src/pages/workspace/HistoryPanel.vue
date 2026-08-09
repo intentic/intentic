@@ -3,7 +3,7 @@ import type { SnapshotChange, SnapshotTrigger, WorkspaceSnapshot } from "@intent
 import { ref } from "vue";
 import { diffRawUrls } from "../../composables/workspace/diffRaw";
 import { useHistory } from "../../composables/workspace/useHistory";
-import { ChangeStatusMark, cmp, type IconName, timeAgo } from "@intentic/ui";
+import { ChangeStatusMark, cmp, type IconName, Notice, timeAgo } from "@intentic/ui";
 import type { DiffPayload } from "@intentic/extension-api";
 import type { OpenMode } from "./workspaceTabs";
 
@@ -95,7 +95,7 @@ const confirmRestore = (id: string): void => {
         </div>
 
         <p v-if="error" class="shrink-0 truncate px-2 py-1 text-2xs text-danger" v-tooltip.right.overflow="error">{{ error }}</p>
-        <p v-if="actionError" class="shrink-0 truncate px-2 py-1 text-2xs text-danger" v-tooltip.right.overflow="actionError">{{ actionError }}</p>
+        <Notice v-if="actionError" :of="actionError" class="mx-2 shrink-0" />
 
         <div class="scrollbar-thin min-h-0 flex-1 overflow-auto py-1">
             <p v-if="snapshots.length === 0" class="px-3 py-2 text-2xs text-subtle">

@@ -2,12 +2,12 @@
 import Button from "primevue/button";
 import { extensionIdOf } from "@intentic/extension-manifest";
 import type { ExtensionSummary } from "@intentic/sandbox-contract";
-import { cmp, FilterBar, RowGroup, Segmented, StatusBadge } from "@intentic/ui";
+import { cmp, FilterBar, Notice, type NoticeModel, NoticeStack, RowGroup, Segmented, StatusBadge } from "@intentic/ui";
 import { computed, ref } from "vue";
 import { startAgent } from "../../composables/agents/agentActions";
 import { type ExtensionSection, sectionsOf } from "../../composables/extensions/extensionCategories";
 import { useExtensionList } from "../../composables/extensions/useExtensionList";
-import { errorMessage } from "../../composables/useAsyncAction";
+import { noticeFrom } from "../../composables/useAsyncAction";
 import { reloadExtensions } from "../../extension-host/useExtensionHost";
 import ExtensionRow from "./ExtensionRow.vue";
 import { extensionBrief } from "./extensionBrief";
@@ -39,6 +39,10 @@ import NewExtensionDialog from "./NewExtensionDialog.vue";
  *     and above the sections for it: they narrow the whole tab, and each section is now only a part of it. */
 
 const { entries, invalid, unlisted, setEnabled, create, isLoading, error } = useExtensionList();
+// The list query's own message, in the words of the page that asked for it.
+const listNotice = computed<NoticeModel | undefined>(() =>
+    error.value === undefined ? undefined : { tone: `danger`, title: `Couldn't list this sandbox's extensions.`, detail: error.value },
+);
 
 // Below this many rows the list IS the overview: a filter box and a state switcher would be more chrome than
 // the thing they filter. The threshold is a display choice, so it lives here rather than in the row model.
@@ -49,7 +53,7 @@ const mode = ref<`all` | `on` | `off`>(`all`);
 // One row open at a time — the list must not grow unpredictably under the pointer while it is being scanned.
 const opened = ref<string | undefined>(undefined);
 const pending = ref<string | undefined>(undefined);
-const toggleError = ref<string | undefined>(undefined);
+const toggleError = ref<NoticeModel | undefined>(undefined);
 const reloading = ref(false);
 
 const filterable = computed(() => entries.value.length >= FILTERABLE_FROM);
@@ -114,7 +118,7 @@ const toggle = async (extension: ExtensionSummary, enabled: boolean): Promise<vo
         await setEnabled(extension.id, enabled);
         await reloadExtensions();
     } catch (failure) {
-        toggleError.value = errorMessage(failure, `Could not ${enabled ? `enable` : `disable`} ${extensionIdOf(extension.manifest)}.`);
+        toggleError.value = noticeFrom(failure, `Could not ${enabled ? `enable` : `disable`} ${extensionIdOf(extension.manifest)}.`);
     } finally {
         pending.value = undefined;
     }
@@ -128,7 +132,7 @@ const reload = async (): Promise<void> => {
     try {
         await reloadExtensions();
     } catch (failure) {
-        toggleError.value = errorMessage(failure, `Could not reload the extension host.`);
+        toggleError.value = noticeFrom(failure, `Could not reload the extension host.`);
     } finally {
         reloading.value = false;
     }
@@ -155,8 +159,7 @@ const created = async (extension: { id: string; dir: string; wish: string }): Pr
 
 <template>
     <div class="flex flex-col gap-5">
-        <p v-if="error" :class="cmp.alertDanger()">{{ error }}</p>
-        <p v-if="toggleError" :class="cmp.alertDanger()">{{ toggleError }}</p>
+        <NoticeStack :of="[listNotice, toggleError]" />
 
         <!-- The tab's instrument, not any one section's. This row's layout reasoning became <FilterBar>'s: the
              filter and the state switcher narrow every section below and read as one instrument, while reloading

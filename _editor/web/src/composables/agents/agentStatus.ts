@@ -279,9 +279,12 @@ export const landedAway = (agent: {
  * on a chip whose card sat in the board's Finished lane.
  *
  * A dot, not the status icon, and NOT the running spinner: this is a filter control, and a rotating glyph per
- * chip would make the legend the busiest thing on a panel whose subject is the file list below it. The active
- * lane pulses only so the mark is told apart by behaviour from the eight identity hues a chip's tint is drawn
- * from; the attention lane is static, because a stalled session is not motion.
+ * chip would make the legend the busiest thing on a panel whose subject is the file list below it. Both lanes
+ * are STATIC for the same reason one step further: the active mark used to pulse so it could be told apart by
+ * behaviour from the eight identity hues a chip's tint is drawn from, but there is one of these per chip, so a
+ * review carrying work from four sessions blinked four times a second for as long as they ran. The halo does
+ * the telling-apart instead — an identity tint is a flat dot, this one is a dot with a ring around it — and it
+ * costs no motion at all.
  *
  * `undefined` in means an agent the roster no longer carries (archived, or retired by the retention sweep),
  * which is not "unknown" for this question: leaving the board is what a finished session does. */
@@ -294,7 +297,7 @@ export const unfinishedMark = (agent: AgentStanding | undefined): { dot: string;
         return undefined;
     }
     return lane === `active`
-        ? { dot: `bg-link animate-pulse`, label: `Still working` }
+        ? { dot: `bg-link ring-2 ring-link/30`, label: `Still working` }
         : // Named by the same reason the board's chip wears. The fallback covers a bare `awaiting` — a turn
           // parked with no flag yet raised, which has nothing more specific to say than that it stopped.
           { dot: `bg-primary-500`, label: attentionReason(agent) ?? `Waiting on you` };

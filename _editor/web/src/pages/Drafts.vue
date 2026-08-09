@@ -1,6 +1,20 @@
 <script setup lang="ts">
 import type { DraftSummary } from "@intentic-app/api-contract";
-import { BrandMark, cmp, ConfirmDialog, formatTimestamp, InfoHint, Page, PageHeader, Row, RowGroup, StatusBadge, timeAgo } from "@intentic/ui";
+import {
+    BrandMark,
+    cmp,
+    ConfirmDialog,
+    formatTimestamp,
+    InfoHint,
+    type NoticeModel,
+    NoticeStack,
+    Page,
+    PageHeader,
+    Row,
+    RowGroup,
+    StatusBadge,
+    timeAgo,
+} from "@intentic/ui";
 import Button from "primevue/button";
 import { computed, ref } from "vue";
 import { useRole } from "../composables/sandbox/useRole";
@@ -46,12 +60,16 @@ import ScheduleControl from "./drafts/ScheduleControl.vue";
  * do. */
 
 const { drafts, invalid, error: listError, save, remove } = useDrafts();
+// The list query knows it failed and nothing else; this page knows what the user came for.
+const listNotice = computed<NoticeModel | undefined>(() =>
+    listError.value === undefined ? undefined : { tone: `danger`, title: `Couldn't read your drafts.`, detail: listError.value },
+);
 // Publishing is the ship tier: below maintainer the queue is a read — the posts, their schedule, their
 // status — with every approve/reject/reschedule affordance absent (the daemon floors the draft mutations
 // the same way). Watching what is about to go out is exactly what a viewer is for.
 const { canShip } = useRole();
 const { enabled: enabledExtensions } = useExtensions();
-const { error: actionError, run } = useAsyncAction();
+const { notice: actionError, run } = useAsyncAction();
 
 /* WHO POSTS IT, from the manifest that owns that fact. `platform` is a bare string by contract (a new platform
  * needs no contract change) and it is the id of the capability whose skill does the posting — so the enabled
@@ -174,9 +192,7 @@ const NOTE = `mt-1.5 line-clamp-2 max-w-[64ch] text-2xs leading-relaxed text-sub
             </template>
         </PageHeader>
 
-        <div v-if="actionError ?? listError" :class="cmp.alertDanger(`mb-4`)">
-            {{ actionError ?? listError }}
-        </div>
+        <NoticeStack :of="[actionError, listNotice]" class="mb-4" />
         <div v-if="invalid.length > 0" :class="cmp.alertWarning(`mb-4`)">
             <Icon name="exclamation-triangle" class="mr-1.5" />{{ invalid.length }} draft file{{ invalid.length === 1 ? "" : "s" }} couldn't be read
             and won't post: <span class="font-mono">{{ invalid.join(", ") }}</span>

@@ -1,10 +1,10 @@
 <script setup lang="ts">
-import { BrandMark, cmp, Picker, type PickerOption } from "@intentic/ui";
+import { BrandMark, cmp, Notice, type NoticeModel, Picker, type PickerOption } from "@intentic/ui";
 import { INVENTORY_SERVICES, type InventoryServiceDescriptor } from "@intentic-app/capability-catalog";
 import Button from "primevue/button";
 import Dialog from "primevue/dialog";
 import { computed, ref, watch } from "vue";
-import { errorMessage } from "../../composables/useAsyncAction";
+import { noticeFrom } from "../../composables/useAsyncAction";
 import { useInventory } from "../../composables/extensions/useInventory";
 import { useWorkspaceApps } from "../../composables/extensions/useWorkspaceApps";
 import CloudflareConnect from "./CloudflareConnect.vue";
@@ -30,7 +30,7 @@ type Picked = { kind: `service`; service: InventoryServiceDescriptor } | { kind:
 
 const selected = ref<Picked | undefined>(undefined);
 const submitting = ref(false);
-const error = ref<string | null>(null);
+const error = ref<NoticeModel | null>(null);
 
 const name = ref(``);
 const values = ref<Record<string, string>>({});
@@ -40,6 +40,9 @@ const subdomainValid = computed(() => SUBDOMAIN_RE.test(subdomain.value.trim()))
 
 // The apps living in workspace monorepos — fetched only while the dialog is open, live against the repo list.
 const { apps: workspaceApps, error: appsError } = useWorkspaceApps(visible);
+const appsNotice = computed<NoticeModel | undefined>(() =>
+    appsError.value === undefined ? undefined : { tone: `danger`, title: `Couldn't list the apps in this workspace.`, detail: appsError.value },
+);
 
 // Apps already declared in intent (by entry name) — shown as added instead of addable.
 const declaredApps = computed(() => new Set(entries.value.filter((entry) => entry.kind === `app`).map((entry) => entry.name)));
@@ -136,7 +139,7 @@ const submit = async (): Promise<void> => {
         emit(`added`);
         close();
     } catch (err) {
-        error.value = errorMessage(err, `Could not add it.`);
+        error.value = noticeFrom(err, `Could not add it.`);
     } finally {
         submitting.value = false;
     }
@@ -178,7 +181,7 @@ const submit = async (): Promise<void> => {
 
             <div class="mb-4 border-t border-line"></div>
 
-            <div v-if="error" :class="cmp.alertDanger('mb-3')">{{ error }}</div>
+            <Notice v-if="error" :of="error" class="mb-3" />
 
             <!-- A want needs Cloudflare for its domain and a server to run on. Rather than send the user off,
                  collect each missing one right here; the created entries then flip this into the form below. -->
@@ -246,7 +249,7 @@ const submit = async (): Promise<void> => {
 
             <template v-if="workspaceApps.length > 0 || appsError">
                 <span :class="cmp.sectionLabel('mb-2 block')">Your apps</span>
-                <div v-if="appsError" :class="cmp.alertDanger('mb-3')">{{ appsError }}</div>
+                <Notice v-if="appsNotice" :of="appsNotice" class="mb-3" />
                 <div class="mb-4 grid grid-cols-2 gap-3">
                     <button
                         v-for="candidate in workspaceApps"

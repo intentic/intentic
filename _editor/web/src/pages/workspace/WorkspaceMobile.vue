@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { WorkspaceTreeEntry } from "@intentic-app/api-contract";
-import { BottomSheet, clipboardOf, ConfirmDialog, PullToRefresh, Segmented } from "@intentic/ui";
+import { BottomSheet, clipboardOf, ConfirmDialog, type NoticeModel, NoticeStack, PullToRefresh, Segmented } from "@intentic/ui";
 import Button from "primevue/button";
 import Dialog from "primevue/dialog";
 import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
@@ -19,6 +19,7 @@ import { useWorkspaceRoute } from "../../composables/workspace/useWorkspaceRoute
 import { type SearchScope, useWorkspaceSearch } from "../../composables/workspace/useWorkspaceSearch";
 import { useWorkspaceTabs } from "../../composables/workspace/useWorkspaceTabs";
 import { useWorkspaceTree } from "../../composables/workspace/useWorkspaceTree";
+import { useReceipts } from "../../composables/receipts";
 import BinaryDiffView from "./viewers/BinaryDiffView.vue";
 import DiffToolbar from "./viewers/DiffToolbar.vue";
 import DiffSkeleton from "./viewers/DiffSkeleton.vue";
@@ -70,7 +71,12 @@ const {
     lazyHidden,
     lazyLoading,
 } = useWorkspaceTree();
+// The tree query reports a raw message; this view knows the user was trying to see their files.
+const treeNotice = computed<NoticeModel | undefined>(() =>
+    error.value === undefined ? undefined : { tone: `danger`, title: `Couldn't load your files.`, detail: error.value },
+);
 const { files: uploadFiles, scanning: uploadScanning, skippedNotice: uploadSkipped, enqueue } = useUploadQueue();
+const { say } = useReceipts();
 // The open file lives in the URL path (`/workspace/<path>`), synced to the tabs singleton by useWorkspaceRoute;
 // this component keeps only the mobile-specific query state (`?dir=` browse location, `?diff=` diff view).
 const { tabs, activeId, activeTab, openLine, openFile, openAtLine, openDiff, fillDiff } = useWorkspaceTabs();
@@ -224,13 +230,13 @@ const confirmRename = (): void => {
         return;
     }
     const parent = parentDir(target.path);
-    void run(() => moveEntry(target.path, parent === `` ? name : `${parent}/${name}`));
+    void run(() => moveEntry(target.path, parent === `` ? name : `${parent}/${name}`), `Couldn't rename that.`);
 };
 const confirmDelete = (): void => {
     const target = deleteTarget.value;
     deleteTarget.value = undefined;
     if (target !== undefined) {
-        void run(() => removeEntries([target.path]));
+        void run(() => removeEntries([target.path]), `Couldn't delete that.`);
     }
 };
 const copyPath = (target: WorkspaceTreeEntry): void => {
@@ -239,6 +245,7 @@ const copyPath = (target: WorkspaceTreeEntry): void => {
     // Clipboard may still be unavailable (insecure context) — swallow, matching CopyButton.
     void clipboardOf(rootEl.value)
         .writeText(target.path)
+        .then(() => say(`Path copied`))
         .catch(() => undefined);
 };
 const download = (target: WorkspaceTreeEntry): void => {
@@ -251,7 +258,7 @@ const download = (target: WorkspaceTreeEntry): void => {
         anchor.download = target.name;
         anchor.click();
         URL.revokeObjectURL(url);
-    });
+    }, `Couldn't download that file.`);
 };
 
 // --- Upload (the drag-drop replacement): a picker FAB targeting the current directory ----------
@@ -391,9 +398,7 @@ const onPick = (event: Event): void => {
                     />
                 </button>
             </div>
-            <p v-if="actionError ?? error" class="shrink-0 border-b border-danger/30 bg-danger/10 px-3 py-1.5 text-xs text-danger">
-                {{ actionError ?? error }}
-            </p>
+            <NoticeStack :of="[actionError, treeNotice]" class="shrink-0 px-3 py-1.5" />
 
             <ReviewPanel v-if="segment === 'changes'" @open-diff="openDiffNav" @fill-diff="fillDiff" />
             <HistoryPanel v-else-if="segment === 'history'" @open-diff="openDiffNav" @fill-diff="fillDiff" />

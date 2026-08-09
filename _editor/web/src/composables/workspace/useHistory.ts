@@ -14,7 +14,7 @@ import { useSandboxQuery } from "../sandbox/useSandboxQuery";
  * tree. The list is vue-query cached; diff/fileDiff stay imperative (the panel loads them on demand). Restore
  * rewrites /work on the daemon, so it refreshes the snapshots, the tree, and drops stale edit buffers. */
 
-const { busy, error: actionError, run } = useAsyncAction();
+const { busy, notice: actionError, run } = useAsyncAction();
 
 const diff = (id: string): Promise<SnapshotDiffResponse> => sandboxJson<SnapshotDiffResponse>(`/history/diff?id=${encodeURIComponent(id)}`);
 const fileDiff = (id: string, scope: string, path: string): Promise<FileDiffResponse> =>

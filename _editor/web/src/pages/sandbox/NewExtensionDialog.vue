@@ -1,9 +1,9 @@
 <script setup lang="ts">
 import Button from "primevue/button";
 import Dialog from "primevue/dialog";
-import { cmp } from "@intentic/ui";
+import { cmp, Notice, type NoticeModel } from "@intentic/ui";
 import { computed, ref, watch } from "vue";
-import { errorMessage } from "../../composables/useAsyncAction";
+import { noticeFrom } from "../../composables/useAsyncAction";
 
 /* NEW EXTENSION — the whole form, because there is almost nothing to ask.
  *
@@ -33,7 +33,7 @@ const publisher = ref(`workspace`);
 const name = ref(``);
 const wish = ref(``);
 const busy = ref(false);
-const failure = ref<string>();
+const failure = ref<NoticeModel>();
 
 // A second extension must not inherit the first one's name or the first one's brief, and a previous failure must
 // not greet a fresh open.
@@ -55,7 +55,7 @@ const submit = async (): Promise<void> => {
         open.value = false;
         emit(`created`, { ...created, wish: wish.value.trim() });
     } catch (error) {
-        failure.value = errorMessage(error, `The extension could not be created.`);
+        failure.value = noticeFrom(error, `The extension could not be created.`);
     } finally {
         busy.value = false;
     }
@@ -110,7 +110,7 @@ const submit = async (): Promise<void> => {
                 </span>
             </label>
 
-            <p v-if="failure" :class="cmp.alertDanger()">{{ failure }}</p>
+            <Notice v-if="failure" :of="failure" />
         </div>
 
         <template #footer>

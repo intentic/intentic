@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import type { Computer, MachineSandbox, MachineSandboxOp } from "@intentic/sandbox-contract";
-import { Card, cmp, MachineDetail, RowGroup, StatusBadge, type StatusVariant, timeAgo } from "@intentic/ui";
+import { Card, cmp, MachineDetail, Notice, type NoticeModel, RowGroup, StatusBadge, type StatusVariant, timeAgo } from "@intentic/ui";
+import { noticeFrom } from "../../composables/useAsyncAction";
 import Button from "primevue/button";
 import { computed, onMounted, ref } from "vue";
 import { useRoute } from "vue-router";
@@ -30,6 +31,10 @@ import { useNow } from "../../composables/useNow";
 const route = useRoute();
 const highlight = ref(false);
 const { computers, error, refetch } = useComputers();
+// The list query's bare message, in the words of the page that asked for it.
+const computersNotice = computed<NoticeModel | undefined>(() =>
+    error.value === undefined ? undefined : { tone: `danger`, title: `Couldn't list your computers.`, detail: error.value },
+);
 
 // One clock for the whole render, so every row's staleness is judged against the same instant rather than each
 // against the moment its own computed happened to run — and the app's one clock, so it stops with this tab.
@@ -106,7 +111,7 @@ const manageable = (computer: Computer): boolean => computer.hostId !== undefine
 
 const rowKey = (computer: Computer, box: MachineSandbox): string => `${computer.key}:${box.slug}`;
 const busy = ref<string | undefined>();
-const actionError = ref<{ key: string; message: string } | undefined>();
+const actionError = ref<{ key: string; notice: NoticeModel } | undefined>();
 const actionDone = ref<{ key: string; message: string } | undefined>();
 // The running operation's output, keyed by row so leaving a log on screen while reading another row's is fine.
 const runLines = ref<Record<string, string[]>>({});
@@ -155,7 +160,7 @@ const act = async (computer: Computer, box: MachineSandbox, op: MachineSandboxOp
         });
         actionDone.value = { key, message };
     } catch (failure) {
-        actionError.value = { key, message: failure instanceof Error ? failure.message : String(failure) };
+        actionError.value = { key, notice: noticeFrom(failure, `That didn't work on this computer.`) };
     } finally {
         busy.value = undefined;
         // Always, including after a failure: a flow that stopped halfway still changed the machine, and the row
@@ -168,7 +173,7 @@ const act = async (computer: Computer, box: MachineSandbox, op: MachineSandboxOp
 <template>
     <div class="flex flex-col gap-4">
         <RowGroup label="Computers">
-            <div v-if="error" :class="cmp.alertDanger('m-4 text-2xs')">{{ error }}</div>
+            <Notice v-if="computersNotice" :of="computersNotice" class="m-4" />
             <div v-else-if="sorted.length === 0" class="px-4 py-6 text-center text-xs text-muted">
                 No computer is paired with this sandbox yet. Enable desktop sync below to work on it from your own editor, or add a Linux/Windows PC
                 from Capabilities to let the agent work there.
@@ -333,7 +338,7 @@ const act = async (computer: Computer, box: MachineSandbox, op: MachineSandboxOp
                             :lines="runLines[rowKey(computer, box)] ?? []"
                             :running="true"
                         />
-                        <p v-if="actionError?.key === rowKey(computer, box)" :class="cmp.alertDanger(`text-2xs`)">{{ actionError.message }}</p>
+                        <Notice v-if="actionError?.key === rowKey(computer, box)" :of="actionError.notice" />
                         <p v-else-if="actionDone?.key === rowKey(computer, box)" class="text-2xs text-muted">{{ actionDone.message }}</p>
                     </div>
                 </div>

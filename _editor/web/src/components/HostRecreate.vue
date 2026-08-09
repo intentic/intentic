@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import type { MachineSandboxOp } from "@intentic/sandbox-contract";
-import { Code, cmp, commandLang, Segmented, useOsPreference } from "@intentic/ui";
+import { cmp, Code, commandLang, Notice, type NoticeModel, Segmented, useOsPreference } from "@intentic/ui";
+import { noticeFrom } from "../composables/useAsyncAction";
 import Button from "primevue/button";
 import { computed, ref } from "vue";
 import MachineRunLog from "../pages/sandbox/MachineRunLog.vue";
@@ -37,7 +38,6 @@ const props = defineProps<{
     action: `Update` | `Rebuild` | `Roll back`;
 }>();
 
-
 const { cmdOs } = useOsPreference();
 const desktop = computed(() => desktopVersion() !== undefined);
 
@@ -47,7 +47,7 @@ const OP: Record<`Update` | `Rebuild` | `Roll back`, MachineSandboxOp> = { Updat
 
 const running = ref(false);
 const lines = ref<string[]>([]);
-const failure = ref<string | undefined>(undefined);
+const failure = ref<NoticeModel | undefined>(undefined);
 const done = ref<string | undefined>(undefined);
 
 /* Recreating THIS sandbox ends this page's connection to it, every time — that is what recreating means, and it
@@ -58,7 +58,11 @@ const runOnMachine = async (): Promise<void> => {
     if (id === undefined || running.value) {
         return;
     }
-    if (!globalThis.confirm(`${props.action} this sandbox?\n\nIt restarts on that computer and this page loses it for a few minutes. Your files are kept.`)) {
+    if (
+        !globalThis.confirm(
+            `${props.action} this sandbox?\n\nIt restarts on that computer and this page loses it for a few minutes. Your files are kept.`,
+        )
+    ) {
         return;
     }
     running.value = true;
@@ -71,7 +75,7 @@ const runOnMachine = async (): Promise<void> => {
             onLine: (line) => lines.value.push(line),
         });
     } catch (error) {
-        failure.value = error instanceof Error ? error.message : String(error);
+        failure.value = noticeFrom(error, `Couldn't rebuild this host.`);
     } finally {
         running.value = false;
     }
@@ -106,7 +110,7 @@ const command = computed(() => {
                 /work) are kept.
             </p>
             <MachineRunLog v-if="running || lines.length > 0" :lines="lines" :running="running" />
-            <div v-if="failure" :class="cmp.alertDanger(`text-2xs`)">{{ failure }}</div>
+            <Notice v-if="failure" :of="failure" />
             <p v-else-if="done" class="text-2xs text-muted">{{ done }}</p>
         </template>
 

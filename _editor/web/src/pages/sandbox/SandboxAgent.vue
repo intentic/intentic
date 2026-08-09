@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { cmp } from "@intentic/ui";
+import { cmp, Notice, type NoticeModel } from "@intentic/ui";
 import { computed } from "vue";
 import { useSandbox } from "../../composables/sandbox/useSandbox";
 import { useSandboxSettings } from "../../composables/sandbox/useSandboxSettings";
@@ -32,14 +32,18 @@ const { settings, error: settingsError, dropped: settingsDropped } = useSandboxS
 // Only states that need explaining: a failed read, or a sandbox that isn't answering. The first-load moment is
 // deliberately silent — the controls are disabled for it either way, and a line that appears and then vanishes
 // would shove every row down and back on each visit.
-const settingsBlocked = computed(() => {
+const settingsBlocked = computed<NoticeModel | undefined>(() => {
     if (settings.value !== undefined) {
         return undefined;
     }
+    // A failed read is a fault and reads as one; an offline sandbox is a fact about the world, so it is a
+    // warning rather than an alarm — the controls are disabled either way and there is nothing to fix here.
     if (settingsError.value !== undefined) {
-        return settingsError.value;
+        return { tone: `danger`, title: `Couldn't read this sandbox's settings.`, detail: settingsError.value };
     }
-    return sandbox.reachable.value ? undefined : `Your sandbox is offline — its settings can't be read or changed from here.`;
+    return sandbox.reachable.value
+        ? undefined
+        : { tone: `warning`, title: `Your sandbox is offline — its settings can't be read or changed from here.` };
 });
 </script>
 
@@ -52,7 +56,7 @@ const settingsBlocked = computed(() => {
 
         <!-- Why every control below is inert, whenever it is: a settings read that hasn't landed (or failed)
              disables all of them, and an unexplained dead switch is indistinguishable from a broken page. -->
-        <p v-if="settingsBlocked" :class="settingsError ? cmp.alertDanger() : 'px-0.5 text-xs text-muted'">{{ settingsBlocked }}</p>
+        <Notice v-if="settingsBlocked" :of="settingsBlocked" />
 
         <!-- A save the daemon accepted but stored WITHOUT one of its fields: the control has already snapped
              back to its old value, and without this line that reads as an input refusing to be typed into

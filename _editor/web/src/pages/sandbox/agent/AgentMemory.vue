@@ -1,10 +1,10 @@
 <script setup lang="ts">
-import { Card, cmp, CopyButton } from "@intentic/ui";
+import { Card, cmp, CopyButton, Notice, type NoticeModel } from "@intentic/ui";
 import Button from "primevue/button";
 import { ref } from "vue";
 import { IMPORT_PROMPT, MEMORY_FILES, mergeMemory } from "../../../composables/extensions/memoryImport";
 import { useSandbox } from "../../../composables/sandbox/useSandbox";
-import { errorMessage } from "../../../composables/useAsyncAction";
+import { noticeFrom } from "../../../composables/useAsyncAction";
 import { useWorkspaceTree } from "../../../composables/workspace/useWorkspaceTree";
 
 /* Bring context from another AI assistant into this sandbox's agent memory files. A two-step copy-paste rather
@@ -15,7 +15,7 @@ const sandbox = useSandbox();
 const { readFile, saveText } = useWorkspaceTree();
 const importText = ref(``);
 const importSaving = ref(false);
-const importError = ref<string | undefined>(undefined);
+const importError = ref<NoticeModel | undefined>(undefined);
 const importMemory = async (): Promise<void> => {
     const text = importText.value.trim();
     if (text === `` || importSaving.value) {
@@ -31,7 +31,7 @@ const importMemory = async (): Promise<void> => {
         }
         importText.value = ``;
     } catch (caught) {
-        importError.value = errorMessage(caught, `Couldn't save memory.`);
+        importError.value = noticeFrom(caught, `Couldn't save memory.`);
     } finally {
         importSaving.value = false;
     }
@@ -52,7 +52,7 @@ const importMemory = async (): Promise<void> => {
             </div>
         </div>
 
-        <div v-if="importError" :class="cmp.alertDanger()">{{ importError }}</div>
+        <Notice v-if="importError" :of="importError" />
 
         <label class="flex flex-col gap-1.5">
             <span class="flex items-center gap-2 text-sm font-medium text-content">

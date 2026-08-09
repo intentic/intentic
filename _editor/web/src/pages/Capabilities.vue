@@ -10,7 +10,19 @@ import {
     contributionCard,
 } from "@intentic-app/capability-catalog";
 import { type CapabilitySummary, type Marketplace } from "@intentic-app/api-contract";
-import { BrandMark, cmp, ConfirmDialog, FilterBar, type IconName, RowGroup, Segmented, SplitView, StatusBadge } from "@intentic/ui";
+import {
+    BrandMark,
+    cmp,
+    ConfirmDialog,
+    FilterBar,
+    type IconName,
+    Notice,
+    type NoticeModel,
+    RowGroup,
+    Segmented,
+    SplitView,
+    StatusBadge,
+} from "@intentic/ui";
 import { type CapabilityField, contributionDiscriminator } from "@intentic/extension-manifest";
 import { isShaPinned, OFFICIAL_REGISTRY_URL, type RegistryEntry } from "@intentic/registry";
 import { type CapabilityKind, type ForticlientConnection, isForticlientCiphertext } from "@intentic/sandbox-contract";
@@ -27,7 +39,7 @@ import { startAgent } from "../composables/agents/agentActions";
 import { devFillGet, devFillSet } from "../composables/devFill";
 import { sandboxJson } from "../composables/sandbox/sandboxClient";
 import { auditBrief, updateBrief } from "./sandbox/extensionBrief";
-import { errorMessage } from "../composables/useAsyncAction";
+import { noticeFrom, noticeOf } from "../composables/useAsyncAction";
 import { browseMarketplace, useCapabilities } from "../composables/extensions/useCapabilities";
 import { useExtensions } from "../composables/extensions/useExtensions";
 import { type BackgroundProcessRow, useBackgroundProcesses, viewProcessLogs } from "../composables/terminal/useBackgroundProcesses";
@@ -294,7 +306,7 @@ watch(capabilities, () => {
 });
 const values = reactive<Record<string, string>>({});
 const submitting = ref(false);
-const error = ref<string | null>(null);
+const error = ref<NoticeModel | null>(null);
 // undefined = the confirm dialog is closed; a string = the capability id awaiting a confirmed removal.
 const confirmRemoveId = ref<string>();
 // --- inline validation (touched-on-blur) ---
@@ -369,7 +381,7 @@ const startAgentLogin = async (id: string): Promise<void> => {
         const { session } = await sandboxJson<{ session: string }>(`/capabilities/${encodeURIComponent(id)}/login`, { method: `POST` });
         useTerminalPanel().openFocused(session);
     } catch (caught) {
-        error.value = errorMessage(caught, `Sign-in could not start.`);
+        error.value = noticeFrom(caught, `Sign-in could not start.`);
     }
 };
 
@@ -523,7 +535,7 @@ const browse = async (): Promise<void> => {
     try {
         market.value = await browseMarketplace(marketUrl.value.trim(), marketToken.value.trim() || undefined);
     } catch (err) {
-        error.value = errorMessage(err, `Could not browse the registry.`);
+        error.value = noticeFrom(err, `Could not browse the registry.`);
     } finally {
         browsing.value = false;
     }
@@ -637,7 +649,7 @@ const readForticlientFile = async (file: File | undefined): Promise<void> => {
     forticlientFile.value = ``;
     forticlientConnections.value = [];
     if (file.size > FORTICLIENT_MAX_BYTES) {
-        error.value = `${file.name} is far too big to be a FortiClient configuration — that looks like the wrong file.`;
+        error.value = noticeOf(`${file.name} is far too big to be a FortiClient configuration — that looks like the wrong file.`);
         return;
     }
     importing.value = true;
@@ -648,7 +660,7 @@ const readForticlientFile = async (file: File | undefined): Promise<void> => {
         forticlientConnections.value = xml.trim().length === 0 ? [] : await importForticlient(xml);
         forticlientFile.value = file.name;
     } catch (err) {
-        error.value = errorMessage(err, `Could not read that FortiClient configuration.`);
+        error.value = noticeFrom(err, `Could not read that FortiClient configuration.`);
     } finally {
         importing.value = false;
     }
@@ -900,7 +912,7 @@ const dismiss = async (entry: CapabilityCatalogEntry): Promise<void> => {
     try {
         await dismissRecommendation.mutateAsync(entry.id);
     } catch (err) {
-        error.value = errorMessage(err, `Could not dismiss that suggestion.`);
+        error.value = noticeFrom(err, `Could not dismiss that suggestion.`);
         return;
     }
     if (walking.value) {
@@ -994,7 +1006,7 @@ const submit = async (): Promise<void> => {
         }
         back();
     } catch (err) {
-        error.value = errorMessage(err, `Could not add the capability.`);
+        error.value = noticeFrom(err, `Could not add the capability.`);
     } finally {
         submitting.value = false;
     }
@@ -1005,7 +1017,7 @@ const removeCapability = async (id: string): Promise<void> => {
     try {
         await remove.mutateAsync(id);
     } catch (err) {
-        error.value = errorMessage(err, `Could not remove the capability.`);
+        error.value = noticeFrom(err, `Could not remove the capability.`);
     }
 };
 
@@ -1021,7 +1033,11 @@ const confirmRemove = async (): Promise<void> => {
     confirmRemoveId.value = undefined;
 };
 
-const topError = computed(() => error.value ?? listError.value);
+const topError = computed<NoticeModel | undefined>(
+    () =>
+        error.value ??
+        (listError.value === undefined ? undefined : { tone: `danger`, title: `Couldn't list your capabilities.`, detail: listError.value }),
+);
 const submitLabel = computed(() =>
     selected.value?.kind === `devops` ? `Activate` : nameCollision.value ? `Update` : selected.value?.kind === `service` ? `Add & provision` : `Add`,
 );
@@ -1030,7 +1046,7 @@ const submitLabel = computed(() =>
 <template>
     <SplitView title="Capabilities" :description="description">
         <template #strips>
-            <div v-if="topError" :class="cmp.alertDanger()">{{ topError }}</div>
+            <Notice v-if="topError" :of="topError" />
         </template>
 
         <!-- The rail NARROWS the grid rather than selecting a document, so on a phone <SplitView> folds it ABOVE

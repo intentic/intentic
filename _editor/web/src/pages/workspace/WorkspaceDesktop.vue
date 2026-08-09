@@ -568,7 +568,7 @@ const onRootDrop = (event: DragEvent): void => {
     // still swallows it so the browser doesn't navigate away to the image, and nothing is written.
     const internal = dataTransfer.getData(`application/x-intentic-path`);
     if (internal !== ``) {
-        void run(() => moveIntoMany(internal.split(`\n`), ``));
+        void run(() => moveIntoMany(internal.split(`\n`), ``), `Couldn't move those files.`);
         return;
     }
     if (!offer.files) {
@@ -937,9 +937,12 @@ const endResize = (event: PointerEvent): void => {
                         @contextmenu="openTabMenu"
                     />
                     <div class="flex shrink-0 items-center gap-2 px-2">
-                        <span v-if="actionError" class="max-w-64 truncate text-2xs text-danger" v-tooltip.bottom.overflow="actionError">{{
-                            actionError
-                        }}</span>
+                        <span
+                            v-if="actionError"
+                            class="max-w-64 truncate text-2xs text-danger"
+                            v-tooltip.bottom="actionError.detail ?? actionError.title"
+                            >{{ actionError.title }}</span
+                        >
                         <!-- The lone remaining status: one spinner for both a running file action and a tree
                              (re)load — the Refresh button that used to spin is now only the command. -->
                         <Icon name="spinner" v-if="busy || isLoading" class="text-sm text-muted" spin aria-label="Working" />

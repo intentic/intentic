@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { BuiltinPromptText, SystemPromptMode } from "@intentic/sandbox-contract";
-import { cmp, CopyButton, Row, RowGroup, Segmented } from "@intentic/ui";
+import { cmp, CopyButton, Notice, Row, RowGroup, Segmented } from "@intentic/ui";
 import Button from "primevue/button";
 import Dialog from "primevue/dialog";
 import ToggleSwitch from "primevue/toggleswitch";
@@ -63,7 +63,7 @@ const setPromptMode = (mode: string): void => patch({ systemPromptMode: mode as 
 // reopening the dialog is instant and forking doesn't re-fetch.
 const builtinPrompts = ref<Partial<Record<string, BuiltinPromptText>>>({});
 const viewingBase = ref<`intentic` | `claude` | undefined>(undefined);
-const { busy: builtinBusy, error: builtinError, run: runBuiltin } = useAsyncAction();
+const { busy: builtinBusy, notice: builtinError, run: runBuiltin } = useAsyncAction();
 const loadBuiltin = async (base: `intentic` | `claude`): Promise<BuiltinPromptText | undefined> => {
     if (builtinPrompts.value[base] === undefined) {
         await runBuiltin(async () => {
@@ -263,7 +263,7 @@ const terseArms = computed(() => savings.value?.output?.metrics[0]);
                         </span>
                     </div>
                 </template>
-                <p v-if="builtinError !== undefined" :class="cmp.alertDanger('mt-1.5 text-2xs')">{{ builtinError }}</p>
+                <Notice v-if="builtinError !== undefined" :of="builtinError" class="mt-1.5" />
             </template>
         </Row>
     </RowGroup>
@@ -284,7 +284,7 @@ const terseArms = computed(() => savings.value?.output?.metrics[0]);
             <Icon name="spinner" class="animate-spin" />
             Reading it from your sandbox…
         </div>
-        <p v-else-if="builtinError !== undefined" :class="cmp.alertDanger()">{{ builtinError }}</p>
+        <Notice v-else-if="builtinError !== undefined" :of="builtinError" />
         <template v-else-if="viewingBase !== undefined && builtinPrompts[viewingBase] !== undefined">
             <p class="text-xs text-muted">
                 <template v-if="viewingBase === `claude`">

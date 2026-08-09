@@ -1,9 +1,9 @@
 <script setup lang="ts">
 import type { SecretInventoryEntry } from "@intentic/sandbox-contract";
-import { cmp, CopyButton } from "@intentic/ui";
+import { cmp, CopyButton, Notice, type NoticeModel } from "@intentic/ui";
 import { computed, ref } from "vue";
 import { reveal, useSecrets } from "../composables/secrets/useSecrets";
-import { errorMessage } from "../composables/useAsyncAction";
+import { noticeFrom } from "../composables/useAsyncAction";
 import SecretField from "./SecretField.vue";
 
 /* One inventory row on the Sandbox Secrets tab, collapsed to a single line: a status dot, the key, and the
@@ -25,7 +25,7 @@ const editing = ref(false);
 const multiline = ref(false);
 const revealedValue = ref<string | undefined>(undefined);
 const confirming = ref(false);
-const error = ref<string | undefined>(undefined);
+const error = ref<NoticeModel | undefined>(undefined);
 
 // A value exists and this viewer is allowed to read it — gates both Reveal and Copy.
 const canReveal = computed(() => props.entry.status !== `missing` && props.entry.revealable);
@@ -61,7 +61,7 @@ const toggleReveal = async (): Promise<void> => {
     try {
         revealedValue.value = await reveal(props.entry.key);
     } catch (err) {
-        error.value = errorMessage(err, `Could not reveal the value.`);
+        error.value = noticeFrom(err, `Could not reveal the value.`);
     }
 };
 
@@ -78,7 +78,7 @@ const removeKey = async (): Promise<void> => {
         await remove.mutateAsync(props.entry.key);
     } catch (err) {
         confirming.value = false;
-        error.value = errorMessage(err, `Could not remove the secret.`);
+        error.value = noticeFrom(err, `Could not remove the secret.`);
     }
 };
 </script>
@@ -188,7 +188,7 @@ const removeKey = async (): Promise<void> => {
                 <span class="font-mono text-subtle">{{ entry.storedAt }}</span>
                 <template v-if="entry.ci !== undefined"> · CI {{ entry.ci.synced ? `synced` : `out of date` }}</template>
             </p>
-            <p v-if="error" :class="cmp.alertDanger(`mt-2`)">{{ error }}</p>
+            <Notice v-if="error" :of="error" class="mt-2" />
 
             <div v-if="panelMode === `reveal`" class="mt-2">
                 <div class="mb-1 flex items-center gap-2">

@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { cmp } from "@intentic/ui";
+import { cmp, Notice, type NoticeModel } from "@intentic/ui";
+import { noticeOf } from "../composables/useAsyncAction";
 import Button from "primevue/button";
 import Dialog from "primevue/dialog";
 import { computed, onBeforeUnmount, ref, watch } from "vue";
@@ -32,7 +33,7 @@ const MOVE_THROTTLE_MS = 40;
 
 const frame = ref<string>();
 const status = ref<"connecting" | "ready" | "saving" | "error">("connecting");
-const errorMsg = ref<string>();
+const errorMsg = ref<NoticeModel>();
 const viewW = ref(1280);
 const viewH = ref(800);
 const surface = ref<HTMLElement>();
@@ -66,7 +67,7 @@ const connect = async (): Promise<void> => {
     const url = await wsSocketUrl(`/system/browser-profile`, { capability: props.capability, mode: props.mode });
     if (url === undefined) {
         status.value = "error";
-        errorMsg.value = "Sandbox isn't reachable, or you're not signed in.";
+        errorMsg.value = noticeOf("Sandbox isn't reachable, or you're not signed in.");
         return;
     }
     const ws = new WebSocket(url);
@@ -100,13 +101,13 @@ const connect = async (): Promise<void> => {
             emit("update:visible", false);
         } else if (message.type === "error") {
             status.value = "error";
-            errorMsg.value = message.message ?? "The browser couldn't be opened.";
+            errorMsg.value = noticeOf(message.message ?? "The browser couldn't be opened.");
         }
     });
     ws.addEventListener("error", () => {
         if (status.value !== "saving") {
             status.value = "error";
-            errorMsg.value = errorMsg.value ?? "Connection failed.";
+            errorMsg.value = errorMsg.value ?? noticeOf("Connection failed.");
         }
     });
 };
@@ -212,8 +213,8 @@ const finish = (): void => {
     >
         <p class="mb-3 text-xs text-muted">
             <template v-if="browsing">
-                This is the signed-in browser the agent uses for {{ label }} — do whatever you need in it. The agent
-                can't use it while this window is open, and anything you change here it sees next time.
+                This is the signed-in browser the agent uses for {{ label }} — do whatever you need in it. The agent can't use it while this window is
+                open, and anything you change here it sees next time.
             </template>
             <template v-else>
                 Sign in as you would normally — including any 2FA. When you're on your logged-in home page, click
@@ -221,12 +222,19 @@ const finish = (): void => {
             </template>
         </p>
 
-        <div v-if="errorMsg" :class="cmp.alertDanger('mb-3')">{{ errorMsg }}</div>
+        <Notice v-if="errorMsg" :of="errorMsg" class="mb-3" />
 
         <!-- The address bar exists only while browsing: signing in goes where the platform sends it, and a URL
              field there would be a way to wander off the flow the window is open for. -->
         <div v-if="browsing" class="mb-2 flex items-center gap-1">
-            <Button size="small" :text="true" severity="secondary" aria-label="Back" :disabled="status !== 'ready'" @click="sendMsg({ type: 'back' })">
+            <Button
+                size="small"
+                :text="true"
+                severity="secondary"
+                aria-label="Back"
+                :disabled="status !== 'ready'"
+                @click="sendMsg({ type: 'back' })"
+            >
                 <template #icon><Icon name="arrow-left" /></template>
             </Button>
             <Button

@@ -1,11 +1,11 @@
 <script setup lang="ts">
-import { cmp } from "@intentic/ui";
+import { cmp, Notice, type NoticeModel } from "@intentic/ui";
 import type { InvitePreview } from "@intentic-app/api-contract";
 import Button from "primevue/button";
 import { computed, onMounted, ref } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { apiClient } from "../composables/useApi";
-import { errorMessage } from "../composables/useAsyncAction";
+import { noticeFrom } from "../composables/useAsyncAction";
 import { useAuth } from "../composables/useAuth";
 import { useSandbox } from "../composables/sandbox/useSandbox";
 
@@ -22,7 +22,7 @@ const token = String(route.params[`token`]);
 const preview = ref<InvitePreview>();
 const loading = ref(true);
 const busy = ref(false);
-const error = ref<string>();
+const error = ref<NoticeModel>();
 
 onMounted(async () => {
     // Session refresh and token preview are independent (preview needs no session) — resolve them together.
@@ -67,7 +67,7 @@ const accept = async (): Promise<void> => {
         sandbox.select(sandboxId);
         await router.push(`/`);
     } catch (err) {
-        error.value = errorMessage(err, `Couldn't accept the invite.`);
+        error.value = noticeFrom(err, `Couldn't accept the invite.`);
         busy.value = false;
     }
 };
@@ -144,7 +144,7 @@ const switchAccount = async (): Promise<void> => {
                 </Button>
             </template>
 
-            <div v-if="error" :class="cmp.alertDanger('mt-4')">{{ error }}</div>
+            <Notice v-if="error" :of="error" class="mt-4" />
         </div>
     </div>
 </template>

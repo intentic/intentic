@@ -1,5 +1,5 @@
 import { ref, watch } from "vue";
-import { errorMessage, useAsyncAction } from "../useAsyncAction";
+import { noticeFrom, useAsyncAction } from "../useAsyncAction";
 import { sandboxJson } from "./sandboxClient";
 import { jsonBody } from "./jsonBody";
 import { useSandbox } from "./useSandbox";
@@ -29,7 +29,7 @@ export function useControlTokens(scope: ControlScope, defaultLabel: string) {
     const tokens = ref<readonly ControlToken[]>([]);
     // The last mint's RAW token — shown once, gone on navigation/sandbox switch, never refetchable.
     const minted = ref<{ readonly token: string; readonly label: string } | undefined>(undefined);
-    const { busy: minting, error, run } = useAsyncAction();
+    const { busy: minting, notice, run } = useAsyncAction();
     const label = ref(``);
 
     const refresh = async (): Promise<void> => {
@@ -44,7 +44,7 @@ export function useControlTokens(scope: ControlScope, defaultLabel: string) {
         () => active.value?.id,
         () => {
             minted.value = undefined;
-            error.value = undefined;
+            notice.value = undefined;
             void refresh();
         },
         { immediate: true },
@@ -67,10 +67,10 @@ export function useControlTokens(scope: ControlScope, defaultLabel: string) {
         try {
             await sandboxJson(`/system/control/tokens/${encodeURIComponent(id)}`, { method: `DELETE` });
         } catch (caught) {
-            error.value = errorMessage(caught, `Revoking failed.`);
+            notice.value = noticeFrom(caught, `Couldn't revoke that token.`);
         }
         await refresh();
     };
 
-    return { tokens, minted, minting, error, label, mint, revoke, refresh };
+    return { tokens, minted, minting, notice, label, mint, revoke, refresh };
 }

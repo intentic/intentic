@@ -1,10 +1,10 @@
 <script setup lang="ts">
-import { cmp } from "@intentic/ui";
+import { cmp, Notice, type NoticeModel } from "@intentic/ui";
 import Button from "primevue/button";
 import { onMounted, ref } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { apiClient } from "../composables/useApi";
-import { errorMessage } from "../composables/useAsyncAction";
+import { noticeFrom, noticeOf } from "../composables/useAsyncAction";
 import { useAuth } from "../composables/useAuth";
 import { useGoogleIdentity } from "../composables/useGoogleIdentity";
 import { environment } from "../environments/environment";
@@ -28,13 +28,13 @@ const router = useRouter();
 const { refresh } = useAuth();
 const { adoptIdToken } = useGoogleIdentity();
 
-const error = ref<string | undefined>(undefined);
+const error = ref<NoticeModel | undefined>(undefined);
 
 const complete = async (): Promise<void> => {
     const handoff = route.query[`handoff`];
     const verifier = route.query[`verifier`];
     if (typeof handoff !== `string` || handoff === `` || typeof verifier !== `string` || verifier === ``) {
-        error.value = `This sign-in link is incomplete.`;
+        error.value = noticeOf(`This sign-in link is incomplete.`);
         return;
     }
     try {
@@ -48,17 +48,17 @@ const complete = async (): Promise<void> => {
             body: JSON.stringify({ token: ott }),
         });
         if (!verified.ok) {
-            error.value = `That sign-in had already expired. Sign in from the app again.`;
+            error.value = noticeOf(`That sign-in had already expired. Sign in from the app again.`);
             return;
         }
         if (!adoptIdToken(idToken)) {
-            error.value = `That sign-in had already expired. Sign in from the app again.`;
+            error.value = noticeOf(`That sign-in had already expired. Sign in from the app again.`);
             return;
         }
         await refresh();
         await router.replace(`/`);
     } catch (err) {
-        error.value = errorMessage(err, `Couldn't finish signing in.`);
+        error.value = noticeFrom(err, `Couldn't finish signing in.`);
     }
 };
 
@@ -69,7 +69,7 @@ onMounted(() => void complete());
     <div class="flex min-h-dvh w-full items-center justify-center bg-canvas px-4 text-content">
         <div class="animate-fade-in flex w-full max-w-sm flex-col gap-4 text-center">
             <template v-if="error">
-                <div :class="cmp.alertDanger('text-xs')">{{ error }}</div>
+                <Notice v-if="error" :of="error" />
                 <Button label="Back to sign in" severity="secondary" class="self-center" @click="void router.replace(`/login`)" />
             </template>
             <p v-else class="flex items-center justify-center gap-2 text-sm text-muted">

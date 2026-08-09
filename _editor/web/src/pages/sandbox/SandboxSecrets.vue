@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { SecretInventoryEntry } from "@intentic/sandbox-contract";
-import { cmp, RowGroup, SearchBar, Segmented, StatusBadge } from "@intentic/ui";
+import { cmp, Notice, type NoticeModel, RowGroup, SearchBar, Segmented, StatusBadge } from "@intentic/ui";
 import Button from "primevue/button";
 import { computed, ref } from "vue";
 import { useRouter } from "vue-router";
@@ -11,7 +11,7 @@ import { readIntenticLines } from "../../composables/intenticStream";
 import { sandboxRequest } from "../../composables/sandbox/sandboxClient";
 import { jsonBody } from "../../composables/sandbox/jsonBody";
 import { useSecretInventory } from "../../composables/secrets/useSecrets";
-import { errorMessage } from "../../composables/useAsyncAction";
+import { noticeFrom } from "../../composables/useAsyncAction";
 
 /* The one place every secret is visible: what the intent requires (and which resources use it), what's set,
  * what intentic generated, which capability credentials are connected, and whether the CI copy is current.
@@ -82,7 +82,7 @@ const cancelAdd = (): void => {
 const ciStale = computed(() => inventory.value.some((entry) => entry.ci !== undefined && !entry.ci.synced));
 const ciKnown = computed(() => inventory.value.some((entry) => entry.ci !== undefined));
 const pushing = ref(false);
-const pushError = ref<string | undefined>(undefined);
+const pushError = ref<NoticeModel | undefined>(undefined);
 const pushToCi = async (): Promise<void> => {
     pushing.value = true;
     pushError.value = undefined;
@@ -98,7 +98,7 @@ const pushToCi = async (): Promise<void> => {
         }
         refreshInventory();
     } catch (err) {
-        pushError.value = errorMessage(err, `Could not push secrets to CI.`);
+        pushError.value = noticeFrom(err, `Could not push secrets to CI.`);
     } finally {
         pushing.value = false;
     }
@@ -111,7 +111,7 @@ const pushToCi = async (): Promise<void> => {
             {{ missingRequiredCount }} required secret{{ missingRequiredCount === 1 ? ` is` : `s are` }} not set yet — deploys fail until every
             required value is in place.
         </div>
-        <div v-if="pushError" :class="cmp.alertDanger('mb-4')">{{ pushError }}</div>
+        <Notice v-if="pushError" :of="pushError" class="mb-4" />
 
         <div v-if="inventoryPending" :class="cmp.emptyState('py-6')"><Icon name="spinner" spin /> Reading your sandbox's secrets…</div>
 

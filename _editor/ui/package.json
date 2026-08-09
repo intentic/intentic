@@ -46,6 +46,10 @@
             "types": "./src/composables/useHighlighter.ts",
             "default": "./src/composables/useHighlighter.ts"
         },
+        "./notice": {
+            "types": "./src/components/notice.ts",
+            "default": "./src/components/notice.ts"
+        },
         "./series": {
             "types": "./src/components/seriesAccent.ts",
             "default": "./src/components/seriesAccent.ts"

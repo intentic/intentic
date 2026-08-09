@@ -9,6 +9,7 @@ import { reportIdle, reportSessionId, reportView } from "../composables/usePrese
 import { useSandboxLiveness } from "../composables/sandbox/useSandboxLiveness";
 import PoppablePanels from "./PoppablePanels.vue";
 import PushNotice from "./PushNotice.vue";
+import ReceiptBar from "./ReceiptBar.vue";
 
 /* THE SIGNED-IN SESSION'S LIVE CONNECTION TO ITS SANDBOX, and the panels that connection feeds — mounted by
  * App.vue for as long as an account has a sandbox selected, and therefore ABOVE every route rather than inside
@@ -69,4 +70,9 @@ onUnmounted(() => stopBackgroundLoader());
          reason the stream does: the check that raises it takes minutes, the user was told to go and do something
          else, and every route in the app is somewhere they might reasonably be when it lands. -->
     <PushNotice />
+    <!-- The app's quiet channel: what just happened, retiring itself. One host above the router, for the same
+         reason the notice above has one — a completion reported from a dialog, a tree row or a settings card is
+         the same event to the user and must not depend on which view raised it. It is deliberately NOT cleared
+         on navigation: "3 files deleted" is still true on the next screen, and it is gone in seconds anyway. -->
+    <ReceiptBar />
 </template>

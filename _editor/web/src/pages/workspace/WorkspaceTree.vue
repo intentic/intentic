@@ -11,6 +11,7 @@ import { useUploadQueue } from "../../composables/workspace/useUploadQueue";
 import { isRecentlyChanged } from "../../composables/workspace/useWorkspaceLive";
 import { useWorkspaceTree } from "../../composables/workspace/useWorkspaceTree";
 import PresenceAvatars from "../../presence/PresenceAvatars.vue";
+import { useReceipts } from "../../composables/receipts";
 import { explorerTreatment, iconForEntry } from "@intentic/ui";
 import { PUBLIC_DIR, REFERENCE_DIR } from "@intentic/workspace-ignore/constants";
 import { filesToEntries } from "./dropEntries";
@@ -98,6 +99,7 @@ const {
 } = useWorkspaceTree();
 const layout = useLayout();
 const { enqueue, enqueueFromDataTransfer } = useUploadQueue();
+const { say } = useReceipts();
 const { fileNesting } = useFileNesting();
 
 // Expanded directory paths live in useWorkspaceTree (shared with the explorer toolbar's Collapse All), consulted
@@ -410,7 +412,7 @@ const commitRename = (): void => {
     if (name === `` || name === basename(path)) {
         return;
     }
-    void run(() => moveEntry(path, joinPath(parentDir(path), name)));
+    void run(() => moveEntry(path, joinPath(parentDir(path), name)), `Couldn't rename that.`);
 };
 const cancelRename = (): void => {
     renamingPath.value = undefined;
@@ -464,13 +466,13 @@ const commitCreate = async (): Promise<void> => {
     creating.value = undefined;
     const path = joinPath(spec.dir, name);
     if (spec.type === `dir`) {
-        await run(() => createDir(path));
+        await run(() => createDir(path), `Couldn't create that folder.`);
         selectSingle(path);
         await focusLead();
         return;
     }
     // A new file: create it, open it, and drop straight into the editor so the user can type immediately.
-    await run(() => saveText(path, ``));
+    await run(() => saveText(path, ``), `Couldn't create that file.`);
     selectSingle(path);
     emit(`openFile`, path);
     layout.setEditMode(true);
@@ -502,7 +504,12 @@ const confirmDelete = (): void => {
     if (paths === undefined) {
         return;
     }
-    void run(() => removeEntries(paths));
+    // Said after the delete lands, not before it: a receipt for something that then failed would be the
+    // app lying about the one action it cannot take back. The failure has its own notice.
+    void run(async () => {
+        await removeEntries(paths);
+        say(paths.length === 1 ? `1 item deleted` : `${paths.length} items deleted`);
+    }, `Couldn't delete that.`);
     selection.value = new Set();
     anchor.value = null;
 };
@@ -561,7 +568,7 @@ const doPaste = async (dir: string): Promise<void> => {
         if (pairs.length === 0) {
             return;
         }
-        await run(() => copyEntries(pairs));
+        await run(() => copyEntries(pairs), `Couldn't paste those items.`);
         revealPasted(
             dir,
             pairs.map((pair) => pair.to),
@@ -573,7 +580,7 @@ const doPaste = async (dir: string): Promise<void> => {
     if (sources.length === 0) {
         return;
     }
-    await run(() => moveIntoMany(sources, dir));
+    await run(() => moveIntoMany(sources, dir), `Couldn't move those items.`);
     revealPasted(
         dir,
         sources.map((source) => joinPath(dir, basename(source))),
@@ -763,7 +770,7 @@ const onRowDrop = (event: DragEvent, row: Row): void => {
     const dataTransfer = event.dataTransfer;
     const internal = dataTransfer.getData(`application/x-intentic-path`);
     if (internal !== ``) {
-        void run(() => moveIntoMany(internal.split(`\n`), dir));
+        void run(() => moveIntoMany(internal.split(`\n`), dir), `Couldn't move those items.`);
         return;
     }
     // enqueueFromDataTransfer runs the capture synchronously (webkitGetAsEntry must fire while the items are alive)

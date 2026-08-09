@@ -447,7 +447,7 @@ useKeybindings();
                              silence. -->
                         <span
                             v-if="tile.ghost"
-                            class="icon-rail-tile flex animate-pulse items-center justify-center rounded-lg bg-overlay/50 text-muted opacity-40 motion-reduce:animate-none"
+                            class="icon-rail-tile flex animate-pulse items-center justify-center rounded-lg bg-overlay/50 text-muted opacity-40"
                             aria-hidden="true"
                         >
                             <span v-if="tile.icon === undefined" class="text-sm font-semibold">{{ initialsOf(tile.label) }}</span>

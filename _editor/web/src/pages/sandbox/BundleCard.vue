@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ImportReportSchema, type BundleExport, type ImportReport } from "@intentic-app/api-contract";
-import { Card, formatDateTime, StatusBadge } from "@intentic/ui";
+import { Card, formatDateTime, type NoticeModel, NoticeStack, StatusBadge } from "@intentic/ui";
 import Button from "primevue/button";
 import ToggleSwitch from "primevue/toggleswitch";
 import { computed, ref } from "vue";
@@ -24,11 +24,16 @@ import { useAsyncAction } from "../../composables/useAsyncAction";
 
 const isOwner = computed(() => useSandbox().active.value?.role === `owner`);
 const { exports, packing, start, remove, error: listError } = useBundleExports();
+// The query carries a raw message and no idea what the user was after; the card does, so the card writes
+// the sentence and keeps the message underneath as evidence.
+const listNotice = computed<NoticeModel | undefined>(() =>
+    listError.value === undefined ? undefined : { tone: `danger`, title: `Couldn't list this sandbox's bundles.`, detail: listError.value },
+);
 
 const withSecrets = ref(false);
 const report = ref<ImportReport | undefined>(undefined);
-const { busy: starting, error: startError, run: runStart } = useAsyncAction();
-const { busy: importing, error: importError, run: runImport } = useAsyncAction();
+const { busy: starting, notice: startError, run: runStart } = useAsyncAction();
+const { busy: importing, notice: importError, run: runImport } = useAsyncAction();
 
 const startExport = (): Promise<void> => runStart(() => start(withSecrets.value), `Could not start the export.`);
 
@@ -178,8 +183,6 @@ const sizeLabel = (bytes: number): string => {
             </p>
         </template>
 
-        <p v-if="startError" class="text-2xs text-danger">{{ startError }}</p>
-        <p v-if="importError" class="text-2xs text-danger">{{ importError }}</p>
-        <p v-if="listError" class="text-2xs text-danger">{{ listError }}</p>
+        <NoticeStack :of="[startError, importError, listNotice]" />
     </Card>
 </template>

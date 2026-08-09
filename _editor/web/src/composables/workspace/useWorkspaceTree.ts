@@ -6,7 +6,7 @@ import { jsonBody } from "../sandbox/jsonBody";
 import { readFileWindow } from "./fileWindow";
 import { sandboxKey, useSandbox } from "../sandbox/useSandbox";
 import { useSandboxQuery } from "../sandbox/useSandboxQuery";
-import { errorMessage, useAsyncAction } from "../useAsyncAction";
+import { noticeFrom, useAsyncAction } from "../useAsyncAction";
 import { resetUploadQueue } from "./useUploadQueue";
 import { readExpandedDirs, writeExpandedDirs } from "./workspaceSnapshot";
 import { scopeQuery, workspaceAgent } from "./workspaceScope";
@@ -16,7 +16,7 @@ import { basename, parentDir } from "@intentic/ui/path";
 // rows, and the editor all report through ONE busy spinner + error line. Errors are surfaced, not thrown — a
 // failed daemon call (denylist 404, escape 400, oversize 413) shouldn't blow up the DOM handler that fired it.
 // Drag-drop uploads are NOT routed here; they go through useUploadQueue so a slow upload never blocks this line.
-const { busy, error: actionError, run } = useAsyncAction();
+const { busy, notice: actionError, run } = useAsyncAction();
 
 // Lazily-loaded children of the dirs the tree walk listed but didn't descend into — ignored ones (node_modules,
 // .git, …) and any that sat below the walk's breadth-first entry budget — keyed by the dir's root-relative path.
@@ -256,7 +256,7 @@ export function useWorkspaceTree() {
                 lazyHidden.value.delete(path);
             }
         } catch (loadError) {
-            actionError.value = errorMessage(loadError, `Failed to load ${path}.`);
+            actionError.value = noticeFrom(loadError, `Couldn't open ${path}.`);
         } finally {
             lazyLoading.value.delete(path);
         }

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Card, Code, CopyButton, formatDate } from "@intentic/ui";
+import { Card, Code, CopyButton, formatDate, Notice } from "@intentic/ui";
 import Button from "primevue/button";
 import { computed } from "vue";
 import { useControlTokens } from "../../composables/sandbox/useControlTokens";
@@ -14,7 +14,7 @@ import { useSandbox } from "../../composables/sandbox/useSandbox";
  * about tokens. The next card that mints one (a CLI, an MCP server) wants its own paste-ready thing. */
 
 const { daemonUrl } = useSandbox();
-const { tokens, minted, minting, error, label, mint, revoke } = useControlTokens(`editor`, `editor bridge`);
+const { tokens, minted, minting, notice, label, mint, revoke } = useControlTokens(`editor`, `editor bridge`);
 
 const zedSnippet = computed(() =>
     minted.value === undefined
@@ -60,7 +60,7 @@ const zedSnippet = computed(() =>
             />
             <Button label="Mint token" size="small" :loading="minting" @click="mint" />
         </div>
-        <p v-if="error" class="text-2xs text-danger">{{ error }}</p>
+        <Notice v-if="notice" :of="notice" />
 
         <div v-if="minted" class="flex flex-col gap-2 rounded-lg bg-canvas p-3">
             <p class="text-2xs text-subtle">Shown once — copy it now. The sandbox stores only a hash.</p>

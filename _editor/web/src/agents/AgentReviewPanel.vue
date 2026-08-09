@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { FileDiffResponse } from "@intentic-app/api-contract";
-import { ChangeStatusMark, cmp, explorerColorClass, iconForEntry, Segmented, useDevice, useExplorerStyle } from "@intentic/ui";
+import { ChangeStatusMark, cmp, explorerColorClass, iconForEntry, Notice, Segmented, useDevice, useExplorerStyle } from "@intentic/ui";
 import { isTestPath } from "@intentic/sandbox-contract";
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, type Ref, watch } from "vue";
 import { useRouter } from "vue-router";
@@ -581,10 +581,7 @@ const endResize = (event: PointerEvent): void => {
                 <p class="break-words text-2xs text-muted">{{ changes.error.value }}</p>
             </div>
         </div>
-        <div v-if="changes.actionError.value" :class="[NOTICE, 'mx-2 mt-2 shrink-0']">
-            <Icon name="exclamation-triangle" class="mt-0.5 shrink-0 text-2xs text-danger" />
-            <p class="min-w-0 flex-1 break-words text-2xs text-danger">{{ changes.actionError.value }}</p>
-        </div>
+        <Notice v-if="changes.actionError.value" :of="changes.actionError.value" class="mx-2 mt-2 shrink-0" />
 
         <!-- What a MERGE land left behind: the delta is in the workspace, and these files carry markers to
              finish there. Shown above the conflict report so the newest outcome reads first. -->

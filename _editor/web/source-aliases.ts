@@ -46,6 +46,10 @@ export const sourceAliases = (): Record<string, string> => ({
     // Same again: the chart palette's slot→colour lookup is called by the usage/savings PROJECTIONS, which are
     // pure functions with their own unit tests — reaching it through the barrel boots Picker.vue and wants a DOM.
     "@intentic/ui/series": here("../../_editor/ui/src/components/seriesAccent.ts"),
+    // And again: what a failure IS — the shape, the severity order, the duplicate collapsing — is plain data
+    // reached by composables that never render (useAsyncAction builds one from a caught value) and by their
+    // unit tests. <Notice> and <NoticeStack> come from the barrel like every other component.
+    "@intentic/ui/notice": here("../../_editor/ui/src/components/notice.ts"),
     // And once more: the 1h/24h/7d/All vocabulary is arithmetic over a timestamp, called by the feeds' pure
     // projections and pinned by their unit tests — none of which should need a DOM to ask how far back "7d" is.
     "@intentic/ui/time": here("../../_editor/ui/src/timeWindow.ts"),

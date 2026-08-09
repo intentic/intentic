@@ -1,12 +1,12 @@
 <script setup lang="ts">
 import type { CloudOptions, CloudProvider, SandboxSummary } from "@intentic-app/api-contract";
-import { cmp, Segmented, useDevice } from "@intentic/ui";
+import { cmp, Notice, type NoticeModel, NoticeStack, Segmented, useDevice } from "@intentic/ui";
 import Button from "primevue/button";
 import Select from "primevue/select";
 import { computed, ref, watch } from "vue";
 import { track } from "../composables/analytics";
 import { apiClient } from "../composables/useApi";
-import { errorMessage } from "../composables/useAsyncAction";
+import { noticeFrom } from "../composables/useAsyncAction";
 import { CLOUD_PROVIDERS, cloudCredentials, cloudProviderMeta, sizeLabel } from "./setupCloud";
 
 /* Step 3's cloud machine form (see setupCloud.ts for what this is). The flow is three moves on one card:
@@ -42,7 +42,7 @@ const credentials = computed(() => cloudCredentials(provider.value, { token: tok
 // a response for a credential no longer in the fields is dropped.
 const options = ref<CloudOptions | null>(null);
 const optionsLoading = ref(false);
-const optionsError = ref<string | undefined>(undefined);
+const optionsError = ref<NoticeModel | undefined>(undefined);
 const location = ref<string | undefined>(undefined);
 const size = ref<string | undefined>(undefined);
 let fetchTimer: ReturnType<typeof setTimeout> | undefined;
@@ -64,7 +64,7 @@ const fetchOptions = async (): Promise<void> => {
         size.value = listed.defaultSize;
     } catch (err) {
         if (asked === credentials.value) {
-            optionsError.value = errorMessage(err, `Couldn't reach ${meta.value.label} with that credential — try again.`);
+            optionsError.value = noticeFrom(err, `Couldn't reach ${meta.value.label} with that credential — try again.`);
         }
     } finally {
         if (asked === credentials.value) {
@@ -92,7 +92,7 @@ const locationOptions = computed(() => options.value?.locations.map((entry) => (
 const sizeOptions = computed(() => options.value?.sizes.map((entry) => ({ label: sizeLabel(entry), value: entry.id })) ?? []);
 
 const provisioning = ref(false);
-const provisionError = ref<string | undefined>(undefined);
+const provisionError = ref<NoticeModel | undefined>(undefined);
 const ready = computed(() => credentials.value !== undefined && options.value !== null && location.value !== undefined && size.value !== undefined);
 
 const create = async (): Promise<void> => {
@@ -110,7 +110,7 @@ const create = async (): Promise<void> => {
         emit(`provisioned`, summary);
     } catch (err) {
         track(`sandbox_cloud_provision_failed`, { provider: provider.value });
-        provisionError.value = errorMessage(err, `Couldn't create the machine — try again.`);
+        provisionError.value = noticeFrom(err, `Couldn't create the machine — try again.`);
     } finally {
         provisioning.value = false;
     }
@@ -177,7 +177,7 @@ const create = async (): Promise<void> => {
             <Icon name="spinner" spin class="text-info" />
             Checking the credential and fetching {{ meta.label }}'s regions and prices…
         </p>
-        <div v-else-if="optionsError" :class="cmp.alertDanger('text-2xs')">{{ optionsError }}</div>
+        <Notice v-else-if="optionsError" :of="optionsError" />
 
         <template v-if="options !== null">
             <!-- Stacked on a phone for the same reason the attach lane stacks: side by side, neither pick
@@ -185,7 +185,14 @@ const create = async (): Promise<void> => {
             <div class="flex flex-col gap-2 md:flex-row">
                 <label class="ui-field md:flex-1">
                     <span class="ui-field-label">{{ provider === `oracle` ? `Availability domain` : `Region` }}</span>
-                    <Select v-model="location" :options="locationOptions" option-label="label" option-value="value" size="small" class="w-full text-xs" />
+                    <Select
+                        v-model="location"
+                        :options="locationOptions"
+                        option-label="label"
+                        option-value="value"
+                        size="small"
+                        class="w-full text-xs"
+                    />
                 </label>
                 <label class="ui-field md:flex-1">
                     <span class="ui-field-label">Size</span>
@@ -193,7 +200,7 @@ const create = async (): Promise<void> => {
                 </label>
             </div>
 
-            <div v-if="provisionError" :class="cmp.alertDanger('text-2xs')">{{ provisionError }}</div>
+            <Notice v-if="provisionError" :of="provisionError" />
             <Button
                 label="Create the machine"
                 class="w-full justify-center md:w-auto md:self-start"
@@ -204,7 +211,9 @@ const create = async (): Promise<void> => {
                 <template #icon><Icon name="bolt" /></template>
             </Button>
             <p class="text-2xs text-subtle">
-                Created in your {{ meta.label }} account, so it's yours: {{ meta.id === `oracle` ? `free within the Always-Free tier` : `billed by ${meta.label} directly to you` }}, and deleting it happens in their console.
+                Created in your {{ meta.label }} account, so it's yours:
+                {{ meta.id === `oracle` ? `free within the Always-Free tier` : `billed by ${meta.label} directly to you` }}, and deleting it happens
+                in their console.
             </p>
         </template>
     </div>
