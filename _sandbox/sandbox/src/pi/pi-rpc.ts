@@ -4,6 +4,7 @@ import type { Readable, Writable } from "node:stream";
 import { StringDecoder } from "node:string_decoder";
 import type { AcpAgentConfig } from "@intentic/sandbox-contract";
 import { parseEnvBlock, splitCommand } from "../acp/acp-spawn.js";
+import { DAEMON_OWNER, workloadStamp } from "../platform/leftovers.js";
 
 /* The Pi RPC transport: spawn `<command> --mode rpc` and speak its strict-LF JSONL protocol over stdio.
  * Commands go down stdin one JSON object per line; every one carries a minted `id`, and the matching
@@ -83,7 +84,9 @@ export const piSpawner = (sessionDir: string): PiSpawn => {
             [...rest, "--mode", "rpc", "--session-dir", sessionDir],
             {
                 cwd,
-                env: { ...process.env, ...parseEnvBlock(config.env) },
+                // Daemon-owned, like the ACP pool it mirrors: kept warm across turns on purpose, so only a
+                // previous daemon's copy is ever a leftover (platform/leftovers.ts).
+                env: { ...process.env, ...parseEnvBlock(config.env), ...workloadStamp(DAEMON_OWNER) },
                 stdio: ["pipe", "pipe", "pipe"],
             },
         );

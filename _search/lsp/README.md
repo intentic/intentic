@@ -16,6 +16,13 @@ program can see. "Checked, and clean" and "could not check" are never conflated.
 not its path — an isolated worktree that mounts its own tree over the same path gets its own daemon that
 actually sees that tree, instead of sharing one that answers about different files by the same name.
 
+*Per view, and exactly one.* Starting one costs a whole-monorepo parse, so the socket does not exist for
+seconds after the spawn — long enough that a burst of edits (a turn fanning out subagents) used to start a
+service each, every one of them a ~1 GB program and all but one unreachable. Two rules close that: the client
+warms a root once and later askers wait on that same warm-up, and a daemon that finds someone already answering
+at its socket stands down instead of unlinking it and binding over the top. A socket nobody answers on is the
+only one treated as stale.
+
 **A caller can put the service somewhere it cannot stand itself.** Identity keying cuts both ways: because the
 name is not in it, one directory named differently on either side of a mount boundary yields one socket. So a
 caller outside a mount namespace can find — or start, through a wrapper it supplies — a daemon *inside* it, and

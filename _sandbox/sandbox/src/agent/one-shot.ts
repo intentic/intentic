@@ -1,4 +1,5 @@
 import { type Options, query } from "@anthropic-ai/claude-agent-sdk";
+import { ONE_SHOT_OWNER, workloadStamp } from "../platform/leftovers.js";
 import { type HarnessCredentials, harnessEnv } from "./harness-credentials.js";
 import { isFailureSentence } from "./failure-sentences.js";
 
@@ -81,6 +82,10 @@ export const runOneShot = async (params: {
                 ...(endpoint !== undefined ? { baseUrl: endpoint.baseUrl, authToken: endpoint.authToken, model: endpoint.model } : {}),
                 ...(oauthToken !== undefined ? { oauthToken } : {}),
             }),
+            // A helper is seconds-scale by construction (see above: no tools, one turn, and a retry it will not
+            // wait fifteen seconds for), so it carries the reserved owner nothing reports live — one still
+            // running a grace window after this call gave up on it is a leftover, and the commonest one there is.
+            ...workloadStamp(ONE_SHOT_OWNER),
         },
     };
     const session = query({ prompt: params.prompt, options });

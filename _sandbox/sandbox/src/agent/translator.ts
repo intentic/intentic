@@ -12,6 +12,7 @@ import {
 import type { Config } from "../env.config.js";
 import type { Services } from "../composition.js";
 import { compatYaml, endpointCompatEntries, translatedEndpoints } from "../endpoints/endpoint-translator.js";
+import { DAEMON_OWNER, workloadStamp } from "../platform/leftovers.js";
 import type { AccountUsageStore } from "../usage/account-usage.js";
 import { fetchTranslatorUsage, quotaPoolFor, type TranslatorAuthFile, type TurnLimit } from "../usage/translator-usage.js";
 
@@ -186,7 +187,12 @@ export const startTranslator = (services: Services): void => {
         const keepTail = (chunk: Buffer): void => {
             outputTail = (outputTail + chunk.toString()).slice(-OUTPUT_TAIL_BYTES);
         };
-        child = spawn("cli-proxy-api", ["--config", configPath], { stdio: ["ignore", "pipe", "pipe"], env: process.env });
+        // Daemon-owned: supervised here with its own restart ladder, so it is never abandoned in this life —
+        // the stamp is what lets a NEXT daemon recognise the copy this one left behind (platform/leftovers.ts).
+        child = spawn("cli-proxy-api", ["--config", configPath], {
+            stdio: ["ignore", "pipe", "pipe"],
+            env: { ...process.env, ...workloadStamp(DAEMON_OWNER) },
+        });
         child.stdout?.on("data", keepTail);
         child.stderr?.on("data", keepTail);
         child.on("exit", (code) => {
@@ -327,7 +333,7 @@ export const createCliProxyClient = (params: {
             codexChild?.kill("SIGTERM");
             const child = spawn("cli-proxy-api", ["--codex-device-login", "--no-browser", "--config", configPath], {
                 stdio: ["ignore", "pipe", "pipe"],
-                env: process.env,
+                env: { ...process.env, ...workloadStamp(DAEMON_OWNER) },
             });
             codexChild = child;
             let buffer = "";

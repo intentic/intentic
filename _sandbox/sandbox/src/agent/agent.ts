@@ -51,6 +51,7 @@ import { agentShellBusy, bashTmuxHooks, tmuxRunEnabled } from "./agent-terminals
 import { withTurnPreamble } from "./turn-preamble.js";
 import { EventQueue } from "./event-queue.js";
 import { harnessEnv, type TurnAllowance } from "./harness-credentials.js";
+import { workloadStamp } from "../platform/leftovers.js";
 import { readClaudeUsage } from "../usage/claude-usage.js";
 import type { TurnLimit } from "../usage/translator-usage.js";
 import { sdkSystemPrompt } from "./system-prompt.js";
@@ -1319,6 +1320,12 @@ const baseOptions = (
         // and not this turn's (isolation.ts). Only for an anchored turn — the only one whose wrapper runs
         // inside a namespace at all.
         ...(request.isolation?.anchor !== undefined ? { [TMUX_NS_ENV]: daemonMountNs } : {}),
+        /* Whose work this is, for the sweep that reclaims what a turn leaves behind (platform/leftovers.ts).
+         * The CLI's MCP servers and their browsers inherit this without knowing it exists, which is the whole
+         * reason it is an env var: nothing below the CLI is ours to hold a handle on. A turn with no
+         * conversation behind it (the bench) is left unstamped rather than given a made-up owner — the sweep
+         * reclaims only what it can attribute, and an owner nothing can report on would read as finished. */
+        ...(request.conversationId !== undefined ? workloadStamp(request.conversationId) : {}),
     },
     // Hooks fire even under bypassPermissions, and for subagents too. tmux: every Bash command runs inside an
     // `agent-*` tmux session (bin/tmux-run) so the terminal panel can watch the agent work live. Installs: an image-scoped install
@@ -1422,11 +1429,7 @@ const askServer = (
                     // Named with its conversation, unlike the plan and permission cards: dismissing this one
                     // ends the turn, and the route that takes the dismissal ends it there rather than waiting
                     // for the browser to send a second request for it (agent.routes' reply handler).
-                    const { id, wait } = createRequest(
-                        "question",
-                        { kind: "question", requestId: "", cancelled: true },
-                        request.conversationId,
-                    );
+                    const { id, wait } = createRequest("question", { kind: "question", requestId: "", cancelled: true }, request.conversationId);
                     push({ kind: "question", requestId: id, questions });
                     const { reply, resolved } = await wait(request.signal);
                     // The picks belong in the frame log, not just in this tool result: they are what a replayed

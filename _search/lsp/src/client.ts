@@ -124,6 +124,17 @@ const spawnDaemon = (root: string, location: ServiceLocation | undefined): void 
     child.unref();
 };
 
+/* ONE COLD START AT A TIME, PER ROOT. A daemon is not cheap to begin — it parses a whole monorepo, which is
+ * hundreds of MB and enough seconds that the socket does not exist for a long while after the spawn. Every edit
+ * that lands in that window used to find nothing listening and start another one, and a turn that fans out
+ * subagents lands a lot of them: three services for one workspace, ~1 GB each, all but one of them unreachable
+ * and merely waiting out an idle timer. The in-flight promise is per socket path, which is per repository, so
+ * concurrent askers about the same tree share one warm-up and askers about different trees are unaffected.
+ *
+ * Every caller lives in the daemon's own process (the post-edit hook), so a promise is the whole of the mutual
+ * exclusion needed here; the standalone `lsp diag` CLI races nothing but itself. */
+const warming = new Map<string, Promise<Socket | undefined>>();
+
 // `socketRoot` is the root as THIS process can stat it and `root` the name the daemon is started with — the same
 // directory, one number, two names, and only the first can be stat'ed from here (protocol.ts).
 const connectOrSpawn = async (root: string, socketRoot: string, location: ServiceLocation | undefined): Promise<Socket | undefined> => {
@@ -132,15 +143,32 @@ const connectOrSpawn = async (root: string, socketRoot: string, location: Servic
     if (existing !== undefined) {
         return existing;
     }
-    spawnDaemon(root, location);
-    for (let attempt = 0; attempt < SPAWN_ATTEMPTS; attempt += 1) {
-        await sleep(SPAWN_RETRY_MS);
-        const socket = await tryConnect(path);
-        if (socket !== undefined) {
-            return socket;
-        }
+    const inFlight = warming.get(path);
+    if (inFlight !== undefined) {
+        /* Someone else is already paying for the cold start. Wait for their outcome and then connect for
+         * ourselves rather than sharing their socket: a Socket is a single request/response conversation here
+         * (`ask` reads one line and the caller destroys it), so handing the same one to two askers would have
+         * them read each other's answers. */
+        await inFlight.catch(() => undefined);
+        return await tryConnect(path);
     }
-    return undefined;
+    const warm = (async (): Promise<Socket | undefined> => {
+        spawnDaemon(root, location);
+        for (let attempt = 0; attempt < SPAWN_ATTEMPTS; attempt += 1) {
+            await sleep(SPAWN_RETRY_MS);
+            const socket = await tryConnect(path);
+            if (socket !== undefined) {
+                return socket;
+            }
+        }
+        return undefined;
+    })();
+    warming.set(path, warm);
+    try {
+        return await warm;
+    } finally {
+        warming.delete(path);
+    }
 };
 
 export interface DiagnoseOptions {

@@ -1,5 +1,6 @@
 import { spawn } from "node:child_process";
 import type { IntenticLine } from "@intentic/sandbox-contract";
+import { DAEMON_OWNER, workloadStamp } from "../platform/leftovers.js";
 
 // `IntenticLine` (one parsed line from `intentic … --output ndjson`: engine events, provider `log`, the
 // terminal `result`) is the wire shape the daemon streams, so it lives in @intentic/sandbox-contract. It stays
@@ -65,7 +66,12 @@ export interface RunLogger {
 // crashed or killed run must be attributable from daemon.log alone, not reconstructed from absence.
 export async function* runIntentic(run: IntenticRun, signal?: AbortSignal, logger?: RunLogger): AsyncGenerator<IntenticLine> {
     const startedAt = Date.now();
-    const child = spawn("intentic", [...run.args], { cwd: run.cwd, env: { ...process.env, INTENTIC_OUTPUT: "ndjson" } });
+    // Daemon-owned: this generator kills its own child on abort and on exit, so the stamp is here for the one
+    // case that cannot — a daemon replaced mid-run, whose `intentic` child nothing is left to signal.
+    const child = spawn("intentic", [...run.args], {
+        cwd: run.cwd,
+        env: { ...process.env, INTENTIC_OUTPUT: "ndjson", ...workloadStamp(DAEMON_OWNER) },
+    });
     logger?.info({ args: run.args, pid: child.pid }, "intentic run spawned");
     child.stdout.setEncoding("utf8");
     let stderr = "";

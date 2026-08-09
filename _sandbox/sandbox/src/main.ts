@@ -52,11 +52,13 @@ import type { BootTracker } from "./platform/boot.js";
 import { claimBootMarker } from "./platform/boot-marker.js";
 import { claimContainerHome } from "./platform/home-owner.js";
 import { startLoopWatchdog } from "./platform/loop-watchdog.js";
+import { DAEMON_OWNER, startLeftoverSweep } from "./platform/leftovers.js";
 import { startWorkloadPriorityGovernor } from "./platform/workload-priority.js";
+import { turnRunOf } from "./agent/turn-runs.js";
 import { readLocalCertificate, startLocalCertificateRenewal } from "./platform/local-cert.js";
 import { restoreAuthorizedKeys, seedPairing } from "./platform/sync.js";
 import { seedSetupHost } from "./hosts/host-seed.js";
-import { reapFinishedSessions } from "./terminal/terminal-session.js";
+import { panePids, reapFinishedSessions } from "./terminal/terminal-session.js";
 import { startVersionCheck } from "./platform/version-check.js";
 import { startRuntimeHealth } from "./agent/adapter-health.js";
 import { startRepoWatch, subscribeRepoChanges } from "./workspace/repo-watch.js";
@@ -613,6 +615,21 @@ const main = async (): Promise<void> => {
     void reapFinishedSessions(stillWorking);
     const sessionSweep = setInterval(() => void reapFinishedSessions(stillWorking), 3_600_000);
 
+    /* Process retention (platform/leftovers.ts): the provider CLIs, MCP servers and headless browsers a turn
+     * started, reclaimed once the turn that owns them has finished. Sessions above are the tmux half of the same
+     * job and this is the half nothing was doing — a turn's tree below the CLI has no handle anyone here holds,
+     * so a stopped turn, a killed CLI or a replaced daemon simply left it running.
+     *
+     * Owner liveness is the turn registry and nothing else, so there is no second definition of alive to keep
+     * true. The two reserved owners answer for themselves: what the daemon keeps warm on purpose (the ACP/Pi
+     * pools, the translator) is live for as long as this daemon is, and a helper one-shot never is. */
+    const leftovers = startLeftoverSweep({
+        ownerLive: (owner) => owner === DAEMON_OWNER || turnRunOf(owner)?.done === false,
+        panePids,
+        logger,
+    });
+    void leftovers.sweep();
+
     // The stock automations a workspace starts with (currently the dependency fix chore), offered exactly
     // once — a deleted seed stays deleted. Before the scheduler so the first tick already sees them.
     await seedDefaultAutomations(services.automations, statePath(services.workspace.root, ".intentic/automations.seeded.json")).catch(
@@ -750,6 +767,7 @@ const main = async (): Promise<void> => {
         logger.info("shutting down intentic sandbox daemon…");
         clearInterval(logsSweep);
         clearInterval(sessionSweep);
+        leftovers.stop();
         scheduler.stop();
         // A pre-push check is a suite running on the main tree — a daemon that exits without killing it leaves
         // it burning CPU with nothing left to report the result to.

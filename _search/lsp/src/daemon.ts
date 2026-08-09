@@ -1,4 +1,4 @@
-import { createServer, type Server, type Socket } from "node:net";
+import { connect, createServer, type Server, type Socket } from "node:net";
 import { rm } from "node:fs/promises";
 import type { Request, Response } from "./protocol.js";
 import { socketPathFor } from "./protocol.js";
@@ -23,6 +23,36 @@ import { Workspace } from "./workspace.js";
 const REFRESH_DEBOUNCE_MS = 300;
 const IDLE_EXIT_MS = 15 * 60 * 1000;
 
+// How long to wait for a socket already at the path to prove it is alive. Generous: the answer only gates
+// whether THIS process is redundant, and a daemon mid-refresh is slow to accept, not dead.
+const PROBE_TIMEOUT_MS = 2_000;
+
+/* Raised by `listen` when another daemon is already serving this root. Not an error anyone has to handle
+ * specially — `runDaemon` treats it as "nothing left to do here" — but a distinct type, because a bind failure
+ * that is NOT this is a real fault and must not be swallowed with it. */
+export class RedundantDaemon extends Error {
+    constructor() {
+        super("another daemon is already serving this root");
+        this.name = "RedundantDaemon";
+    }
+}
+
+// Whether anything accepts a connection at `path`. A socket file with nobody behind it (the daemon was killed)
+// refuses with ECONNREFUSED, which is the case this distinguishes from a live neighbour.
+const answers = (path: string): Promise<boolean> =>
+    new Promise((resolve) => {
+        const socket = connect(path);
+        const settle = (alive: boolean): void => {
+            clearTimeout(timer);
+            socket.removeAllListeners();
+            socket.destroy();
+            resolve(alive);
+        };
+        const timer = setTimeout(() => settle(false), PROBE_TIMEOUT_MS);
+        socket.once("connect", () => settle(true));
+        socket.once("error", () => settle(false));
+    });
+
 export interface DaemonOptions {
     readonly root: string;
     readonly refreshDebounceMs?: number;
@@ -44,8 +74,17 @@ export class Daemon {
         this.idleExitMs = options.idleExitMs ?? IDLE_EXIT_MS;
     }
 
+    /* Binding is a CLAIM, and it has to be checked before it is made. This used to unlink whatever was at the
+     * path and bind over it, on the reasoning that only a killed daemon could have left one — but two daemons
+     * racing a cold start are the common case, not the rare one, and the second one's unlink cut the first one
+     * off from every future request. What it had built (a whole monorepo's program, ~1 GB) then sat unreachable
+     * until its idle timer ran out. So: if something is already answering here, this daemon is the redundant one
+     * and says so; the caller exits rather than squatting. Only a socket nobody answers on is stale, and only
+     * that one is removed. */
     async listen(): Promise<string> {
-        // A socket file left behind by a killed daemon would make bind fail; nothing else owns this path.
+        if (await answers(this.socketPath)) {
+            throw new RedundantDaemon();
+        }
         await rm(this.socketPath, { force: true });
         const server = createServer((socket) => this.serve(socket));
         this.server = server;
@@ -126,10 +165,18 @@ export class Daemon {
 }
 
 // Entry point for `lsp daemon <root>`: serve until idle, then exit. Kept out of the class so tests can drive a
-// Daemon without a process lifecycle attached to it.
+// Daemon without a process lifecycle attached to it. Losing the race to bind is a normal outcome, not a failure:
+// a neighbour is already serving this root, so this process has nothing to hold open and returning ends it.
 export const runDaemon = async (root: string): Promise<void> => {
     const daemon = new Daemon({ root });
-    await daemon.listen();
+    try {
+        await daemon.listen();
+    } catch (error) {
+        if (error instanceof RedundantDaemon) {
+            return;
+        }
+        throw error;
+    }
     for (const signal of ["SIGINT", "SIGTERM"] as const) {
         process.once(signal, () => void daemon.close().then(() => process.exit(0)));
     }

@@ -33,6 +33,14 @@ The **per-project AI-agent dev daemon** — a Docker image that runs as the proj
 - [src/agents](src/agents) — **plural**: the fleet. The registry, `worktrees.ts`, `isolation.ts`, `land.ts`, `origins.ts`, `landed-presence.ts`.
 - [src/git/git.routes.ts](src/git/git.routes.ts) — status/commit/push over the wire; [src/workspace](src/workspace) — the repo layout the daemon serves. [src/workspace/workspace-scope.ts](src/workspace/workspace-scope.ts) decides WHOSE copy a file read means: the shared `/work` tree, or one conversation's own checkout when the request names it (`?agent=`). Reads only — no write route can name a checkout — and a request naming one that was archived away says so specifically instead of reporting a missing file.
 - [src/composition.ts](src/composition.ts) — what is wired to what; [src/main.ts](src/main.ts) — the entrypoint that builds it and serves.
+- The two things that keep a busy sandbox from eating itself, both keyed on the fact that a child inherits from
+  its parent without anyone propagating anything:
+  [src/platform/workload-priority.ts](src/platform/workload-priority.ts) renices every direct child so the
+  control plane outranks the work it started, and
+  [src/platform/leftovers.ts](src/platform/leftovers.ts) stamps each one with WHOSE turn it is, so the provider
+  CLI's MCP servers and their headless browsers — three levels down, and nothing here holds a handle on them —
+  can be reclaimed once that turn has finished. Anything under a tmux pane is exempt: that has a watcher, and
+  [src/terminal/terminal-session.ts](src/terminal/terminal-session.ts) ages it out on its own policy.
 - The four change feeds that keep the browser fresh without it ever asking twice, all riding the one `/events`
   stream: [src/workspace/workspace-watch.ts](src/workspace/workspace-watch.ts) (files),
   [src/workspace/repo-watch.ts](src/workspace/repo-watch.ts) (the repo set),
