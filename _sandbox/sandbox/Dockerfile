@@ -277,7 +277,7 @@ RUN chmod +x /opt/sandbox/node_modules/@intentic/iq/dist/cli.js \
     && ln -s /opt/sandbox/node_modules/@intentic/iq/dist/cli.js /usr/local/bin/iq
 # The `codex` CLI is the codex feature pack (a global install pinned to @openai/codex-sdk's exact dependency —
 # packs/codex.Dockerfile): prepare-image-trees.sh prunes the ~350 MiB @openai/codex platform package OUT of the
-# daemon tree, so the pack's copy is the only one and the daemon's adapter drives it via codexPathOverride.
+# daemon tree, so the pack's copy is the only one and the daemon directly spawns its app-server surface.
 # Image-baked first-party extensions — one manifest checkout per subdir, enumerated by installedExtensions()
 # via SANDBOX_EXTENSIONS_DIR (the iq-plugin precedent): present in every sandbox, not removable, no capability
 # entry. connectors, social, computers, acp-agents and pi-agent are data-only (manifest + skill packs + client

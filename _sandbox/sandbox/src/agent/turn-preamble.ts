@@ -41,8 +41,8 @@ export const LITERAL_SLASH_NOTE =
  * path the agent inherited from a memory, an AGENTS.md or its own earlier turn already names its own space
  * (agents/isolation.ts) — and when the container can't build that namespace, the tool-input rewrite keeps the
  * same guarantee one layer up (agents/worktree-redirect.ts). Neither layer reaches the runtimes that declare
- * `isolation: "cwd"`: Codex drives an SDK with no spawn seam to enter, and an ACP agent talks to a pooled
- * connection that outlives the turn. They are cwd'd into their worktree and nothing else, so an absolute
+ * `isolation: "cwd"`: the Codex app-server adapter does not consume the namespace plan, and an ACP agent talks
+ * to a pooled connection that outlives the turn. They are cwd'd into their worktree and nothing else, so an absolute
  * /work path lands in the SHARED checkout — which is exactly how three agents once spent a morning writing
  * into main while their worktrees stayed empty.
  *

@@ -6,7 +6,7 @@ import { discoverCodexModels, discoverTranslatorCodexModels, humanizeModelId, is
 
 /* The Codex model catalog service — the Codex twin of opencode.ts's xaiModels(). Resolves the ids a Codex turn
  * can actually drive, ALWAYS non-empty so the picker is never blank and a turn always resolves a concrete model
- * (never the SDK's rejected gpt-5-codex default). Source, in order:
+ * (never the CLI's rejected gpt-5-codex fallback). Source, in order:
  *   1. the bundled translator's OpenAI-compatible /v1/models — it holds the Codex SUBSCRIPTION credential and
  *      reports exactly the subscription's usable ids (the authoritative source once the translator is up);
  *   2. OpenAI's REST /v1/models with the container OPENAI_API_KEY (best-effort dev fallback with no translator);

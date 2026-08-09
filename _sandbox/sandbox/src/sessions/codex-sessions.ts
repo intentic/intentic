@@ -6,10 +6,10 @@ import { displayNameOf, toolCategoryOf } from "../agent/tool-calls.js";
 import { preambleNotes, stripTurnPreamble } from "../agent/turn-preamble.js";
 
 // Codex persists each thread as a rollout under <CODEX_HOME>/sessions/YYYY/MM/DD/rollout-<ISO8601>-<threadId>.jsonl
-// (the id is the `thread.started` thread_id). The @openai/codex-sdk exposes only start/resumeThread — no
-// exists/list API — so finding a thread's rollout means scanning the home's sessions/ tree for the file whose
-// name carries the thread id. There is a single sandbox-wide CODEX_HOME (Codex authenticates through the
-// translator subscription, not per-account homes), so this is a plain lookup.
+// (the id is the app-server `thread/start` result). Readiness and transcript backfill must answer without
+// starting another app-server process, so finding a thread's rollout means scanning the home's sessions/ tree
+// for the file whose name carries the thread id. There is a single sandbox-wide CODEX_HOME (Codex authenticates
+// through the translator subscription, not per-account homes), so this is a plain lookup.
 const ownsRollout = (fileName: string, threadId: string): boolean => fileName.startsWith("rollout-") && fileName.endsWith(`-${threadId}.jsonl`);
 
 const findRollout = async (home: string, threadId: string): Promise<string | undefined> => {

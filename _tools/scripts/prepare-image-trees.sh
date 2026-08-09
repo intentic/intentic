@@ -63,10 +63,10 @@ done
 # load in the image: the node dist the daemon and iq resolve (dist/transformers.node.{mjs,cjs}) requires only
 # onnxruntime-node + onnxruntime-common, and nothing else in dist/ resolves the web package. pnpm deploy has no
 # per-dependency exclude, so it is pruned from the tree after the fact.
-# @openai/codex is the ~350 MiB platform binary @openai/codex-sdk exact-pins — only ever needed at SPAWN time,
-# and the codex feature pack global-installs the same pinned version onto PATH (packs/codex.Dockerfile;
-# packs.integration.test.ts holds the pins in step), which the adapter drives via codexPathOverride. Shipping it in the
-# tree too would put the one copy the pack owns back into every image, core included.
+# @openai/codex is the ~350 MiB platform binary @openai/codex-sdk exact-pins. The codex feature pack
+# global-installs the same pinned version onto PATH (packs/codex.Dockerfile; packs.integration.test.ts holds the
+# pins in step), and the adapter directly spawns that binary's app-server surface. Shipping it in the tree too
+# would put the one copy the pack owns back into every image, core included.
 # The -xtype l pass clears the symlinks both prunes leave dangling in dependents' node_modules (never
 # followed, but no reason to ship them).
 rm -rf "$out"/sandbox/node_modules/.pnpm/onnxruntime-web@*

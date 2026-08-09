@@ -1,11 +1,12 @@
 # @intentic/sandbox
 
-The **per-project AI-agent dev daemon** — a Docker image that runs as the project's workspace container on the customer's host. It exposes an HTTP API the browser drives **directly** over the sandbox's own Cloudflare tunnel (Google-backed renewable sessions): run a Claude Agent turn over the project's three repos, run the `intentic` CLI, do git operations, read/write inventory, and report the dev-server preview. Ships to GHCR as `ghcr.io/intentic/sandbox`. A private package (not published to npm).
+The **per-project AI-agent dev daemon** — a Docker image that runs as the project's workspace container on the customer's host. It exposes an HTTP API the browser drives **directly** over the sandbox's own Cloudflare tunnel (Google-backed renewable sessions): run provider-native agent turns over the project's repos, run the `intentic` CLI, do git operations, read/write inventory, and report the dev-server preview. Ships to GHCR as `ghcr.io/intentic/sandbox`. A private package (not published to npm).
 
 ## Responsibilities
 
 - Serve the daemon API (`/agent`, `/intentic`, `/git/:repo/*`, `/inventory`, `/info`, `/preview`, `/health`); the browser calls it directly over the sandbox's tunnel, each request authenticated by a daemon session minted from verified Google identity (`/health` carved out for liveness).
-- Run one Claude Agent turn (`runAgent`) over the workspace, streaming typed `AgentEvent`s as SSE `data:` frames.
+- Run one Claude Code, Codex app-server, OpenCode, ACP, or Pi turn over the workspace, normalizing each runtime's
+  native stream into typed `AgentEvent`s and serving them as SSE `data:` frames.
 - Run the `intentic` CLI in-workspace and stream its ndjson lines; commit/push the repos.
 - Manage the app dev server and report preview status — including what is ACTUALLY answering inside the box: each
   listening port with the process that took it and the terminal that process descends from, whoever started it.
@@ -75,13 +76,20 @@ The **per-project AI-agent dev daemon** — a Docker image that runs as the proj
 
 ## How it fits
 
-The agent half of the dev plane. The browser talks to this daemon **directly** over the sandbox's own Cloudflare tunnel; the daemon verifies Google identity when establishing a renewable session, resolves the Claude token from its **own** stored credentials, and injects it into the SDK per turn. The platform is never on this path and never contacts the sandbox — it only stores the sandbox's public URL (which the browser derived and wrote) so the browser knows where to reach it; the browser alone probes the daemon for liveness (`/health` + the `/events` stream).
+The agent half of the dev plane. The browser talks to this daemon **directly** over the sandbox's own Cloudflare tunnel; the daemon verifies Google identity when establishing a renewable session, resolves the selected provider's credential from its **own** stored accounts, and starts that provider's runtime per turn. The platform is never on this path and never contacts the sandbox — it only stores the sandbox's public URL (which the browser derived and wrote) so the browser knows where to reach it; the browser alone probes the daemon for liveness (`/health` + the `/events` stream).
+
+Native Codex turns use `codex app-server --stdio`. A subscription turn gives app-server a custom Responses
+provider aimed at the bundled CLIProxyAPI translator; the translator authenticates upstream with the owner's
+connected ChatGPT account, so image generation consumes that subscription rather than an `OPENAI_API_KEY`.
+Generated PNGs are copied out of Codex's provider state into `.intentic/artifacts/imagegen/`; only the durable
+workspace-relative path enters the event stream and transcript. The `@openai/codex-sdk` dependency remains the
+exact CLI-version anchor and the locator for a vendored development fallback, not the native turn transport.
 
 ## Conventions & gotchas
 
 - Workspace-root daemon state has a lifecycle taxonomy: provider homes are secret under `.intentic/auth/`,
   resumable Claude state is carried under `.intentic/sessions/claude/`, rebuildable search state is under
-  `.intentic/cache/`, durable attachments/browser captures/run evidence are under `.intentic/artifacts/`, and
+  `.intentic/cache/`, durable attachments/browser captures/generated images/run evidence are under `.intentic/artifacts/`, and
   connector discovery state is derived under `.intentic/runtime/`. Small owner-edited manifests remain directly
   under `.intentic/` so their stable paths stay readable.
 - The Claude credential lives in the sandbox's own `.intentic/auth/claude/` store (connected via the daemon's
@@ -96,7 +104,8 @@ The agent half of the dev plane. The browser talks to this daemon **directly** o
   `tail -n 20 /history/logs/resource-metrics.jsonl | jq .`) and through the existing authenticated
   `GET /logs/file?name=resource-metrics.jsonl&bytes=1000000` route. The normal logs retention applies: files are
   tail-truncated after 5 MB, expire after 30 days, and participate in the 100-file cap.
-- Built on Hono + the Claude Agent SDK + zod; `runAgent`'s `QueryFn` is injectable so co-located `*.test.ts` run without the SDK or network.
+- Built on Hono, zod, and provider-native runtimes. Claude uses the Agent SDK; Codex uses app-server, whose
+  runner seam is injectable so co-located tests run without a provider process or network.
 - There is more than one workspace, and a path alone does not say which. Every isolated conversation has its own checkout, so the same path names a different file in each — which is why the workspace read routes take an optional conversation and resolve the root in one place (`src/workspace/workspace-scope.ts`). A checkout is **not** a superset of `/work` (the mirrored dirs are bare mount points from outside the turn's namespace, and untracked workspace content was never in it), so a scoped read falls back to the shared tree and reports which one answered. Search is the stated exception: the iq index is built over `/work` and stays there.
 - A land's product is **uncommitted** — it patches the main working tree and moves no commit. So every reading taken between two shas (`standing.ts`) is blind to the user discarding it afterwards; `landed-presence.ts` is the one that asks the working tree, and it is what keeps a card from claiming work is in a workspace that no longer holds it.
 - Workflow run artifacts are shared state under `.intentic/workflow-runs/`. The JSON ledger retains every active

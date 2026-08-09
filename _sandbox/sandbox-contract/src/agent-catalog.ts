@@ -169,7 +169,7 @@ export const HARNESSES: readonly { label: string; value: AgentHarness }[] = [
 /* WHAT A PROVIDER/HARNESS PAIR CAN ACTUALLY DO — one declaration, read by both sides of the wire.
  *
  * Five runtimes serve turns behind one seam (AgentRequest in, AgentEvent frames out): the Claude Code Agent SDK
- * loop, Codex's exec surface, OpenCode, any ACP agent, and Pi's RPC surface. They do NOT do the same things, and for a long time
+ * loop, Codex app-server, OpenCode, any ACP agent, and Pi's RPC surface. They do NOT do the same things, and for a long time
  * the only thing that said so was a comment inside each adapter — "Ignores the Claude-only request fields" —
  * which no surface above it could read. So the composer offered "Ask before each file edit" on a runtime whose
  * every tool call is pre-approved, and offered a reasoning-effort scale to a runtime that drops the field.
@@ -239,8 +239,9 @@ const CLAUDE_CODE: AgentCapabilities = {
     recovery: true,
 };
 
-// Codex's exec surface: item-level events, no approval channel, no MCP seam through the SDK constructor we use.
-// Reasoning effort IS forwarded (modelReasoningEffort). `codex app-server` is the upgrade path for the first two.
+// Codex app-server: item-level events plus richer request/MCP channels. This client deliberately declines
+// server-initiated approvals and has not connected questions or MCP to Intentic's policy seams, so only the
+// item stream and reasoning effort are claimed here.
 const CODEX: AgentCapabilities = {
     runtime: "codex",
     steering: false,

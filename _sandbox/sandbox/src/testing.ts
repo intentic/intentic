@@ -7,6 +7,7 @@ import type { ListenerContribution } from "@intentic/extension-manifest";
 import type { IsolatedAgent, PersistedAgent } from "./agents/agents-store.js";
 import type { IsolationPlan, TurnIsolation } from "./agents/isolation.js";
 import { overlaysDir } from "./agents/isolation.js";
+import type { CodexEvent, CodexRunner, CodexTurn } from "./codex/codex-app-server.js";
 import type { Config } from "./env.config.js";
 
 /* Test-support seams shared across this package's suites — the ones that stand in for something specific to
@@ -122,6 +123,17 @@ export const noIsolation = (root: string, historyRoot: string = HISTORY_ROOT): T
         overlays: overlaysDir(historyRoot, basename(worktree)),
     }),
 });
+
+// One fake for the provider-private turn seam. Plan-mode suites supply one event list per resumed turn; the
+// final list repeats if a flow asks again, which keeps rejection-loop fixtures focused on only the turns used.
+export const fakeCodexRunner = (...turns: readonly (readonly CodexEvent[])[]): { runner: CodexRunner; calls: CodexTurn[] } => {
+    const calls: CodexTurn[] = [];
+    const runner: CodexRunner = async function* (turn) {
+        calls.push(turn);
+        yield* turns[Math.min(calls.length - 1, turns.length - 1)] ?? [];
+    };
+    return { runner, calls };
+};
 
 /* One agent card, mid-life: a branch of its own, a turn's worth of counters at zero, nothing landed yet. It is
  * an IsolatedAgent rather than a PersistedAgent because every path that reads an agent's PLACEMENT (land, the

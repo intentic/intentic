@@ -14,8 +14,8 @@ import { join } from "node:path";
 const pathCache = new Map<string, Promise<string | undefined>>();
 
 // WHERE `binary` resolves to, or undefined when this image doesn't carry it. The absolute path is the answer
-// with more in it, and one caller needs it: the Codex adapter hands the SDK an explicit codexPathOverride so
-// the binary it drives is the pack's, never whatever the SDK's own vendored lookup finds.
+// with more in it, and one caller needs it: the Codex adapter directly spawns the pack's app-server binary;
+// a missing pack may then fall back to the SDK-pinned development wrapper in codex-path.ts.
 export const resolveOnPath = (binary: string): Promise<string | undefined> => {
     const cached = pathCache.get(binary);
     if (cached !== undefined) {

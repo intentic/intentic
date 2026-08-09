@@ -1,7 +1,7 @@
 /* OpenAI/Codex's live model catalog for a native (ChatGPT-account) turn — the source of valid Codex model ids.
- * @openai/codex-sdk exposes NO list-models API and, given no model, the CLI falls back to a built-in default
- * (gpt-5-codex) a ChatGPT account may not accept — the "model is not supported when using Codex with a ChatGPT
- * account" 400. So we resolve the account's real models ourselves and always pass an explicit id.
+ * Given no model, the CLI falls back to a built-in default (gpt-5-codex) a ChatGPT account may not accept — the
+ * "model is not supported when using Codex with a ChatGPT account" 400. So we resolve the translator account's
+ * real models ourselves and always pass app-server an explicit id.
  *
  * Discovery order (see createCodexCatalog): the bundled translator's OpenAI-compatible /v1/models (it holds the
  * Codex subscription and reports exactly the ids the account can drive) first, then OpenAI's REST /v1/models with

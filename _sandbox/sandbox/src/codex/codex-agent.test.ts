@@ -1,20 +1,13 @@
 import { STATE_DIR, WORKSPACE_ROOT } from "@intentic/constants";
-import type { ThreadEvent } from "@openai/codex-sdk";
 import type { AgentEvent } from "@intentic/sandbox-contract";
 import { expect, test } from "vitest";
 import { resolveRequest } from "../agent/agent-requests.js";
-import { type CodexRunner, type CodexTurn, createCodexAgent } from "./codex-agent.js";
+import { fakeCodexRunner } from "../testing.js";
+import type { CodexEvent, CodexRunner } from "./codex-app-server.js";
+import { createCodexAgent } from "./codex-agent.js";
 
-// A fake runner yielding one canned ThreadEvent list per invocation (plan turns invoke it repeatedly),
-// capturing each turn's prompt/session/options/env — no CLI, no network.
-const fakeRunner = (...turns: ThreadEvent[][]): { runner: CodexRunner; calls: CodexTurn[] } => {
-    const calls: CodexTurn[] = [];
-    const runner: CodexRunner = async function* (turn) {
-        calls.push(turn);
-        yield* turns[Math.min(calls.length - 1, turns.length - 1)] ?? [];
-    };
-    return { runner, calls };
-};
+const createTestAgent = (runner: CodexRunner, codexHome = "/home") =>
+    createCodexAgent({ codexHome, runner });
 
 const request = { prompt: "add a /ping route", cwd: WORKSPACE_ROOT, signal: new AbortController().signal };
 
@@ -37,7 +30,7 @@ const collect = async (
 };
 
 test("a turn maps thread events onto session, deltas, thinking, tools, todos, usage, and done", async () => {
-    const { runner } = fakeRunner([
+    const { runner } = fakeCodexRunner([
         { type: "thread.started", thread_id: "thr-1" },
         { type: "turn.started" },
         { type: "item.completed", item: { id: "r1", type: "reasoning", text: "planning the edit" } },
@@ -51,10 +44,10 @@ test("a turn maps thread events onto session, deltas, thinking, tools, todos, us
         { type: "item.completed", item: { id: "m1", type: "agent_message", text: "Added the route." } },
         {
             type: "turn.completed",
-            usage: { input_tokens: 10, cached_input_tokens: 3, cache_write_input_tokens: 0, output_tokens: 5, reasoning_output_tokens: 2 },
+            usage: { input_tokens: 10, cached_input_tokens: 3, cache_write_input_tokens: 1, output_tokens: 5, reasoning_output_tokens: 2 },
         },
     ]);
-    const events = await collect(createCodexAgent(`${WORKSPACE_ROOT}/${STATE_DIR}/auth/codex`, runner), request);
+    const events = await collect(createTestAgent(runner, `${WORKSPACE_ROOT}/${STATE_DIR}/auth/codex`), request);
     expect(events).toEqual([
         { kind: "session", sessionId: "thr-1" },
         { kind: "thinking", text: "planning the edit" },
@@ -73,14 +66,14 @@ test("a turn maps thread events onto session, deltas, thinking, tools, todos, us
         { kind: "delta", text: "Added the route." },
         // Codex only reports a completed agent_message, so every delta is a whole prose block and closes one.
         { kind: "text_end" },
-        { kind: "usage", inputTokens: 10, outputTokens: 5, cacheReadTokens: 3 },
+        { kind: "usage", inputTokens: 10, outputTokens: 5, cacheReadTokens: 3, cacheCreationTokens: 1 },
         { kind: "done" },
     ]);
 });
 
 test("the turn runs full-access with approvals off, resumes the session, and pins CODEX_HOME", async () => {
-    const { runner, calls } = fakeRunner([]);
-    await collect(createCodexAgent(`${WORKSPACE_ROOT}/${STATE_DIR}/auth/codex`, runner), {
+    const { runner, calls } = fakeCodexRunner([]);
+    await collect(createTestAgent(runner, `${WORKSPACE_ROOT}/${STATE_DIR}/auth/codex`), {
         ...request,
         sessionId: "thr-9",
         model: "gpt-5-codex",
@@ -92,7 +85,6 @@ test("the turn runs full-access with approvals off, resumes the session, and pin
     expect(turn.sessionId).toBe("thr-9");
     expect(turn.options).toEqual({
         workingDirectory: "/work",
-        skipGitRepoCheck: true,
         sandboxMode: "danger-full-access",
         approvalPolicy: "never",
         model: "gpt-5-codex",
@@ -103,9 +95,9 @@ test("the turn runs full-access with approvals off, resumes the session, and pin
     expect(turn.env["DISCORD_BOT_TOKEN"]).toBe("tok");
 });
 
-test("a subscription-served turn (codexEndpoint) rides the translator provider block on the local bearer, no auth.json", async () => {
-    const { runner, calls } = fakeRunner([]);
-    await collect(createCodexAgent(`${WORKSPACE_ROOT}/${STATE_DIR}/auth/codex`, runner), {
+test("a subscription turn uses the translator bearer and the actor marker that unlocks image generation", async () => {
+    const { runner, calls } = fakeCodexRunner([]);
+    await collect(createTestAgent(runner, `${WORKSPACE_ROOT}/${STATE_DIR}/auth/codex`), {
         ...request,
         model: "gpt-5.5",
         codexEndpoint: { baseUrl: "http://127.0.0.1:8788", authToken: "intentic-translator-local" },
@@ -114,35 +106,34 @@ test("a subscription-served turn (codexEndpoint) rides the translator provider b
     // The bearer rides CODEX_API_KEY (env_key), not an OAuth token in a home.
     expect(turn.env["CODEX_API_KEY"]).toBe("intentic-translator-local");
     // A full model_providers block pinned to the translator's /v1, Responses wire format, WS disabled.
+    expect(turn.modelProvider).toBe("translator");
     expect(turn.config).toEqual({
-        model_provider: "translator",
-        model_providers: {
-            translator: {
-                name: "translator",
-                base_url: "http://127.0.0.1:8788/v1",
-                wire_api: "responses",
-                env_key: "CODEX_API_KEY",
-                supports_websockets: false,
-            },
+        "model_providers.translator": {
+            name: "translator",
+            base_url: "http://127.0.0.1:8788/v1",
+            wire_api: "responses",
+            env_key: "CODEX_API_KEY",
+            http_headers: { "x-openai-actor-authorization": "intentic" },
+            supports_websockets: false,
         },
     });
 });
 
 test("a native (account) turn carries no provider config — Codex uses its own credential resolution", async () => {
-    const { runner, calls } = fakeRunner([]);
-    await collect(createCodexAgent(`${WORKSPACE_ROOT}/${STATE_DIR}/auth/codex`, runner), { ...request, model: "gpt-5-codex" });
+    const { runner, calls } = fakeCodexRunner([]);
+    await collect(createTestAgent(runner, `${WORKSPACE_ROOT}/${STATE_DIR}/auth/codex`), { ...request, model: "gpt-5-codex" });
     expect(calls[0]!.config).toBeUndefined();
     expect(calls[0]!.env["CODEX_API_KEY"]).toBeUndefined();
 });
 
 test("a failed command surfaces its output as a failed update", async () => {
-    const { runner } = fakeRunner([
+    const { runner } = fakeCodexRunner([
         {
             type: "item.completed",
             item: { id: "c1", type: "command_execution", command: "pnpm test", aggregated_output: "1 failed", exit_code: 1, status: "failed" },
         },
     ]);
-    const events = await collect(createCodexAgent("/home", runner), request);
+    const events = await collect(createTestAgent(runner), request);
     expect(events).toEqual([
         { kind: "tool_call_update", id: "c1", status: "failed", content: [{ type: "text", text: "1 failed" }] },
         { kind: "done" },
@@ -150,8 +141,8 @@ test("a failed command surfaces its output as a failed update", async () => {
 });
 
 test("attached images ride as native inputs while other files are referenced in the prompt", async () => {
-    const { runner, calls } = fakeRunner([]);
-    await collect(createCodexAgent("/home", runner), {
+    const { runner, calls } = fakeCodexRunner([]);
+    await collect(createTestAgent(runner), {
         ...request,
         attachments: [
             `${WORKSPACE_ROOT}/${STATE_DIR}/artifacts/attachments/a/shot.png`,
@@ -164,7 +155,7 @@ test("attached images ride as native inputs while other files are referenced in 
 });
 
 test("a plan turn sends attached images on the first planning turn only — the resumed thread keeps them", async () => {
-    const { runner, calls } = fakeRunner(
+    const { runner, calls } = fakeCodexRunner(
         [
             { type: "thread.started", thread_id: "thr-6" },
             { type: "item.completed", item: { id: "m1", type: "agent_message", text: "Plan." } },
@@ -172,7 +163,7 @@ test("a plan turn sends attached images on the first planning turn only — the 
         [{ type: "item.completed", item: { id: "m2", type: "agent_message", text: "Done." } }],
     );
     await collect(
-        createCodexAgent("/home", runner),
+        createTestAgent(runner),
         { ...request, permissionMode: "plan" as const, attachments: [`${WORKSPACE_ROOT}/a/shot.png`] },
         () => ({
             approve: true,
@@ -184,14 +175,14 @@ test("a plan turn sends attached images on the first planning turn only — the 
 });
 
 test("a plan turn proposes read-only, then executes full-access on the same thread after approval", async () => {
-    const { runner, calls } = fakeRunner(
+    const { runner, calls } = fakeCodexRunner(
         [
             { type: "thread.started", thread_id: "thr-2" },
             { type: "item.completed", item: { id: "m1", type: "agent_message", text: "Plan: add the route, then test." } },
         ],
         [{ type: "item.completed", item: { id: "m2", type: "agent_message", text: "Done." } }],
     );
-    const events = await collect(createCodexAgent("/home", runner), { ...request, permissionMode: "plan" as const }, () => ({ approve: true }));
+    const events = await collect(createTestAgent(runner), { ...request, permissionMode: "plan" as const }, () => ({ approve: true }));
 
     expect(events).toEqual([
         { kind: "session", sessionId: "thr-2" },
@@ -216,7 +207,7 @@ test("a plan turn proposes read-only, then executes full-access on the same thre
 });
 
 test("a rejected plan loops another read-only planning turn carrying the feedback", async () => {
-    const { runner, calls } = fakeRunner(
+    const { runner, calls } = fakeCodexRunner(
         [
             { type: "thread.started", thread_id: "thr-3" },
             { type: "item.completed", item: { id: "m1", type: "agent_message", text: "Plan v1" } },
@@ -225,7 +216,7 @@ test("a rejected plan loops another read-only planning turn carrying the feedbac
         [{ type: "item.completed", item: { id: "m3", type: "agent_message", text: "Executed." } }],
     );
     let planCount = 0;
-    const events = await collect(createCodexAgent("/home", runner), { ...request, permissionMode: "plan" as const }, () => {
+    const events = await collect(createTestAgent(runner), { ...request, permissionMode: "plan" as const }, () => {
         planCount += 1;
         return planCount === 1 ? { approve: false, feedback: "use fastify" } : { approve: true };
     });
@@ -241,30 +232,29 @@ test("a rejected plan loops another read-only planning turn carrying the feedbac
 test("a plan turn that fails after holding a message emits the error and NO plan frame", async () => {
     // The plan phase held an agent_message, then the turn failed (e.g. out of credits). A failed turn must surface
     // only the error — never a "plan" built from the pre-error message — and must not run the execute turn.
-    const { runner, calls } = fakeRunner([
+    const { runner, calls } = fakeCodexRunner([
         { type: "thread.started", thread_id: "thr-7" },
         { type: "item.completed", item: { id: "m1", type: "agent_message", text: "Partial plan." } },
         { type: "turn.failed", error: { message: "Payment Required" } },
     ]);
-    const events = await collect(createCodexAgent("/home", runner), { ...request, permissionMode: "plan" as const });
+    const events = await collect(createTestAgent(runner), { ...request, permissionMode: "plan" as const });
     expect(events).toEqual([{ kind: "session", sessionId: "thr-7" }, { kind: "error", message: "Payment Required" }, { kind: "done" }]);
     expect(events.some((event) => event.kind === "plan")).toBe(false);
     expect(calls).toHaveLength(1);
 });
 
-// Codex's fallback-metadata warning, verbatim off `codex exec --json`: an `error` ITEM that lands before
-// turn.started, after which the turn answers normally. Every model the subscription serves but the pinned CLI
-// has no compiled-in metadata for emits one — currently the whole gpt-5.6 line.
+// Codex's fallback-metadata warning lands before turn.started, after which the turn answers normally. Every
+// model the subscription serves but the pinned CLI has no compiled-in metadata for emits one.
 const ADVISORY = "Model metadata for `gpt-5.6-sol` not found. Defaulting to fallback metadata; this can degrade performance and cause issues.";
 
 test("a non-fatal advisory is tagged rather than surfaced as a failure, and the turn's answer still lands", async () => {
-    const { runner } = fakeRunner([
+    const { runner } = fakeCodexRunner([
         { type: "thread.started", thread_id: "thr-8" },
-        { type: "item.completed", item: { id: "e1", type: "error", message: ADVISORY } },
+        { type: "error", message: ADVISORY },
         { type: "turn.started" },
         { type: "item.completed", item: { id: "m1", type: "agent_message", text: "ok" } },
     ]);
-    expect(await collect(createCodexAgent("/home", runner), request)).toEqual([
+    expect(await collect(createTestAgent(runner), request)).toEqual([
         { kind: "session", sessionId: "thr-8" },
         // Coded, so the client renders a muted notice instead of the red error line under a turn that worked.
         { kind: "error", code: "codex-advisory", message: ADVISORY },
@@ -277,15 +267,15 @@ test("a non-fatal advisory is tagged rather than surfaced as a failure, and the 
 test("a plan turn survives an advisory and still proposes its plan", async () => {
     // The regression this covers: the advisory marked the planning phase errored, so plan-emulation abandoned the
     // turn — picking any gpt-5.6 model in Plan mode produced a red line, no plan card, and no execution.
-    const { runner, calls } = fakeRunner(
+    const { runner, calls } = fakeCodexRunner(
         [
             { type: "thread.started", thread_id: "thr-10" },
-            { type: "item.completed", item: { id: "e1", type: "error", message: ADVISORY } },
+            { type: "error", message: ADVISORY },
             { type: "item.completed", item: { id: "m1", type: "agent_message", text: "Plan: add the route." } },
         ],
         [{ type: "item.completed", item: { id: "m2", type: "agent_message", text: "Done." } }],
     );
-    const events = await collect(createCodexAgent("/home", runner), { ...request, permissionMode: "plan" as const }, () => ({ approve: true }));
+    const events = await collect(createTestAgent(runner), { ...request, permissionMode: "plan" as const }, () => ({ approve: true }));
 
     expect(events).toEqual([
         { kind: "session", sessionId: "thr-10" },
@@ -305,18 +295,19 @@ test("a plan turn survives an advisory and still proposes its plan", async () =>
     expect(calls[1]!.options.sandboxMode).toBe("danger-full-access");
 });
 
-// Codex's in-turn stream retry, verbatim off `codex exec --json`: the top-level `error` EVENT (not an item),
-// carrying the retry counters its own loop minted and the transport reason in parentheses. The turn keeps going.
+// Codex's in-turn stream retry arrives as an app-server error notification carrying the retry counters its own
+// loop minted and the transport reason in parentheses. The turn keeps going.
 const STREAM_RETRY = "Reconnecting... 1/5 (stream disconnected before completion: stream closed before response.completed)";
+const PROCESS_EXIT = "Codex app-server exited (1): connection closed";
 
 test("an in-turn stream retry is a wait, not a failure — the turn's answer still lands", async () => {
     // The incident: this frame put a red error line under a turn that then answered normally four minutes later.
-    const { runner } = fakeRunner([
+    const { runner } = fakeCodexRunner([
         { type: "thread.started", thread_id: "thr-11" },
         { type: "error", message: STREAM_RETRY },
         { type: "item.completed", item: { id: "m1", type: "agent_message", text: "back" } },
     ]);
-    expect(await collect(createCodexAgent("/home", runner), request)).toEqual([
+    expect(await collect(createTestAgent(runner), request)).toEqual([
         { kind: "session", sessionId: "thr-11" },
         // The same frame the Claude path emits for its own in-turn retries: the chat's loader line says the turn
         // is waiting, and the next frame retires it.
@@ -329,7 +320,7 @@ test("an in-turn stream retry is a wait, not a failure — the turn's answer sti
 
 test("a plan turn survives a stream retry and still proposes its plan", async () => {
     // A retry that marked the phase errored would have plan-emulation abandon a turn the CLI recovered by itself.
-    const { runner, calls } = fakeRunner(
+    const { runner, calls } = fakeCodexRunner(
         [
             { type: "thread.started", thread_id: "thr-12" },
             { type: "error", message: STREAM_RETRY },
@@ -337,7 +328,7 @@ test("a plan turn survives a stream retry and still proposes its plan", async ()
         ],
         [{ type: "item.completed", item: { id: "m2", type: "agent_message", text: "Done." } }],
     );
-    const events = await collect(createCodexAgent("/home", runner), { ...request, permissionMode: "plan" as const }, () => ({ approve: true }));
+    const events = await collect(createTestAgent(runner), { ...request, permissionMode: "plan" as const }, () => ({ approve: true }));
 
     expect(events).toEqual([
         { kind: "session", sessionId: "thr-12" },
@@ -359,45 +350,39 @@ test("a stream retry doesn't stand in for the real failure when the retries run 
     // Codex retries five times and then fails for real. The retry notices must not count as this turn's surfaced
     // error, or the failure that follows them would arrive silent.
     const runner: CodexRunner = async function* () {
-        yield { type: "error", message: STREAM_RETRY } as ThreadEvent;
-        throw new Error("Codex Exec exited with code 1: Reading prompt from stdin...");
+        yield { type: "error", message: STREAM_RETRY } as CodexEvent;
+        throw new Error(PROCESS_EXIT);
     };
-    expect(await collect(createCodexAgent("/home", runner), request)).toEqual([
+    expect(await collect(createTestAgent(runner), request)).toEqual([
         { kind: "provider_retry", attempt: 1, maxAttempts: 5 },
-        { kind: "error", message: "Codex Exec exited with code 1: Reading prompt from stdin..." },
+        { kind: "error", message: PROCESS_EXIT },
         { kind: "done" },
     ]);
 });
 
 test("an advisory doesn't stand in for the real failure when the turn then dies", async () => {
-    // surfacedError exists to stop the SDK's generic exit-code wrapper from clobbering an actionable message.
+    // surfacedError exists to stop the process transport's generic exit wrapper from clobbering an actionable message.
     // An advisory is not that message — counting it as one would leave a genuinely failed turn silent.
     const runner: CodexRunner = async function* () {
-        yield { type: "item.completed", item: { id: "e1", type: "error", message: ADVISORY } } as ThreadEvent;
-        throw new Error("Codex Exec exited with code 1: Reading prompt from stdin...");
+        yield { type: "error", message: ADVISORY } as CodexEvent;
+        throw new Error(PROCESS_EXIT);
     };
-    expect(await collect(createCodexAgent("/home", runner), request)).toEqual([
+    expect(await collect(createTestAgent(runner), request)).toEqual([
         { kind: "error", code: "codex-advisory", message: ADVISORY },
-        { kind: "error", message: "Codex Exec exited with code 1: Reading prompt from stdin..." },
+        { kind: "error", message: PROCESS_EXIT },
         { kind: "done" },
     ]);
 });
 
-// Codex's post-compaction notice, verbatim off `codex exec --json`: an `error` ITEM the CLI sends the moment a
-// compaction lands, on every one of them — its "multiple compactions" wording describes the risk it warns about,
-// not a threshold it waits for. The turn carries on with the rewritten history.
-const COMPACTED =
-    "Heads up: Long threads and multiple compactions can cause the model to be less accurate. Start a new thread when possible to keep threads small and targeted.";
-
-test("a compaction notice is the compact lifecycle frame, not a failure, and the turn's answer still lands", async () => {
+test("a context-compaction item is the compact lifecycle frame, and the turn's answer still lands", async () => {
     // The incident: every long Sol turn ended with the red error line, directly under the answer it had just
     // produced — a thread that auto-compacts at ~90% of the window earns one of these for each compaction.
-    const { runner } = fakeRunner([
+    const { runner } = fakeCodexRunner([
         { type: "thread.started", thread_id: "thr-13" },
-        { type: "item.completed", item: { id: "e1", type: "error", message: COMPACTED } },
+        { type: "item.completed", item: { id: "compact-1", type: "context_compaction" } },
         { type: "item.completed", item: { id: "m1", type: "agent_message", text: "carrying on" } },
     ]);
-    expect(await collect(createCodexAgent("/home", runner), request)).toEqual([
+    expect(await collect(createTestAgent(runner), request)).toEqual([
         { kind: "session", sessionId: "thr-13" },
         // The frame the Claude path already yields off compact_boundary: one muted "context compacted" notice in
         // the chat for both providers, and nothing on the error channel to write turn.error or redden the card.
@@ -411,15 +396,15 @@ test("a compaction notice is the compact lifecycle frame, not a failure, and the
 test("a plan turn survives a compaction and still proposes its plan", async () => {
     // A compaction that marked the phase errored would have plan-emulation drop a plan the turn really produced —
     // and a plan turn is exactly the long, tool-heavy kind that reaches the compaction threshold.
-    const { runner, calls } = fakeRunner(
+    const { runner, calls } = fakeCodexRunner(
         [
             { type: "thread.started", thread_id: "thr-14" },
-            { type: "item.completed", item: { id: "e1", type: "error", message: COMPACTED } },
+            { type: "item.completed", item: { id: "compact-1", type: "context_compaction" } },
             { type: "item.completed", item: { id: "m1", type: "agent_message", text: "Plan: add the route." } },
         ],
         [{ type: "item.completed", item: { id: "m2", type: "agent_message", text: "Done." } }],
     );
-    const events = await collect(createCodexAgent("/home", runner), { ...request, permissionMode: "plan" as const }, () => ({ approve: true }));
+    const events = await collect(createTestAgent(runner), { ...request, permissionMode: "plan" as const }, () => ({ approve: true }));
 
     expect(events).toEqual([
         { kind: "session", sessionId: "thr-14" },
@@ -439,46 +424,45 @@ test("a plan turn survives a compaction and still proposes its plan", async () =
 
 test("a compaction doesn't stand in for the real failure when the turn then dies", async () => {
     // A turn can compact and THEN die for a real reason. The compact frame never touches surfacedError, so the
-    // SDK's exit-code wrapper still gets to speak rather than the turn ending silent.
+    // app-server process-exit wrapper still gets to speak rather than the turn ending silent.
     const runner: CodexRunner = async function* () {
-        yield { type: "item.completed", item: { id: "e1", type: "error", message: COMPACTED } } as ThreadEvent;
-        throw new Error("Codex Exec exited with code 1: Reading prompt from stdin...");
+        yield { type: "item.completed", item: { id: "compact-1", type: "context_compaction" } } as CodexEvent;
+        throw new Error(PROCESS_EXIT);
     };
-    expect(await collect(createCodexAgent("/home", runner), request)).toEqual([
+    expect(await collect(createTestAgent(runner), request)).toEqual([
         { kind: "compact", trigger: "auto" },
-        { kind: "error", message: "Codex Exec exited with code 1: Reading prompt from stdin..." },
+        { kind: "error", message: PROCESS_EXIT },
         { kind: "done" },
     ]);
 });
 
 test("turn failures and thrown runners become error events followed by done", async () => {
-    const failing = fakeRunner([{ type: "turn.failed", error: { message: "usage limit reached" } }]);
-    expect(await collect(createCodexAgent("/home", failing.runner), request)).toEqual([
+    const failing = fakeCodexRunner([{ type: "turn.failed", error: { message: "usage limit reached" } }]);
+    expect(await collect(createTestAgent(failing.runner), request)).toEqual([
         { kind: "error", message: "usage limit reached" },
         { kind: "done" },
     ]);
 
     const throwing: CodexRunner = async function* () {
-        yield { type: "thread.started", thread_id: "thr-4" } as ThreadEvent;
-        throw new Error("codex exec blew up");
+        yield { type: "thread.started", thread_id: "thr-4" } as CodexEvent;
+        throw new Error("app-server connection failed");
     };
-    expect(await collect(createCodexAgent("/home", throwing), request)).toEqual([
+    expect(await collect(createTestAgent(throwing), request)).toEqual([
         { kind: "session", sessionId: "thr-4" },
-        { kind: "error", message: "codex exec blew up" },
+        { kind: "error", message: "app-server connection failed" },
         { kind: "done" },
     ]);
 });
 
-test("a streamed error survives the SDK's non-zero-exit throw", async () => {
-    // Codex streams the real cause (e.g. out of credits), then exits non-zero — which makes the SDK throw its
-    // generic "Codex Exec exited with code 1: Reading prompt from stdin..." wrapper. The wrapper must not
-    // overwrite the actionable message already surfaced.
+test("a streamed error survives the app-server process-exit throw", async () => {
+    // Codex streams the real cause (e.g. out of credits), then exits non-zero. The generic process wrapper must
+    // not overwrite the actionable message already surfaced.
     const runner: CodexRunner = async function* () {
-        yield { type: "thread.started", thread_id: "thr-5" } as ThreadEvent;
-        yield { type: "turn.failed", error: { message: "Your workspace is out of credits." } } as ThreadEvent;
-        throw new Error("Codex Exec exited with code 1: Reading prompt from stdin...");
+        yield { type: "thread.started", thread_id: "thr-5" } as CodexEvent;
+        yield { type: "turn.failed", error: { message: "Your workspace is out of credits." } } as CodexEvent;
+        throw new Error(PROCESS_EXIT);
     };
-    expect(await collect(createCodexAgent("/home", runner), request)).toEqual([
+    expect(await collect(createTestAgent(runner), request)).toEqual([
         { kind: "session", sessionId: "thr-5" },
         { kind: "error", message: "Your workspace is out of credits." },
         { kind: "done" },

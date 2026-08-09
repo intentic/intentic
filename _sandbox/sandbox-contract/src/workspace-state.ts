@@ -253,7 +253,7 @@ const STATE_FILES = [
     {
         path: ".intentic/artifacts/",
         invalidates: [],
-        why: "Durable outputs owned by conversations and extension runs: attachments, browser captures, acceptance reports, and loop ledgers.",
+        why: "Durable outputs owned by conversations and extension runs: attachments, browser captures, generated images, acceptance reports, and loop ledgers.",
         portability: "carry",
     },
     {

@@ -1,8 +1,8 @@
 # The `codex` CLI — the agent's shell delegates tasks to the user's connected Codex account (`codex exec`,
-# agent/delegation.ts), and the daemon's Codex adapter drives this same binary via codexPathOverride
-# (codex/codex-agent.ts), so the pack and the adapter can never run different engines. The daemon tree
-# deliberately does NOT carry @openai/codex (prepare-image-trees.sh prunes it — ~350 MiB the SDK only needs at
-# spawn time); this global install is the one copy. Pinned to @openai/codex-sdk's exact dependency;
+# agent/delegation.ts), and the daemon directly spawns this same binary as `codex app-server --stdio`
+# (codex/codex-app-server.ts), so delegation and native turns cannot run different engines. The daemon tree
+# deliberately does NOT carry @openai/codex (prepare-image-trees.sh prunes the ~350 MiB platform package);
+# this global install is the one copy. Pinned to @openai/codex-sdk's exact dependency;
 # packs.integration.test.ts holds the two in step.
 # ponytail: bump together with @openai/codex-sdk.
 RUN npm install -g @openai/codex@0.146.0 && codex --version && npm cache clean --force

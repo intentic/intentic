@@ -876,7 +876,7 @@ export const createServices = (config: Config, logger: Logger): Services => {
         authRoot,
         history: createWorkspaceHistory({ workspace, historyRoot: config.historyRoot, logger }),
         agent: runAgent,
-        codexAgent: createCodexAgent(codexBase),
+        codexAgent: createCodexAgent({ codexHome: codexBase }),
         grokAgent: createGrokAgent(createGrokRunner(openCode)),
         acpAgent: createAcpAgent(acpConnections),
         acpConnections,

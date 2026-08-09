@@ -655,8 +655,9 @@ async function* runTurn(
      *
      * Gated on the runtime that actually ENTERS the namespace — the `isolation` field of its declared record,
      * which is "namespace" for exactly one of them. The Claude Code loop enters through the SDK's spawn seam; a
-     * native Codex turn drives an in-process SDK with no such seam, and an ACP turn talks to a pooled connection
-     * that outlives this turn. Building an anchor for those would be worse than skipping it: `effectiveCwd`
+     * native Codex turn uses an app-server process whose adapter has not been connected to this namespace plan,
+     * and an ACP turn talks to a pooled connection that outlives this turn. Building an anchor for those would
+     * be worse than skipping it: `effectiveCwd`
      * below would hand them /work — the SHARED tree — while they sit outside the namespace that makes /work mean
      * the worktree. They keep pointing straight at their worktree instead, and are TOLD so (turn-plan.ts folds
      * the worktree note into their prompt), which is the only enforcement layer left for them.

@@ -1,78 +1,40 @@
-import {
-    Codex,
-    type CodexOptions,
-    type Input,
-    type ModelReasoningEffort,
-    type SandboxMode,
-    type ThreadEvent,
-    type ThreadItem,
-    type ThreadOptions,
-} from "@openai/codex-sdk";
 import type { AgentEvent, ToolCallLocation } from "@intentic/sandbox-contract";
 import type { AgentRequest } from "../agent/agent.js";
 import { splitAttachments, withFileNote } from "../agent/attachment-note.js";
 import { EXECUTE_PROMPT, type ExecutePhase, type PlanPhase, runPlanEmulation } from "../agent/plan-emulation.js";
 import { toolCategoryOf, workspacePath } from "../agent/tool-calls.js";
+import {
+    type CodexEvent,
+    type CodexItem,
+    type CodexReasoningEffort,
+    type CodexRunner,
+    type CodexSandboxMode,
+    type CodexThreadOptions,
+    type CodexTurn,
+    createCodexAppServerRunner,
+} from "./codex-app-server.js";
+import { persistCodexImageArtifact } from "./codex-image-artifacts.js";
 import { CODEX_ADVISORY, CODEX_MODEL_INVALID } from "./codex-models.js";
-import { CODEX_BINARY_MISSING, codexBinary } from "./codex-path.js";
 
 /* The Codex provider adapter: same seam as agent.ts's runAgent — AgentRequest in, AgentEvent frames out — but
- * backed by the Codex CLI (`codex exec` via @openai/codex-sdk) instead of the Claude Agent SDK. Provider
- * differences stay inside this file; the wire contract, routes, and UI are shared.
+ * backed by the Codex CLI's provider-native app-server instead of the Claude Agent SDK. Provider differences
+ * stay inside this file; the wire contract, routes, and UI are shared.
  *
- * The exec surface emits item-level events only (whole agent messages, no token deltas) and has no interactive
- * approval channel — both fine here: the UI typewriter smooths chunky deltas, and the container is the
- * isolation boundary (the Claude path already runs bypassPermissions for the same reason).
- * ponytail: `codex app-server` is the upgrade path for token deltas + per-command approvals, swappable inside
- * this file alone. */
+ * App-server publishes whole item completions plus lifecycle, usage, image-generation, and compaction events.
+ * Intentic still leaves approval requests disabled: the container is the isolation boundary (the Claude path
+ * already runs bypassPermissions for the same reason), and this adapter deliberately declines server requests. */
 
-// One Codex turn: resume the thread when sessionId is present, else start a new one. Injected so tests drive a
-// fake ThreadEvent stream — no CLI spawn (the QueryFn pattern from agent.ts).
-export interface CodexTurn {
-    readonly prompt: string;
-    // Absolute image paths riding as native local_image inputs (Codex vision reads them by path).
-    readonly images?: readonly string[];
-    readonly sessionId?: string;
-    readonly env: Record<string, string>;
-    // `--config` overrides for the CLI (the SDK flattens them to dotted TOML paths) — carries the translator
-    // provider block on a subscription-served turn; absent ⇒ Codex's own defaults (ChatGPT OAuth / API key).
-    readonly config?: NonNullable<CodexOptions["config"]>;
-    readonly options: ThreadOptions;
-    readonly signal: AbortSignal;
-}
-export type CodexRunner = (turn: CodexTurn) => AsyncIterable<ThreadEvent>;
-
-// The SDK does NOT inherit process.env when `env` is passed, so the runner receives the full environment.
-//
-// The binary is named explicitly (codex-path.ts): the SDK's own lookup resolves the pruned @openai/codex
-// package and fails with a message about node_modules, where the real state is an image without the codex pack.
-// Thrown rather than yielded — runCodexAgent's catch turns it into the turn's one error frame.
-const defaultRunner: CodexRunner = async function* (turn) {
-    const codexPathOverride = await codexBinary();
-    if (codexPathOverride === undefined) {
-        throw new Error(CODEX_BINARY_MISSING);
-    }
-    const codex = new Codex({ codexPathOverride, env: turn.env, ...(turn.config !== undefined ? { config: turn.config } : {}) });
-    const thread = turn.sessionId !== undefined ? codex.resumeThread(turn.sessionId, turn.options) : codex.startThread(turn.options);
-    const input: Input =
-        turn.images !== undefined && turn.images.length > 0
-            ? [{ type: "text", text: turn.prompt }, ...turn.images.map((path) => ({ type: "local_image" as const, path }))]
-            : turn.prompt;
-    const { events } = await thread.runStreamed(input, { signal: turn.signal });
-    yield* events;
-};
-
-// Codex's reasoning-effort scale matches the SDK's EffortLevel except the top: Claude's "max" → Codex "xhigh".
+// Codex app-server's reasoning-effort scale uses "xhigh" where Intentic's shared scale uses "max".
 const EFFORT_LEVELS = new Set(["minimal", "low", "medium", "high", "xhigh"]);
-const reasoningEffort = (effort: string): ModelReasoningEffort | undefined => {
+const reasoningEffort = (effort: string): CodexReasoningEffort | undefined => {
     if (effort === "max") {
         return "xhigh";
     }
-    return EFFORT_LEVELS.has(effort) ? (effort as ModelReasoningEffort) : undefined;
+    return EFFORT_LEVELS.has(effort) ? (effort as CodexReasoningEffort) : undefined;
 };
 
-// process.env with undefined entries dropped (CodexOptions.env is Record<string, string>), cli-kind capability
-// credentials merged, and CODEX_HOME pinned to the workspace-scoped auth/session store.
+// process.env with undefined entries dropped, cli-kind capability credentials merged, and CODEX_HOME pinned to
+// the workspace-scoped auth/session store. App-server inherits only this explicit environment.
 //
 // CODEX_API_KEY is NOT inherited: it is the translator bearer, and the only turn entitled to one is the turn that
 // resolved a codexEndpoint (which sets it explicitly below). A daemon whose own environment carries a bearer —
@@ -92,28 +54,30 @@ const codexEnv = (codexHome: string, cliEnv: Record<string, string> | undefined)
 // env_key (never a rotating OAuth token, so nothing races the translator's own refresh loop).
 // supports_websockets=false is load-bearing: the translator's inbound is plain POST SSE, and without it Codex
 // burns five WebSocket connect retries per turn before falling back.
-const translatorProvider = (baseUrl: string): NonNullable<CodexOptions["config"]> => ({
-    model_provider: "translator",
-    model_providers: {
-        translator: {
+const translatorProvider = (baseUrl: string): Pick<CodexTurn, "modelProvider" | "config"> => ({
+    modelProvider: "translator",
+    config: {
+        "model_providers.translator": {
             name: "translator",
             base_url: `${baseUrl.replace(/\/$/, "")}/v1`,
             wire_api: "responses",
             env_key: "CODEX_API_KEY",
+            // Codex exposes its image extension to actor-authorized proxies. This fixed, non-secret marker only
+            // reaches the loopback translator: pinned CLIProxyAPI deliberately rebuilds the upstream header set,
+            // drops it, and authenticates /images/* from its own ChatGPT subscription credential instead.
+            http_headers: { "x-openai-actor-authorization": "intentic" },
             supports_websockets: false,
         },
     },
 });
 
-const threadOptions = (request: AgentRequest, sandboxMode: SandboxMode): ThreadOptions => {
+const threadOptions = (request: AgentRequest, sandboxMode: CodexSandboxMode): CodexThreadOptions => {
     const effort = request.effort !== undefined ? reasoningEffort(request.effort) : undefined;
     return {
         workingDirectory: request.cwd,
-        // The workspace root holds the repos but is not itself a git repo.
-        skipGitRepoCheck: true,
         sandboxMode,
-        // No approval channel on the exec surface; the container is the isolation boundary (same posture as
-        // the Claude path's bypassPermissions).
+        // This client does not implement app-server's approval requests; the container is the isolation boundary
+        // (same posture as the Claude path's bypassPermissions).
         approvalPolicy: "never",
         ...(request.model !== undefined ? { model: request.model } : {}),
         ...(effort !== undefined ? { modelReasoningEffort: effort } : {}),
@@ -121,7 +85,7 @@ const threadOptions = (request: AgentRequest, sandboxMode: SandboxMode): ThreadO
 };
 
 // Flatten an MCP result's content blocks to plain text, like agent.ts's resultText.
-const mcpResultText = (item: Extract<ThreadItem, { type: "mcp_tool_call" }>): string => {
+const mcpResultText = (item: Extract<CodexItem, { type: "mcp_tool_call" }>): string => {
     if (item.error !== undefined) {
         return item.error.message;
     }
@@ -148,22 +112,9 @@ const mcpResultText = (item: Extract<ThreadItem, { type: "mcp_tool_call" }>): st
  * optional rather than have this guess one. */
 const CODEX_STREAM_RETRY = /^Reconnecting\.\.\.\s*(\d+)\s*\/\s*(\d+)/;
 
-/* Codex's post-compaction notice, which is a LIFECYCLE event wearing an error's clothes. The CLI compacted the
- * thread successfully and says so — unconditionally, on every compaction, not (despite its own wording) only
- * after several: core/src/compact.rs sends it as an `EventMsg::Warning` the moment the rewritten history lands.
- *
- * It arrives as an error because `exec --experimental-json` — the surface the SDK drives — has no compaction
- * event in its ThreadEvent union at all, so a warning can only be serialized as a completed `error` item. The
- * app-server's `thread/compacted` frame is the same fact with a name, and this transport never sees it.
- *
- * Read as a failure, it painted the red line under every long Sol turn: the turn had just compacted at ~90% of
- * the window and answered normally, and one thread emits it again for every compaction it goes on to do. So it
- * is the `compact` frame the Claude path already yields off compact_boundary — same fact, same muted notice in
- * the chat, and off the error channel entirely, which is what the coded-advisory route never managed: an error
- * frame still writes turn.error into the activity log and reddens the agent's card, whatever its code.
- *
- * `auto` is not a guess: this surface publishes no slash commands (codex never sends a `commands` frame), so
- * there is no `/compact` to reach it by, and auto-compaction is the only compaction that happens here. */
+/* Older Codex builds reported successful auto-compaction as this warning. Current app-server emits the named
+ * contextCompaction item handled below; retaining the warning classifier also keeps a warning from reddening a
+ * healthy turn when the pinned CLI chooses that channel. */
 const CODEX_COMPACTED = /long threads and multiple compactions/i;
 
 /* What a codex error message actually is, when it is not a failure. Both of codex's error channels run through
@@ -193,10 +144,20 @@ interface TurnCapture {
     errored?: boolean;
 }
 
-// Normalize one Codex turn's ThreadEvent stream onto AgentEvents. `capture` set ⇒ plan phase: agent messages
+interface ImageArtifactContext {
+    readonly workspaceRoot: string;
+    readonly codexHome: string;
+}
+
+// Normalize one Codex turn's provider event stream onto AgentEvents. `capture` set ⇒ plan phase: agent messages
 // are held back one-deep — intermediate narration still streams (flushed when the next message arrives), and
 // whatever remains held at stream end is the plan text.
-async function* streamTurn(events: AsyncIterable<ThreadEvent>, cwd: string, capture?: TurnCapture): AsyncGenerator<AgentEvent> {
+async function* streamTurn(
+    events: AsyncIterable<CodexEvent>,
+    cwd: string,
+    imageArtifacts: ImageArtifactContext,
+    capture?: TurnCapture,
+): AsyncGenerator<AgentEvent> {
     for await (const event of events) {
         if (event.type === "thread.started") {
             if (capture !== undefined) {
@@ -243,8 +204,8 @@ async function* streamTurn(events: AsyncIterable<ThreadEvent>, cwd: string, capt
                     };
                 }
             } else if (item.type === "file_change") {
-                // Emitted once, on success or failure; the item carries paths but no diff text (the app-server
-                // surface is the upgrade path for a real diff), so the card shows locations + status only.
+                // Emitted once, on success or failure; the app-server item carries paths but no diff text, so
+                // the card shows locations + status only.
                 if (event.type === "item.completed") {
                     const locations = item.changes
                         .map((change) => workspacePath(change.path, cwd))
@@ -283,27 +244,51 @@ async function* streamTurn(events: AsyncIterable<ThreadEvent>, cwd: string, capt
                     kind: "todos",
                     items: item.items.map((todo) => ({ content: todo.text, status: todo.completed ? ("completed" as const) : ("pending" as const) })),
                 };
-            } else if (item.type === "error") {
-                if (event.type === "item.completed") {
-                    const notice = codexNotice(item.message);
-                    if (notice !== undefined) {
-                        yield notice;
+            } else if (item.type === "image_generation") {
+                if (event.type === "item.started") {
+                    yield {
+                        kind: "tool_call",
+                        id: item.id,
+                        name: "Image generation",
+                        category: "other",
+                        status: "in_progress",
+                        ...(item.revised_prompt !== undefined ? { target: item.revised_prompt } : {}),
+                    };
+                } else if (event.type === "item.completed") {
+                    if (item.status !== "completed") {
+                        yield {
+                            kind: "tool_call_update",
+                            id: item.id,
+                            status: "failed",
+                            content: [{ type: "text", text: "Image generation failed" }],
+                        };
                         continue;
                     }
-                    yield { kind: "error", message: item.message };
-                    if (capture !== undefined) {
-                        capture.errored = true;
+                    try {
+                        const path = await persistCodexImageArtifact({ ...imageArtifacts, image: item });
+                        yield { kind: "tool_call_update", id: item.id, status: "completed", content: [{ type: "image", path }] };
+                    } catch (error) {
+                        yield {
+                            kind: "tool_call_update",
+                            id: item.id,
+                            status: "failed",
+                            content: [{ type: "text", text: error instanceof Error ? error.message : "Could not save generated image" }],
+                        };
                     }
                 }
+            } else if (item.type === "context_compaction" && event.type === "item.completed") {
+                yield { kind: "compact", trigger: "auto" };
             }
         } else if (event.type === "turn.completed") {
-            // Codex reports only a cached-input bucket (no separate cache-write), so map it to cacheReadTokens.
-            yield {
-                kind: "usage",
-                inputTokens: event.usage.input_tokens,
-                outputTokens: event.usage.output_tokens,
-                cacheReadTokens: event.usage.cached_input_tokens,
-            };
+            if (event.usage !== undefined) {
+                yield {
+                    kind: "usage",
+                    inputTokens: event.usage.input_tokens,
+                    outputTokens: event.usage.output_tokens,
+                    cacheReadTokens: event.usage.cached_input_tokens,
+                    cacheCreationTokens: event.usage.cache_write_input_tokens,
+                };
+            }
         } else if (event.type === "turn.failed") {
             yield { kind: "error", message: event.error.message };
             if (capture !== undefined) {
@@ -329,14 +314,16 @@ const CODEX_PLAN_PREAMBLE =
     "Before making any changes, propose a clear, concise plan for the request below and stop — do not execute it yet. " +
     "You are in a read-only sandbox for this turn; end your reply with the plan itself.\n\n";
 
-// Always-plan flow over the shared skeleton (the exec surface has no ExitPlanMode hook): a read-only planning
-// turn whose trailing message becomes the plan, then a full-access execution turn resumed on the same thread.
-// No `question` frames: the exec surface has no AskUserQuestion analog, which is what `questions: false` in this
-// runtime's capability row declares (and what the composer's "no clarifying questions" chip tells the user).
+// Always-plan flow over the shared skeleton (this client does not wire app-server's collaboration modes): a
+// read-only planning turn whose trailing message becomes the plan, then a full-access execution turn resumed on
+// the same thread.
+// No `question` frames: server-initiated question requests are deliberately unwired, which is what
+// `questions: false` in this runtime's capability row declares.
 async function* runCodexPlanTurn(
     request: AgentRequest,
     runner: CodexRunner,
-    turnBase: Pick<CodexTurn, "env" | "config">,
+    turnBase: Pick<CodexTurn, "env" | "modelProvider" | "config">,
+    imageArtifacts: ImageArtifactContext,
 ): AsyncGenerator<AgentEvent> {
     const { images: firstTurnImages, others } = splitAttachments(request.attachments);
     // Images ride the first planning turn only — revision and execute turns resume the same thread, whose
@@ -354,6 +341,7 @@ async function* runCodexPlanTurn(
                 signal: request.signal,
             }),
             request.cwd,
+            imageArtifacts,
             capture,
         );
         images = [];
@@ -369,36 +357,45 @@ async function* runCodexPlanTurn(
                 signal: request.signal,
             }),
             request.cwd,
+            imageArtifacts,
         );
     yield* runPlanEmulation(request.signal, CODEX_PLAN_PREAMBLE + withFileNote(request.prompt, others), request.sessionId, planPhase, executePhase);
 }
 
-// Build the Codex provider for the Services seam: AgentRequest in, AgentEvent frames out. What this runtime
-// does NOT do is declared, not left to this comment — `capabilitiesOf(…).runtime === "codex"` in the contract's
-// agent-catalog.ts, which turn-plan.ts reads to strip the fields nothing here would honour (a permission mode
-// other than plan) and the composer reads to stop offering them. Two of those rows are upgrade paths rather
-// than facts of the protocol: `mcp: "none"` because the SDK constructor's `config: { mcp_servers }` is
-// unwired, and `questions: false` because the exec surface has no AskUserQuestion analog — app-server adds one.
-export const createCodexAgent = (codexHome: string, runner: CodexRunner = defaultRunner) =>
-    async function* runCodexAgent(request: AgentRequest): AsyncGenerator<AgentEvent> {
+interface CodexAgentOptions {
+    readonly codexHome: string;
+    readonly runner?: CodexRunner;
+}
+
+// Build the Codex provider for the Services seam: AgentRequest in, AgentEvent frames out. What this client does
+// not implement stays declared in the Codex capability row: app-server has MCP and interaction channels, but
+// enabling those requires wiring their server requests into Intentic's policy and question seams first.
+export const createCodexAgent = (options: CodexAgentOptions) => {
+    const runner = options.runner ?? createCodexAppServerRunner();
+    return async function* runCodexAgent(request: AgentRequest): AsyncGenerator<AgentEvent> {
         // Per-account CODEX_HOME when the turn resolved one; the constructor's base dir is the OPENAI_API_KEY
         // fallback path only. A subscription-served turn (codexEndpoint) layers the translator provider block
         // on top: the bearer rides CODEX_API_KEY and the home holds only sessions — whatever auth.json it may
         // carry is ignored by the custom provider.
-        const env = codexEnv(request.codexHome ?? codexHome, request.cliEnv);
-        const turnBase: Pick<CodexTurn, "env" | "config"> =
+        const activeCodexHome = request.codexHome ?? options.codexHome;
+        const env = codexEnv(activeCodexHome, request.cliEnv);
+        const turnBase: Pick<CodexTurn, "env" | "modelProvider" | "config"> =
             request.codexEndpoint !== undefined
-                ? { env: { ...env, CODEX_API_KEY: request.codexEndpoint.authToken }, config: translatorProvider(request.codexEndpoint.baseUrl) }
+                ? {
+                      env: { ...env, CODEX_API_KEY: request.codexEndpoint.authToken },
+                      ...translatorProvider(request.codexEndpoint.baseUrl),
+                  }
                 : { env };
-        // Codex reports a real failure (out of credits, usage limits, a bad model) as a turn.failed/error frame
-        // on its JSON stream and THEN exits non-zero — which makes the SDK throw a generic "Codex Exec exited
-        // with code N: <stderr>" whose stderr is only codex's benign "Reading prompt from stdin..." line.
-        // Surfacing that wrapper last would clobber the actionable message, so only emit it when nothing
-        // specific was already streamed.
+        // request.cwd is the conversation's actual checkout for cwd-isolated Codex turns. Using the daemon's
+        // shared workspace root here would put an isolated conversation's generated image in somebody else's
+        // tree even though every source edit correctly landed in its worktree.
+        const imageArtifacts = { workspaceRoot: request.cwd, codexHome: activeCodexHome };
+        // If app-server reports a specific error and then its process also dies, keep the actionable frame and
+        // suppress the generic process-exit wrapper.
         const { images, others } = splitAttachments(request.attachments);
         const turn =
             request.permissionMode === "plan"
-                ? runCodexPlanTurn(request, runner, turnBase)
+                ? runCodexPlanTurn(request, runner, turnBase, imageArtifacts)
                 : streamTurn(
                       runner({
                           prompt: withFileNote(request.prompt, others),
@@ -409,13 +406,14 @@ export const createCodexAgent = (codexHome: string, runner: CodexRunner = defaul
                           signal: request.signal,
                       }),
                       request.cwd,
+                      imageArtifacts,
                   );
         let surfacedError = false;
         try {
             for await (const event of turn) {
                 if (event.kind === "error") {
                     // An advisory is already tagged and is not a failure, so it must not count as the turn's
-                    // surfaced error — letting it stand in for one would swallow the SDK's exit-code wrapper on a
+                    // surfaced error — letting it stand in for one would swallow the process-exit wrapper on a
                     // turn that then died for a real reason.
                     if (event.code === "codex-advisory") {
                         yield event;
@@ -438,3 +436,4 @@ export const createCodexAgent = (codexHome: string, runner: CodexRunner = defaul
         }
         yield { kind: "done" };
     };
+};

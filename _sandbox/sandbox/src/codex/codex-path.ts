@@ -3,28 +3,25 @@ import { createRequire } from "node:module";
 import { dirname, join } from "node:path";
 import { resolveOnPath } from "../platform/on-path.js";
 
-/* WHICH `codex` BINARY A TURN DRIVES, and why the daemon names it instead of letting the SDK look.
+/* WHICH `codex` BINARY A TURN DRIVES, and why the daemon resolves it before spawning app-server.
  *
- * @openai/codex-sdk is a thin driver: the JS wrapper stays a dependency, but the ~350 MB @openai/codex platform
- * package it would otherwise spawn is pruned from the deployed tree (prepare-image-trees.sh). The one copy of
- * the CLI is the codex PACK's global install at /usr/local/bin/codex, pinned to the SDK's exact dependency
- * version — so PATH is the answer, and passing it as codexPathOverride is what makes the adapter and the
- * agent's own `codex exec` delegation provably the same engine.
+ * The adapter directly spawns `codex app-server --stdio`. @openai/codex-sdk stays as the exact version anchor,
+ * but the ~350 MB @openai/codex platform package it pins is pruned from the deployed tree
+ * (prepare-image-trees.sh). The one copy of the CLI is the codex PACK's global install at
+ * /usr/local/bin/codex, pinned to that exact dependency version — so PATH makes app-server and the agent's own
+ * `codex exec` delegation provably the same engine.
  *
- * Left to itself the SDK resolves @openai/codex/package.json through its own require at CONSTRUCTION time and
- * throws "Unable to locate Codex CLI binaries" when the prune took it — a message about node_modules, for a
- * user whose actual problem is an image without the pack in it.
- *
- * The vendored wrapper is the DEV fallback, and only when it is really there: a checkout that still has the
- * platform package (a `pnpm install` outside the image) keeps working with no pack installed. */
+ * The SDK dependency also provides the DEV fallback's location, and only when its pinned platform package is
+ * really there: a checkout that still has the package (a `pnpm install` outside the image) keeps working with
+ * no pack installed. */
 
 // The rebuild-fixable state, in the user's terms. "rebuild" is load-bearing — it is the word the UI reads to
 // route a state to the Environment card — so it has to survive any rewording of this sentence.
 export const CODEX_BINARY_MISSING =
     "This sandbox's image doesn't include the Codex CLI yet — rebuild it from the Environment card in Sandbox ▸ Environment to run Codex here.";
 
-/* The tree's own copy, resolved through Node exactly as the SDK resolves it: from the SDK's location, not this
- * module's. @openai/codex is the SDK's dependency and not ours, so under pnpm's non-hoisted layout it is only
+/* The tree's own copy, resolved through Node from the SDK's location, not this module's. @openai/codex is the
+ * SDK's dependency and not ours, so under pnpm's non-hoisted layout it is only
  * reachable from inside @openai/codex-sdk — and asking the resolver rather than guessing a path is also what
  * keeps this working in both layouts the daemon runs in (the workspace's shared store in a dev checkout, the
  * self-contained tree in the image).

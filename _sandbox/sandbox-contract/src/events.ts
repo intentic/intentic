@@ -103,12 +103,12 @@ export type ToolCallLocation = z.infer<typeof ToolCallLocationSchema>;
 // tools (old_string/new_string) and whole-file for Write; an absent oldText means a new file / unknown
 // previous content. Sides are capped daemon-side; `truncated` marks a clipped side.
 //
-// `image` is a PICTURE THE TOOL PRODUCED, carried as a workspace path rather than as bytes: a browser
-// screenshot is already on disk under .intentic/artifacts/browser (the artifact hook put it there), so the client
-// fetches it from /workspace/raw like any other file. Base64 on the wire would push a third of a megabyte
-// through the event stream and into the stored transcript for every screenshot, to show something the
-// workspace can already serve — and the path is what keeps the picture openable afterwards, which the inlined
-// bytes would not be. Root-relative, forward-slash: the same route space as ToolCallLocation.
+// `image` is a PICTURE THE TOOL PRODUCED, carried as a workspace path rather than as bytes. Browser screenshots
+// already live under .intentic/artifacts/browser, and provider-generated images are copied into
+// .intentic/artifacts/imagegen, so the client fetches either from /workspace/raw like any other file. Base64 on
+// the wire would bloat the event stream and every stored transcript to show bytes the workspace already serves;
+// the path also keeps the picture openable afterwards. Root-relative, forward-slash: the same route space as
+// ToolCallLocation.
 export const ToolCallContentSchema = z.discriminatedUnion("type", [
     z.object({ type: z.literal("text"), text: z.string() }),
     z.object({

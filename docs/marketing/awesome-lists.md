@@ -174,8 +174,8 @@ maintains intentic.
 Two corrections the submissions forced, worth keeping straight in all copy: intentic's **native** providers
 are Claude Code, Codex, Grok, Kimi Code and Google (Antigravity); **OpenCode, Gemini CLI and any other ACP
 agent** arrive as installable capabilities through the ACP bridge. And the Codex path really is the Codex CLI
-(`codex exec` via `@openai/codex-sdk`), which is what makes the Codex list a legitimate target rather than a
-stretch.
+(`codex app-server` for native turns, with `codex exec` available for delegation), which is what makes the
+Codex list a legitimate target rather than a stretch.
 
 ## Not submitted, and what each is waiting on
 

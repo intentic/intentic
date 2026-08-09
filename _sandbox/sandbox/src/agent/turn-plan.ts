@@ -51,7 +51,7 @@ import { setupNoticeFor, workspaceSetup } from "../workspace/workspace-setup.js"
  *
  * Each provider answers it the same four ways and differs only in the details: gate the credential, name the
  * runner, name the account the usage frames are attributed to, and assemble the request. Writing that out per
- * arm is what let the arms drift — the Codex gate resolved a concrete model so the SDK's built-in default could
+ * arm is what let the arms drift — the Codex gate resolved a concrete model so the CLI's built-in default could
  * never leak through, and the Grok gate learned the same lesson separately, months later.
  *
  * A REFUSAL IS A VALUE, exactly as in harness-credentials.ts (which this calls, and whose header explains why).
@@ -302,7 +302,7 @@ export const planCodexTurn = async (services: Services, input: AgentTurn, contex
                     : "Connect your ChatGPT subscription in Sandbox ▸ Agent to run Codex.",
         };
     }
-    // Resolve a concrete model so the turn never falls back to @openai/codex-sdk's built-in default
+    // Resolve a concrete model so app-server never falls back to the Codex CLI's built-in default
     // (gpt-5-codex), which the subscription can reject. An explicit selection rides through (a stale one
     // self-heals via codex-model-invalid); an empty one resolves the catalog default (discovery → persisted →
     // seed floor, never empty — see codex-catalog).

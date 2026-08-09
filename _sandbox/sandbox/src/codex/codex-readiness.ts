@@ -30,8 +30,8 @@ export type CodexReadiness =
       };
 
 export const codexReadiness = async (services: Services): Promise<CodexReadiness> => {
-    // First, because it is true of every credential: whatever authenticates the turn, the turn is `codex exec`,
-    // and a core image carries the SDK but not the CLI it drives.
+    // First, because it is true of every credential: whatever authenticates the turn, the adapter starts
+    // `codex app-server`, and a core image carries the version-anchor SDK but not the CLI it names.
     if ((await codexBinary()) === undefined) {
         return { ok: false, detail: CODEX_BINARY_MISSING };
     }

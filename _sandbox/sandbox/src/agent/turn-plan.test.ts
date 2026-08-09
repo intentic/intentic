@@ -125,10 +125,10 @@ test("a harness refusal rides through with the credential resolver's own code", 
 
 // --- what a permitted turn is handed ----------------------------------------------------------------------
 
-/* Both native arms resolve a CONCRETE model rather than letting their SDK pick, and for the same reason twice
- * over: @openai/codex-sdk defaults to gpt-5-codex (which a subscription can reject) and OpenCode defaults to a
- * retired models.dev id xAI rejects outright. An omitted model is the common case — the client drops an empty
- * selection from the wire so the daemon resolves its own catalog default. */
+/* Both native arms resolve a CONCRETE model rather than letting their runtime pick, and for the same reason
+ * twice over: the Codex CLI defaults to gpt-5-codex (which a subscription can reject) and OpenCode defaults to
+ * a retired models.dev id xAI rejects outright. An omitted model is the common case — the client drops an
+ * empty selection from the wire so the daemon resolves its own catalog default. */
 
 test("Codex resolves the catalog default when the turn pins no model", async () => {
     const services = servicesWith({

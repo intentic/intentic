@@ -62,8 +62,8 @@ test("bake-only and unknown packs compose no overlay fragment", async () => {
  * comments point at: a bump on one side without the other fails here, not as a runtime skew.
  *   browser  — the packed playwright version IS the daemon's, or chromium.executablePath() resolves a
  *              revision the pack never installed.
- *   codex    — the packed CLI IS @openai/codex-sdk's exact dependency, or the adapter drives a different
- *              engine than `codex exec` runs.
+ *   codex    — the packed CLI IS @openai/codex-sdk's exact dependency, or native app-server turns and
+ *              delegated `codex exec` can drive a different engine than the version anchor names.
  *   opencode — the packed CLI matches @opencode-ai/sdk, or the client/server wire API skews. */
 test("pack pins are in lockstep with the daemon's own dependency versions", async () => {
     const pin = (content: string, pattern: RegExp): string => {

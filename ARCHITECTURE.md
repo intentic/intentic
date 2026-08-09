@@ -66,7 +66,7 @@ flowchart TB
   costing a dockerd restart instead of a rebuild. The HOST's Docker socket is
   never mounted, so the agent's containers can only live inside the sandbox's own engine; its cloudflared runs as
   a separate sidecar container). Runs the coding agents (Claude via the agent
-  SDK, Codex, Grok, Kimi Code, Gemini — spawned per turn, not resident) and the `intentic` CLI over the three repos
+  SDK, Codex app-server, Grok, Kimi Code, Gemini — spawned per turn, not resident) and the `intentic` CLI over the three repos
   (`intent` = `deploy.config.ts`, the IaC; `desired-state` = resolved artifact + status; `app` =
   the application code), and exposes its daemon over its **own Cloudflare tunnel**. SSH keys,
   Cloudflare and agent tokens ride straight into it and never reach the platform.
@@ -115,8 +115,10 @@ survive reconnects. Its subsystems:
 - **Agent backends** — Claude (agent SDK, spawned per turn), Codex, Grok/opencode, Kimi Code, and Gemini. Kimi
   and Google's models are re-served from subscription OAuth through the bundled translator on the Claude Code
   harness
-  ([agent/](_sandbox/sandbox/src/agent/)), plus an anonymous website **webchat** widget over SSE. The five runtimes
-  behind that seam (the Claude Code loop, Codex's exec surface, OpenCode, ACP, and Pi's RPC mode under the
+  ([agent/](_sandbox/sandbox/src/agent/)), plus an anonymous website **webchat** widget over SSE. Native Codex
+  points app-server at that same subscription-backed translator; generated image items are copied into
+  `.intentic/artifacts/imagegen/` and stream as paths, never transcript-embedded base64. The five runtimes
+  behind that seam (the Claude Code loop, Codex app-server, OpenCode, ACP, and Pi's RPC mode under the
   reserved `pi` capability id — [pi/](_sandbox/sandbox/src/pi/)) do not do the same things, so
   what each one *can* do is **declared**, not inferred: `capabilitiesOf(provider, harness)`
   ([sandbox-contract/agent-catalog.ts](_sandbox/sandbox-contract/src/agent-catalog.ts)) is one row per runtime —
