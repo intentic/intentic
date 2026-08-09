@@ -27,10 +27,12 @@ import { usePushFlow } from "../../composables/workspace/usePushFlow";
 import { useRepos } from "../../composables/workspace/useRepos";
 import { useNow } from "../../composables/useNow";
 import type { DiffPayload } from "@intentic/extension-api";
-import { moduleGroups, rowName, type ModuleGroup } from "./changeModules";
+import { EMPTY_MODULE_VIEW, moduleView, type ModuleGroup, type ModuleView } from "../../composables/workspace/changeModules";
 import type { OpenMode } from "./workspaceTabs";
 import { useChangeGrouping } from "../../composables/workspace/useChangeGrouping";
 import { useModules } from "../../composables/workspace/useModules";
+import ChangeRowName from "../../components/ChangeRowName.vue";
+import ModuleLabel from "../../components/ModuleLabel.vue";
 
 /* The Changes review — a mode of the workspace's ONE left sidebar (Workspace.vue owns the aside, the resize
  * handle, and the Files|Changes|History mode switch), VSCode's SCM pattern over the real repos: uncommitted
@@ -297,34 +299,26 @@ const sidesSplit = (repo: RepoChanges): boolean => sidesOf(repo).length > 1;
 const { groupByModule } = useChangeGrouping();
 const { modulesOf } = useModules();
 
-interface SectionView {
-    // The rows as the list draws them: one unnamed bucket in path mode, one per module otherwise.
-    readonly buckets: readonly ModuleGroup<GitChange>[];
-    // Whether those buckets get headers. A lone bucket of files no module claims is the repo's name printed
-    // under the repo's own row, so it draws none — exactly like a lone side draws no count.
-    readonly named: boolean;
-}
-
 /* Every side's shape, built ONCE per change to the review rather than per call. Both the headers and the rows
  * read it (a row's label switches on `named`), and a per-row grouping pass would be quadratic on a list this
- * one is expressly built to survive — the daemon ships up to 500 rows a repo. */
+ * one is expressly built to survive — the daemon ships up to 500 rows a repo.
+ *
+ * The rule itself is changeModules' moduleView, shared with the agent review on /agents/{id} — the two lists
+ * having written their own copies of it is how they came to disagree about the same change set. */
+type SectionView = ModuleView<ModuleGroup<GitChange>>;
 const sectionViews = computed<ReadonlyMap<string, SectionView>>(() => {
     const views = new Map<string, SectionView>();
     for (const repo of scannable.value) {
         for (const section of sidesOf(repo)) {
-            const buckets = groupByModule.value
-                ? moduleGroups(section.changes, (change) => change.path, modulesOf(repo.repo), repo.repo)
-                : [{ key: `all`, name: ``, packaged: false, rows: section.changes }];
-            views.set(JSON.stringify([repo.repo, section.side]), {
-                buckets,
-                named: groupByModule.value && (buckets.length > 1 || buckets[0]?.packaged === true),
-            });
+            views.set(
+                JSON.stringify([repo.repo, section.side]),
+                moduleView(section.changes, (change) => change.path, modulesOf(repo.repo), repo.repo, groupByModule.value),
+            );
         }
     }
     return views;
 });
-const EMPTY_VIEW: SectionView = { buckets: [], named: false };
-const viewOf = (repo: string, side: GitDiffSide): SectionView => sectionViews.value.get(JSON.stringify([repo, side])) ?? EMPTY_VIEW;
+const viewOf = (repo: string, side: GitDiffSide): SectionView => sectionViews.value.get(JSON.stringify([repo, side])) ?? EMPTY_MODULE_VIEW;
 
 // This panel lives in a ~270px sidebar, so labelled secondary buttons don't fit — four of them pushed the
 // primary Commit off the edge entirely. Everything secondary is a 24px icon with a tooltip and an aria-label;
@@ -1458,26 +1452,17 @@ const WARNING = `flex items-start gap-1.5 rounded-md border border-warning/40 bg
                         </div>
 
                         <template v-for="bucket in viewOf(group.repo, section.side).buckets" :key="`${group.repo}/${section.side}/${bucket.key}`">
-                            <!-- The module a run of rows belongs to, said once. A label rather than a control:
-                                 the toggle behind it changes how the list READS, and staging stays the side's
-                                 verb above (and the row's own beside it), so nothing here can act on a scope
-                                 git has no word for. `box` is a package's own manifest; `folder` marks the
-                                 bucket of paths no module claims, named after the repo they sit loose in.
+                            <!-- The module a run of rows belongs to, said once — the same ModuleLabel the review
+                                 panel on /agents/{id} draws, so a module is said the same way in both lists. A
+                                 label rather than a control: the toggle behind it changes how the list READS,
+                                 and staging stays the side's verb above (and the row's own beside it), so
+                                 nothing here can act on a scope git has no word for.
 
-                                 QUIETER THAN WHAT IT GROUPS. This heading is the third rank in the list — under
-                                 the repo, under the side — so it is separated by AIR, not by brightness: at
-                                 `text-content` it outshone every filename below it and the eye landed on the
-                                 package instead of on the change, which is the one thing this panel is read
-                                 for. `text-muted` + the leading glyph is the same recessive heading the review
-                                 panel on /agents/{id} uses, so a module is said the same way in both lists.
-                                 The glyph is drawn under 1em on purpose: at 1em these icon sets overshoot an
-                                 11px line's cap height by ~1.5px top AND bottom, and a mark taller than the
-                                 word beside it reads as sitting off-centre however exactly it is centred. -->
+                                 Separated by AIR rather than by brightness: this heading is the third rank in
+                                 the list — under the repo, under the side — and everything about how quiet it
+                                 is lives in the component. -->
                             <div v-if="viewOf(group.repo, section.side).named" class="flex items-center gap-1.5 pl-2 pt-2">
-                                <Icon :name="bucket.packaged ? 'box' : 'folder'" class="shrink-0 text-[0.6rem] text-subtle" />
-                                <span class="min-w-0 truncate text-2xs font-medium text-muted" v-tooltip.right.overflow="bucket.name">{{
-                                    bucket.name
-                                }}</span>
+                                <ModuleLabel :name="bucket.name" :packaged="bucket.packaged" />
                                 <span class="shrink-0 text-2xs text-subtle">{{ bucket.rows.length }}</span>
                             </div>
                             <template v-for="change in bucket.rows" :key="`${group.repo}/${section.side}/${change.path}`">
@@ -1514,29 +1499,15 @@ const WARNING = `flex items-start gap-1.5 rounded-md border border-warning/40 bg
                                         @dblclick="openDiff(group.repo, section.side, change, 'keep')"
                                     >
                                         <ChangeStatusMark :status="change.status" />
-                                        <!-- Under a module header the row is the FILE — the header already carries
-                                         where it lives, and repeating the prefix on every row is what module
-                                         grouping exists to stop. The full path is always the tooltip here (not
-                                         only when cut off): a basename is ambiguous by construction, and this
-                                         is the one reading where looking harder cannot resolve it. -->
-                                        <span
-                                            v-if="viewOf(group.repo, section.side).named"
-                                            class="min-w-0 flex-1 truncate text-2xs text-muted max-md:text-xs"
-                                            v-tooltip.right="changeLabel(group.repo, change)"
-                                            >{{ rowName(change.path) }}</span
-                                        >
-                                        <!-- dir="rtl" ellipsizes the head of the path so the filename survives truncation, but it
-                                         also lets bidi-neutral edge characters jump sides: a leading "_" in "_apps/…" renders
-                                         at the far right. <bdi> isolates the path as one LTR run, keeping the glyphs in order.
-                                         The tooltip is what that truncation costs — the full label, repo included, and only
-                                         while the row is actually cut off. -->
-                                        <span
-                                            v-else
-                                            class="min-w-0 flex-1 truncate text-2xs text-muted max-md:text-xs"
-                                            dir="rtl"
-                                            v-tooltip.right.overflow="changeLabel(group.repo, change)"
-                                            ><bdi>{{ change.path }}</bdi></span
-                                        >
+                                        <!-- How a changed file is named, shared with the review panel on
+                                         /agents/{id} so a file reads the same on both — see ChangeRowName. It
+                                         replaces the middle-truncated full path this row used to draw, which
+                                         made every row in a deep tree look identical. -->
+                                        <ChangeRowName
+                                            :path="change.path"
+                                            :label="changeLabel(group.repo, change)"
+                                            :named="viewOf(group.repo, section.side).named"
+                                        />
                                         <!-- Who landed it: a provider chip per agent (two, then a count), and the name
                                          itself only once the panel is wide enough to hold it AND the file has a
                                          single owner — the path keeps first claim on the width. -->

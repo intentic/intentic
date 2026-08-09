@@ -1,5 +1,12 @@
 import type { AgentChange, AgentChangesResponse, AgentRepoChanges, FileDiffResponse } from "@intentic-app/api-contract";
-import { isTestPath, type AgentSpan, type LandConflictReason, type LandMode, type LandResult } from "@intentic/sandbox-contract";
+import {
+    isTestPath,
+    type AgentSpan,
+    type LandConflictReason,
+    type LandMode,
+    type LandResult,
+    type WorkspaceModule,
+} from "@intentic/sandbox-contract";
 import { computed, ref, watch, type Ref } from "vue";
 import { rendersAsBytes } from "../../pages/workspace/fileType";
 import { queryClient, UNPERSISTED } from "../queryPersistence";
@@ -137,6 +144,22 @@ export function useAgentChanges(agentId: Ref<string>) {
     });
 
     const repos = computed<readonly AgentRepoChanges[]>(() => query.data.value?.repos ?? []);
+
+    /* THE PACKAGE LAYOUT the review groups this agent's rows under — read off the diff itself, never from the
+     * workspace-wide /workspace/modules that the Changes panel uses. Same call shape as that one (useModules'
+     * `modulesOf`), deliberately, so the two review lists group through an identical seam; what differs is only
+     * WHOSE tree answered, which is the whole point.
+     *
+     * The workspace read walks /work, and an agent works in a worktree of its own. A package the agent has just
+     * created has its manifest only there, so /work could not name it — and that is the case where the naming
+     * matters most, because every file of a new package is a change. The review listed all of them as loose
+     * files of the repo, under no package at all, with their paths shortened to bare filenames.
+     *
+     * Keyed by the {repo} id every row already carries, so a lookup is never a scan. */
+    const modulesByRepo = computed<ReadonlyMap<string, readonly WorkspaceModule[]>>(
+        () => new Map(repos.value.map((group) => [group.repo, group.modules])),
+    );
+    const modulesOf = (repo: string): readonly WorkspaceModule[] => modulesByRepo.value.get(repo) ?? [];
 
     /* Why the last land refused — read from the DAEMON, not from the land call this browser made. The land
      * that conflicts is almost always the automatic one at turn completion, which no browser asked for: the
@@ -276,6 +299,7 @@ export function useAgentChanges(agentId: Ref<string>) {
 
     return {
         repos,
+        modulesOf,
         files,
         count,
         pending,

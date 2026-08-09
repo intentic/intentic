@@ -1997,6 +1997,22 @@ export const CommitResultSchema = z.object({
 });
 export type CommitResult = z.infer<typeof CommitResultSchema>;
 
+/* One module a changed file can be grouped under in the review panels: a repo-relative dir ("_editor/web", or ""
+ * for a repo that is itself one package) and the name its package.json declares. Distinct from
+ * WorkspacePackage, which is the DEPENDENCY graph's node — that one is pnpm's view of the workspace and carries
+ * the grouping axis its diagram colours by; this one is a filesystem fact about where a path lives.
+ *
+ * Stated HERE, above both readings of it, because there are two trees a review can be of and each groups by its
+ * own: the workspace read below (/workspace/modules, the Changes panel) speaks for /work, and every agent's
+ * diff carries its own (AgentRepoChanges.modules) because an agent's files live in a worktree /work cannot
+ * see. */
+export const WorkspaceModuleSchema = z.object({ dir: z.string(), name: z.string() });
+export type WorkspaceModule = z.infer<typeof WorkspaceModuleSchema>;
+export const RepoModulesSchema = z.object({ repo: z.string(), modules: z.array(WorkspaceModuleSchema) });
+export type RepoModules = z.infer<typeof RepoModulesSchema>;
+export const WorkspaceModulesSchema = z.object({ repos: z.array(RepoModulesSchema) });
+export type WorkspaceModules = z.infer<typeof WorkspaceModulesSchema>;
+
 // One file an agent touched, plus whether that change is ALREADY in the main tree. The review lists the
 // agent's CUMULATIVE output (base → worktree), not just the not-yet-landed remainder, because landing is not
 // the end of the review: a clean turn auto-lands within milliseconds, and a list scoped to the remainder shows
@@ -2013,6 +2029,14 @@ export const AgentRepoChangesSchema = z.object({
     repo: z.string(),
     branch: z.string().optional(),
     changes: z.array(AgentChangeSchema),
+    /* THE PACKAGE LAYOUT OF THE TREE THESE CHANGES CAME FROM, so the review can group them by module the way
+     * the workspace's Changes panel does. It rides the changes rather than being fetched beside them, because
+     * an agent works in a worktree the main tree cannot see: a package the agent has just created exists only
+     * there, so the workspace-wide read (/workspace/modules) does not know its name and every one of its files
+     * — which for a new package is all of them — fell into the unnamed "loose in this repo" bucket.
+     *
+     * Same read, same instant, same tree as the rows it groups: that is what stops the two from disagreeing. */
+    modules: z.array(WorkspaceModuleSchema),
 });
 export type AgentRepoChanges = z.infer<typeof AgentRepoChangesSchema>;
 /* The review, plus WHY the last land refused — because a conflict is discovered by the daemon (a clean turn
@@ -2614,16 +2638,6 @@ export const WorkspaceDepEdgeSchema = z.object({ from: z.string(), to: z.string(
 export type WorkspaceDepEdge = z.infer<typeof WorkspaceDepEdgeSchema>;
 export const WorkspaceGraphSchema = z.object({ packages: z.array(WorkspacePackageSchema), edges: z.array(WorkspaceDepEdgeSchema) });
 export type WorkspaceGraph = z.infer<typeof WorkspaceGraphSchema>;
-// One module a changed file can be grouped under in the review panels: a repo-relative dir ("_editor/web", or ""
-// for a repo that is itself one package) and the name its package.json declares. Distinct from
-// WorkspacePackage, which is the DEPENDENCY graph's node — that one is pnpm's view of the workspace and carries
-// the grouping axis its diagram colours by; this one is a filesystem fact about where a path lives.
-export const WorkspaceModuleSchema = z.object({ dir: z.string(), name: z.string() });
-export type WorkspaceModule = z.infer<typeof WorkspaceModuleSchema>;
-export const RepoModulesSchema = z.object({ repo: z.string(), modules: z.array(WorkspaceModuleSchema) });
-export type RepoModules = z.infer<typeof RepoModulesSchema>;
-export const WorkspaceModulesSchema = z.object({ repos: z.array(RepoModulesSchema) });
-export type WorkspaceModules = z.infer<typeof WorkspaceModulesSchema>;
 // Path params for the per-repo apps routes: the monorepo name (validated in the handler like PanelRepoParam)
 // and, for per-app preview control (start/stop), the app key (api/web/landing).
 export const RepoAppsParamSchema = z.object({ repo: z.string() });

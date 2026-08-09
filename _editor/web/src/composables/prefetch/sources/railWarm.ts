@@ -30,8 +30,9 @@ export const railWarmSource = (): readonly WarmTask[] => [
     // The workspace, first among these: it is the rail's other permanent surface, and the tree is what the whole
     // view is built out of.
     warmQuery(`rail:workspace-tree`, `rail`, workspaceTreeKey(), fetchWorkspaceTree),
-    // The package layout both review surfaces group their rows by — cheap, held long, and the difference
-    // between a review that groups on arrival and one that regroups a beat later.
+    // The package layout the Changes panel groups its rows by — cheap, held long, and the difference between a
+    // review that groups on arrival and one that regroups a beat later. (The agent review needs no entry here:
+    // its layout rides its own diff, which this loader already warms.)
     warmQuery(`rail:workspace-modules`, `rail`, modulesKey(), fetchModules),
     warmQuery(`rail:drafts`, `rail`, draftsKey, fetchDrafts),
     warmQuery(`rail:panels`, `rail`, panelsKey, fetchPanels),

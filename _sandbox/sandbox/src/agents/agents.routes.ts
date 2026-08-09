@@ -6,7 +6,7 @@ import type { Services } from "../composition.js";
 import type { OrpcContext } from "../context.js";
 import { conversationLines, matchLines } from "../sessions/transcript-search.js";
 import { resolveWithin } from "../workspace/workspace-files.js";
-import { agentRepoChanges, anchorOf } from "./agent-changes.js";
+import { agentRepoChanges, agentRepoModules, anchorOf } from "./agent-changes.js";
 import { type IsolatedAgent, isIsolated, type PersistedAgent } from "./agents-store.js";
 import { archivable, archiveAgents, purgeArchived } from "./archive.js";
 import { landAgent, outstandingConflicts } from "./land.js";
@@ -207,7 +207,11 @@ export const createAgentsRoutes = (services: Services) => {
                     // Object.assign, not a spread: `changes` is this call's own freshly-parsed array, so the
                     // flag goes onto the objects that are about to be serialized and nothing is copied.
                     const flagged = changes.map((change): AgentChange => Object.assign(change, { landed: !pending.has(change.path) }));
-                    repos.push({ repo: composed.repo, branch: entry.branch, changes: flagged });
+                    // The tree's own package layout, for the review to group those rows under (agent-changes.ts).
+                    // Read here rather than looked up from /workspace/modules: that read walks /work, which cannot
+                    // see a package living so far only in this agent's worktree.
+                    const modules = await agentRepoModules(services.agentWorktrees, entry, composed.repo);
+                    repos.push({ repo: composed.repo, branch: entry.branch, changes: flagged, modules });
                 } catch (error) {
                     // One broken worktree (mid-repair, deleted dir) must not 500 the whole review.
                     services.logger.warn({ err: error, repo: composed.repo, id: entry.id }, "agents diff: repo skipped");

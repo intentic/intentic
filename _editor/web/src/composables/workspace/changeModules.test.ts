@@ -1,6 +1,6 @@
 import type { WorkspaceModule } from "@intentic/sandbox-contract";
 import { describe, expect, it } from "vitest";
-import { moduleGroups, moduleOf, rowName } from "./changeModules";
+import { moduleGroups, moduleOf, moduleView } from "./changeModules";
 
 const MODULES: readonly WorkspaceModule[] = [
     { dir: `_editor/web`, name: `@shop/web` },
@@ -56,9 +56,41 @@ describe(`moduleGroups`, () => {
         expect(single.map((group) => group.name)).toEqual([`@shop/cli`]);
         expect(single[0]?.packaged).toBe(true);
     });
+});
 
-    it(`names every row under a header by its file`, () => {
-        expect(rowName(`_editor/web/src/main.ts`)).toBe(`main.ts`);
-        expect(rowName(`ARCHITECTURE.md`)).toBe(`ARCHITECTURE.md`);
+/* The rule both review lists draw from. It is tested HERE rather than through either panel because that is the
+ * point of it existing: the two used to answer these questions separately, and separately is how they came to
+ * disagree. */
+describe(`moduleView`, () => {
+    const paths = [`_editor/web/src/main.ts`, `ARCHITECTURE.md`, `_editor/ui/src/Row.vue`];
+
+    it(`heads the buckets when a repo's changes span more than one`, () => {
+        const view = moduleView(paths, (path) => path, MODULES, `shop`, true);
+        expect(view.named).toBe(true);
+        expect(view.buckets.map((bucket) => bucket.name)).toEqual([`@shop/web`, `shop`, `@shop/ui`]);
+    });
+
+    // The case the whole `named` flag exists for: one bucket of files no package claims would print the repo's
+    // own name directly under the repo's own heading, saying nothing — so it says nothing, and its rows keep
+    // their paths.
+    it(`leaves a lone unclaimed bucket unnamed`, () => {
+        const view = moduleView([`src/main.rs`, `Cargo.toml`], (path) => path, [], `engine`, true);
+        expect(view.named).toBe(false);
+        expect(view.buckets).toHaveLength(1);
+    });
+
+    // A repo that IS one package still earns its heading: the name is the package's, not the repo's, so it
+    // tells the reader something the heading above it did not.
+    it(`heads a lone bucket that is a real package`, () => {
+        const view = moduleView([`src/index.ts`], (path) => path, [{ dir: ``, name: `@shop/cli` }], `cli`, true);
+        expect(view.named).toBe(true);
+        expect(view.buckets[0]?.name).toBe(`@shop/cli`);
+    });
+
+    it(`collapses to one unnamed bucket — the plain path list — with grouping off`, () => {
+        const view = moduleView(paths, (path) => path, MODULES, `shop`, false);
+        expect(view.named).toBe(false);
+        expect(view.buckets).toHaveLength(1);
+        expect(view.buckets[0]?.rows).toEqual(paths);
     });
 });

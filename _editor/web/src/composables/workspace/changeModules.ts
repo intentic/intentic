@@ -8,7 +8,16 @@ import type { WorkspaceModule } from "@intentic/sandbox-contract";
  * obvious reading of "show modules instead of paths" and is the wrong one: nine consecutive rows reading
  * "@intentic/desktop" say nothing about the thing you are about to click.
  *
- * Modules come from the daemon (workspace/modules.ts); everything here is the pure mapping the panels share. */
+ * THE WHOLE RULE LIVES HERE, not just its first half. There are two review lists — the workspace's Changes
+ * panel and the fleet's agent review — and they had each written their own copy of "which buckets, and do they
+ * get headings", which is how the two ended up disagreeing about the same change set. Now they call moduleView
+ * and render what it says. (It sits in composables/ rather than under either panel for the same reason: shared
+ * code filed inside one of its two consumers is shared code waiting to be forked.)
+ *
+ * WHOSE modules, though, is each surface's own business, and that distinction is the point: a list groups by
+ * the package layout of the TREE ITS ROWS CAME FROM. The Changes panel reads /work (useModules); an agent's
+ * review reads the layout its diff shipped with, because the agent's files live in a worktree /work cannot see
+ * — a package it has just created exists nowhere else, and a new package's files are ALL changes. */
 
 // The module a repo-relative path belongs to: the longest module dir that prefixes it, so a package nested
 // inside another (an app with its own operator UI) claims its own files. A repo that is one package declares
@@ -61,7 +70,37 @@ export const moduleGroups = <T>(
     return [...grouped.values()];
 };
 
-// What a row shows once its module is named above it: the file, not the path to it. The path stays the
-// tooltip — a basename is ambiguous by construction (two `index.ts` in one package), and this is the one
-// reading where that ambiguity is not resolvable by looking.
-export const rowName = (path: string): string => path.slice(path.lastIndexOf(`/`) + 1);
+/* A LIST AS IT IS ACTUALLY DRAWN: the buckets, and whether they get headings. Both review panels compute this
+ * once per change to their rows and read it from every header and every row — a grouping pass per row would be
+ * quadratic on a landing the daemon is allowed to ship 500 rows a repo for.
+ *
+ * `named` is the judgement worth stating once: a LONE bucket of files no module claims would print the repo's
+ * own name directly under the repo's own heading, which says nothing — so it draws no heading, and its rows
+ * keep their full paths, because with nothing above them naming the package a bare filename is all the reader
+ * would get. Everything else is headed. */
+// Generic over the BUCKET rather than the row, so a panel that hangs its own numbers off each bucket (the agent
+// review's per-package ± and blocker count) states its view type as ModuleView<ItsOwnBucket> instead of
+// re-declaring the shape.
+export interface ModuleView<B> {
+    readonly buckets: readonly B[];
+    readonly named: boolean;
+}
+
+export const moduleView = <T>(
+    rows: readonly T[],
+    pathOf: (row: T) => string,
+    modules: readonly WorkspaceModule[],
+    fallbackName: string,
+    // The reader's preference (useChangeGrouping). Off ⇒ one unnamed bucket, i.e. the plain path list.
+    grouped: boolean,
+): ModuleView<ModuleGroup<T>> => {
+    if (!grouped) {
+        return { buckets: [{ key: `all`, name: ``, packaged: false, rows }], named: false };
+    }
+    const buckets = moduleGroups(rows, pathOf, modules, fallbackName);
+    return { buckets, named: buckets.length > 1 || buckets[0]?.packaged === true };
+};
+
+// The view of a repo that has no rows at all — a shared constant so neither panel has to invent an empty one
+// (and so an empty view is never accidentally `named`).
+export const EMPTY_MODULE_VIEW: ModuleView<never> = { buckets: [], named: false };

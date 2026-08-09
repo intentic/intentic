@@ -1,6 +1,7 @@
-import type { AgentSpan, GitChange } from "@intentic/sandbox-contract";
+import type { AgentSpan, GitChange, WorkspaceModule } from "@intentic/sandbox-contract";
 import { defaultGit, type GitRunner } from "@intentic/scaffold";
 import { changesAgainstBase, changesBetweenRefs, headSha } from "../git/changes.js";
+import { readModules } from "../workspace/modules.js";
 import type { IsolatedAgent, PersistedAgent } from "./agents-store.js";
 import type { AgentWorktrees } from "./worktrees.js";
 
@@ -104,3 +105,18 @@ export const agentRepoChanges = async (
     const from = await anchorOf(dir, main, entry.branch, span === "outstanding" ? composed.landedTip : undefined, composed.base, git);
     return attached ? changesAgainstBase(dir, from, git) : changesBetweenRefs(main, from, entry.branch, git);
 };
+
+/* THE PACKAGE LAYOUT those changes are grouped under, read from THE SAME TREE they were read from — the one
+ * thing that keeps the review's headings and its rows talking about the same world.
+ *
+ * The workspace-wide read (/workspace/modules) cannot do this job: it walks /work, and an agent works in a
+ * worktree of its own. A package the agent has just created has its manifest only there, so /work could not
+ * name it — and a brand-new package is the case where naming matters most, because every one of its files is
+ * a change. The review listed them all as loose files of the repo, under no package at all.
+ *
+ * A RETIRED checkout falls back to the main repo, exactly as the file diff beside it does: the worktree is
+ * gone, the branch's tree is not on disk, and by the time an agent is retired its work has normally landed —
+ * so the main tree is both the only cheap answer and, nearly always, the right one.
+ */
+export const agentRepoModules = async (worktrees: AgentWorktrees, entry: IsolatedAgent, repo: string): Promise<WorkspaceModule[]> =>
+    readModules((await worktrees.attached(entry.id, repo)) ? worktrees.worktreeDir(entry.id, repo) : worktrees.mainDir(repo));

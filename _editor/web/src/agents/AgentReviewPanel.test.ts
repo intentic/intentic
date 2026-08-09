@@ -6,7 +6,7 @@
 // fix is entirely in what renders: a mark per blocked row, a count per repo heading, a filter that narrows to
 // them. None of that can be pinned by a unit test on the composable, only by looking at the rows.
 import type { AgentChangesResponse } from "@intentic-app/api-contract";
-import type { WorkspaceModules } from "@intentic/sandbox-contract";
+import type { WorkspaceModule } from "@intentic/sandbox-contract";
 import { VueQueryPlugin } from "@tanstack/vue-query";
 import { afterEach, expect, it, vi } from "vitest";
 import { type App, createApp, defineComponent, h, nextTick, ref } from "vue";
@@ -65,8 +65,14 @@ const changes: AgentChangesResponse = {
                 { path: `src/config.ts`, status: `modified`, additions: 2, deletions: 1, landed: false },
                 { path: `assets/logo.png`, status: `modified`, landed: false },
             ],
+            modules: [],
         },
-        { repo: `docs`, branch: `agent/a1`, changes: [{ path: `README.md`, status: `modified`, additions: 1, deletions: 1, landed: false }] },
+        {
+            repo: `docs`,
+            branch: `agent/a1`,
+            changes: [{ path: `README.md`, status: `modified`, additions: 1, deletions: 1, landed: false }],
+            modules: [],
+        },
     ],
     conflicts: [
         {
@@ -80,10 +86,12 @@ const changes: AgentChangesResponse = {
     ],
 };
 
-/* The root repo's package layout, for the tests about PACKAGES. One package over the two auth files, and the
- * two loose files nothing claims — which are also, deliberately, the two blocked ones: folding the bucket that
- * holds a refusal is the case where a fold must not be able to hide anything. */
-const MODULES: WorkspaceModules = { repos: [{ repo: `root`, modules: [{ dir: `src/auth`, name: `@shop/auth` }] }] };
+/* The root repo's package layout AS THE AGENT'S OWN TREE HAS IT — shipped with the diff, not looked up from the
+ * workspace-wide read, because an agent works in a worktree and /work cannot see a package that so far exists
+ * only there. One package over the two auth files, and the two loose files nothing claims — which are also,
+ * deliberately, the two blocked ones: folding the bucket that holds a refusal is the case where a fold must not
+ * be able to hide anything. */
+const MODULES: readonly WorkspaceModule[] = [{ dir: `src/auth`, name: `@shop/auth` }];
 
 let app: App | undefined;
 
@@ -91,13 +99,14 @@ let app: App | undefined;
  * being reachable (useSandboxQuery), which no test drives, and the cache is where the real panel reads it from
  * anyway — this is the state a browser is in when it opens the review on a conflict it learned about from the
  * board. */
-const mount = async (modules?: WorkspaceModules): Promise<HTMLElement> => {
-    queryClient.setQueryData(sandboxKey(`agents`, AGENT, `diff`), changes);
-    // Without this the repo has no packages to group by, so every path lands in one unnamed bucket and the list
-    // draws repo headings only — which is what the tests that aren't about packages want.
-    if (modules !== undefined) {
-        queryClient.setQueryData(sandboxKey(`workspace`, `modules`), modules);
+const mount = async (modules: readonly WorkspaceModule[] = []): Promise<HTMLElement> => {
+    // Empty by default: with no packages to group by, every path lands in one unnamed bucket and the list draws
+    // repo headings only — which is what the tests that aren't about packages want.
+    const repos: AgentChangesResponse[`repos`] = [];
+    for (const repo of changes.repos) {
+        repos.push(repo.repo === `root` ? { ...repo, modules: [...modules] } : repo);
     }
+    queryClient.setQueryData(sandboxKey(`agents`, AGENT, `diff`), { ...changes, repos } satisfies AgentChangesResponse);
     const el = document.createElement(`div`);
     document.body.append(el);
     // The review's state is created by AgentDetail in the real page and handed down, so one instance serves
@@ -192,6 +201,21 @@ it(`narrows to exactly the blocked files`, async () => {
     [...el.querySelectorAll(`button`)].find((button) => button.textContent?.trim() === `Blocked 2`)!.click();
     await nextTick();
     expect(rows(el).map((row) => row.textContent?.match(/config\.ts|logo\.png|session\.ts|README\.md/)?.[0])).toEqual([`config.ts`, `logo.png`]);
+});
+
+/* THE PACKAGE /work HAS NEVER HEARD OF. An agent writes in a worktree, so a package it has just created has
+ * its manifest only there — and that is exactly when grouping matters most, because every file of a new package
+ * is a change. This list used to group by the workspace-wide read, which walks /work, so all of them fell into
+ * the unnamed "loose in this repo" bucket and were drawn as bare paths under no package at all. It groups by
+ * the layout its own diff shipped with; the workspace read below is seeded to disagree, and is not consulted. */
+it(`groups by the packages of the agent's own tree, not the workspace's`, async () => {
+    queryClient.setQueryData(sandboxKey(`workspace`, `modules`), { repos: [{ repo: `root`, modules: [] }] });
+    const el = await mount(MODULES);
+    const heading = packageHeading(el, `@shop/auth`);
+    expect(heading).toBeDefined();
+    expect(heading.querySelector(`[data-icon="box"]`)).not.toBeNull();
+    // Named above, so the rows under it are the files alone rather than repeated `src/auth/` prefixes.
+    expect(rowFor(el, `src/auth/session.ts`).textContent).not.toContain(`src/auth`);
 });
 
 /* FOLDING A PACKAGE. A landing that spans four packages is one the reviewer cares about and three that are

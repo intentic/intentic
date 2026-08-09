@@ -10,8 +10,8 @@ const STORAGE_KEY = `ui-changes-by-module`;
  * On by default: "which part of the system did this touch" is the first question of a review, and the module
  * prefix is the repeated half of the path — the half a 270px sidebar truncates away. A repo with no manifests
  * to group by (a Rust/Python/Go tree, a bare docs repo) costs nothing for it being on: every path lands in the
- * one unclaimed bucket, which draws no header and keeps full paths (see changeModules.ts and the panels'
- * `named`), so those repos read exactly as they would with this off. */
+ * one unclaimed bucket, which draws no header and keeps full paths (changeModules' moduleView and its `named`,
+ * the rule both panels share), so those repos read exactly as they would with this off. */
 
 const read = (): boolean => {
     try {

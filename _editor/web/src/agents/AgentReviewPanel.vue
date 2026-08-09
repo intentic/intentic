@@ -26,13 +26,14 @@ import BinaryDiffView from "../pages/workspace/viewers/BinaryDiffView.vue";
 import DiffToolbar from "../pages/workspace/viewers/DiffToolbar.vue";
 import DiffView from "../pages/workspace/viewers/DiffView.vue";
 import { rendersAsBytes } from "../pages/workspace/fileType";
-import { moduleGroups, type ModuleGroup } from "../pages/workspace/changeModules";
+import { EMPTY_MODULE_VIEW, moduleView, type ModuleGroup, type ModuleView } from "../composables/workspace/changeModules";
 import { useChangeGrouping } from "../composables/workspace/useChangeGrouping";
-import { useModules } from "../composables/workspace/useModules";
+import ChangeRowName from "../components/ChangeRowName.vue";
+import ModuleLabel from "../components/ModuleLabel.vue";
 import AgentConflictReport from "./AgentConflictReport.vue";
 import ReviewGroupCheck from "./ReviewGroupCheck.vue";
 import { groupCountLabel, groupPassOn, rowAfterGroup, viewedIn } from "../composables/agents/reviewGroupPass";
-import { basename, parentDir } from "@intentic/ui/path";
+import { basename } from "@intentic/ui/path";
 
 /* One agent's work, as a REVIEW: the file list on the left, that file's diff on the right, in this view — the
  * shape every code review has (GitHub, VSCode's SCM, `git add -p`), because the job is scanning a body of
@@ -225,45 +226,40 @@ const groups = computed<readonly RepoGroup[]>(() => {
     return built;
 });
 
-/* The same reading the workspace's Changes panel offers, from the same preference (useChangeGrouping): a repo's
- * rows grouped under the package each path lives in, with the row itself shrunk to the file. One setting for
- * both review surfaces, because "how do I read a change list" is not a thing anyone wants to answer twice —
- * and because these two lists disagreeing about how a changed file is named is exactly the kind of seam that
- * makes two panels feel like two products. */
+/* The same reading the workspace's Changes panel offers, from the same preference (useChangeGrouping) and
+ * through the same rule (changeModules' moduleView): a repo's rows grouped under the package each path lives
+ * in, with the row itself shrunk to the file. One setting and one rule for both review surfaces, because "how
+ * do I read a change list" is not a thing anyone wants to answer twice — and because these two lists
+ * disagreeing about how a changed file is named is exactly the kind of seam that makes two panels feel like two
+ * products.
+ *
+ * The MODULES come from the agent's own diff (useAgentChanges' modulesOf), not from the workspace-wide read the
+ * Changes panel uses: an agent works in a worktree, so a package it has just created is not in /work to be
+ * named yet — see the note there. */
 const { groupByModule } = useChangeGrouping();
-const { modulesOf } = useModules();
 
 // A package's rows plus the numbers its heading carries, summed here rather than in the template so a fold is
 // a class change and not a pass over every row in the review.
 interface ReviewBucket extends ModuleGroup<AgentReviewFile>, GroupStats {}
-
-interface RepoView {
-    // A repo's rows as the list draws them: one unnamed bucket in path mode, one per module otherwise.
-    readonly buckets: readonly ReviewBucket[];
-    // Whether those buckets get headers. A lone bucket of files no module claims is the repo's name printed
-    // under the repo's own header — nothing to say, so nothing said. It is also what makes a bucket FOLDABLE:
-    // an unnamed one has no heading to fold from, and its repo's own heading already does that job.
-    readonly named: boolean;
-}
+// `named` also decides whether a bucket can FOLD: an unnamed one has no heading to fold from, and its repo's
+// own heading already does that job.
+type RepoView = ModuleView<ReviewBucket>;
 
 // Built once per change to the review, not per call: the rows read `named` too (a row's label switches on it),
 // and a grouping pass per row would be quadratic on a big landing.
 const repoViews = computed<ReadonlyMap<string, RepoView>>(() => {
     const views = new Map<string, RepoView>();
     for (const group of groups.value) {
-        const grouped: readonly ModuleGroup<AgentReviewFile>[] = groupByModule.value
-            ? moduleGroups(group.files, (file) => file.change.path, modulesOf(group.repo), group.repo)
-            : [{ key: `all`, name: ``, packaged: false, rows: group.files }];
+        const view = moduleView(group.files, (file) => file.change.path, changes.modulesOf(group.repo), group.repo, groupByModule.value);
         const buckets: ReviewBucket[] = [];
-        for (const bucket of grouped) {
+        for (const bucket of view.buckets) {
             buckets.push({ ...bucket, ...statsOf(bucket.rows) });
         }
-        views.set(group.repo, { buckets, named: groupByModule.value && (buckets.length > 1 || buckets[0]?.packaged === true) });
+        views.set(group.repo, { buckets, named: view.named });
     }
     return views;
 });
-const EMPTY_VIEW: RepoView = { buckets: [], named: false };
-const viewOf = (repo: string): RepoView => repoViews.value.get(repo) ?? EMPTY_VIEW;
+const viewOf = (repo: string): RepoView => repoViews.value.get(repo) ?? EMPTY_MODULE_VIEW;
 
 // What the keyboard walks: the rows actually on screen, in render order. A collapsed repo — or a collapsed
 // package inside an open one — contributes nothing, since j/k stepping onto a row you cannot see is the fold
@@ -709,18 +705,13 @@ const endResize = (event: PointerEvent): void => {
                                         class="flex min-w-0 flex-1 items-center gap-1.5 py-0.5 pl-1.5 pr-1 text-left"
                                         @click="toggleModule(group.repo, bucket.key)"
                                     >
-                                        <!-- Under 1em: at 1em these icon sets overshoot an 11px line's cap height by
-                                         ~1.5px top and bottom, and a mark taller than the word beside it reads as
-                                         sitting off-centre however exactly it is centred. Same size in the
-                                         workspace's own Changes list — one way to say a module. -->
                                         <Icon
                                             class="shrink-0 text-[0.6rem] text-subtle"
                                             :name="moduleCollapsed(group.repo, bucket.key) ? 'chevron-right' : 'chevron-down'"
                                         />
-                                        <Icon :name="bucket.packaged ? 'box' : 'folder'" class="shrink-0 text-[0.6rem] text-subtle" />
-                                        <span class="min-w-0 truncate text-2xs font-medium text-muted" v-tooltip.right.overflow="bucket.name">{{
-                                            bucket.name
-                                        }}</span>
+                                        <!-- One way to say a module, shared with the workspace's own Changes
+                                         list — see ModuleLabel. -->
+                                        <ModuleLabel :name="bucket.name" :packaged="bucket.packaged" />
                                         <span class="shrink-0 text-2xs text-subtle">{{ groupLabel(bucket.rows) }}</span>
                                         <!-- A folded package must not be able to hide a refusal, exactly as a
                                          folded repo can't — same badge, same glyph, one scope down. -->
@@ -770,26 +761,9 @@ const endResize = (event: PointerEvent): void => {
                                                 class="shrink-0 text-2xs"
                                                 :class="explorerColorClass(explorerStyle, basename(file.change.path), 'file', false)"
                                             />
-                                            <!-- Under a module header the row is the file alone — the header carries where
-                                     it lives — and the full path is always the tooltip rather than only when
-                                     the row is cut off, because a basename is ambiguous by construction. -->
-                                            <span
-                                                v-if="viewOf(group.repo).named"
-                                                class="min-w-0 flex-1 truncate text-2xs font-medium text-content max-md:text-xs"
-                                                v-tooltip.right="file.label"
-                                                >{{ basename(file.change.path) }}</span
-                                            >
-                                            <!-- Basename first and legible, its directory trailing and dimmed: a review is
-                                     read by file name, and the middle-truncated full paths this replaces made
-                                     every row in a deep tree look the same. -->
-                                            <span
-                                                v-else
-                                                class="min-w-0 flex-1 truncate text-2xs max-md:text-xs"
-                                                v-tooltip.right.overflow="file.label"
-                                            >
-                                                <span class="font-medium text-content">{{ basename(file.change.path) }}</span>
-                                                <span class="ml-1 text-subtle">{{ parentDir(file.change.path) }}</span>
-                                            </span>
+                                            <!-- How a changed file is named, shared with the workspace's Changes
+                                     list so a file reads the same on both — see ChangeRowName. -->
+                                            <ChangeRowName :path="file.change.path" :label="file.label" :named="viewOf(group.repo).named" />
                                             <!-- WHY THIS ROW REFUSED, on the row. A blocked file is unlanded by
                                      definition, so the plain dot would only be repeating what the mark
                                      already says in a word — the mark REPLACES it rather than crowding in
