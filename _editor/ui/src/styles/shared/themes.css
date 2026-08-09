@@ -7,39 +7,46 @@
  * in a theme block MUST also be set in [data-theme=X][data-mode="dark"] (0,2,0), or the theme would
  * clobber the dark flip from semantic-colors.css. Ramps/fonts/radii/density are mode-independent. */
 
-/* ── Carbon — technical. Cool graphite neutrals, electric cyan accent, Space Grotesk,
- *    sharp corners, tight density, hard borders. ── */
+/* ── Carbon — technical. Graphite neutrals, muted petrol-blue accent, Space Grotesk,
+ *    sharp corners, tight density. Lines are deliberately NOT overridden: Carbon reads as
+ *    precise because of the corner radius and the spacing, not because the boxes are drawn
+ *    harder, and a theme-wide border darkening turns every table, card and input into a
+ *    cage. It inherits the default soft neutral line from semantic-colors.css. ── */
 [data-theme="carbon"] {
     --font-sans: "Space Grotesk", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif,
         "Apple Color Emoji", "Segoe UI Emoji";
 
-    /* Neutral → graphite: hue 250, roughly double Ember's chroma, darker floor. */
-    --color-neutral-0:   oklch(99% 0.003 250);
-    --color-neutral-50:  oklch(98% 0.005 250);
-    --color-neutral-100: oklch(96% 0.007 250);
-    --color-neutral-200: oklch(92% 0.01 250);
-    --color-neutral-300: oklch(87% 0.012 250);
-    --color-neutral-400: oklch(71% 0.014 250);
-    --color-neutral-500: oklch(58% 0.015 250);
-    --color-neutral-600: oklch(48% 0.015 250);
-    --color-neutral-700: oklch(40% 0.014 250);
-    --color-neutral-800: oklch(30% 0.013 250);
-    --color-neutral-900: oklch(22% 0.012 250);
-    --color-neutral-950: oklch(15% 0.011 250);
+    /* Neutral → graphite: hue 250 with a darker floor than Ember, but chroma held near Ember's
+     * so surfaces and lines stay gray. The old ramp ran ~2× chroma and tinted every panel blue. */
+    --color-neutral-0:   oklch(99% 0.002 250);
+    --color-neutral-50:  oklch(98% 0.003 250);
+    --color-neutral-100: oklch(96% 0.005 250);
+    --color-neutral-200: oklch(92.5% 0.007 250);
+    --color-neutral-300: oklch(88% 0.008 250);
+    --color-neutral-400: oklch(72% 0.009 250);
+    --color-neutral-500: oklch(59% 0.010 250);
+    --color-neutral-600: oklch(49% 0.010 250);
+    --color-neutral-700: oklch(41% 0.010 250);
+    --color-neutral-800: oklch(31% 0.009 250);
+    --color-neutral-900: oklch(23% 0.008 250);
+    --color-neutral-950: oklch(15.5% 0.007 250);
 
-    /* Brand → electric cyan: blue ramp shape at hue 215. */
-    --color-brand-0:   oklch(97% 0.02 215);
-    --color-brand-50:  oklch(96% 0.03 215);
-    --color-brand-100: oklch(93% 0.06 215);
-    --color-brand-200: oklch(88% 0.09 215);
-    --color-brand-300: oklch(81% 0.12 215);
-    --color-brand-400: oklch(74% 0.145 215);
-    --color-brand-500: oklch(67% 0.155 215);
-    --color-brand-600: oklch(58% 0.15 215);
-    --color-brand-700: oklch(50% 0.13 215);
-    --color-brand-800: oklch(42% 0.11 215);
-    --color-brand-900: oklch(37% 0.09 215);
-    --color-brand-950: oklch(28% 0.07 215);
+    /* Brand → petrol blue. Peak chroma 0.095 — roughly half the old electric cyan and well under
+     * Ember's 0.175 — so the accent belongs to the graphite family instead of glowing on top of it.
+     * Hue sits at ~210, clear of the informational blue at 255. Lightness per stop is unchanged,
+     * so link and fill contrast is exactly what it was. */
+    --color-brand-0:   oklch(97% 0.012 210);
+    --color-brand-50:  oklch(96% 0.02 210);
+    --color-brand-100: oklch(93% 0.033 210);
+    --color-brand-200: oklch(88% 0.05 210);
+    --color-brand-300: oklch(81% 0.07 210);
+    --color-brand-400: oklch(74% 0.085 211);
+    --color-brand-500: oklch(67% 0.093 212);
+    --color-brand-600: oklch(58% 0.095 214);
+    --color-brand-700: oklch(50% 0.088 216);
+    --color-brand-800: oklch(42% 0.075 218);
+    --color-brand-900: oklch(37% 0.065 220);
+    --color-brand-950: oklch(28% 0.05 222);
 
     /* Sharp, compressed radius scale. */
     --radius-xs: 0.125rem;
@@ -57,58 +64,57 @@
     --ui-control-padding-x: calc(var(--spacing) * 2.5);
     --ui-control-padding-y: calc(var(--spacing) * 1.5);
     --ui-field-gap: calc(var(--spacing) * 1.5);
-
-    /* Harder borders. */
-    --role-line: var(--color-surface-300);
-    --role-line-strong: var(--color-surface-400);
-}
-[data-theme="carbon"][data-mode="dark"] {
-    --role-line: var(--color-surface-700);
-    --role-line-strong: var(--color-surface-600);
 }
 
-/* ── Meadow — friendly. Soft violet-tinted ink neutrals, violet accent, DM Sans,
- *    generous corners, airy density, soft lines. ── */
+/* ── Meadow — friendly. Near-neutral paper surfaces, soft wisteria accent, DM Sans, rounded
+ *    corners, airy density. Like Carbon it leaves lines alone: the old override pushed them to
+ *    surface-100, which on a surface-0 card is a border you cannot see, so cards, inputs and
+ *    table rows lost their edges entirely. The default neutral line is quiet without vanishing. ── */
 [data-theme="meadow"] {
     --font-sans: "DM Sans", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif,
         "Apple Color Emoji", "Segoe UI Emoji";
 
-    /* Neutral → soft ink: hue 300, very low chroma, lighter top and violet-tinted floor. */
-    --color-neutral-0:   oklch(99.5% 0.002 300);
-    --color-neutral-50:  oklch(98.5% 0.003 300);
-    --color-neutral-100: oklch(96.5% 0.004 300);
-    --color-neutral-200: oklch(93% 0.006 300);
-    --color-neutral-300: oklch(88% 0.008 300);
-    --color-neutral-400: oklch(72% 0.01 300);
-    --color-neutral-500: oklch(59% 0.011 300);
-    --color-neutral-600: oklch(49% 0.012 300);
-    --color-neutral-700: oklch(41% 0.012 300);
-    --color-neutral-800: oklch(31% 0.014 300);
-    --color-neutral-900: oklch(24% 0.015 300);
-    --color-neutral-950: oklch(18% 0.016 300);
+    /* Neutral → soft ink: hue 300 at about half the previous chroma. Enough of a violet whisper to
+     * pair with the accent, little enough that panels read as paper rather than as pale mauve. */
+    --color-neutral-0:   oklch(99.5% 0.001 300);
+    --color-neutral-50:  oklch(98.5% 0.002 300);
+    --color-neutral-100: oklch(96.5% 0.003 300);
+    --color-neutral-200: oklch(93% 0.004 300);
+    --color-neutral-300: oklch(88% 0.005 300);
+    --color-neutral-400: oklch(72% 0.006 300);
+    --color-neutral-500: oklch(59% 0.007 300);
+    --color-neutral-600: oklch(49% 0.007 300);
+    --color-neutral-700: oklch(41% 0.007 300);
+    --color-neutral-800: oklch(31% 0.008 300);
+    --color-neutral-900: oklch(24% 0.009 300);
+    --color-neutral-950: oklch(17% 0.010 300);
 
-    /* Brand → violet: orange ramp shape at hue 300, chroma peaking at the 600 stop. */
-    --color-brand-0:   oklch(97% 0.02 300);
-    --color-brand-50:  oklch(96% 0.035 300);
-    --color-brand-100: oklch(93% 0.06 300);
-    --color-brand-200: oklch(88% 0.09 300);
-    --color-brand-300: oklch(81% 0.12 300);
-    --color-brand-400: oklch(73% 0.15 300);
-    --color-brand-500: oklch(65% 0.18 300);
-    --color-brand-600: oklch(57% 0.19 300);
-    --color-brand-700: oklch(50% 0.17 300);
-    --color-brand-800: oklch(43% 0.14 300);
-    --color-brand-900: oklch(38% 0.12 300);
-    --color-brand-950: oklch(29% 0.09 300);
+    /* Brand → wisteria. The old ramp peaked at 0.19 chroma, the most saturated palette in the set and
+     * a hue the eye already reads as loud; 0.105 keeps the color and drops the shout. Hue eases from
+     * 298 to 291 down the ramp so deep shades stay violet instead of turning magenta. Lightness per
+     * stop is unchanged, so link and fill contrast is exactly what it was. */
+    --color-brand-0:   oklch(97% 0.012 298);
+    --color-brand-50:  oklch(96% 0.02 298);
+    --color-brand-100: oklch(93% 0.035 298);
+    --color-brand-200: oklch(88% 0.055 298);
+    --color-brand-300: oklch(81% 0.075 298);
+    --color-brand-400: oklch(73% 0.09 297);
+    --color-brand-500: oklch(65% 0.10 296);
+    --color-brand-600: oklch(57% 0.105 295);
+    --color-brand-700: oklch(50% 0.10 294);
+    --color-brand-800: oklch(43% 0.085 293);
+    --color-brand-900: oklch(38% 0.072 292);
+    --color-brand-950: oklch(29% 0.055 291);
 
-    /* Generous radius scale. */
-    --radius-xs: 0.375rem;
-    --radius-sm: 0.5rem;
-    --radius-md: 0.75rem;
-    --radius-lg: 1rem;
-    --radius-xl: 1.25rem;
-    --radius-2xl: 1.5rem;
-    --ui-radius: var(--radius-2xl);
+    /* Generous radius scale — trimmed from the old one, which put 1.5rem on every card and overlay
+     * and made panels read as toys rather than as friendly. */
+    --radius-xs: 0.3125rem;
+    --radius-sm: 0.4375rem;
+    --radius-md: 0.625rem;
+    --radius-lg: 0.875rem;
+    --radius-xl: 1.125rem;
+    --radius-2xl: 1.375rem;
+    --ui-radius: var(--radius-xl);
 
     /* Airier density. */
     --ui-page-padding: calc(var(--spacing) * 8);
@@ -117,15 +123,6 @@
     --ui-control-padding-x: calc(var(--spacing) * 4);
     --ui-control-padding-y: calc(var(--spacing) * 2.5);
     --ui-field-gap: calc(var(--spacing) * 2.5);
-
-    /* Softer lines. */
-    --role-line: var(--color-surface-100);
-    --role-line-strong: var(--color-surface-200);
-}
-[data-theme="meadow"][data-mode="dark"] {
-    /* Re-assert the default dark line flip (see CASCADE RULE). */
-    --role-line: var(--color-surface-800);
-    --role-line-strong: var(--color-surface-700);
 }
 
 /* ── Honey — a warm Ember sibling in antique gold. Keeps Ember's Inter font; differentiates on
