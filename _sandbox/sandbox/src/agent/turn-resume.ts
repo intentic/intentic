@@ -68,6 +68,25 @@ const RESUME_MAX_AGE_MS = 6 * 60 * 60_000;
  * so the counter survives the death it is guarding against. */
 const MAX_RESUME_ATTEMPTS = 1;
 
+/* HOW LONG A CARD MAY SAY "COMING BACK" BEFORE IT HAS TO STOP SAYING IT.
+ *
+ * The auth failure frame promises the client a renewal (autoResume: "scheduled"), and the fleet card holds
+ * itself out of every settled lane on the strength of that promise — a spinner with an elapsed counter and no
+ * ending. Nothing else can end it: `finish` deliberately does not clear the wait (the resume outlives the turn
+ * it belongs to), so the only two ways out are the resumed turn's own begin and abandonResume below.
+ *
+ * Which makes every silent exit from a resume a permanently spinning card, and there are several — the token
+ * endpoint hanging, a conflict on the conversation, an abandon lost to a turn that had not finished unwinding.
+ * They used to share one fate: the pending entry was dropped BEFORE the attempt, so whatever went wrong went
+ * wrong exactly once and left nothing behind to notice it. Now the entry survives its attempts and this is the
+ * clock they run against — the re-mint is one HTTPS round trip fired within a pass of the failure, so a minute
+ * of passes is far past generous, and what is still waiting at the end of it is not waiting for anything. */
+const AUTH_RESUME_DEADLINE_MS = 60_000;
+
+// What the card says when that minute runs out. It is the sentence for the one auth ending a person has to act
+// on, so it names the act rather than the machinery — see abandonResume.
+const AUTH_GAVE_UP = "The Claude sign-in this turn ran on could not be renewed in time — reconnect the account, then send again.";
+
 // Every turn start clears its conversation's pending resumes — both kinds. Whatever runs next (the user
 // retrying by hand, the scheduler's own fire) supersedes them.
 export const clearPendingResume = (conversationId: string): void => {
@@ -85,7 +104,11 @@ export interface AuthFailure {
     readonly refusedToken: string;
 }
 
-const pendingAuth = new Map<string, AuthFailure>();
+const pendingAuth = new Map<string, AuthFailure & { readonly recordedAt: number }>();
+
+// Conversations with an attempt in flight right now. The entry is no longer dropped when its attempt starts, so
+// without this a re-mint slower than the poll would be fired again underneath itself once every five seconds.
+const firingAuth = new Set<string>();
 
 /* Whether an auth-killed turn with THIS prompt is one this module will re-run. False for a turn that is ITSELF a
  * resume: a credential that refuses the freshly minted token too is not a transient rotation, and re-running
@@ -100,12 +123,15 @@ export const authResumable = (prompt: string): boolean => !prompt.startsWith(RES
 /* Remember an auth-killed turn for the next scheduler pass. Recorded from the turn's own exit rather than
  * resumed there and then, because the failing run still owns its conversation at that moment — starting the
  * replacement inline would hit turn-runs' conflict and drop the resume on the floor. The poll is a few seconds
- * behind, and the alternative is a tab that stays dead until a human types into it. */
-export const recordAuthFailure = (failure: AuthFailure): void => {
+ * behind, and the alternative is a tab that stays dead until a human types into it.
+ *
+ * `recordedAt` is the instant the card started promising to come back, which is what AUTH_RESUME_DEADLINE_MS is
+ * measured from — the promise and the clock on it begin together. */
+export const recordAuthFailure = (failure: AuthFailure, now: number = Date.now()): void => {
     if (!authResumable(failure.input.prompt)) {
         return;
     }
-    pendingAuth.set(failure.input.conversationId, failure);
+    pendingAuth.set(failure.input.conversationId, { ...failure, recordedAt: now });
 };
 
 export interface OutageFailure {
@@ -236,31 +262,89 @@ export interface TurnResumeScheduler {
     readonly tick: (now?: number) => Promise<void>;
 }
 
+/* What one attempt at an auth resume settled, and the only thing the pass needs from it: whether this pending
+ * entry is finished with. "retry" is the verdict that did not exist and had to — every attempt used to consume
+ * its entry, so an attempt that achieved nothing achieved nothing PERMANENTLY, with a spinner left turning over
+ * it. Bounded by AUTH_RESUME_DEADLINE_MS, so retrying can never mean forever. */
+type AuthVerdict = "resumed" | "dead" | "retry";
+
 /* Re-mint the refused token and re-run the turn it killed. The rotation call is the whole safety argument: it
  * ADOPTS a token another holder already rotated to (the common case — the proactive refresh is usually what
  * refused this turn in the first place), refreshes only when the store still holds the refused one, and
  * records `invalid_grant` as terminal instead of replaying it. So a credential that is genuinely dead answers
  * undefined, no resume fires, and the coded error frame stands with its reconnect affordance — the one case
  * where a human really is required. */
-const fireAuthResume = async (services: Services, wake: WakeFn, failure: AuthFailure): Promise<void> => {
+const fireAuthResume = async (services: Services, wake: WakeFn, failure: AuthFailure): Promise<AuthVerdict> => {
     const conversationId = failure.input.conversationId;
-    const replacement = await replaceRejectedToken(services.claudeStore, failure.account, failure.refusedToken).catch((error: unknown) => {
+    /* A THROW IS NOT AN ANSWER, and telling it apart from one is the difference between a card that recovers and
+     * a card that gives up on a working account. `rotate` answers undefined for a credential it KNOWS is dead;
+     * a rejected promise means the question never got asked — the token endpoint was unreachable, the request
+     * timed out, the disk refused the write. Those clear on their own, so they buy another pass rather than a
+     * reconnect notice the user cannot act on. */
+    let replacement: string | undefined;
+    try {
+        replacement = await replaceRejectedToken(services.claudeStore, failure.account, failure.refusedToken);
+    } catch (error) {
         services.logger.warn({ err: error, account: failure.account }, "auth auto-resume could not re-mint the refused token");
-        return undefined;
-    });
+        return "retry";
+    }
     // Nothing new to run on: the credential is revoked outright, or the store handed back the very token the
     // API just refused — which would fail identically the moment the turn respawned. The card has been holding
     // itself open for this since the turn stopped, so settle it: nothing is coming, and a human is needed.
     if (replacement === undefined || replacement === failure.refusedToken) {
-        await services.agents.abandonResume(
+        const settled = await services.agents.abandonResume(
             conversationId,
             Date.now(),
             "The Claude sign-in this turn ran on could not be renewed — reconnect the account, then send again.",
         );
-        return;
+        // The card is still unwinding the very turn this is about, and its finish() will re-open the spinner
+        // over anything written now. Come back on the next pass, when there is something left to settle.
+        return settled ? "dead" : "retry";
     }
-    if ((await startConversationTurn(services, wake, resumedTurn(failure, RESUME_NOTES.auth))) !== undefined) {
-        services.logger.info({ conversationId, account: failure.account }, "auth auto-resume fired");
+    if ((await startConversationTurn(services, wake, resumedTurn(failure, RESUME_NOTES.auth))) === undefined) {
+        // A live turn owns the conversation. Usually that IS the ending — the user's own send supersedes the
+        // resume, and its begin clears the wait — but it is equally the failed turn still walking its cleanup,
+        // which supersedes nothing. Indistinguishable from here, so keep the entry: a superseded one is dropped
+        // by clearPendingResume at that turn's start, and only the other kind is still here next pass.
+        return "retry";
+    }
+    services.logger.info({ conversationId, account: failure.account }, "auth auto-resume fired");
+    return "resumed";
+};
+
+/* THE AUTH PASS. Every conversation whose credential died under it, re-minted and re-run — or, once the minute
+ * is up, told that nothing is coming.
+ *
+ * The deadline is the half that was missing, and it is not a retry policy: it is the only thing standing behind
+ * the promise the failure frame already made to the client. A resume that quietly does not happen is
+ * indistinguishable, from every surface, from one that is about to. */
+const runAuthPass = async (services: Services, wake: WakeFn, now: number): Promise<void> => {
+    // Snapshotted before the loop: an await inside a live map iteration would also pick up a failure recorded by
+    // a turn that is still settling, which this pass has no business acting on yet.
+    const refused = [...pendingAuth.values()];
+    for (const failure of refused) {
+        const conversationId = failure.input.conversationId;
+        if (now - failure.recordedAt > AUTH_RESUME_DEADLINE_MS) {
+            // Checked ahead of the in-flight gate on purpose: an attempt still running at the deadline is
+            // precisely the wedged case this exists for, and it must not be what keeps the card spinning. Should
+            // it complete later and start its turn, that turn's begin re-opens the card, which is correct.
+            if (await services.agents.abandonResume(conversationId, now, AUTH_GAVE_UP)) {
+                pendingAuth.delete(conversationId);
+                services.logger.warn({ conversationId, account: failure.account }, "auth auto-resume gave up — the card is settled as failed");
+            }
+            continue;
+        }
+        if (firingAuth.has(conversationId)) {
+            continue;
+        }
+        firingAuth.add(conversationId);
+        try {
+            if ((await fireAuthResume(services, wake, failure)) !== "retry") {
+                pendingAuth.delete(conversationId);
+            }
+        } finally {
+            firingAuth.delete(conversationId);
+        }
     }
 };
 
@@ -288,13 +372,17 @@ const runOutagePass = async (services: Services, wake: WakeFn, now: number): Pro
         // toggle is off and the offer went unanswered. Either way the user has read the failure and moved on, and
         // a turn springing back to life long after they did is worse than one that stayed dead.
         if (now - failure.recordedAt > OUTAGE_STALE_AFTER_MS) {
-            pendingOutage.delete(conversationId);
-            // And the card stops saying it is coming back, for the same reason — see abandonResume.
-            await services.agents.abandonResume(
+            // And the card stops saying it is coming back, for the same reason — see abandonResume. Kept until
+            // that lands: an abandon refused by a turn still unwinding is the one way this leaves a spinner
+            // behind, and the entry is what brings the pass back to finish the job.
+            const settled = await services.agents.abandonResume(
                 conversationId,
                 now,
                 `${failure.provider} was down when this turn ran and the hour it had to come back has passed — send again to pick it up.`,
             );
+            if (settled) {
+                pendingOutage.delete(conversationId);
+            }
             continue;
         }
         if (!resumeAfterOutage || !outageRetryDue(failure.provider, now)) {
@@ -321,15 +409,7 @@ export const createTurnResumeScheduler = (services: Services, wake: WakeFn, inte
     let timer: NodeJS.Timeout | undefined;
 
     const tick = async (now: number = Date.now()): Promise<void> => {
-        // Snapshotted before the loop: entries are deleted as they fire, and an await inside a live map
-        // iteration would also pick up a failure recorded by a turn that is still settling.
-        const refused = [...pendingAuth.values()];
-        for (const failure of refused) {
-            // Deleted before firing, like the outage path: a conflict means a turn is already live on the
-            // conversation and supersedes the resume, and a retained entry would re-fire on every pass.
-            pendingAuth.delete(failure.input.conversationId);
-            await fireAuthResume(services, wake, failure);
-        }
+        await runAuthPass(services, wake, now);
         await runOutagePass(services, wake, now);
     };
 

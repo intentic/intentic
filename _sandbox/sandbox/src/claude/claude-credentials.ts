@@ -227,11 +227,23 @@ const readIdentity = (json: TokenResponse): Pick<TokenSet, "email" | "organizati
     ...(typeof json.organization?.name === "string" && json.organization.name !== "" ? { organization: json.organization.name } : {}),
 });
 
+/* How long the token endpoint gets to answer. `fetch` has no timeout of its own, so a connection that opens and
+ * then goes quiet hangs its caller for as long as the socket lives — and the callers here are the ones that must
+ * never hang: a turn resolving its credential at spawn, and the resume pass re-minting a token the API just
+ * refused. That second one is the whole argument for a number being here at all. It reports what it did through
+ * a card that says "coming back" until it returns, so a refresh that never returns is a fleet agent that spins
+ * for the rest of the day. Failing at twenty seconds costs one pass and says so out loud; not failing costs
+ * everything. Generous against a slow network, far inside the resume's own minute. */
+const TOKEN_REQUEST_TIMEOUT_MS = 20_000;
+
 const requestTokens = async (body: Record<string, string>): Promise<TokenSet> => {
     const response = await fetch(TOKEN_URL, {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify(body),
+        // A timeout aborts with a TimeoutError, which is not a TokenRequestError — so it stays a transient
+        // failure everywhere it is read, never the terminal invalid_grant that would revoke a healthy account.
+        signal: AbortSignal.timeout(TOKEN_REQUEST_TIMEOUT_MS),
     });
     if (!response.ok) {
         throw new TokenRequestError(response.status, await response.text().catch(() => ""));

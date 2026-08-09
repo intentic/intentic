@@ -718,13 +718,33 @@ describe("agents registry", () => {
         await registry.begin(turn(), 1_000);
         registry.observe("c1", { kind: "error", code: "claude-token-refused", message: "API Error: 401", autoResume: "scheduled" });
         await registry.finish("c1", 2_000);
-        await registry.abandonResume("c1", 3_000, "The Claude sign-in this turn ran on could not be renewed.");
+        expect(await registry.abandonResume("c1", 3_000, "The Claude sign-in this turn ran on could not be renewed.")).toBe(true);
         expect(registry.get("c1")?.status).toBe("error");
         // And it says which ending this was. The card has been promising to come back for as long as the
         // scheduler kept trying; "error" alone, at the end of that, is the least it could tell the reader.
         expect(registry.get("c1")?.failure).toBe("The Claude sign-in this turn ran on could not be renewed.");
-        // Idempotent, because the scheduler's passes are: a second call has no wait left to close.
-        await registry.abandonResume("c1", 4_000, "The Claude sign-in this turn ran on could not be renewed.");
+        // Idempotent, because the scheduler's passes are: a second call has no wait left to close, which is
+        // still the wait being over — so it answers true and the caller stops carrying the entry.
+        expect(await registry.abandonResume("c1", 4_000, "The Claude sign-in this turn ran on could not be renewed.")).toBe(true);
+        expect(registry.get("c1")?.status).toBe("error");
+    });
+
+    /* THE ABANDON THAT ARRIVES A SECOND TOO EARLY — the race that left the spinning cards this contract exists
+     * for. The scheduler's pass can land between the refusal being recorded and the failed turn finishing its
+     * unwind, and anything written in that window is overwritten by the finish that follows. Saying so is the
+     * whole job: the caller keeps its pending entry and comes back, where dropping it silently meant the card
+     * kept its "coming back" spinner with nothing left anywhere that could ever end it. */
+    it("an abandon that lands while the turn is still unwinding reports that it did not take", async () => {
+        const registry = createAgentsRegistry(memoryStore(), standings(), presences());
+        await registry.init();
+        await registry.begin(turn(), 1_000);
+        registry.observe("c1", { kind: "error", code: "claude-token-refused", message: "API Error: 401", autoResume: "scheduled" });
+        // No finish() yet: the frame has gone out and the generator is still walking its finallys.
+        expect(await registry.abandonResume("c1", 2_000, "The Claude sign-in this turn ran on could not be renewed.")).toBe(false);
+        expect(registry.get("c1")?.status).toBe("running");
+        // The turn settles, and the very next attempt lands.
+        await registry.finish("c1", 3_000);
+        expect(await registry.abandonResume("c1", 4_000, "The Claude sign-in this turn ran on could not be renewed.")).toBe(true);
         expect(registry.get("c1")?.status).toBe("error");
     });
 
@@ -771,7 +791,7 @@ describe("agents registry", () => {
         registry.observe("c1", { kind: "error", code: "claude-token-refused", message: "API Error: 401", autoResume: "scheduled" });
         await registry.finish("c1", 2_000);
         await registry.begin(turn({ prompt: "try again" }), 3_000);
-        await registry.abandonResume("c1", 4_000, "The Claude sign-in this turn ran on could not be renewed.");
+        expect(await registry.abandonResume("c1", 4_000, "The Claude sign-in this turn ran on could not be renewed.")).toBe(false);
         expect(registry.get("c1")?.status).toBe("running");
     });
 

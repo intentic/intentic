@@ -40,11 +40,16 @@ export interface OutageResume {
  * board: the notice was printed and nothing was ever armed to catch what it promised.
  *
  * The two conditions differ only in how long the wait is worth. A CREDENTIAL RENEWAL is due within one scheduler
- * pass (5s), so it probes fast and gives up inside a minute — past that the re-mint failed, and the honest answer
- * is "reconnect the account" rather than a spinner. An OUTAGE resume is due on a backoff that grows to twenty
- * minutes, so it probes slowly and keeps looking for the best part of an hour. Both give up quietly: the resumed
- * run's transcript replays on the next hydrate either way. */
-const RENEWAL_PROBE = { delayMs: 1_000, intervalMs: 3_000, tries: 15 } as const;
+ * pass (5s), so it probes fast and gives up shortly after the daemon does — past that the re-mint failed, and the
+ * honest answer is "reconnect the account" rather than a spinner. An OUTAGE resume is due on a backoff that grows
+ * to twenty minutes, so it probes slowly and keeps looking for the best part of an hour. Both give up quietly:
+ * the resumed run's transcript replays on the next hydrate either way.
+ *
+ * The renewal budget must OUTLAST the daemon's own deadline for that wait (AUTH_RESUME_DEADLINE_MS, one minute),
+ * and the ordering is the whole reason the number is what it is: the daemon keeps re-minting across a network
+ * blip for as long as that minute lasts, and a window that stopped watching first would print "could not be
+ * renewed" over a turn that then came back to nobody. 1s + 25×3s leaves a clear margin past it. */
+const RENEWAL_PROBE = { delayMs: 1_000, intervalMs: 3_000, tries: 25 } as const;
 const OUTAGE_PROBE = { delayMs: 10_000, intervalMs: 15_000, tries: 20 } as const;
 
 /* The conversation, as much of it as a failure may touch. Written out rather than taking the Conversation whole

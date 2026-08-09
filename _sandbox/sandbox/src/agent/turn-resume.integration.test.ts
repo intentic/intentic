@@ -31,13 +31,18 @@ import {
 // worth a parameter rather than a stub each test writes, because the property it pins is the one nobody sees
 // happen: a card holds itself out of the Finished lane from the moment its turn dies, so a pass that decides
 // nothing is coming back and says nothing to the registry leaves a "Resuming…" spinner turning forever.
-const fakeServices = (root: string, abandoned: string[] = []): Services => {
+//
+// `takes` is the registry's answer to each attempt: false means a turn was still unwinding and the abandon was
+// not applied, which the pass has to come back from rather than treat as done (see abandonResume). Read per
+// call so a test can flip it between passes, which is the whole shape of that race.
+const fakeServices = (root: string, abandoned: string[] = [], takes: () => boolean = () => true): Services => {
     const record = fileTranscriptRecord(join(root, "transcripts"));
     return unstubbed<Services>("services", {
         sandboxSettings: fileSandboxSettingsStore(join(root, "settings.json")),
         agents: unstubbed<Services["agents"]>("agents", {
             abandonResume: async (id: string) => {
                 abandoned.push(id);
+                return takes();
             },
         }),
         // No device subscribed, which is what a workspace that has never granted push reports.
@@ -157,8 +162,23 @@ const fakeStore = (stored: { accessToken: string; revokedAt?: number }): Service
         logger: unstubbed<Services["logger"]>("logger", { info: () => {}, warn: () => {}, error: () => {}, debug: () => {} }),
     });
 
-const authServices = (root: string, claudeStore: Services["claudeStore"], abandoned: string[] = []): Services =>
-    unstubbed<Services>("services", { ...fakeServices(root, abandoned), claudeStore });
+/* A store that cannot answer at all — the token endpoint unreachable, the request timing out, the disk refusing
+ * the write. Distinct from the revoked account above and the distinction is the point: that one is an ANSWER
+ * ("this credential is dead"), and this one is the question never being asked. */
+const brokenStore = (): Services["claudeStore"] =>
+    unstubbed<Services["claudeStore"]>("claudeStore", {
+        read: async () => {
+            throw new Error("claude token endpoint unreachable");
+        },
+        write: async () => {},
+        clear: async () => {},
+        list: async () => [],
+        withRefreshLock: async (_id, act) => act(),
+        logger: unstubbed<Services["logger"]>("logger", { info: () => {}, warn: () => {}, error: () => {}, debug: () => {} }),
+    });
+
+const authServices = (root: string, claudeStore: Services["claudeStore"], abandoned: string[] = [], takes: () => boolean = () => true): Services =>
+    unstubbed<Services>("services", { ...fakeServices(root, abandoned, takes), claudeStore });
 
 test("a turn the API refused mid-flight is re-minted and re-run on the next pass", async () => {
     const services = authServices(mkdtempSync(join(tmpdir(), "turn-resume-")), fakeStore({ accessToken: "tok-2" }));
@@ -208,6 +228,65 @@ test("the next turn on the conversation supersedes a pending auth resume", async
     recordAuthFailure({ input: { prompt: "finish the report", conversationId: "auth-4", isolated: true }, account: "acct", refusedToken: "tok-1" });
     clearPendingResume("auth-4");
     await createTurnResumeScheduler(services, fakeWake(prompts)).tick();
+    expect(prompts).toHaveLength(0);
+});
+
+/* THE PROMISE HAS A DEADLINE ON IT, and this is the case that says why it needs one. A re-mint that cannot even
+ * be attempted is not an answer about the credential, so it buys another pass rather than a reconnect notice
+ * the user cannot act on. What it must not buy is silence: the card has been showing a spinner and an elapsed
+ * counter since the turn died, and nothing but this pass can ever end that. Two live sessions sat like that for
+ * hours because one attempt consumed its pending entry and then quietly achieved nothing. */
+test("a re-mint that cannot be attempted keeps its place, then gives the card up once the minute is out", async () => {
+    const abandoned: string[] = [];
+    const services = authServices(mkdtempSync(join(tmpdir(), "turn-resume-")), brokenStore(), abandoned);
+    const prompts: string[] = [];
+    const scheduler = createTurnResumeScheduler(services, fakeWake(prompts));
+    recordAuthFailure(
+        { input: { prompt: "finish the report", conversationId: "auth-5", isolated: true }, account: "acct", refusedToken: "tok-1" },
+        1_000,
+    );
+    await scheduler.tick(1_000);
+    // Neither resumed nor given up on: the store said nothing about the credential, so nothing is decided yet.
+    expect(prompts).toHaveLength(0);
+    expect(abandoned).toEqual([]);
+    // And the entry is still here, which is the whole repair — the pass comes back to it.
+    await scheduler.tick(30_000);
+    expect(abandoned).toEqual([]);
+    // Past the minute the promise is withdrawn rather than left hanging: the card settles into Attention.
+    await scheduler.tick(61_002);
+    expect(abandoned).toEqual(["auth-5"]);
+    // Once, not on every pass for the life of the daemon.
+    await scheduler.tick(90_000);
+    expect(abandoned).toEqual(["auth-5"]);
+    expect(prompts).toHaveLength(0);
+});
+
+/* The narrow race that produced the same spinner: the pass fires within a few seconds of the refusal, which can
+ * be before the failed turn has finished unwinding — and a card written in that window is overwritten by the
+ * finish that follows. The registry says so, and the entry stays until the answer changes. */
+test("an abandon lost to a turn still unwinding is made good on the next pass", async () => {
+    const abandoned: string[] = [];
+    let unwound = false;
+    const services = authServices(
+        mkdtempSync(join(tmpdir(), "turn-resume-")),
+        fakeStore({ accessToken: "tok-1", revokedAt: 1 }),
+        abandoned,
+        () => unwound,
+    );
+    const prompts: string[] = [];
+    const scheduler = createTurnResumeScheduler(services, fakeWake(prompts));
+    recordAuthFailure(
+        { input: { prompt: "finish the report", conversationId: "auth-6", isolated: true }, account: "acct", refusedToken: "tok-1" },
+        1_000,
+    );
+    await scheduler.tick(1_000);
+    expect(abandoned).toEqual(["auth-6"]);
+    unwound = true;
+    await scheduler.tick(2_000);
+    expect(abandoned).toEqual(["auth-6", "auth-6"]);
+    // Landed, so consumed — the pass stops asking.
+    await scheduler.tick(3_000);
+    expect(abandoned).toEqual(["auth-6", "auth-6"]);
     expect(prompts).toHaveLength(0);
 });
 

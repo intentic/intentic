@@ -247,8 +247,14 @@ export interface AgentsRegistry {
      *
      * `reason` is what the card then says. The two callers are the only ones who know which of the two endings
      * this is, and a card that has been promising to come back for an hour owes the reader more than the word
-     * "error" when it stops. */
-    readonly abandonResume: (id: string, now: number, reason: string) => Promise<void>;
+     * "error" when it stops.
+     *
+     * Answers whether the WAIT IS OVER, which is not the same as whether anything was written: a card with no
+     * wait left to end (a fresh turn already cleared it, the entry is gone) is settled and answers true. Only a
+     * turn still unwinding answers false — the caller has to come back, because the failing turn's own finish is
+     * seconds away and will re-open the very spinner this was called to close. Dropping that call is how a
+     * refusal recorded one tick before its turn settled left a card spinning with nothing left to end it. */
+    readonly abandonResume: (id: string, now: number, reason: string) => Promise<boolean>;
     /* Re-derive every live agent's land standing and publish the roster if any of them moved. Called wherever
      * the answer can have changed without this daemon doing it — most of all the roster READ, which is what
      * heals a card after work reached the main tree by a road the daemon never saw (a hand-merge in a
@@ -938,14 +944,21 @@ export const createAgentsRegistry = (store: AgentsStore, standings: LandStanding
         abandonResume: async (id, now, reason) => {
             const entry = entryOf(id);
             const state = runtime.get(id);
-            if (entry === undefined || state?.resuming !== true || state.running) {
-                return;
+            // Still unwinding — its own finish() is about to write how it ended, over anything written here.
+            // The one answer that means "come back", and the reason this returns anything at all.
+            if (state?.running === true) {
+                return false;
+            }
+            // Nothing left to end: a fresh turn's begin already cleared the wait, or the entry is gone.
+            if (entry === undefined || state?.resuming !== true) {
+                return true;
             }
             state.resuming = false;
             const failure = sanitizeFailure(reason);
             replace({ ...entry, status: "error", ...(failure !== undefined ? { failure } : {}), updatedAt: now });
             await persist();
             broadcast();
+            return true;
         },
         recordLanded: async (id, outcome) => {
             const entry = entryOf(id);
