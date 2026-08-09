@@ -54,6 +54,38 @@ const routed = new Map<string, SpokenLine[]>();
 const conversations = new Map<string, SpokenLine[]>();
 const ROUTED_PER_SESSION = 200;
 
+interface LineTotals {
+    lines: number;
+    textCharacters: number;
+}
+
+const storedTotals: LineTotals = { lines: 0, textCharacters: 0 };
+const routedTotals: LineTotals = { lines: 0, textCharacters: 0 };
+const conversationTotals: LineTotals = { lines: 0, textCharacters: 0 };
+
+const textCharacters = (lines: readonly SpokenLine[]): number => lines.reduce((total, line) => total + line.text.length, 0);
+
+const replaceLines = (target: Map<string, SpokenLine[]>, key: string, lines: SpokenLine[], totals: LineTotals): void => {
+    const previous = target.get(key);
+    totals.lines += lines.length - (previous?.length ?? 0);
+    totals.textCharacters += textCharacters(lines) - textCharacters(previous ?? []);
+    target.set(key, lines);
+};
+
+// Cheap ownership counters for the periodic resource series. Character counts are intentionally not encoded
+// byte estimates: they track growth without serializing the cache (which would itself create a large spike).
+export const transcriptSearchMetrics = (): Readonly<Record<string, number>> => ({
+    storedSessions: stored.size,
+    storedLines: storedTotals.lines,
+    storedTextCharacters: storedTotals.textCharacters,
+    routedSessions: routed.size,
+    routedLines: routedTotals.lines,
+    routedTextCharacters: routedTotals.textCharacters,
+    routedConversations: conversations.size,
+    conversationLines: conversationTotals.lines,
+    conversationTextCharacters: conversationTotals.textCharacters,
+});
+
 const spoken = (text: string, speaker: Speaker): SpokenLine[] => {
     const trimmed = text.trim();
     return trimmed.length === 0 ? [] : [{ text: trimmed, speaker }];
@@ -82,9 +114,8 @@ export const recordPrompt = (sessionId: string, prompt: string): void => {
     if (lines.length === 0) {
         return;
     }
-    const held = routed.get(sessionId) ?? [];
-    held.push(...lines);
-    routed.set(sessionId, held.slice(-ROUTED_PER_SESSION));
+    const held = [...(routed.get(sessionId) ?? []), ...lines].slice(-ROUTED_PER_SESSION);
+    replaceLines(routed, sessionId, held, routedTotals);
 };
 
 export const recordConversationPrompt = (conversationId: string, prompt: string): void => {
@@ -92,9 +123,8 @@ export const recordConversationPrompt = (conversationId: string, prompt: string)
     if (lines.length === 0) {
         return;
     }
-    const held = conversations.get(conversationId) ?? [];
-    held.push(...lines);
-    conversations.set(conversationId, held.slice(-ROUTED_PER_SESSION));
+    const held = [...(conversations.get(conversationId) ?? []), ...lines].slice(-ROUTED_PER_SESSION);
+    replaceLines(conversations, conversationId, held, conversationTotals);
 };
 
 // What was said in a restored transcript — the extraction the fleet filter matches on, shared with the cached
@@ -156,7 +186,7 @@ export const readSessionLines = async (dir: string, sessionId: string): Promise<
     const scoped = await getSessionMessages(sessionId, { dir });
     const messages = scoped.length > 0 ? scoped : await getSessionMessages(sessionId);
     const lines = storedLines(messages);
-    stored.set(sessionId, lines);
+    replaceLines(stored, sessionId, lines, storedTotals);
     return live.length === 0 ? lines : [...lines, ...live];
 };
 

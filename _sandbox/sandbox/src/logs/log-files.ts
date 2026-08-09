@@ -6,8 +6,9 @@ import type { LogFileEntry } from "@intentic/sandbox-contract";
 import { resolveWithin } from "../workspace/workspace-files.js";
 
 // Daemon-owned debug logs under historyRoot/logs: terminal pipe-pane captures (terminals/), intentic CLI run
-// logs (intentic-runs/), and the daemon's own pino file (daemon.log). Living under historyRoot keeps them
-// outside the agent's /work mount — the same placement rationale as activity.jsonl.
+// logs (intentic-runs/), the daemon's own pino file (daemon.log), and its resource time series
+// (resource-metrics.jsonl). Living under historyRoot keeps them outside the agent's /work mount — the same
+// placement rationale as activity.jsonl.
 
 // Prune policy: copy-truncate any file past MAX_FILE_BYTES to its newest TAIL_BYTES (safe under the writers'
 // O_APPEND fds — later appends land after the rewritten tail), drop files idle past MAX_AGE_MS, and cap the

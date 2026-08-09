@@ -20,6 +20,7 @@ export interface WorkerScorerOptions {
 }
 
 export interface WorkerScorer extends QueryScorer {
+    metrics(): { readonly live: boolean; readonly pendingRequests: number };
     close(): Promise<void>;
 }
 
@@ -106,6 +107,7 @@ export const workerScorer = (options: WorkerScorerOptions): WorkerScorer => {
     };
 
     return {
+        metrics: () => ({ live: worker !== undefined, pendingRequests: pending.size }),
         async semantic(query, allowed) {
             const response = await send((id) => ({ type: "semantic", id, query, allowed: [...allowed] }));
             return response?.type === "semantic" ? { hits: response.hits, pending: response.pending } : undefined;

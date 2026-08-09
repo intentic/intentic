@@ -47,6 +47,9 @@ every embedded chunk costs ~300ms and the cross-encoder another ~400ms, and neit
 
 Write-ahead logging is what makes that safe: one writer, two readers, no waiting. The dashed edges are
 messages — a change notification out to the indexer, a query out to the scorer and its ranked answer back.
+The resident engine's `metrics()` reports its cached file count, dirty/applied sequence lag, generation, and
+query-worker liveness/backlog without walking the sweep; the sandbox folds those numbers into its durable
+resource time series so a growing host heap can be compared with the state this engine actually retains.
 
 ## Key files
 

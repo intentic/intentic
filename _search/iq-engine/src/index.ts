@@ -74,6 +74,16 @@ export interface ResidentEngineOptions extends EngineOptions {
     readonly onQueryError?: (error: Error) => void;
 }
 
+export interface ResidentEngineMetrics {
+    readonly files: number;
+    readonly generation: number;
+    readonly dirtySequence: number;
+    readonly appliedSequence: number;
+    readonly revalidated: boolean;
+    readonly sweepAgeMs: number | undefined;
+    readonly queryWorker: { readonly live: boolean; readonly pendingRequests: number };
+}
+
 // A long-lived engine for hosts that serve other traffic (the sandbox daemon): one open DB, the sweep cached in
 // memory, and revalidation driven by filesystem-change notifications instead of paid inline by every query.
 export interface ResidentEngine {
@@ -90,6 +100,9 @@ export interface ResidentEngine {
     // Boot warmup: first index pass + the full embedding backlog. Queries may run concurrently throughout, and
     // so may everything else this process serves — none of it runs on this thread.
     warm(): Promise<IndexStatus>;
+    // Cheap resident-state cardinalities for the host's resource time series. These name whether heap growth
+    // tracks the cached workspace sweep or queued semantic work without walking either structure again.
+    metrics(): ResidentEngineMetrics;
     // Stops the worker and releases the SQLite handle.
     close(): Promise<void>;
 }
@@ -343,6 +356,15 @@ export const createResidentEngine = (options: ResidentEngineOptions): ResidentEn
     };
 
     const engine: ResidentEngine = {
+        metrics: () => ({
+            files: entries.length,
+            generation,
+            dirtySequence: dirtySeq,
+            appliedSequence: appliedSeq,
+            revalidated: revalidatedOnce,
+            sweepAgeMs: sweepStart === 0 ? undefined : Date.now() - sweepStart,
+            queryWorker: scorer.metrics(),
+        }),
         async run(request, signal) {
             await firstSweep;
             return dispatch(

@@ -95,16 +95,35 @@ export const agentTranscript = async (deps: AgentTranscriptDeps, agent: Transcri
  * them moved; the window closes the moment anything is recorded. The prompt a LIVE turn is running on is not
  * this function's problem either: the route unions it in from the routed-prompt index (conversationLines),
  * the same way the session search covers its own write-lag window. */
-export const createSpokenLinesReader = (deps: AgentTranscriptDeps): ((agent: TranscriptAgent) => Promise<readonly SpokenLine[]>) => {
+export interface SpokenLinesReaderMetrics {
+    readonly conversations: number;
+    readonly lines: number;
+    readonly textCharacters: number;
+}
+
+export interface SpokenLinesReader {
+    (agent: TranscriptAgent): Promise<readonly SpokenLine[]>;
+    readonly metrics: () => SpokenLinesReaderMetrics;
+}
+
+export const createSpokenLinesReader = (deps: AgentTranscriptDeps): SpokenLinesReader => {
     const cache = new Map<string, { size: number | undefined; lines: readonly SpokenLine[] }>();
-    return async (agent) => {
+    let cachedLines = 0;
+    let cachedTextCharacters = 0;
+    const read = async (agent: TranscriptAgent): Promise<readonly SpokenLine[]> => {
         const size = await deps.record.size(agent.id);
         const held = cache.get(agent.id);
         if (held !== undefined && held.size === size) {
             return held.lines;
         }
         const lines = spokenLinesOf(await agentTranscript(deps, agent));
+        cachedLines += lines.length - (held?.lines.length ?? 0);
+        cachedTextCharacters +=
+            lines.reduce((total, line) => total + line.text.length, 0) - (held?.lines.reduce((total, line) => total + line.text.length, 0) ?? 0);
         cache.set(agent.id, { size, lines });
         return lines;
     };
+    return Object.assign(read, {
+        metrics: (): SpokenLinesReaderMetrics => ({ conversations: cache.size, lines: cachedLines, textCharacters: cachedTextCharacters }),
+    });
 };

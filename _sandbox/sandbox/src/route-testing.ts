@@ -269,6 +269,7 @@ export interface WideSeamOverrides {
     readonly claudeStore?: Partial<Services["claudeStore"]>;
     readonly cliProxy?: Partial<Services["cliProxy"]>;
     readonly sandboxSettings?: Partial<Services["sandboxSettings"]>;
+    readonly iq?: Partial<Services["iq"]>;
 }
 export type ServiceOverrides = Partial<Omit<Services, keyof WideSeamOverrides>> & WideSeamOverrides;
 
@@ -284,7 +285,7 @@ export const testProviderCatalogs: Services["providerCatalogs"] = {
 };
 
 export const services = (overrides: ServiceOverrides = {}): Services => {
-    const { auth, git, usage, claudeStore, cliProxy, sandboxSettings, ...rest } = overrides;
+    const { auth, git, usage, claudeStore, cliProxy, sandboxSettings, iq, ...rest } = overrides;
     /* A real registry over a memory store (cheap, and /events' roster subscription needs the real seam);
      * worktree git mechanics are stubbed — the worktree suites cover them against real git. Neither derived
      * half is computed here: these suites drive the routes, and where a card's work stands — plus how much of
@@ -539,7 +540,16 @@ export const services = (overrides: ServiceOverrides = {}): Services => {
         files: fakeFiles(),
         workspaceTree: async () => ({ root: WORKSPACE_ROOT, tree: [], hidden: 0 }),
         // Inert resident search — no index, no rg. The search route test overrides `run` with a canned outcome.
-        iq: {
+        iq: unstubbed<Services["iq"]>("iq", {
+            metrics: () => ({
+                files: 0,
+                generation: 0,
+                dirtySequence: 0,
+                appliedSequence: 0,
+                revalidated: true,
+                sweepAgeMs: 0,
+                queryWorker: { live: false, pendingRequests: 0 },
+            }),
             run: async () => ({
                 result: { mode: "q", total: 0, files: 0, shown: 0, groups: [], freshness: { state: "fresh" as const }, truncated: false },
                 text: "",
@@ -554,7 +564,8 @@ export const services = (overrides: ServiceOverrides = {}): Services => {
             markDirty: () => {},
             warm: async () => ({ files: 0, symbols: 0, chunks: 0, embedded: 0, generation: 0, freshness: { state: "fresh" as const, ageMs: 0 } }),
             close: async () => {},
-        },
+            ...iq,
+        }),
         sessions: {
             list: async () => [],
             read: async () => [],

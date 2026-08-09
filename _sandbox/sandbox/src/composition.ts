@@ -145,7 +145,7 @@ import {
     type SessionSummary,
     workspaceSessionExists,
 } from "./sessions/sessions.js";
-import type { SpokenLine } from "./sessions/transcript-search.js";
+import { transcriptSearchMetrics, type SpokenLine } from "./sessions/transcript-search.js";
 import { fileThreadSessionsStore, type ThreadSessionsStore } from "./sessions/thread-sessions.js";
 import {
     agentTranscript,
@@ -210,6 +210,9 @@ export interface Services {
     // HTTP requests, event fan-out) measures itself through this, so a "the panel felt slow" report has a log
     // line naming the op instead of a stall with no attribution — see platform/perf.ts.
     readonly perf: PerfTracker;
+    // Cardinalities of the resident structures whose growth should explain heap growth in the durable resource
+    // series. Reading this must stay allocation-light: the sampler calls it every minute on the daemon loop.
+    readonly resourceOwners: () => Readonly<Record<string, unknown>>;
     // Where the boot chain is. main.ts declares its steps and drives it; app.ts gates every data route on its
     // `converged` promise, and /events streams its progress so the browser can WAIT VISIBLY instead of firing
     // a workspace's worth of reads at a daemon that will only park them (see platform/boot.ts).
@@ -748,6 +751,19 @@ export const createServices = (config: Config, logger: Logger): Services => {
         sessionIdOf: agents.sessionIdOf,
         readClaudeSession: readWorkspaceSession,
     };
+    const transcriptLines = createSpokenLinesReader(transcriptDeps);
+    const iq = createResidentEngine({
+        root: workspace.root,
+        indexDir: statePath(workspace.root, ".intentic/cache/", "iq"),
+        // An index pass that fails once warm() has settled has no caller to reject — without this the index
+        // would stop tracking disk and search would just quietly get older.
+        onIndexError: (error) => logger.warn({ err: error }, "iq index pass failed — search results may be stale"),
+        // The query worker owns the semantic scan and the cross-encoder. Losing it does not fail a search,
+        // it silently narrows one to keyword matching — so it has to be visible here.
+        onQueryError: (error) => logger.warn({ err: error }, "iq query worker failed — search fell back to keyword matching"),
+        ...(config.iqModelDir !== "" ? { modelDir: config.iqModelDir } : {}),
+        ...(config.iqRgPath !== "" ? { rgPath: config.iqRgPath } : {}),
+    });
 
     /* The backend supervisor enumerates extensions through the finished services object (the same
      * ExtensionHost seam every other consumer uses), which does not exist until the literal below is built —
@@ -757,6 +773,15 @@ export const createServices = (config: Config, logger: Logger): Services => {
         config,
         logger,
         perf,
+        resourceOwners: () => {
+            const operations = perf.ranked();
+            return {
+                transcriptSearch: transcriptSearchMetrics(),
+                conversationTranscriptSearch: transcriptLines.metrics(),
+                iq: iq.metrics(),
+                perf: { operations: operations.length, spans: operations.reduce((total, operation) => total + operation.count, 0) },
+            };
+        },
         // Born converged — main() declares the chain and closes the gate behind it, so a services object built
         // for a test or the host-internal preview has nothing to wait for.
         boot: createBootTracker(logger),
@@ -920,18 +945,7 @@ export const createServices = (config: Config, logger: Logger): Services => {
         },
         workspaceTree: walkWorkspaceTree,
         workspaceChildren: listWorkspaceChildren,
-        iq: createResidentEngine({
-            root: workspace.root,
-            indexDir: statePath(workspace.root, ".intentic/cache/", "iq"),
-            // An index pass that fails once warm() has settled has no caller to reject — without this the index
-            // would stop tracking disk and search would just quietly get older.
-            onIndexError: (error) => logger.warn({ err: error }, "iq index pass failed — search results may be stale"),
-            // The query worker owns the semantic scan and the cross-encoder. Losing it does not fail a search,
-            // it silently narrows one to keyword matching — so it has to be visible here.
-            onQueryError: (error) => logger.warn({ err: error }, "iq query worker failed — search fell back to keyword matching"),
-            ...(config.iqModelDir !== "" ? { modelDir: config.iqModelDir } : {}),
-            ...(config.iqRgPath !== "" ? { rgPath: config.iqRgPath } : {}),
-        }),
+        iq,
         sessions: {
             list: listWorkspaceSessions,
             read: readWorkspaceSession,
@@ -948,7 +962,7 @@ export const createServices = (config: Config, logger: Logger): Services => {
             // source conversation's record, and no provider knows this conversation exists yet.
             fork: (agent, source, keep) => transcriptDeps.record.fork(agent.id, source, keep),
             append: (agent, messages) => transcriptDeps.record.append(agent.id, messages),
-            lines: createSpokenLinesReader(transcriptDeps),
+            lines: transcriptLines,
             count: (agent) => transcriptDeps.record.count(agent.id),
             truncate: (agent, keep) => transcriptDeps.record.truncate(agent.id, keep),
         },

@@ -68,6 +68,10 @@ export class TurnRun {
         return this.frames;
     }
 
+    metrics(): { readonly frames: number; readonly waiters: number } {
+        return { frames: this.frames.length, waiters: this.waiters.length };
+    }
+
     push(event: AgentEvent): void {
         this.frames.push(event);
         this.wake();
@@ -269,3 +273,19 @@ export function turnRunOf(conversationId: string): TurnRun | undefined {
     sweep();
     return runs.get(conversationId);
 }
+
+export const turnRunMetrics = (): Readonly<Record<string, number>> => {
+    sweep();
+    let live = 0;
+    let retained = 0;
+    let frames = 0;
+    let waiters = 0;
+    for (const run of runs.values()) {
+        live += run.done ? 0 : 1;
+        retained += run.done ? 1 : 0;
+        const held = run.metrics();
+        frames += held.frames;
+        waiters += held.waiters;
+    }
+    return { runs: runs.size, live, retained, frames, waiters };
+};

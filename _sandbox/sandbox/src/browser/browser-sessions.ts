@@ -324,6 +324,25 @@ export const listBrowserSessions = (): BrowserSession[] => {
     return [...sessions.values()].map(summarize);
 };
 
+export const browserSessionMetrics = (): Readonly<Record<string, number>> => {
+    prune(Date.now());
+    let running = 0;
+    let finished = 0;
+    let retainedPages = 0;
+    let openPages = 0;
+    let attaching = 0;
+    for (const session of sessions.values()) {
+        running += session.finishedAt === undefined ? 1 : 0;
+        finished += session.finishedAt === undefined ? 0 : 1;
+        retainedPages += session.pages.size;
+        for (const page of session.pages.values()) {
+            openPages += page.closed ? 0 : 1;
+        }
+        attaching += session.attaching === undefined ? 0 : 1;
+    }
+    return { sessions: sessions.size, running, finished, retainedPages, openPages, attaching };
+};
+
 // Close one session's browser — the kill route's answer for a `browser-*` name. Ends the agent's browsing for
 // that turn, exactly as killing an `agent-*` tmux session ends its shell; the tool call in flight fails and the
 // agent is told so, which is the honest outcome of the owner pulling the plug.

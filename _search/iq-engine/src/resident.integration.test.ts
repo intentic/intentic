@@ -68,4 +68,6 @@ test("warm reports index status after the initial refresh", async () => {
     const status = await engine.warm();
     expect(status.files).toBeGreaterThan(0);
     expect(status.symbols).toBeGreaterThan(0);
+    expect(engine.metrics()).toMatchObject({ revalidated: true, queryWorker: { live: true, pendingRequests: 0 } });
+    expect(engine.metrics().files).toBeGreaterThan(0);
 });

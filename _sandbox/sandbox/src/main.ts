@@ -53,9 +53,11 @@ import type { BootTracker } from "./platform/boot.js";
 import { claimBootMarker } from "./platform/boot-marker.js";
 import { claimContainerHome } from "./platform/home-owner.js";
 import { startLoopWatchdog } from "./platform/loop-watchdog.js";
+import { startResourceMetrics } from "./platform/resource-metrics.js";
 import { DAEMON_OWNER, startLeftoverSweep } from "./platform/leftovers.js";
 import { startWorkloadPriorityGovernor } from "./platform/workload-priority.js";
-import { turnRunOf } from "./agent/turn-runs.js";
+import { turnRunMetrics, turnRunOf } from "./agent/turn-runs.js";
+import { browserSessionMetrics } from "./browser/browser-sessions.js";
 import { readLocalCertificate, startLocalCertificateRenewal } from "./platform/local-cert.js";
 import { restoreAuthorizedKeys, seedPairing } from "./platform/sync.js";
 import { seedSetupHost } from "./hosts/host-seed.js";
@@ -167,11 +169,16 @@ const main = async (): Promise<void> => {
     }
     // The stall detector: any future freeze — a synchronous path in here, or the whole VM thrashing under a
     // fleet of builds — leaves a log line with the lag and the machine's pressure numbers attributing it.
-    startLoopWatchdog(logger);
+    const loopWatchdog = startLoopWatchdog(logger);
     // Provider SDKs spawn their CLIs internally, outside the polite Bash/git wrappers. Keep every direct child
     // below the control plane so a newly introduced workload cannot compete equally with /events heartbeats.
     const workloadPriority = startWorkloadPriorityGovernor();
     const services = createServices(config, logger);
+    const resourceMetrics = startResourceMetrics({
+        historyRoot: config.historyRoot,
+        logger,
+        owners: () => ({ ...services.resourceOwners(), turnRuns: turnRunMetrics(), browserSessions: browserSessionMetrics() }),
+    });
     /* Point the scaffold's git seam at the perf tracker, so every git this daemon runs — the Changes scan's
      * hundreds of reads, a land's checkout, the history snapshots — is attributable. Git is where the reported
      * slowness lives and it was the one subsystem with no measurement at all.
@@ -769,6 +776,9 @@ const main = async (): Promise<void> => {
 
     const shutdown = (): void => {
         logger.info("shutting down intentic sandbox daemon…");
+        resourceMetrics.stop();
+        loopWatchdog.stop();
+        services.perf.stop();
         clearInterval(logsSweep);
         clearInterval(sessionSweep);
         leftovers.stop();
