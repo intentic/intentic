@@ -31,6 +31,10 @@ export interface CapabilityScope {
     readonly total: number;
     /** How many of them already have a connection. */
     readonly connected: number;
+    /** Spells the number out, for a slice whose total is not a count of cards — see the Connected row, which
+     *  counts CONNECTIONS so its number matches the list it opens. Without this the tooltip would derive a
+     *  sentence from two figures that no longer mean what it assumes. */
+    readonly meta?: string;
 }
 </script>
 
@@ -51,7 +55,7 @@ const groups = computed<NavGroup<CapabilityScope>[]>(() => [{ key: `categories`,
 
 const tone = (scope: CapabilityScope): string => (scope.connected > 0 ? `text-success` : ``);
 const meta = (scope: CapabilityScope): string =>
-    scope.connected === 0 ? `${scope.total} capabilities` : `${scope.total} capabilities · ${scope.connected} connected`;
+    scope.meta ?? (scope.connected === 0 ? `${scope.total} capabilities` : `${scope.total} capabilities · ${scope.connected} connected`);
 
 const { mobile } = useDevice();
 

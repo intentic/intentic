@@ -22,16 +22,18 @@ import {
     Segmented,
     SplitView,
     StatusBadge,
+    type StatusVariant,
 } from "@intentic/ui";
 import { type CapabilityField, contributionDiscriminator } from "@intentic/extension-manifest";
 import { isShaPinned, OFFICIAL_REGISTRY_URL, type RegistryEntry } from "@intentic/registry";
-import { type CapabilityKind, type ForticlientConnection, isForticlientCiphertext } from "@intentic/sandbox-contract";
+import { type CapabilityKind, type CapabilityState, type ForticlientConnection, isForticlientCiphertext } from "@intentic/sandbox-contract";
 import Button from "primevue/button";
 import ToggleSwitch from "primevue/toggleswitch";
 import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import BrowserProfileDialog from "../components/BrowserProfileDialog.vue";
 import HostConnectDialog from "../components/HostConnectDialog.vue";
+import CapabilityConnections, { type CapabilityConnection, type CapabilityConnectionGroup } from "../components/CapabilityConnections.vue";
 import CapabilityEffects from "../components/CapabilityEffects.vue";
 import CapabilityRail, { type CapabilityScope } from "../components/CapabilityRail.vue";
 import CredentialGuide from "../components/CredentialGuide.vue";
@@ -65,7 +67,14 @@ import { importForticlient, useVpn } from "../composables/sandbox/useVpn";
  * the grid, per <FilterBar>'s rule that the bar spans the list under it). Both live in the URL, so "the SQL cards"
  * and "everything I have connected" are links somebody can be sent. Picking a card is not a third filter but a
  * navigation: the config form takes the grid's place and the rail stays put, so abandoning a half-filled form for
- * another category is one click rather than a trip back out through the catalog. */
+ * another category is one click rather than a trip back out through the catalog.
+ *
+ * ONE SLICE IS NOT A SHORTER CATALOG. Connected asks a different question — not "which of these could I add" but
+ * "what have I got" — and a grid of cards answers it wrongly at every step: three SSH boxes collapse into one
+ * tile, the names their owner typed are nowhere, and a connection that quietly needs signing in again looks
+ * exactly like one that works. So that slice draws <CapabilityConnections> instead: the instances themselves,
+ * named, addressed and stated. It is still the same page — same rail, same filter, same click into the same card
+ * — it just stops pretending the reader is shopping. */
 
 const NAME_RE = /^[a-zA-Z0-9][a-zA-Z0-9_-]*$/;
 const URL_RE = /^https?:\/\/.+/i;
@@ -173,14 +182,22 @@ const suggestName = (entry: CapabilityCatalogEntry): string => {
 const nameCollision = computed(() => selectedInstances.value.some((instance) => instance.id === name.value.trim()));
 
 /* --- what the rail slices the catalog by, and what the grid then shows ---
- * Every card with the two facts both panes read off it. Computed once here rather than per tile per render: the
+ * Every card with the facts all three panes read off it. Computed once here rather than per tile per render: the
  * grid used to call instancesOf() three times per card while drawing it, which is a scan of every capability in
- * the sandbox per call. */
+ * the sandbox per call. The INSTANCES ride along rather than just their count, because the Connected slice lists
+ * them one by one and re-deriving them there would be that same scan a fourth time. */
 const cards = computed(() =>
-    allCards.value.map((entry) => ({ entry, connected: instancesOf(entry).length, recommendation: recommendationFor(entry.id) })),
+    allCards.value.map((entry) => {
+        const instances = instancesOf(entry);
+        return { entry, instances, connected: instances.length, recommendation: recommendationFor(entry.id) };
+    }),
 );
 const connectedCards = computed(() => cards.value.filter((card) => card.connected > 0));
 const recommendedCards = computed(() => cards.value.filter((card) => card.recommendation !== undefined));
+// Connections, not cards: the Connected row's number is what the list it opens is long, and one card can hold
+// several (two Reddit accounts, three SSH boxes). Kept here beside the cards it counts; the rows themselves are
+// built further down, where the per-kind facts they carry are in scope.
+const connectionCount = computed(() => cards.value.reduce((total, card) => total + card.connected, 0));
 
 // The two slices that cut across every category. Constants because both the URL and the branches below name them.
 const CONNECTED = `connected`;
@@ -215,7 +232,18 @@ const allScope = computed<CapabilityScope>(() => scopeOf(``, `All capabilities`,
 // page that turns out to be empty, and "Recommended 0" reads as the workspace scan having failed.
 const pinnedScopes = computed<CapabilityScope[]>(() => [
     allScope.value,
-    ...(connectedCards.value.length === 0 ? [] : [scopeOf(CONNECTED, `Connected`, `check-circle`, connectedCards.value)]),
+    ...(connectedCards.value.length === 0
+        ? []
+        : [
+              {
+                  key: CONNECTED,
+                  label: `Connected`,
+                  icon: `check-circle` as IconName,
+                  total: connectionCount.value,
+                  connected: connectionCount.value,
+                  meta: `${connectionCount.value} ${connectionCount.value === 1 ? `connection` : `connections`} across ${connectedCards.value.length} ${connectedCards.value.length === 1 ? `capability` : `capabilities`}`,
+              },
+          ]),
     ...(recommendedCards.value.length === 0 ? [] : [scopeOf(RECOMMENDED, `Recommended`, `sparkles`, recommendedCards.value)]),
 ]);
 // A category with no cards is not a row: several of them are empty until the extension that fills them is enabled.
@@ -247,6 +275,8 @@ const activeScope = computed<CapabilityScope>(
 const railScope = computed<string>({ get: () => activeScope.value.key, set: (value) => (scope.value = value) });
 const inCategory = computed(() => categoryScopes.value.some((entry) => entry.key === activeScope.value.key));
 
+// The cards a slice covers. Connected covers them too — it just draws them as the CONNECTIONS inside them
+// rather than as tiles (see `connectionGroups`), so nothing downstream of here renders in that slice.
 const inScope = computed(() => {
     if (activeScope.value.key === ``) {
         return cards.value;
@@ -288,7 +318,7 @@ const groupedCatalog = computed(() =>
 // heading the grid no longer repeats has gone.
 const description = computed(() => {
     if (activeScope.value.key === CONNECTED) {
-        return `What your agent can already reach. Open one to add another connection of the same kind, or to take it away.`;
+        return `Every connection your agent can reach right now. Open one to change it, to add another of the same kind, or to take it away.`;
     }
     if (activeScope.value.key === RECOMMENDED) {
         return `Suggested from what is checked out in your workspace — each one is something your own code already asks for.`;
@@ -626,6 +656,113 @@ const vpnFacts = (id: string): string | undefined => {
         .join(` · `);
 };
 
+/* --- THE CONNECTED SLICE: an inventory, not a catalog with the unconnected cards taken out ---
+ *
+ * See <CapabilityConnections> for why this is a list of INSTANCES. What lives here rather than in the component
+ * is everything that needs the page's own sources — the host roster, the vpn links, the daemon's pending detail
+ * — so the component stays a renderer of rows somebody else decided the meaning of.
+ *
+ * Placed below the per-kind helpers it reads (hostFor, awaitingLogin, vpnFacts) rather than beside the cards it
+ * derives from: `connectionCount` is up there because the rail needs only the number. */
+
+// What identifies a connection to the person who made it, in the order they would say it. `provider`/`platform`
+// are deliberately absent — they are the card, which the row already names, so printing them would spend the
+// line on "github · github". Secrets never reach here: the daemon strips them from the config it echoes back.
+const CONNECTION_FACTS = [`host`, `server`, `url`, `account`, `org`, `guild`, `database`, `user`, `path`] as const;
+
+// Two facts at most. A row is a line, and the third fact is the one that pushes the state badge off the end of it.
+const connectionFacts = (instance: CapabilitySummary): string =>
+    CONNECTION_FACTS.map((key) => instance.config[key])
+        .filter((value): value is string => typeof value === `string` && value.trim() !== ``)
+        .slice(0, 2)
+        .join(` · `);
+
+/* THE STATE IN THE READER'S WORDS, and the order the rows sort in. "active/pending/error/inactive" is the
+ * daemon's vocabulary and it is the wrong one here: `pending` is the state of a thing whose setup was never
+ * finished, and the reader's question is not what to call it but whether they still have something to do. Rank
+ * is the same judgement as the wording — what is unfinished or broken sorts above what is merely working, so a
+ * list that mostly works still opens on the part that doesn't. */
+const CONNECTION_STATES: Readonly<Record<CapabilityState, { label: string; tone: StatusVariant; rank: number }>> = {
+    error: { label: `error`, tone: `danger`, rank: 0 },
+    pending: { label: `needs setup`, tone: `warning`, rank: 1 },
+    inactive: { label: `off`, tone: `neutral`, rank: 2 },
+    active: { label: `ready`, tone: `success`, rank: 3 },
+};
+
+// Two kinds know something truer about themselves than their status field does, and both are the difference
+// between "you have something to do" and "it is simply asleep" — which is exactly what this column is for.
+const connectionState = (entry: CapabilityCatalogEntry, instance: CapabilitySummary): { label: string; tone: StatusVariant; rank: number } => {
+    if (entry.kind === `browser` && awaitingLogin(instance)) {
+        return { label: `needs sign-in`, tone: `warning`, rank: 1 };
+    }
+    if (entry.kind === `host` && instance.status.state === `active`) {
+        return hostFor(instance.id)?.online === true ? { label: `online`, tone: `success`, rank: 3 } : { label: `offline`, tone: `neutral`, rank: 2 };
+    }
+    return CONNECTION_STATES[instance.status.state];
+};
+
+/* One row per live connection, carrying its category so the list groups the way the catalog does and a haystack
+ * so the filter over it searches the things a row actually shows. That haystack is the reason the bar keeps
+ * working when the slice changes under it: in the catalog "acme" matches nothing, and here it has to find the
+ * box called ops-box at ops.acme.dev — the name its owner typed and the address they typed are the two things
+ * they would search for, and neither is in any card's prose. */
+type ConnectionRow = CapabilityConnection & { readonly category: CapabilityCategory; readonly rank: number; readonly haystack: string };
+
+const connections = computed<ConnectionRow[]>(() =>
+    cards.value.flatMap((card) =>
+        card.instances.map((instance) => {
+            const state = connectionState(card.entry, instance);
+            const facts = (card.entry.kind === `vpn` ? vpnFacts(instance.id) : undefined) ?? connectionFacts(instance);
+            // Only where something is actually outstanding: the daemon writes these for a reader ("Not
+            // connected", "Needs a sandbox rebuild"), and echoing one beside a working connection would turn a
+            // status into noise.
+            const note = state.rank <= 1 ? instance.status.detail : undefined;
+            // A connection nobody named took the card's id (suggestName), and "docker" written under a Docker
+            // logo with "Docker" beneath it is the same word three times. Where the name IS the card, the card
+            // is the name — and the line under it is free for the facts that actually differ.
+            const named = instance.id !== card.entry.id;
+            return {
+                title: named ? instance.id : card.entry.name,
+                card: named ? card.entry.name : undefined,
+                cardId: card.entry.id,
+                id: instance.id,
+                logo: card.entry.logo,
+                icon: entryIcon(card.entry),
+                detail: facts,
+                state: state.label,
+                tone: state.tone,
+                note,
+                category: card.entry.category,
+                rank: state.rank,
+                haystack: `${instance.id} ${card.entry.name} ${card.entry.kind} ${facts}`.toLowerCase(),
+            };
+        }),
+    ),
+);
+
+const visibleConnections = computed<ConnectionRow[]>(() => {
+    const needle = search.value.trim().toLowerCase();
+    return needle === `` ? connections.value : connections.value.filter((row) => row.haystack.includes(needle));
+});
+
+// The same headings as the grid, so the rail points at the same ten either way. Sorted inside a group rather
+// than across the whole list: what needs attention should rise past the rows it sits WITH, not jump the
+// category it belongs to.
+const connectionGroups = computed<CapabilityConnectionGroup[]>(() =>
+    CAPABILITY_CATEGORIES.flatMap((category) => {
+        const rows = visibleConnections.value
+            .filter((row) => row.category === category.id)
+            .toSorted((left, right) => left.rank - right.rank || left.id.localeCompare(right.id));
+        return rows.length === 0 ? [] : [{ label: category.label, rows }];
+    }),
+);
+
+// Which of the two the grid pane is showing, and how much of it — the filter bar's count follows whichever list
+// is under it, because a number that counts something else is worse than no number.
+const showingConnections = computed(() => activeScope.value.key === CONNECTED);
+const visibleCount = computed(() => (showingConnections.value ? visibleConnections.value.length : visibleCards.value.length));
+const nothingMatches = computed(() => (showingConnections.value ? connectionGroups.value.length === 0 : groupedCatalog.value.length === 0));
+
 // --- FortiClient import (vpn card only) ---
 // A user with an exported FortiClient config drops the file in and picks a connection instead of re-keying its
 // host, port and protocol per tunnel. The file is read HERE and only its text is posted: the daemon cannot
@@ -853,8 +990,11 @@ watch(
 // Picking a card / going back is a navigation now — the URL is the source of truth for what's shown. The query
 // rides along both ways, so going back lands on the slice the card was picked out of rather than on the whole
 // catalog with the filter thrown away.
+const openCard = (card: string): void => {
+    void router.push({ name: `capabilities`, params: { card }, query: route.query });
+};
 const pick = (entry: CapabilityCatalogEntry): void => {
-    void router.push({ name: `capabilities`, params: { card: entry.id }, query: route.query });
+    openCard(entry.id);
 };
 
 const back = (): void => {
@@ -1616,32 +1756,43 @@ const submitLabel = computed(() =>
 
                 <!-- The bar sits on the grid it narrows, spanning it — one left edge and one right edge down the
                      pane. Picking the slice is the rail's own job and is not repeated here. -->
-                <FilterBar v-model="search" placeholder="Filter by name, what it does, kind…" :count="visibleCards.length" />
+                <FilterBar
+                    v-model="search"
+                    :placeholder="showingConnections ? `Filter by name, host, kind…` : `Filter by name, what it does, kind…`"
+                    :count="visibleCount"
+                />
 
                 <!-- The tiles keep their distance from the scrollbar: `pr-2` is the gap, and the reserved gutter is
                      what stops the whole grid sliding sideways the moment a filter takes the last row away. -->
                 <div class="scrollbar-thin scrollbar-stable @container flex min-h-0 flex-1 flex-col gap-6 overflow-y-auto pr-2">
+                    <!-- THE ONE SLICE THAT IS NOT A SHORTER CATALOG. Everywhere else the question is "what could
+                         I add", and a grid of tiles answers it; here it is "what have I got", and the answer is
+                         the connections themselves — named, with the host or account that tells them apart and
+                         the state they are actually in. See <CapabilityConnections>. -->
+                    <CapabilityConnections v-if="showingConnections" :groups="connectionGroups" @open="openCard" />
+
                     <!-- HEADINGS ONLY WHERE THE GRID SPANS MORE THAN ONE CATEGORY. Under a single category the
                          rail has already said which one and the page's own description carries its sentence, so a
                          heading repeating both above the only group in view is a line of chrome. -->
-                    <div v-for="group in groupedCatalog" :key="group.label" class="flex flex-col gap-2">
-                        <!-- The label alone. The category's sentence is the PAGE's description the moment the rail
+                    <template v-else>
+                        <div v-for="group in groupedCatalog" :key="group.label" class="flex flex-col gap-2">
+                            <!-- The label alone. The category's sentence is the PAGE's description the moment the rail
                              points at it, so printing all ten of them down the full catalog spends a line each on
                              text nobody is reading yet — and the catalog is the view that has no room to spare. -->
-                        <div v-if="!inCategory" :class="cmp.sectionLabel()">{{ group.label }}</div>
-                        <!-- Container queries, not viewport ones: the grid is what is left of the page after the
+                            <div v-if="!inCategory" :class="cmp.sectionLabel()">{{ group.label }}</div>
+                            <!-- Container queries, not viewport ones: the grid is what is left of the page after the
                              index column takes its 16rem, so how many tiles fit is a fact about this pane. -->
-                        <div class="grid grid-cols-1 gap-2 @xl:grid-cols-2 @3xl:grid-cols-3 @5xl:grid-cols-4">
-                            <button
-                                v-for="card in group.entries"
-                                :key="card.entry.id"
-                                type="button"
-                                class="flex h-full w-full items-start gap-2 rounded-lg border border-line bg-card px-2.5 py-2 text-left transition-colors hover:border-line-strong hover:bg-overlay"
-                                @click="pick(card.entry)"
-                            >
-                                <BrandMark :size="24" :name="card.entry.name" :logo="card.entry.logo" :icon="entryIcon(card.entry)" />
-                                <div class="min-w-0">
-                                    <!-- WRAPPING, because the tile is a third of a pane rather than a third of the
+                            <div class="grid grid-cols-1 gap-2 @xl:grid-cols-2 @3xl:grid-cols-3 @5xl:grid-cols-4">
+                                <button
+                                    v-for="card in group.entries"
+                                    :key="card.entry.id"
+                                    type="button"
+                                    class="flex h-full w-full items-start gap-2 rounded-lg border border-line bg-card px-2.5 py-2 text-left transition-colors hover:border-line-strong hover:bg-overlay"
+                                    @click="pick(card.entry)"
+                                >
+                                    <BrandMark :size="24" :name="card.entry.name" :logo="card.entry.logo" :icon="entryIcon(card.entry)" />
+                                    <div class="min-w-0">
+                                        <!-- WRAPPING, because the tile is a third of a pane rather than a third of the
                                          page now. Without it the badges hold their line and squeeze the name into
                                          two, which puts the one word a scanner is looking for last.
 
@@ -1649,56 +1800,64 @@ const submitLabel = computed(() =>
                                          a whole line of a tile that is now two lines tall, and they were the same
                                          words on every card carrying them — a strip of green ticks reads as a
                                          column of state faster than "1 connected" repeated down the grid. -->
-                                    <div class="flex flex-wrap items-center gap-x-1.5">
-                                        <span class="text-xs font-semibold text-content">{{ card.entry.name }}</span>
-                                        <!-- The count only once there is more than one to count: a lone tick already
+                                        <div class="flex flex-wrap items-center gap-x-1.5">
+                                            <span class="text-xs font-semibold text-content">{{ card.entry.name }}</span>
+                                            <!-- The count only once there is more than one to count: a lone tick already
                                              means connected, and "1" beside it is a number nobody needs. -->
-                                        <span
-                                            v-if="card.connected > 0"
-                                            v-tooltip.top="`${card.connected} connected`"
-                                            class="inline-flex items-center gap-0.5 text-2xs text-success"
-                                            :aria-label="`${card.connected} connected`"
-                                        >
-                                            <Icon name="check-circle" />
-                                            <template v-if="card.connected > 1">{{ card.connected }}</template>
-                                        </span>
-                                        <span v-if="card.recommendation" class="text-2xs text-info" aria-label="Recommended">
-                                            <Icon name="sparkles" />
-                                        </span>
-                                        <span
-                                            v-if="card.entry.requires?.includes('devops') && !hasCapability('devops')"
-                                            v-tooltip.top="`Requires DevOps`"
-                                            class="text-2xs text-muted"
-                                            aria-label="Requires DevOps"
-                                        >
-                                            <Icon name="lock" />
-                                        </span>
-                                        <CapabilityEffects :effects="badgeEffects(card.entry)" :compact="true" />
-                                    </div>
-                                    <!-- CLAMPED, not merely short. Card copy is authored to one line, but a card
+                                            <span
+                                                v-if="card.connected > 0"
+                                                v-tooltip.top="`${card.connected} connected`"
+                                                class="inline-flex items-center gap-0.5 text-2xs text-success"
+                                                :aria-label="`${card.connected} connected`"
+                                            >
+                                                <Icon name="check-circle" />
+                                                <template v-if="card.connected > 1">{{ card.connected }}</template>
+                                            </span>
+                                            <span v-if="card.recommendation" class="text-2xs text-info" aria-label="Recommended">
+                                                <Icon name="sparkles" />
+                                            </span>
+                                            <span
+                                                v-if="card.entry.requires?.includes('devops') && !hasCapability('devops')"
+                                                v-tooltip.top="`Requires DevOps`"
+                                                class="text-2xs text-muted"
+                                                aria-label="Requires DevOps"
+                                            >
+                                                <Icon name="lock" />
+                                            </span>
+                                            <CapabilityEffects :effects="badgeEffects(card.entry)" :compact="true" />
+                                        </div>
+                                        <!-- CLAMPED, not merely short. Card copy is authored to one line, but a card
                                          derives from any enabled extension's manifest — including one nobody here
                                          wrote — and a row is as tall as its tallest tile, so one long sentence
                                          used to inflate the two cards beside it. -->
-                                    <div class="line-clamp-2 text-2xs text-muted">{{ card.entry.description }}</div>
-                                    <!-- Derived from what is checked out in the workspace, so the claim comes
+                                        <div class="line-clamp-2 text-2xs text-muted">{{ card.entry.description }}</div>
+                                        <!-- Derived from what is checked out in the workspace, so the claim comes
                                          with the thing that was read to make it rather than being asserted. The
                                          two lines this costs are spent only on the handful of cards the scan
                                          actually vouched for — a claim nobody can check is one nobody should act
                                          on, which is not a thing to hide behind a hover. -->
-                                    <div v-if="card.recommendation" class="text-2xs text-info">{{ card.recommendation.reason }}</div>
-                                    <div v-if="card.recommendation" class="truncate font-mono text-2xs text-subtle">
-                                        {{ card.recommendation.evidence }}
+                                        <div v-if="card.recommendation" class="text-2xs text-info">{{ card.recommendation.reason }}</div>
+                                        <div v-if="card.recommendation" class="truncate font-mono text-2xs text-subtle">
+                                            {{ card.recommendation.evidence }}
+                                        </div>
                                     </div>
-                                </div>
-                            </button>
+                                </button>
+                            </div>
                         </div>
-                    </div>
+                    </template>
 
-                    <!-- Only ever reachable through the filter: every slice the rail offers has cards in it. So it
-                         answers the one question a reader has here, which is what they typed. -->
-                    <div v-if="groupedCatalog.length === 0" :class="cmp.emptyState()">
+                    <!-- Only ever reachable through the filter: every slice the rail offers has something in it.
+                         So it answers the one question a reader has here, which is what they typed — and it
+                         answers it about the list they are actually looking at, which under Connected is their
+                         own connections and not the catalog. -->
+                    <div v-if="nothingMatches" :class="cmp.emptyState()">
                         <p class="text-sm">Nothing in {{ activeScope.label }} matches “{{ search.trim() }}”.</p>
-                        <p class="mt-1 text-xs text-muted">Capabilities are searched by name, by what they do, and by kind — “mcp”, “ssh”, “sql”.</p>
+                        <p v-if="showingConnections" class="mt-1 text-xs text-muted">
+                            Connections are searched by the name you gave them, by what they connect to, and by kind.
+                        </p>
+                        <p v-else class="mt-1 text-xs text-muted">
+                            Capabilities are searched by name, by what they do, and by kind — “mcp”, “ssh”, “sql”.
+                        </p>
                     </div>
                 </div>
             </div>
