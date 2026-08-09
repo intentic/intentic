@@ -105,9 +105,6 @@ const {
 } = useAgents();
 const { active, openConversation, panes, openBeside, closePane, collapsePanes, closeTabs, setPanes } = useChat();
 const { popOut: popOutChat, poppedOut } = useChatPopout();
-// This agent's chat has a column in the chat window but not the focus — the board's half of the rail's
-// "showing" mark, so a split is legible from either surface.
-const showingInPane = (id: string): boolean => panes.value.length > 1 && id !== active.value.conversationId && panes.value.includes(id);
 // A refusal lands on the board's notice strip — the preparation refuses whole (a running source, a transcript
 // that couldn't be captured), and a press that does nothing visible reads as a button that broke.
 const synthesize = async (): Promise<void> => {
@@ -255,6 +252,12 @@ const runGraphUp = computed(
         ),
 );
 const highlightId = computed(() => flashId.value ?? (mobile.value || runGraphUp.value ? undefined : active.value.conversationId));
+/* THE OTHER COLUMNS, ringed exactly as that one is. A split is not a ranking — the reader put two chats up to
+ * read them together — so the board no longer draws the panes that don't hold the keyboard a step fainter than
+ * the one that does (AgentCard.selected has the rest of it; the chat rail dropped the same second weight). The
+ * two states that take the ring off the focused chat take it off these as well, which is why this is read off
+ * `highlightId`'s own conditions rather than off the pane set alone. */
+const inPane = (id: string): boolean => !mobile.value && !runGraphUp.value && panes.value.length > 1 && panes.value.includes(id);
 const finishedWindow = computed(() => windowFinished(boardLanes.value.finished, windowed.value ? highlightId.value : undefined, (agent) => agent.id));
 // The lane's visible cards. Finished shows its window (or the archive, when open); the other two lanes are
 // self-emptying and show everything.
@@ -1292,8 +1295,7 @@ const grabCard = (event: PointerEvent, agent: FleetAgent, card: HTMLElement): vo
                             :dense="narrow"
                             :dragging="draggedId === agent.id && dragging"
                             :pending="pendingFor(agent)"
-                            :selected="agent.id === highlightId"
-                            :showing="showingInPane(agent.id)"
+                            :selected="agent.id === highlightId || inPane(agent.id)"
                             :match="snippetOf(agent)"
                             :query="needle"
                             @open="(event) => focusAgent(agent, event)"
@@ -1372,8 +1374,7 @@ const grabCard = (event: PointerEvent, agent: FleetAgent, card: HTMLElement): vo
                             :now="now"
                             :dense="narrow"
                             :pending="pendingFor(agent)"
-                            :selected="agent.id === highlightId"
-                            :showing="showingInPane(agent.id)"
+                            :selected="agent.id === highlightId || inPane(agent.id)"
                             :match="snippetOf(agent)"
                             :query="needle"
                             @open="(event) => focusAgent(agent, event)"

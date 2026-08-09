@@ -1168,6 +1168,42 @@ describe(`chat panes`, () => {
         expect(chat.activeId.value).toBe(arriving);
     });
 
+    /* "NEW AGENT" IS A FRESH START, NOT AN ARRIVAL. Every other way into a chat swaps the focused column and
+     * leaves the rest — those are chats the reader deliberately put up side by side. A brand-new one has
+     * nothing in it to be beside anything, so it takes the panel whole; the chat it displaced is still open,
+     * one click from a column again. */
+    it(`gives the whole panel to a new chat rather than one column of a split`, () => {
+        const chat = useChat();
+        const ids = openThree();
+        chat.openBeside(ids[1]!);
+        expect(chat.panes.value).toEqual([ids[0], ids[1]]);
+
+        const fresh = chat.newChat();
+
+        expect(chat.panes.value).toEqual([fresh.conversationId]);
+        expect(chat.activeId.value).toBe(fresh.conversationId);
+        // The split was given back, not closed — every chat that was open still is.
+        expect(chat.conversations.value.map((conversation) => conversation.conversationId)).toEqual([...ids, fresh.conversationId]);
+    });
+
+    /* The same, down the OTHER branch: pressed while an untouched draft is already open, "New agent" hands that
+     * one back rather than minting a second (see "chat tabs"), and the press has to mean the same thing either
+     * way — a draft the reader has since given a second column to still comes back as the whole panel. */
+    it(`gives the whole panel back when New agent hands over the draft it already opened`, () => {
+        const chat = useChat();
+        const ids = openThree();
+        const fresh = chat.newChat();
+        // A Shift-range on the rail: a second column, with the focus left on the draft — the one way a draft
+        // survives alongside another pane, since any move of the focus off it reaps it.
+        chat.setPanes([fresh.conversationId, ids[1]!]);
+        expect(chat.panes.value).toEqual([fresh.conversationId, ids[1]]);
+
+        const again = chat.newChat();
+
+        expect(again.conversationId).toBe(fresh.conversationId);
+        expect(chat.panes.value).toEqual([fresh.conversationId]);
+    });
+
     it(`comes back from a reload with its columns, in the order they were left`, async () => {
         const chat = useChat();
         const ids = openThree();

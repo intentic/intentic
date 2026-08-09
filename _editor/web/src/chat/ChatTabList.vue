@@ -501,8 +501,12 @@ const hidePreview = (): void => {
  * the click without one replaces it. That is the only way out of a split that costs the same as the way in.
  *
  * The MENU is what makes it discoverable; the modifiers are the accelerator for whoever already knows. */
+/* Which rows are ON SCREEN — and the whole of what the card wears, since a column is a column: the ringed
+ * cards ARE the pane set, at one weight, whichever of them the keyboard happens to be in (RailCard.selected).
+ * The focused chat is always a member, so a single-pane panel rings exactly the one card it always did. */
 const showing = (id: string): boolean => panes.value.includes(id);
-// More than one chat has a column, so a row can say "on screen" without that being the same claim as "focused".
+// Whether there is a column to GIVE BACK: the last pane is the panel itself, so "Close Pane" and the Ctrl+click
+// that toggles one off are offered only past the first.
 const split = computed(() => panes.value.length > 1);
 // Panes exist in the POP-OUT window only — the docked column is ~22rem, and a second chat in it would be two
 // unusable slivers (ChatPanel holds that rule). So the gestures and the rows that teach them are offered where
@@ -721,8 +725,7 @@ const closeTab = (event: Event, id: string): void => {
                             :status="statusOf({ conversation: c, agent })"
                             :live="liveOf({ conversation: c, agent })"
                             :now="now"
-                            :selected="activeId === c.conversationId"
-                            :showing="split && activeId !== c.conversationId && showing(c.conversationId)"
+                            :selected="activeId === c.conversationId || showing(c.conversationId)"
                             :attention="lane.key === 'attention'"
                             :snippet="agent === undefined ? undefined : snippetOf(agent)"
                             @click="onRowClick($event, c.conversationId)"

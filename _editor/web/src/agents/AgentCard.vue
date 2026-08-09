@@ -55,11 +55,11 @@ const props = defineProps<{
     // What the board has in flight against this card, if anything — the action itself, so the button that
     // fired it can say so while the rest of the card only dims (see PendingAction).
     pending?: PendingAction;
+    /* This agent's chat is ON SCREEN in the chat panel — one weight, however many columns it is sharing that
+     * screen with. A split used to be ranked here (the focused column at full strength, the rest at half), and
+     * the rail ranked it the same way; both have stopped, because nothing about a second column makes the
+     * first one more real. See RailCard.selected, which this is the board's half of. */
     selected?: boolean;
-    // This agent's chat has a pane of its own in the chat window, but not the focus — a weaker claim than
-    // `selected` and drawn as such, so a split reads as "these are on screen, this one is live" rather than as
-    // several selected cards.
-    showing?: boolean;
     // The board's filter, when one is on. `match` is the line the query hit and who said it — the EVIDENCE for
     // this card being in a filtered lane. Absent when the hit was the title (already on the card, and marked
     // below instead). A card that matches for a reason the user can't see is what teaches people to stop
@@ -303,11 +303,7 @@ const grab = (event: PointerEvent): void => {
                user's focus, in the app's own primary), attention is a solid bar down the left edge (a property
                of the agent, in warning — the same colour as its chip on the row above). */
             lane === 'attention' ? 'border-l-[3px] border-l-warning' : '',
-            selected
-                ? 'border-primary-500 bg-overlay ring-2 ring-primary-500/50'
-                : showing
-                  ? 'border-primary-500/45 bg-card ring-1 ring-primary-500/30'
-                  : 'border-line bg-card hover:border-line-strong',
+            selected ? 'border-primary-500 bg-overlay ring-2 ring-primary-500/50' : 'border-line bg-card hover:border-line-strong',
             dragging ? 'opacity-40' : '',
             pending !== undefined ? 'pointer-events-none opacity-60' : '',
         ]"

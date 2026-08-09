@@ -52,11 +52,14 @@ const props = defineProps<{
     status?: { name: IconName; spin?: boolean; class: string; "aria-label"?: string };
     live?: { icon: IconName; text: string; since?: number };
     now?: number;
-    // The card the pane beside this list is showing — a ring and a lifted surface.
+    /* A card whose chat has a COLUMN on screen — a ring and a lifted surface.
+     *
+     * ONE WEIGHT, however many columns there are. A split used to be drawn as a ranking: the focused chat wore
+     * this, and the others a half-strength version of the same two channels. Nothing about a split makes one
+     * column subordinate — the reader put two chats up to read them together — so the list was quietly
+     * answering a question ("which is the real one?") that has no answer, and a second, muddier accent weight
+     * was the whole cost of it. Every chat on screen is on screen. */
     selected?: boolean;
-    // On screen but not focused, which is a weaker claim and drawn as such: the same two channels at half
-    // weight, so a split reads as "these are up, this one is live" rather than as several selected cards.
-    showing?: boolean;
     // This session needs the user — a bar down the left edge. A CHANNEL OF ITS OWN so it stacks with
     // selection: drawing both as an outline meant opening the card that needed you erased the very cue that
     // put it in the lane.
@@ -76,7 +79,7 @@ const titleRuns = computed(() => markSegments(props.title, props.needle ?? ``));
     <button
         type="button"
         class="rail-card group flex w-full min-w-0 shrink-0 scroll-mt-8 flex-col gap-1.5 rounded-lg border p-2.5 text-left text-2xs"
-        :class="{ 'rail-card-on': selected, 'rail-card-shown': showing, 'rail-card-attention': attention, 'border-dashed': dashed }"
+        :class="{ 'rail-card-on': selected, 'rail-card-attention': attention, 'border-dashed': dashed }"
     >
         <span class="flex w-full min-w-0 items-start gap-2">
             <!-- Sized to the title's first line so a two-line title hangs off the tile, not around it. -->
@@ -175,10 +178,6 @@ const titleRuns = computed(() => markSegments(props.title, props.needle ?? ``));
  * The ring is a hairline against a border of the same colour, so the edge reads as a solid 2px of accent
  * rather than as the old 1px line under a 50%-opacity wash — a translucent ring picks up whatever it lies on,
  * which is why the edge looked soft on the lane and muddy between cards. */
-.rail-card.rail-card-shown {
-    --rail-border: color-mix(in srgb, var(--color-primary-500) 50%, var(--color-line));
-    --rail-ring: inset 0 0 0 1px color-mix(in srgb, var(--color-primary-500) 22%, transparent);
-}
 .rail-card.rail-card-on {
     color: var(--color-content);
     --rail-border: var(--color-primary-500);
@@ -191,9 +190,6 @@ const titleRuns = computed(() => markSegments(props.title, props.needle ?? ``));
 /* Hover on a card that already wears the accent deepens the halo instead of recolouring the edge. Its fill is
    already the hover fill, so without this a selected card was the one row in the list that answered the
    pointer with nothing at all. */
-.rail-card.rail-card-shown:hover {
-    --rail-lift: 0 1px 5px -1px color-mix(in srgb, var(--color-primary-500) 25%, transparent);
-}
 .rail-card.rail-card-on:hover {
     --rail-lift: 0 1px 6px -1px color-mix(in srgb, var(--color-primary-500) 45%, transparent);
 }

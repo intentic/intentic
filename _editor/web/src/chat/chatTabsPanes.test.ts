@@ -118,6 +118,22 @@ it(`collapses the split to the row clicked without a modifier`, async () => {
     expect(useChat().conversations.value.map((c) => c.conversationId)).toEqual(ids);
 });
 
+/* BOTH COLUMNS, ONE MARK. The rail used to rank a split — the focused chat's card at full strength, the rest a
+ * step fainter — which asked the reader to read a hierarchy into two chats they had put up to read together.
+ * Every chat with a column wears the same card now, and the row for a chat with no column still wears none. */
+it(`marks every chat on screen the same, whichever one holds the keyboard`, async () => {
+    const ids = openThree();
+    const el = await mountList();
+
+    row(el, ids[1]!).dispatchEvent(new MouseEvent(`click`, { bubbles: true, ctrlKey: true }));
+    await settle();
+
+    expect(useChat().panes.value).toEqual([ids[0], ids[1]]);
+    expect(row(el, ids[0]!).className).toContain(`rail-card-on`);
+    expect(row(el, ids[1]!).className).toContain(`rail-card-on`);
+    expect(row(el, ids[2]!).className).not.toContain(`rail-card-on`);
+});
+
 it(`still gives a row a column of its own when Ctrl says so`, async () => {
     const ids = openThree();
     const el = await mountList();

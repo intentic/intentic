@@ -83,7 +83,7 @@ const shown = computed<Conversation[]>(() => {
     return held.length > 0 ? held : [active.value];
 });
 // A split is what is DRAWN, not what was asked for — a claimed column nobody filled must not make a
-// single-pane panel wear a split's accents or offer its per-column ×.
+// single-pane panel offer its per-column ×.
 const split = computed(() => shown.value.length > 1);
 
 // Past the width floor the panes stop shrinking and the row scrolls, so the focused one has to be brought back
@@ -337,7 +337,7 @@ const endResize = (event: PointerEvent): void => {
 
             <!-- The panes, sharing the room equally (the terminal panel's split cells, which this is the chat's
                  half of) until the floor, past which the row scrolls sideways rather than crushing them. -->
-            <div v-else ref="paneRow" class="chat-panes flex min-h-0 min-w-0 flex-1 overflow-x-auto" :class="{ 'chat-panes-split': split }">
+            <div v-else ref="paneRow" class="chat-panes flex min-h-0 min-w-0 flex-1 overflow-x-auto">
                 <!-- A pane may be closed from its own corner only in a SPLIT: with one column the × would be
                      a control that closes the panel it lives in, which is the pop-out's job and the strip's.
                      The panel answers the press, the way it answers `focus` — which chats are on screen is
@@ -357,18 +357,19 @@ const endResize = (event: PointerEvent): void => {
 </template>
 
 <style scoped>
-/* Equal columns with a hairline between, and a top accent on the focused pane so keystroke routing is visible
-   in a split — the terminal panel's `.term-cell` rules, which this is the chat's half of. The accent is only
-   drawn while there is more than one pane: in a single-pane panel every keystroke goes to the one chat on
-   screen, and a permanent marker saying so would be chrome that never changes. */
+/* Equal columns with a hairline between them, and NOTHING that ranks one above the other.
+ *
+ * The focused pane used to wear a top accent, on the argument that keystroke routing should be visible. It
+ * isn't a rank the reader has to see: every pane carries its own composer, so where the typing goes is already
+ * said by the caret sitting in one of them, and the accent only ever answered a question the panel had stopped
+ * asking. What it DID do was make two chats a reader had put side by side to compare read as a main one and a
+ * spare — a stripe across the top of one column, which is the loudest thing the panel draws. Panes are equals;
+ * the panel says so by drawing them the same. */
 .chat-panes :deep(.chat-pane) {
     flex: 1 1 0;
     min-width: 22rem;
 }
 .chat-panes :deep(.chat-pane + .chat-pane) {
     border-left: 1px solid var(--color-line);
-}
-.chat-panes-split :deep(.chat-pane-on) {
-    box-shadow: inset 0 2px 0 0 color-mix(in srgb, var(--color-primary-500) 55%, transparent);
 }
 </style>

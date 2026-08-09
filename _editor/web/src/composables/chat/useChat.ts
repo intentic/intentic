@@ -1157,15 +1157,25 @@ export const resetChat = (): void => {
  * tab is already open, this hands that one back and focuses it rather than minting a second the write would drop
  * on the spot. The two are indistinguishable to the user — an empty draft has nothing in it to tell them apart —
  * so the difference was only ever visible as a "+" that did nothing. What the press is FOR then is the caret,
- * which startAgent asks for either way. */
+ * which startAgent asks for either way.
+ *
+ * IT TAKES THE WHOLE PANEL, not the column the focus happened to be in. Every other arrival here — a board card,
+ * a deep link, a history row — is "show me THIS chat", and swapping one column for it is right, because the
+ * other columns are chats the reader deliberately put up beside it. A fresh agent is not an arrival, it is a
+ * fresh START: nothing has been said in it yet, so there is nothing for the chat still sitting in the next
+ * column to be beside. Replacing one half of a split left the reader looking at a brand-new empty composer with
+ * somebody else's transcript pinned next to it, and the only way back to one chat was to dismantle the split by
+ * hand. The other chats stay OPEN — this gives their columns back, it does not close them. */
 const newChat = (): Conversation => {
     const open = conversations.value.find(untouchedDraft);
-    if (open !== undefined) {
-        setConversations(conversations.value, open.conversationId, `new-chat-reuse`);
-        return open;
+    const conversation = open ?? new Conversation();
+    if (open === undefined) {
+        setConversations([...conversations.value, conversation], conversation.conversationId, `new-chat`);
+    } else {
+        setConversations(conversations.value, conversation.conversationId, `new-chat-reuse`);
     }
-    const conversation = new Conversation();
-    setConversations([...conversations.value, conversation], conversation.conversationId, `new-chat`);
+    // After the write, so the column kept is the one the fresh chat has just been seated in.
+    collapsePanes();
     return conversation;
 };
 
@@ -1176,9 +1186,14 @@ const newChat = (): Conversation => {
  *
  * Safe against the one-untouched-draft rule because a suggestion always arrives carrying its prompt in `draft`,
  * which is exactly what `untouchedDraft` reads as touched: this conversation is kept, and any empty draft the
- * strip was holding is reaped by the same write, which is the correct outcome either way. */
+ * strip was holding is reaped by the same write, which is the correct outcome either way.
+ *
+ * It collapses the split for the same reason `newChat` does, and that is not a coincidence to be tidied away
+ * later: an accepted suggestion has to land exactly where "New agent" would have left the user, or the two
+ * doors into a fresh session open onto two different rooms. */
 export const adoptConversation = (conversation: Conversation): void => {
     setConversations([...conversations.value, conversation], conversation.conversationId, `adopt-suggested`);
+    collapsePanes();
 };
 
 // "Put the caret in the composer", as a signal rather than a call: the conversation list is store state, but
@@ -1253,7 +1268,10 @@ const closePane = (conversationId: string): void => {
  *
  * It names no id on purpose: the click has already moved the focus, so the chat to keep IS the focused one.
  * That also keeps it out of setActive, where it would wrongly collapse a deep link's or a history row's
- * arrival — those are not gestures on a selection. */
+ * arrival — those are not gestures on a selection.
+ *
+ * Its other caller is `newChat` (and `adoptConversation` with it), which is the same shape of act: a fresh
+ * session is a fresh start, so it lands as the one chat on screen rather than as half of somebody else's split. */
 const collapsePanes = (): void => {
     if (panes.value.length > 1) {
         panes.value = [activeId.value];
