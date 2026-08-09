@@ -319,7 +319,7 @@ export const runWorkflow = async (services: Services, run: WorkflowRun, fn: Turn
         const relay = (): void => {
             void stopLoop(conversationId);
             if (stopTurn(conversationId)) {
-                services.agents.stopping(conversationId);
+                services.agents.stopping(conversationId, "stopped");
             }
         };
         abort.signal.addEventListener("abort", relay, { once: true });

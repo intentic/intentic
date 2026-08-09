@@ -30,6 +30,11 @@ import { writeJsonFile } from "../store/json-file.js";
  * reason that outlives the label: only `interrupted` is a candidate for the boot resume pass. A turn somebody
  * chose to stop must never come back on its own.
  *
+ * It is narrower than "the user ended it", though, and deliberately: a turn ended by DISMISSING its question
+ * writes the resting `idle` here instead. Both endings are the user's, but pressing Stop reaches in to halt
+ * work they still wanted — the card waits in Attention to be picked up — while waving a question away says
+ * they are done with it, and nothing is owed. What the turn wrote is still on its branch either way.
+ *
  * `.catch` rather than a bare enum, and the only field here that carries one: agents.json is user data on a
  * volume that outlives every image, so this field's vocabulary shrinking must cost the VALUE, not the row. The
  * per-entry parse below already treats losing a row as a cost to be minimised; a status that no longer exists

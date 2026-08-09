@@ -36,7 +36,7 @@ import type { AgentRequest, ParkedSync } from "./agent.js";
 import { adapterFor } from "./adapter-registry.js";
 import { withAttachmentNote } from "./attachment-note.js";
 import { preambleNotes, splitTurnNotes, syncNote, withTurnPreamble } from "./turn-preamble.js";
-import { resolveRequest } from "./agent-requests.js";
+import { conversationOf, resolveRequest } from "./agent-requests.js";
 import { rewindConversation } from "./rewind.js";
 import { commandsOf } from "./agent-commands.js";
 import { isSearchCall } from "./tool-calls.js";
@@ -1200,13 +1200,37 @@ export const createAgentRoutes = (services: Services) => {
             }
             yield { kind: "end" as const };
         }),
-        // Un-park a turn waiting on an interactive card — a plan approval, question picks, or a per-tool
-        // permission prompt, all keyed by the same requestId. NOT_FOUND when nothing holds that id (already
-        // answered, or the turn ended), which is what tells the client to freeze the card as stale.
-        reply: i.reply.handler(({ input }) => {
+        /* Un-park a turn waiting on an interactive card — a plan approval, question picks, or a per-tool
+         * permission prompt, all keyed by the same requestId. NOT_FOUND when nothing holds that id (already
+         * answered, or the turn ended), which is what tells the client to freeze the card as stale.
+         *
+         * A DISMISSED QUESTION ENDS THE TURN, and it ends here rather than in the browser. The rule itself is
+         * old: the card was raised because the agent could not choose, so waving it away answers nothing, and
+         * letting the turn run on means it guesses at exactly the fork it just said it could not guess at.
+         * What changed is where it happens. The browser used to say it in two messages — release the card,
+         * then stop — and between them the daemon had a live turn with nothing parked on it, which is the
+         * definition of a working agent: the board pulled the card out of Attention, filed it under Active for
+         * the length of a round trip, and then moved it a second time when the stop arrived. Said in one step
+         * the in-between never exists, and where the card lands stops being a race between two requests.
+         *
+         * Marked before it is resolved, and the whole handler down to the abort is synchronous, so the tool's
+         * own continuation cannot run in between and re-publish the agent as running. */
+        reply: i.reply.handler(async ({ input }) => {
+            const dismissed = input.kind === "question" && input.cancelled === true ? conversationOf(input.requestId) : undefined;
+            if (dismissed !== undefined) {
+                services.agents.stopping(dismissed, "dismissed");
+            }
             if (!resolveRequest(input)) {
                 throw new ORPCError("NOT_FOUND", { message: `no pending ${input.kind} for that request` });
             }
+            if (dismissed === undefined) {
+                return { ok: true } as const;
+            }
+            stopTurn(dismissed);
+            // Joined like the stop route joins, and for the same reason: the answer to this request is what the
+            // browser lets the user type behind, so it must not come back while the run still holds the
+            // conversation. The wait is a blink — the turn is parked inside the card being dismissed.
+            await turnRunOf(dismissed)?.waitUntilFinished();
             return { ok: true } as const;
         }),
         // Inject a user message into the conversation's running turn (delivered between tool calls);
@@ -1258,7 +1282,7 @@ export const createAgentRoutes = (services: Services) => {
             // a long tool call — and until it lands the roster would still be saying `running` to every surface
             // watching this agent, spinner and all. Marked before the join, not after, because the whole point
             // is to fill exactly the window the join waits out.
-            services.agents.stopping(input.conversationId);
+            services.agents.stopping(input.conversationId, "stopped");
             // abort() is only a request. The detached pump remains the conversation's live run until its
             // generator unwinds (including worktree/registry cleanup), so acknowledging before then lets an
             // immediate next message collide with the old run and get a bogus "another window" conflict.

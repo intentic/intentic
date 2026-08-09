@@ -51,16 +51,23 @@ interface RuntimeState {
     // The sentence the last error frame carried, flushed onto the entry at finish so the card can say why
     // rather than only that. Last one wins: a turn that fails twice died of the second.
     failure: string | undefined;
-    /* The user pressed Stop and the abort has landed — this turn is on its way out but not out yet.
+    /* THE USER ENDED THIS TURN and the abort has landed — it is on its way out but not out yet — in the two
+     * flavours that end differently.
      *
      * It is runtime state rather than a status write because the turn is still LIVE: aborting the provider only
      * asks it to unwind, and the generator keeps the conversation (its worktree, its mutex) until it has walked
      * its own cleanup — seconds, on a turn with a big tool call in flight. That window used to be published as
      * plain `running`, so a stopped agent kept its spinner turning on every surface until it settled.
      *
-     * Read twice: `summaryOf` publishes it as `stopping` the moment it is set, and `finish` reads it to write
-     * the terminal `stopped` — the one thing that tells a turn a person ended from one the daemon died under. */
-    stopping: boolean;
+     * Read twice: `summaryOf` publishes either flavour as `stopping` the moment it is set, and `finish` reads
+     * WHICH to decide the terminal status — the one thing that tells a turn a person ended from one the daemon
+     * died under, and a Stop from a card the user waved away.
+     *
+     * `dismissed` is the second flavour, and it ends where a clean turn does. Pressing Stop leaves half-written
+     * work nobody asked to be finished, so its card waits in Attention to be picked up; dismissing a question
+     * is the user saying they are done with this — nothing is owed, so the card settles in Finished and the
+     * branch keeps whatever it wrote for whenever they come back to it. */
+    stopping: "stopped" | "dismissed" | undefined;
     /* This turn was killed by something the daemon is already undoing — a rotated credential being re-minted, a
      * provider outage being waited out — and it is coming back on its own (turn-resume.ts).
      *
@@ -97,7 +104,7 @@ const freshRuntime = (): RuntimeState => ({
     pauses: new Map(),
     errored: false,
     failure: undefined,
-    stopping: false,
+    stopping: undefined,
     resuming: false,
     activity: undefined,
     contextTokens: undefined,
@@ -201,15 +208,21 @@ export interface AgentsRegistry {
     readonly recordLanded: (id: string, outcome: LandOutcome) => Promise<void>;
     // Fold one turn frame into runtime state; broadcasts only on card-visible changes.
     readonly observe: (id: string, event: AgentEvent) => void;
-    /* The user's Stop has aborted this turn — publish it as `stopping` NOW, ahead of the unwind.
+    /* THE USER ENDED THIS TURN and the abort has landed — recorded NOW, ahead of the unwind.
      *
      * The whole point is the gap it closes. /agent/stop aborts the provider and then waits for the generator to
      * walk its cleanup, and until finish() runs the roster still reads `running`: the press had no visible
      * result anywhere, so every surface kept a spinner turning on a turn that was already dead. Called by the
-     * stop route rather than inferred from a frame, because an abort's defining feature is that no frame
-     * follows it. A no-op when nothing is running — a stop that raced the turn's own ending changes nothing.
-     */
-    readonly stopping: (id: string) => void;
+     * routes rather than inferred from a frame, because an abort's defining feature is that no frame follows
+     * it. A no-op when nothing is running — an ending that raced the turn's own changes nothing.
+     *
+     * The two endings differ in what the card does WHILE it unwinds, as well as where it lands. A Stop is
+     * published immediately, because the press is news and the card has to stop spinning. A dismissal is not:
+     * the card is already sitting in Attention where the user just acted on it, the unwind is over in a blink
+     * (the turn is parked inside the card being dismissed, so there is nothing in flight to unwind), and
+     * publishing the in-between would spend a lane change announcing that the agent went back to work for the
+     * length of that blink — which is the thing being fixed. It holds its place, and finish() moves it once. */
+    readonly stopping: (id: string, ending: "stopped" | "dismissed") => void;
     // End of turn (aborted included): flush pending usage/session into the entry, release the mutex, and write
     // how the turn ENDED — error on an observed error frame, `stopped` when the user cut it short, else idle.
     // Deliberately says nothing about where the work now stands: that is standing.ts's question, re-derived
@@ -285,16 +298,16 @@ export const createAgentsRegistry = (store: AgentsStore, standings: LandStanding
          * to say and the question passes to git. `error` and `interrupted` outrank precisely because nothing
          * else remembers them: a turn that died is not made fine by a branch that happens to be empty.
          *
-         * Within the live rung, a stop outranks a park: a turn aborted while holding a question is on its way
-         * out, and publishing it as `awaiting` would keep asking the user to answer a card the abort has
-         * already settled.
+         * Within the live rung, an ending the user chose outranks a park: a turn aborted while holding a
+         * question is on its way out, and publishing it as `awaiting` would keep asking the user to answer a
+         * card the abort has already settled.
          *
          * An armed resume outranks every settled reading below it for the same reason `stopping` outranks
          * `running`: the entry describes a turn that has stopped, and this one has stopped without ending. */
         const landing = entry.branch === undefined ? "idle" : standings.of(entry.id);
         const status =
             state?.running === true
-                ? state.stopping
+                ? state.stopping !== undefined
                     ? "stopping"
                     : parked.length > 0
                       ? "awaiting"
@@ -813,19 +826,25 @@ export const createAgentsRegistry = (store: AgentsStore, standings: LandStanding
             }
             broadcast();
         },
-        stopping: (id) => {
+        stopping: (id, ending) => {
             const state = runtime.get(id);
-            // Nothing running ⇒ nothing to say. A stop that raced the turn's own last frame is not news, and
+            // Nothing running ⇒ nothing to say. An ending that raced the turn's own last frame is not news, and
             // marking a settled conversation would leave `stopping` on the entry for the NEXT turn to inherit.
-            if (state === undefined || !state.running || state.stopping) {
+            if (state === undefined || !state.running || state.stopping !== undefined) {
                 return;
             }
-            state.stopping = true;
-            // The abort settles every card this turn was parked on (agent-requests.ts) — including the ones
-            // whose `resolved` frame will never make it out of the dying stream. Cleared here rather than at
-            // finish so the card stops asking for an answer it can no longer take the moment the stop lands.
+            state.stopping = ending;
+            /* The abort settles every card this turn was parked on (agent-requests.ts) — including the ones
+             * whose `resolved` frame will never make it out of the dying stream. Cleared here rather than at
+             * finish so the card stops asking for an answer it can no longer take the moment the ending lands.
+             *
+             * Which is also why clearing them is not enough on its own for a dismissal, and why the publish
+             * below is the Stop's alone: a released card on a live turn reads as `running`, so re-broadcasting
+             * here would file the dismissed agent under Active for the blink before finish() lands. */
             state.pauses.clear();
-            broadcast();
+            if (ending === "stopped") {
+                broadcast();
+            }
         },
         finish: async (id, now) => {
             const entry = entryOf(id);
@@ -834,11 +853,11 @@ export const createAgentsRegistry = (store: AgentsStore, standings: LandStanding
             // manual land route finishes with an outcome outside any turn and must not inflate the counter.
             const ranTurn = state?.running === true;
             // Same reason, for the value this writes below: the reset clears it, and a manual land's finish
-            // (no runtime state at all) must not read as a stop.
-            const wasStopped = state?.stopping === true;
+            // (no runtime state at all) must not read as an ending the user chose.
+            const ended = state?.stopping;
             if (state !== undefined) {
                 state.running = false;
-                state.stopping = false;
+                state.stopping = undefined;
                 // A turn that ended holds nobody up any more, however it ended: an aborted card's waiter is
                 // settled by the same abort, and its `resolved` frame may never make it out of the stream.
                 state.pauses.clear();
@@ -857,11 +876,18 @@ export const createAgentsRegistry = (store: AgentsStore, standings: LandStanding
                 const { failure: _ended, ...carried } = entry;
                 replace({
                     ...carried,
-                    // How the turn ENDED, which is all this field says now: an observed error frame, the user's
-                    // own Stop, else the clean ending that hands the question to standing.ts. A stop outranks
-                    // nothing — the abort's own unwind no longer reaches here as an error (see agent.routes'
-                    // frame loop), so an errored stop means the turn had already failed when it was stopped.
-                    status: state?.errored === true ? "error" : wasStopped ? "stopped" : "idle",
+                    /* How the turn ENDED, which is all this field says now: an observed error frame, the user's
+                     * own Stop, else the clean ending that hands the question to standing.ts. A stop outranks
+                     * nothing — the abort's own unwind no longer reaches here as an error (see agent.routes'
+                     * frame loop), so an errored stop means the turn had already failed when it was stopped.
+                     *
+                     * A DISMISSED card takes the clean ending with everything else that had nothing left to
+                     * do. It is an ending the user chose, like the Stop beside it, but not the same one: they
+                     * waved the question away rather than reaching in to halt work they still wanted, so
+                     * nothing is owed and the card belongs with the finished ones. Whatever the turn had
+                     * written stays on its branch for a later message to carry on from, exactly as it does
+                     * for any turn that ends with an unlanded delta. */
+                    status: state?.errored === true ? "error" : ended === "stopped" ? "stopped" : "idle",
                     ...(state?.errored === true && state.failure !== undefined ? { failure: state.failure } : {}),
                     costUsd: entry.costUsd + (state?.pendingCostUsd ?? 0),
                     inputTokens: entry.inputTokens + (state?.pendingInputTokens ?? 0),

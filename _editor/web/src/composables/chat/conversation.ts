@@ -1003,8 +1003,6 @@ export class Conversation {
         if (!this.streaming.value) {
             return;
         }
-        this.cancelPendingCards();
-        this.transcript.notice(`Stopped.`);
         const stopping = postTurnControl(`/agent/stop`, { conversationId: this.conversationId }).then(() => undefined);
         this.stopping = stopping;
         void stopping.finally(() => {
@@ -1012,6 +1010,15 @@ export class Conversation {
                 this.stopping = undefined;
             }
         });
+        this.ended();
+    }
+
+    // This side of a turn ending on the user's say-so: freeze the cards it was parked on, say so in the
+    // transcript, and drop the stream. Shared with a dismissal, which ends the turn as part of the dismissal
+    // itself and so has no request of its own to send (see cancelQuestion).
+    private ended(): void {
+        this.cancelPendingCards();
+        this.transcript.notice(`Stopped.`);
         this.abort();
         this.persist();
     }
@@ -1154,14 +1161,18 @@ export class Conversation {
         }
     }
 
-    // Dismisses a pending question AND stops the turn. This TELLS the daemon (cancelled), rather than just
-    // dropping the stream: the agent is parked inside its `ask` tool holding the conversation's run lock, so a
-    // client-side-only dismissal would wedge the conversation until the daemon restarted.
-    //
-    // Stopping is the point, not a side effect — it is what Claude Code does, and for the same reason. The card
-    // was raised because the agent could not choose for itself; waving it away answers nothing, so letting the
-    // turn run on means it guesses at exactly the fork it just said it could not guess at. The user gets the
-    // wheel back instead, with the transcript recording both halves ("Question dismissed." then "Stopped.").
+    /* Dismisses a pending question, which ENDS THE TURN. The card was raised because the agent could not
+     * choose for itself; waving it away answers nothing, so letting the turn run on means it guesses at
+     * exactly the fork it just said it could not guess at. The user gets the wheel back instead, with the
+     * transcript recording both halves ("Question dismissed." then "Stopped.").
+     *
+     * ONE REQUEST DOES BOTH, and the daemon is where the ending happens (agent.routes' reply handler). Sending
+     * the dismissal and then a Stop behind it is what made a dismissed agent flash through the board's Active
+     * lane: between the two, the daemon had a live turn with nothing parked on it — a working agent, as far as
+     * every surface reading the roster could tell — and the card was pulled out of Attention to say so before
+     * being moved again when the stop landed. It also made where the card CAME TO REST a race between two
+     * requests. The reply now comes back with the turn already out, so there is nothing to send after it and
+     * nothing to wait for: the board moves the card once. */
     async cancelQuestion(message: ChatMessage): Promise<void> {
         const question = message.question;
         if (question?.status !== `pending`) {
@@ -1177,8 +1188,8 @@ export class Conversation {
             return;
         }
         this.transcript.notice(`Question dismissed.`);
-        // After the card is frozen, so it reads back as dismissed rather than as a card the Stop caught pending.
-        this.stop();
+        // After the card is frozen, so it reads back as dismissed rather than as a card the ending caught pending.
+        this.ended();
     }
 
     // Answers a pending permission card. 'once' allows just this call, 'always' also persists the rules the

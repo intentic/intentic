@@ -525,7 +525,7 @@ describe("agents registry", () => {
         await registry.begin(turn(), 1_000);
         const frames: (string | undefined)[] = [];
         const unsubscribe = registry.subscribe((agents) => frames.push(agents[0]?.status));
-        registry.stopping("c1");
+        registry.stopping("c1", "stopped");
         expect(registry.get("c1")?.status).toBe("stopping");
         expect(frames.at(-1)).toBe("stopping"); // the press has a visible result before anything unwinds
         // Still the conversation's live turn: the mutex is held until finish, so a message sent now would
@@ -542,7 +542,7 @@ describe("agents registry", () => {
         const registry = createAgentsRegistry(store, standings(), presences());
         await registry.init();
         await registry.begin(turn(), 1_000);
-        registry.stopping("c1");
+        registry.stopping("c1", "stopped");
         await registry.finish("c1", 2_000);
         expect(registry.get("c1")?.status).toBe("stopped");
         expect(store.saved().find((entry) => entry.id === "c1")?.status).toBe("stopped");
@@ -553,6 +553,34 @@ describe("agents registry", () => {
         expect(registry.get("c1")?.status).toBe("idle");
     });
 
+    /* A DISMISSED CARD IS THE OTHER ENDING THE USER CHOOSES, and it does not come to rest where a Stop does.
+     * Stopping reaches in to halt work the user still wanted, so its card waits to be picked up; waving a
+     * question away says they are done with this one, so nothing is owed and the card settles with the
+     * finished ones — whatever the turn wrote stays on its branch for a later message.
+     *
+     * The card also has to move ONCE. Releasing the question leaves a live turn with nothing parked on it,
+     * which reads as a working agent, so a publish here would file the agent under Active for the blink
+     * before the unwind lands — the two-step the browser used to do, only faster. */
+    it("settles a dismissed turn where a clean one ends, and holds its place until it gets there", async () => {
+        const store = memoryStore();
+        const registry = createAgentsRegistry(store, standings(), presences());
+        await registry.init();
+        await registry.begin(turn(), 1_000);
+        registry.observe("c1", { kind: "question", requestId: "q1", questions: [] });
+        const frames: (string | undefined)[] = [];
+        const unsubscribe = registry.subscribe((agents) => frames.push(agents[0]?.status));
+        registry.stopping("c1", "dismissed");
+        expect(frames.at(-1)).toBe("awaiting"); // the subscribe snapshot — nothing published on the way out
+        // The card cannot be answered any more, and the turn is still the conversation's live one.
+        expect(registry.get("c1")?.attention.question).toBe(false);
+        expect(registry.running("c1")).toBe(true);
+        await registry.finish("c1", 2_000);
+        expect(registry.get("c1")?.status).toBe("idle");
+        expect(store.saved().find((entry) => entry.id === "c1")?.status).toBe("idle");
+        expect(frames.at(-1)).toBe("idle"); // one move: Attention straight to Finished
+        unsubscribe();
+    });
+
     // The abort settles every waiter, so a card raised by a frame still in flight behind the stop would ask a
     // question whose answer has nowhere to go — and would drag the card back into Attention on its way out.
     it("drops the cards a stopping turn was parked on, and refuses to raise new ones", async () => {
@@ -561,7 +589,7 @@ describe("agents registry", () => {
         await registry.begin(turn(), 1_000);
         registry.observe("c1", { kind: "question", requestId: "q1", questions: [] });
         expect(registry.get("c1")?.status).toBe("awaiting");
-        registry.stopping("c1");
+        registry.stopping("c1", "stopped");
         expect(registry.get("c1")?.status).toBe("stopping");
         expect(registry.get("c1")?.attention.question).toBe(false);
         registry.observe("c1", { kind: "permission", requestId: "perm1", toolName: "Bash" });
@@ -578,8 +606,8 @@ describe("agents registry", () => {
         await registry.finish("c1", 2_000);
         const frames: number[] = [];
         const unsubscribe = registry.subscribe(() => frames.push(1));
-        registry.stopping("c1");
-        registry.stopping("never-heard-of-it");
+        registry.stopping("c1", "stopped");
+        registry.stopping("never-heard-of-it", "stopped");
         expect(registry.get("c1")?.status).toBe("idle");
         expect(frames.length).toBe(1); // the subscribe snapshot, and nothing after it
         unsubscribe();
@@ -592,7 +620,7 @@ describe("agents registry", () => {
         await registry.init();
         await registry.begin(turn(), 1_000);
         registry.observe("c1", { kind: "error", message: "boom" });
-        registry.stopping("c1");
+        registry.stopping("c1", "stopped");
         await registry.finish("c1", 2_000);
         expect(registry.get("c1")?.status).toBe("error");
     });

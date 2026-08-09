@@ -909,7 +909,9 @@ describe(`Conversation`, () => {
 
         const paths = sandboxRequestMock.mock.calls.map(([path]) => path);
         expect(paths).toContain(`/agent/reply`);
-        expect(paths).toContain(`/agent/stop`);
+        // ONE request does both halves — the daemon ends the turn where the dismissal lands. A stop sent
+        // behind it is what flashed the board's Active lane between the two (see cancelQuestion).
+        expect(paths).not.toContain(`/agent/stop`);
         expect(conversation.messages.value.find((message) => message.question !== undefined)!.question).toMatchObject({ status: `cancelled` });
         expect(conversation.streaming.value).toBe(false);
         expect(conversation.error.value).toBeNull();

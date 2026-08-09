@@ -20,7 +20,15 @@ import type { AgentEvent, AgentReply } from "@intentic/sandbox-contract";
 
 type Waiter = (reply: AgentReply, fromUser: boolean) => void;
 
-const pending = new Map<string, Waiter>();
+// A parked card: how to settle it, and — when its raiser knew — the conversation whose turn is parked on it.
+// The conversation is carried because one settlement is not only an answer: dismissing a question ENDS the
+// turn, and the route that takes the dismissal has to be able to name the turn it ends (see conversationOf).
+interface Parked {
+    readonly settle: Waiter;
+    readonly conversationId: string | undefined;
+}
+
+const pending = new Map<string, Parked>();
 
 // How a parked card settled: the reply its caller acts on, and the frame every client needs to see to stop
 // rendering the card as live. They are handed out together because only this module can tell a user's answer
@@ -33,9 +41,11 @@ export interface Settled<K extends AgentReply["kind"]> {
 
 // Register a card awaiting the user. `onAbort` is the reply synthesized if the turn dies first — each caller
 // supplies the answer that makes its own tool result read honestly ("cancelled", "denied", …).
+// `conversationId` is what the card was raised on behalf of, for the callers that run inside one.
 export function createRequest<K extends AgentReply["kind"]>(
     kind: K,
     onAbort: Extract<AgentReply, { kind: K }>,
+    conversationId?: string,
 ): { id: string; wait: (signal: AbortSignal) => Promise<Settled<K>> } {
     const id = randomUUID();
     const wait = (signal: AbortSignal): Promise<Settled<K>> =>
@@ -55,7 +65,7 @@ export function createRequest<K extends AgentReply["kind"]>(
             // Registered BEFORE the aborted check, because the idempotence guard above is a delete: a settle
             // that runs before this id is in the map deletes nothing, reads that as "already settled", and
             // returns without resolving — leaving a card raised on an already-dead turn parked forever.
-            pending.set(id, settle);
+            pending.set(id, { settle, conversationId });
             if (signal.aborted) {
                 settle(onAbort, false);
                 return;
@@ -67,10 +77,16 @@ export function createRequest<K extends AgentReply["kind"]>(
 
 // Resolve the parked card. False when nothing holds that id — the turn already ended, and the route 404s.
 export function resolveRequest(reply: AgentReply): boolean {
-    const settle = pending.get(reply.requestId);
-    if (settle === undefined) {
+    const parked = pending.get(reply.requestId);
+    if (parked === undefined) {
         return false;
     }
-    settle(reply, true);
+    parked.settle(reply, true);
     return true;
+}
+
+// Which conversation is parked on this card, for a settlement that does something to the TURN rather than only
+// answering it. Read BEFORE resolving — the entry is gone the moment it settles.
+export function conversationOf(requestId: string): string | undefined {
+    return pending.get(requestId)?.conversationId;
 }

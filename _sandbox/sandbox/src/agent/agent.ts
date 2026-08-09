@@ -1419,7 +1419,14 @@ const askServer = (
                 },
                 async (args) => {
                     const questions = args.questions as AskQuestion[];
-                    const { id, wait } = createRequest("question", { kind: "question", requestId: "", cancelled: true });
+                    // Named with its conversation, unlike the plan and permission cards: dismissing this one
+                    // ends the turn, and the route that takes the dismissal ends it there rather than waiting
+                    // for the browser to send a second request for it (agent.routes' reply handler).
+                    const { id, wait } = createRequest(
+                        "question",
+                        { kind: "question", requestId: "", cancelled: true },
+                        request.conversationId,
+                    );
                     push({ kind: "question", requestId: id, questions });
                     const { reply, resolved } = await wait(request.signal);
                     // The picks belong in the frame log, not just in this tool result: they are what a replayed
