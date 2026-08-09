@@ -5,12 +5,13 @@ import BaseLayout from "../../layouts/BaseLayout.astro";
 import Footer from "../../components/Footer.astro";
 import Nav from "../../components/Nav.astro";
 
-/* One template, one page per comparison — same bargain as product/[slug].astro: a new comparison is an entry
- * in an array and its nav row, footer link, page meta, OG card and llms.txt entry all follow from it.
+/* One template, one page per comparison — a new comparison is an entry in an array and its nav row, footer
+ * link, page meta, OG card and llms.txt entry all follow from it.
  *
- * The section order is the argument: the verdict BEFORE the table, the overlap before the differences, and the
- * case for the other product last but unmissable. A reader who stops after the verdict has still been told the
- * truth, and a reader who only scans the table sees the rows that go the other way marked. */
+ * The order is the argument, and it is table-forward: the one-line answer, then the head-to-head table as the
+ * centrepiece (a reader who only scans sees the marked rows that go the other way), then the two things it
+ * really comes down to, then the case FOR the other product last and at full weight. Everything a competitor
+ * ships changes weekly, so each page names what it checked and dares the reader to correct it. */
 
 export function getStaticPaths() {
     return comparePages.map((page) => ({ params: { slug: page.slug }, props: { page } }));
@@ -26,15 +27,16 @@ const index = comparePages.indexOf(page);
 const next = comparePages[(index + 1) % comparePages.length];
 
 const theirRows = page.table.filter((row) => row.theirs).length;
+const host = new URL(page.url).host;
 ---
 
 <BaseLayout breadcrumbs={[{ name: "Compare", path: compareHref("") }, { name: page.navLabel, path: compareHref(page.slug) }]}>
     <Nav />
     <main class="flex-1">
-        <!-- Hero: the claim, then what they are in their own words -->
+        <!-- Hero: the framing, then what they are in their own words -->
         <section class="relative overflow-hidden border-b border-line">
             <div class="absolute inset-0 bg-linear-to-br from-primary-600/10 via-canvas to-canvas" aria-hidden="true"></div>
-            <div class="relative mx-auto max-w-7xl px-6 pt-28 pb-16 lg:pt-32 lg:pb-20">
+            <div class="relative mx-auto max-w-7xl px-6 pt-28 pb-14 lg:pt-32 lg:pb-16">
                 <div class="flex flex-wrap items-center gap-3">
                     <a href={compareHref("")} class="eyebrow transition-colors hover:text-link">Compare</a>
                     {family && <span class="chip bg-primary-500/12 text-primary-400">{family.label} · {family.verdict}</span>}
@@ -42,63 +44,44 @@ const theirRows = page.table.filter((row) => row.theirs).length;
                 <h1 class="mt-3 max-w-3xl text-3xl leading-tight font-semibold tracking-tight sm:text-4xl">{page.heading}</h1>
                 <p class="mt-4 max-w-2xl text-base leading-relaxed text-muted">{page.sub}</p>
 
-                <figure class="mt-8 max-w-2xl border-l-2 border-line-strong pl-5">
+                <figure class="mt-7 max-w-2xl border-l-2 border-line-strong pl-5">
                     <blockquote class="text-sm leading-relaxed text-muted">{page.theirPitch}</blockquote>
                     <figcaption class="mt-2 text-2xs text-subtle">
                         {page.name} ·
-                        <a href={page.url} target="_blank" rel="noopener nofollow" class="transition-colors hover:text-link">
-                            {new URL(page.url).host}
-                        </a>
+                        <a href={page.url} target="_blank" rel="noopener nofollow" class="transition-colors hover:text-link">{host}</a>
                     </figcaption>
                 </figure>
 
-                <div class="mt-8 flex flex-wrap gap-3">
+                <div class="mt-7 flex flex-wrap gap-3">
                     <a class="btn btn-primary" href={APP_URL}>Get started free</a>
                     <a class="btn btn-secondary" href="/product/">See the product</a>
                 </div>
             </div>
         </section>
 
-        <!-- The verdict, before anything that could be read as a scorecard -->
-        <section class="border-b border-line">
-            <div class="mx-auto max-w-7xl px-6 py-16 lg:py-20">
+        <div class="mx-auto max-w-7xl px-6">
+            <!-- The answer, in one or two lines, before anything that could read as a scorecard -->
+            <section class="border-b border-line py-14 lg:py-16">
                 <div class="eyebrow">The short answer</div>
-                <div class="mt-4 max-w-3xl space-y-4">
-                    {page.verdict.map((paragraph) => <p class="text-lg leading-relaxed text-content">{paragraph}</p>)}
-                </div>
-            </div>
-        </section>
-
-        <div class="mx-auto max-w-7xl space-y-16 px-6 py-16 lg:space-y-20 lg:py-20">
-            <!-- Overlap first. Naming what the other product does well is what buys the next section a hearing. -->
-            <section class="fade-in card p-7 lg:p-9">
-                <h2 class="text-xl font-semibold tracking-tight text-content">{page.overlap.title}</h2>
-                <p class="mt-3 max-w-3xl text-base leading-relaxed text-muted">{page.overlap.body}</p>
-            </section>
-
-            <section class="fade-in">
-                <h2 class="text-xl font-semibold tracking-tight text-content">Where they differ</h2>
-                <div class="mt-8 grid gap-x-14 gap-y-10 lg:grid-cols-2">
-                    {
-                        page.differences.map((section, i) => (
-                            <div>
-                                <div class="text-sm font-semibold text-link">{String(i + 1).padStart(2, "0")}</div>
-                                <h3 class="mt-2 text-base font-medium text-content">{section.title}</h3>
-                                <p class="mt-3 text-sm leading-relaxed text-muted">{section.body}</p>
-                            </div>
-                        ))
-                    }
+                <div class="mt-4 max-w-3xl space-y-3">
+                    {page.verdict.map((paragraph) => <p class="text-lg leading-relaxed text-content sm:text-xl">{paragraph}</p>)}
                 </div>
             </section>
 
-            <!-- The table. Only the rows that go the other way are marked: marking "wins" on every other row
-                 would make it a scorecard, and a scorecard with no losing rows is one nobody believes. -->
-            <section class="fade-in">
-                <h2 class="text-xl font-semibold tracking-tight text-content">Head to head</h2>
-                <table class="cmp mt-6 w-full">
-                    <caption class="mb-4 text-left text-sm text-subtle">
-                        {theirRows} of these {page.table.length} rows go to {page.name}. Those are the marked ones.
-                    </caption>
+            <!-- Head to head: the centrepiece. Only the rows that go the other way are marked — a scorecard
+                 with a tick on every row is one nobody believes. The "where you agree" line rides above it so
+                 the concession is read before the contrast. -->
+            <section class="fade-in border-b border-line py-14 lg:py-16">
+                <div class="flex flex-wrap items-baseline justify-between gap-x-6 gap-y-1">
+                    <h2 class="text-xl font-semibold tracking-tight text-content">Head to head</h2>
+                    <p class="text-2xs text-subtle">
+                        {theirRows} of {page.table.length} rows go to {page.name} — <span class="text-primary-400">▸</span> marks them
+                    </p>
+                </div>
+                <p class="mt-3 max-w-3xl text-sm leading-relaxed text-subtle">
+                    <span class="font-medium text-muted">Where you agree · </span>{page.overlap.body}
+                </p>
+                <table class="cmp mt-7 w-full">
                     <thead>
                         <tr>
                             <th scope="col"><span class="sr-only">Dimension</span></th>
@@ -123,29 +106,45 @@ const theirRows = page.table.filter((row) => row.theirs).length;
                 </table>
             </section>
 
+            <!-- What it comes down to: the one or two distinctions that survive the table. Compact by design —
+                 the table already carried the detail, this is the thing to remember. -->
+            <section class="fade-in border-b border-line py-14 lg:py-16">
+                <h2 class="text-xl font-semibold tracking-tight text-content">What it comes down to</h2>
+                <div class:list={["mt-6 grid gap-4", page.differences.length >= 3 ? "md:grid-cols-3" : "md:grid-cols-2"]}>
+                    {
+                        page.differences.map((section, i) => (
+                            <div class="card p-6">
+                                <div class="text-sm font-semibold text-link">{String(i + 1).padStart(2, "0")}</div>
+                                <h3 class="mt-2 text-base font-medium text-content">{section.title}</h3>
+                                <p class="mt-2 text-sm leading-relaxed text-muted">{section.body}</p>
+                            </div>
+                        ))
+                    }
+                </div>
+            </section>
+
             {
                 page.together && (
-                    <section class="fade-in card border-primary-600/30 bg-primary-500/6 p-7 lg:p-9">
-                        <div class="eyebrow text-primary-400">Not either/or</div>
-                        <h2 class="mt-2 text-xl font-semibold tracking-tight text-content">{page.together.title}</h2>
-                        <p class="mt-3 max-w-3xl text-base leading-relaxed text-muted">{page.together.body}</p>
+                    <section class="fade-in border-b border-line py-14 lg:py-16">
+                        <div class="card border-primary-600/30 bg-primary-500/6 p-7 lg:p-9">
+                            <div class="eyebrow text-primary-400">Not either/or</div>
+                            <h2 class="mt-2 text-xl font-semibold tracking-tight text-content">{page.together.title}</h2>
+                            <p class="mt-3 max-w-3xl text-base leading-relaxed text-muted">{page.together.body}</p>
+                        </div>
                     </section>
                 )
             }
 
-            <!-- The case for them, in the last position and at full weight. If this section is soft the whole
-                 page reads as marketing, and everything above it stops counting. -->
-            <section class="fade-in border-t border-line pt-12">
+            <!-- The case for them, last and at full weight. If this is soft the whole page reads as marketing. -->
+            <section class="fade-in py-14 lg:py-16">
                 <h2 class="text-xl font-semibold tracking-tight text-content">Pick {page.name} when</h2>
                 <p class="mt-4 max-w-3xl text-lg leading-relaxed text-content">{page.pickThem}</p>
                 <p class="mt-6 max-w-3xl text-sm leading-relaxed text-subtle">
-                    Every claim above is checkable on
-                    <a href={page.url} target="_blank" rel="noopener nofollow" class="transition-colors hover:text-link">
-                        {new URL(page.url).host}
-                    </a>
-                    and in this repo. Where we have it wrong,
-                    <a href={githubIssuesUrl} target="_blank" rel="noopener" class="text-link hover:underline">open an issue</a>
-                    and it gets fixed in the next build.
+                    Checked against
+                    <a href={page.url} target="_blank" rel="noopener nofollow" class="transition-colors hover:text-link">{host}</a>
+                    the week this shipped — these products move fast. Spot something out of date?
+                    <a href={githubIssuesUrl} target="_blank" rel="noopener" class="text-link hover:underline">Open an issue</a>
+                    and it is fixed in the next build.
                 </p>
             </section>
         </div>
@@ -177,7 +176,7 @@ const theirRows = page.table.filter((row) => row.theirs).length;
         }
 
         .cmp thead th {
-            padding: 0 0 10px;
+            padding: 0 18px 10px 0;
             text-align: left;
             font-size: 0.75rem;
             font-weight: 600;
@@ -208,6 +207,11 @@ const theirRows = page.table.filter((row) => row.theirs).length;
             border-bottom: 1px solid var(--color-line);
         }
 
+        /* The intentic column is the one being argued for: tint its cells so the eye has a side to follow. */
+        .cmp tbody td[data-side="intentic"] {
+            color: var(--color-content);
+        }
+
         .cmp tbody td.theirs {
             color: var(--color-content);
         }
@@ -218,11 +222,6 @@ const theirRows = page.table.filter((row) => row.theirs).length;
         }
 
         @media (max-width: 48rem) {
-            /* The caption has to be told to block too: a `table-caption` inside a `display: block` table has
-               no table box to size against and collapses to a two-word column. */
-            .cmp caption {
-                display: block;
-            }
             .cmp thead {
                 display: none;
             }
