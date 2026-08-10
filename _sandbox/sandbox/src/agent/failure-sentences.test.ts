@@ -1,5 +1,12 @@
 import { expect, test } from "vitest";
-import { isAuthFailureText, isEntitlementRefusalText, isFailureSentence, isUsageLimitText, mentionsSpentAllowance } from "./failure-sentences.js";
+import {
+    isAuthFailureText,
+    isDeclinedAnswer,
+    isEntitlementRefusalText,
+    isFailureSentence,
+    isUsageLimitText,
+    mentionsSpentAllowance,
+} from "./failure-sentences.js";
 
 /* The two conditions the CLI reports as prose, and the third reading of them that the routed providers forced.
  *
@@ -61,4 +68,43 @@ test("does not read a spent plan or a revoked token as a revoked seat", () => {
     expect(isEntitlementRefusalText(KIMI_403)).toBe(false);
     expect(isEntitlementRefusalText("Failed to authenticate. API Error: 401 OAuth access token has been revoked")).toBe(false);
     expect(isEntitlementRefusalText("Sure — I've updated the config and the tests pass.")).toBe(false);
+});
+
+/* A FOURTH READING, AND THE ONE THAT ACTUALLY SHIPPED A BUG. Nothing was wrong with the provider: the naming
+ * pass asked a healthy model to name a session, the opening prompt was too thin to name, and the model asked a
+ * question back. Every predicate above passed it — it is neither a spent allowance nor a dead credential — so
+ * it was written down as the conversation's name at the highest automatic rank, and the commit box then read
+ * that name, prefixed it, and filed `feat: i need more context to name this session…` as a commit subject. */
+const DECLINED_NAMING = "I need more context to name this session. What feature, surface, file, or system does this touch?";
+
+test("reads a model asking for context as no answer at all — the reply that became a commit subject", () => {
+    expect(isDeclinedAnswer(DECLINED_NAMING)).toBe(true);
+    // The conditions it is NOT: nothing here is a provider's fault, so nothing here should send the user to an
+    // account screen or make them wait for a reset.
+    expect(isFailureSentence(DECLINED_NAMING)).toBe(false);
+    expect(isEntitlementRefusalText(DECLINED_NAMING)).toBe(false);
+});
+
+test("catches the shapes a decline arrives in, not one provider's wording", () => {
+    // A question back, whatever it opens with.
+    expect(isDeclinedAnswer("Which part of the diff should the subject describe?")).toBe(true);
+    // The first person, which a noun-phrase answer never uses.
+    expect(isDeclinedAnswer("I'm unable to summarise this change.")).toBe(true);
+    expect(isDeclinedAnswer("Sorry, there is not enough here to name.")).toBe(true);
+    // And a flat declarative decline, which neither of the two tests above would catch.
+    expect(isDeclinedAnswer("Not enough information to write a commit message.")).toBe(true);
+    expect(isDeclinedAnswer("Please provide the file contents.")).toBe(true);
+});
+
+// The direction that would do real damage: refusing a good answer leaves a session wearing a cut sentence and a
+// commit box empty, so every ordinary name and subject has to pass.
+test("passes the names and subjects these seams actually exist to collect", () => {
+    expect(isDeclinedAnswer("feat: ordered model picker")).toBe(false);
+    expect(isDeclinedAnswer("fix: stop the picker reordering on refresh")).toBe(false);
+    expect(isDeclinedAnswer("Sandbox freezes · fix")).toBe(false);
+    expect(isDeclinedAnswer("Commit message drafting · rethink")).toBe(false);
+    expect(isDeclinedAnswer("refactor: drop the title-derived commit subject")).toBe(false);
+    // Empty is nothing, not a decline — every caller already treats it as nothing.
+    expect(isDeclinedAnswer("")).toBe(false);
+    expect(isDeclinedAnswer("   ")).toBe(false);
 });

@@ -38,6 +38,24 @@ const sanitizeTitle = (prompt: string): string | undefined => {
     return clean === "" ? undefined : clean;
 };
 
+/* The same scrub for a drafted commit BODY, which differs from a title in the one way that matters: its
+ * newlines are the content. The body arrives as "- " fact lines and is read back as those lines, so collapsing
+ * them the way sanitizeTitle does would run four separate facts into one unreadable sentence. Line breaks
+ * survive; every other control character does not, and the whole thing is bounded so a model that ignored the
+ * prompt's line count cannot put a page into the commit box. */
+const MAX_BODY_LENGTH = 1_000;
+const sanitizeBody = (body: string): string | undefined => {
+    const clean = body
+        .replaceAll(/\r\n?/gu, "\n")
+        .replaceAll(/[\p{Cc}\p{Cf}]/gu, (character) => (character === "\n" ? "\n" : " "))
+        .split("\n")
+        .map((line) => line.trim())
+        .filter((line) => line !== "")
+        .join("\n")
+        .slice(0, MAX_BODY_LENGTH);
+    return clean === "" ? undefined : clean;
+};
+
 interface RuntimeState {
     running: boolean;
     // The cards the turn is parked on RIGHT NOW, by the requestId each was raised with — the fleet's attention
@@ -185,7 +203,7 @@ export interface AgentsRegistry {
      * No broadcast: nothing on the fleet board shows it. The Changes panel reads it through agentOrigins, which
      * reads these entries live on every scan, so the chip has it as soon as it is written. Leaves updatedAt
      * alone for the same reason setTitle does — the land already stamped the activity this describes. */
-    readonly setLandedSubject: (id: string, subject: string, note?: string) => Promise<void>;
+    readonly setLandedSubject: (id: string, draft: { subject: string; body?: string; note?: string }) => Promise<void>;
     // Stamp the read marker the cards' unread badge is measured against. Like setTitle it leaves updatedAt
     // alone (reading is not activity) and needs no running guard. Undefined ⇒ unknown id.
     readonly markSeen: (id: string, now: number) => Promise<AgentSummary | undefined>;
@@ -676,19 +694,26 @@ export const createAgentsRegistry = (store: AgentsStore, standings: LandStanding
             const entry = entryOf(id);
             return entry === undefined ? undefined : summaryOf(entry);
         },
-        setLandedSubject: async (id, subject, note) => {
+        setLandedSubject: async (id, draft) => {
             const entry = entryOf(id);
-            const clean = sanitizeTitle(subject);
+            const clean = sanitizeTitle(draft.subject);
             // Sanitized through the title cleaner, which is the same job: one bounded line, no control
             // characters. An empty draft writes nothing rather than clearing what the last land said.
             if (entry === undefined || clean === undefined) {
                 return;
             }
-            // The note goes through the same cleaner for the same reasons, and is CLEARED when this land wrote
-            // none: the note describes the claim as it now stands, so a landing that turned out to be invisible
-            // to users must not leave the previous land's sentence standing over it.
-            const cleanNote = note === undefined ? undefined : sanitizeTitle(note);
-            replace({ ...entry, landedSubject: clean, ...(cleanNote === undefined ? { landedNote: undefined } : { landedNote: cleanNote }) });
+            /* The body and the note go through their own cleaners (the body keeps its line breaks; see
+             * sanitizeBody) and are both CLEARED when this land wrote none. They describe the claim as it NOW
+             * stands, so a second land that turned out to need neither must not leave the previous land's
+             * facts standing over a subject that has since been rewritten. */
+            const cleanBody = draft.body === undefined ? undefined : sanitizeBody(draft.body);
+            const cleanNote = draft.note === undefined ? undefined : sanitizeTitle(draft.note);
+            replace({
+                ...entry,
+                landedSubject: clean,
+                ...(cleanBody === undefined ? { landedBody: undefined } : { landedBody: cleanBody }),
+                ...(cleanNote === undefined ? { landedNote: undefined } : { landedNote: cleanNote }),
+            });
             await persist();
         },
         markSeen: async (id, now) => {

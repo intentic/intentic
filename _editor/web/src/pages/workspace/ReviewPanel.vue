@@ -15,8 +15,7 @@ import { useChat } from "../../composables/chat/useChat";
 import { useQuickModel } from "../../composables/chat/quickModel";
 import { useLayout } from "../../composables/useLayout";
 import { useReceipts } from "../../composables/receipts";
-import { clearFilledMessage, commitMessage, fillCommitMessage } from "../../composables/workspace/commitMessage";
-import { conventionalSubject } from "../../composables/workspace/commitSuggestion";
+import { canFillCommitMessage, clearFilledMessage, commitMessage, fillCommitMessage } from "../../composables/workspace/commitMessage";
 import { useCommitDraft } from "../../composables/workspace/useCommitDraft";
 import { ALL_SIDES, originHue, originsOf, summarizeOrigins, YOURS } from "../../composables/workspace/changeOrigins";
 import { formatElapsed, unfinishedMark } from "../../composables/agents/agentStatus";
@@ -198,26 +197,28 @@ const originNote = (id: string): string | undefined => {
  * sparkle button uses, against the same paths, so re-prefixing it here would put a second convention on a line
  * that already has one.
  *
- * The title fallback is what answers with no AI account connected, for a landing that predates this, or when
- * the draft failed — the reading that used to be the only one, unchanged and still one keystroke from being
- * overwritten. */
-const originSubject = (id: string): string | undefined => originOf(id)?.subject ?? conventionalSubject([originTitle(id) ?? ``]);
-
-/* What the chip actually files: the subject, and under it the `Release-Note:` trailer when this landing had one
- * (a repo that keeps a changelog, and a change its users would notice). Composed HERE rather than stored joined,
- * because a subject is one line everywhere it is shown and the pair only becomes a commit message at this
- * moment — see OriginAgent.note.
+ * THERE IS NO LONGER A TITLE FALLBACK. A verb table used to turn the session's name into a subject whenever no
+ * drafted one existed — `Review panel · audit` filed as `chore: review panel audit` — and that guess is the
+ * whole complaint this panel kept earning: it rephrased the ask instead of describing the change, and it did it
+ * confidently. It also had no way to tell a real title from a bad one, so a naming pass that failed and asked
+ * for more context went into the commit box verbatim, wearing a `feat:` the table had picked for it.
  *
- * The trailer rides the fallback too: a landing with a note but no drafted subject still has a note worth
- * keeping, and dropping it because the first half came from the title would lose the half that was written from
- * the code. */
+ * What replaces it is not another guess: a chip with nothing drafted asks the daemon to read that session's
+ * diff and write one now (see toggleOrigin). It costs a moment where the guess cost nothing, and it is the only
+ * version of this that can be right. */
+const originSubject = (id: string): string | undefined => originOf(id)?.subject;
+
+/* What the chip actually files: the subject, the drafted facts under it, and the `Release-Note:` trailer at the
+ * bottom when this landing had one (a repo that keeps a changelog, and a change its users would notice).
+ * Composed HERE rather than stored joined, because a subject is one line everywhere it is SHOWN — the chip in
+ * the legend is one line — and the three only become a commit message at this moment. See OriginAgent.body. */
 const originMessage = (id: string): string | undefined => {
     const subject = originSubject(id);
-    const note = originOf(id)?.note;
-    if (subject === undefined || note === undefined) {
-        return subject;
+    if (subject === undefined) {
+        return undefined;
     }
-    return `${subject}\n\nRelease-Note: ${note}`;
+    const origin = originOf(id);
+    return [subject, origin?.body ?? ``, origin?.note === undefined ? `` : `Release-Note: ${origin.note}`].filter((part) => part !== ``).join(`\n\n`);
 };
 
 /* ONE CLICK, TWO HALVES OF THE SAME INTENT — "commit this session's work". The chip has always narrowed the
@@ -229,21 +230,17 @@ const originMessage = (id: string): string | undefined => {
  * into one line — a message nobody chose, that changed under them whenever another agent landed. Naming a
  * commit is now something you ASK for, and the ask is the click you were already making.
  *
- * An origin with neither a drafted subject nor a title files nothing: the chip's "Agent 4f2a1c" fallback is an
- * id, and an id is not a description of a change. The filter still applies — you can narrow to a session you
- * cannot name. */
-const toggleOrigin = (id: string): void => {
-    const next = originFilter.value === id ? undefined : id;
-    originFilter.value = next;
-    const subject = next === undefined || next === YOURS ? undefined : originMessage(next);
-    if (subject === undefined) {
-        // Toggled off, moved to "you", or a session with nothing to lend — either way the line the legend put
-        // there no longer has a chip behind it. Anything the user has made their own survives this.
-        clearFilledMessage();
-        return;
-    }
-    fillCommitMessage(subject);
-};
+ * A session whose work landed before a quick model was connected — or whose draft failed — has no stored
+ * message, and rather than guess one from its name the click READS THE CODE: the same prompt, the same reader
+ * and the same paths the sparkle button uses, against exactly the files this chip just narrowed to. It costs a
+ * moment where the old guess cost nothing, and it is the only version of this that describes the change.
+ *
+ * The filter always applies, drafted line or not — you can narrow to a session nothing can name.
+ *
+ * DEFINED FURTHER DOWN, beside runAutofill, because it now needs the same three things that one does: the draft
+ * client, the readiness computed and the receipts channel. The two are the same gesture at different scopes —
+ * "name this session's work" and "name this commit" — so they read better together than this one would up here
+ * ahead of everything it calls. */
 
 // A chip is a 14px logo and, at best, a title truncated to max-w-24 — so hovering one (on a file row, or in the
 // From legend above the list) raises the SAME card the chat tab strip raises for that session: the full derived
@@ -682,6 +679,43 @@ const { warn } = useReceipts();
 // Off when there is nothing to describe or nothing to describe it with. `commitTarget` is empty in exactly the
 // cases the Commit button is also off, so the two never disagree about whether this commit exists.
 const autofillReady = computed(() => commitTarget.value.length > 0 && quickModel.choice.value !== undefined && !commitDraft.busy.value);
+
+// The From legend's click — see the block above originMessage for what it is and why it stopped guessing.
+const toggleOrigin = async (id: string): Promise<void> => {
+    const next = originFilter.value === id ? undefined : id;
+    originFilter.value = next;
+    if (next === undefined || next === YOURS) {
+        // Toggled off or moved to "you" — the line the legend put there no longer has a chip behind it. Anything
+        // the user has made their own survives this.
+        clearFilledMessage();
+        return;
+    }
+    const stored = originMessage(next);
+    if (stored !== undefined) {
+        fillCommitMessage(stored);
+        return;
+    }
+    // Asked BEFORE the model call rather than after: a box holding the user's own text will refuse the fill, and
+    // an unconnected sandbox has nothing to ask — in both cases the call would be paid for and thrown away.
+    if (!canFillCommitMessage() || !autofillReady.value) {
+        clearFilledMessage();
+        return;
+    }
+    const drafted = await commitDraft.draft(filteredGroups.value, false, commitMessage.value);
+    if (drafted === undefined) {
+        // A cancel says nothing on purpose; a real failure is worth one line, because the user clicked expecting
+        // a message and the box is about to stay empty.
+        if (commitDraft.error.value !== undefined) {
+            warn(commitDraft.error.value);
+        }
+        return;
+    }
+    // The legend may have been clicked again while the model was thinking. Filing now would put a message about
+    // one session over a filter pointing at another, which is the one outcome worse than an empty box.
+    if (originFilter.value === next) {
+        fillCommitMessage(drafted);
+    }
+};
 // Why it cannot run, when it cannot — and what it is about to do when it can. One string, because the tooltip
 // and the refusal are the same sentence read at two different moments.
 const autofillHint = computed(() => {
@@ -714,10 +748,7 @@ const runAutofill = async (): Promise<void> => {
         warn(autofillHint.value);
         return;
     }
-    // What the filtered session was ASKED to do, sent alongside the diff so the line can say why as well as
-    // what. Only for a commit narrowed to one session: "you", and an unfiltered commit, have no single ask.
-    const intent = originFilter.value === undefined || originFilter.value === YOURS ? undefined : originTitle(originFilter.value);
-    const message = await commitDraft.draft(commitGroups.value, commitAll.value, commitMessage.value, intent);
+    const message = await commitDraft.draft(commitGroups.value, commitAll.value, commitMessage.value);
     if (message === undefined) {
         // Undefined is also the user's own cancel, which says nothing on purpose — `error` is only set for a
         // failure they did not ask for.

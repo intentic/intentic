@@ -72,10 +72,18 @@ export const commitMessage = computed<string>({
     },
 });
 
-// A session's title, read as this commit's subject — the From legend's click. Declines while the box holds
-// anything the fill did not put there.
+/* Whether a fill would land at all — the same test fillCommitMessage makes below, asked BEFORE the work of
+ * producing something to fill with.
+ *
+ * It is separate because the legend's click now PAYS for its line: with nothing drafted at land time the chip
+ * reads the session's diff and writes a message on the spot, and spending a model call on a box that is going
+ * to decline the result is pure cost with nothing on screen to show for it. */
+export const canFillCommitMessage = (): boolean => draft.value === `` || draft.value === filled.value;
+
+// The message for a session's work, filed by the From legend's click. Declines while the box holds anything the
+// fill did not put there.
 export const fillCommitMessage = (message: string): void => {
-    if (draft.value !== `` && draft.value !== filled.value) {
+    if (!canFillCommitMessage()) {
         return;
     }
     filled.value = message;

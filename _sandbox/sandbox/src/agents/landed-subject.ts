@@ -1,7 +1,7 @@
-import { isFailureSentence } from "../agent/failure-sentences.js";
+import { isDeclinedAnswer, isFailureSentence } from "../agent/failure-sentences.js";
 import { askQuickModel } from "../agent/quick-model.js";
 import type { Services } from "../composition.js";
-import { cleanCommitSubject, cleanReleaseNote, commitMessagePrompt, type RepoDiff } from "../git/commit-message.js";
+import { cleanCommitBody, cleanCommitSubject, cleanReleaseNote, commitMessagePrompt, type RepoDiff } from "../git/commit-message.js";
 
 /* WHAT THE WORK DID, WRITTEN WHEN IT ARRIVES — the sentence the Changes panel's "From" chip files into the
  * commit box.
@@ -76,21 +76,32 @@ export const describeLanding = async (services: Services, id: string): Promise<v
      * repo the commit spans, so it is written for the audience that has one. */
     const { changelogRepos } = await services.sandboxSettings.get();
     const wantsNote = diffs.some((diff) => changelogRepos.includes(diff.repo));
-    // The session's own name for the job goes in as CONTEXT beside the diff — the prompt is explicit that the
-    // code overrules it (see commitMessagePrompt). Which is the whole shape of this feature in one call: the
-    // ask is worth knowing and is not worth trusting, so it informs the sentence instead of being it.
-    const { text } = await askQuickModel(services, commitMessagePrompt(diffs, entry.title, wantsNote), new AbortController().signal);
+    /* THE DIFF AND NOTHING ELSE. This call used to hand the session's title over beside the patch as context
+     * about what the work was FOR. It reliably came back as the answer instead of as context: the cheap rung
+     * given a title and a diff writes the title back, so a conversation named for the question that opened it
+     * committed under that question no matter what the four turns since had done. Worse, the title is itself
+     * model-written — a naming pass that failed and asked for more context put that request into the commit
+     * message. What the change was for is legible in what it did, and the diff cannot go stale. */
+    const { text } = await askQuickModel(services, commitMessagePrompt(diffs, wantsNote), new AbortController().signal);
     const subject = cleanCommitSubject(text);
     // A provider's refusal arrives as this reply's TEXT on the providers whose failures stream as prose, so it
-    // is checked here rather than left to the throw above — the same guard, for the same reason, as the naming
-    // pass makes over its own reply (agent/title-namer.ts).
-    if (subject === `` || isFailureSentence(subject)) {
+    // is checked here rather than left to the throw above — and a model that asked a question back instead of
+    // describing the diff has not written a subject either. The same pair of guards, for the same reasons, as
+    // the naming pass makes over its own reply (agent/title-namer.ts).
+    if (subject === `` || isFailureSentence(subject) || isDeclinedAnswer(subject)) {
         return;
     }
+    // The body rides along with the subject — the facts under it, which the chip never shows and the commit box
+    // files beneath the line it does. Empty whenever the model judged the subject sufficient, which is expected.
+    const body = cleanCommitBody(text);
     // The note is read from the same reply, and only kept when one was asked for: a model that volunteers a
     // trailer on a repo that keeps no changelog has answered a question nobody put to it.
     const note = wantsNote ? cleanReleaseNote(text) : ``;
-    await services.agents.setLandedSubject(id, subject, note === `` ? undefined : note);
+    await services.agents.setLandedSubject(id, {
+        subject,
+        ...(body === `` ? {} : { body }),
+        ...(note === `` ? {} : { note }),
+    });
 };
 
 // The fire-and-forget form every land site uses: a failure here is a log line, never the land's problem.

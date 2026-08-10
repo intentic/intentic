@@ -55,11 +55,11 @@ export function useCommitDraft() {
      * all" (the worktree). Passing anything else would describe a commit the button is not about to make.
      * Returns the drafted message, or undefined if it failed or was cancelled; the caller writes it into the input.
      *
-     * `intent` is what the session behind a FILTERED commit was asked to do, and it is the difference between a
-     * subject that names the reason and one that lists what moved. Sent only when the filter has narrowed the
-     * commit to one session — an unfiltered commit can span several, and picking one of their asks to describe
-     * all of them would be worse than sending none. */
-    const draft = async (groups: readonly RepoPaths[], all: boolean, current: string, intent?: string): Promise<string | undefined> => {
+     * THE DIFF IS THE WHOLE INPUT. This used to also send the filtered session's title as an `intent` hint, on
+     * the theory that the diff says what changed and the ask says what it was for. The cheap rung that answers
+     * this treated the hint as the answer and wrote the title back, so the button reliably produced a rephrased
+     * session name over a diff it had barely read. What the work was for is legible in what it did. */
+    const draft = async (groups: readonly RepoPaths[], all: boolean, current: string): Promise<string | undefined> => {
         if (busy.value) {
             cancel();
             return undefined;
@@ -72,7 +72,7 @@ export function useCommitDraft() {
             const result = await sandboxJson<CommitMessageDraft>(`/git/commit-message`, {
                 method: `POST`,
                 headers: { "content-type": `application/json` },
-                body: JSON.stringify({ repos: groups, ...(all ? { all: true } : {}), ...(intent === undefined ? {} : { intent }) }),
+                body: JSON.stringify({ repos: groups, ...(all ? { all: true } : {}) }),
                 signal: controller.signal,
             });
             previous.value = current;

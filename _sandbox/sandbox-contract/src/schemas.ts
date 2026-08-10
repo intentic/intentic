@@ -1809,11 +1809,6 @@ export type RepoPaths = z.infer<typeof RepoPathsSchema>;
 export const CommitMessageDraftSchema = z.object({
     repos: z.array(RepoPathsSchema).min(1).max(50),
     all: z.boolean().optional(),
-    // What the session behind this commit was ASKED to do, when the panel is scoped to exactly one — its title,
-    // verbatim. Context, never the answer: the diff still says what changed, and this says what it was for, so
-    // the subject can name the reason instead of restating the file list. Absent for an unscoped commit, where
-    // there is no single ask to name.
-    intent: z.string().max(200).optional(),
 });
 // The draft plus WHICH model wrote it, so the surface can name it rather than claiming an anonymous "AI" —
 // that name is also the only place the resolved quick model is visible before anyone opens settings.
@@ -1977,9 +1972,19 @@ export const OriginAgentSchema = z.object({
      * still answers to "Review panel · audit" — a good name for the session and a wrong subject for the
      * commit. This is read off the code instead, so it describes the change the user is about to record.
      *
-     * Absent when no quick model is connected, when the draft failed, or for a landing that predates this —
-     * the panel falls back to reading the title as a subject, which is where it started. */
+     * Absent when no quick model is connected or when the draft failed. The panel no longer has a title-shaped
+     * fallback to reach for — guessing a subject from the ask is exactly the habit this replaced — so a chip
+     * with no subject drafts one on demand instead. */
     subject: z.string().optional(),
+    /* THE FACTS UNDER THE SUBJECT — the drafted body, already written as "- " lines (git/commit-message.ts).
+     *
+     * Stored beside the subject rather than inside it for the same reason `note` is: a subject is one bounded
+     * line everywhere it is shown, and the chip in the Changes legend shows exactly that line. The body only
+     * becomes part of a message at the moment the chip fills the commit box, which is where the three are
+     * composed.
+     *
+     * Absent whenever the model judged the subject sufficient, which is the expected answer for small commits. */
+    body: z.string().optional(),
     /* THE SAME LANDING, SAID TO A USER — the `Release-Note:` sentence the chip files in under the subject, for a
      * repo that keeps a changelog (SandboxSettings.changelogRepos).
      *

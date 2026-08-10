@@ -46,6 +46,52 @@ export const isAuthFailureText = (text: string): boolean => text.startsWith(AUTH
 // this is the predicate the one-shot seam and both naming guards read, and no caller of them names a member.
 export const isFailureSentence = (text: string): boolean => isUsageLimitText(text) || isAuthFailureText(text);
 
+/* A MODEL THAT ANSWERED THE ASKER INSTEAD OF THE ASK — the third kind of reply that is not data, and the only
+ * one here that is nobody's failure. The provider is healthy, the credential is good, the turn completed: the
+ * model simply decided it could not do the job from what it was given and said so, politely, in the first
+ * person.
+ *
+ * It reached us as a session title. A naming pass on a thin opening prompt came back with "I need more context
+ * to name this session. What feature, surface, file, or system…", every guard above passed it — it is neither a
+ * spent allowance nor a refused credential — and it was written down as the conversation's name at the highest
+ * automatic rank, which made it final. The commit box then read that title, prefixed it, and filed `feat: i
+ * need more context to name this session…` as a commit subject. One unguarded reply, two surfaces wrong.
+ *
+ * THE SHAPE IS THE SIGNAL, not the wording, because the wording is per-model and endless. Everything asked for
+ * through these seams is a NOUN PHRASE — a name, a subject, a sentence about a diff — and none of them is
+ * addressed to anybody. So a reply that asks a question, opens in the first person, or apologises is a reply
+ * about the request rather than an answer to it. The phrase list underneath catches the models that decline in
+ * a flat declarative ("not enough information to…") and would otherwise slip past both tests.
+ *
+ * DELIBERATELY EAGER. A false positive costs one pass: the caller writes nothing, the old value stands, and the
+ * next turn asks again. A false negative is permanent — a name that outranks every later automatic source, or a
+ * commit that goes into the history wearing a question. Given that trade, this leans toward refusing. */
+const DECLINE_OPENERS =
+    /^(?:i|i'm|i am|i'd|i would|i've|my|we|sorry|apolog|unfortunately|please|could you|can you|to name|there(?:'s| is) (?:not|no)|without)\b/i;
+const DECLINE_PHRASES = [
+    "more context",
+    "more information",
+    "more detail",
+    "not enough",
+    "no context",
+    "unable to",
+    "cannot determine",
+    "can't determine",
+    "need to know",
+    "clarify",
+    "please provide",
+    "please specify",
+];
+
+export const isDeclinedAnswer = (text: string): boolean => {
+    const clean = text.trim();
+    // Empty is not a decline — it is nothing, and every caller already treats it as nothing.
+    if (clean === "") {
+        return false;
+    }
+    return clean.includes("?") || DECLINE_OPENERS.test(clean) || DECLINE_PHRASES.some((phrase) => clean.toLowerCase().includes(phrase));
+};
+
 /* A SPENT ALLOWANCE IN SOMEBODY ELSE'S WORDS — the same condition as isUsageLimitText, for the providers whose
  * wording the Claude Code SDK has no prefix list for.
  *

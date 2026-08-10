@@ -7,6 +7,7 @@ import type { OrpcContext } from "../context.js";
 import { repoGitDir, syncRootExcludes } from "../history/history.js";
 import { discoverRepos, isValidRepoId } from "../workspace/repo-discovery.js";
 import { isControlPlanePath, resolveWithin } from "../workspace/workspace-files.js";
+import { isDeclinedAnswer } from "../agent/failure-sentences.js";
 import { askQuickModel } from "../agent/quick-model.js";
 import type { ActionResult } from "./changes.js";
 import { cleanCommitMessage, commitMessagePrompt } from "./commit-message.js";
@@ -351,12 +352,19 @@ export const createGitRoutes = (services: Services) => {
             const wantsNote = input.repos.some((target) => changelogRepos.includes(target.repo));
             const { text, choice, skipped } = await askQuickModel(
                 services,
-                commitMessagePrompt(diffs, input.intent, wantsNote),
+                commitMessagePrompt(diffs, wantsNote),
                 signal ?? new AbortController().signal,
             );
             const message = cleanCommitMessage(text);
             if (message === "") {
                 throw new ORPCError("BAD_GATEWAY", { message: `${choice.model} returned an empty commit message — try again.` });
+            }
+            // A model that asked a question back instead of describing the diff has produced no message either,
+            // and the one thing that must not happen is filing it as one — see isDeclinedAnswer, which exists
+            // because exactly that reached a commit box. Reported like the empty reply, because to the user it
+            // is the same event: the button did not produce a message.
+            if (isDeclinedAnswer(message)) {
+                throw new ORPCError("BAD_GATEWAY", { message: `${choice.model} couldn't describe this change — try again.` });
             }
             // Whatever the chain stepped over on the way here travels with the answer: the panel names the model
             // that wrote the line, and a user whose first choice was skipped should be told rather than left to

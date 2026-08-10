@@ -1,6 +1,6 @@
 import type { Services } from "../composition.js";
 import { askQuickModel } from "./quick-model.js";
-import { isFailureSentence } from "./failure-sentences.js";
+import { isDeclinedAnswer, isFailureSentence } from "./failure-sentences.js";
 
 /* THE NAME THE QUICK MODEL WRITES FOR A CONVERSATION, one second into its first turn — the second half of the
  * naming rule that starts in the contract's title.ts.
@@ -80,8 +80,8 @@ const BULLET = /^[-*]\s+/;
 
 /* The separator the shape asks for, against the ones a model reaches for instead — normalised for the same
  * reason the wrappers above are stripped, so that a right name in wrong punctuation still lands as one column
- * plus a tag rather than as prose. (commitSuggestion.ts reads that tag; a stray em dash there would cost the
- * commit type.)
+ * plus a tag rather than as prose. (The browser's sessionCategory.ts reads that tag to tint the session's
+ * identity tile; a stray em dash there would cost the card its colour and its glyph.)
  *
  * Only a SPACED separator, or a bullet character, and only in front of ONE trailing word: `Auth refresh-loop`
  * is a hyphenated noun, not a subject and an action, and an unspaced hyphen is the one shape common to both. */
@@ -120,10 +120,18 @@ export const nameAgentTitle = async (services: Services, conversationId: string,
     }
     const { text } = await askQuickModel(services, namePrompt(prompt), new AbortController().signal);
     const title = cleanSessionTitle(text);
-    // The refusal check repeats here because the quick model may run on a DIFFERENT provider than the turn it is
-    // naming — its own limit hit or refused credential arrives as this reply's text, not as a thrown error, on
-    // providers whose failures stream as prose rather than reaching one-shot's flag.
-    if (title === `` || isFailureSentence(title)) {
+    /* Two ways this reply can fail to be a name, and only the first is anybody's fault.
+     *
+     * The refusal check repeats here because the quick model may run on a DIFFERENT provider than the turn it is
+     * naming — its own limit hit or refused credential arrives as this reply's text, not as a thrown error, on
+     * providers whose failures stream as prose rather than reaching one-shot's flag.
+     *
+     * The decline check is for a healthy model that simply would not do it: an opening prompt too thin to name
+     * ("continue", a pasted stack trace, a bare slash command) gets answered with a question back, and writing
+     * that down would name the conversation after the model's confusion — permanently, since a model title
+     * outranks every later automatic source. Skipping leaves the derived title standing and lets the next turn,
+     * which has more to go on, try again. */
+    if (title === `` || isFailureSentence(title) || isDeclinedAnswer(title)) {
         return;
     }
     await services.agents.setTitle(conversationId, title, "model");

@@ -30,8 +30,9 @@ test("keeps quotes that are part of the name", () => {
     expect(cleanSessionTitle(`"Resume with Claude" prompt · remove`)).toBe(`"Resume with Claude" prompt · remove`);
 });
 
-/* The action tag reaches commitSuggestion.ts as the commit type, so the separator in front of it is normalised
- * rather than taken as written — a model that answered with the right name and a dash still gets its tag read. */
+/* The action tag reaches the browser's sessionCategory.ts as the kind of work the card is tinted by, so the
+ * separator in front of it is normalised rather than taken as written — a model that answered with the right
+ * name and a dash still gets its tag read. */
 
 test("normalises whatever separator the model reached for", () => {
     expect(cleanSessionTitle("Sandbox freezes - fix")).toBe("Sandbox freezes · fix");
