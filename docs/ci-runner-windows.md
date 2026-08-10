@@ -1,7 +1,7 @@
 # The Windows CI runner
 
 One machine, and it exists to do the single thing no other runner in this repo can: **execute
-`Intentic-setup.exe`**. Everything the pipeline otherwise knows about the Windows installer comes from
+`Intentic-<version>-x64-setup.exe`**. Everything the pipeline otherwise knows about the Windows installer comes from
 unpacking it as an archive on a Linux box — the installer is cross-compiled there by `cargo-xwin` and, until
 this runner existed, first ran on a customer's PC.
 
@@ -150,7 +150,7 @@ pnpm install --frozen-lockfile --filter=@intentic/desktop-smoke-windows...
 pnpm turbo run build --filter=@intentic/desktop-smoke-windows...
 
 node _tools/desktop-smoke-windows/dist/main.js doctor --needs-docker
-node _tools/desktop-smoke-windows/dist/main.js install --installer path\to\Intentic-setup.exe --keep-installed
+node _tools/desktop-smoke-windows/dist/main.js install --installer path\to\Intentic-<version>-x64-setup.exe --keep-installed
 node _tools/desktop-smoke-windows/dist/main.js setup --ic-bin path\to\ic-windows-amd64.exe
 node _tools/desktop-smoke-windows/dist/main.js agents
 node _tools/desktop-smoke-windows/dist/main.js teardown
@@ -176,7 +176,7 @@ What each tier asserts, and why each assertion earns its place, is in
 
 The Windows runner never builds product binaries. Linux jobs cross-build what each workflow needs and upload it:
 
-- `Intentic-setup.exe` — via `build-desktop.sh <version> --windows-only`. For a release, the serialized release
+- `Intentic-<version>-x64-setup.exe` — via `build-desktop.sh <version> --windows-only`. For a release, the serialized release
   workflow builds the versioned candidate once, Windows executes it, and publication stages that same artifact
   with `--windows-prebuilt`; no second installer build can differ after the check.
 - `ic-windows-amd64.exe` — because `connect.ps1` is a **bootstrap shim**: the setup flow lives in the `ic` CLI,

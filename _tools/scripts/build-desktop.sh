@@ -19,13 +19,14 @@ set -euo pipefail
 
 VERSION="${1:?usage: build-desktop.sh <version> [--linux-only|--windows-only|--windows-prebuilt <dir>]}"
 . "$(dirname "$0")/repo-root.sh"
+. "$(dirname "$0")/desktop-artifacts.sh"
 # Two verification jobs each want ONE side of this build, and the release wants both. One build script either
 # way, so the artifacts a CI job verifies are produced by exactly the path that produces the released ones.
 #
 #   --linux-only    skips the Windows cross-build and the cargo-xwin toolchain it needs. For desktop-verify,
 #                   which exercises the Linux bundles on a real host and has no use for an installer it cannot
 #                   run.
-#   --windows-only  skips the Linux bundles. For the job that hands `Intentic-setup.exe` to the Windows runner:
+#   --windows-only  skips the Linux bundles. For the job that hands the NSIS installer to the Windows runner:
 #                   a deb/rpm/AppImage build costs it several minutes of artifacts nothing downstream opens.
 #   --windows-prebuilt <dir>
 #                   builds Linux and stages the already-tested NSIS candidate from this directory. The release
@@ -48,8 +49,18 @@ case "${2:-}" in
         exit 2
         ;;
 esac
-if [ -n "$WINDOWS_PREBUILT" ] && [ ! -f "$WINDOWS_PREBUILT/Intentic-setup.exe" ]; then
-    echo "error: the tested Windows installer is missing from $WINDOWS_PREBUILT" >&2
+# What this build's four artifacts are called (desktop-artifacts.sh) — resolved once, here, so the collect and
+# the manifest below cannot drift from each other or from what the release attaches.
+NSIS_NAME="$(desktop_artifact_name nsis "$VERSION")"
+APPIMAGE_NAME="$(desktop_artifact_name appimage "$VERSION")"
+DEB_NAME="$(desktop_artifact_name deb "$VERSION")"
+RPM_NAME="$(desktop_artifact_name rpm "$VERSION")"
+# A prebuilt candidate is looked for by its EXACT versioned name, not by whatever installer happens to be in
+# that directory. It was built by an earlier job at a version this run was told to release, so a name that does
+# not match means the two disagree about what is being released — and staging it anyway would attach an
+# installer whose contents claim one version under a file name promising another.
+if [ -n "$WINDOWS_PREBUILT" ] && [ ! -f "$WINDOWS_PREBUILT/$NSIS_NAME" ]; then
+    echo "error: no $NSIS_NAME in $WINDOWS_PREBUILT — the tested candidate is missing, or was built at a different version" >&2
     exit 2
 fi
 ROOT="$(repo_root)"
@@ -156,26 +167,29 @@ if [ "$LINUX_ONLY" -eq 0 ] && [ -z "$WINDOWS_PREBUILT" ]; then
     pnpm exec tauri build --config "$CONFIG" --runner cargo-xwin --target x86_64-pc-windows-msvc --bundles nsis
 fi
 
-# --- collect with stable (un-versioned) names, so the site's vanity URLs and latest.json never need a bump ---
+# --- collect under the names the release attaches (desktop-artifacts.sh: version + architecture) ---
+# The bundlers each spell their own output differently and none of them agrees with the others, so the names
+# are imposed here rather than inherited — which is also what makes every downstream consumer able to ask for
+# an artifact by KIND and get one answer.
 if [ "$WINDOWS_ONLY" -eq 0 ]; then
-    cp "$LINUX_BUNDLES"/appimage/*.AppImage "$OUT/Intentic.AppImage"
-    cp "$LINUX_BUNDLES"/deb/*.deb "$OUT/Intentic.deb"
-    cp "$LINUX_BUNDLES"/rpm/*.rpm "$OUT/Intentic.rpm"
+    cp "$LINUX_BUNDLES"/appimage/*.AppImage "$OUT/$APPIMAGE_NAME"
+    cp "$LINUX_BUNDLES"/deb/*.deb "$OUT/$DEB_NAME"
+    cp "$LINUX_BUNDLES"/rpm/*.rpm "$OUT/$RPM_NAME"
     appimage_signatures=("$LINUX_BUNDLES"/appimage/*.AppImage.sig)
     if [ -f "${appimage_signatures[0]}" ]; then
-        cp "${appimage_signatures[0]}" "$OUT/Intentic.AppImage.sig"
+        cp "${appimage_signatures[0]}" "$OUT/$APPIMAGE_NAME.sig"
     fi
 fi
 if [ -n "$WINDOWS_PREBUILT" ]; then
-    cp "$WINDOWS_PREBUILT/Intentic-setup.exe" "$OUT/Intentic-setup.exe"
-    if [ -f "$WINDOWS_PREBUILT/Intentic-setup.exe.sig" ]; then
-        cp "$WINDOWS_PREBUILT/Intentic-setup.exe.sig" "$OUT/Intentic-setup.exe.sig"
+    cp "$WINDOWS_PREBUILT/$NSIS_NAME" "$OUT/$NSIS_NAME"
+    if [ -f "$WINDOWS_PREBUILT/$NSIS_NAME.sig" ]; then
+        cp "$WINDOWS_PREBUILT/$NSIS_NAME.sig" "$OUT/$NSIS_NAME.sig"
     fi
 elif [ "$LINUX_ONLY" -eq 0 ]; then
-    cp "$WIN_BUNDLES"/nsis/*-setup.exe "$OUT/Intentic-setup.exe"
+    cp "$WIN_BUNDLES"/nsis/*-setup.exe "$OUT/$NSIS_NAME"
     windows_signatures=("$WIN_BUNDLES"/nsis/*-setup.exe.sig)
     if [ -f "${windows_signatures[0]}" ]; then
-        cp "${windows_signatures[0]}" "$OUT/Intentic-setup.exe.sig"
+        cp "${windows_signatures[0]}" "$OUT/$NSIS_NAME.sig"
     fi
 fi
 
@@ -184,20 +198,20 @@ fi
 # only one of them would advertise an update that 404s for everyone on the other.
 if [ -n "${TAURI_SIGNING_PRIVATE_KEY:-}" ] && [ "$LINUX_ONLY" -eq 0 ] && [ "$WINDOWS_ONLY" -eq 0 ]; then
     echo "==> writing latest.json"
-    if [ ! -f "$OUT/Intentic.AppImage.sig" ] || [ ! -f "$OUT/Intentic-setup.exe.sig" ]; then
+    if [ ! -f "$OUT/$APPIMAGE_NAME.sig" ] || [ ! -f "$OUT/$NSIS_NAME.sig" ]; then
         echo "error: updater signing is enabled but a staged desktop signature is missing" >&2
         exit 1
     fi
-    appimage_sig="$(cat "$OUT/Intentic.AppImage.sig")"
-    nsis_sig="$(cat "$OUT/Intentic-setup.exe.sig")"
+    appimage_sig="$(cat "$OUT/$APPIMAGE_NAME.sig")"
+    nsis_sig="$(cat "$OUT/$NSIS_NAME.sig")"
     cat >"$OUT/latest.json" <<MANIFEST
 {
     "version": "${VERSION}",
     "notes": "https://github.com/intentic/intentic/releases/tag/v${VERSION}",
     "pub_date": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
     "platforms": {
-        "linux-x86_64": { "signature": "${appimage_sig}", "url": "${DOWNLOADS}/Intentic.AppImage" },
-        "windows-x86_64": { "signature": "${nsis_sig}", "url": "${DOWNLOADS}/Intentic-setup.exe" }
+        "linux-x86_64": { "signature": "${appimage_sig}", "url": "${DOWNLOADS}/${APPIMAGE_NAME}" },
+        "windows-x86_64": { "signature": "${nsis_sig}", "url": "${DOWNLOADS}/${NSIS_NAME}" }
     }
 }
 MANIFEST

@@ -26,6 +26,7 @@
 # CLOUDFLARE_API_TOKEN and belongs with the other gated nightly suites, which self-skip without their secrets.
 set -euo pipefail
 . "$(dirname "$0")/repo-root.sh"
+. "$(dirname "$0")/desktop-artifacts.sh"
 
 ROOT="$(repo_root)"
 SANDBOX_IMAGE="${SANDBOX_E2E_IMAGE:-ghcr.io/intentic/sandbox:stable}"
@@ -40,9 +41,9 @@ if [ ! -d "${1:-$ROOT/_editor/desktop-app/dist-bin}" ]; then
     exit 1
 fi
 DIST="$(cd "${1:-$ROOT/_editor/desktop-app/dist-bin}" && pwd)"
-DEB="$DIST/Intentic.deb"
-if [ ! -f "$DEB" ]; then
-    echo "error: $DEB not found — this tier reads the shipped connect.sh out of the installer." >&2
+DEB="$(desktop_artifact "$DIST" deb)"
+if [ -z "$DEB" ]; then
+    echo "error: no $(desktop_artifact_glob deb) in $DIST — this tier reads the shipped connect.sh out of the installer." >&2
     exit 1
 fi
 

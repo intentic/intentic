@@ -5,7 +5,7 @@
 #
 # The three things no amount of `cargo test` can tell you, in the order a user meets them:
 #
-#   1. INSTALL. `apt-get install ./Intentic.deb` on a host with no GUI libraries at all — so the package's own
+#   1. INSTALL. `apt-get install` the built .deb on a host with no GUI libraries at all — so the package's own
 #      Depends field has to name everything the binary links against. Tauri's bundler generates that field and
 #      nothing else in the pipeline reads it; when it is wrong the build is green, the install is clean, and the
 #      app dies on first launch with a linker error the user cannot act on.
@@ -34,6 +34,10 @@
 # the workspace. A window would appear either way. Only its title says whether the link arrived — and the
 # confirmation's title says it first, being a window that has no other reason to exist.
 set -euo pipefail
+# Placed next to the artifacts by verify-desktop-install.sh — see its `docker cp`. The artifact names carry a
+# version this script is never told, so it asks for one by kind instead of spelling a name it would have to
+# keep in step with the builder.
+. /usr/local/lib/desktop-artifacts.sh
 
 KIND="${1:?usage: smoke.sh deb|appimage}"
 DISPLAY_NUM=99
@@ -188,8 +192,8 @@ echo "==> smoke: ${KIND}"
 # ── 1. install ────────────────────────────────────────────────────────────────────────────────────────────────
 case "$KIND" in
     deb)
-        artifact=/artifacts/Intentic.deb
-        [ -f "$artifact" ] || { echo "error: $artifact not mounted" >&2; exit 1; }
+        artifact="$(desktop_artifact /artifacts deb)"
+        [ -n "$artifact" ] || { echo "error: no $(desktop_artifact_glob deb) in /artifacts" >&2; exit 1; }
         apt-get update -qq
         # Let apt resolve the package's OWN Depends — the whole point of the bare image. A missing runtime
         # library fails HERE, loudly, instead of at launch with a linker error.
@@ -205,8 +209,8 @@ case "$KIND" in
         LAUNCH=("$BINARY")
         ;;
     appimage)
-        artifact=/artifacts/Intentic.AppImage
-        [ -f "$artifact" ] || { echo "error: $artifact not mounted" >&2; exit 1; }
+        artifact="$(desktop_artifact /artifacts appimage)"
+        [ -n "$artifact" ] || { echo "error: no $(desktop_artifact_glob appimage) in /artifacts" >&2; exit 1; }
         # The excludelist baseline, and nothing above it. linuxdeploy applies the AppImage project's
         # excludelist, which deliberately does NOT bundle the libraries every graphical Linux install already
         # carries — so an AppImage is self-contained ABOVE that line and host-dependent below it. This image has

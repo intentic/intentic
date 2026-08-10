@@ -37,22 +37,69 @@ function canonicalForMarkdown(pathname: string): string | undefined {
     return withoutExt === "/index" ? "/" : `${withoutExt}/`;
 }
 
-/* Desktop-app downloads (_editor/desktop-app): stable vanity URLs, so the site and the app's own links never carry
- * a version. An installer staged locally into public/desktop/ (stage-local-downloads.sh — gitignored, so a
- * deploy normally ships none) is served directly; otherwise this redirects to the latest GitHub Release,
- * which is where publish-github.sh attaches them.
+/* Desktop-app downloads (_editor/desktop-app): stable vanity URLs, so the site and the app's own links never
+ * carry a version — while the FILE they hand over does. Those are two different promises and this is where
+ * they are kept apart: a link that needs bumping every release eventually 404s, and a download called
+ * `Intentic-setup.exe` cannot tell anyone which build they installed, or survive sitting in a Downloads
+ * folder beside three of its own predecessors.
  *
- * `releases/latest/download/<name>` is the same surface sync.sh and computer.sh fetch their binaries from:
- * it resolves to the newest release without the site knowing a version. Names match build-desktop.sh's
- * un-versioned artifact names. */
-const DESKTOP_LATEST = "https://github.com/intentic/intentic/releases/latest/download";
-const DESKTOP_FILES: Record<string, string> = {
-    "/desktop": "Intentic-setup.exe",
-    "/desktop/windows": "Intentic-setup.exe",
-    "/desktop/linux": "Intentic.AppImage",
-    "/desktop/deb": "Intentic.deb",
-    "/desktop/rpm": "Intentic.rpm",
+ * An installer staged locally into public/desktop/ (stage-local-downloads.sh — gitignored, so a deploy
+ * normally ships none) is served directly under its plain staged name; otherwise this resolves the newest
+ * release and redirects to that release's versioned asset. */
+const RELEASES = "https://github.com/intentic/intentic/releases";
+const DESKTOP_FILES: Record<string, { staged: string; asset: (version: string) => string }> = {
+    "/desktop": { staged: "Intentic-setup.exe", asset: (v) => `Intentic-${v}-x64-setup.exe` },
+    "/desktop/windows": { staged: "Intentic-setup.exe", asset: (v) => `Intentic-${v}-x64-setup.exe` },
+    "/desktop/linux": { staged: "Intentic.AppImage", asset: (v) => `Intentic-${v}-x86_64.AppImage` },
+    "/desktop/deb": { staged: "Intentic.deb", asset: (v) => `Intentic-${v}-amd64.deb` },
+    "/desktop/rpm": { staged: "Intentic.rpm", asset: (v) => `Intentic-${v}-x86_64.rpm` },
 };
+
+/* Where a download route actually sends someone, memoised per platform for an hour in the isolate. A worker
+ * isolate serves many requests, so the common case costs no upstream request at all; a cold or recycled
+ * isolate simply asks again. Releases are the slowest-moving thing this site knows about, and being an hour
+ * behind on one costs a visitor nothing — the previous version's asset is still there.
+ *
+ * TWO upstream reads, both cheap and both headers-only:
+ *
+ *   1. WHICH RELEASE IS NEWEST, read from where GitHub already answers it: /releases/latest is a 302 to
+ *      /releases/tag/v<version>. Not the REST API — that spends an unauthenticated quota shared across
+ *      everything leaving a Cloudflare colo, for a fact this redirect states in a response with no body.
+ *   2. WHETHER THAT RELEASE REALLY CARRIES THIS ASSET. Composing a file name from a version is a guess about
+ *      what a build produced, and this route is the main way anyone gets the product — so the guess is
+ *      checked rather than served. It covers a release that failed to attach one platform's installer, a
+ *      naming change landing on the site before the first release that produces it, and any future rename
+ *      whose two halves deploy at different times, because the site and the release pipeline are separate
+ *      deployments and always will be.
+ *
+ * A miss falls back to the releases page: not the file they asked for, but a page with every asset on it and
+ * a working download two seconds away. A dead end is the one answer this route must never give. */
+const DOWNLOAD_TTL_MS = 60 * 60 * 1000;
+const downloadCache = new Map<string, { url: string; at: number }>();
+
+async function resolveDownload(asset: (version: string) => string, key: string): Promise<string> {
+    const cached = downloadCache.get(key);
+    if (cached !== undefined && Date.now() - cached.at < DOWNLOAD_TTL_MS) {
+        return cached.url;
+    }
+    let resolved = `${RELEASES}/latest`;
+    try {
+        const latest = await fetch(`${RELEASES}/latest`, { redirect: "manual" });
+        const version = /\/releases\/tag\/v(?<version>[^/?#]+)$/u.exec(latest.headers.get("location") ?? "")?.groups?.version;
+        if (version !== undefined) {
+            const candidate = `${RELEASES}/download/v${version}/${asset(version)}`;
+            // An asset that exists answers a HEAD with a redirect to storage; one that does not answers 404.
+            const probe = await fetch(candidate, { method: "HEAD", redirect: "manual" });
+            if (probe.status < 400) {
+                resolved = candidate;
+            }
+        }
+    } catch {
+        // Offline, rate-limited, or the redirect shape moved — the releases-page fallback stands.
+    }
+    downloadCache.set(key, { url: resolved, at: Date.now() });
+    return resolved;
+}
 
 export default {
     async fetch(request: Request, env: { ASSETS: { fetch: typeof fetch } }): Promise<Response> {
@@ -60,13 +107,15 @@ export default {
 
         const download = DESKTOP_FILES[url.pathname.replace(/\/$/, "")];
         if (download !== undefined) {
-            const staged = await env.ASSETS.fetch(new Request(new URL(`/desktop/${download}`, url), request));
+            const staged = await env.ASSETS.fetch(new Request(new URL(`/desktop/${download.staged}`, url), request));
             if (staged.ok) {
                 const headers = new Headers(staged.headers);
-                headers.set("content-disposition", `attachment; filename="${download}"`);
+                headers.set("content-disposition", `attachment; filename="${download.staged}"`);
                 return new Response(staged.body, { status: staged.status, headers });
             }
-            return Response.redirect(`${DESKTOP_LATEST}/${download}`, 302);
+            // Keyed on the staged name rather than the route, so /desktop and /desktop/windows — the same
+            // installer under two paths — share one resolution instead of probing for it twice.
+            return Response.redirect(await resolveDownload(download.asset, download.staged), 302);
         }
 
         const canonical = canonicalForMarkdown(url.pathname);

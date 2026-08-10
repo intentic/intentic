@@ -1,6 +1,6 @@
 # The CI runners
 
-> The **Linux** fleet. The one Windows machine — the only runner that can execute `Intentic-setup.exe` — is
+> The **Linux** fleet. The one Windows machine — the only runner that can execute the Windows installer — is
 > [`ci-runner-windows.md`](ci-runner-windows.md), and shares none of the setup below.
 
 CI assumes one thing no runner provides by default: **a persistent host directory at `/ci-cache`**. Without it

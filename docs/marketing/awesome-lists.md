@@ -22,7 +22,7 @@ Every list matches on a different one of these, so the pitch changes per target:
 | Multi-agent-CLI host | Claude Code, Codex, OpenCode, Gemini as interchangeable engines |
 | MCP client | MCP servers wired in per agent as capabilities |
 | Sandbox / isolation layer | Docker sandbox per agent, editable Dockerfile the user approves |
-| Desktop app | Tauri app, shipped in releases (`Intentic-setup.exe`, per-OS binaries) |
+| Desktop app | Tauri app, shipped in releases (`Intentic-<version>-x64-setup.exe`, per-OS binaries) |
 | Free / open source alternative | MIT, no paid tier, runs on your own model subscriptions |
 
 ## Tier 1 — submit now (no gate we fail)

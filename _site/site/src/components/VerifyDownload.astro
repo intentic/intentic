@@ -18,7 +18,7 @@ import { githubUrl } from "@intentic-dev/site-content/site";
 const card = await scorecard();
 
 const commands = `# The desktop installer, or any binary from a release
-gh attestation verify Intentic-setup.exe --repo intentic/intentic
+gh attestation verify Intentic-<version>-x64-setup.exe --repo intentic/intentic
 
 # The sandbox image your machine runs
 gh attestation verify oci://ghcr.io/intentic/sandbox:stable --repo intentic/intentic

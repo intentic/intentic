@@ -525,13 +525,14 @@ jobs:
       - run: bash _tools/scripts/build-ic.sh windows-x64
       # Staged into one directory rather than uploaded as two paths, because an upload of several paths is
       # rooted at their COMMON ANCESTOR — for two different dist-bin directories that is the repo root, and the
-      # installer arrives as `_editor/desktop-app/dist-bin/Intentic-setup.exe` instead of at the name the
-      # Windows tier is handed. A directory upload is rooted at the directory, so the names survive.
+      # installer arrives under `_editor/desktop-app/dist-bin/` instead of at the top level the Windows tier
+      # looks in. A directory upload is rooted at the directory, so the names survive.
       # Emptied first: this job checks out with `clean: false`, so the directory can survive from a run whose
       # build failed after it was staged.
       - run: |
+          . _tools/scripts/desktop-artifacts.sh
           rm -rf windows-artifacts && mkdir -p windows-artifacts
-          cp _editor/desktop-app/dist-bin/Intentic-setup.exe _sandbox/ic/dist-bin/ic-windows-amd64.exe windows-artifacts/
+          cp "$(desktop_artifact _editor/desktop-app/dist-bin nsis)" _sandbox/ic/dist-bin/ic-windows-amd64.exe windows-artifacts/
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: windows-desktop-artifacts
@@ -541,7 +542,7 @@ jobs:
 
   # THE TIER NO OTHER JOB IN THIS REPO CAN RUN: the shipped Windows installer, executed on Windows.
   #
-  # Everything else this pipeline knows about Intentic-setup.exe comes from reading it as an archive. This
+  # Everything else this pipeline knows about the Windows installer comes from reading it as an archive. This
   # installs it unattended on a clean machine, asserts what landed on disk, fires a real intentic:// link at a
   # machine where the app has never run — the state a first-time user is in, and the half that was broken on
   # Linux for months while every after-launch assertion passed — launches it, fires the link again at the
@@ -596,7 +597,10 @@ jobs:
       # cannot fix from inside itself, and the doctor names it with its remedy.
       - run: node _tools/desktop-smoke-windows/dist/main.js teardown
       - run: node _tools/desktop-smoke-windows/dist/main.js doctor
-      - run: node _tools/desktop-smoke-windows/dist/main.js install --installer windows-artifacts/Intentic-setup.exe
+      # Resolve-Path rather than a spelled-out name: the installer carries the version it was built at, which
+      # this job does not hold. It errors when nothing matches, and GitHub's PowerShell shell stops on error,
+      # so a missing installer fails here instead of reaching the harness as an empty argument.
+      - run: node _tools/desktop-smoke-windows/dist/main.js install --installer (Resolve-Path windows-artifacts/Intentic-*-x64-setup.exe)
       # Always, so a run that failed mid-tier hands the next one a clean machine rather than relying on the
       # reconcile above to notice.
       - run: node _tools/desktop-smoke-windows/dist/main.js teardown

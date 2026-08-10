@@ -84,7 +84,9 @@ export const openDesktopLink = (link: string): void => {
  *   • local dev: the site's own dev server (`pnpm --filter @intentic-dev/site dev`, port 4321), which serves
  *     _site/site/public/ at the root — stage installers into public/desktop/ with
  *     `pnpm --filter @intentic/desktop-app stage:downloads`, so the download is your own build.
- * File names are the release-stable ones from _tools/scripts/build-desktop.sh. */
+ * The file names here are the STAGED ones, which is why they carry no version: a release artifact is named
+ * Intentic-<version>-x64-setup.exe, but a working-tree build has no version to state (it carries the 0.0.0
+ * "not a release" sentinel), and the dev server has no worker to resolve a name it was not given. */
 const DESKTOP_FILES = {
     windows: { vanity: `windows`, file: `Intentic-setup.exe` },
     linuxAppImage: { vanity: `linux`, file: `Intentic.AppImage` },

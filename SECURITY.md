@@ -11,7 +11,7 @@ You need the [GitHub CLI](https://cli.github.com). Nothing else, and no account.
 
 ```sh
 # The desktop installer, or any binary attached to a release
-gh attestation verify Intentic-setup.exe --repo intentic/intentic
+gh attestation verify Intentic-<version>-x64-setup.exe --repo intentic/intentic
 
 # The sandbox image your machine runs
 gh attestation verify oci://ghcr.io/intentic/sandbox:stable --repo intentic/intentic

@@ -10,7 +10,7 @@ window, a tray icon and a registry entry, so it needs a real Windows session. Se
 ```powershell
 pnpm turbo run build --filter=@intentic/desktop-smoke-windows...
 node dist/main.js doctor            # the machine, before the product
-node dist/main.js install  --installer path\to\Intentic-setup.exe [--expected-version 1.2.3]
+node dist/main.js install  --installer path\to\Intentic-1.2.3-x64-setup.exe [--expected-version 1.2.3]
 node dist/main.js setup             # needs Docker Desktop on Linux containers
 node dist/main.js agents            # needs a connected account (see the runner doc)
 node dist/main.js teardown          # put the machine back
@@ -18,7 +18,7 @@ node dist/main.js teardown          # put the machine back
 
 ## Why this exists
 
-`Intentic-setup.exe` is cross-compiled on a Linux runner by `cargo-xwin` and, before these tiers, was
+The Windows installer is cross-compiled on a Linux runner by `cargo-xwin` and, before these tiers, was
 **never executed anywhere** before a user double-clicked it. The only automated look inside it was
 `verify-desktop-bundle.sh` unpacking it with 7z — which proves the files are in the archive and nothing at all
 about what happens when someone runs it. Two of this repo's own comments named the missing piece "the Windows

@@ -13,7 +13,7 @@ bash _tools/scripts/verify-desktop-install.sh                # that they INSTALL
 
 ## What the bare image is for
 
-`apt-get install ./Intentic.deb` has to resolve `libwebkit2gtk`, `libgtk-3` and the rest from the package's own
+`apt-get install ./Intentic-<version>-amd64.deb` has to resolve `libwebkit2gtk`, `libgtk-3` and the rest from the package's own
 `Depends` field. The Tauri bundler generates that field, nothing else in the pipeline reads it, and the machine
 that built the package necessarily already has those libraries — so an incomplete `Depends` is green all the
 way to a user's first launch, where it is a linker error they cannot act on. Pre-seeding the libraries here

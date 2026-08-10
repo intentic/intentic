@@ -13,6 +13,7 @@
 # Windows runner).
 set -euo pipefail
 . "$(dirname "$0")/repo-root.sh"
+. "$(dirname "$0")/desktop-artifacts.sh"
 
 ROOT="$(repo_root)"
 CONTEXT="$ROOT/_tools/desktop-smoke"
@@ -62,17 +63,23 @@ smoke() {
     # container are environment variables inside smoke.sh, not a loosened security profile.
     docker create --name "$container" --shm-size=1g "$IMAGE" "$kind" >/dev/null
     docker cp "$DIST/." "$container:/artifacts"
+    # The naming rules travel WITH the artifacts, rather than being restated inside the image: smoke.sh has to
+    # find a file whose version it does not know, and the image's build context is its own directory, so it
+    # cannot reach _tools/scripts at build time. Copied here instead, where both are already in hand.
+    docker cp "$ROOT/_tools/scripts/desktop-artifacts.sh" "$container:/usr/local/lib/desktop-artifacts.sh"
     checked=$((checked + 1))
     if ! docker start -a "$container"; then
         failures=$((failures + 1))
     fi
 }
 
-if [ -f "$DIST/Intentic.deb" ]; then smoke deb; fi
-if [ -f "$DIST/Intentic.AppImage" ]; then smoke appimage; fi
+# By kind, not by name — the whole directory is copied into the container either way, and smoke.sh finds the
+# one it was asked for the same way. What is decided here is only whether there is anything to run.
+if [ -n "$(desktop_artifact "$DIST" deb)" ]; then smoke deb; fi
+if [ -n "$(desktop_artifact "$DIST" appimage)" ]; then smoke appimage; fi
 
 if [ "$checked" -eq 0 ]; then
-    echo "error: no installable artifacts in $DIST (expected Intentic.deb and/or Intentic.AppImage)" >&2
+    echo "error: no installable artifacts in $DIST (expected $(desktop_artifact_glob deb) and/or $(desktop_artifact_glob appimage))" >&2
     exit 1
 fi
 

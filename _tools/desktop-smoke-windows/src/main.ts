@@ -45,7 +45,7 @@ const main = async (): Promise<number> => {
     if (command === `install`) {
         const installer = flag(argv, `installer`);
         if (installer === undefined) {
-            process.stderr.write(`error: --installer <path to Intentic-setup.exe> is required\n`);
+            process.stderr.write(`error: --installer <path to Intentic-<version>-x64-setup.exe> is required\n`);
             return 2;
         }
         await runInstallTier(harness, {

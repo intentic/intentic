@@ -1,4 +1,5 @@
 ---
+import { latestRelease } from "@intentic-dev/astro-integrations";
 import { APP_URL } from "@intentic-dev/site-content/site";
 import BaseLayout from "../layouts/BaseLayout.astro";
 import Footer from "../components/Footer.astro";
@@ -13,8 +14,13 @@ import Nav from "../components/Nav.astro";
  * hand over a file.
  *
  * The URLs are the site worker's vanity paths (worker.ts): a locally-staged installer if one exists, else a
- * redirect to the newest release in the public package registry. No version anywhere on this page — a
- * download link that needs a bump every release is a download link that eventually 404s. */
+ * redirect to the newest release's asset. No version in the LINKS — one that needs a bump every release is
+ * one that eventually 404s — but the version is stated beside them, because the two are not the same promise:
+ * a stable link is how the page keeps working, and a stated version is how somebody knows what they are about
+ * to install and whether this project shipped anything this year. It is read, never typed (latestRelease),
+ * and the page renders without it rather than with a stale one. */
+
+const release = await latestRelease();
 
 const title = "Download Intentic for Windows and Linux";
 const description =
@@ -95,6 +101,21 @@ const does = [
                     ))
                 }
             </div>
+
+            {/* The link sits at the END of the sentence on purpose: an anchor followed by punctuation puts the
+                closing tag and the full stop on separate lines once this file is formatted, and the browser
+                renders that gap as a space floating before the period. */}
+            {
+                release !== null && (
+                    <p class="mt-4 text-xs text-subtle">
+                        Version <strong class="font-medium text-muted">{release.version}</strong>, released {release.date}. Each download is
+                        named for its version, so you can always tell which build you have.{" "}
+                        <a href={release.notes} target="_blank" rel="noopener" class="text-link hover:underline">
+                            What's new
+                        </a>
+                    </p>
+                )
+            }
 
             <p class="mt-4 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-subtle">
                 <span>Other Linux packages:</span>

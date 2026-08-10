@@ -74,7 +74,8 @@ jobs:
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: windows-release-candidate
-          path: _editor/desktop-app/dist-bin/Intentic-setup.exe*
+          # The installer and its updater signature, both of which carry the version stamped above.
+          path: _editor/desktop-app/dist-bin/Intentic-*-x64-setup.exe*
           if-no-files-found: error
           retention-days: 7
 
@@ -151,7 +152,9 @@ jobs:
       # matters more: a release that stalls for want of a hand-cleaned runner stalls the publish behind it.
       - run: node _tools/desktop-smoke-windows/dist/main.js teardown
       - run: node _tools/desktop-smoke-windows/dist/main.js doctor
-      - run: node _tools/desktop-smoke-windows/dist/main.js install --installer windows-release-candidate/Intentic-setup.exe --expected-version $env:RELEASE_VERSION
+      # By its exact versioned name, unlike ci.yml's glob: this job knows the version being released, so a
+      # candidate built at any other one fails here rather than being verified and published as this release.
+      - run: node _tools/desktop-smoke-windows/dist/main.js install --installer "windows-release-candidate/Intentic-$($env:RELEASE_VERSION)-x64-setup.exe" --expected-version $env:RELEASE_VERSION
       - run: node _tools/desktop-smoke-windows/dist/main.js teardown
         if: always()
 

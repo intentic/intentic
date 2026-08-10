@@ -25,6 +25,7 @@
 # which is cross-built by cargo-xwin and never otherwise opened before it reaches a user.
 set -euo pipefail
 . "$(dirname "$0")/repo-root.sh"
+. "$(dirname "$0")/desktop-artifacts.sh"
 
 ROOT="$(repo_root)"
 SOURCE_REL="_site/site/public/scripts"
@@ -189,15 +190,21 @@ check_nsis() {
 echo "==> verifying desktop bundles in ${DIST#"$ROOT"/}"
 echo "    against the ${#EXPECTED[@]} scripts committed at $SOURCE_REL ($(git -C "$ROOT" rev-parse --short HEAD))"
 
-# `if` rather than `[ -f … ] && check_…`: under `set -e` a trailing AND-list whose test is false exits the
-# script non-zero, so an absent Windows artifact would read as a verification failure.
-if [ -f "$DIST/Intentic.deb" ]; then check_deb "$DIST/Intentic.deb"; fi
-if [ -f "$DIST/Intentic.rpm" ]; then check_rpm "$DIST/Intentic.rpm"; fi
-if [ -f "$DIST/Intentic.AppImage" ]; then check_appimage "$DIST/Intentic.AppImage"; fi
-if [ -f "$DIST/Intentic-setup.exe" ]; then check_nsis "$DIST/Intentic-setup.exe"; fi
+# Found by kind rather than by name: the version in each file name belongs to the build being verified, which
+# is not something this script is told. `if` rather than `[ -n … ] && check_…`: under `set -e` a trailing
+# AND-list whose test is false exits the script non-zero, so an absent Windows artifact — the normal state of
+# a --linux-only build — would read as a verification failure.
+deb="$(desktop_artifact "$DIST" deb)"
+rpm="$(desktop_artifact "$DIST" rpm)"
+appimage="$(desktop_artifact "$DIST" appimage)"
+nsis="$(desktop_artifact "$DIST" nsis)"
+if [ -n "$deb" ]; then check_deb "$deb"; fi
+if [ -n "$rpm" ]; then check_rpm "$rpm"; fi
+if [ -n "$appimage" ]; then check_appimage "$appimage"; fi
+if [ -n "$nsis" ]; then check_nsis "$nsis"; fi
 
 if [ "$checked" -eq 0 ]; then
-    echo "error: no known artifacts in $DIST (expected Intentic.deb / .rpm / .AppImage / Intentic-setup.exe)" >&2
+    echo "error: no known artifacts in $DIST (expected $(desktop_artifact_glob deb) / $(desktop_artifact_glob rpm) / $(desktop_artifact_glob appimage) / $(desktop_artifact_glob nsis))" >&2
     exit 1
 fi
 

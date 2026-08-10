@@ -147,8 +147,9 @@ jobs:
       # Staged flat for the reason ci.yml's desktop-windows-build spells out: a multi-path upload is rooted at
       # the paths' common ancestor, and the tiers below ask for these two by name.
       - run: |
+          . _tools/scripts/desktop-artifacts.sh
           rm -rf windows-artifacts && mkdir -p windows-artifacts
-          cp _editor/desktop-app/dist-bin/Intentic-setup.exe _sandbox/ic/dist-bin/ic-windows-amd64.exe windows-artifacts/
+          cp "$(desktop_artifact _editor/desktop-app/dist-bin nsis)" _sandbox/ic/dist-bin/ic-windows-amd64.exe windows-artifacts/
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: windows-desktop-artifacts-nightly
@@ -208,7 +209,7 @@ jobs:
       - run: node _tools/desktop-smoke-windows/dist/main.js doctor --needs-docker
       # --keep-installed: tiers 2 and 3 run the scripts the INSTALLER put on the machine, so the install has to
       # survive the tier that made it. Reading them from the source tree would test a file no user ever runs.
-      - run: node _tools/desktop-smoke-windows/dist/main.js install --installer windows-artifacts/Intentic-setup.exe --keep-installed
+      - run: node _tools/desktop-smoke-windows/dist/main.js install --installer (Resolve-Path windows-artifacts/Intentic-*-x64-setup.exe) --keep-installed
       - run: node _tools/desktop-smoke-windows/dist/main.js setup --sandbox-image $env:SANDBOX_E2E_IMAGE --ic-bin windows-artifacts/ic-windows-amd64.exe
       - run: node _tools/desktop-smoke-windows/dist/main.js agents
       # Always: the sandbox this created holds a container, a network and a sidecar, and the install it ran on

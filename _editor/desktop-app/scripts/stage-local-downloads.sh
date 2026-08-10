@@ -1,8 +1,14 @@
 #!/usr/bin/env bash
 # Build the desktop installers from this checkout and stage them into _site/site/public/desktop/
-# (gitignored) under the release-stable names — so the LOCAL site serves them and the web app's
-# dev "Get it" links (http://localhost:4321/desktop/…) download your local build instead of a
-# release. The deployed worker prefers these same asset paths too, so nothing forks between envs.
+# (gitignored) — so the LOCAL site serves them and the web app's dev "Get it" links
+# (http://localhost:4321/desktop/…) download your local build instead of a release. The deployed worker
+# prefers these same asset paths too, so nothing forks between envs.
+#
+# These keep the plain names while a RELEASE artifact is Intentic-<version>-x64-setup.exe
+# (_tools/scripts/desktop-artifacts.sh). Not an oversight and not a second scheme: a working-tree build has no
+# version to put in a name — it carries the 0.0.0 "not a release" sentinel that version-check.ts and
+# upgrade.ts already read as "built from source" — and a name claiming 0.0.0 would be a version statement that
+# is false rather than absent. A fixed name is also what the dev server needs, having no worker to resolve one.
 #
 #   pnpm --filter @intentic/desktop-app stage:downloads               # Linux bundles (deb/rpm/AppImage)
 #   pnpm --filter @intentic/desktop-app stage:downloads -- --windows  # + Windows NSIS via cargo-xwin

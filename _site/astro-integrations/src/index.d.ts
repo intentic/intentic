@@ -53,3 +53,15 @@ export interface Scorecard {
 
 /** The published OpenSSF Scorecard for this repository, or null when the API cannot be read at build time. */
 export function scorecard(): Promise<Scorecard | null>;
+
+export interface LatestRelease {
+    /** The release version, without the tag's `v` prefix. */
+    version: string;
+    /** The day it was published, YYYY-MM-DD. */
+    date: string;
+    /** The release page, where its notes are. */
+    notes: string;
+}
+
+/** The newest published release, or null when the API cannot be read at build time. */
+export function latestRelease(): Promise<LatestRelease | null>;

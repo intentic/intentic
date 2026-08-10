@@ -3,7 +3,7 @@
  * The direct counterpart of `_tools/desktop-smoke/smoke.sh`, in the same order a user meets the same things,
  * and it exists because the Windows installer is the one artifact in this repo that is cross-built on a Linux
  * runner and then executed for the first time on a customer's PC. Until this tier ran, the only automated look
- * inside `Intentic-setup.exe` was `verify-desktop-bundle.sh` unpacking it with 7z — which proves the files are
+ * inside the installer was `verify-desktop-bundle.sh` unpacking it with 7z — which proves the files are
  * in the archive and nothing at all about what happens when someone double-clicks it.
  *
  * NO DOCKER OR CREDENTIALS. The app and setup are pointed at loopback stand-ins; only the installer's own
@@ -47,7 +47,7 @@ import { prepareHermeticDesktop } from "./hermetic.js";
 import { answerConfirm, appWindowTitled, appWindows, findInstalledApp, openLink, schemeCommand, webView2, windowTitles } from "./probe.js";
 
 export interface InstallTierOptions {
-    /** The `Intentic-setup.exe` under test. */
+    /** The `Intentic-<version>-x64-setup.exe` under test. */
     readonly installer: string;
     /** When this is a release gate, the version Windows must read back from the installed candidate. */
     readonly expectedVersion: string | undefined;
