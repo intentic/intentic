@@ -60,3 +60,13 @@ test("IgnoreScope.isIgnored grays junk dirs (incl. .git) + browser profiles; lea
     expect(scope.isIgnored("build", "repo/build", true)).toBe(false);
     expect(scope.isIgnored("src", "repo/src", true)).toBe(false);
 });
+
+// The pointer file a worktree/submodule/--separate-git-dir repo keeps in place of a .git dir is deliberately NOT
+// ignored here: a portability bundle has to carry it (see portability.integration.test.ts — a restore without it
+// is a tree of repos answering `fatal: not a git repository`). Keeping it out of SEARCH is the search sweep's
+// own call; see scan.ts.
+test("a .git pointer file is left to each caller — this layer only knows the directory", () => {
+    const scope = createIgnoreScope();
+    expect(scope.isIgnored(".git", "repo/.git", true)).toBe(true);
+    expect(scope.isIgnored(".git", "repo/.git", false)).toBe(false);
+});

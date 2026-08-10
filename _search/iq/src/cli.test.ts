@@ -223,6 +223,23 @@ test("zero hits always carry a diagnostic hint", async () => {
     expect(def.out).toContain("iq sym 'zz_never_zz*'");
 });
 
+// The most repeated zero-hit shape in the transcripts: a question typed at a verb that matches literally. The
+// hint has to name the verb that reads intent, because the reader's next move is otherwise grep.
+test("a phrase given to an exact verb is diagnosed as the wrong verb, not as bad wording", async () => {
+    const phrase = await invoke(["find", "widget tree explorer sidebar"]);
+    expect(phrase.exitCode).toBe(1);
+    expect(phrase.out).toContain("that query is a phrase");
+    expect(phrase.out).toContain('iq "widget tree explorer sidebar"');
+
+    // Scope is the weaker diagnosis when both are true — widening cannot rescue a phrase given to `find`.
+    const alsoScoped = await invoke(["find", "widget tree explorer sidebar", "--lang", "py"]);
+    expect(alsoScoped.out).toContain("that query is a phrase");
+
+    // A deliberate regex is a pattern however many words it spans, and keeps the older diagnosis.
+    const regex = await invoke(["find", "zz_never_zz|zz_also_never_zz", "--lang", "py"]);
+    expect(regex.out).toContain("scope may be too narrow");
+});
+
 test("parseMultiLine: quoted query and per-line flags parse instead of being searched literally", () => {
     const parsed = parseMultiLine('find "createWidget" --lang ts --in alpha');
     expect(parsed.error).toBeUndefined();

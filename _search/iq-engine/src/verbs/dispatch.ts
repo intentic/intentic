@@ -331,14 +331,32 @@ const ANCHOR_VERBS = new Set<Verb>(["outline", "context", "recent", "log", "who"
 const GREP_DIALECT = /\\[|+?(){}]/;
 const GREP_DIALECT_NOTE = "pattern has grep-style escapes — iq uses rust regex: alternation is a|b (no backslash); literal text: --literal";
 
+// The verbs that match a name or a pattern literally. A question in prose cannot match any of them — only the
+// semantic pipeline behind a bare query reads intent.
+const EXACT_VERBS = new Set<Verb>(["find", "files", "def", "refs", "sym", "ast"]);
+// Deliberate regex, which is a pattern however many words it spans — `a|b`, `foo.*bar`, a character class. The
+// escaped-metachar case is caught earlier by GREP_DIALECT; this is the unescaped one.
+const REGEX_INTENT = /[|()[\]*+?^$\\]/;
+// A phrase, not a name: two or more whitespace-separated words. `iq find 'exact text'` is a legitimate way to
+// spell a literal string, and it lands here too — but that only happens once the literal already missed, and
+// asking semantically is the right next move either way.
+const isPhrase = (query: string): boolean => !REGEX_INTENT.test(query) && query.trim().split(/\s+/).length > 1;
+
 // Zero hits must never be a dead end — benchmarked at a 31% zero-hit rate, each one a wasted agent turn.
-// Diagnose the probable cause in priority order: grep-dialect regex, over-narrow scope, then rephrasing.
+// Diagnose the probable cause in priority order: grep-dialect regex, wrong verb, over-narrow scope, rephrasing.
 const zeroHitHint = (request: QueryRequest): string | undefined => {
     if (ANCHOR_VERBS.has(request.verb)) {
         return undefined;
     }
     if (GREP_DIALECT.test(request.query)) {
         return `0 hits and the ${GREP_DIALECT_NOTE}`;
+    }
+    // Before scope, because a phrase given to an exact verb matches nothing at any scope — widening cannot save
+    // it. Transcript analytics found this the single most repeated zero-hit shape (`iq find "file tree explorer
+    // sidebar"`, `iq find "capabilities page route view"`), and the generic "rephrase" hint below sent every one
+    // of them back to grep: it named the verb they were already misusing and never mentioned the one that works.
+    if (EXACT_VERBS.has(request.verb) && isPhrase(request.query)) {
+        return `0 hits — iq ${request.verb} matches ${request.verb === "files" ? "file names" : "text and names"} literally, and that query is a phrase; ask it as a question instead: iq "${request.query}"`;
     }
     const scope = request.scope;
     if (scope.langs !== undefined || scope.paths !== undefined || scope.globs !== undefined || scope.only !== undefined) {

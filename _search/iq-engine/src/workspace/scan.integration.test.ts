@@ -53,6 +53,25 @@ test("the reference shelf is skipped by default and reachable via --ignored, lik
     expect(full).toContain("refs/react/src/scheduler.ts");
 });
 
+// Every repo in this workspace is a worktree whose real gitdir lives outside it, so `.git` is a POINTER FILE,
+// not a directory. It still has to sweep as git metadata: as content it leaks a host path from outside the
+// workspace, and its byte count changes whenever the worktree is re-pointed, which left the index permanently
+// reporting files behind that no pass could ever reconcile.
+test("a .git worktree pointer file is junk like a .git dir, and still liftable with --ignored", async () => {
+    await mkdir(join(root, "gamma/src"), { recursive: true });
+    await writeFile(join(root, "gamma/src/main.ts"), "export const main = 1;\n");
+    await writeFile(join(root, "gamma/.git"), "gitdir: /elsewhere/gits/gamma\n");
+    const swept = await sweep(root, false);
+    expect(swept.map((entry) => entry.path)).not.toContain("gamma/.git");
+    expect(swept.map((entry) => entry.path)).toContain("gamma/src/main.ts"); // the repo around it stays searchable
+    // Ignoring the pointer must not un-name the repo it marks: churn, hotspots, recent, log and who all key off
+    // this, and they go silently blank for a repo whose entries carry no `repo`.
+    expect(swept.find((entry) => entry.path === "gamma/src/main.ts")?.repo).toBe("gamma");
+
+    const full = (await sweep(root, true)).map((entry) => entry.path);
+    expect(full).toContain("gamma/.git"); // junk, not floor — the same escape hatch a .git dir has
+});
+
 test("the agent plane's byproducts are excluded, its manifests are not", async () => {
     await writeFile(join(root, `${STATE_DIR}/settings.json`), '{ "theme": "dark" }\n');
     const excluded = [

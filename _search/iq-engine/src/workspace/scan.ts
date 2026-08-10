@@ -32,7 +32,16 @@ export const sweep = async (root: string, includeIgnored: boolean): Promise<File
                     return;
                 }
                 const relPath = rel === "" ? dirent.name : `${rel}/${dirent.name}`;
-                if (isIqDenied(relPath) || (!includeIgnored && here.isIgnored(dirent.name, relPath, dirent.isDirectory()))) {
+                // `.git` counts as the directory it stands in for. The ignore layer grays a `.git` DIR, but the
+                // repos here keep a one-line `gitdir:` POINTER FILE instead (see ownsGit above), and as a file it
+                // was admitted as ordinary text: it put a host path from outside the workspace into search
+                // results, and — because re-pointing a worktree changes its byte count — the reader's size diff
+                // called it stale on every pass. A transcript audit found two days of answers opening with a
+                // fixed "index 6 files behind", one per pointer file: the standing false alarm that teaches a
+                // reader to disbelieve the real one. Only the sweep's business — a portability bundle must still
+                // carry these, so the shared ignore layer cannot be the place this happens.
+                const junkGit = dirent.isDirectory() || dirent.name === ".git";
+                if (isIqDenied(relPath) || (!includeIgnored && here.isIgnored(dirent.name, relPath, junkGit))) {
                     return;
                 }
                 if (dirent.isDirectory()) {
