@@ -5,8 +5,7 @@ import { isTestPath } from "@intentic/sandbox-contract";
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, type Ref, watch } from "vue";
 import { useRouter } from "vue-router";
 import ReviewStat from "../components/ReviewStat.vue";
-import type { LineStat } from "../composables/workspace/codeStat";
-import { useCodeStats } from "../composables/workspace/useCodeStats";
+import { sumCounts, useCodeStats, type CodeCount } from "../composables/workspace/useCodeStats";
 import { stopAgent } from "../composables/agents/agentActions";
 import { type Blocker, REASON_COPY } from "../composables/agents/conflictResolution";
 import {
@@ -164,9 +163,14 @@ const filtered = computed<readonly AgentReviewFile[]>(() => {
 /* HOW BIG EACH CHANGE IS IN THE READING ON SCREEN. The diffs here open on code alone unless the reader asks for
  * the comments back, so the counts beside them do too — see useCodeStats for where they come from and why they
  * arrive rather than being computed here. Scoped by agent, since the store is shared with every other review
- * surface in the app and two agents can be holding the same path. */
-const { statOf } = useCodeStats();
-const codeOf = (file: AgentReviewFile): LineStat | undefined => statOf(agentStatKey(agentId, file.repo, file.change.path));
+ * surface in the app and two agents can be holding the same path.
+ *
+ * Three answers, not two: this file's stripped counts, git's own (for a file with nothing to strip), or that the
+ * reading is still being worked out — which the badge prints as such instead of standing git's number in for it.
+ * The background reader has normally settled every row of this review before the page opens; a row that arrives
+ * ahead of it says "counting" for a moment rather than showing a number that would then change. */
+const { countOf } = useCodeStats();
+const codeOf = (file: AgentReviewFile): CodeCount => countOf(agentStatKey(agentId, file.repo, file.change.path));
 
 /* What a heading says about the rows under it — at BOTH scopes, because both fold. A collapsed heading is the
  * only thing left of its rows, so it has to carry what the rows would have said: how big the change is, and
@@ -175,24 +179,15 @@ const codeOf = (file: AgentReviewFile): LineStat | undefined => statOf(agentStat
 interface GroupStats {
     readonly additions: number;
     readonly deletions: number;
-    // The same span with the comments out of it, once anything under it has been read. Summed from what each row
-    // knows — a half-read group reports some of its own numbers and some of git's, which is exactly what its
-    // rows are showing and so the only total that can agree with them.
-    readonly code: LineStat | undefined;
+    /* The same span with the comments out of it — the sum of what its rows are showing, and PENDING until every one
+     * of them is known (sumCounts). A heading that added up the rows it happened to have and printed the result was
+     * the worst number on the panel: part git, part code, agreeing with neither, and re-totalling every time the
+     * reader clicked one of its rows. */
+    readonly code: CodeCount;
     readonly blocked: number;
 }
-const codeSumOf = (files: readonly AgentReviewFile[]): LineStat | undefined => {
-    let known = false;
-    let additions = 0;
-    let deletions = 0;
-    for (const file of files) {
-        const stat = codeOf(file);
-        known ||= stat !== undefined;
-        additions += stat?.additions ?? file.change.additions ?? 0;
-        deletions += stat?.deletions ?? file.change.deletions ?? 0;
-    }
-    return known ? { additions, deletions } : undefined;
-};
+const codeSumOf = (files: readonly AgentReviewFile[]): CodeCount =>
+    sumCounts(files.map((file) => ({ count: codeOf(file), additions: file.change.additions, deletions: file.change.deletions })));
 const statsOf = (files: readonly AgentReviewFile[]): GroupStats => ({
     additions: files.reduce((total, file) => total + (file.change.additions ?? 0), 0),
     deletions: files.reduce((total, file) => total + (file.change.deletions ?? 0), 0),
@@ -646,7 +641,7 @@ const endResize = (event: PointerEvent): void => {
                     <!-- Totals for the whole review. The code/tests SPLIT that used to sit here in ± lines is
                          gone: the Code/Tests filter options above already carry that division in files, and
                          saying it twice in two units is how a header becomes something you stop reading. -->
-                    <ReviewStat :code="reviewCode" :additions="changes.additions.value" :deletions="changes.deletions.value" />
+                    <ReviewStat v-bind="reviewCode" :additions="changes.additions.value" :deletions="changes.deletions.value" />
                     <!-- A check and "3/12" beside a file list reads as reviewed-of-total without being told.
                          The keyboard map it used to smuggle in here reached nobody: a hover on a counter is not
                          where anyone looks for shortcuts. -->
@@ -680,7 +675,7 @@ const endResize = (event: PointerEvent): void => {
                                     <Icon name="exclamation-triangle" class="text-2xs" />{{ group.blocked }}
                                 </span>
                                 <span class="flex-1"></span>
-                                <ReviewStat :code="group.code" :additions="group.additions" :deletions="group.deletions" />
+                                <ReviewStat v-bind="group.code" :additions="group.additions" :deletions="group.deletions" />
                             </button>
                             <ReviewGroupCheck
                                 :name="group.repo"
@@ -724,7 +719,7 @@ const endResize = (event: PointerEvent): void => {
                                         <span class="flex-1"></span>
                                         <!-- Its size, always: folded this is the only place the package's ± is
                                          left, and open it is what tells you which package is worth folding. -->
-                                        <ReviewStat :code="bucket.code" :additions="bucket.additions" :deletions="bucket.deletions" />
+                                        <ReviewStat v-bind="bucket.code" :additions="bucket.additions" :deletions="bucket.deletions" />
                                     </button>
                                     <ReviewGroupCheck
                                         :name="bucket.name"
@@ -781,7 +776,7 @@ const endResize = (event: PointerEvent): void => {
                                                 class="h-1.5 w-1.5 shrink-0 rounded-full bg-warning"
                                                 v-tooltip.right="'Not yet landed in your workspace'"
                                             ></span>
-                                            <ReviewStat :code="codeOf(file)" :additions="file.change.additions" :deletions="file.change.deletions" />
+                                            <ReviewStat v-bind="codeOf(file)" :additions="file.change.additions" :deletions="file.change.deletions" />
                                         </button>
                                         <button
                                             type="button"
@@ -829,7 +824,7 @@ const endResize = (event: PointerEvent): void => {
                     <DiffToolbar
                         :path="selected.label"
                         :status="selected.change.status"
-                        :code="codeOf(selected)"
+                        v-bind="codeOf(selected)"
                         :additions="selected.change.additions"
                         :deletions="selected.change.deletions"
                         :from="selected.change.from"

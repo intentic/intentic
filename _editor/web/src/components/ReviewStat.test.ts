@@ -27,6 +27,7 @@ const { showComments, toggleShowComments } = useLayout();
 
 interface Props {
     code?: LineStat;
+    counting?: boolean;
     additions?: number;
     deletions?: number;
 }
@@ -92,5 +93,26 @@ describe(`<ReviewStat>`, () => {
         expect(host.textContent).toContain(`+12`);
         expect(host.textContent).toContain(`−2`);
         expect(host.querySelector(`[data-tip]`)).toBeNull();
+    });
+
+    /* THE CASE THIS COMPONENT WAS GETTING WRONG. A row whose file had not been read printed git's number, and the
+     * read that a click performs then replaced it — so the number you scanned and the number you clicked were
+     * different, with nothing having changed but the reading. It says "not yet" instead, and keeps git's own on the
+     * hover so the reader is not left with nothing at all. */
+    it(`states no number while the reading is still being worked out`, async () => {
+        await withComments(false);
+        const host = render({ counting: true, additions: 54, deletions: 0 });
+
+        expect(host.textContent).not.toContain(`54`);
+        expect(host.textContent).toContain(`…`);
+        expect(host.querySelector<HTMLElement>(`[data-tip]`)?.dataset[`tip`]).toBe(`Working out how much of this is code — +54 counting comments`);
+    });
+
+    it(`has nothing to wait for when the comments are shown — git's counts are the reading`, async () => {
+        await withComments(true);
+        const host = render({ counting: true, additions: 54, deletions: 0 });
+
+        expect(host.textContent).toContain(`+54`);
+        expect(host.textContent).not.toContain(`…`);
     });
 });

@@ -49,6 +49,9 @@ vi.mock("../pages/workspace/viewers/DiffView.vue", () => ({ default: { render: (
 vi.mock("../pages/workspace/viewers/BinaryDiffView.vue", () => ({ default: { render: () => null } }));
 
 const { default: AgentReviewPanel } = await import("./AgentReviewPanel.vue");
+// The reader's comment toggle, which decides WHICH reading every badge in the panel prints. Imported the same way
+// as the panel, after the globals its module chain reads at import time are in place.
+const { showComments, toggleShowComments } = (await import("../composables/useLayout")).useLayout();
 
 const AGENT = `a1`;
 /* A refused land as the daemon reports it: nothing landed (a check land is atomic), two of the five files
@@ -142,6 +145,11 @@ afterEach(() => {
     app = undefined;
     document.body.innerHTML = ``;
     queryClient.clear();
+    // The toggle is app-wide state that outlives a mount, so a test that flips it hands the next one a different
+    // panel than it asked for.
+    if (showComments.value) {
+        toggleShowComments();
+    }
 });
 
 // The file rows, by the class the row container carries. Substring-matched to sidestep escaping Tailwind's `/`.
@@ -243,7 +251,18 @@ it(`keeps a folded package saying how big it is and how much of it refused`, asy
     expect(rowNames(el)).toEqual([`session.ts`, `session.test.ts`, `README.md`]);
     expect(packageHeading(el, `root`).querySelector(`[data-icon="exclamation-triangle"]`)).not.toBeNull();
     expect(packageHeading(el, `root`).textContent).toContain(`2`);
-    // Its size stays legible while it is folded: +2 −1 (config.ts) with logo.png carrying no line counts.
+    /* WHAT A HEADING SAYS BEFORE ITS ROWS HAVE BEEN READ. Nothing here has read a diff, so how much of these
+     * packages is code rather than comment is not known yet — and a heading that filled that gap with git's
+     * numbers would be stating a total it was about to replace, which is what it used to do. It says "not yet"
+     * instead; the reader's own hover carries git's reading in the meantime (ReviewStat). */
+    expect(packageHeading(el, `@shop/auth`).textContent).toContain(`…`);
+    expect(packageHeading(el, `@shop/auth`).textContent).not.toContain(`+20`);
+
+    // With the comments shown, git's own counts ARE the reading, and they arrived with the change list — so the
+    // size is legible at once: +20 −3 for the package, and +2 −1 (config.ts) for the loose bucket, whose
+    // logo.png carries no line counts at all.
+    toggleShowComments();
+    await nextTick();
     expect(packageHeading(el, `@shop/auth`).textContent).toContain(`+20`);
     expect(packageHeading(el, `root`).textContent).toContain(`+2`);
 });

@@ -7,8 +7,7 @@ import { computed, ref, watch } from "vue";
 import ProviderLogo from "../../chat/ProviderLogo.vue";
 import HoverCard from "../../components/HoverCard.vue";
 import ReviewStat from "../../components/ReviewStat.vue";
-import type { LineStat } from "../../composables/workspace/codeStat";
-import { useCodeStats } from "../../composables/workspace/useCodeStats";
+import { useCodeStats, type CodeCount } from "../../composables/workspace/useCodeStats";
 import { rendersAsBytes } from "./fileType";
 import { useAgents } from "../../composables/agents/useAgents";
 import { useChat } from "../../composables/chat/useChat";
@@ -387,10 +386,11 @@ const openDiff = (repo: string, side: GitDiffSide, change: GitChange, mode: Open
  *
  * HOW BIG EACH CHANGE IS IN THE READING ON SCREEN: these rows sit beside diffs that open on code alone, so
  * their +/− has to be the code's. That count is a by-product of having both sides of a file, so it is taken
- * where the file is READ (useChanges' fileDiff) rather than by whoever asked for it — which is why there is no
- * limit here any more past which a row keeps git's number. */
-const { statOf } = useCodeStats();
-const codeOf = (repo: string, side: GitDiffSide, path: string): LineStat | undefined => statOf(workingStatKey(repo, side, path));
+ * where the file is READ (useChanges' fileDiff) rather than by whoever asked for it — and the loader reads far
+ * enough down the list (warmRows) that a row's number is normally settled before the panel is opened. A row it
+ * has not reached says so; it does not stand git's number in for one it is about to replace. */
+const { countOf } = useCodeStats();
+const codeOf = (repo: string, side: GitDiffSide, path: string): CodeCount => countOf(workingStatKey(repo, side, path));
 
 // --- row selection (a list selection, NOT a commit target) -------------------------------------------------
 // Ordinary click/ctrl/shift list selection, exactly as VSCode's SCM list works, and for exactly one purpose:
@@ -1496,7 +1496,7 @@ const WARNING = `flex items-start gap-1.5 rounded-md border border-warning/40 bg
                                             </span>
                                         </span>
                                         <ReviewStat
-                                            :code="codeOf(group.repo, section.side, change.path)"
+                                            v-bind="codeOf(group.repo, section.side, change.path)"
                                             :additions="change.additions"
                                             :deletions="change.deletions"
                                         />

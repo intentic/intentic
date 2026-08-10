@@ -39,7 +39,19 @@ const host = ref<HTMLElement>();
 const diff = shallowRef<Monaco.editor.IStandaloneDiffEditor>();
 let original: Monaco.editor.ITextModel | undefined;
 let modified: Monaco.editor.ITextModel | undefined;
-let lang: string | undefined;
+/* TWO LANGUAGE IDS, and they are not the same question.
+ *
+ * `modelLang` is what MONACO is told these models are — it has to be a grammar this editor has actually bridged,
+ * so it comes back through ensureLanguage and is undefined when that could not be done (the file then renders
+ * uncoloured, which is the honest outcome).
+ *
+ * `stripLang` is what the COMMENT STRIP is computed on, resolved from the path alone — the same call, with the same
+ * arguments, that the count store makes (codeStat's codeLineStat). That identity is the point: the analysis client
+ * caches by (text, lang), so the pane and the row beside it now share one cache entry and cannot reach two
+ * different answers about what a comment is. Passing Monaco's id here instead made the pane's reading depend on
+ * whether an editor bridge had succeeded, which is nothing to do with the file. */
+let modelLang: string | undefined;
+let stripLang: string | undefined;
 let disposed = false;
 let importSides: readonly [ImportSide, ImportSide] = [
     { lines: [], imports: new Set() },
@@ -82,7 +94,7 @@ const modelImports = (analysis: CodeAnalysis): ReadonlySet<number> => {
 const side = async (text: string): Promise<DisplaySide> => {
     // Hiding comments needs the analysis; showing them only needs it when import skipping will consume the other
     // half of the same result. In either case a warmed review normally answers from the client cache.
-    const analysis = !showComments.value || skipImports.value ? await requestCodeAnalysis(text, lang) : undefined;
+    const analysis = !showComments.value || skipImports.value ? await requestCodeAnalysis(text, stripLang) : undefined;
     if (showComments.value || analysis === undefined) {
         return { text, lineNumbers: `on`, stripped: false, imports: new Set(analysis?.imports ?? []) };
     }
@@ -160,7 +172,8 @@ onMounted(async () => {
      * added or deleted file has only one). The cap sees the larger side, since both get tokenized; character
      * count stands in for the byte size it wants — these props are already-decoded text, and the cap is a guard
      * against tokenizing something enormous, not a byte-exact budget. */
-    lang = await ensureLanguage(m, highlightLangFor(path, Math.max(before?.length ?? 0, after?.length ?? 0), after ?? before ?? ``));
+    stripLang = highlightLangFor(path, Math.max(before?.length ?? 0, after?.length ?? 0), after ?? before ?? ``);
+    modelLang = await ensureLanguage(m, stripLang);
     if (disposed || host.value === undefined) {
         return; // unmounted (fast file-switch) while Monaco/grammar loaded
     }
@@ -190,8 +203,8 @@ onMounted(async () => {
     });
     diff.value = editor;
     // Empty models first: `render` owns what goes in them, so the toggle and the first paint take one path.
-    original = m.editor.createModel(``, lang);
-    modified = m.editor.createModel(``, lang);
+    original = m.editor.createModel(``, modelLang);
+    modified = m.editor.createModel(``, modelLang);
     editor.setModel({ original, modified });
     await render(editor);
     if (disposed) {

@@ -26,13 +26,16 @@ import type { LineStat } from "../../../composables/workspace/codeStat";
  *   badges  — after the path (a blocked/not-landed mark: a property of the FILE, so it rides with its name)
  *   actions — after the reading controls (the host's own file-scoped buttons) */
 
-const { path, status, code, additions, deletions, from } = defineProps<{
+const { path, status, code, counting, additions, deletions, from } = defineProps<{
     // Repo-qualified where the surface knows the repo — this is a label to read, not a key.
     path: string;
     status?: ChangeStatus;
     // This file's counts with the comments out, for the pane below — which is showing exactly that unless the
-    // toggle on this bar says otherwise. Undefined until the file has been read (see useCodeStats).
+    // toggle on this bar says otherwise. Absent when there is nothing to strip: git's are then what the pane shows.
     code?: LineStat;
+    // Still being worked out (see useCodeStats). The review surfaces pass this straight from the count store, so
+    // the bar over a file says the same thing about it as the row the reader clicked.
+    counting?: boolean;
     additions?: number;
     deletions?: number;
     // Where a rename came from, printed as `← old/path` on the surfaces that track renames.
@@ -75,7 +78,7 @@ const LAYOUT_OPTIONS: { label: string; value: DiffLayout }[] = [
             ← {{ from }}
         </span>
         <slot name="badges" />
-        <ReviewStat :code="code" :additions="additions" :deletions="deletions" />
+        <ReviewStat :code="code" :counting="counting" :additions="additions" :deletions="deletions" />
         <Segmented v-if="!mobile" :model-value="diffLayout" :options="LAYOUT_OPTIONS" size="xs" @update:model-value="setDiffLayout" />
         <!-- A default that silently removes lines has to keep saying so, which is why this is a labelled toggle
              and not one more glyph: "Comments" with an eye through it is readable at a glance as a state. -->

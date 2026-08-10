@@ -8,6 +8,7 @@ import { useChat } from "../../chat/useChat";
 import { queryClient } from "../../queryPersistence";
 import type { WarmBand, WarmTask } from "../warmPlan";
 import { warmQuery } from "../warmQuery";
+import { reviewsToRead, type ReviewToRead } from "./reviewsToRead";
 
 /* THE BOARD'S WISH LIST — every card on /agents, with the two reads that stand between clicking it and reading
  * it already made.
@@ -38,10 +39,6 @@ import { warmQuery } from "../warmQuery";
 // deliberately, because the board must not be able to crowd the review's diffs out of the plan entirely.
 const MAX_CARDS = 40;
 
-// And how far down ONE agent's review the rows are warmed — the same bound, and the same reasoning, as the
-// workspace review's (changesWarm's WARM_LIMIT).
-const MAX_REVIEW_ROWS = 30;
-
 const { lanes } = useAgents();
 const { active } = useChat();
 
@@ -53,22 +50,27 @@ const wishesFor = (agent: FleetAgent, focused: boolean): readonly WarmTask[] => 
     ];
 };
 
-/* THE REVIEW THE USER IS ACTUALLY STANDING IN — one agent's rows, warmed the way the workspace review's are.
+/* ONE REVIEW'S ROWS — the read that works out the +/− the review prints beside each file with the comments taken
+ * out (useCodeStats), and therefore the read that decides whether those numbers are TRUE when the page opens. It
+ * used to be declared for the open page alone, and the arithmetic of that was hopeless: the reader lands, the walk
+ * starts, and the numbers arrive over the following seconds into a list that is being scanned right then. Warming a
+ * review after its reader has arrived is warming the wrong thing — WHICH reviews are read ahead of that, and how
+ * near each is, is reviewsToRead.
  *
- * Only for the agent whose page is open, and only from the file list already in hand: a board of forty cards
- * times their files would be thousands of two-file reads, which is the burst this whole engine exists not to
- * be. The list itself is warmed for every card above; the rows behind it are warmed for the one being read. */
-const openReviewWishes = (): readonly WarmTask[] => {
-    const route = router.currentRoute.value;
-    const agentId = route.name === `agent` ? String(route.params[`id`] ?? ``) : ``;
-    if (agentId === ``) {
-        return [];
-    }
+ * Only ever from a list already in hand: the rows follow on the beat after their list lands, never before it. A card
+ * with no changes contributes nothing. */
+const reviewRowWishes = ({ agentId, band, rows }: ReviewToRead): readonly WarmTask[] => {
     const held = queryClient.getQueryData<AgentChangesResponse>(agentChangesKey(agentId));
     return (held?.repos ?? [])
         .flatMap((group) => group.changes.map((change) => ({ repo: group.repo, path: change.path })))
-        .slice(0, MAX_REVIEW_ROWS)
-        .map((row) => warmQuery(`agent:${agentId}:diff:${row.repo}:${row.path}`, `now`, agentFileDiffQuery(agentId, row.repo, row.path)));
+        .slice(0, rows)
+        .map((row) => warmQuery(`agent:${agentId}:diff:${row.repo}:${row.path}`, band, agentFileDiffQuery(agentId, row.repo, row.path)));
+};
+
+// The page the reader is on, when it is an agent's.
+const openAgentId = (): string | undefined => {
+    const route = router.currentRoute.value;
+    return route.name === `agent` ? String(route.params[`id`] ?? ``) : undefined;
 };
 
 export const agentsWarmSource = (): readonly WarmTask[] => {
@@ -83,8 +85,14 @@ export const agentsWarmSource = (): readonly WarmTask[] => {
         .filter((agent) => !unregistered(agent.status))
         .slice(0, MAX_CARDS)
         .flatMap((agent) => wishesFor(agent, agent.id === focused));
-    // The open review's rows come FIRST in the list, not because the plan is ordered by position (it is ordered
-    // by band) but because within a band the source's own order decides — and the review on screen is nearer
-    // than the card list behind it.
-    return [...openReviewWishes(), ...cards];
+    /* The reviews' rows come FIRST in the list, not because the plan is ordered by position (it is ordered by band)
+     * but because within a band the source's own order decides — and a review that is open, or one press away, is
+     * nearer than the card list behind it. Which reviews those are needs the lanes, which is why it is worked out
+     * here and not above. */
+    const reviews = reviewsToRead(
+        openAgentId(),
+        focused,
+        board.attention.filter((agent) => !unregistered(agent.status)).map((agent) => agent.id),
+    ).flatMap(reviewRowWishes);
+    return [...reviews, ...cards];
 };

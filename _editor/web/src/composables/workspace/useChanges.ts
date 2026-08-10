@@ -192,14 +192,18 @@ export const workingStatKey = (repo: string, side: GitDiffSide, path: string): s
  * answered from the cache. It used to be the warm walk's job, so a row the walk hadn't reached showed git's
  * number until it was opened AND a second watch existed to catch that case.
  *
- * Bytes and oversized files are left alone: neither has text to strip, and both already render as something
- * other than a diff. The store turns away a second ask for content it has already counted, so overlapping
- * callers cost nothing. */
+ * Bytes and oversized files are WRITTEN OFF rather than left alone: neither has text to strip, so git's counts are
+ * exactly what their pane shows — and a row left unrecorded was indistinguishable from one whose count had simply
+ * not been taken yet, which is how a badge ends up printing a number it is about to replace. The store turns away a
+ * second ask for content it has already counted, so overlapping callers cost nothing. */
 const countDiff = (repo: string, path: string, side: GitDiffSide, body: FileDiffResponse): void => {
+    const stats = useCodeStats();
+    const key = workingStatKey(repo, side, path);
     if (body.truncated === true || rendersAsBytes(path, body.binary)) {
+        stats.noCode(key);
         return;
     }
-    void useCodeStats().record(workingStatKey(repo, side, path), path, body.before ?? ``, body.after ?? ``);
+    void stats.record(key, path, body.before ?? ``, body.after ?? ``);
 };
 
 /* The query, named apart from the call, so the background loader can be handed the QUERY rather than a function
