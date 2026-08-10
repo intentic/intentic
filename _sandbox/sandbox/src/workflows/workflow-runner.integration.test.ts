@@ -107,6 +107,7 @@ test("workflow loops pin the full model choice, shared base, spend ceiling, and 
             harness: "claude-code",
             account: "codex-account-2",
             model: "gpt-5.6",
+            actsAs: "release-reviewer",
             maxSpendUsd: 3.5,
         }),
     ]);
@@ -123,6 +124,7 @@ test("workflow loops pin the full model choice, shared base, spend ceiling, and 
         harness: "claude-code",
         account: "codex-account-2",
         model: "gpt-5.6",
+        actsAs: "release-reviewer",
         worktreeBase: REPOS,
         autoLand: false,
     });

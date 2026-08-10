@@ -204,6 +204,7 @@ export const runLoop = async (services: Services, record: LoopRecord, fn: TurnFn
                 ...(record.harness !== undefined ? { harness: record.harness } : {}),
                 ...(record.account !== undefined ? { account: record.account } : {}),
                 ...(record.model !== undefined ? { model: record.model } : {}),
+                ...(record.actsAs !== undefined ? { actsAs: record.actsAs } : {}),
                 ...(record.worktreeBase !== undefined ? { worktreeBase: record.worktreeBase } : {}),
                 ...(record.autoLand !== undefined ? { autoLand: record.autoLand } : {}),
             };

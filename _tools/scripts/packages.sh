@@ -10,7 +10,7 @@
 # sandbox-contract, and extension-api now depends on sandbox-contract — so the chain is
 # extension-manifest → registry → sandbox-contract → extension-api, where extension-api used to come first.
 PUB=(_tools/constants _sandbox/sandbox-run _deploy/graph _deploy/resources _deploy/engine _deploy/need-resolver _deploy/providers \
-     _sandbox/extension-manifest _sandbox/registry _sandbox/sandbox-contract _sandbox/extension-api _computers/local-agent _sandbox/sync _computers/desktop _computers/browser _computers/host _sandbox/acp-bridge _sandbox/scaffold _deploy/state-resolver _deploy/cli \
+     _sandbox/extension-manifest _sandbox/registry _sandbox/sandbox-contract _sandbox/extension-api _computers/local-agent _sandbox/sync _computers/desktop _computers/browser _computers/host _sandbox/acp-bridge _sandbox/gate _sandbox/scaffold _deploy/state-resolver _deploy/cli \
      _sandbox/workspace-ignore _search/iq-engine _search/iq-recall _search/iq _deploy/sdk _tools/registry-scan)
 
 # Every dir that carries the release version = the published set plus the private sandbox image, which is not

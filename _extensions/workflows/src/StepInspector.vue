@@ -3,6 +3,7 @@ import { Button, Checkbox, cmp, Icon, Picker, ProseField, Segmented } from "@int
 import { HARNESSES, type OutputField, providerLabel, type WorkflowStep } from "@intentic/sandbox-contract";
 import { computed, ref } from "vue";
 import { host } from "./host";
+import { usePersonas } from "./usePersonas";
 
 /* THE SELECTED STEP — two questions, and everything else folded away.
  *
@@ -212,6 +213,18 @@ const choose = async (): Promise<void> => {
 
 const unpin = (): void => patch({ agent: undefined, model: undefined, account: undefined, harness: undefined });
 
+/* WHO THE STEP IS when it reaches outside — the chat composer's persona pill, as a form row. A step is an
+ * unattended turn, and unattended-with-no-persona deliberately reaches no logged-in account at all; pinning a
+ * card is how a release check gets the one voice, folder scope and account set its owner already wrote down.
+ * The cards are authored on the Personas page — this is only a pointer at one. */
+const { personas } = usePersonas();
+const actsAs = computed({
+    get: () => step.value.actsAs,
+    set: (value: string | undefined) => patch({ actsAs: value }),
+});
+const personaOptions = computed(() => personas.value.map((persona) => ({ value: persona.id, label: persona.label ?? persona.id })));
+const personaLabel = (id: string): string => personas.value.find((persona) => persona.id === id)?.label ?? id;
+
 const setMaxSpend = (value: string): void => {
     const trimmed = value.trim();
     patch({ maxSpendUsd: trimmed === `` ? undefined : Number(trimmed) });
@@ -232,6 +245,9 @@ const advancedSummary = computed(() => {
     }
     if (step.value.account !== undefined) {
         parts.push(described.value.accountLabel ?? `pinned account`);
+    }
+    if (step.value.actsAs !== undefined) {
+        parts.push(`acts as ${personaLabel(step.value.actsAs)}`);
     }
     if (step.value.output.kind === `json`) {
         parts.push(`${step.value.output.fields.length} data field${step.value.output.fields.length === 1 ? `` : `s`}`);
@@ -431,6 +447,33 @@ const advancedSummary = computed(() => {
                     <span class="text-2xs text-subtle">
                         Pin one where the model is part of the design — two steps on two providers is how you compare them. Left alone, this step runs
                         on whatever you normally use.
+                    </span>
+                </div>
+
+                <div class="flex flex-col gap-1.5">
+                    <span :class="cmp.sectionLabel()">Acts as</span>
+                    <div class="flex items-center gap-1.5">
+                        <Picker
+                            v-model="actsAs"
+                            :options="personaOptions"
+                            placeholder="Nobody — full tools, no accounts"
+                            aria-label="Persona for this step"
+                            class="min-w-0 flex-1 text-xs"
+                        />
+                        <button
+                            v-if="step.actsAs !== undefined"
+                            type="button"
+                            v-tooltip.top="`Unpin — this step acts as nobody`"
+                            :class="cmp.iconButton()"
+                            aria-label="Unpin the persona"
+                            @click="actsAs = undefined"
+                        >
+                            <Icon name="times" />
+                        </button>
+                    </div>
+                    <span class="text-2xs text-subtle">
+                        A step runs with nobody at the keyboard, so it reaches no logged-in account unless it acts as a persona — the card also sets
+                        its voice and how far its tools go.
                     </span>
                 </div>
             </div>

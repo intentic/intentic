@@ -14,6 +14,9 @@ and converge — designed on a canvas, saved, and then run with its progress vis
 - Run one, and show where it is, step by step, including per-step spend ceilings and complete response artifacts.
 - Offer templates for the workflows most workspaces want, including anonymous multi-model attempts, independent
   evaluation, and a verified synthesis step.
+- Declare a release gate on a design: the token-authed webhook a CI pipeline calls with what it knows, answered
+  pass / fail / blocked off one declared output field. The designer's gate panel and the card's badge both show
+  the URL and a paste-ready CI step.
 
 ## Key files
 
@@ -35,6 +38,10 @@ unconditionally.
 - Creating and updating are explicit operations. New designs and template copies receive fresh UUID-backed ids,
   so a stale browser cannot silently overwrite an existing workflow.
 - A model pin is the complete runtime choice: provider, model, account, and harness. Leaving it unpinned inherits
-  the workspace's normal unattended model.
+  the workspace's normal unattended model. A step can separately act as a persona; without one it keeps the
+  unattended default — full tools, no logged-in accounts.
+- The gate's webhook token is minted by the daemon on first save and kept across every later edit, so the URL a
+  pipeline was taught survives renames and re-pointed fields. Removing the gate revokes it; a future gate gets a
+  new one.
 - The run ledger keeps all active runs and the newest 50 ended runs. Long step responses live under
   `.intentic/workflow-runs/<run>/<step>.md`; the ledger stores only a bounded preview.

@@ -251,6 +251,7 @@ const loopForStep = (step: WorkflowStep, repos: readonly RepoBase[], conversatio
     ...(step.harness !== undefined ? { harness: step.harness } : {}),
     ...(step.account !== undefined ? { account: step.account } : {}),
     ...(step.model !== undefined ? { model: step.model } : {}),
+    ...(step.actsAs !== undefined ? { actsAs: step.actsAs } : {}),
     worktreeBase: [...repos],
     // A candidate branch is a workflow input until a person chooses it. Global auto-land is a chat posture and
     // must never merge an intermediate arm into the workspace before downstream comparison has happened.

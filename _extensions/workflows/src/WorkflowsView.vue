@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import {
+    AnchoredOverlay,
     Button,
     cmp,
     ConfirmDialog,
@@ -15,6 +16,7 @@ import {
 } from "@intentic/extension-ui";
 import type { Workflow, WorkflowRun, WorkflowSummary } from "@intentic/sandbox-contract";
 import { computed, ref, shallowRef } from "vue";
+import GateAccess from "./GateAccess.vue";
 import WorkflowCard from "./WorkflowCard.vue";
 import WorkflowDesigner from "./WorkflowDesigner.vue";
 import WorkflowRunPage from "./WorkflowRunPage.vue";
@@ -150,6 +152,22 @@ const blank = (): void =>
  * with the design already picked. Nothing is spent until the send.
  */
 const runNow = (workflow: WorkflowSummary): void => host().chat.composeWorkflow(workflow.id);
+
+/* THE GATE BADGE'S PANEL — the URL and the paste-ready CI step, on the card, because the card is where the
+ * owner is standing months after the save that minted them (the automations row keeps its webhook on the row
+ * for the same reason). One overlay for the whole list, anchored to whichever badge was pressed. */
+const gateShown = ref<{ workflow: WorkflowSummary; anchor: HTMLElement }>();
+const gateOpen = computed({
+    get: () => gateShown.value !== undefined,
+    set: (open: boolean) => {
+        if (!open) {
+            gateShown.value = undefined;
+        }
+    },
+});
+const showGate = (workflow: WorkflowSummary, event: MouseEvent): void => {
+    gateShown.value = { workflow, anchor: event.currentTarget as HTMLElement };
+};
 
 const removeWorkflow = async (): Promise<void> => {
     const id = confirmRemoveId.value;
@@ -296,6 +314,22 @@ const RUN_VARIANT: Record<WorkflowRun["state"], StatusVariant> = {
                         :description="workflow.description"
                         @open="openSaved(workflow.id)"
                     >
+                        <!-- The gate badge is a DOOR, not an ornament: it opens the URL and the CI step a
+                             pipeline is wired with, which otherwise only exist inside the designer. -->
+                        <template v-if="workflow.gate" #badges>
+                            <button
+                                type="button"
+                                class="cursor-pointer"
+                                :aria-label="`CI wiring for ${workflow.name}`"
+                                v-tooltip.top="`A pipeline can run this — the webhook URL and a paste-ready CI step`"
+                                @click="showGate(workflow, $event)"
+                            >
+                                <StatusBadge variant="primary" size="xs">
+                                    <Icon name="shield" class="text-2xs" />
+                                    CI gate
+                                </StatusBadge>
+                            </button>
+                        </template>
                         <!-- ONE LOUD CONTROL PER CARD. Run is what the page is for and is always there; edit and
                              delete come up under the pointer, because reading the gallery is the common act and
                              three buttons of equal weight is what made the old row unreadable. They stay put
@@ -430,5 +464,13 @@ const RUN_VARIANT: Record<WorkflowRun["state"], StatusVariant> = {
         >
             <p class="text-sm text-subtle">Its run history stays — every run kept its own copy of the design. A run already going is not stopped.</p>
         </ConfirmDialog>
+
+        <!-- The gate badge's panel: the same <GateAccess> the designer shows, so the two copies of the one
+             string a pipeline is taught cannot disagree. -->
+        <AnchoredOverlay v-model="gateOpen" :anchor="gateShown?.anchor" side="bottom" cross="start">
+            <div class="w-[28rem] max-w-[92vw] p-3">
+                <GateAccess v-if="gateShown" :workflow="gateShown.workflow" />
+            </div>
+        </AnchoredOverlay>
     </Page>
 </template>

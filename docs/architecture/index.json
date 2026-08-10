@@ -1017,6 +1017,21 @@
     },
     {
       "dev": true,
+      "from": "_sandbox/gate",
+      "to": "_sandbox/sandbox-contract"
+    },
+    {
+      "dev": true,
+      "from": "_sandbox/gate",
+      "to": "_tools/testing"
+    },
+    {
+      "dev": true,
+      "from": "_sandbox/gate",
+      "to": "_tools/tsconfig"
+    },
+    {
+      "dev": true,
       "from": "_sandbox/registry",
       "to": "_tools/tsconfig"
     },
@@ -2992,16 +3007,16 @@
           "what": "the list, and the runs against it."
         }
       ],
-      "behind": 5,
+      "behind": 6,
       "component": "extensions",
       "dir": "_extensions/workflows",
-      "files": 20,
+      "files": 25,
       "hasTests": true,
-      "loc": 2628,
+      "loc": 3081,
       "name": "@intentic/ext-workflows",
       "oneLiner": "Multi-step agent work, designed as a graph and run as one thing.",
       "readmeRev": "14ff733fed810db4360f4d347a15f399b95a60b1",
-      "reason": "5 commits have touched this package since its README was written",
+      "reason": "6 commits have touched this package since its README was written",
       "stale": true,
       "updatedAt": 1786047319000
     },
@@ -3240,6 +3255,32 @@
     {
       "anchors": [
         {
+          "path": "_sandbox/gate/src/gate.ts",
+          "what": "everything the CLI decides, as pure functions: argument parsing, the dialled URL, the verdict reader, the exit mapping."
+        },
+        {
+          "path": "_sandbox/gate/src/cli.ts",
+          "what": "the process around them: stdin, one fetch, stdout, an exit code."
+        },
+        {
+          "path": "_sandbox/gate/src/gate.test.ts",
+          "what": "the behaviour a pipeline relies on, including the reader-versus-contract agreement test."
+        }
+      ],
+      "behind": 0,
+      "dir": "_sandbox/gate",
+      "files": 4,
+      "hasTests": true,
+      "loc": 295,
+      "name": "@intentic/gate",
+      "oneLiner": "The one-line CI step for a release gate — POSTs what the pipeline knows to a gated workflow's webhook, waits for the run, and exits on the verdict.",
+      "readmeRev": "",
+      "stale": false,
+      "updatedAt": 0
+    },
+    {
+      "anchors": [
+        {
           "path": "_sandbox/ic/src/main.rs",
           "what": "the command tree, and the map from every env var the shell flows honored."
         },
@@ -3358,18 +3399,18 @@
           "what": "workflow scheduling, immutable run snapshots, restart recovery, run-ledger"
         }
       ],
-      "behind": 2,
+      "behind": 1,
       "component": "sandbox",
       "dir": "_sandbox/sandbox",
       "files": 722,
       "hasTests": true,
-      "loc": 119948,
+      "loc": 119952,
       "name": "@intentic/sandbox",
       "oneLiner": "The per-project AI-agent dev daemon — a Docker image that runs as the project's workspace container on the customer's host.",
-      "readmeRev": "5825e5e54f406ea6e7753d89f2abe9b82207a85e",
-      "reason": "2 commits have touched this package since its README was written",
+      "readmeRev": "a6af36b81bea1a068265e15b44e9619c368f1d90",
+      "reason": "1 commit has touched this package since its README was written",
       "stale": true,
-      "updatedAt": 1786375858000
+      "updatedAt": 1786377867000
     },
     {
       "anchors": [
@@ -3406,16 +3447,16 @@
           "what": "the public surface."
         }
       ],
-      "behind": 6,
+      "behind": 7,
       "component": "sandbox",
       "dir": "_sandbox/sandbox-contract",
       "files": 91,
       "hasTests": true,
-      "loc": 16483,
+      "loc": 16499,
       "name": "@intentic/sandbox-contract",
       "oneLiner": "The wire between the sandbox daemon and its browser client — change it here, and both sides follow.",
       "readmeRev": "7f909e66f0b912dfdbb79263ba135d72ac9c805a",
-      "reason": "6 commits have touched this package since its README was written",
+      "reason": "7 commits have touched this package since its README was written",
       "stale": true,
       "updatedAt": 1786359939000
     },
@@ -4265,7 +4306,7 @@
       "updatedAt": 1785938026000
     }
   ],
-  "generatedAt": 1786377669458,
+  "generatedAt": 1786379606236,
   "orphans": [],
   "repo": "intentic",
   "undocumented": []

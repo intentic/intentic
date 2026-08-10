@@ -2,6 +2,7 @@
 import { Button, cmp, Icon, Popover, ResizeSeam } from "@intentic/extension-ui";
 import { type Workflow, workflowFaults } from "@intentic/sandbox-contract";
 import { computed, ref, watch } from "vue";
+import GatePanel from "./GatePanel.vue";
 import StepInspector from "./StepInspector.vue";
 import WorkflowCanvas from "./WorkflowCanvas.vue";
 import { addStep, connectSteps, disconnectSteps, removeStep, toggleHandoff, updateStep } from "./workflowEdit";
@@ -45,6 +46,7 @@ const pickedEdge = ref<{ from: string; to: string }>();
 const failure = ref<string>();
 const settingsAnchor = ref<HTMLElement>();
 const settings = ref<InstanceType<typeof Popover>>();
+const gatePanel = ref<InstanceType<typeof Popover>>();
 
 // Re-opening on a different workflow must not keep the last one's draft — a designer that silently edits the
 // wrong workflow is the one mistake here that is invisible until it is saved.
@@ -171,6 +173,12 @@ const commit = async (): Promise<void> => {
                     <template #icon><Icon name="sliders-h" /></template>
                 </Button>
             </span>
+            <!-- The gate sits beside Run settings because it is the same kind of thing — a property of the
+                 whole design, not of any step. The icon takes the link tint when one is declared, which is the
+                 header's whole statement of "a pipeline can call this". -->
+            <Button label="CI gate" size="small" severity="secondary" :text="true" @click="gatePanel?.toggle($event)">
+                <template #icon><Icon name="shield" :class="draft.gate !== undefined ? `text-link` : ``" /></template>
+            </Button>
             <span class="flex-1"></span>
             <span v-if="faults.length > 0" class="truncate text-2xs text-warning">{{ faults[0] }}</span>
             <button type="button" :class="cmp.linkButton()" @click="emit(`close`)">Cancel</button>
@@ -275,6 +283,11 @@ const commit = async (): Promise<void> => {
                 </label>
                 <p v-for="fault in faults" :key="fault" class="text-2xs text-warning">{{ fault }}</p>
             </div>
+        </Popover>
+
+        <!-- The gate: how a CI pipeline runs this design and reads a verdict back. -->
+        <Popover ref="gatePanel">
+            <GatePanel :workflow="draft" @patch="(gate) => patch({ gate })" />
         </Popover>
     </div>
 </template>

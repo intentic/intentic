@@ -460,6 +460,11 @@ export const LoopSchema = z.object({
     harness: AgentHarnessSchema.optional(),
     account: z.string().optional(),
     model: z.string().optional(),
+    // Which persona the iterations act as (AgentTurnSchema.actsAs — read its note for why this is not spelled
+    // `account`). The fourth passthrough an automation carries, and it matters here for the automation's
+    // reason: every iteration is unattended, and an unattended turn with no persona reaches no logged-in
+    // account at all — pinning a card is the one way a loop gets hands.
+    actsAs: entryId.optional(),
     // A workflow persists these on its underlying loop so restart recovery cannot silently change the checkout
     // or let a candidate inherit the sandbox's global auto-land posture on a later iteration.
     worktreeBase: z.array(RepoBaseSchema).min(1).max(50).optional(),
@@ -4167,6 +4172,12 @@ export const WorkflowStepSchema = z.object({
     harness: AgentHarnessSchema.optional(),
     account: z.string().optional(),
     model: z.string().optional(),
+    /* Which persona the step acts as — the same field a chat turn and an automation carry (AgentTurnSchema.
+     * actsAs), because a step IS an unattended turn under the loop machinery. Unpinned, a step keeps the
+     * strict unattended default: full tools, no logged-in accounts. Pinning a card is how a gated release
+     * check gets a voice, a folder scope, or the one Reddit it is allowed to post from — a decision the owner
+     * already wrote down once, on the card. */
+    actsAs: entryId.optional(),
 });
 export type WorkflowStep = z.infer<typeof WorkflowStepSchema>;
 

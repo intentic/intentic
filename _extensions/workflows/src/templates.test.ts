@@ -20,6 +20,11 @@ test("template ids are unique — the gallery hides one already saved under its 
     expect(new Set(ids).size).toBe(ids.length);
 });
 
+/* THE RACING CARDS, which the shape assertions below are about. The release-gate card is a different
+ * proposition — a one-step design whose pitch is the webhook, not the graph — so holding it to "must fan out,
+ * must fan in, must race two models" would be asserting a shape it exists to not have. */
+const RACING = WORKFLOW_TEMPLATES.filter(({ workflow }) => workflow.id.startsWith(`two-models`));
+
 /* THE GALLERY IS TWO CARDS OF THE SAME SHAPE, and every one of them has to keep it — that is what this asserts.
  * Five templates that were all straight chains would have looked like a full gallery and taught nothing; a
  * template that quietly loses its fan-in is the same failure, and the second card is no excuse for it. Nothing
@@ -31,7 +36,8 @@ test("template ids are unique — the gallery hides one already saved under its 
  * something this card teaches, and asserting it here would be asserting a step that exists to be asserted.
  */
 test("the template teaches every shape", () => {
-    for (const { workflow } of WORKFLOW_TEMPLATES) {
+    expect(RACING.length, `the gallery lost the racing cards these assertions are about`).toBeGreaterThan(0);
+    for (const { workflow } of RACING) {
         const { steps } = workflow;
         // Branching by the same definition the page's own shape line uses: several steps starting at once,
         // whether they fan out from one predecessor or from the run itself. Both draw as a fork, which is what
@@ -62,7 +68,7 @@ test("the template teaches every shape", () => {
  * the authorship the comparison exists to hold blind.
  */
 test("the attempts are unburdened and anonymous in every template", () => {
-    for (const { workflow } of WORKFLOW_TEMPLATES) {
+    for (const { workflow } of RACING) {
         const attempts = workflow.steps.filter((step) => step.id.startsWith(`attempt-`));
         expect(
             attempts.every((step) => step.output.kind === `none` && step.checks.length === 0),
@@ -117,7 +123,10 @@ test("the scored template separates blind evaluation from checked synthesis", ()
  * of them would look like helpful prefill and would be the wrapper, retyped by hand.
  */
 test("the steps that start a run add nothing to what the user typed", () => {
-    for (const { workflow } of WORKFLOW_TEMPLATES) {
+    // Scoped to the racing cards: their roots are handed a PERSON'S request, which is the task already. The
+    // gate card's root is handed whatever a pipeline interpolated — a sha, a URL — and needs its prompt to
+    // turn that context into a job.
+    for (const { workflow } of RACING) {
         for (const root of workflow.steps.filter((step) => step.needs.length === 0)) {
             expect(root.prompt, `${workflow.id}/${root.id} paraphrases the request instead of taking it`).toBeUndefined();
             expect(root.goal, `${workflow.id}/${root.id} declares a goal the request should be`).toBeUndefined();
@@ -154,6 +163,25 @@ test("attempts that race each other are given the identical task — only the mo
         const task = (step: WorkflowStep) => ({ prompt: step.prompt, goal: step.goal, output: step.output, checks: step.checks });
         expect(task(first), `${id}: "${first.title}" and "${second.title}" were not given the same task`).toEqual(task(second));
     }
+});
+
+/* THE GATE CARD IS THE SMALLEST WIRING THAT ANSWERS A PIPELINE, and staying smallest is its job: one step,
+ * a gate already pointed at it, and a verdict field the machinery can validate. A second step or a dropped
+ * gate would not be a variation — it would be the recipe no longer demonstrating the thing it teaches
+ * (gate.routes.ts calls a one-step workflow naming its only step the intended small case). */
+test("the release-gate template ships wired: one step, gate on its required verdict", () => {
+    const gated = WORKFLOW_TEMPLATES.find(({ workflow }) => workflow.id === `release-gate`)?.workflow;
+    expect(gated, `the gallery lost the card that teaches CI wiring`).toBeDefined();
+    expect(gated?.steps).toHaveLength(1);
+    expect(gated?.gate?.step).toBe(gated?.steps[0]?.id);
+    expect(gated?.gate?.pass.length).toBeGreaterThan(0);
+    // No token in the template: it is minted per save, and a prefilled one would be the same credential in
+    // every workspace that ever picked this card.
+    expect(gated?.gate?.token).toBeUndefined();
+    const step = gated?.steps[0];
+    const field = step?.output.kind === `json` ? step.output.fields.find((entry) => entry.name === gated?.gate?.field) : undefined;
+    expect(field?.required, `the gate reads a field the step may omit`).toBe(true);
+    expect(field?.type).not.toBe(`string[]`);
 });
 
 // A template can only pin a provider the app itself offers: an id from an installed ACP capability is legal on

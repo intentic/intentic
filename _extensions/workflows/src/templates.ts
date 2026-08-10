@@ -231,4 +231,55 @@ export const WORKFLOW_TEMPLATES: readonly WorkflowTemplate[] = [
             ],
         },
     },
+    /* THE THIRD CARD IS A DIFFERENT PROPOSITION FROM THE FIRST TWO: not a shape for work you start, but the
+     * intelligent step a CI PIPELINE starts — which is why it ships with a gate already declared and pointed
+     * at its only step, the intended small case. Deliberately one step: the pitch is the wiring (webhook in,
+     * verdict out), and a reader who wants a security review or an acceptance sweep behind the same door adds
+     * steps to this graph without touching the gate.
+     *
+     * ITS ROOT HAS A PROMPT, unlike every other root in the gallery, and that is the difference in caller: the
+     * other templates are handed a person's request, which IS the task; a gate is handed whatever a pipeline
+     * managed to interpolate — a sha, a branch, a URL — which is context that only becomes a task once the
+     * step says what to do with it. */
+    {
+        icon: `shield`,
+        summary: `The intelligent step for a CI pipeline. The pipeline POSTs what it knows — commit, branch, preview URL — to this workflow's own webhook, one session exercises the change and judges it, and the pipeline reads back pass, fail or blocked.`,
+        workflow: {
+            id: `release-gate`,
+            name: `Release gate`,
+            description: `Called by a pipeline over its webhook: a session inspects the change the pipeline named, judges whether it should ship, and answers with a verdict the pipeline can gate the release on.`,
+            maxParallel: 1,
+            steps: [
+                step(`judge`, `Judge the change`, {
+                    goal: `The change the pipeline named has been exercised against the workspace and a defensible verdict recorded.`,
+                    prompt:
+                        `A pipeline called this gate with everything it knows about a change — the text above: typically a commit, a branch, ` +
+                        `sometimes a preview URL. Find that change in this workspace and exercise it the way a careful reviewer would: read the ` +
+                        `diff against what it claims to do, build and test where the project says how, open the preview if one is named. Judge ` +
+                        `only the change in front of you, not the codebase's general state.\n\n` +
+                        `Write "pass" only for work you actually verified; write "fail" when the change is broken or falls short of what it ` +
+                        `claims. If you cannot reach the work at all — the commit is not here, the preview does not answer — fail this step ` +
+                        `rather than writing a verdict you never formed: the pipeline then reads "blocked", which is the honest answer.`,
+                    output: {
+                        kind: `json`,
+                        fields: [
+                            {
+                                name: `verdict`,
+                                type: `string`,
+                                description: `pass | fail — pass only when the change was exercised and found safe to ship`,
+                                required: true,
+                            },
+                            {
+                                name: `reason`,
+                                type: `string`,
+                                description: `one sentence on why — the only line of this the pipeline log will show`,
+                                required: true,
+                            },
+                        ],
+                    },
+                }),
+            ],
+            gate: { step: `judge`, field: `verdict`, pass: [`pass`] },
+        },
+    },
 ];
