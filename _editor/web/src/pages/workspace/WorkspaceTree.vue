@@ -7,6 +7,7 @@ import type { MenuItem } from "primevue/menuitem";
 import { computed, nextTick, ref, type VNode, watch } from "vue";
 import { useLayout } from "../../composables/useLayout";
 import { viewersOfPath } from "../../composables/usePresence";
+import { noteUserCreatedDir, useEmptyDirs } from "../../composables/workspace/useEmptyDirs";
 import { useFileNesting } from "../../composables/workspace/useFileNesting";
 import { useUploadQueue } from "../../composables/workspace/useUploadQueue";
 import { isRecentlyChanged } from "../../composables/workspace/useWorkspaceLive";
@@ -31,6 +32,13 @@ interface Row {
     // A file row that folds sibling files under it (a dir's package.json, see fileNesting.ts): draws a
     // chevron and expands/collapses like a dir, while clicking the row still opens the file itself.
     readonly nest?: boolean;
+    // A settled-barren branch (emptyDirs.ts): dims like an ignored row, and a single-child descent collapses
+    // into this ONE row — `chain` labels it ("public / demo / assets"), `chainTail` is the deepest link, whose
+    // children are what an expanded chain shows. The row stays keyed by the branch ROOT, so selection, delete
+    // and the keyboard axis all act on the unit the user would actually remove.
+    readonly barren?: boolean;
+    readonly chain?: readonly string[];
+    readonly chainTail?: WorkspaceTreeEntry;
 }
 // A non-interactive "N more items" marker, rendered ONLY under a dir the daemon actually cut (or at the root),
 // and only ever with the real count it reported — a directory that merely hasn't been loaded yet lazy-loads on
@@ -102,6 +110,12 @@ const layout = useLayout();
 const { enqueue, enqueueFromDataTransfer } = useUploadQueue();
 const { say } = useReceipts();
 const { fileNesting } = useFileNesting();
+// Barren branches — folders holding nothing but empty folders (settled, so an agent mid-scaffold never
+// flickers the tree). Rows dim and collapse below; the sweep footer counts and clears the whole set.
+const { isBarren, roots: barrenRootEntries, chainOf, branchDirs } = useEmptyDirs(
+    () => tree,
+    () => lazyChildren.value,
+);
 
 // Expanded directory paths live in useWorkspaceTree (shared with the explorer toolbar's Collapse All), consulted
 // here only when not filtering — a filter force-expands matched branches.
@@ -209,6 +223,17 @@ const visibleRows = computed<(Row | MoreRow)[]>(() => {
             if (entry.type === `dir`) {
                 if (needle === ``) {
                     const isExpanded = open.has(entry.path);
+                    // A barren branch is ONE row: the single-child descent collapses into it, and expanding it
+                    // continues from the chain's tail — three rows of debris become one legible line whose shape
+                    // says exactly what happened. Skipped while filtering, like nesting: a filter flattens.
+                    if (isBarren(entry.path)) {
+                        const { names, tail } = chainOf(entry);
+                        out.push({ entry, depth, isExpanded, barren: true, chainTail: tail, ...(names.length > 1 ? { chain: names } : {}) });
+                        if (isExpanded) {
+                            out.push(...walk(childrenOf(tail), depth + 1));
+                        }
+                        continue;
+                    }
                     out.push({ entry, depth, isExpanded });
                     if (isExpanded) {
                         out.push(...walk(childrenOf(entry), depth + 1));
@@ -308,9 +333,18 @@ const treatEntry = (name: string, type: "file" | "dir", isExpanded: boolean, ign
 // A locked row wears the padlock in place of its own glyph: what kind of file it is stops being the useful
 // fact about it the moment it is the one thing you cannot open.
 const treat = (row: Row): ReturnType<typeof treatEntry> => {
-    const treatment = treatEntry(row.entry.name, row.entry.type, row.isExpanded, row.entry.ignored);
+    // A barren row wears the ignored dimming: nothing is at risk, so it gets the same weight as any other
+    // out-of-focus row — a fact, not an alarm.
+    const treatment = treatEntry(row.entry.name, row.entry.type, row.isExpanded, row.entry.ignored === true || row.barren === true);
     return locked(row.entry.path) ? { ...treatment, icon: `lock` satisfies IconName, colorClass: `text-subtle` } : treatment;
 };
+
+// Whether a row has anything to expand into. A barren chain expands from its TAIL, and a chain whose tail is
+// the empty leaf gets no chevron — the gesture would be a promise the row can't keep (same as a locked dir).
+const expandable = (row: Row): boolean =>
+    (row.entry.type === `dir` || row.nest === true) &&
+    !locked(row.entry.path) &&
+    (row.barren !== true || childrenOf(row.chainTail ?? row.entry).length > 0);
 
 // Expansion is the whole gesture: a dir the walk never listed (ignored, or below its entry budget) fetches its
 // children off this set, in useWorkspaceTree — so a folder restored open on reload loads exactly like one the
@@ -506,6 +540,9 @@ const commitCreate = async (): Promise<void> => {
     creating.value = undefined;
     const path = joinPath(spec.dir, name);
     if (spec.type === `dir`) {
+        // The user's own New Folder is empty by definition — exempt from the barren marking until it gains
+        // content, so the explorer doesn't call it junk three seconds after they made it.
+        noteUserCreatedDir(path);
         await run(() => createDir(path), `Couldn't create that folder.`);
         selectSingle(path);
         await focusLead();
@@ -526,7 +563,38 @@ const doDeleteSelection = (): void => {
     if (paths.length === 0) {
         return;
     }
+    // A selection that is ONLY barren branches skips the confirm dialog: no content is lost, so "this can't
+    // be undone" would be false — the receipt's Undo puts an empty folder back exactly. Anything holding real
+    // content keeps the full confirmation below.
+    const entries = paths.map((path) => byPath.value.get(path));
+    const barrenOnly = entries.every((entry): entry is WorkspaceTreeEntry => entry !== undefined && entry.type === `dir` && isBarren(entry.path));
+    if (barrenOnly) {
+        sweepBarren(entries);
+        return;
+    }
     confirmPaths.value = paths;
+};
+/* Remove barren branches without ceremony, and hold the way back: the branch shapes are recorded BEFORE the
+ * delete (afterwards the tree no longer knows them), and Undo recreates the deepest folder of each chain —
+ * recursive create rebuilds the exact shape, which is what makes this the one delete that is genuinely
+ * reversible. Counted in BRANCHES, the unit the user sees and deletes. */
+const sweepBarren = (roots: readonly WorkspaceTreeEntry[]): void => {
+    if (roots.length === 0) {
+        return;
+    }
+    const dirs = roots.flatMap((root) => branchDirs(root));
+    const leaves = dirs.filter((dir) => !dirs.some((other) => other !== dir && other.startsWith(`${dir}/`)));
+    const paths = roots.map((root) => root.path);
+    void run(async () => {
+        await removeEntries(paths);
+        say(paths.length === 1 ? `1 empty folder removed` : `${paths.length} empty folders removed`, async () => {
+            for (const dir of leaves) {
+                await createDir(dir);
+            }
+        });
+    }, `Couldn't delete that.`);
+    selection.value = new Set();
+    anchor.value = null;
 };
 const deleteHeader = computed<string>(() => {
     const paths = confirmPaths.value;
@@ -553,6 +621,15 @@ const confirmDelete = (): void => {
     }, `Couldn't delete that.`);
     selection.value = new Set();
     anchor.value = null;
+};
+// Keep a barren branch on purpose: drop the standard placeholder into its DEEPEST folder, so the whole chain
+// is non-empty from then on — real for git, carried by clones, and out of the empty-folder list for good.
+const keepFolder = (entry: WorkspaceTreeEntry): void => {
+    const tail = chainOf(entry).tail;
+    void run(async () => {
+        await saveText(joinPath(tail.path, `.gitkeep`), ``);
+        say(`Folder kept`);
+    }, `Couldn't keep that folder.`);
 };
 const cancelDelete = (): void => {
     confirmPaths.value = undefined;
@@ -860,6 +937,13 @@ const menuItems = computed<MenuItem[]>(() => {
         if (!multi) {
             items.push({ label: `Rename`, icon: `pencil`, command: () => beginRename(target.path) });
         }
+        /* The one user-facing gesture a barren branch keeps: saying it is INTENTIONAL — a place a build drops
+         * output, a mount point. Kept the durable way, with the standard placeholder file, so the folder is
+         * genuinely non-empty from then on: real for git, visible to teammates, out of this list forever. No
+         * private exclusion state anyone else can't see. */
+        if (!multi && target.type === `dir` && isBarren(target.path)) {
+            items.push({ label: `Keep folder`, icon: `check-circle`, command: () => keepFolder(target) });
+        }
         items.push(
             { label: multi ? `Delete ${count} items` : `Delete`, icon: `trash`, command: () => doDeleteSelection() },
             { separator: true },
@@ -951,7 +1035,7 @@ const openMenu = (event: MouseEvent, entry: WorkspaceTreeEntry | undefined): voi
                     type="button"
                     role="treeitem"
                     :aria-selected="selection.has(row.entry.path)"
-                    :aria-expanded="(row.entry.type === 'dir' || row.nest) && !locked(row.entry.path) ? row.isExpanded : undefined"
+                    :aria-expanded="expandable(row) ? row.isExpanded : undefined"
                     :tabindex="tabbablePath === row.entry.path ? 0 : -1"
                     :draggable="renamingPath !== row.entry.path && !locked(row.entry.path)"
                     class="ui-row-select group flex w-full items-center gap-1.5 py-0.5 pr-2 text-left text-[0.8125rem]"
@@ -970,10 +1054,11 @@ const openMenu = (event: MouseEvent, entry: WorkspaceTreeEntry | undefined): voi
                     @dragleave="onRowDragLeave(row)"
                     @drop="onRowDrop($event, row)"
                 >
-                    <!-- No chevron on a locked folder: there is nothing behind it to expand into (the walk stops
-                         there), so offering the gesture would only be a promise the row can't keep. -->
+                    <!-- No chevron on a locked folder (nothing behind it to expand into — the walk stops there)
+                         or on a barren chain whose tail is the empty leaf: either way the gesture would only be
+                         a promise the row can't keep. -->
                     <Icon
-                        v-if="(row.entry.type === 'dir' || row.nest) && !locked(row.entry.path)"
+                        v-if="expandable(row)"
                         class="w-[0.7rem] shrink-0 text-[0.6rem] text-subtle"
                         :name="row.isExpanded ? 'chevron-down' : 'chevron-right'"
                         @click="onChevronClick($event, row)"
@@ -1000,11 +1085,14 @@ const openMenu = (event: MouseEvent, entry: WorkspaceTreeEntry | undefined): voi
                         @blur="commitRename"
                         @vue:mounted="focusRename"
                     />
+                    <!-- A collapsed barren chain reads as one path ("public / demo / assets"): the shape of the
+                         label IS the explanation — a branch holding nothing but emptiness, selectable and
+                         deletable as the one unit it really is. -->
                     <span
                         v-else
                         class="min-w-0 flex-1 truncate"
-                        :class="row.entry.ignored || locked(row.entry.path) ? 'text-subtle' : 'text-content/90'"
-                        >{{ row.entry.name }}</span
+                        :class="row.entry.ignored || row.barren || locked(row.entry.path) ? 'text-subtle' : 'text-content/90'"
+                        >{{ row.chain !== undefined ? row.chain.join(" / ") : row.entry.name }}</span
                     >
                     <!-- The reference shelf: dimmed like every out-of-focus dir, but it must not read as junk —
                          the badge names what it is. What the shelf is FOR was a 29-word paragraph hanging off a
@@ -1093,6 +1181,19 @@ const openMenu = (event: MouseEvent, entry: WorkspaceTreeEntry | undefined): voi
                 </div>
             </template>
         </template>
+        <!-- The sweep: one quiet line, present only while barren branches exist (post-settle) and gone the moment
+             they are — not a permanent fixture waiting to be useful. No dialog in front of it: deleting an empty
+             folder is the safest destructive act there is, and the receipt's Undo puts one back exactly. -->
+        <div v-if="barrenRootEntries.length > 0 && filter.trim() === ''" class="flex items-center gap-2 py-1.5 pl-3 pr-2 text-2xs text-subtle">
+            <span class="min-w-0 truncate">{{ barrenRootEntries.length }} empty {{ barrenRootEntries.length === 1 ? "folder" : "folders" }}</span>
+            <button
+                type="button"
+                class="shrink-0 cursor-pointer font-medium text-content/70 underline-offset-2 hover:text-content hover:underline"
+                @click="sweepBarren(barrenRootEntries)"
+            >
+                Clean up
+            </button>
+        </div>
         <p v-if="visibleRows.length === 0 && creating === undefined" class="px-3 py-3 text-center text-2xs text-subtle">
             {{ filter.trim() ? "No matching files." : "Empty workspace." }}
         </p>

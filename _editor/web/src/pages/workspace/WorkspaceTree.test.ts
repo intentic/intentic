@@ -45,10 +45,26 @@ globalThis.Element.prototype.scrollIntoView = function scrollIntoView(this: Elem
 const SANDBOX = `sb1`;
 localStorage.setItem(`intentic.activeSandboxId`, SANDBOX);
 
+// The daemon, recorded rather than reached: no sandbox is registered in a test, so a real call would die on
+// "sandbox isn't reachable" before it ever hit the network. Every op answers ok — the barren-branch tests
+// assert WHAT the explorer asked for (the delete, the undo's re-create) and what it showed after.
+const daemon = vi.hoisted(() => ({ calls: [] as { path: string; init?: RequestInit }[] }));
+vi.mock("../../composables/sandbox/sandboxClient", async (importOriginal) => {
+    const original = await importOriginal<typeof import("../../composables/sandbox/sandboxClient")>();
+    return {
+        ...original,
+        sandboxJson: async (path: string, init?: RequestInit): Promise<unknown> => {
+            daemon.calls.push({ path, init });
+            return { ok: true };
+        },
+    };
+});
+
 const { default: WorkspaceTree } = await import("./WorkspaceTree.vue");
 const { resetWorkspaceTreeState } = await import("../../composables/workspace/useWorkspaceTree");
 const { queryClient } = await import("../../composables/queryPersistence");
 const { useLayout } = await import("../../composables/useLayout");
+const { useReceipts } = await import("../../composables/receipts");
 
 const layout = useLayout();
 
@@ -299,5 +315,85 @@ describe(`the rows the sandbox keeps to itself`, () => {
 
         expect(opened).toEqual([`.intentic/auth`]);
         expect(rows(el)).toEqual([`.intentic`, `capabilities.json`, `settings.json`, `auth`, `README.md`]);
+    });
+});
+
+/* BARREN BRANCHES — folders holding nothing but empty folders, the debris agent file moves leave behind. The
+ * subject is what the explorer SHOWS: nothing at all until the emptiness has settled (an agent mid-scaffold
+ * must not strobe the tree), then ONE dimmed row for the whole chain, a one-line sweep footer, and a delete
+ * that skips the confirm dialog — no content is lost, and the receipt's Undo puts an empty folder back
+ * exactly. Timers are faked: the settle window is the behaviour, not incidental delay. */
+describe(`empty folders (barren branches)`, () => {
+    // `web › demo › assets` where every link holds only the next — one piece of junk, not three.
+    const BARREN_TREE: WorkspaceTreeEntry[] = [
+        dir(`web`, [dir(`web/demo`, [dir(`web/demo/assets`, [])])]),
+        dir(`src`, [file(`src/main.ts`)]),
+        file(`README.md`),
+    ];
+
+    beforeEach(() => {
+        vi.useFakeTimers();
+        daemon.calls.length = 0;
+    });
+    afterEach(() => {
+        vi.useRealTimers();
+        useReceipts().dismissReceipt();
+    });
+
+    it(`stays quiet through the settle window, then collapses the chain into one dimmed row and counts it`, async () => {
+        const el = await mount({ tree: BARREN_TREE });
+
+        // Before the window passes: an ordinary row, no marker, no footer.
+        expect(rows(el)).toEqual([`web`, `src`, `README.md`]);
+        expect(el.textContent).not.toContain(`empty folder`);
+
+        await vi.advanceTimersByTimeAsync(10_100);
+        await nextTick();
+
+        expect(rows(el)).toEqual([`web / demo / assets`, `src`, `README.md`]);
+        const label = [...el.querySelectorAll(`[role="treeitem"] span`)].find((span) => span.textContent?.includes(`web / demo`));
+        expect(label?.className).toContain(`text-subtle`);
+        expect(el.textContent).toContain(`1 empty folder`);
+        // The chain's tail is the empty leaf: nothing to expand into, so no chevron.
+        const chainRow = [...el.querySelectorAll(`[role="treeitem"]`)].find((row) => row.textContent?.includes(`web / demo`));
+        expect(chainRow?.querySelector(`[data-icon^="chevron"]`)).toBeNull();
+    });
+
+    it(`sweeps from the footer without a dialog, and the receipt holds the way back`, async () => {
+        const el = await mount({ tree: BARREN_TREE });
+        await vi.advanceTimersByTimeAsync(10_100);
+        await nextTick();
+
+        const cleanUp = [...el.querySelectorAll(`button`)].find((button) => button.textContent?.trim() === `Clean up`) as HTMLElement;
+        cleanUp.click();
+        await vi.advanceTimersByTimeAsync(1);
+
+        expect(document.body.textContent).not.toContain(`Delete folder?`);
+        const deletes = daemon.calls.filter((call) => call.init?.method === `DELETE`);
+        expect(deletes.length).toBe(1);
+        expect(String(deletes[0]?.init?.body)).toContain(`"web"`);
+        const { receipt } = useReceipts();
+        expect(receipt.value?.message).toBe(`1 empty folder removed`);
+
+        // Undo recreates the chain's deepest folder — recursive create rebuilds the exact shape.
+        await receipt.value?.undo?.();
+        const creates = daemon.calls.filter((call) => call.path === `/workspace/dir`);
+        expect(creates.length).toBe(1);
+        expect(String(creates[0]?.init?.body)).toContain(`web/demo/assets`);
+    });
+
+    it(`skips the confirm dialog when the Delete key lands on a barren-only selection`, async () => {
+        const el = await mount({ tree: BARREN_TREE });
+        await vi.advanceTimersByTimeAsync(10_100);
+        await nextTick();
+
+        const chainRow = [...el.querySelectorAll(`[role="treeitem"]`)].find((row) => row.textContent?.includes(`web / demo`)) as HTMLElement;
+        chainRow.click();
+        await nextTick();
+        chainRow.dispatchEvent(new KeyboardEvent(`keydown`, { key: `Delete`, bubbles: true }));
+        await vi.advanceTimersByTimeAsync(1);
+
+        expect(document.body.textContent).not.toContain(`Delete folder?`);
+        expect(useReceipts().receipt.value?.message).toBe(`1 empty folder removed`);
     });
 });

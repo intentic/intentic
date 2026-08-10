@@ -4,6 +4,7 @@ import { computed, ref, watch } from "vue";
 import { sandboxBlob, sandboxJson } from "../sandbox/sandboxClient";
 import { jsonBody } from "../sandbox/jsonBody";
 import { readFileWindow } from "./fileWindow";
+import { resetEmptyDirsState } from "./useEmptyDirs";
 import { sandboxKey, useSandbox } from "../sandbox/useSandbox";
 import { useSandboxQuery } from "../sandbox/useSandboxQuery";
 import { noticeFrom, useAsyncAction } from "../useAsyncAction";
@@ -74,6 +75,7 @@ export const resetWorkspaceTreeState = (): void => {
     clipboard.value = undefined;
     restoreExpanded();
     resetUploadQueue();
+    resetEmptyDirsState();
 };
 
 // The lazy subtrees are keyed by path alone, so they mean a different directory in a different scope

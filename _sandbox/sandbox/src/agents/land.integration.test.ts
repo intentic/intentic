@@ -14,7 +14,7 @@ import { createPerfTracker } from "../platform/perf.js";
 import { workspacePaths } from "../workspace/workspace.js";
 import { anchorOf } from "./agent-changes.js";
 
-import { landAgent, outstandingConflicts } from "./land.js";
+import { landAgent, outstandingConflicts, pruneEmptiedDirs } from "./land.js";
 import { createAgentWorktrees, type AgentWorktrees, type ConversationWorktree } from "./worktrees.js";
 
 const exec = promisify(execFile);
@@ -708,4 +708,57 @@ test("after merging main into the branch, land measures from the merge-base, not
     expect(second.landed).toBe(true);
     expect(second.conflicts).toBeUndefined();
     expect(await readFile(join(work, "long.ts"), "utf8")).toBe(lines([0, "one AGENT"], [6, "seven OTHERS"], [3, "four AGAIN"]));
+});
+
+/* A DELETION'S DEBRIS. Git tracks no directories, so the folder a deletion empties would sit in the main tree
+ * forever — untracked, invisible to every git verb, and the user's to notice. A land takes its own debris with
+ * it: whichever apply path carried the removal, the emptied chain is gone afterwards, and folders the land did
+ * NOT empty are never touched. */
+test("a land that deletes a folder's last file takes the emptied chain with it", async () => {
+    const { work, worktrees } = await setup();
+    await mkdir(join(work, "src/old/deep"), { recursive: true });
+    await writeFile(join(work, "src/old/deep/legacy.ts"), "old\n");
+    await sh(work, "add", "-A");
+    await sh(work, "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "-m", "nested");
+    const conversation = await worktrees.ensure("c2", []);
+    await rm(join(conversation.cwd, "src/old/deep/legacy.ts"));
+
+    const result = await landAgent(worktrees, isolatedAgent(conversation.repos, { id: `c2` }));
+    expect(result.landed).toBe(true);
+    // The whole chain, not just the file: src held nothing but the emptiness below it.
+    expect(existsSync(join(work, "src"))).toBe(false);
+    expect(existsSync(join(work, "app.ts"))).toBe(true);
+});
+
+test("the subset land (part of the delta already in main) also prunes what its removals empty", async () => {
+    const { work, worktrees } = await setup();
+    await mkdir(join(work, "src/old"), { recursive: true });
+    await writeFile(join(work, "src/old/legacy.ts"), "old\n");
+    await sh(work, "add", "-A");
+    await sh(work, "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "-m", "nested");
+    const conversation = await worktrees.ensure("c2", []);
+    // The agent deletes the nested file AND edits app.ts — and the user has already applied the app.ts edit
+    // to main by hand, so the bulk check fails, classifyDelta drops that change as already-in-main, and the
+    // remainder (the deletion) goes through applyChanges: the subset path.
+    await rm(join(conversation.cwd, "src/old/legacy.ts"));
+    await writeFile(join(conversation.cwd, "app.ts"), "line one EDITED\nline two\nline three\n");
+    await writeFile(join(work, "app.ts"), "line one EDITED\nline two\nline three\n");
+
+    const result = await landAgent(worktrees, isolatedAgent(conversation.repos, { id: `c2` }));
+    expect(result.landed).toBe(true);
+    expect(existsSync(join(work, "src"))).toBe(false);
+});
+
+// The prune itself, off the git path: climbs exactly as far as the removal emptied, and no further.
+test("pruneEmptiedDirs stops at the first level that still holds anything, and at the repo root", async () => {
+    const base = await mkdtemp(join(tmpdir(), "intentic-prune-"));
+    tempDirs.push(base);
+    await mkdir(join(base, "a/b/c"), { recursive: true });
+    await writeFile(join(base, "a/keep.txt"), "kept\n");
+
+    await pruneEmptiedDirs(base, ["a/b/c/removed.txt", "top-level-removed.txt"]);
+
+    expect(existsSync(join(base, "a/b"))).toBe(false); // the emptied chain
+    expect(existsSync(join(base, "a/keep.txt"))).toBe(true); // the stop
+    expect(existsSync(base)).toBe(true); // a root-level removal never climbs out
 });

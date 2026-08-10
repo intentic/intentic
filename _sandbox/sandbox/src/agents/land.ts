@@ -1,6 +1,6 @@
-import { access, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { access, mkdtemp, rm, rmdir, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join, resolve } from "node:path";
 import type { AgentSpan, GitChange, LandConflict, LandConflictReason, LandMode, LandResult } from "@intentic/sandbox-contract";
 import { defaultGit, type GitRunner } from "@intentic/scaffold";
 import { changedFiles, headSha, parseNameStatusZ } from "../git/changes.js";
@@ -96,6 +96,26 @@ const deltaChangeOf = (change: GitChange): DeltaChange => ({
     paths: change.from === undefined ? [change.path] : [change.from, change.path],
     removes: change.status === "deleted" ? [change.path] : change.from === undefined ? [] : [change.from],
 });
+
+/* Directories a removal leaves empty are debris the user is then asked to tidy by hand — git tracks no
+ * directories, so nothing downstream ever cleans them up. `git apply` prunes them itself whenever the patch
+ * expresses the removal (its remove_path removes emptied leading dirs — the whole-delta and 3-way lands are
+ * covered by that); the post-condition `rm`s in applyChanges are the one removal git never sees, so their
+ * emptied parents are pruned here. Scoped strictly to the delta's own removals: climb from each removed path's
+ * parent toward the repo root — `rmdir` refuses a non-empty dir and a missing one means the chain is already
+ * gone, so either failure IS the stop, and a pre-existing empty folder elsewhere is never touched. */
+export const pruneEmptiedDirs = async (main: string, removed: readonly string[]): Promise<void> => {
+    const root = resolve(main);
+    for (const path of removed) {
+        for (let dir = dirname(resolve(root, path)); dir !== root && dir.startsWith(root); dir = dirname(dir)) {
+            try {
+                await rmdir(dir);
+            } catch {
+                break;
+            }
+        }
+    }
+};
 
 /* WHICH changes of a delta actually refuse to apply, and why.
  *
@@ -196,12 +216,14 @@ const applyChanges = async (
     }
     const patchPath = join(patchDir, `${repo.replaceAll("/", "_")}.remainder.patch`);
     await writeFile(patchPath, patch);
+    const removes = changes.flatMap((change) => change.removes);
     await git(main, ["apply", patchPath]);
     await Promise.all(
         // `force` so an already-absent path — which is all of them, whenever the patch expressed its own
         // removals — costs one stat and no error.
-        changes.flatMap((change) => change.removes).map(async (path) => await rm(join(main, path), { force: true })),
+        removes.map(async (path) => await rm(join(main, path), { force: true })),
     );
+    await pruneEmptiedDirs(main, removes);
 };
 
 /* THE REFUSAL AS IT STANDS NOW — the stored conflict report re-asked against today's tree, touching nothing.
