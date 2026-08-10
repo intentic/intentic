@@ -51,7 +51,7 @@ const PROMPT_KEPT = [
                 ask
             }}</span>
         </div>
-        <div class="mt-2 grid gap-2 sm:grid-cols-2">
+        <div class="mt-2 grid gap-2 @lg:grid-cols-2">
             <div class="overflow-hidden rounded-lg border border-line">
                 <p class="border-b border-line bg-canvas px-2.5 py-1 text-2xs font-medium uppercase tracking-wide text-subtle">Off</p>
                 <p class="px-2.5 py-2 text-2xs text-muted">
@@ -99,7 +99,7 @@ const PROMPT_KEPT = [
             release-notes writer, a support bot, a reviewer with your house rules) and it has a real cost, because this app talks to the assistant
             through that same prompt.
         </p>
-        <div class="mt-2 grid gap-2 sm:grid-cols-2">
+        <div class="mt-2 grid gap-2 @lg:grid-cols-2">
             <div class="overflow-hidden rounded-lg border border-warning/40">
                 <p class="border-b border-warning/40 bg-warning/10 px-2.5 py-1 text-2xs font-medium uppercase tracking-wide text-warning">
                     What Custom gives up

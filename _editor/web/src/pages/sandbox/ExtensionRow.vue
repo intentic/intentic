@@ -172,7 +172,10 @@ const tone = computed(() => TONE[entry.state.variant] ?? `text-muted`);
          a row that happens to have grown a panel under it. The tint is an ink wash rather than `bg-canvas`
          because canvas and card are one step apart in light mode — a treatment that only exists in the dark
          scheme is a treatment that isn't there. -->
-    <div class="group border-l-2" :class="[expanded ? `bg-content/6` : `transition-colors hover:bg-content/4`, accent ?? `border-l-transparent`]">
+    <div
+        class="group @container border-l-2"
+        :class="[expanded ? `bg-content/6` : `transition-colors hover:bg-content/4`, accent ?? `border-l-transparent`]"
+    >
         <div class="flex items-center gap-3 pl-2.5 pr-3">
             <button
                 type="button"
@@ -197,12 +200,12 @@ const tone = computed(() => TONE[entry.state.variant] ?? `text-muted`);
                              by changing INK rather than by opacity — a half-transparent word over a tinted row
                              is a muddier grey than the palette's own muted one, and it takes the hover tint
                              with it. -->
-                        <span class="min-w-0 flex-1 truncate text-sm sm:w-48 sm:flex-none">
+                        <span class="min-w-0 flex-1 truncate text-sm @2xl:w-48 @2xl:flex-none">
                             <span v-if="entry.extension.source !== `builtin`" class="text-subtle">{{ manifest.publisher }}.</span
                             ><span class="font-medium" :class="entry.extension.enabled ? `text-content` : `text-muted`">{{ manifest.name }}</span>
                         </span>
                         <span
-                            class="hidden min-w-0 flex-1 items-baseline gap-1.5 text-xs sm:flex"
+                            class="hidden min-w-0 flex-1 items-baseline gap-1.5 text-xs @2xl:flex"
                             :class="entry.extension.enabled ? `text-muted` : `text-subtle`"
                         >
                             <span v-tooltip.overflow="shown" class="min-w-0 truncate">{{ shown }}</span>

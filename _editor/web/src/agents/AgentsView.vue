@@ -2,7 +2,7 @@
 import Button from "primevue/button";
 import type { Disposable } from "@intentic/extension-api";
 import type { WorkflowRun } from "@intentic/sandbox-contract";
-import { clipboardOf, cmp, ContextMenu, SearchBar, useDevice } from "@intentic/ui";
+import { clipboardOf, cmp, ContextMenu, SearchBar, useDevice, useNarrow } from "@intentic/ui";
 import Dialog from "primevue/dialog";
 import type { MenuItem } from "primevue/menuitem";
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from "vue";
@@ -524,25 +524,16 @@ const hint = computed(() => {
     }
     return dropRejection(dragged.value, over.value);
 });
-// Three columns need ~270px each before a card starts truncating its title — below that the board stacks.
-// Measured off the board element rather than declared as a CSS container query, because `container-type`
-// makes an element a containing block for its fixed-position descendants, and the drag ghost is fixed at
-// viewport coordinates.
-const NARROW_BOARD_PX = 840;
+// Three columns need ~16rem each before a card starts truncating its title — below that the board stacks. The
+// shared measurement (useNarrow) rather than a CSS container query: `container-type` makes an element a
+// containing block for its fixed-position descendants, and the drag ghost is fixed at viewport coordinates.
+const NARROW_BOARD_REM = 48;
 const boardEl = ref<HTMLElement | undefined>(undefined);
-// Unmeasured reads as wide: the ResizeObserver's first callback lands before the first paint, so the fallback
-// is never seen, and defaulting the other way would flash three columns on a phone.
-const boardWidth = ref(Number.POSITIVE_INFINITY);
-const narrow = computed(() => boardWidth.value < NARROW_BOARD_PX);
+const narrow = useNarrow(boardEl, NARROW_BOARD_REM);
 // The shared clock, for every card's elapsed/time-ago readout.
 const now = useNow();
-let boardObserver: ResizeObserver | undefined;
 onMounted(() => {
     void refresh();
-    if (boardEl.value !== undefined) {
-        boardObserver = new ResizeObserver(([entry]) => (boardWidth.value = entry?.contentRect.width ?? boardWidth.value));
-        boardObserver.observe(boardEl.value);
-    }
     // The archive is off the live roster, so its size has to be asked for. Worth the one request at mount:
     // without a count the Finished header can only offer an archive the user has no reason to believe holds
     // anything, and an empty board would hide every agent they ever ran behind an unlabelled button.
@@ -578,7 +569,6 @@ onUnmounted(() => {
     clearTimeout(receiptTimer);
     clearTimeout(pulseTimer);
     clearTimeout(flashTimer);
-    boardObserver?.disconnect();
     for (const disposable of boardCommands) {
         disposable.dispose();
     }

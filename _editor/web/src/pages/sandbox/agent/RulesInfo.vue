@@ -24,7 +24,7 @@ const MOMENTS = [
         <!-- The one genuinely surprising thing: two moments here treat a list of rules differently, and the
              difference follows from what the moment is for rather than from a setting. -->
         <h3 class="mt-5 text-xs font-semibold uppercase tracking-wide text-subtle">When several rules match</h3>
-        <div class="mt-2 grid gap-2 sm:grid-cols-2">
+        <div class="mt-2 grid gap-2 @lg:grid-cols-2">
             <div class="overflow-hidden rounded-lg border border-line">
                 <p class="border-b border-line bg-canvas px-2.5 py-1 text-2xs font-medium uppercase tracking-wide text-subtle">
                     Moments that do things

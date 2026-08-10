@@ -146,9 +146,11 @@ const logText = computed(() => {
             <!-- A stack's services ride the list response, so this costs no extra call. Two columns of plain
                  text rather than a wrap of bordered chips: the names are what the reader is scanning for, and
                  forty characters of shared registry prefix in front of each one is what buried them. -->
-            <div v-if="resource.services.length > 0" class="mb-3">
+            <div v-if="resource.services.length > 0" class="@container mb-3">
                 <div :class="cmp.sectionLabel(`mb-1.5 text-2xs`)">Services</div>
-                <div class="grid gap-x-6 gap-y-1 sm:grid-cols-2">
+                <!-- Two columns against THIS block, not the window: the panel it sits in is as wide as the reader
+                     left the workspace pane, and a viewport query put two 160px columns in it. -->
+                <div class="grid gap-x-6 gap-y-1 @lg:grid-cols-2">
                     <div v-for="service in resource.services" :key="service.name" class="flex min-w-0 items-baseline gap-2 text-2xs">
                         <span class="shrink-0 font-medium text-content">{{ service.name }}</span>
                         <span class="truncate font-mono text-subtle" v-tooltip.top="service.image">{{ imageLabel(service.image) }}</span>

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Button, cmp, Icon, InfoHint, Picker, type PickerOptions, SearchBar, useDevice } from "@intentic/extension-ui";
+import { Button, cmp, Icon, InfoHint, Picker, type PickerOptions, SearchBar, useNarrow } from "@intentic/extension-ui";
 import { computed, ref, watch } from "vue";
 import { filterOptions, type Filters, useNoteMutations, useOverview, useSearch } from "./useKnowledge";
 import NoteIndex from "./NoteIndex.vue";
@@ -15,15 +15,19 @@ import NotePane from "./NotePane.vue";
  *
  * A HUB SECTION, so this file draws neither a page title nor a frame — the hub draws both. That constraint is
  * what shapes the layout: the section is a wide band rather than a page, so the chrome is one row, the index is
- * a narrow column beside the note rather than a second rail in front of it, and on a phone it folds above the
- * note instead of hiding it.
+ * a narrow column beside the note rather than a second rail in front of it, and in a narrow body it folds above
+ * the note instead of hiding it.
  *
  * WHAT IS UNFINISHED ABOUT THE VAULT gets a strip, and only when there IS something — links pointing at notes
  * nobody wrote, kinds the vocabulary has not adopted, notes that fell out of the graph. A permanent panel
  * reading "0 problems" would spend the same space to say nothing, and would train the reader to stop looking at
  * the place where the real thing eventually appears. */
 
-const { mobile } = useDevice();
+/* MEASURED ON THIS BODY, not on the screen and not on the hub. The section sits inside a hub, inside the
+ * workspace pane, beside a chat panel the reader can drag — so by the time a note gets here the width left is
+ * nothing the window can predict. Below ~36rem a 16rem index beside a note leaves neither readable. */
+const body = ref<HTMLElement | undefined>(undefined);
+const stacked = useNarrow(body, 36);
 const { overview, error: overviewError } = useOverview();
 
 const q = ref(``);
@@ -132,7 +136,7 @@ const startVault = async (): Promise<void> => {
 
 <template>
     <!-- A HUB SECTION BODY — no page header and no frame of its own: the hub draws both. -->
-    <div class="flex min-h-0 flex-col gap-3">
+    <div ref="body" class="flex min-h-0 flex-col gap-3">
         <div v-if="error" :class="cmp.alertDanger(`px-4 py-3 text-sm`)">{{ error }}</div>
 
         <!-- The section's one row of chrome: what this is, how to ask it something, and what it amounts to. -->
@@ -215,13 +219,13 @@ const startVault = async (): Promise<void> => {
             <p v-if="seed.error.value" class="text-xs text-danger">{{ seed.error.value.message }}</p>
         </div>
 
-        <div v-else class="flex max-h-[72dvh] min-h-0 gap-3" :class="mobile ? `flex-col` : undefined">
-            <!-- On a phone the index folds above the note instead of beside it: a 18rem column next to a note
-                 leaves neither of them readable, and hiding the note behind a list would put two taps between
-                 the reader and the thing they came for. -->
+        <div v-else class="flex max-h-[72dvh] min-h-0 gap-3" :class="stacked ? `flex-col` : undefined">
+            <!-- In a narrow body the index folds above the note instead of beside it: a 16rem column next to a
+                 note leaves neither of them readable, and hiding the note behind a list would put two clicks
+                 between the reader and the thing they came for. -->
             <div
                 class="shrink-0 overflow-hidden rounded-lg border border-line"
-                :class="mobile ? `max-h-56` : `flex max-h-full w-64 min-w-0 flex-col`"
+                :class="stacked ? `max-h-56` : `flex max-h-full w-64 min-w-0 flex-col`"
             >
                 <NoteIndex :hits="hits" :selected="selected" :filtered="filtered" :is-loading="isLoading" @pick="open" />
             </div>

@@ -188,7 +188,9 @@ const confirmDiscard = (): void => {
 
 <template>
     <div class="flex h-full min-h-0 flex-col">
-        <div class="view-header flex items-center gap-2 border-b border-line px-3">
+        <!-- A @container: the header thins out against ITS OWN width, which is the workspace pane's and not
+             the window's — with the chat panel open the two are nowhere near each other. -->
+        <div class="view-header @container flex items-center gap-2 border-b border-line px-3">
             <button
                 type="button"
                 class="flex h-7 w-7 items-center justify-center rounded-md text-muted transition-colors hover:bg-overlay hover:text-content"
@@ -220,12 +222,12 @@ const confirmDiscard = (): void => {
                  the only route to the id every git command, worktree path and CLI verb needs was to read
                  thirty-six characters off the screen and retype them. Pressing it now opens the one panel that
                  states the name in all three forms anyone pastes it in.
-                 It survives onto a phone as the bare glyph rather than vanishing: this row has no width for a
-                 branch name there, but hiding the chip made the identity of the thing on screen unreachable on
-                 the one device where retyping it is worst. -->
+                 It survives into a narrow header as the bare glyph rather than vanishing: this row has no width
+                 for a branch name there, but hiding the chip made the identity of the thing on screen unreachable
+                 exactly where retyping it is worst. -->
             <span
                 v-if="fleetAgent?.branch !== undefined"
-                class="hidden max-w-[16rem] shrink-0 items-center rounded bg-overlay px-1.5 py-px md:inline-flex"
+                class="hidden max-w-[16rem] shrink-0 items-center rounded bg-overlay px-1.5 py-px @2xl:inline-flex"
             >
                 <SessionChip :branch="fleetAgent.branch" reveal @reveal="openIdentity" />
             </span>

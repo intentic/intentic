@@ -76,14 +76,21 @@ const fixHint = computed<string | undefined>(() => {
 
 <template>
     <div class="group border-l-[3px] transition-colors" :class="[tone.rowBorder, expanded ? `bg-content/[0.02]` : `hover:bg-content/[0.02]`]">
-        <!-- Run header row -->
-        <div class="flex w-full items-center gap-3 px-4 py-3">
+        <!-- Run header row. IT WRAPS, because the pane it lives in is not the window: with the chat panel open
+             this row gets ~450px, and four rigid clusters in a nowrap line simply ran off the side of it — the
+             stage circles landed on top of the branch name and "Fix with agent" was painted outside the pane. The
+             commit line keeps a floor (it is the row's headline, and truncating it to nothing helps nobody) and
+             the two right-hand clusters travel together, so what happens instead is a second line. -->
+        <div class="flex w-full flex-wrap items-center gap-x-3 gap-y-2 px-4 py-3">
             <Icon :name="tone.icon" class="shrink-0 text-base" :class="[tone.text, tone.spin ? `animate-spin` : ``]" />
 
             <Avatar :size="24" :name="run.authorName" :src="run.authorAvatarUrl" v-tooltip.top="run.authorName" />
 
-            <!-- Pipeline info -->
-            <div class="min-w-0 flex-1">
+            <!-- Pipeline info. The floor is what decides when this row breaks in two: a flex line wraps on the
+                 items' MINIMUM widths, before any of them is allowed to shrink, so a generous floor here spends
+                 itself as second lines on rows that had the room all along. 10rem is the commit subject's own
+                 floor — under it there is no headline left to read, which is the point at which stacking wins. -->
+            <div class="min-w-40 flex-1">
                 <div class="flex items-center gap-2">
                     <a
                         :href="run.url"
@@ -129,68 +136,78 @@ const fixHint = computed<string | undefined>(() => {
                 </div>
             </div>
 
-            <!-- Inline stage graph -->
-            <div class="flex shrink-0 items-center">
-                <PipelineGraph v-if="stages.length > 0" :stages="stages" :recurring="recurring" />
-                <!-- Same circles-and-connectors geometry as the real graph, so the row does not re-flow around
-                     it when the jobs land. Three is the guess; the count is what we are waiting to learn. -->
-                <div v-else-if="jobsLoading" class="flex items-center" aria-hidden="true">
-                    <template v-for="i in 3" :key="i">
-                        <span v-if="i > 1" class="h-px w-3 shrink-0 bg-line"></span>
-                        <span class="skeleton h-6 w-6 shrink-0 rounded-full"></span>
-                    </template>
+            <!-- The stages and what you can do about them. They wrap between themselves as well, because the
+                 alternative is the stage circles being squeezed to a sliver by two buttons that refuse to shrink —
+                 and the circles are what the row is FOR. `ml-auto` + `justify-end` keeps them to the right of
+                 whichever line they land on. -->
+            <div class="ml-auto flex min-w-0 flex-wrap items-center justify-end gap-x-3 gap-y-2">
+                <!-- Inline stage graph. `basis-0` with a floor of ~three circles, because the graph is the one
+                     item here that can give: sized from its content it would count its full length toward the
+                     wrap and break a row that had room for it, and with no floor at all it would be squeezed to
+                     a sliver by two buttons that never shrink. So it asks for three circles, takes its natural
+                     width when the line has it (`max-w-max`), and scrolls when a twelve-stage run has more. -->
+                <div class="scrollbar-thin flex max-w-max min-w-24 flex-1 basis-0 items-center overflow-x-auto">
+                    <PipelineGraph v-if="stages.length > 0" :stages="stages" :recurring="recurring" />
+                    <!-- Same circles-and-connectors geometry as the real graph, so the row does not re-flow around
+                         it when the jobs land. Three is the guess; the count is what we are waiting to learn. -->
+                    <div v-else-if="jobsLoading" class="flex items-center" aria-hidden="true">
+                        <template v-for="i in 3" :key="i">
+                            <span v-if="i > 1" class="h-px w-3 shrink-0 bg-line"></span>
+                            <span class="skeleton h-6 w-6 shrink-0 rounded-full"></span>
+                        </template>
+                    </div>
                 </div>
-            </div>
 
-            <!-- Time + actions -->
-            <div class="flex shrink-0 items-center gap-2">
-                <span class="text-2xs text-subtle" :title="formatTimestamp(run.createdAt)">
-                    {{ timeAgo(run.createdAt) }}
-                </span>
-                <div class="flex items-center gap-1">
-                    <!-- Primary only on the branch's open failure. Every other red row keeps the same action at
-                         Re-run's weight: a log entry, not a demand — while the vendor's own re-runs and skipped
-                         jobs mean a green above is evidence, not proof, so the action stays one click away. -->
-                    <Button
-                        v-if="run.status === `failed`"
-                        label="Fix with agent"
-                        size="small"
-                        :severity="open ? undefined : `secondary`"
-                        :text="!open"
-                        :loading="busy === actionKey"
-                        :disabled="busy !== undefined"
-                        v-tooltip.top="fixHint"
-                        @click="emit(`fix`, run)"
-                    />
-                    <Button
-                        v-if="run.status === `running`"
-                        label="Cancel"
-                        size="small"
-                        severity="secondary"
-                        text
-                        :loading="busy === actionKey"
-                        :disabled="busy !== undefined"
-                        @click="emit(`cancel`, run)"
-                    />
-                    <Button
-                        v-else
-                        label="Re-run"
-                        size="small"
-                        severity="secondary"
-                        text
-                        :loading="busy === actionKey"
-                        :disabled="busy !== undefined"
-                        @click="emit(`rerun`, run)"
-                    />
+                <!-- Time + actions -->
+                <div class="flex shrink-0 items-center gap-2">
+                    <span class="text-2xs text-subtle" :title="formatTimestamp(run.createdAt)">
+                        {{ timeAgo(run.createdAt) }}
+                    </span>
+                    <div class="flex items-center gap-1">
+                        <!-- Primary only on the branch's open failure. Every other red row keeps the same action at
+                             Re-run's weight: a log entry, not a demand — while the vendor's own re-runs and skipped
+                             jobs mean a green above is evidence, not proof, so the action stays one click away. -->
+                        <Button
+                            v-if="run.status === `failed`"
+                            label="Fix with agent"
+                            size="small"
+                            :severity="open ? undefined : `secondary`"
+                            :text="!open"
+                            :loading="busy === actionKey"
+                            :disabled="busy !== undefined"
+                            v-tooltip.top="fixHint"
+                            @click="emit(`fix`, run)"
+                        />
+                        <Button
+                            v-if="run.status === `running`"
+                            label="Cancel"
+                            size="small"
+                            severity="secondary"
+                            text
+                            :loading="busy === actionKey"
+                            :disabled="busy !== undefined"
+                            @click="emit(`cancel`, run)"
+                        />
+                        <Button
+                            v-else
+                            label="Re-run"
+                            size="small"
+                            severity="secondary"
+                            text
+                            :loading="busy === actionKey"
+                            :disabled="busy !== undefined"
+                            @click="emit(`rerun`, run)"
+                        />
+                    </div>
+                    <button
+                        type="button"
+                        class="cursor-pointer p-1"
+                        :title="expanded ? `Hide job graph` : `Show job graph`"
+                        @click="expanded = !expanded"
+                    >
+                        <Icon name="chevron-down" class="text-2xs text-subtle transition-transform" :class="expanded ? `rotate-180` : ``" />
+                    </button>
                 </div>
-                <button
-                    type="button"
-                    class="cursor-pointer p-1"
-                    :title="expanded ? `Hide job graph` : `Show job graph`"
-                    @click="expanded = !expanded"
-                >
-                    <Icon name="chevron-down" class="text-2xs text-subtle transition-transform" :class="expanded ? `rotate-180` : ``" />
-                </button>
             </div>
         </div>
 

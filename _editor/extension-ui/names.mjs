@@ -63,7 +63,9 @@ export const extensionUiNames = [
     "sinceOf",
     "timeAgo",
     "timeWindowWords",
+    "useCompact",
     "useDevice",
     "useListNavigation",
+    "useNarrow",
     "useTheme",
 ];

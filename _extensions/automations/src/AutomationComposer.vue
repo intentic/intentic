@@ -212,10 +212,10 @@ const finish = (id: string): void => {
                         :class="cmp.input('px-2 py-1 text-xs')"
                         @keydown.enter.prevent="pickFirstMatch"
                     />
-                    <div class="scrollbar-thin flex max-h-[60vh] flex-col gap-2 overflow-y-auto">
+                    <div class="scrollbar-thin @container flex max-h-[60vh] flex-col gap-2 overflow-y-auto">
                         <template v-for="group in recipeGroups" :key="group.label">
                             <span :class="cmp.sectionLabel('px-0.5 pt-1 text-2xs first:pt-0')">{{ group.label }}</span>
-                            <div class="grid gap-1.5 sm:grid-cols-2 lg:grid-cols-3">
+                            <div class="grid gap-1.5 @lg:grid-cols-2 @3xl:grid-cols-3">
                                 <button
                                     v-for="recipe in group.items"
                                     :key="recipe.id"

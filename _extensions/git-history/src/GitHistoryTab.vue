@@ -651,7 +651,9 @@ const runPending = async (): Promise<void> => {
             <p v-else-if="searching && matched.length === 0" class="px-3 py-3 text-2xs text-subtle">
                 No loaded commit matches. Scroll to load more of the history, then search again.
             </p>
-            <div v-for="{ row, commit } in graphRows" :key="commit.sha">
+            <!-- A @container per row: which of the author/date/sha columns fit is a fact about the row, and this
+                 view is a workspace panel whose width the reader sets. -->
+            <div v-for="{ row, commit } in graphRows" :key="commit.sha" class="@container">
                 <button
                     type="button"
                     class="ui-row-select flex w-full items-center gap-2 py-0 pl-3 pr-3 text-left transition-opacity"
@@ -733,7 +735,7 @@ const runPending = async (): Promise<void> => {
                          things you can do with one, and a menu for three items nobody would guess are hidden
                          there is a menu nobody opens. `pop` is the common case, so it leads. -->
                     <template v-else-if="stashBySha.get(commit.sha)">
-                        <span class="hidden shrink-0 text-2xs text-subtle sm:block">{{ timeAgo(commit.at) }}</span>
+                        <span class="hidden shrink-0 text-2xs text-subtle @md:block">{{ timeAgo(commit.at) }}</span>
                         <span
                             v-for="verb in [
                                 {
@@ -761,8 +763,8 @@ const runPending = async (): Promise<void> => {
                         >
                     </template>
                     <template v-else>
-                        <span class="hidden shrink-0 truncate text-2xs text-subtle lg:block lg:max-w-32">{{ commit.author }}</span>
-                        <span class="hidden shrink-0 text-2xs text-subtle sm:block">{{ timeAgo(commit.at) }}</span>
+                        <span class="hidden shrink-0 truncate text-2xs text-subtle @2xl:block @2xl:max-w-32">{{ commit.author }}</span>
+                        <span class="hidden shrink-0 text-2xs text-subtle @md:block">{{ timeAgo(commit.at) }}</span>
                         <span class="shrink-0 font-mono text-[0.65rem] text-subtle">{{ commit.short }}</span>
                     </template>
                 </button>

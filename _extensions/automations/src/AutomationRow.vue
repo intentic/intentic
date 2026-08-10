@@ -169,7 +169,11 @@ const doorbell = computed(() => {
 </script>
 
 <template>
-    <div class="group/row">
+    <!-- A @container, so the columns below thin out against THIS ROW rather than against the window. They were on
+         viewport breakpoints, which are a fair guess only for a page that owns the screen: with the chat panel
+         open the list gets ~350px, `sm:` and `lg:` both still read as true, and the last-run column, the next-run
+         column and the whole prompt were laid on top of the automation's own name. -->
+    <div class="group/row @container">
         <div class="flex items-center gap-2 px-2.5 py-1.5 transition-colors hover:bg-content/5">
             <button
                 type="button"
@@ -195,21 +199,21 @@ const doorbell = computed(() => {
                      "and what does it do" without costing a second line. First thing to go as the page narrows.
                      aria-hidden so the disclosure's accessible name stays "<id> <trigger>" rather than a whole
                      truncated prompt — the full text is one expand away, unabridged. -->
-                <span class="hidden min-w-0 flex-1 truncate text-2xs text-subtle lg:block" aria-hidden="true">{{ automation.prompt }}</span>
+                <span class="hidden min-w-0 flex-1 truncate text-2xs text-subtle @3xl:block" aria-hidden="true">{{ automation.prompt }}</span>
             </button>
 
             <span
                 v-if="lastRun"
-                class="hidden w-24 shrink-0 truncate text-right text-2xs sm:block"
+                class="hidden w-24 shrink-0 truncate text-right text-2xs @xl:block"
                 :class="OUTCOME_CLASS[lastRun.outcome]"
                 v-tooltip.top="runTooltip(lastRun)"
             >
                 {{ OUTCOME_VERB[lastRun.outcome] }} {{ since(lastRun.at) }}
             </span>
-            <span v-else class="hidden w-24 shrink-0 text-right text-2xs text-subtle sm:block">never run</span>
+            <span v-else class="hidden w-24 shrink-0 text-right text-2xs text-subtle @xl:block">never run</span>
 
             <span
-                class="hidden w-12 shrink-0 truncate text-right text-2xs text-subtle sm:block"
+                class="hidden w-12 shrink-0 truncate text-right text-2xs text-subtle @xl:block"
                 v-tooltip.top="automation.nextRun !== undefined ? `Next: ${formatDateTime(automation.nextRun)}` : undefined"
             >
                 {{ nextLabel }}

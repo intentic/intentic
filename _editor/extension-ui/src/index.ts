@@ -103,11 +103,18 @@ export {
     TIME_WINDOWS,
     type TimeWindow,
     timeWindowWords,
+    /* Whether the <SplitView> above has folded its index above its body. What a rail asks before swapping itself
+     * to a compact control, so the two halves of one screen change shape at one width. Outside a split it falls
+     * back to the device, which is the only narrow case left. */
+    useCompact,
     useDevice,
     /* Arrow keys / Home / End / Enter over a list, with the wrap-around and the scroll-into-view already
      * decided. Ships because a keyboard-navigable list is the shape half these views are, and the parts a
      * hand-roll leaves out (wrapping at the ends, keeping the active row in view) are invisible on a mouse. */
     useListNavigation,
+    /* "Is my own element too narrow for this layout" — the question every extension view actually means, since it
+     * renders into a pane the reader can drag to half its width, not into the window. */
+    useNarrow,
     useTheme,
 } from "@intentic/ui";
 // Also reachable as `@intentic/extension-ui/format` — see the note there for why an extension's pure logic

@@ -34,10 +34,13 @@ const { grow = false, scroll = true } = defineProps<{
 </script>
 
 <template>
-    <section class="flex min-h-0 flex-col overflow-hidden rounded-lg border border-line bg-card" :class="grow ? `flex-1` : ``">
+    <!-- A @container, because whether the header's title and actions fit on one line is a fact about the PANEL:
+         these sit in a workspace pane the reader can drag down to a third of the window, where a viewport query
+         says "wide" and hands a 300px header two competing halves. -->
+    <section class="@container flex min-h-0 flex-col overflow-hidden rounded-lg border border-line bg-card" :class="grow ? `flex-1` : ``">
         <header
             v-if="title !== undefined || $slots[`title`] || $slots[`actions`] || $slots[`lead`]"
-            class="flex shrink-0 flex-col gap-2 border-b border-line px-4 py-2.5 md:flex-row md:items-start md:justify-between md:gap-3"
+            class="flex shrink-0 flex-col gap-2 border-b border-line px-4 py-2.5 @xl:flex-row @xl:items-start @xl:justify-between @xl:gap-3"
         >
             <div class="min-w-0">
                 <div class="flex min-w-0 items-center gap-2">

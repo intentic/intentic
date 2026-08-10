@@ -138,7 +138,9 @@ const summary = computed(() => {
             <!-- Cause on the left, what it costs on the right. Two blocks rather than one, because "we cannot ask
                  this question here" and "we have not measured it" are the distinction verdict.ts exists to keep,
                  and a reader scanning for the chore they expected needs to know which of the two answers it. -->
-            <div v-if="open" class="flex flex-col gap-2 pt-0.5 pl-4">
+            <!-- A @container so the cause/cost pair splits into two columns on the width THIS block has, which is
+                 the workspace pane's, not the window's. -->
+            <div v-if="open" class="@container flex flex-col gap-2 pt-0.5 pl-4">
                 <div
                     v-for="block in [
                         { label: `Not applicable`, groups: ruledOut },
@@ -148,7 +150,7 @@ const summary = computed(() => {
                 >
                     <template v-if="block.groups.length > 0">
                         <p class="text-2xs text-content">{{ block.label }}</p>
-                        <dl class="mt-1 grid grid-cols-1 gap-x-4 gap-y-0.5 sm:grid-cols-[max-content_1fr]">
+                        <dl class="mt-1 grid grid-cols-1 gap-x-4 gap-y-0.5 @md:grid-cols-[max-content_1fr]">
                             <template v-for="group in block.groups" :key="group.cause">
                                 <dt class="text-2xs text-subtle">{{ group.cause }}</dt>
                                 <dd class="text-2xs text-subtle/70">{{ group.names.join(` · `) }}</dd>

@@ -172,10 +172,10 @@ const save = async (): Promise<void> => {
 </script>
 
 <template>
-    <div class="flex flex-col gap-6">
+    <div class="@container flex flex-col gap-6">
         <!-- Identity: name + logo (owner-editable), self-reported image / version / URL, online status. -->
         <Card class="flex flex-col gap-4">
-            <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div class="flex flex-col gap-3 @2xl:flex-row @2xl:items-center @2xl:justify-between">
                 <div class="flex min-w-0 flex-1 items-center gap-3">
                     <!-- The logo IS the control — no "Choose image" row to add, so the card never changes height.
                          Live for owners in every state (a logo has nothing to commit), disabled and out of the
@@ -224,7 +224,7 @@ const save = async (): Promise<void> => {
                         </div>
                     </Popover>
 
-                    <div class="-ml-2 min-w-0 flex-1 sm:max-w-md">
+                    <div class="-ml-2 min-w-0 flex-1 @2xl:max-w-md">
                         <div class="flex items-center gap-2">
                             <!-- Title and field share one box — same height, padding and type scale — so switching
                                  modes only paints a border; the glyphs never move. In edit mode a hidden sizer

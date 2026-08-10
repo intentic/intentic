@@ -243,7 +243,7 @@ const setProvider = (provider: string): void => {
 </script>
 
 <template>
-    <div class="flex flex-col gap-3">
+    <div class="@container flex flex-col gap-3">
         <!-- The name IS the automation's identity — the daemon upserts on it — so retyping it while editing
              would fork a second automation rather than rename this one. Absent once it exists; the row above
              is already showing it. -->
@@ -265,16 +265,17 @@ const setProvider = (provider: string): void => {
              it then does. They used to be one column forty fields tall, because the form lived in a 44rem modal
              and a column was the only thing that fit — the Doorbell branch alone is eight fields, and reaching
              the Prompt meant scrolling past every one of them without ever seeing the two halves together.
-             Both callers hand this component the whole page (72rem), so the split is the same in the create
-             panel and in the row's editor — one layout, not two to keep honest. It stacks back to one column
-             below `md`, where a second column would be two cramped ones.
+             Both callers hand this component the whole page, so the split is the same in the create
+             panel and in the row's editor — one layout, not two to keep honest. It stacks back to one column once
+             THIS form is under ~48rem — measured on the form, because the panel is only as wide as the workspace
+             pane the reader left it, and a window-width query put two cramped columns in half a screen.
              The split was a bare grid first, and a bare grid is what made it read as ragged rather than as two
              halves: nothing named the columns, so a short "When" beside a tall "Then" looked like a layout that
              had failed rather than one question that happens to be shorter than the other. A heading each and a
              rule between them is what turns the same two columns into a sentence — WHEN this happens, THEN do
              that — and the rule is also what makes their ends read as deliberate. -->
-        <div class="grid items-stretch gap-x-0 gap-y-5 md:grid-cols-2">
-            <div class="flex min-w-0 flex-col gap-3 md:pr-5">
+        <div class="grid items-stretch gap-x-0 gap-y-5 @3xl:grid-cols-2">
+            <div class="flex min-w-0 flex-col gap-3 @3xl:pr-5">
                 <div class="flex items-baseline gap-2">
                     <span :class="cmp.sectionLabel()">When</span>
                     <span class="text-2xs text-subtle">what wakes the agent</span>
@@ -589,7 +590,7 @@ const setProvider = (provider: string): void => {
                 </p>
             </div>
 
-            <div class="flex min-w-0 flex-col gap-3 md:border-l md:border-line md:pl-5">
+            <div class="flex min-w-0 flex-col gap-3 @3xl:border-l @3xl:border-line @3xl:pl-5">
                 <div class="flex items-baseline gap-2">
                     <span :class="cmp.sectionLabel()">Then</span>
                     <span class="text-2xs text-subtle">what it wakes with</span>
@@ -798,7 +799,9 @@ const setProvider = (provider: string): void => {
                     </p>
                     <p v-else class="text-xs text-muted">
                         {{ actsAsLabel.bounds }}
-                        <button type="button" :class="cmp.linkButton('inline')" @click="host().navigate(`/sandbox/personas`)">Edit this persona</button>
+                        <button type="button" :class="cmp.linkButton('inline')" @click="host().navigate(`/sandbox/personas`)">
+                            Edit this persona
+                        </button>
                     </p>
                 </div>
 

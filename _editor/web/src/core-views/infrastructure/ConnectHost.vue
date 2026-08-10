@@ -176,7 +176,7 @@ onUnmounted(() => clearInterval(timer));
 </script>
 
 <template>
-    <div class="flex flex-col gap-3">
+    <div class="@container flex flex-col gap-3">
         <div>
             <div class="flex items-center gap-2">
                 <h3 class="font-semibold text-content">Connect a server</h3>
@@ -200,7 +200,7 @@ onUnmounted(() => clearInterval(timer));
         </div>
 
         <form class="flex flex-col gap-3" @submit.prevent="mint">
-            <div class="grid gap-3 sm:grid-cols-2">
+            <div class="grid gap-3 @lg:grid-cols-2">
                 <label v-if="!provided" class="ui-field">
                     <span class="ui-field-label">Cloudflare API token</span>
                     <input

@@ -25,6 +25,8 @@ const open = ref(false);
     >
         <Icon name="info-circle" />
     </button>
+    <!-- The body is a @container: a write-up that lays itself out in two columns keys off the DIALOG's width
+         (36rem, or 95vw on a phone) rather than the window's — the two disagree on every phone. -->
     <Dialog
         v-model:visible="open"
         :modal="true"
@@ -32,7 +34,7 @@ const open = ref(false);
         :dismissable-mask="true"
         :header="title"
         :style="{ width: '36rem', maxWidth: '95vw' }"
-        :pt="{ content: { class: `max-h-[70dvh] overflow-y-auto` } }"
+        :pt="{ content: { class: `@container max-h-[70dvh] overflow-y-auto` } }"
     >
         <slot />
     </Dialog>

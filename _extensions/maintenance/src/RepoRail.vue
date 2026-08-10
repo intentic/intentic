@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { type NavGroup, NavRail, Picker, type PickerOptions, Row, useDevice } from "@intentic/extension-ui";
+import { type NavGroup, NavRail, Picker, type PickerOptions, Row, useCompact } from "@intentic/extension-ui";
 import { repoName } from "@intentic/sandbox-contract/chores";
 import { computed } from "vue";
 
@@ -11,8 +11,9 @@ import { computed } from "vue";
  * rows while the book behind it grows, and picking one is what makes the body finite.
  *
  * It NARROWS rather than selects: every row on the right is a real chore whether you came via "All repositories"
- * or via one of them, so there is nothing to go "into" — which is why <SplitView> folds it above the body on a
- * phone (mobile="collapse") rather than covering the list, and why this swaps itself to a Picker at that width.
+ * or via one of them, so there is nothing to go "into" — which is why <SplitView> folds it above the body once
+ * the pane is too narrow for both (mobile="collapse") rather than covering the list, and why this swaps itself to
+ * a Picker at that width.
  *
  * The count is what is DUE, not how many chores exist: thirteen is the same number in every repository and says
  * nothing. Whether any of them is a risk being CARRIED is the row's colour rather than a second number — see the
@@ -36,7 +37,8 @@ const meta = (due: number, atRisk: number): string => (atRisk === 0 ? `${due} du
 // One unlabelled group: a heading over the only group in the rail names a distinction that is not being made.
 const groups = computed<NavGroup<(typeof repos)[number]>[]>(() => [{ key: `repos`, items: [...repos] }]);
 
-const { mobile } = useDevice();
+// Asked of the split above, not of the screen: the board beside this rail is only as wide as the workspace pane.
+const compact = useCompact();
 
 // The same model as options. `description` carries the count the rail shows in its right column.
 const options = computed<PickerOptions<string>>(() => [
@@ -55,7 +57,7 @@ const picked = computed<string>({ get: () => selected.value ?? ``, set: (value) 
 </script>
 
 <template>
-    <Picker v-if="mobile" v-model="picked" :options="options" aria-label="Repository" header="Repository" class="w-full text-xs" />
+    <Picker v-if="compact" v-model="picked" :options="options" aria-label="Repository" header="Repository" class="w-full text-xs" />
 
     <NavRail v-else :groups="groups">
         <!-- Not a member of any group, so it cannot be filtered or grouped away: "all" is the state the rail

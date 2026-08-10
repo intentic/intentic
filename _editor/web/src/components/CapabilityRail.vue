@@ -7,8 +7,9 @@
      rail stays ten rows while the catalog behind it grows without limit, and picking one makes the grid finite.
 
      It NARROWS rather than selects: every tile on the right is a real card whether you came via "All capabilities"
-     or via one category. So <SplitView> folds it above the grid on a phone (mobile="collapse", the default) rather
-     than covering it, and this swaps itself to a Picker at that width — the app's standard touch swap.
+     or via one category. So <SplitView> folds it above the grid once the pane is too narrow for both (the default
+     mobile="collapse") rather than covering it, and this swaps itself to a Picker at that width — the app's
+     standard compact swap.
 
      The pinned rows are the two questions this page is actually opened with — "what have I already got" and "what
      should I add" — which no category can answer, because both cut across all of them. They are rows rather than a
@@ -39,7 +40,7 @@ export interface CapabilityScope {
 </script>
 
 <script setup lang="ts">
-import { type NavGroup, NavRail, Picker, type PickerOptions, Row, useDevice } from "@intentic/ui";
+import { type NavGroup, NavRail, Picker, type PickerOptions, Row, useCompact } from "@intentic/ui";
 import { computed } from "vue";
 
 const { pinned, categories } = defineProps<{
@@ -57,7 +58,8 @@ const tone = (scope: CapabilityScope): string => (scope.connected > 0 ? `text-su
 const meta = (scope: CapabilityScope): string =>
     scope.meta ?? (scope.connected === 0 ? `${scope.total} capabilities` : `${scope.total} capabilities · ${scope.connected} connected`);
 
-const { mobile } = useDevice();
+// Asked of the split above, not of the screen: the grid beside this rail is only as wide as the workspace pane.
+const compact = useCompact();
 
 // The same model as options. `description` carries the count the rail shows in its right column.
 const options = computed<PickerOptions<string>>(() => [
@@ -70,7 +72,7 @@ const options = computed<PickerOptions<string>>(() => [
 </script>
 
 <template>
-    <Picker v-if="mobile" v-model="selected" :options="options" aria-label="Capability category" header="Category" class="w-full text-xs" />
+    <Picker v-if="compact" v-model="selected" :options="options" aria-label="Capability category" header="Category" class="w-full text-xs" />
 
     <NavRail v-else aria-label="Capability categories" :groups="groups">
         <!-- Not members of any group, so they cannot be grouped away: "all" is the state the rail returns to, and

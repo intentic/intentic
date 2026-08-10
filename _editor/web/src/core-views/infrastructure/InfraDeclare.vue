@@ -287,7 +287,7 @@ onUnmounted(progress.stopWatching);
     </div>
 
     <!-- WHAT YOU WANT — the center of the page: the apps + self-hosted services the user declares; one Add entry point. -->
-    <section class="mb-6">
+    <section class="@container mb-6">
         <div class="mb-3 flex items-end justify-between gap-3">
             <div class="flex items-center gap-2">
                 <h2 class="text-base font-semibold text-content">What you want</h2>
@@ -306,7 +306,7 @@ onUnmounted(progress.stopWatching);
             </Button>
         </div>
 
-        <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
+        <div class="grid grid-cols-1 gap-4 @lg:grid-cols-2">
             <!-- Apps — declared i.want.app entries ∪ resolved plan ∪ live deployments (see wanted.ts). -->
             <div class="flex flex-col gap-2">
                 <span :class="cmp.sectionLabel()">Apps</span>

@@ -188,7 +188,7 @@ const hasSpend = computed(() => current.value.length > 0);
 </script>
 
 <template>
-    <div class="flex flex-col gap-6">
+    <div class="@container flex flex-col gap-6">
         <Notice v-if="usageNotice" :of="usageNotice" />
 
         <!-- ONE filter row, above everything, scoping everything below it. Date first: it is the control every
@@ -233,7 +233,7 @@ const hasSpend = computed(() => current.value.length > 0);
                      out of its card. Each clamp's floor is a size the widest value that tile can hold still fits
                      at, with `truncate` as the backstop for a locale that disagrees. `mt-auto` on the last line
                      of each tile settles the footers onto one baseline however tall the grid stretches them. -->
-                <div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                <div class="grid gap-3 @lg:grid-cols-2 @3xl:grid-cols-4">
                     <Card class="@container flex min-w-0 flex-col">
                         <div class="text-xs text-muted">Spend</div>
                         <div class="mt-1 truncate text-[clamp(1.5rem,13cqi,3rem)] font-semibold leading-none tabular-nums text-content">
@@ -297,7 +297,7 @@ const hasSpend = computed(() => current.value.length > 0);
                     <p v-else :class="cmp.emptyState()">Nothing was billed in this range.</p>
                 </Card>
 
-                <div class="grid gap-3 lg:grid-cols-2">
+                <div class="grid gap-3 @2xl:grid-cols-2">
                     <Card>
                         <h3 class="mb-3 text-sm font-semibold text-content">Cost by model</h3>
                         <BarChart v-if="byModel.length > 0" :items="rankedBars(byModel)" :label-width="8" />

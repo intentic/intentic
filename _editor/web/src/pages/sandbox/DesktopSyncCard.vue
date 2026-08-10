@@ -86,8 +86,8 @@ onUnmounted(stop);
 </script>
 
 <template>
-    <Card id="desktop-sync" class="flex flex-col gap-4 transition-shadow" :class="ringing ? 'ring-2 ring-info' : ''">
-        <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+    <Card id="desktop-sync" class="@container flex flex-col gap-4 transition-shadow" :class="ringing ? 'ring-2 ring-info' : ''">
+        <div class="flex flex-col gap-3 @2xl:flex-row @2xl:items-center @2xl:justify-between">
             <div class="flex items-center gap-2.5">
                 <Icon name="sync" class="text-lg text-muted" />
                 <div>

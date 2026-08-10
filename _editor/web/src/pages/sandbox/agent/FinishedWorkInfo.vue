@@ -29,7 +29,7 @@ const AT_A_GLANCE = [
             An agent works on its own branch, in its own checkout. Landing is the step that brings that work back to your workspace as uncommitted
             changes — the same state as if you'd made the edits yourself, ready to read, amend or throw away.
         </p>
-        <div class="mt-2 grid gap-2 sm:grid-cols-2">
+        <div class="mt-2 grid gap-2 @lg:grid-cols-2">
             <div class="overflow-hidden rounded-lg border border-line">
                 <p class="border-b border-line bg-canvas px-2.5 py-1 text-2xs font-medium uppercase tracking-wide text-subtle">On</p>
                 <p class="px-2.5 py-2 text-2xs text-muted">

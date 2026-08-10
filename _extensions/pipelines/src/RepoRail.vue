@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { type NavGroup, NavRail, Picker, type PickerGroup, type PickerOptions, Row, useDevice } from "@intentic/extension-ui";
+import { type NavGroup, NavRail, Picker, type PickerGroup, type PickerOptions, Row, useCompact } from "@intentic/extension-ui";
 import { computed } from "vue";
 import { type RepoStanding, standingNote } from "./repoStandings";
 
@@ -48,7 +48,8 @@ const meta = (standing: RepoStanding): string => (standing.silent ? `` : String(
 const tone = (standing: RepoStanding): string =>
     standing.failing > 0 ? `text-danger` : standing.repo.hookWarning === undefined ? `` : `text-warning`;
 
-const { mobile } = useDevice();
+// Asked of the split above, not of the screen: the board beside this rail is only as wide as the workspace pane.
+const compact = useCompact();
 
 // The same model as options, with the row's number as the quiet right-hand annotation.
 const options = computed<PickerOptions<string>>(() => {
@@ -75,7 +76,7 @@ const everything = computed(() => (failing.value === 0 ? `Nothing failing anywhe
 </script>
 
 <template>
-    <Picker v-if="mobile" v-model="picked" :options="options" aria-label="Repository" header="Repository" class="w-full text-xs" />
+    <Picker v-if="compact" v-model="picked" :options="options" aria-label="Repository" header="Repository" class="w-full text-xs" />
 
     <NavRail v-else :groups="groups">
         <!-- Not a member of any group, so no grouping can push it out of reach: "all" is the state the rail

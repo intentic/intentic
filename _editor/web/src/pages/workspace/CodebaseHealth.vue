@@ -40,7 +40,7 @@ const building = computed(() => health.value?.freshness.state === `building`);
 </script>
 
 <template>
-    <div class="flex h-full min-h-0 flex-col bg-canvas text-content">
+    <div class="@container flex h-full min-h-0 flex-col bg-canvas text-content">
         <!-- Header: repo switcher · churn window · refresh — the same shape as the graph's, one surface over. -->
         <div class="flex h-8 shrink-0 items-center gap-1.5 border-b border-line bg-card px-3">
             <Icon name="wave-pulse" class="shrink-0 text-xs text-subtle" />
@@ -84,7 +84,7 @@ const building = computed(() => health.value?.freshness.state === `building`);
 
                 <!-- What the index holds, as four counts. Not a chart: a handful of headline numbers is a
                      stat-tile row, and a bar chart of four unrelated scales would say less. -->
-                <dl class="grid grid-cols-2 gap-2 sm:grid-cols-4">
+                <dl class="grid grid-cols-2 gap-2 @xl:grid-cols-4">
                     <div class="min-w-0 rounded-md border border-line bg-card px-3 py-2">
                         <dt class="text-2xs text-muted">Files</dt>
                         <dd class="mt-0.5 truncate text-lg font-semibold leading-none text-content">{{ formatCount(totals.files) }}</dd>

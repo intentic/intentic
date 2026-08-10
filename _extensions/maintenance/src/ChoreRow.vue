@@ -46,7 +46,9 @@ const liveAgent = computed(() => (run?.running === true ? run.manifest.conversat
 </script>
 
 <template>
-    <div class="border-t border-line/60 first:border-t-0">
+    <!-- A @container: whether this row can hold its title and its headline on one line is a fact about the ROW,
+         and the row is as wide as a workspace pane the reader can shrink to a third of the window. -->
+    <div class="@container border-t border-line/60 first:border-t-0">
         <button
             type="button"
             class="flex w-full cursor-pointer items-center gap-3 px-4 py-2.5 text-left hover:bg-overlay"
@@ -58,11 +60,11 @@ const liveAgent = computed(() => (run?.running === true ? run.manifest.conversat
             <Icon :name="verdict.chore.icon as IconName" class="shrink-0 text-subtle" />
             <!-- ONE LINE WITH ROOM FOR IT, TWO WITHOUT. On a wide row the title keeps its full width and the
                  headline takes the flexible column: truncating "4 majors waiting, 61 behind in total" to fit a
-                 chore name nobody needed re-reading would lose the only part that changes. At phone width there is
-                 no column wide enough for both, and the row that tried spilled its state badge off the card — so
+                 chore name nobody needed re-reading would lose the only part that changes. In a narrow pane there
+                 is no column wide enough for both, and the row that tried spilled its state badge off the card — so
                  the two stack, each truncating on its own line, and the badge stays where it can be read. -->
-            <span class="flex min-w-0 flex-1 flex-col gap-0.5 sm:flex-row sm:items-center sm:gap-3">
-                <span class="flex min-w-0 items-center gap-2 sm:shrink-0">
+            <span class="flex min-w-0 flex-1 flex-col gap-0.5 @lg:flex-row @lg:items-center @lg:gap-3">
+                <span class="@lg:shrink-0 flex min-w-0 items-center gap-2">
                     <span class="min-w-0 truncate text-sm text-content">{{ verdict.chore.title }}</span>
                     <span v-if="showRepo" class="shrink-0 rounded bg-content/[0.06] px-1.5 py-0.5 text-2xs text-subtle">
                         {{ repoName(verdict.repo) }}
@@ -74,7 +76,7 @@ const liveAgent = computed(() => (run?.running === true ? run.manifest.conversat
             <StatusBadge v-if="status" :variant="status.variant" :label="status.label" size="xs" class="shrink-0" />
         </button>
 
-        <div v-if="expanded" class="border-t border-line/60 bg-canvas px-4 py-4 sm:px-6">
+        <div v-if="expanded" class="border-t border-line/60 bg-canvas px-4 py-4 @lg:px-6">
             <p class="max-w-[70ch] text-xs text-subtle">{{ verdict.chore.description }}</p>
 
             <!-- THE RULE, above the evidence and phrased as what WOULD make this due, so it reads the same whether

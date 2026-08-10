@@ -104,6 +104,9 @@ export { seriesColor } from "./components/seriesAccent.js";
 // The index-and-body screen — five views were four implementations of it, and the one that had solved it
 // (HubLayout) lived in the web app where no extension could reach it.
 export { default as SplitView } from "./components/SplitView.vue";
+// Whether that screen has folded its index above its body — what a rail asks so its own compact form arrives at
+// the same width the shell's does.
+export { useCompact } from "./components/splitView.js";
 export { default as StatRow } from "./components/StatRow.vue";
 export { default as StatusBadge, type StatusVariant } from "./components/StatusBadge.vue";
 export { default as StepSection } from "./components/StepSection.vue";
@@ -160,6 +163,10 @@ export {
 export { useExplorerStyle } from "./composables/useExplorerStyle.js";
 export { commandLang, type CommandOs, OS_OPTIONS, useOsPreference } from "./composables/useOsPreference.js";
 export { type Device, useDevice } from "./composables/useDevice.js";
+/* Is THIS ELEMENT too narrow for the layout it wants — the pane-shaped question, and almost always the one a
+ * view means. `useDevice` answers about the screen, and a view that renders between the rail and a draggable
+ * chat panel is never as wide as the screen. */
+export { useNarrow } from "./composables/useNarrow.js";
 export { useListNavigation } from "./composables/useListNavigation.js";
 export { type ColorScheme, useTheme } from "./composables/useTheme.js";
 export { type TextSize, useTextSize } from "./composables/useTextSize.js";

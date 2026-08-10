@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { STATE_DIR } from "@intentic/constants";
-import { clipboardOf, cmp, ConfirmDialog, ContextMenu, type IconName, Segmented } from "@intentic/ui";
+import { clipboardOf, cmp, ConfirmDialog, ContextMenu, type IconName, Segmented, useNarrow } from "@intentic/ui";
 import type { Disposable } from "@intentic/extension-api";
 import Button from "primevue/button";
 import type { MenuItem } from "primevue/menuitem";
@@ -143,6 +143,33 @@ const {
 } = useWorkspaceTabs();
 // Mirror the active file into the URL (`/workspace/<path>`) so a reload / shared link reopens it.
 useWorkspaceRoute();
+
+/* THE EXPLORER STOPS BEING A COLUMN WHEN THERE IS NO ROOM FOR TWO. This view renders into the workspace pane,
+ * not the window, so a reader with the chat panel open gets ~500px — and the explorer's own floor is 272px, which
+ * left the file they opened about 190px to be read in: "Drop your work here" came out one word per line. Below
+ * ~40rem the tree becomes a DRAWER over the viewer instead: the same rows, the same actions, opened and closed by
+ * the same control, but the file always has the pane.
+ *
+ * The drawer's open state is local and starts closed, deliberately: `sidebarCollapsed` is a preference the reader
+ * set for a docked column on a wide pane, and writing "collapsed" into it because a chat panel is open would hand
+ * them a hidden explorer on their next full-width session. Two situations, two pieces of state — and the toggle,
+ * the command and the tooltip all route through here so there is still ONE control. */
+const workspaceBody = ref<HTMLElement | undefined>(undefined);
+const narrowBody = useNarrow(workspaceBody, 40);
+const drawerOpen = ref(false);
+const sidebarOpen = computed(() => (narrowBody.value ? drawerOpen.value : !layout.sidebarCollapsed.value));
+const toggleSidebar = (): void => {
+    if (narrowBody.value) {
+        drawerOpen.value = !drawerOpen.value;
+        return;
+    }
+    layout.toggleSidebar();
+};
+// Opening a file is the drawer's whole purpose, so it gets out of the way the moment one lands.
+watch(
+    () => activeId.value,
+    () => (drawerOpen.value = false),
+);
 
 // The gap between clicking a changed file and its content arriving. The tab, its label and the toolbar's status
 // and ± counts are already on screen by then — this decides only whether the panes below them are worth drawing
@@ -459,7 +486,7 @@ const WORKSPACE_COMMANDS: readonly Omit<RegisteredCommand, `owner`>[] = [
     { command: `workspace.showHistory`, title: `Show Restore Points`, icon: `history`, handler: () => layout.setSidebarPanel(`history`) },
     // The root repo's health report — the palette route to what a nested repo opens from its own tree row.
     { command: `workspace.codebaseHealth`, title: `Show Codebase Health`, icon: `wave-pulse`, handler: () => openHealth(`root`) },
-    { command: `workspace.toggleSidebar`, title: `Toggle Explorer`, icon: `bars`, keybinding: `Ctrl+Shift+B`, handler: () => layout.toggleSidebar() },
+    { command: `workspace.toggleSidebar`, title: `Toggle Explorer`, icon: `bars`, keybinding: `Ctrl+Shift+B`, handler: () => toggleSidebar() },
     // The explorer's two filters, reachable from the palette — and from anywhere the sidebar is collapsed, where
     // the toolbar's funnel isn't on screen to click.
     { command: `workspace.toggleIgnored`, title: `Toggle Ignored Files`, icon: `eye`, handler: () => layout.toggleShowIgnored() },
@@ -627,9 +654,7 @@ const tooltipWithChord = (label: string, command: string): string => {
     const chord = commandShortcut(command);
     return chord === undefined ? label : `${label} (${chord})`;
 };
-const explorerTooltip = computed(() =>
-    tooltipWithChord(layout.sidebarCollapsed.value ? `Show explorer` : `Hide explorer`, `workspace.toggleSidebar`),
-);
+const explorerTooltip = computed(() => tooltipWithChord(sidebarOpen.value ? `Hide explorer` : `Show explorer`, `workspace.toggleSidebar`));
 const rootHealthTooltip = computed(() => tooltipWithChord(`Codebase health of the workspace root`, `workspace.codebaseHealth`));
 
 const startResize = (event: PointerEvent): void => {
@@ -676,17 +701,22 @@ const endResize = (event: PointerEvent): void => {
              background, viewer, and empty state all upload to /work root); a folder row captures its own drop
              (stopPropagation) so hovering a folder targets that folder instead. -->
         <div
+            ref="workspaceBody"
             class="relative flex min-h-0 flex-1"
             @dragenter="onRootDragEnter"
             @dragover.prevent
             @dragleave="onRootDragLeave"
             @drop.prevent="onRootDrop"
         >
+            <!-- A column while there is room for two, a drawer over the viewer once there is not (see narrowBody).
+                 The drawer keeps a right-hand margin so the viewer it covers is still visibly there, and the
+                 stored column width is ignored — it was chosen against a pane this one is not. -->
             <aside
-                v-if="!layout.sidebarCollapsed.value"
+                v-if="sidebarOpen"
                 ref="sidebar"
-                class="relative flex min-h-0 shrink-0 flex-col border-r border-line bg-card"
-                :style="{ width: uiLength(layout.sidebarWidth.value) }"
+                class="relative flex min-h-0 flex-col border-r border-line bg-card"
+                :class="narrowBody ? `absolute inset-y-0 left-0 z-20 w-[min(20rem,85%)] shadow-xl` : `shrink-0`"
+                :style="narrowBody ? undefined : { width: uiLength(layout.sidebarWidth.value) }"
             >
                 <!-- Files and Changes are the primary modes; automatic restore history is deliberately quieter.
                      One column, one resize handle — review/history never steal width from the diff view in the
@@ -901,7 +931,9 @@ const endResize = (event: PointerEvent): void => {
                         @open-directory="openDirectory"
                     />
                 </div>
+                <!-- No seam on the drawer: its width is the pane's to decide, not the reader's to drag. -->
                 <div
+                    v-if="!narrowBody"
                     class="ws-resize"
                     @pointerdown="startResize"
                     @pointermove="onResize"
@@ -914,6 +946,10 @@ const endResize = (event: PointerEvent): void => {
                 <div v-if="rootDragging && layout.sidebarPanel.value === 'files'" class="ws-dropzone pointer-events-none absolute inset-1 z-10"></div>
             </aside>
 
+            <!-- Dismisses the drawer by clicking the file it is covering — the way every drawer works, and the
+                 only affordance the toggle button does not already provide. -->
+            <div v-if="narrowBody && sidebarOpen" class="absolute inset-0 z-10 bg-black/30" @click="drawerOpen = false"></div>
+
             <section class="relative flex min-h-0 min-w-0 flex-1 flex-col bg-canvas">
                 <!-- Tab row: explorer toggle + open tabs + the workspace status/actions the old top bar held.
                      Always rendered so the controls survive zero open tabs. -->
@@ -921,7 +957,7 @@ const endResize = (event: PointerEvent): void => {
                     <button
                         type="button"
                         class="mx-1 flex h-7 w-7 shrink-0 items-center justify-center self-center rounded-md text-muted transition-colors hover:bg-overlay hover:text-content"
-                        @click="layout.toggleSidebar()"
+                        @click="toggleSidebar()"
                         v-tooltip.bottom="explorerTooltip"
                         aria-label="Toggle explorer"
                     >

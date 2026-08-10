@@ -51,7 +51,9 @@ const LAYOUT_OPTIONS: { label: string; value: DiffLayout }[] = [
 </script>
 
 <template>
-    <div class="flex h-8 shrink-0 items-center gap-1.5 border-b border-line px-2 max-md:h-12">
+    <!-- A @container: what fits on this bar is a fact about the viewer, which is as wide as the reader left
+         the workspace pane. `max-md:` stays a viewport query — it is the touch target height, not a layout. -->
+    <div class="@container flex h-8 shrink-0 items-center gap-1.5 border-b border-line px-2 max-md:h-12">
         <slot name="lead" />
         <ChangeStatusMark v-if="status !== undefined" :status="status" />
         <!-- Directory dimmed and leading, basename legible — the same reading order the review's rows use, so
@@ -67,7 +69,7 @@ const LAYOUT_OPTIONS: { label: string; value: DiffLayout }[] = [
         </span>
         <span
             v-if="from !== undefined"
-            class="hidden max-w-40 truncate font-mono text-2xs text-subtle md:inline-block"
+            class="hidden max-w-40 truncate font-mono text-2xs text-subtle @xl:inline-block"
             v-tooltip.bottom.overflow="from"
         >
             ← {{ from }}

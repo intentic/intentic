@@ -227,7 +227,24 @@ const openAgent = (id: string): void => api.navigate(`/agents/${id}`);
             <DocsNav :components="set?.repoDoc?.components ?? []" :index="index" :page="page" @open="openPage" />
         </template>
 
-        <template #detail>
+        <!-- THE WAY BACK, and only while there is nothing to go back TO on screen. This is the app's one `swap`
+             split: once the pane is too narrow for a contents list beside a document, opening a page REPLACES the
+             list, and without this the reader holds a document with no visible route to the next one. Wide enough
+             for both, the list is right there and a back button would point at something already in view.
+
+             Above the prose rather than inside it: it belongs to the pane's frame, and a control that scrolls away
+             with the document is one the reader loses exactly when they want it. -->
+        <template #detail="{ compact }">
+            <button
+                v-if="compact && page !== undefined"
+                type="button"
+                class="mb-2 flex shrink-0 cursor-pointer items-center gap-1.5 self-start text-xs text-muted transition-colors hover:text-content"
+                @click="openPage(undefined)"
+            >
+                <Icon name="arrow-left" class="text-2xs" />
+                Contents
+            </button>
+
             <div v-if="isLoading" class="flex min-h-0 flex-1 items-center justify-center text-muted">
                 <Icon name="spinner" class="text-lg" spin />
             </div>

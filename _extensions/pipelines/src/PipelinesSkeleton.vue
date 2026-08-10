@@ -46,14 +46,20 @@ const ROWS = [
             </div>
 
             <div class="divide-y divide-line overflow-hidden rounded-lg border border-line bg-card">
-                <div v-for="(row, index) in ROWS" :key="index" class="flex w-full items-center gap-3 border-l-[3px] border-line px-4 py-3">
+                <!-- Wraps exactly as the real row does (PipelineRunRow), so a narrow pane does not re-flow the
+                     list the moment the runs land. -->
+                <div
+                    v-for="(row, index) in ROWS"
+                    :key="index"
+                    class="flex w-full flex-wrap items-center gap-x-3 gap-y-2 border-l-[3px] border-line px-4 py-3"
+                >
                     <span class="skeleton h-4 w-4 shrink-0 rounded-full"></span>
                     <span class="skeleton h-6 w-6 shrink-0 rounded-full"></span>
 
                     <!-- The two line boxes are h-5 / h-4 with an h-0.5 gap because that is exactly what the
                          real headline (text-sm) and meta line (text-2xs, mt-0.5) measure — a 63px row either
                          way, so the list does not shuffle upward the moment the runs arrive. -->
-                    <div class="min-w-0 flex-1">
+                    <div class="min-w-40 flex-1">
                         <div class="flex h-5 items-center gap-2">
                             <span class="skeleton h-3.5 max-w-full" :class="row.headline"></span>
                             <span class="skeleton h-4 w-14 rounded-md"></span>
@@ -65,19 +71,21 @@ const ROWS = [
                         </div>
                     </div>
 
-                    <!-- Stage circles, connectors and all: the row's most distinctive shape, and the part a
-                         reader scans first once the data is there. -->
-                    <div class="hidden shrink-0 items-center sm:flex">
-                        <template v-for="stage in row.stages" :key="stage">
-                            <span v-if="stage > 1" class="h-px w-3 shrink-0 bg-line"></span>
-                            <span class="skeleton h-6 w-6 shrink-0 rounded-full"></span>
-                        </template>
-                    </div>
+                    <div class="ml-auto flex min-w-0 flex-wrap items-center justify-end gap-x-3 gap-y-2">
+                        <!-- Stage circles, connectors and all: the row's most distinctive shape, and the part a
+                             reader scans first once the data is there. -->
+                        <div class="scrollbar-thin flex max-w-max min-w-24 flex-1 basis-0 items-center overflow-x-auto">
+                            <template v-for="stage in row.stages" :key="stage">
+                                <span v-if="stage > 1" class="h-px w-3 shrink-0 bg-line"></span>
+                                <span class="skeleton h-6 w-6 shrink-0 rounded-full"></span>
+                            </template>
+                        </div>
 
-                    <div class="flex shrink-0 items-center gap-2">
-                        <span class="skeleton h-2.5 w-12"></span>
-                        <span class="skeleton h-6 w-24 rounded-md"></span>
-                        <span class="skeleton mx-1 h-3 w-3"></span>
+                        <div class="flex shrink-0 items-center gap-2">
+                            <span class="skeleton h-2.5 w-12"></span>
+                            <span class="skeleton h-6 w-24 rounded-md"></span>
+                            <span class="skeleton mx-1 h-3 w-3"></span>
+                        </div>
                     </div>
                 </div>
             </div>
