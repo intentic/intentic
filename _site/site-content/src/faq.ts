@@ -71,6 +71,15 @@ export const faqGroups: FaqGroup[] = [
                 more: { label: "Specialize a sandbox until it does a job alone", href: docsHref("autonomous-employees") },
             },
             {
+                id: "sandbox-or-persona",
+                question: "Should I start a new sandbox or add a new persona?",
+                answer: [
+                    "Go by what's different. A sandbox is a whole workspace of its own — its tools, the systems it's connected to, its budget and its code. Start a new one when the job is genuinely different, or when you want that work kept apart with its spend on its own tab.",
+                    "A persona is who a sandbox is when it posts to the outside world: it ties together the logins that are the same someone, so the agent speaks as that account and no others. Add one — no new sandbox needed — when the work is the same but you want a different face for it, like posting as a brand account alongside your own.",
+                ],
+                more: { label: "Specialize a sandbox, then grow a team", href: docsHref("autonomous-employees") },
+            },
+            {
                 id: "which-models",
                 question: "Which AI models does it use?",
                 answer: [
