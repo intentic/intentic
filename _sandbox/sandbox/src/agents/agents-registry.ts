@@ -185,7 +185,7 @@ export interface AgentsRegistry {
      * No broadcast: nothing on the fleet board shows it. The Changes panel reads it through agentOrigins, which
      * reads these entries live on every scan, so the chip has it as soon as it is written. Leaves updatedAt
      * alone for the same reason setTitle does — the land already stamped the activity this describes. */
-    readonly setLandedSubject: (id: string, subject: string) => Promise<void>;
+    readonly setLandedSubject: (id: string, subject: string, note?: string) => Promise<void>;
     // Stamp the read marker the cards' unread badge is measured against. Like setTitle it leaves updatedAt
     // alone (reading is not activity) and needs no running guard. Undefined ⇒ unknown id.
     readonly markSeen: (id: string, now: number) => Promise<AgentSummary | undefined>;
@@ -676,7 +676,7 @@ export const createAgentsRegistry = (store: AgentsStore, standings: LandStanding
             const entry = entryOf(id);
             return entry === undefined ? undefined : summaryOf(entry);
         },
-        setLandedSubject: async (id, subject) => {
+        setLandedSubject: async (id, subject, note) => {
             const entry = entryOf(id);
             const clean = sanitizeTitle(subject);
             // Sanitized through the title cleaner, which is the same job: one bounded line, no control
@@ -684,7 +684,11 @@ export const createAgentsRegistry = (store: AgentsStore, standings: LandStanding
             if (entry === undefined || clean === undefined) {
                 return;
             }
-            replace({ ...entry, landedSubject: clean });
+            // The note goes through the same cleaner for the same reasons, and is CLEARED when this land wrote
+            // none: the note describes the claim as it now stands, so a landing that turned out to be invisible
+            // to users must not leave the previous land's sentence standing over it.
+            const cleanNote = note === undefined ? undefined : sanitizeTitle(note);
+            replace({ ...entry, landedSubject: clean, ...(cleanNote === undefined ? { landedNote: undefined } : { landedNote: cleanNote }) });
             await persist();
         },
         markSeen: async (id, now) => {

@@ -68,6 +68,7 @@ import { restoreAuthorizedKeys, seedPairing } from "./platform/sync.js";
 import { seedSetupHost } from "./hosts/host-seed.js";
 import { panePids, reapFinishedSessions } from "./terminal/terminal-session.js";
 import { startVersionCheck } from "./platform/version-check.js";
+import { startReleaseNotesCheck } from "./platform/release-notes.js";
 import { startRuntimeHealth } from "./agent/adapter-health.js";
 import { startRepoWatch, subscribeRepoChanges } from "./workspace/repo-watch.js";
 import { startRefWatch } from "./git/ref-watch.js";
@@ -787,6 +788,11 @@ const main = async (): Promise<void> => {
     // update without ever fetching on the request path.
     const versionCheck = startVersionCheck();
 
+    // …and what that update would actually give them, on the same cadence: the offer and the reason to take it
+    // come from two different places (npm for the version, the GitHub Release for the notes) and neither may
+    // hold up the /info that shows them.
+    const releaseNotesCheck = startReleaseNotesCheck();
+
     // The same bargain for "can each agent runtime serve a turn": probed off the turn path so the picker can
     // say a subscription is missing BEFORE a prompt is written, rather than as that turn's failure.
     startRuntimeHealth(services);
@@ -885,6 +891,7 @@ const main = async (): Promise<void> => {
         ciPoller.stop();
         turnResume.stop();
         versionCheck.stop();
+        releaseNotesCheck.stop();
         services.announcer.stop();
         localCertRenewal.stop();
         services.history.stop();

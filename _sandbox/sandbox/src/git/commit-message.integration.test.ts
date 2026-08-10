@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
 import { afterEach, expect, test } from "vitest";
-import { cleanCommitSubject, collectRepoDiff, commitMessagePrompt } from "./commit-message.js";
+import { cleanCommitMessage, cleanCommitSubject, cleanReleaseNote, collectRepoDiff, commitMessagePrompt } from "./commit-message.js";
 
 /* The material an AI-drafted commit message is written from. Run against REAL repos, like the rest of git/,
  * because the whole risk here is describing the wrong side: the index and the worktree disagree constantly, and
@@ -195,8 +195,47 @@ test("unwraps the packaging a cheap model adds even when told not to", () => {
     expect(cleanCommitSubject("   \n\nfeat: add autofill\n")).toBe("feat: add autofill");
 });
 
-test("keeps only the first line — the commit box is single-line, so a body has nowhere to go", () => {
+test("takes the subject alone — the body is the other reader's job (cleanCommitMessage)", () => {
     expect(cleanCommitSubject("feat: add autofill\n\nDrafts the message from the staged diff.")).toBe("feat: add autofill");
+});
+
+test("asks for a release note only when the repo keeps a changelog", () => {
+    const noNote = commitMessagePrompt([{ repo: "root", subjects: [], summary: "M\ta.txt", patch: "" }]);
+    expect(noNote).not.toContain("Release-Note:");
+    expect(noNote.trimEnd().endsWith("Reply with the subject line only.")).toBe(true);
+
+    const wantsNote = commitMessagePrompt([{ repo: "root", subjects: [], summary: "M\ta.txt", patch: "" }], undefined, true);
+    expect(wantsNote).toContain("Release-Note: <one plain sentence>");
+    // The omission instruction is the load-bearing half: most commits change nothing a user would notice, and a
+    // model that writes a note for every one of them refills the changelog with the noise it exists to remove.
+    expect(wantsNote).toContain("OMIT the Release-Note line entirely");
+});
+
+test("reads the note off the reply, and says so when there isn't one", () => {
+    expect(cleanReleaseNote("feat: ordered model picker\n\nRelease-Note: Your models stay in the order you set them.")).toBe(
+        "Your models stay in the order you set them.",
+    );
+    // The common case by far: the model judged the change invisible from outside and left the line out.
+    expect(cleanReleaseNote("refactor: split the picker component")).toBe("");
+    // Packaging comes off a note exactly as it comes off a subject.
+    expect(cleanReleaseNote('feat: x\n\nRelease-Note: "Your models stay put."')).toBe("Your models stay put.");
+    // A model that leads with the note has still answered correctly, in the other order.
+    expect(cleanReleaseNote("Release-Note: Your models stay put.\nfeat: ordered model picker")).toBe("Your models stay put.");
+});
+
+test("a note-first reply still yields the subject, not the note", () => {
+    expect(cleanCommitSubject("Release-Note: Your models stay put.\nfeat: ordered model picker")).toBe("feat: ordered model picker");
+});
+
+test("composes subject and note as a git trailer, and the subject alone without one", () => {
+    // The blank line is what makes it a trailer rather than the second line of the subject's paragraph.
+    expect(cleanCommitMessage("feat: ordered model picker\nRelease-Note: Your models stay put.")).toBe(
+        "feat: ordered model picker\n\nRelease-Note: Your models stay put.",
+    );
+    // No note ⇒ byte for byte what the box received before any of this existed.
+    expect(cleanCommitMessage("refactor: split the picker component")).toBe("refactor: split the picker component");
+    // Nothing at all is still nothing — the caller reports the model said nothing rather than committing a trailer.
+    expect(cleanCommitMessage("Release-Note: orphaned note")).toBe("");
 });
 
 test("leaves quotes that are part of the subject alone", () => {

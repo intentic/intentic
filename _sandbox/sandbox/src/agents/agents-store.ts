@@ -119,6 +119,10 @@ export const PersistedAgentSchema = z.object({
      * Overwritten by the next land (the claim grows; so does the sentence about it) and left alone otherwise —
      * a commit expires the claim, and the entry going quiet is what retires this with it. */
     landedSubject: z.string().optional(),
+    // The user-facing sentence for the same landing, when this repo keeps a changelog — see OriginAgent.note for
+    // why it is stored apart from the subject rather than as a second line of it. Persisted for the same reason
+    // the subject is: the commit that carries it is usually made long after the land that wrote it.
+    landedNote: z.string().optional(),
     status: PersistedAgentStatusSchema,
     // Why the last turn failed — the EVIDENCE behind an errored card, the same role `conflicts` below plays for
     // a refused land (see AgentSummarySchema). Persisted rather than held in the turn's runtime state because

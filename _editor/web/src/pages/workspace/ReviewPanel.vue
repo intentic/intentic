@@ -203,6 +203,23 @@ const originNote = (id: string): string | undefined => {
  * overwritten. */
 const originSubject = (id: string): string | undefined => originOf(id)?.subject ?? conventionalSubject([originTitle(id) ?? ``]);
 
+/* What the chip actually files: the subject, and under it the `Release-Note:` trailer when this landing had one
+ * (a repo that keeps a changelog, and a change its users would notice). Composed HERE rather than stored joined,
+ * because a subject is one line everywhere it is shown and the pair only becomes a commit message at this
+ * moment — see OriginAgent.note.
+ *
+ * The trailer rides the fallback too: a landing with a note but no drafted subject still has a note worth
+ * keeping, and dropping it because the first half came from the title would lose the half that was written from
+ * the code. */
+const originMessage = (id: string): string | undefined => {
+    const subject = originSubject(id);
+    const note = originOf(id)?.note;
+    if (subject === undefined || note === undefined) {
+        return subject;
+    }
+    return `${subject}\n\nRelease-Note: ${note}`;
+};
+
 /* ONE CLICK, TWO HALVES OF THE SAME INTENT — "commit this session's work". The chip has always narrowed the
  * list (and every section verb under it) to that agent's files; it now also names that work in the commit box.
  * Those were the two things a user did by hand, in a row, every time: filter to the agent, then describe what
@@ -218,7 +235,7 @@ const originSubject = (id: string): string | undefined => originOf(id)?.subject 
 const toggleOrigin = (id: string): void => {
     const next = originFilter.value === id ? undefined : id;
     originFilter.value = next;
-    const subject = next === undefined || next === YOURS ? undefined : originSubject(next);
+    const subject = next === undefined || next === YOURS ? undefined : originMessage(next);
     if (subject === undefined) {
         // Toggled off, moved to "you", or a session with nothing to lend — either way the line the legend put
         // there no longer has a chip behind it. Anything the user has made their own survives this.
@@ -732,6 +749,19 @@ watch(commitMessage, (message) => {
     }
 });
 
+/* HOW TALL THE BOX IS — one row until there is a second line, then as many as the message needs, to a stop.
+ *
+ * The box is a textarea rather than a single-line input because a commit message HAS a body: the release-note
+ * trailer the drafter writes for a repo that keeps a changelog lands under the subject, and in an `input` it
+ * had nowhere to go — the draft was truncated to its first line before it ever reached the user. Growing with
+ * the content rather than sitting permanently tall keeps the ordinary case (a subject, no body) looking exactly
+ * as it did, which is the case almost every commit is.
+ *
+ * Capped, because this panel is a review surface: past a handful of lines the message would push the file list
+ * off the screen the user is describing, and the textarea scrolls instead. */
+const MAX_COMMIT_ROWS = 6;
+const commitRows = computed(() => Math.min(MAX_COMMIT_ROWS, commitMessage.value.split(`\n`).length));
+
 // --- stage / unstage ---------------------------------------------------------------------------------------
 // `staged` is the one side that moves BACK out of the index; the other two move in. For a conflict that inward
 // move is `git add`, which is precisely how you tell git the merge is resolved — same request, different word
@@ -1001,21 +1031,27 @@ const WARNING = `flex items-start gap-1.5 rounded-md border border-warning/40 bg
                  placement): it acts on the field it is drawn in, and the sidebar has no room for a second
                  labelled button beside Commit. Extra right padding keeps a long message from running under it. -->
             <div class="relative">
-                <input
+                <!-- A textarea, not an input: a commit message has a body, and the release-note trailer written
+                     for a changelog repo lives in it. Enter breaks the line (which is what a body needs);
+                     Ctrl/Cmd+Enter still commits, as the placeholder says. -->
+                <textarea
                     v-model="commitMessage"
-                    type="text"
+                    :rows="commitRows"
                     placeholder="Message (Ctrl+Enter to commit)"
-                    class="w-full min-w-0 rounded-md border border-line bg-canvas py-1 pl-2 pr-7 text-xs text-content placeholder:text-subtle focus:border-line-strong focus:outline-none"
+                    class="w-full min-w-0 resize-none rounded-md border border-line bg-canvas py-1 pl-2 pr-7 text-xs leading-snug text-content placeholder:text-subtle focus:border-line-strong focus:outline-none"
                     @keydown.ctrl.enter="doCommit"
                     @keydown.meta.enter="doCommit"
-                />
+                ></textarea>
                 <!-- Never disabled, only dimmed: a button that cannot run still has the one thing the user
                      wants, which is the reason it cannot. Clicking a dim sparkle says it out loud (runAutofill),
                      where a `disabled` attribute swallows the click and leaves the reason in a tooltip touch
-                     never opens. -->
+                     never opens.
+
+                     Pinned to the TOP of the box rather than centred in it: the box grows downwards with the
+                     body, and a vertically-centred button would drift away from the subject line it acts on. -->
                 <button
                     type="button"
-                    class="absolute right-1 top-1/2 -translate-y-1/2 rounded p-1 text-subtle transition-colors hover:bg-overlay hover:text-content"
+                    class="absolute right-1 top-1 rounded p-1 text-subtle transition-colors hover:bg-overlay hover:text-content"
                     :class="autofillReady || commitDraft.busy.value ? `` : `opacity-40`"
                     @click="runAutofill"
                     v-tooltip.right="commitDraft.busy.value ? 'Stop drafting' : autofillHint"

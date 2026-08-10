@@ -1,7 +1,7 @@
 import { isFailureSentence } from "../agent/failure-sentences.js";
 import { askQuickModel } from "../agent/quick-model.js";
 import type { Services } from "../composition.js";
-import { cleanCommitSubject, commitMessagePrompt, type RepoDiff } from "../git/commit-message.js";
+import { cleanCommitSubject, cleanReleaseNote, commitMessagePrompt, type RepoDiff } from "../git/commit-message.js";
 
 /* WHAT THE WORK DID, WRITTEN WHEN IT ARRIVES — the sentence the Changes panel's "From" chip files into the
  * commit box.
@@ -71,10 +71,15 @@ export const describeLanding = async (services: Services, id: string): Promise<v
     if (diffs.length === 0) {
         return;
     }
+    /* A note is asked for when any repo this landing touched keeps a changelog — the same "any, not all" rule
+     * the commit box's own draft follows (git.routes.ts), and for the same reason: one message covers every
+     * repo the commit spans, so it is written for the audience that has one. */
+    const { changelogRepos } = await services.sandboxSettings.get();
+    const wantsNote = diffs.some((diff) => changelogRepos.includes(diff.repo));
     // The session's own name for the job goes in as CONTEXT beside the diff — the prompt is explicit that the
     // code overrules it (see commitMessagePrompt). Which is the whole shape of this feature in one call: the
     // ask is worth knowing and is not worth trusting, so it informs the sentence instead of being it.
-    const { text } = await askQuickModel(services, commitMessagePrompt(diffs, entry.title), new AbortController().signal);
+    const { text } = await askQuickModel(services, commitMessagePrompt(diffs, entry.title, wantsNote), new AbortController().signal);
     const subject = cleanCommitSubject(text);
     // A provider's refusal arrives as this reply's TEXT on the providers whose failures stream as prose, so it
     // is checked here rather than left to the throw above — the same guard, for the same reason, as the naming
@@ -82,7 +87,10 @@ export const describeLanding = async (services: Services, id: string): Promise<v
     if (subject === `` || isFailureSentence(subject)) {
         return;
     }
-    await services.agents.setLandedSubject(id, subject);
+    // The note is read from the same reply, and only kept when one was asked for: a model that volunteers a
+    // trailer on a repo that keeps no changelog has answered a question nobody put to it.
+    const note = wantsNote ? cleanReleaseNote(text) : ``;
+    await services.agents.setLandedSubject(id, subject, note === `` ? undefined : note);
 };
 
 // The fire-and-forget form every land site uses: a failure here is a log line, never the land's problem.

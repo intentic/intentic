@@ -18,7 +18,14 @@ import { readWorkspaceFile, statWorkspaceFileSize } from "../workspace/workspace
  * told to match them, which on a Conventional Commits repo reproduces `feat:` / `fix:` without this file
  * knowing what Conventional Commits is — and keeps working on a repo that writes subjects some other way. A
  * hard-coded convention would be wrong for every user whose repo disagrees with it, and this daemon runs on
- * their repos, not on ours. */
+ * their repos, not on ours.
+ *
+ * THE ONE THING THAT CANNOT BE INFERRED is the release note (`Release-Note:` below), which is why it is the
+ * only part of this prompt anybody has to ask for. A repo that has never written one gives the model nothing to
+ * copy from, so it is gated on the owner naming that repo in settings (SandboxSettings.changelogRepos) and is
+ * absent everywhere else. What it asks for is not a second description of the diff: it is the sentence someone
+ * USING the software would recognise, and the model is told to leave it out entirely when the change is one
+ * nobody outside the project would ever notice — which is most of them. */
 
 // The whole prompt's patch budget, split across the repos a commit spans. Generous enough that an ordinary
 // change arrives whole, small enough to stay cheap on the rung this runs on — and the stat + file list above it
@@ -123,7 +130,7 @@ const clip = (patch: string, budget: number): string => {
 // The prompt. Written flat rather than as a system/user pair because the one-shot sends no system prompt at all
 // (see one-shot.ts): the instruction, the style examples and the material are one message, in the order the
 // model should weigh them.
-export const commitMessagePrompt = (diffs: readonly RepoDiff[], intent?: string): string => {
+export const commitMessagePrompt = (diffs: readonly RepoDiff[], intent?: string, wantsNote = false): string => {
     const budget = Math.floor(MAX_PATCH_BYTES / Math.max(1, diffs.length));
     const repos = diffs.map((diff) =>
         [
@@ -136,13 +143,32 @@ export const commitMessagePrompt = (diffs: readonly RepoDiff[], intent?: string)
             .join(`\n\n`),
     );
     return [
-        `Write the subject line for the git commit described below.`,
+        wantsNote
+            ? `Write the subject line for the git commit described below, and — only if this change is one a user would notice — a release note under it.`
+            : `Write the subject line for the git commit described below.`,
         // The output contract is stated first and last: this model is the cheap rung, and a preamble ("Sure!
         // Here's a commit message:") pasted into the input is the failure this helper is most likely to have.
         `Rules:`,
-        `- Reply with the subject line ONLY. No preamble, no explanation, no quotes, no code fences.`,
+        wantsNote
+            ? `- Reply with the subject line, and nothing else except the note described below. No preamble, no explanation, no quotes, no code fences.`
+            : `- Reply with the subject line ONLY. No preamble, no explanation, no quotes, no code fences.`,
         `- One line. Match the style, prefix convention and capitalisation of the recent subjects shown below.`,
         `- Describe WHAT the change accomplishes, not which files moved.`,
+        /* THE RELEASE NOTE, asked for in the terms it will be READ in — by someone deciding whether to take an
+         * update, not by someone reviewing the diff. Two instructions carry that, and the second is the one that
+         * matters: most commits earn no note at all. A model asked for a note on every commit will write one for
+         * every commit, and a changelog that lists "audit rail icons" beside a real feature is the noise this
+         * whole mechanism exists to remove. Omission is stated as the expected outcome rather than an escape
+         * hatch, because the cheap rung does what it is told is normal. */
+        wantsNote
+            ? `- If (and only if) someone USING this software would notice this change, add a second line spelled exactly: Release-Note: <one plain sentence>.`
+            : undefined,
+        wantsNote
+            ? `- That sentence is for users, not developers: say what they can now do or what no longer goes wrong, in their words, with no file, symbol or internal name in it.`
+            : undefined,
+        wantsNote
+            ? `- OMIT the Release-Note line entirely for anything a user would never see — refactors, tests, build and CI work, dependency bumps, internal cleanup. Most commits get no note, and that is the expected answer.`
+            : undefined,
         // A commit spanning repos gets one message, so it has to describe the change rather than any one repo.
         diffs.length > 1 ? `- This commit spans ${diffs.length} repositories and shares one message. Describe the change as a whole.` : undefined,
         /* WHAT THE WORK WAS FOR, when the caller knows — the session's own name for the job it was given.
@@ -158,7 +184,9 @@ export const commitMessagePrompt = (diffs: readonly RepoDiff[], intent?: string)
         ``,
         ...repos,
         ``,
-        `Reply with the subject line only.`,
+        wantsNote
+            ? `Reply with the subject line, plus a Release-Note line only if a user would notice this change.`
+            : `Reply with the subject line only.`,
     ]
         .filter((line) => line !== undefined)
         .join(`\n`);
@@ -171,19 +199,57 @@ const FENCE = /^```[\w-]*\n?|\n?```$/g;
 const LABEL = /^(?:subject|commit message|message)\s*:\s*/i;
 const BULLET = /^[-*]\s+/;
 
-// The one line that goes in the input. Everything else the model may have said is dropped — the commit box is
-// single-line, so a body has nowhere to go and pasting it in would produce a subject with a paragraph glued to it.
-export const cleanCommitSubject = (reply: string): string => {
-    const unfenced = reply.trim().replace(FENCE, ``);
-    const first = unfenced
-        .split(`\n`)
-        .map((line) => line.trim())
-        .find((line) => line !== ``);
-    if (first === undefined) {
-        return ``;
-    }
-    const bare = first.replace(BULLET, ``).replace(LABEL, ``).trim();
+/* WHAT A NOTE IS CARRIED ON: git's own trailer convention, rather than a shape invented here. `git log
+ * --format=%(trailers:key=Release-Note,valueonly)` reads it back at release time, `git interpret-trailers`
+ * understands it, and anyone who opens the commit sees a labelled line instead of a stray sentence. The
+ * harvest and the writer therefore share ONE spelling, which is this constant. */
+export const RELEASE_NOTE_TRAILER = `Release-Note:`;
+
+const isNoteLine = (line: string): boolean => line.toLowerCase().startsWith(RELEASE_NOTE_TRAILER.toLowerCase());
+
+// The wrappers a model reaches for around any one line, off.
+const unwrap = (line: string): string => {
+    const bare = line.replace(BULLET, ``).replace(LABEL, ``).trim();
     // Symmetric surrounding quotes only: an apostrophe or a quoted term inside the subject is part of it.
     const unquoted = /^(["'`])(.*)\1$/.exec(bare);
     return (unquoted?.[2] ?? bare).trim();
+};
+
+const replyLines = (reply: string): string[] =>
+    reply
+        .trim()
+        .replace(FENCE, ``)
+        .split(`\n`)
+        .map((line) => line.trim())
+        .filter((line) => line !== ``);
+
+// The subject: the first line that is not the note. Skipping the trailer rather than taking line one outright is
+// what keeps a model that leads with its note from putting the note in the subject — the answer is still right,
+// it simply arrived in the other order, and rejecting it over that would waste a good draft.
+export const cleanCommitSubject = (reply: string): string => {
+    const first = replyLines(reply).find((line) => !isNoteLine(line));
+    return first === undefined ? `` : unwrap(first);
+};
+
+// The note, if the model wrote one — empty when it judged the change invisible to users, which is the common
+// case and not a failure. Only the FIRST is taken: a model that writes three has misunderstood the ask, and
+// three notes about one commit would reach the changelog as three entries.
+export const cleanReleaseNote = (reply: string): string => {
+    const line = replyLines(reply).find(isNoteLine);
+    return line === undefined ? `` : unwrap(line.slice(RELEASE_NOTE_TRAILER.length));
+};
+
+/* The whole message the commit box receives: the subject, and beneath it the note as a trailer. The blank line
+ * between them is load-bearing — it is what makes the note a git trailer rather than the second line of the
+ * subject's own paragraph, and without it `git log` reads the pair as one run-on subject.
+ *
+ * With no note this returns the subject alone, byte for byte what the box got before any of this existed, which
+ * is what keeps every repo that never asked for notes exactly where it was. */
+export const cleanCommitMessage = (reply: string): string => {
+    const subject = cleanCommitSubject(reply);
+    const note = cleanReleaseNote(reply);
+    if (subject === `` || note === ``) {
+        return subject;
+    }
+    return `${subject}\n\n${RELEASE_NOTE_TRAILER} ${note}`;
 };

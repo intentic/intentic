@@ -57,7 +57,23 @@ section() { # <heading> <grep-args...>
   if [ -n "$body" ]; then printf '### %s\n\n%s\n\n' "$heading" "$body"; fi
 }
 
+# WHAT A USER WOULD NOTICE, ahead of everything else and in their words — the `Release-Note:` trailers the commit
+# drafter writes for a repo that keeps a changelog (see _sandbox/sandbox/src/git/commit-message.ts). Most commits
+# carry none, by design: the model is told to omit the line for anything invisible from outside the project, so
+# this section is the release's handful of real changes rather than a second copy of the subject list below it.
+#
+# THIS SECTION IS AN API. The site's changelog page and the sandbox's "Update available" card both read these
+# bullets back off the published Release, which is what makes the Release body the ONE editable source: fixing a
+# bad note here, by hand, after the fact, corrects every surface that quotes it. Keep the heading spelling and
+# the `- ` bullets — both are parsed (_site/site/src/lib/changelog.ts).
+#
+# Deduplicated, because identical work routinely lands as several identical commits (five in v1.184.0), and each
+# one carries the same sentence. `awk '!seen[$0]++'` keeps the first of each in git's own newest-first order.
+whats_new="$(git log --no-merges --format='%(trailers:key=Release-Note,valueonly)' "$range" |
+  grep -v '^[[:space:]]*$' | awk '!seen[$0]++' | sed 's/^/- /' || true)"
+
 notes="$(
+  if [ -n "$whats_new" ]; then printf "## What's new\n\n%s\n\n" "$whats_new"; fi
   section Features '^feat(\(|!?:)'
   section Fixes '^fix(\(|!?:)'
   section Other -v '^(feat|fix)(\(|!?:)'

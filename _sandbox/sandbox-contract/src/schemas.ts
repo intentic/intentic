@@ -1432,6 +1432,20 @@ export const SandboxSettingsSchema = z.object({
      * every connected provider, best first. Storing resolved ids here instead would go stale exactly like a
      * pinned model does. */
     quickModel: z.array(z.string()).max(10).default([]),
+    /* WHICH REPOS KEEP A CHANGELOG — the repos whose commits carry a `Release-Note:` trailer, written by the
+     * same quick model that drafts the subject (git/commit-message.ts) and harvested at release time.
+     *
+     * A LIST OF REPOS RATHER THAN A FLAG, and EMPTY BY DEFAULT, because this daemon runs on the user's repos
+     * rather than on ours. The commit drafter's one standing rule is that house style is INFERRED, never
+     * prescribed — it reads the last handful of subjects and matches them, so a repo that spells its commits
+     * some other way is never argued with. A note trailer is the one thing that cannot be inferred that way: a
+     * repo which has never written one gives the model nothing to copy, so asking for it has to be somebody's
+     * explicit decision. Empty means every repo behaves exactly as it did before this existed.
+     *
+     * Named by repo id ("root", or the root-relative dir discoverRepos reports), because a workspace holds
+     * several repos and a commit can span them: the trailer is written when the commit touches a repo that
+     * asked for one, and a repo that did not ask never gets a line it has to explain to its reviewers. */
+    changelogRepos: z.array(z.string()).max(50).default([]),
     /* WHAT AN AGENT RUN OPENS ON — the tier above quickModel, and the answer for every turn a SURFACE starts
      * rather than a person at a composer: Fix with agent on a pipeline or a deployment, a Maintenance chore, a
      * Documentation or Acceptance run, the fix a failed pre-push check proposes. `${provider}:${model}`
@@ -1966,6 +1980,17 @@ export const OriginAgentSchema = z.object({
      * Absent when no quick model is connected, when the draft failed, or for a landing that predates this —
      * the panel falls back to reading the title as a subject, which is where it started. */
     subject: z.string().optional(),
+    /* THE SAME LANDING, SAID TO A USER — the `Release-Note:` sentence the chip files in under the subject, for a
+     * repo that keeps a changelog (SandboxSettings.changelogRepos).
+     *
+     * A SEPARATE FIELD rather than a second line inside `subject`, because a subject is one bounded line
+     * everywhere it is stored and shown, and flattening a note into it would produce a run-on subject in the
+     * box and a truncated note in the changelog. Kept apart, each stays what it is and the commit box composes
+     * the pair at the moment of the fill.
+     *
+     * Usually absent, and that is the design: most landings change nothing a user would notice, and the model
+     * is told to omit the note for those rather than to invent one. */
+    note: z.string().optional(),
 });
 export type OriginAgent = z.infer<typeof OriginAgentSchema>;
 
@@ -5150,6 +5175,21 @@ export const InfoSchema = z.object({
      * nothing to go back to and no rollback is offered. */
     channel: z.string().optional(),
     previousImage: z.string().optional(),
+    /* WHAT IS IN THE UPDATE, in the words of the people it is for — the user-facing lines from every release
+     * between `version` and `latest`, newest first (platform/release-notes.ts reads them off the published
+     * GitHub Releases).
+     *
+     * The update card's other half. It could always say an update exists and what taking it costs — recreating
+     * the container interrupts every agent mid-turn — and never what the update was worth, which left the
+     * decision it asks for with nothing on one side of it.
+     *
+     * Absent, or empty, whenever there is nothing to say: the notes cache is cold, GitHub is unreachable, or
+     * every release in the gap changed only things nobody outside the project would notice. All three read the
+     * same way on the card, which shows the offer without them, exactly as it did before. */
+    updateNotes: z.array(z.string()).optional(),
+    // How many further notes the gap holds beyond the ones sent, for a sandbox that has been left alone a long
+    // time. Absent or 0 ⇒ `updateNotes` is the whole of it.
+    moreUpdateNotes: z.number().optional(),
 });
 export type Info = z.infer<typeof InfoSchema>;
 

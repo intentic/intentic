@@ -9,7 +9,7 @@ import { discoverRepos, isValidRepoId } from "../workspace/repo-discovery.js";
 import { isControlPlanePath, resolveWithin } from "../workspace/workspace-files.js";
 import { askQuickModel } from "../agent/quick-model.js";
 import type { ActionResult } from "./changes.js";
-import { cleanCommitSubject, commitMessagePrompt } from "./commit-message.js";
+import { cleanCommitMessage, commitMessagePrompt } from "./commit-message.js";
 import { AGENT_GIT_AUTHOR, gitFailureReason } from "./git.js";
 
 // How long one Changes scan's result stands in for the next caller's. Long enough to swallow the browser's
@@ -343,12 +343,18 @@ export const createGitRoutes = (services: Services) => {
                     }),
                 ),
             );
+            /* A note is asked for when ANY repo this commit spans keeps a changelog. Any rather than all,
+             * because the repos share one message: a commit that touches a changelog repo and a scratch one
+             * still ships a change to the first, and that is the one whose users read the note. The read is a
+             * small JSON file the settings routes own, so it costs nothing next to the model call below. */
+            const { changelogRepos } = await services.sandboxSettings.get();
+            const wantsNote = input.repos.some((target) => changelogRepos.includes(target.repo));
             const { text, choice, skipped } = await askQuickModel(
                 services,
-                commitMessagePrompt(diffs, input.intent),
+                commitMessagePrompt(diffs, input.intent, wantsNote),
                 signal ?? new AbortController().signal,
             );
-            const message = cleanCommitSubject(text);
+            const message = cleanCommitMessage(text);
             if (message === "") {
                 throw new ORPCError("BAD_GATEWAY", { message: `${choice.model} returned an empty commit message — try again.` });
             }

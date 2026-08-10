@@ -36,6 +36,16 @@ export const pageMeta: Record<string, PageMeta> = {
             "The Intentic desktop app runs your agent sandbox on your own computer without a terminal. It installs Docker if you need it, starts the sandbox, keeps it updated, and opens your workspace.",
         datePublished: "2026-08-02",
     },
+    /* What shipped, in the words of the people it shipped for. Its ENTRIES come from the published GitHub
+     * Releases at build time (site/src/lib/changelog.ts) — only the framing is authored here, exactly like the
+     * gallery below. The description says "what changed" rather than naming versions: the page is read by
+     * someone deciding whether to update, not by someone auditing a version history. */
+    "/changelog/": {
+        title: "Changelog · intentic",
+        description:
+            "What's new in intentic: every release that changed something you'd notice, in plain language, newest first. Written as the work shipped and published straight from the release.",
+        datePublished: "2026-08-10",
+    },
     // The gallery's ROWS come from the registry repo at build time; only its framing is authored here.
     "/extensions/": {
         title: "Extensions · intentic",

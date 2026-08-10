@@ -28,6 +28,7 @@ import { publishRuntimeChange, subscribeRuntimeChanges } from "./runtime-watch.j
 import { registerPresence, subscribePresence, updatePresence } from "./presence.js";
 import { captureScrollback, isValidSessionName } from "../terminal/terminal-session.js";
 import { isNewer, latestVersion } from "../platform/version-check.js";
+import { MAX_UPDATE_NOTES, updateNotes } from "../platform/release-notes.js";
 import { runtimeHealth } from "../agent/adapter-health.js";
 import { buildId } from "../version.js";
 import { manifestProblems } from "../store/manifest-problems.js";
@@ -245,10 +246,17 @@ export const createSystemRoutes = (services: Services) => {
             // /info query refetches. Same shape for both, for the same reason — see adapter-health.ts.
             const latest = latestVersion();
             const runtimes = runtimeHealth();
+            // What the update actually contains, capped so a long-neglected sandbox gets a card rather than a
+            // scroll. The remainder travels as a count: "and 9 more" is what sends someone to the changelog,
+            // where an unbounded list on a hub card would just bury everything under it.
+            const notes = updateNotes(info.version);
+            const shown = notes.slice(0, MAX_UPDATE_NOTES);
             return {
                 ...info,
                 ...(latest !== undefined ? { latest, updateAvailable: isNewer(latest, info.version) } : {}),
                 ...(runtimes !== undefined ? { runtimes } : {}),
+                ...(shown.length > 0 ? { updateNotes: shown } : {}),
+                ...(notes.length > shown.length ? { moreUpdateNotes: notes.length - shown.length } : {}),
             };
         }),
         /* What the daemon could not read in its own `.intentic/` manifests.

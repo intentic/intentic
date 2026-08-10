@@ -18,7 +18,7 @@ import { useSandboxVersion } from "../../composables/sandbox/useSandboxVersion";
  * replaced, the daemon reports it, and the way back is one command — but only if it is visible at the moment
  * it is wanted, which is precisely when there is no update to advertise. */
 
-const { installed, latest, updateAvailable, info, serverManaged, slug } = useSandboxVersion();
+const { installed, latest, updateAvailable, updateNotes, moreUpdateNotes, info, serverManaged, slug } = useSandboxVersion();
 const { cmdOs } = useOsPreference();
 
 /* Rollback is POSIX-only for now — recreate.ps1 has no -Rollback parameter (its header says why), so on a
@@ -51,6 +51,31 @@ const midTurn = computed(() => fleet.value.filter(turnInFlight).length);
                     You are on the newest image for this channel. If the last update caused trouble, you can go back to the one before it.
                 </p>
             </div>
+        </div>
+
+        <!-- WHAT YOU WOULD GET, above the warning about what it costs and above the button that does it. That
+             order is the whole point of this section: this card asks the reader to weigh an update against
+             interrupting work that is running right now, and until these lines existed it put the cost and the
+             button on screen with nothing at all on the other side of the scale.
+
+             Written when each change shipped and published with its release, so it is the same text the
+             changelog carries — not a second description written here. Absent whenever there is nothing to
+             say (a release nobody outside the project would notice, a cold cache, no route to GitHub), and the
+             card then reads exactly as it did before. -->
+        <div v-if="updateAvailable && updateNotes.length > 0" class="flex flex-col gap-1.5 border-t border-line pt-3">
+            <p class="text-xs font-medium text-content">What's new</p>
+            <ul class="flex flex-col gap-1">
+                <li v-for="note in updateNotes" :key="note" class="flex gap-2 text-2xs text-muted">
+                    <span class="mt-1.5 h-0.5 w-0.5 shrink-0 rounded-full bg-primary-500" />
+                    <span>{{ note }}</span>
+                </li>
+            </ul>
+            <!-- The tail of a long gap, as a count rather than fifty more bullets — a sandbox nobody has
+                 recreated in weeks would otherwise bury the rest of this page. -->
+            <p v-if="moreUpdateNotes > 0" class="text-2xs text-subtle">
+                …and {{ moreUpdateNotes }} more —
+                <a href="https://intentic.dev/changelog/" target="_blank" rel="noopener" class="underline hover:text-content">read the changelog</a>
+            </p>
         </div>
 
         <p v-if="midTurn > 0" class="text-2xs text-warning">

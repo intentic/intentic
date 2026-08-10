@@ -4,6 +4,7 @@ import { computed } from "vue";
 import { useSandbox } from "../../composables/sandbox/useSandbox";
 import { useSandboxSettings } from "../../composables/sandbox/useSandboxSettings";
 import AiAccountSection from "./AiAccountSection.vue";
+import AgentChangelog from "./agent/AgentChangelog.vue";
 import AgentChecks from "./agent/AgentChecks.vue";
 import AgentCodeSearch from "./agent/AgentCodeSearch.vue";
 import AgentCommandOutput from "./agent/AgentCommandOutput.vue";
@@ -71,6 +72,9 @@ const settingsBlocked = computed<NoticeModel | undefined>(() => {
         <AgentSubagents />
         <AgentChecks />
         <AgentFinishedWork />
+        <!-- Under Finished work because it is the next thing that happens to a change: the work lands, and this
+             decides whether the commit recording it also says what it meant for a user. -->
+        <AgentChangelog />
         <!-- Directly under the two groups whose rows ARE rules, because it is the same table seen whole: the
              three switches above are the common instructions, this is everything else the owner has told the
              sandbox to do, and reading them in that order is what makes the connection obvious. -->

@@ -1,0 +1,113 @@
+---
+import { githubReleasesUrl } from "@intentic-dev/site-content/site";
+import { getPageMeta } from "@intentic-dev/site-content/page-meta";
+import BaseLayout from "../layouts/BaseLayout.astro";
+import Footer from "../components/Footer.astro";
+import Nav from "../components/Nav.astro";
+import { loadChangelog } from "../lib/changelog";
+
+/* WHAT SHIPPED, said to the people it shipped for.
+ *
+ * Every line on this page was written as its own change landed — a sentence in the commit that made it, drafted
+ * against the diff and carried through the release (src/lib/changelog.ts explains the path and why the Release
+ * body is the one editable copy). Nothing is composed here at release time and nothing is composed here at
+ * build time; this page is a reader.
+ *
+ * MOST RELEASES ARE NOT ON IT, and that is the feature. Intentic publishes around three releases a day, and the
+ * overwhelming majority of them move something nobody outside the project could see — a refactor, a test, a
+ * build fix. Those carry no note, so they have no entry, and what is left is the short list of changes somebody
+ * would actually want to know about. A changelog that listed all ninety would be a log, not a changelog.
+ *
+ * The version numbers are here because the app reports one: somebody arriving from the update prompt is holding
+ * a number and wants to know what is in the gap. They are deliberately quiet in the design for everyone else. */
+
+const meta = getPageMeta("/changelog/");
+const { entries, unavailable } = await loadChangelog();
+
+const dateline = (iso: string): string =>
+    new Date(iso).toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric", timeZone: "UTC" });
+---
+
+<BaseLayout title={meta?.title ?? "Changelog · intentic"} description={meta?.description ?? ""}>
+    <Nav />
+    <main class="flex-1">
+        <section class="mx-auto max-w-3xl px-6 pt-32 pb-12 max-sm:pt-28">
+            <div class="eyebrow">Changelog</div>
+            <h1 class="mt-3 text-3xl font-semibold tracking-tight sm:text-4xl">What's new</h1>
+            <p class="mt-4 text-lg leading-relaxed text-muted">
+                Every release that changed something you'd notice, newest first. Releases that only moved things
+                around under the hood aren't listed — there are a lot of those, and none of them are news.
+            </p>
+            <p class="mt-4 text-sm leading-relaxed text-subtle">
+                Every release, including the ones that aren't here, is on
+                <a href={githubReleasesUrl} class="underline hover:text-content" rel="noopener" target="_blank">GitHub</a>
+                with its full commit list and downloads.
+            </p>
+        </section>
+
+        {/* The read failed at build time. Said plainly rather than rendered as an empty page: "no entries" and
+            "we could not fetch the entries" look identical and mean opposite things. */}
+        {
+            unavailable && (
+                <section class="mx-auto max-w-3xl px-6 pb-16">
+                    <p class="rounded-lg border border-line p-4 text-sm leading-relaxed text-muted">
+                        This list couldn't be loaded when the site was last built. The releases themselves are
+                        always on{" "}
+                        <a href={githubReleasesUrl} class="underline hover:text-content" rel="noopener" target="_blank">
+                            GitHub
+                        </a>
+                        .
+                    </p>
+                </section>
+            )
+        }
+
+        {/* Genuinely nothing to show yet — the notes start with the first release published after the feature
+            landed, and until then this page is honest about being empty rather than looking broken. */}
+        {
+            !unavailable && entries.length === 0 && (
+                <section class="mx-auto max-w-3xl px-6 pb-16">
+                    <p class="rounded-lg border border-line p-4 text-sm leading-relaxed text-muted">
+                        Nothing here yet — the next release with a user-facing change will be the first entry.
+                    </p>
+                </section>
+            )
+        }
+
+        <section class="mx-auto max-w-3xl px-6 pb-24">
+            <div class="flex flex-col gap-12">
+                {
+                    entries.map((entry) => (
+                        <article class="border-t border-line pt-8">
+                            {/* The dateline leads and the version follows it, in that order and at that weight,
+                                because the date is what orients a reader scrolling and the version is a lookup
+                                key for the one arriving from an update prompt. */}
+                            <div class="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+                                <time datetime={entry.publishedAt} class="text-sm font-medium text-content">
+                                    {dateline(entry.publishedAt)}
+                                </time>
+                                <a
+                                    href={entry.url}
+                                    class="font-mono text-xs text-subtle underline hover:text-content"
+                                    rel="noopener"
+                                    target="_blank"
+                                >
+                                    {entry.version}
+                                </a>
+                            </div>
+                            <ul class="mt-4 space-y-3">
+                                {entry.notes.map((note) => (
+                                    <li class="flex gap-3 text-base leading-relaxed text-muted">
+                                        <span class="mt-2.5 h-1 w-1 shrink-0 rounded-full bg-primary-500" />
+                                        <span>{note}</span>
+                                    </li>
+                                ))}
+                            </ul>
+                        </article>
+                    ))
+                }
+            </div>
+        </section>
+    </main>
+    <Footer />
+</BaseLayout>

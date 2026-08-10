@@ -14,6 +14,8 @@ The public website at intentic.dev — an Astro build, all copy imported rather 
 - [src/pages/docs](src/pages/docs) — the documentation pages.
 - [src/layouts](src/layouts) — the shells every page composes into.
 - [src/lib/registry.ts](src/lib/registry.ts) — the extension registry the marketplace pages read.
+- [src/lib/changelog.ts](src/lib/changelog.ts) — the published GitHub Releases `/changelog/` reads, and the
+  parser for the "What's new" section `_tools/scripts/publish-github.sh` writes into each release body.
 - [astro.config.mjs](astro.config.mjs) — where the build-time integrations are wired in.
 
 ## How it fits

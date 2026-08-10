@@ -2,7 +2,7 @@ import { compareHref } from "./compare";
 import { docsDestinations } from "./docs";
 import type { ShotImage } from "./landing";
 import { productHref, productPages } from "./product";
-import { DEMO_PATH, githubReleasesUrl } from "./site";
+import { DEMO_PATH } from "./site";
 
 /* The site's navigation, as data.
  *
@@ -81,10 +81,15 @@ export const navEntries: NavEntry[] = [
         prefix: "/docs",
         // One unlabelled column of four destinations — see docsDestinations for why this is not the tree.
         sections: [{ items: [...docsDestinations] }],
-        // Release notes as the panel's action rather than a seventh link in the bar. It is the same question
+        // The changelog as the panel's action rather than a seventh link in the bar. It is the same question
         // the docs answer — what does this thing do — asked about the last two weeks of it, and it was the
         // one row of the bar a visitor reads once a release.
-        action: { label: "Release notes", href: githubReleasesUrl, external: true },
+        //
+        // Points at OUR page rather than at the GitHub releases it used to: a visitor asking what changed wants
+        // the handful of things they would notice, and what they got was every commit in the range, subject
+        // lines and all. The exhaustive list is still one click further on (/changelog/ links each entry to its
+        // release), which is the right order — the readable answer first, the audit trail behind it.
+        action: { label: "Changelog", href: "/changelog/" },
     },
     // A bare link, like Compare: the gallery's contents come from the registry repo at build time, so there is
     // no authored list here to build a menu out of.

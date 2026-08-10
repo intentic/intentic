@@ -29,6 +29,11 @@ export function useSandboxVersion() {
     const installed = computed(() => info.value?.version);
     const latest = computed(() => info.value?.latest);
     const updateAvailable = computed(() => info.value?.updateAvailable === true);
+    // What the update contains, and how much of it didn't fit — the daemon caps the list (see MAX_UPDATE_NOTES)
+    // so a sandbox left alone for weeks gets a card rather than a scroll. Empty is the ordinary case for a
+    // release that changed nothing a user would notice, and the card simply omits the section.
+    const updateNotes = computed<readonly string[]>(() => info.value?.updateNotes ?? []);
+    const moreUpdateNotes = computed(() => info.value?.moreUpdateNotes ?? 0);
 
     /* Which agent runtimes can serve a turn right now, keyed by AgentCapabilities.runtime — the daemon probes
      * this off the turn path so a picker can say a subscription is missing BEFORE the user writes a prompt.
@@ -45,5 +50,5 @@ export function useSandboxVersion() {
     // without an overlay). HostRecreate turns this into a button in the desktop app and a command elsewhere.
     const slug = computed(() => envState.value?.container?.replace(/^intentic-sandbox-/, ``));
 
-    return { info, installed, latest, updateAvailable, runtimeIssue, serverManaged, slug };
+    return { info, installed, latest, updateAvailable, updateNotes, moreUpdateNotes, runtimeIssue, serverManaged, slug };
 }
