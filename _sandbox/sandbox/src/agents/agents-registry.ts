@@ -203,7 +203,7 @@ export interface AgentsRegistry {
      * No broadcast: nothing on the fleet board shows it. The Changes panel reads it through agentOrigins, which
      * reads these entries live on every scan, so the chip has it as soon as it is written. Leaves updatedAt
      * alone for the same reason setTitle does — the land already stamped the activity this describes. */
-    readonly setLandedSubject: (id: string, draft: { subject: string; body?: string; note?: string }) => Promise<void>;
+    readonly setLandedSubject: (id: string, draft: { subject: string; body?: string; note?: string; breaking?: string }) => Promise<void>;
     // Stamp the read marker the cards' unread badge is measured against. Like setTitle it leaves updatedAt
     // alone (reading is not activity) and needs no running guard. Undefined ⇒ unknown id.
     readonly markSeen: (id: string, now: number) => Promise<AgentSummary | undefined>;
@@ -708,11 +708,13 @@ export const createAgentsRegistry = (store: AgentsStore, standings: LandStanding
              * facts standing over a subject that has since been rewritten. */
             const cleanBody = draft.body === undefined ? undefined : sanitizeBody(draft.body);
             const cleanNote = draft.note === undefined ? undefined : sanitizeTitle(draft.note);
+            const cleanBreaking = draft.breaking === undefined ? undefined : sanitizeTitle(draft.breaking);
             replace({
                 ...entry,
                 landedSubject: clean,
                 ...(cleanBody === undefined ? { landedBody: undefined } : { landedBody: cleanBody }),
                 ...(cleanNote === undefined ? { landedNote: undefined } : { landedNote: cleanNote }),
+                ...(cleanBreaking === undefined ? { landedBreaking: undefined } : { landedBreaking: cleanBreaking }),
             });
             await persist();
         },

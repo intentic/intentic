@@ -1,7 +1,7 @@
 import { isDeclinedAnswer, isFailureSentence } from "../agent/failure-sentences.js";
 import { askQuickModel } from "../agent/quick-model.js";
 import type { Services } from "../composition.js";
-import { cleanCommitBody, cleanCommitSubject, cleanReleaseNote, commitMessagePrompt, type RepoDiff } from "../git/commit-message.js";
+import { cleanBreakingNote, cleanCommitBody, cleanCommitSubject, cleanReleaseNote, commitMessagePrompt, type RepoDiff } from "../git/commit-message.js";
 
 /* WHAT THE WORK DID, WRITTEN WHEN IT ARRIVES — the sentence the Changes panel's "From" chip files into the
  * commit box.
@@ -95,12 +95,15 @@ export const describeLanding = async (services: Services, id: string): Promise<v
     // files beneath the line it does. Empty whenever the model judged the subject sufficient, which is expected.
     const body = cleanCommitBody(text);
     // The note is read from the same reply, and only kept when one was asked for: a model that volunteers a
-    // trailer on a repo that keeps no changelog has answered a question nobody put to it.
+    // trailer on a repo that keeps no changelog has answered a question nobody put to it. The breaking
+    // sentence rides the same gate — a repo with no changelog has no update card quoting it either.
     const note = wantsNote ? cleanReleaseNote(text) : ``;
+    const breaking = wantsNote ? cleanBreakingNote(text) : ``;
     await services.agents.setLandedSubject(id, {
         subject,
         ...(body === `` ? {} : { body }),
         ...(note === `` ? {} : { note }),
+        ...(breaking === `` ? {} : { breaking }),
     });
 };
 

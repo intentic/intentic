@@ -323,6 +323,14 @@ export const commitMessagePrompt = (diffs: readonly RepoDiff[], wantsNote = fals
         wantsNote
             ? `- OMIT the Release-Note line entirely for anything a user would never see — refactors, tests, build and CI work, dependency bumps, internal cleanup. Most commits get no note, and that is the expected answer.`
             : undefined,
+        /* THE BREAKING NOTE is rarer still, and the bar is stated as removal rather than change: the cheap rung
+         * told to flag "changes" flags every diff, because every diff changes something. What it is asked for is
+         * the sentence the update card will show as a warning, so it must say what stops working and what to do
+         * — and the "!" demand beside it is what ties the sentence to the major version bump the release
+         * tooling derives from the type. */
+        wantsNote
+            ? `- If (and only if) this change REMOVES or breaks something users already rely on — a feature gone, a command renamed, a file format no longer read — add a line spelled exactly: Breaking-Note: <what stops working and what to do instead, one plain sentence>, and mark the type with "!" (e.g. feat!:). This is rare; when in doubt, omit it.`
+            : undefined,
         // The output contract is stated first and last: this model is the cheap rung, and a preamble ("Sure!
         // Here's a commit message:") pasted into the input is the failure this helper is most likely to have.
         `- Reply with the message itself. No preamble, no explanation, no quotes, no code fences.`,
@@ -350,7 +358,15 @@ const BULLET = /^[-*]\s+/;
  * harvest and the writer therefore share ONE spelling, which is this constant. */
 export const RELEASE_NOTE_TRAILER = `Release-Note:`;
 
-const isNoteLine = (line: string): boolean => line.toLowerCase().startsWith(RELEASE_NOTE_TRAILER.toLowerCase());
+/* The note's rarer sibling: the sentence for a change that TAKES something away from users — harvested into
+ * the Release's "Breaking changes" section the same way (publish-github.sh), and the reason the update card
+ * can warn before the update instead of the user finding out after. Same trailer convention, same one
+ * spelling shared by writer and harvest. */
+export const BREAKING_NOTE_TRAILER = `Breaking-Note:`;
+
+const startsWithTrailer = (line: string, trailer: string): boolean => line.toLowerCase().startsWith(trailer.toLowerCase());
+
+const isNoteLine = (line: string): boolean => startsWithTrailer(line, RELEASE_NOTE_TRAILER) || startsWithTrailer(line, BREAKING_NOTE_TRAILER);
 
 // The wrappers a model reaches for around any one line, off.
 const unwrap = (line: string): string => {
@@ -408,6 +424,13 @@ export const cleanCommitBody = (reply: string): string =>
 // case and not a failure. Only the FIRST is taken: a model that writes three has misunderstood the ask, and
 // three notes about one commit would reach the changelog as three entries.
 export const cleanReleaseNote = (reply: string): string => {
-    const line = replyLines(reply).find(isNoteLine);
+    const line = replyLines(reply).find((candidate) => startsWithTrailer(candidate, RELEASE_NOTE_TRAILER));
     return line === undefined ? `` : unwrap(line.slice(RELEASE_NOTE_TRAILER.length));
+};
+
+// The breaking sentence, if the model wrote one — empty for every change that takes nothing away, which is
+// nearly all of them. First only, same as the note: one landing breaks one way or the model has misread it.
+export const cleanBreakingNote = (reply: string): string => {
+    const line = replyLines(reply).find((candidate) => startsWithTrailer(candidate, BREAKING_NOTE_TRAILER));
+    return line === undefined ? `` : unwrap(line.slice(BREAKING_NOTE_TRAILER.length));
 };

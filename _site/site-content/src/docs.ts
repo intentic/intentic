@@ -77,6 +77,17 @@ export const docsSections: DocsSection[] = [
                     datePublished: "2026-07-23",
                 },
             },
+            {
+                id: "updates",
+                title: "Updates & what never breaks",
+                blurb: "The promises every update keeps, and the two lanes",
+                meta: {
+                    title: "Updates: what we promise never breaks · intentic docs",
+                    description:
+                        "What an intentic update can never touch: your files survive every update and rollback, updates are offered rather than forced, breaking changes are flagged before you take them, and every release soaks on the beta lane before stable.",
+                    datePublished: "2026-08-10",
+                },
+            },
         ],
     },
     {

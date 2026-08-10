@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { Card, StatusBadge, useOsPreference } from "@intentic/ui";
-import { computed } from "vue";
+import Button from "primevue/button";
+import { computed, ref } from "vue";
 import HostRecreate from "../../components/HostRecreate.vue";
 import { turnInFlight } from "../../composables/agents/agentStatus";
 import { useAgents } from "../../composables/agents/useAgents";
@@ -18,8 +19,17 @@ import { useSandboxVersion } from "../../composables/sandbox/useSandboxVersion";
  * replaced, the daemon reports it, and the way back is one command — but only if it is visible at the moment
  * it is wanted, which is precisely when there is no update to advertise. */
 
-const { installed, latest, updateAvailable, updateNotes, moreUpdateNotes, info, serverManaged, slug } = useSandboxVersion();
+const { installed, latest, updateAvailable, updateNotes, moreUpdateNotes, breakingNotes, info, serverManaged, slug } = useSandboxVersion();
 const { cmdOs } = useOsPreference();
+
+/* A BREAKING UPDATE MUST NOT LOOK ROUTINE. When the gap carries breaking notes the card changes character —
+ * danger badge, the breaking lines first — and the update command stays behind one explicit click: consent to
+ * a breaking change should be informed, and "informed" is not a list scrolled past on the way to a button.
+ * Routine updates keep their one-step flow untouched; rollback is never gated, because it is the way OUT of a
+ * breaking update that went badly. Acknowledgment is deliberately not persisted — a card seen again after a
+ * reload asks again, which for something read once a fortnight is a feature, not friction. */
+const breaking = computed(() => updateAvailable.value && breakingNotes.value.length > 0);
+const acknowledged = ref(false);
 
 /* Rollback is POSIX-only for now — recreate.ps1 has no -Rollback parameter (its header says why), so on a
  * Windows shell there is no command to hand over. Hidden rather than shown-and-broken: an offer that fails
@@ -37,20 +47,46 @@ const midTurn = computed(() => fleet.value.filter(turnInFlight).length);
 <template>
     <Card v-if="updateAvailable || rollbackTo" class="flex flex-col gap-4">
         <div class="flex items-start gap-2.5">
-            <Icon :name="updateAvailable ? `arrow-circle-up` : `history`" class="mt-0.5 text-lg text-muted" />
+            <Icon
+                :name="breaking ? `exclamation-triangle` : updateAvailable ? `arrow-circle-up` : `history`"
+                class="mt-0.5 text-lg"
+                :class="breaking ? `text-danger` : `text-muted`"
+            />
             <div class="min-w-0 flex-1">
                 <div class="flex items-center justify-between gap-3">
-                    <h2 class="font-semibold leading-tight">{{ updateAvailable ? `Update available` : `Sandbox image` }}</h2>
-                    <StatusBadge v-if="updateAvailable" variant="warning" :label="`${installed ?? '?'} → ${latest}`" dot />
+                    <h2 class="font-semibold leading-tight">
+                        {{ breaking ? `Update available — changes how things work` : updateAvailable ? `Update available` : `Sandbox image` }}
+                    </h2>
+                    <StatusBadge v-if="updateAvailable" :variant="breaking ? `danger` : `warning`" :label="`${installed ?? '?'} → ${latest}`" dot />
                     <StatusBadge v-else-if="channel" variant="neutral" :label="channel" />
                 </div>
-                <p v-if="updateAvailable" class="text-2xs text-subtle">
+                <p v-if="breaking" class="text-2xs text-subtle">
+                    This update removes or changes things you may rely on — read what changes below before taking it. Your files (in /work) are
+                    kept either way, and you can roll back afterwards —
+                    <a href="https://intentic.dev/docs/updates/" target="_blank" rel="noopener" class="underline hover:text-content"
+                        >what updates never break</a
+                    >.
+                </p>
+                <p v-else-if="updateAvailable" class="text-2xs text-subtle">
                     A newer sandbox image has been released. Updating pulls it and recreates your sandbox — your files (in /work) are kept.
                 </p>
                 <p v-else class="text-2xs text-subtle">
                     You are on the newest image for this channel. If the last update caused trouble, you can go back to the one before it.
                 </p>
             </div>
+        </div>
+
+        <!-- WHAT STOPS WORKING, before anything else on the card and never truncated: a warning that fell off
+             the end of a capped list is a breaking update taken unwarned. Each line was written in the commit
+             that made the break, telling the user what changes for them and what to do about it. -->
+        <div v-if="breaking" class="flex flex-col gap-1.5 rounded-lg border border-danger/40 bg-danger/10 p-3">
+            <p class="text-xs font-medium text-danger">What changes</p>
+            <ul class="flex flex-col gap-1">
+                <li v-for="note in breakingNotes" :key="note" class="flex gap-2 text-2xs text-content">
+                    <span class="mt-1.5 h-0.5 w-0.5 shrink-0 rounded-full bg-danger" />
+                    <span>{{ note }}</span>
+                </li>
+            </ul>
         </div>
 
         <!-- WHAT YOU WOULD GET, above the warning about what it costs and above the button that does it. That
@@ -89,7 +125,13 @@ const midTurn = computed(() => fleet.value.filter(turnInFlight).length);
             </p>
         </template>
         <template v-else-if="slug">
-            <template v-if="updateAvailable">
+            <!-- The acknowledgment gate: for a breaking update the command appears only after one explicit
+                 click. Not a legal ritual — the point is that the reader's eyes crossed the list above before
+                 the copy-paste reflex could fire. -->
+            <template v-if="breaking && !acknowledged">
+                <Button label="I've read what changes — show me the update" size="small" severity="secondary" @click="acknowledged = true" />
+            </template>
+            <template v-else-if="updateAvailable">
                 <p class="text-xs font-medium text-content">To update, recreate your sandbox on the new image:</p>
                 <HostRecreate :slug="slug" action="Update" />
             </template>

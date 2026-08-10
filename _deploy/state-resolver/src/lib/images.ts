@@ -94,8 +94,9 @@ export const IMAGES = Object.freeze({
     garage: "dxflrs/garage:v2.3.0@sha256:866bd13ed2038ba7e7190e840482bc27234c4afaf77be8cfa439ae088c1e4690",
     // The first-party intentic image built from _sandbox/sandbox (the AI-agent workspace), published to the repo's
     // GHCR by _tools/scripts/publish-images.sh. Deliberately NOT digest-pinned like the entries above: it tracks the
-    // moving `stable` tag, which ONLY the release moves (semantic-release's successCmd pushes `<version> stable`),
-    // so it always resolves to the newest RELEASE image — our own component, always current, with no pin to bump.
+    // moving `stable` tag, which ONLY promotion moves (_tools/scripts/promote-stable.sh, after a release has
+    // soaked on the `beta` lane), so it always resolves to the newest PROMOTED release — our own component,
+    // current after its soak, with no pin to bump.
     // Never `:latest`: that tag is the continuous push-to-main build carrying internal version 0.0.0 (unpublished),
     // so a scaffolded intent repo's `pnpm install` of ~0.0.0 deps fails and `intentic deploy init` can't resolve
     // @intentic/graph. `stable` only ever points at a published release, so init resolves. The GHCR package must be

@@ -5,7 +5,7 @@ import { STATE_DIR } from "@intentic/constants";
 import { afterEach, beforeEach, expect, test } from "vitest";
 import { z } from "zod";
 import { jsonFile } from "./json-file.js";
-import { clearManifestProblems, manifestProblems } from "./manifest-problems.js";
+import { clearManifestProblems, manifestProblems, withSkewHint } from "./manifest-problems.js";
 import { objectParse } from "./unknown-keys.js";
 
 /* The whole path, on a real file: a manifest breaks on disk, the daemon reads it, and what it could not make
@@ -145,4 +145,32 @@ test("a broken DAEMON-WRITTEN file is not put in front of the owner", async () =
     await hand.file.read();
 
     expect(manifestProblems(root).map((report) => report.path)).toEqual([`${STATE_DIR}/settings.json`]);
+});
+
+test("after a rollback, a schema-rejected file is explained as newer rather than broken", async () => {
+    const root = await workspace();
+    const settings = settingsFile(root);
+    // A shape only a NEWER schema would accept — this build rejects it whole.
+    await write(settings.path, `{"terseOutput": {"level": 2}}`);
+    await settings.file.read();
+
+    // Without the stamp, the plain sentence: the file does not match, fix the file.
+    const plain = manifestProblems(root)[0]?.problems[0];
+    expect(plain?.kind).toBe("unreadable");
+    expect(plain?.detail).toBe("the file does not match what this build expects");
+
+    // With the workspace stamped by a newer run than this build, the same record reads as recognition — the
+    // decoration happens on the way OUT, so nothing about recording or self-clearing changes.
+    const decorated = withSkewHint(manifestProblems(root)[0]?.problems ?? [], "1.199.0", "1.200.0")[0];
+    expect(decorated?.detail).toContain("intentic 1.200.0, newer than this sandbox (1.199.0)");
+    expect(decorated?.detail).toContain("Updating the sandbox will read it again");
+
+    // A stamp that does NOT outrank the running build decorates nothing — an old stamp is not evidence.
+    expect(withSkewHint(manifestProblems(root)[0]?.problems ?? [], "1.200.0", "1.200.0")[0]?.detail).toBe(
+        "the file does not match what this build expects",
+    );
+    // …and neither does a mangled-JSON file, whatever the stamp says: newer builds write valid JSON.
+    await write(settings.path, `not json`);
+    await settings.file.read();
+    expect(withSkewHint(manifestProblems(root)[0]?.problems ?? [], "1.199.0", "1.200.0")[0]?.detail).toBe("the file is not valid JSON");
 });

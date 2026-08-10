@@ -127,6 +127,9 @@ export const PersistedAgentSchema = z.object({
     // why it is stored apart from the subject rather than as a second line of it. Persisted for the same reason
     // the subject is: the commit that carries it is usually made long after the land that wrote it.
     landedNote: z.string().optional(),
+    // The breaking sentence for the same landing — what this change TAKES AWAY from users, destined for the
+    // Release's "Breaking changes" section via the `Breaking-Note:` trailer. Almost always absent.
+    landedBreaking: z.string().optional(),
     status: PersistedAgentStatusSchema,
     // Why the last turn failed — the EVIDENCE behind an errored card, the same role `conflicts` below plays for
     // a refused land (see AgentSummarySchema). Persisted rather than held in the turn's runtime state because

@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
 import { afterEach, expect, test } from "vitest";
-import { cleanCommitBody, cleanCommitSubject, cleanReleaseNote, collectRepoDiff, commitMessagePrompt, type RepoDiff } from "./commit-message.js";
+import { cleanBreakingNote, cleanCommitBody, cleanCommitSubject, cleanReleaseNote, collectRepoDiff, commitMessagePrompt, type RepoDiff } from "./commit-message.js";
 
 /* The material an AI-drafted commit message is written from. Run against REAL repos, like the rest of git/,
  * because the whole risk here is describing the wrong side: the index and the worktree disagree constantly, and
@@ -288,6 +288,11 @@ test("asks for a release note only when the repo keeps a changelog", () => {
     // The omission instruction is the load-bearing half: most commits change nothing a user would notice, and a
     // model that writes a note for every one of them refills the changelog with the noise it exists to remove.
     expect(wantsNote).toContain("OMIT the Release-Note line entirely");
+    // The breaking note rides the same gate: no changelog, no breaking sentence either.
+    expect(noNote).not.toContain("Breaking-Note:");
+    expect(wantsNote).toContain("Breaking-Note:");
+    // …and the instruction ties the sentence to the "!" type marker the release tooling majors on.
+    expect(wantsNote).toContain(`mark the type with "!"`);
 });
 
 test("reads the note off the reply, and says so when there isn't one", () => {
@@ -306,6 +311,18 @@ test("a note-first reply still yields the subject, not the note", () => {
     expect(cleanCommitSubject("Release-Note: Your models stay put.\nfeat: ordered model picker")).toBe("feat: ordered model picker");
     // …and the note does not fall through into the body either.
     expect(cleanCommitBody("Release-Note: Your models stay put.\nfeat: ordered model picker")).toBe("");
+});
+
+test("reads the breaking sentence off the reply, apart from the note", () => {
+    const reply = "feat!: retire the legacy picker\n\nRelease-Note: The model picker is simpler now.\nBreaking-Note: The old picker layout is gone — use the new list.";
+    expect(cleanBreakingNote(reply)).toBe("The old picker layout is gone — use the new list.");
+    // Each cleaner reads only its own trailer, whichever order the model wrote them in.
+    expect(cleanReleaseNote(reply)).toBe("The model picker is simpler now.");
+    // The overwhelmingly common case: nothing was taken away, no line was written.
+    expect(cleanBreakingNote("feat: ordered model picker\n\nRelease-Note: Your models stay put.")).toBe("");
+    // A breaking line never leaks into the subject or body, same as the note.
+    expect(cleanCommitSubject("Breaking-Note: The old picker is gone.\nfeat!: retire the legacy picker")).toBe("feat!: retire the legacy picker");
+    expect(cleanCommitBody("Breaking-Note: The old picker is gone.\nfeat!: retire the legacy picker")).toBe("");
 });
 
 test("leaves quotes that are part of the subject alone", () => {

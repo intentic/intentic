@@ -6,12 +6,13 @@
 #   dind-host  a Docker-in-Docker + sshd deploy-target "host" — connect.ps1 stands one up on Windows so a
 #              server-less user can deploy locally (the e2e harness + intentic-local.sh use the same recipe)
 # Used by CI — the Images workflow (latest + commit SHA on push to main, one job per arch) and the release
-# (release-images.sh: the version + the moving `stable` tag, via semantic-release publishCmd) — and runnable
+# (release-images.sh: the version + the moving `beta` tag, via semantic-release publishCmd) — and runnable
 # by hand:
 #   docker login ghcr.io && TAGS=0.1.0 pnpm publish:images
-# TAGS is a space-separated tag list; every listed tag is pushed. On release the moving `stable` tag is pushed
-# onto the new version; _deploy/state-resolver/src/lib/images.ts and the connect scripts reference `sandbox:stable`
-# (unpinned — always the latest release, no digest to maintain). The GHCR packages must be made public once so
+# TAGS is a space-separated tag list; every listed tag is pushed. On release the moving `beta` tag is pushed
+# onto the new version; the `stable` tag every connect script and _deploy/state-resolver/src/lib/images.ts
+# reference moves LATER, when promote-stable.sh decides the release has soaked (the two lanes —
+# COMPATIBILITY.md). Both are unpinned — no digest to maintain. The GHCR packages must be made public once so
 # tenant hosts can pull them unauthenticated.
 set -euo pipefail
 . "$(dirname "$0")/repo-root.sh"

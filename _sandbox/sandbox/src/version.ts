@@ -4,8 +4,9 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { packageRoot } from "@intentic/constants/node";
 
-// The release flow bumps package versions before building the stable image, so this is the readable version
-// behind ghcr.io/intentic/sandbox:stable.
+// The release flow bumps package versions before building the release image, so this is the readable version
+// behind ghcr.io/intentic/sandbox:beta the moment it ships — and behind :stable once promote-stable.sh moves
+// the stable lane onto it.
 export const { version } = createRequire(import.meta.url)(join(packageRoot(import.meta.url), "package.json")) as { version: string };
 
 // Only semantic-release's prepareCmd stamps a real version into package.json; everything built from a working

@@ -18,9 +18,11 @@ import { githubReleasesUrl } from "@intentic-dev/site-content/site";
 
 const RELEASES_API = "https://api.github.com/repos/intentic/intentic/releases?per_page=100";
 
-// The heading publish-github.sh writes, and the contract between the two files. Everything under it, up to the
-// next heading, is the release's user-facing notes.
+// The headings publish-github.sh writes, and the contract between the two files. Everything under each, up to
+// the next heading, is the release's user-facing notes — and its breaking sentences, when a commit declared a
+// break (`Breaking-Note:` trailers, the rare sibling of `Release-Note:`).
 const WHATS_NEW_HEADING = /^##\s+What's new\s*$/i;
+const BREAKING_HEADING = /^##\s+Breaking changes\s*$/i;
 
 export interface ChangelogEntry {
     /** The plain release version, no `v` — what the app reports as its own and compares against. */
@@ -31,6 +33,8 @@ export interface ChangelogEntry {
     url: string;
     /** The user-facing lines, in the order the release lists them. Never empty — see loadChangelog. */
     notes: string[];
+    /** What this release takes away — the "Breaking changes" lines. Empty for almost every release. */
+    breaking: string[];
 }
 
 /* The bullets under "What's new", or none. Written against the shape publish-github.sh emits rather than as a
@@ -38,9 +42,9 @@ export interface ChangelogEntry {
  * are the heading and the `- ` lines beneath it. A body with no such section (every release before this feature,
  * and every release since whose commits all turned out to be invisible to users) yields nothing, which is what
  * keeps it off the page entirely. */
-export const parseNotes = (body: string): string[] => {
+const sectionBullets = (body: string, heading: RegExp): string[] => {
     const lines = body.split(/\r?\n/);
-    const start = lines.findIndex((line) => WHATS_NEW_HEADING.test(line.trim()));
+    const start = lines.findIndex((line) => heading.test(line.trim()));
     if (start === -1) {
         return [];
     }
@@ -57,6 +61,9 @@ export const parseNotes = (body: string): string[] => {
     }
     return notes.filter((note) => note !== "");
 };
+
+export const parseNotes = (body: string): string[] => sectionBullets(body, WHATS_NEW_HEADING);
+export const parseBreaking = (body: string): string[] => sectionBullets(body, BREAKING_HEADING);
 
 interface GithubRelease {
     tag_name?: unknown;
@@ -76,9 +83,11 @@ const toEntry = (release: GithubRelease): ChangelogEntry | undefined => {
         return undefined;
     }
     const notes = parseNotes(body);
+    const breaking = parseBreaking(body);
     // A release nobody outside the project would notice is not an entry. At three releases a day this is most of
-    // them, and listing them anyway — "1.184.1: nothing to report" — is the noise the notes exist to replace.
-    return notes.length === 0 ? undefined : { version: tag.replace(/^v/, ""), publishedAt, url, notes };
+    // them, and listing them anyway — "1.184.1: nothing to report" — is the noise the notes exist to replace. A
+    // release that only breaks is still an entry: that is the one page must not go quiet about.
+    return notes.length === 0 && breaking.length === 0 ? undefined : { version: tag.replace(/^v/, ""), publishedAt, url, notes, breaking };
 };
 
 export interface Changelog {

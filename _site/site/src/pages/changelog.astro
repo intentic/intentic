@@ -41,7 +41,8 @@ const dateline = (iso: string): string =>
             <p class="mt-4 text-sm leading-relaxed text-subtle">
                 Every release, including the ones that aren't here, is on
                 <a href={githubReleasesUrl} class="underline hover:text-content" rel="noopener" target="_blank">GitHub</a>
-                with its full commit list and downloads.
+                with its full commit list and downloads. Whatever a release changes, some things it never touches —
+                <a href="/docs/updates/" class="underline hover:text-content">what we promise never breaks</a>.
             </p>
         </section>
 
@@ -94,7 +95,24 @@ const dateline = (iso: string): string =>
                                 >
                                     {entry.version}
                                 </a>
+                                {entry.breaking.length > 0 && (
+                                    <span class="rounded-full border border-red-500/40 bg-red-500/10 px-2 py-0.5 text-xs font-medium text-red-600 dark:text-red-400">
+                                        Breaking
+                                    </span>
+                                )}
                             </div>
+                            {/* What this release takes away, above what it adds — the same order the update
+                                card shows them in, because it is the order a reader needs them in. */}
+                            {entry.breaking.length > 0 && (
+                                <ul class="mt-4 space-y-3">
+                                    {entry.breaking.map((note) => (
+                                        <li class="flex gap-3 text-base leading-relaxed text-muted">
+                                            <span class="mt-2.5 h-1 w-1 shrink-0 rounded-full bg-red-500" />
+                                            <span>{note}</span>
+                                        </li>
+                                    ))}
+                                </ul>
+                            )}
                             <ul class="mt-4 space-y-3">
                                 {entry.notes.map((note) => (
                                     <li class="flex gap-3 text-base leading-relaxed text-muted">

@@ -2,8 +2,9 @@
 /* Both gates, made runnable everywhere the code is written.
  *
  * `pnpm typecheck` runs this and then `turbo run typecheck`; `pnpm test` runs this and then `turbo run test
- * --only`. Four invariants live here, and all of them exist because the checks that catch drift used to run in
- * exactly one place — CI, on main, after the merge.
+ * --only`. Six invariants live here, and all of them exist because the checks that catch drift used to run in
+ * exactly one place — CI, on main, after the merge. (5 and 6 — the release-heading contract and the
+ * undeclared-shrink gate on the wire contract — are documented at their own blocks below.)
  *
  * All but invariant 2 need no node_modules and no network, which is what lets `--checks-only` run them from a
  * `pre-push` hook and from a CI job that has not installed anything yet (ci.yml, the `preflight` job).
@@ -481,11 +482,81 @@ for (const file of readdirSync(WORKFLOWS).filter((name) => name.endsWith(".yml")
     }
 }
 
+/* Invariant 5. The release-body headings are ONE contract spelled in three files that share no dependency
+ * edge: publish-github.sh writes "## Breaking changes" and "## What's new" into the Release, and the daemon's
+ * update card (release-notes.ts) and the site's changelog page (changelog.ts) parse them back off it. Each
+ * parser is deliberately its own copy — the files say why — so nothing but this check notices a drifted
+ * spelling. And a drift fails NOTHING at runtime: the section simply stops being seen, which for the breaking
+ * heading means a breaking update is offered as routine, the one silence the heading exists to prevent. */
+const HEADINGS = ["What's new", "Breaking changes"];
+const HEADING_FILES = ["_tools/scripts/publish-github.sh", "_sandbox/sandbox/src/platform/release-notes.ts", "_site/site/src/lib/changelog.ts"];
+const headingDrift = [];
+for (const file of HEADING_FILES) {
+    const text = readFileSync(join(root, file), "utf8");
+    for (const heading of HEADINGS.filter((spelling) => !text.includes(spelling))) {
+        headingDrift.push(`${file}: no longer spells "${heading}" — writer and both parsers must stay in step`);
+    }
+}
+
+/* Invariant 6. A SHRUNK wire contract arrives declared. contract.lock.json is the sandbox-contract package's
+ * exported schemas as one comparable document (its contract-lock.ts explains the pair); this check diffs the
+ * committed lock against its merge-base and, when something that EXISTED is gone or different, insists some
+ * commit in the range says so — a `type!:` subject or a `Breaking-Note:` trailer, the two spellings the
+ * release pipeline majors and warns on. Additions pass in silence: every reader parses loosely, so growth
+ * breaks nobody, and a gate that fired on every new field would train everyone to game it.
+ *
+ * Compared against merge-base rather than the worktree so it gates the PUSH (pre-push hook, PR preflight) —
+ * on main itself the merge-base IS HEAD and the check stands down, which is honest: by then the declaration
+ * either landed or the moment for it has passed. No base, no lock at base, no git: stand down rather than
+ * guess. */
+const LOCK_FILE = "_sandbox/sandbox-contract/contract.lock.json";
+const undeclaredBreaks = [];
+const git = (...args) => {
+    const result = spawnSync("git", args, { cwd: root, encoding: "utf8" });
+    return result.status === 0 ? result.stdout : undefined;
+};
+const shrunk = (base, head, at, out) => {
+    if (typeof base !== "object" || base === null || Array.isArray(base) || typeof head !== "object" || head === null || Array.isArray(head)) {
+        if (JSON.stringify(base) !== JSON.stringify(head)) {
+            out.push(at);
+        }
+        return;
+    }
+    for (const key of Object.keys(base)) {
+        if (key in head) {
+            shrunk(base[key], head[key], `${at}.${key}`, out);
+        } else {
+            out.push(`${at}.${key} (removed)`);
+        }
+    }
+};
+if (existsSync(join(root, LOCK_FILE))) {
+    const head = git("rev-parse", "HEAD")?.trim();
+    const mergeBase = (git("merge-base", "HEAD", "origin/main") ?? git("merge-base", "HEAD", "main"))?.trim();
+    const baseLock = head !== undefined && mergeBase !== undefined && mergeBase !== head ? git("show", `${mergeBase}:${LOCK_FILE}`) : undefined;
+    if (baseLock !== undefined) {
+        const gone = [];
+        shrunk(JSON.parse(baseLock), JSON.parse(readFileSync(join(root, LOCK_FILE), "utf8")), "", gone);
+        const messages = git("log", "--format=%B", `${mergeBase}..HEAD`) ?? "";
+        const declared = /^[a-z]+(\([^)]*\))?!:/m.test(messages) || /^Breaking-Note:/m.test(messages);
+        if (gone.length > 0 && !declared) {
+            undeclaredBreaks.push(
+                ...gone.slice(0, 10).map((path) => `${LOCK_FILE}: ${path.replace(/^\./, "")}`),
+                ...(gone.length > 10 ? [`…and ${gone.length - 10} more`] : []),
+                `something users could rely on was removed or changed — land it as a \`type!:\` commit with a ` +
+                    `\`Breaking-Note: <what stops working and what to do instead>\` trailer, or make the change compatible`,
+            );
+        }
+    }
+}
+
 // Every report before any exit, so one run says everything that is wrong rather than the first thing.
 const reports = [
     ["Test files outside the program or the budget they belong in", problems],
     ["pnpm-lock.yaml is out of date — run `pnpm install` and commit it (this is CI's ERR_PNPM_OUTDATED_LOCKFILE)", drift],
     ["Self-hosted CI is reachable from a fork's pull request (docs/ci-runner.md, 'The fork boundary')", exposed],
+    ["The release-body headings drifted apart (they are parsed, not prose)", headingDrift],
+    ["The wire contract shrank without a declared breaking change", undeclaredBreaks],
 ];
 if (reports.some(([, lines]) => lines.length > 0)) {
     for (const [heading, lines] of reports.filter(([, some]) => some.length > 0)) {
@@ -496,6 +567,8 @@ if (reports.some(([, lines]) => lines.length > 0)) {
 console.log(`typecheck coverage: every package with tests type-checks them, and every machine-touching suite is named as one`);
 console.log(`lockfile: ${importers.length} importers record the specifiers their package.json declares`);
 console.log(`fork boundary: no self-hosted job is reachable from a fork's pull request`);
+console.log(`release headings: writer and both parsers spell the same two sections`);
+console.log(`wire contract: nothing shrank undeclared against merge-base`);
 
 /* Everything below needs node_modules and writes to the tree; everything above reads the checkout and nothing
  * else. `--checks-only` is that line — it is what the pre-push hook and the CI preflight job run. */

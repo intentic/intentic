@@ -204,17 +204,28 @@ const originNote = (id: string): string | undefined => {
  * read. */
 const originSubject = (id: string): string | undefined => originOf(id)?.subject;
 
-/* What the chip actually files: the subject, the drafted facts under it, and the `Release-Note:` trailer at the
- * bottom when this landing had one (a repo that keeps a changelog, and a change its users would notice).
- * Composed HERE rather than stored joined, because a subject is one line everywhere it is SHOWN — the chip in
- * the legend is one line — and the three only become a commit message at this moment. See OriginAgent.body. */
+/* What the chip actually files: the subject, the drafted facts under it, and the `Release-Note:` /
+ * `Breaking-Note:` trailers at the bottom when this landing had them (a repo that keeps a changelog, and a
+ * change its users would notice — or lose). Composed HERE rather than stored joined, because a subject is one
+ * line everywhere it is SHOWN — the chip in the legend is one line — and the parts only become a commit
+ * message at this moment. See OriginAgent.body.
+ *
+ * The two trailers share ONE paragraph, joined by a single newline: git only reads the message's final block
+ * as trailers, so a blank line between them would demote the first to body text and the release harvest would
+ * never see it. */
 const originMessage = (id: string): string | undefined => {
     const subject = originSubject(id);
     if (subject === undefined) {
         return undefined;
     }
     const origin = originOf(id);
-    return [subject, origin?.body ?? ``, origin?.note === undefined ? `` : `Release-Note: ${origin.note}`].filter((part) => part !== ``).join(`\n\n`);
+    const trailers = [
+        origin?.note === undefined ? `` : `Release-Note: ${origin.note}`,
+        origin?.breaking === undefined ? `` : `Breaking-Note: ${origin.breaking}`,
+    ]
+        .filter((line) => line !== ``)
+        .join(`\n`);
+    return [subject, origin?.body ?? ``, trailers].filter((part) => part !== ``).join(`\n\n`);
 };
 
 /* ONE CLICK, TWO HALVES OF THE SAME INTENT — "commit this session's work". The chip has always narrowed the

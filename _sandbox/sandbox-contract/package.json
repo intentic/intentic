@@ -68,7 +68,8 @@
         "typecheck": "tsgo --noEmit -p tsconfig.test.json",
         "watch": "tsgo --build --watch",
         "test": "vitest run",
-        "test:watch": "vitest"
+        "test:watch": "vitest",
+        "lock": "tsgo && node scripts/write-lock.mjs"
     },
     "dependencies": {
         "@intentic/constants": "workspace:*",

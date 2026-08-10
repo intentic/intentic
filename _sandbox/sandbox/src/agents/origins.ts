@@ -189,6 +189,8 @@ export const createAgentOrigins = (
                     // …and the same landing said to a user, for a repo that keeps a changelog. Travels beside
                     // the subject rather than inside it so the box can compose the commit's trailer.
                     ...(entry.landedNote !== undefined ? { note: entry.landedNote } : {}),
+                    // …and, rarely, what it takes away — the `Breaking-Note:` trailer's sentence.
+                    ...(entry.landedBreaking !== undefined ? { breaking: entry.landedBreaking } : {}),
                 };
             }
             return identities;

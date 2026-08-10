@@ -5,12 +5,18 @@ import { afterEach, expect, test, vi } from "vitest";
 import { type QueryFn, runAgent } from "./agent.js";
 
 // Force the tmux gate ON. In CI the wrapper is absent so tmuxRunEnabled() is false and no `terminal` frame is
-// emitted (agent.test.ts covers that gated-off path); here we stub existsSync true (keeping the rest of
-// node:fs) plus the opt-in env so the on-path emit is exercised.
-vi.mock("node:fs", async (importOriginal) => ({
-    ...(await importOriginal<typeof import("node:fs")>()),
-    existsSync: () => true,
-}));
+// emitted (agent.test.ts covers that gated-off path); here we stub existsSync true FOR THE WRAPPER'S PATH ONLY
+// (keeping the rest of node:fs, and honest answers for every other path) plus the opt-in env so the on-path
+// emit is exercised. Only the gate's own path is lied about because everything else in this test's import
+// graph deserves the truth: version.ts finds its package.json by walking up with existsSync, and an
+// always-true stub stops that walk at src/ and fails the whole suite on a module far from the tmux gate.
+vi.mock("node:fs", async (importOriginal) => {
+    const actual = await importOriginal<typeof import("node:fs")>();
+    return {
+        ...actual,
+        existsSync: (path: import("node:fs").PathLike) => (String(path).includes("tmux") ? true : actual.existsSync(path)),
+    };
+});
 
 afterEach(() => vi.unstubAllEnvs());
 

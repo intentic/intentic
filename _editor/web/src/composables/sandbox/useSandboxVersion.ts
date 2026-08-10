@@ -34,6 +34,9 @@ export function useSandboxVersion() {
     // release that changed nothing a user would notice, and the card simply omits the section.
     const updateNotes = computed<readonly string[]>(() => info.value?.updateNotes ?? []);
     const moreUpdateNotes = computed(() => info.value?.moreUpdateNotes ?? 0);
+    // What the update TAKES AWAY — uncapped, unlike the notes: their presence is what turns the card from an
+    // offer into a warning that asks to be read before it hands over the command.
+    const breakingNotes = computed<readonly string[]>(() => info.value?.breakingNotes ?? []);
 
     /* Which agent runtimes can serve a turn right now, keyed by AgentCapabilities.runtime — the daemon probes
      * this off the turn path so a picker can say a subscription is missing BEFORE the user writes a prompt.
@@ -50,5 +53,5 @@ export function useSandboxVersion() {
     // without an overlay). HostRecreate turns this into a button in the desktop app and a command elsewhere.
     const slug = computed(() => envState.value?.container?.replace(/^intentic-sandbox-/, ``));
 
-    return { info, installed, latest, updateAvailable, updateNotes, moreUpdateNotes, runtimeIssue, serverManaged, slug };
+    return { info, installed, latest, updateAvailable, updateNotes, moreUpdateNotes, breakingNotes, runtimeIssue, serverManaged, slug };
 }

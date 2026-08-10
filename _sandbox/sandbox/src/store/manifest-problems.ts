@@ -1,5 +1,7 @@
 import { relative } from "node:path";
-import { isReportedManifest, type ManifestProblem, type ManifestProblemReport } from "@intentic/sandbox-contract";
+import { isNewer, isReportedManifest, type ManifestProblem, type ManifestProblemReport } from "@intentic/sandbox-contract";
+import { version } from "../version.js";
+import { newestRunVersion } from "./newest-run.js";
 
 /* WHAT THE DAEMON COULD NOT READ IN ITS OWN STATE FILES, kept where a browser can ask for it.
  *
@@ -60,13 +62,36 @@ export const recordManifestProblems = (path: string, problems: readonly Manifest
  *
  * Files outside the workspace root fail that test too, which costs nothing: the notice never had a sensible way
  * to name them anyway. */
+/* The one detail json-file.ts writes for a schema rejection — matched here so the rejection alone, and not a
+ * hand-mangled not-JSON file, earns the version-skew sentence below. The two files are siblings; a reworded
+ * detail over there must move this constant with it. */
+const SCHEMA_REJECTED = "the file does not match what this build expects";
+
+/* THE SENTENCE A ROLLBACK EARNS. A schema rejection reads identically whether the file was mangled by hand or
+ * written by a NEWER build this sandbox has since rolled back from — and the repairs differ completely: fix
+ * the file, versus update again and it reads fine. When the workspace's stamp (newest-run.ts) says a newer
+ * intentic has run here, the report says so instead of implying the file is broken. Recognition only, by
+ * design and by CLAUDE.md's own rule: nothing anywhere reads the file differently because of the version. */
+export const withSkewHint = (problems: readonly ManifestProblem[], running: string, newest: string | undefined): ManifestProblem[] =>
+    problems.map((problem) =>
+        problem.kind === "unreadable" && problem.detail === SCHEMA_REJECTED && newest !== undefined && isNewer(newest, running)
+            ? {
+                  ...problem,
+                  detail:
+                      `${SCHEMA_REJECTED} — this workspace has run intentic ${newest}, newer than this sandbox (${running}), ` +
+                      `so the file may simply be newer than this build. Updating the sandbox will read it again; ` +
+                      `only edit the file if you know it is actually wrong.`,
+              }
+            : problem,
+    );
+
 export const manifestProblems = (root: string): ManifestProblemReport[] =>
     [...byPath.entries()]
         .map(([path, problems]) => ({ rel: relative(root, path), problems }))
         .filter(({ rel }) => isReportedManifest(rel))
-        // Copied, not handed out by reference: this is the registry's own array, and a caller that sorted or
-        // spliced the value it got back would be editing what the next reader sees.
-        .map(({ rel, problems }) => ({ path: rel, problems: [...problems] }))
+        // Copied (and skew-decorated) on the way out, never by reference: this is the registry's own array,
+        // and a caller that sorted or spliced the value it got back would be editing what the next reader sees.
+        .map(({ rel, problems }) => ({ path: rel, problems: withSkewHint(problems, version, newestRunVersion()) }))
         .toSorted((a, b) => a.path.localeCompare(b.path));
 
 // Test seam: the registry is module-level, so a suite that records has to be able to put it back.

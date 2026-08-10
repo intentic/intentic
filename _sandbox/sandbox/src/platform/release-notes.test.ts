@@ -1,6 +1,6 @@
 import { afterEach, expect, test, vi } from "vitest";
 import { isDevBuild } from "../version.js";
-import { parseReleaseNotes, refreshReleaseNotes, startReleaseNotesCheck, updateNotes } from "./release-notes.js";
+import { breakingNotes, parseBreakingNotes, parseReleaseNotes, refreshReleaseNotes, startReleaseNotesCheck, updateNotes } from "./release-notes.js";
 
 afterEach(() => {
     vi.unstubAllGlobals();
@@ -34,6 +34,31 @@ test("reads the user-facing section and stops at the commit list under it", () =
 test("a release with nothing a user would notice yields no notes", () => {
     expect(parseReleaseNotes("### Features\n\n- ordered model picker\n")).toEqual([]);
     expect(parseReleaseNotes("")).toEqual([]);
+});
+
+// The body publish-github.sh writes when a commit declared a break: its own section, above What's new.
+const BREAKING_BODY = ["## Breaking changes", "", "- The old picker layout is gone — use the new list.", "", ...RELEASE_BODY.split("\n")].join("\n");
+
+test("reads the breaking section apart from the notes", () => {
+    expect(parseBreakingNotes(BREAKING_BODY)).toEqual(["The old picker layout is gone — use the new list."]);
+    // Each parser sees only its own section — a break is not a note, and a note is not a warning.
+    expect(parseReleaseNotes(BREAKING_BODY)).toEqual(["Your models stay in the order you set them.", "The commit box keeps a full message."]);
+    expect(parseBreakingNotes(RELEASE_BODY)).toEqual([]);
+});
+
+test("collects every breaking sentence in the gap, and a release that only breaks still counts", async () => {
+    vi.stubGlobal("fetch", async () =>
+        releasesResponse([
+            { tag_name: "v1.188.0", body: "## Breaking changes\n\n- The export command is gone.\n" },
+            { tag_name: "v1.187.0", body: "## What's new\n\n- Middle thing.\n" },
+        ]),
+    );
+    await refreshReleaseNotes();
+    // v1.188.0 carries no What's new at all — it must still be cached, or the warning never reaches the card.
+    expect(breakingNotes("1.186.0")).toEqual(["The export command is gone."]);
+    expect(updateNotes("1.186.0")).toEqual(["Middle thing."]);
+    // Past the break, nothing to warn about.
+    expect(breakingNotes("1.188.0")).toEqual([]);
 });
 
 test("collects the notes for every release newer than this sandbox, and none of the older ones", async () => {

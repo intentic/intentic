@@ -72,7 +72,16 @@ section() { # <heading> <grep-args...>
 whats_new="$(git log --no-merges --format='%(trailers:key=Release-Note,valueonly)' "$range" |
   grep -v '^[[:space:]]*$' | awk '!seen[$0]++' | sed 's/^/- /' || true)"
 
+# WHAT THIS RELEASE TAKES AWAY, above everything else — the `Breaking-Note:` trailers, same pipeline and same
+# dedup as the notes. This heading is part of the same API as "What's new": the changelog page and the update
+# card both parse it back off the Release body, and the card treats its presence as "warn before updating, and
+# ask for an acknowledgment" — so a release must carry this section exactly when a commit declared a break,
+# and the spelling must not drift.
+breaking="$(git log --no-merges --format='%(trailers:key=Breaking-Note,valueonly)' "$range" |
+  grep -v '^[[:space:]]*$' | awk '!seen[$0]++' | sed 's/^/- /' || true)"
+
 notes="$(
+  if [ -n "$breaking" ]; then printf "## Breaking changes\n\n%s\n\n" "$breaking"; fi
   if [ -n "$whats_new" ]; then printf "## What's new\n\n%s\n\n" "$whats_new"; fi
   section Features '^feat(\(|!?:)'
   section Fixes '^fix(\(|!?:)'
@@ -88,8 +97,12 @@ notes="$(
 release_id="$(api "https://api.github.com/repos/${REPO}/releases/tags/${TAG}" 2>/dev/null | node -pe 'JSON.parse(require("fs").readFileSync(0,"utf8")).id' 2>/dev/null || true)"
 if [ -z "$release_id" ]; then
   echo "==> creating release ${TAG}"
+  # make_latest: false — A NEW RELEASE IS BETA, NOT LATEST. Every download surface (`releases/latest/download`
+  # in the connect scripts, the site's download links) and every stable sandbox's update check follows the
+  # "latest" flag, and promote-stable.sh flips it only after the release has soaked on the beta lane. Creating
+  # a release as latest here would hand an unsoaked build to every stable user the moment it tagged.
   release_id="$(
-    node -pe 'JSON.stringify({tag_name: process.argv[1], name: process.argv[1], body: process.argv[2]})' "$TAG" "$notes" |
+    node -pe 'JSON.stringify({tag_name: process.argv[1], name: process.argv[1], body: process.argv[2], make_latest: "false"})' "$TAG" "$notes" |
       api --header "Content-Type: application/json" --data-binary @- "https://api.github.com/repos/${REPO}/releases" |
       node -pe 'JSON.parse(require("fs").readFileSync(0,"utf8")).id'
   )"

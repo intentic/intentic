@@ -2059,6 +2059,11 @@ export const OriginAgentSchema = z.object({
      * Usually absent, and that is the design: most landings change nothing a user would notice, and the model
      * is told to omit the note for those rather than to invent one. */
     note: z.string().optional(),
+    /* WHAT THE SAME LANDING TAKES AWAY — the `Breaking-Note:` sentence, filed as its own trailer so the
+     * release harvest can put it under "Breaking changes" and the update card can warn with it before the
+     * update rather than after. Nearly always absent: the model is told a breaking note is for removals only,
+     * and to omit it when in doubt. */
+    breaking: z.string().optional(),
 });
 export type OriginAgent = z.infer<typeof OriginAgentSchema>;
 
@@ -5378,6 +5383,11 @@ export const InfoSchema = z.object({
     // How many further notes the gap holds beyond the ones sent, for a sandbox that has been left alone a long
     // time. Absent or 0 ⇒ `updateNotes` is the whole of it.
     moreUpdateNotes: z.number().optional(),
+    /* WHAT THE UPDATE TAKES AWAY — the "Breaking changes" lines from every release in the same gap, uncapped
+     * (a warning that fell off a truncated list is a breaking update taken unwarned). Their presence is what
+     * turns the update card from an offer into a warning that asks to be read before it hands over the
+     * command. Absent for the overwhelming majority of updates, which break nothing. */
+    breakingNotes: z.array(z.string()).optional(),
 });
 export type Info = z.infer<typeof InfoSchema>;
 

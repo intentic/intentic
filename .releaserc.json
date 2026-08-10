@@ -8,8 +8,7 @@
             "@semantic-release/exec",
             {
                 "prepareCmd": "bash _tools/scripts/release-prepare.sh ${nextRelease.version}",
-                "publishCmd": "bash _tools/scripts/publish-github.sh ${nextRelease.version} && bash _tools/scripts/release-images.sh ${nextRelease.version}",
-                "successCmd": "git tag -f stable && git push -f origin stable"
+                "publishCmd": "bash _tools/scripts/publish-github.sh ${nextRelease.version} && bash _tools/scripts/release-images.sh ${nextRelease.version}"
             }
         ]
     ]

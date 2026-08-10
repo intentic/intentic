@@ -12,9 +12,13 @@ DIR="$(cd "$(dirname "$0")" && pwd)"
 cd "$(repo_root)"
 
 bash "$DIR/prepare-image-trees.sh"
-TAGS="$VERSION stable" ARCH_SUFFIX=-amd64 IMAGES=sandbox bash "$DIR/publish-images.sh"
+# THE RELEASE MOVES `beta`, NEVER `stable`. Every release lands on the beta lane the moment it publishes; the
+# `stable` tags (and the git `stable` tag, and the Release's "latest" flag every download link follows) move
+# only when promote-stable.sh decides the release has soaked — nightly, after ~48h on the beta lane. That gap
+# is the staged rollout: whoever runs beta (the maintainers, first) is the canary for everyone on stable.
+TAGS="$VERSION beta" ARCH_SUFFIX=-amd64 IMAGES=sandbox bash "$DIR/publish-images.sh"
 # dind-host stays a single amd64 image (publish-images.sh says why) — plain tags, no merge.
-TAGS="$VERSION stable" IMAGES=dind-host bash "$DIR/publish-images.sh"
-ARM64_REF="$VERSION-arm64" bash "$DIR/merge-image-manifests.sh" sandbox "$VERSION" stable
+TAGS="$VERSION beta" IMAGES=dind-host bash "$DIR/publish-images.sh"
+ARM64_REF="$VERSION-arm64" bash "$DIR/merge-image-manifests.sh" sandbox "$VERSION" beta
 # The core profile's halves, published by the same jobs under core- prefixed tags (publish-images.sh TAG_PREFIX).
-ARM64_REF="core-$VERSION-arm64" bash "$DIR/merge-image-manifests.sh" sandbox "core-$VERSION" core-stable
+ARM64_REF="core-$VERSION-arm64" bash "$DIR/merge-image-manifests.sh" sandbox "core-$VERSION" core-beta

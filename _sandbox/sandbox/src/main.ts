@@ -67,6 +67,7 @@ import { restoreAuthorizedKeys, seedPairing } from "./platform/sync.js";
 import { seedSetupHost } from "./hosts/host-seed.js";
 import { panePids, reapFinishedSessions } from "./terminal/terminal-session.js";
 import { startVersionCheck } from "./platform/version-check.js";
+import { recordNewestRun } from "./store/newest-run.js";
 import { startReleaseNotesCheck } from "./platform/release-notes.js";
 import { startRuntimeHealth } from "./agent/adapter-health.js";
 import { startRepoWatch, subscribeRepoChanges } from "./workspace/repo-watch.js";
@@ -802,13 +803,19 @@ const main = async (): Promise<void> => {
         logger.error({ err: error }, "loops and workflow runs could not be resumed"),
     );
 
+    // Stamp this workspace with the newest version that ever ran it (forward-only) — what lets a manifest
+    // problem after a rollback read as "written by a newer intentic" instead of "your file is broken"
+    // (store/newest-run.ts). Backgrounded: the stamp only sharpens a sentence, it gates nothing.
+    void recordNewestRun(config.workspaceRoot).catch(() => undefined);
+
     // Warm the "latest released sandbox version" cache in the background so /info can offer a non-blocking
-    // update without ever fetching on the request path.
-    const versionCheck = startVersionCheck();
+    // update without ever fetching on the request path. Channel-aware: a stable sandbox is offered the
+    // promoted release, a beta one the newest (version-check.ts explains the two pointers).
+    const versionCheck = startVersionCheck(config.sandbox.channel);
 
     // …and what that update would actually give them, on the same cadence: the offer and the reason to take it
-    // come from two different places (npm for the version, the GitHub Release for the notes) and neither may
-    // hold up the /info that shows them.
+    // come from two different reads (the Release's "latest" pointer for the version, the Release bodies for
+    // the notes) and neither may hold up the /info that shows them.
     const releaseNotesCheck = startReleaseNotesCheck();
 
     // The same bargain for "can each agent runtime serve a turn": probed off the turn path so the picker can

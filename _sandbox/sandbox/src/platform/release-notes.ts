@@ -35,20 +35,21 @@ export const MAX_UPDATE_NOTES = 12;
 interface ReleaseNotes {
     readonly version: string;
     readonly notes: readonly string[];
+    readonly breaking: readonly string[];
 }
 
 let cached: readonly ReleaseNotes[] = [];
 
-/* The bullets under "What's new", or none.
+/* The bullets under one release-body heading, or none.
  *
  * DELIBERATELY A SECOND COPY of the parser in _site/site/src/lib/changelog.ts, on the same reasoning as
- * `markInitials` over there: the two consumers of this heading share no dependency edge, and one should not be
- * invented — a marketing site importing the sandbox contract, or the daemon importing the site — for fifteen
- * lines of string handling. The heading spelling is the contract publish-github.sh writes; keep the three in
- * step by hand. */
-export const parseReleaseNotes = (body: string): string[] => {
+ * `markInitials` over there: the two consumers of these headings share no dependency edge, and one should not
+ * be invented — a marketing site importing the sandbox contract, or the daemon importing the site — for
+ * fifteen lines of string handling. The heading spellings are the contract publish-github.sh writes; keep the
+ * three in step by hand. */
+const sectionBullets = (body: string, heading: RegExp): string[] => {
     const lines = body.split(/\r?\n/);
-    const start = lines.findIndex((line) => /^##\s+What's new\s*$/i.test(line.trim()));
+    const start = lines.findIndex((line) => heading.test(line.trim()));
     if (start === -1) {
         return [];
     }
@@ -66,6 +67,13 @@ export const parseReleaseNotes = (body: string): string[] => {
     return notes.filter((note) => note !== "");
 };
 
+export const parseReleaseNotes = (body: string): string[] => sectionBullets(body, /^##\s+What's new\s*$/i);
+
+// What a release TAKES AWAY — the `Breaking-Note:` trailers publish-github.sh files under their own heading.
+// Kept apart from the notes end to end: these are the lines the update card must warn with, in full, before
+// the update is taken.
+export const parseBreakingNotes = (body: string): string[] => sectionBullets(body, /^##\s+Breaking changes\s*$/i);
+
 /* Everything a sandbox on `installed` has not seen yet, newest release first, flattened into one list.
  *
  * Deduplicated ACROSS releases as well as within them: a note describing one change can ride several releases
@@ -74,7 +82,7 @@ export const parseReleaseNotes = (body: string): string[] => {
  *
  * An unknown installed version yields nothing rather than everything: that is the dev build (0.0.0), which
  * every release outranks, and it is exactly the sandbox that should not be told it is fifty releases behind. */
-export const updateNotes = (installed: string | undefined): string[] => {
+const collectSince = (installed: string | undefined, pick: (release: ReleaseNotes) => readonly string[]): string[] => {
     if (installed === undefined) {
         return [];
     }
@@ -84,7 +92,7 @@ export const updateNotes = (installed: string | undefined): string[] => {
         if (!isNewer(release.version, installed)) {
             continue;
         }
-        for (const note of release.notes) {
+        for (const note of pick(release)) {
             const key = note.toLowerCase();
             if (!seen.has(key)) {
                 seen.add(key);
@@ -94,6 +102,13 @@ export const updateNotes = (installed: string | undefined): string[] => {
     }
     return notes;
 };
+
+export const updateNotes = (installed: string | undefined): string[] => collectSince(installed, (release) => release.notes);
+
+// Every breaking sentence between `installed` and the newest release, deduplicated the same way. These are
+// NEVER capped: MAX_UPDATE_NOTES exists so a hub card stays a card, but a warning that fell off the end of a
+// truncated list is a user who took a breaking update unwarned.
+export const breakingNotes = (installed: string | undefined): string[] => collectSince(installed, (release) => release.breaking);
 
 interface GithubRelease {
     tag_name?: unknown;
@@ -119,7 +134,10 @@ export const refreshReleaseNotes = async (): Promise<void> => {
                     return [];
                 }
                 const notes = parseReleaseNotes(body);
-                return notes.length === 0 ? [] : [{ version: tag.replace(/^v/, ""), notes }];
+                const breaking = parseBreakingNotes(body);
+                // A release with either section is worth caching: a break with no ordinary notes still has to
+                // reach the card, and it is exactly the release that must not slip through unremarked.
+                return notes.length === 0 && breaking.length === 0 ? [] : [{ version: tag.replace(/^v/, ""), notes, breaking }];
             });
     } catch {
         // Keep the previous cached value.

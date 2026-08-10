@@ -1,9 +1,10 @@
 #!/bin/sh
 # The gates that need nothing installed, run before the push rather than after it.
 #
-# Wired by the root `prepare` script alongside commit-msg (core.hooksPath=.githooks). What it runs is the first
-# half of _tools/scripts/prepass.mjs — test-file coverage, integration-suite naming, and lockfile drift — which
-# reads the checkout and nothing else: no node_modules, no network, ~70ms.
+# Wired by the root `prepare` script alongside commit-msg (core.hooksPath=.githooks). What it runs is the check
+# half of _tools/scripts/prepass.mjs — the repo invariants readable from the checkout alone: test-file coverage,
+# integration-suite naming, lockfile drift, the fork boundary, the release-heading contract, and the gate that a
+# shrunk wire contract pushes with a declared break. No node_modules, no network, ~70ms.
 #
 # It is here because of what those failures cost in CI. Measured over 40 main pipelines, 10 of the 22 red ones
 # died on one of these three, every one of them AFTER `pnpm install --frozen-lockfile` had resolved 1,800+
