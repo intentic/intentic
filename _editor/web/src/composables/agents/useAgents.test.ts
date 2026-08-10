@@ -491,6 +491,77 @@ describe("the finished fold", () => {
     });
 });
 
+/* CARDS THAT WOULD NOT SIT STILL — the reported bug, and the argument for the tiebreaker every lane order now
+ * ends on.
+ *
+ * A tie in a sort is not a draw, it is a question passed down: the order falls to the array underneath, and
+ * this board's array is `fleet`, kept sorted by `updatedAt` descending. That clock ticks per agent, a second
+ * at a time and out of step with the rest, so every activity frame dealt the tied cards a fresh order and the
+ * column reshuffled itself under the user's eyes.
+ *
+ * The ties are ordinary. Agents resumed TOGETHER — one credential renewal bringing a batch of turns back —
+ * begin in the same millisecond, so they carry an identical `startedAt` for as long as they run. */
+describe("lane order holds still", () => {
+    const running = (id: string, startedAt: number, updatedAt: number): AgentSummary => ({
+        id,
+        status: `running`,
+        provider: `claude`,
+        harness: `native`,
+        startedAt,
+        updatedAt,
+        attention: { plan: false, question: false, permission: false, conflict: false },
+    });
+    const activeIds = (): string[] => useAgents().lanes.value.active.map((entry) => entry.id);
+
+    beforeEach(() => {
+        resetAgents();
+        useAgents().archived.value = [];
+        const other = new Conversation();
+        other.registered.value = true;
+        useChat().conversations.value = [other];
+    });
+
+    // The report itself: four agents resumed at one stroke, each reporting its own activity, trading places in
+    // the column every second. The lane settles on one order and every frame after it is the SAME order.
+    it("holds agents that started in the same millisecond in place as their activity ticks", () => {
+        const batch = [`c`, `a`, `d`, `b`];
+        setAgents(
+            batch.map((id) => running(id, 5_000, 5_000)),
+            1,
+        );
+        const settled = activeIds();
+
+        expect(settled).toHaveLength(4);
+        // Each in turn becomes the most recently active — the frames that used to re-deal the lane.
+        for (const [at, live] of batch.entries()) {
+            setAgents(
+                batch.map((id) => running(id, 5_000, id === live ? 6_000 + at : 5_000)),
+                at + 2,
+            );
+
+            expect(activeIds()).toEqual(settled);
+        }
+    });
+
+    // Attention orders on `updatedAt` alone, so a batch that also stalls together (two agents asking at once)
+    // ties outright — the same churn, one lane over.
+    it("holds the attention lane still when two cards share an updatedAt", () => {
+        const asking = (id: string): AgentSummary => ({
+            ...running(id, 5_000, 7_000),
+            status: `awaiting`,
+            attention: { plan: false, question: true, permission: false, conflict: false },
+        });
+        setAgents([asking(`b`), asking(`a`)], 1);
+        const settled = useAgents().lanes.value.attention.map((entry) => entry.id);
+
+        // The daemon's own roster order is not a promise — the same agents arrive the other way round on the
+        // next frame, and the lane may not move because of it.
+        setAgents([asking(`a`), asking(`b`)], 2);
+
+        expect(useAgents().lanes.value.attention.map((entry) => entry.id)).toEqual(settled);
+    });
+});
+
 // The board's exit. Archiving is the ROUTINE way an agent leaves the fleet, so what these pin down is the
 // thing that makes it routine: it never asks first, it never interrupts, and it always keeps a way back.
 describe("archive", () => {

@@ -485,6 +485,20 @@ watch(registry, (entries) => {
 export const canArchive = (agent: Pick<FleetAgent, "status" | "attention" | "archivedAt">): boolean =>
     agent.archivedAt === undefined && !unregistered(agent.status) && !turnInFlight(agent) && !awaitingUser(agent);
 
+/* THE LAST WORD IN EVERY LANE'S ORDER, and the only thing it is for: a comparator that can return 0 hands the
+ * tie to the input order, and this board's input is `fleet` — re-sorted by `updatedAt` descending on every
+ * frame. That clock ticks per agent, a second at a time and out of step with the others, so a tie is not a
+ * settled draw but a coin flipped again every second: tied cards traded places in the column for as long as
+ * they ran.
+ *
+ * Ties are not the exotic case they sound like. Agents resumed TOGETHER — a batch that came back after one
+ * credential renewal — begin within the same millisecond and carry the same `startedAt` for the rest of the
+ * turn, which is exactly the report this fixes.
+ *
+ * The id is arbitrary and that is fine: the requirement is not a meaningful order for cards nothing else
+ * distinguishes, it is the SAME order next frame. */
+const byId = (a: FleetAgent, b: FleetAgent): number => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0);
+
 const lanes = computed<Record<FleetLane, FleetAgent[]>>(() => {
     const grouped: Record<FleetLane, FleetAgent[]> = { attention: [], active: [], finished: [] };
     for (const agent of fleet.value) {
@@ -495,9 +509,12 @@ const lanes = computed<Record<FleetLane, FleetAgent[]>>(() => {
     // top on every activity frame (updatedAt ticks every second, which churns the lane when many run at once).
     // Oldest-running leads; a draft has no startedAt, so it falls back to updatedAt but is already sorted ahead.
     grouped.active.sort(
-        (a, b) => Number(b.status === `draft`) - Number(a.status === `draft`) || (a.startedAt ?? a.updatedAt) - (b.startedAt ?? b.updatedAt),
+        (a, b) =>
+            Number(b.status === `draft`) - Number(a.status === `draft`) ||
+            (a.startedAt ?? a.updatedAt) - (b.startedAt ?? b.updatedAt) ||
+            byId(a, b),
     );
-    grouped.attention.sort((a, b) => b.updatedAt - a.updatedAt);
+    grouped.attention.sort((a, b) => b.updatedAt - a.updatedAt || byId(a, b));
     /* UNSENT FIRST, then ready-to-land, then recency. Both exceptions are the same argument, made about the
      * fold: this lane windows to a handful (FINISHED_WINDOW), and recency alone lets whatever finished a minute
      * ago push either kind of card behind it — where "waiting for you" quietly becomes "forgotten".
@@ -509,7 +526,11 @@ const lanes = computed<Record<FleetLane, FleetAgent[]>>(() => {
      * MORE THAN A WINDOW'S WORTH of such cards exist, at which point they are hiding each other rather than
      * being hidden by unrelated work. */
     grouped.finished.sort(
-        (a, b) => Number(b.unsent) - Number(a.unsent) || Number(b.status === `ready`) - Number(a.status === `ready`) || b.updatedAt - a.updatedAt,
+        (a, b) =>
+            Number(b.unsent) - Number(a.unsent) ||
+            Number(b.status === `ready`) - Number(a.status === `ready`) ||
+            b.updatedAt - a.updatedAt ||
+            byId(a, b),
     );
     return grouped;
 });
