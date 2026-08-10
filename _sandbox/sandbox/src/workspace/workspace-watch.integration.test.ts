@@ -44,7 +44,11 @@ test("isWatchIgnored skips junk dirs (incl. .git) + browser profiles, but not so
     expect(watchIgnored(at("app", "refs", "notes.md"))).toBe(false);
 });
 
-test("createWorkspaceWatch emits visible root-relative paths, skips node_modules, and coalesces a burst", async () => {
+// What only a real filesystem can answer: that chokidar's descent filter is wired to the ignore predicate, and
+// that what comes out the other side is root-relative. How a burst is BATCHED is not asserted here — that
+// depends on whether the machine delivered both inotify events inside one 250ms window, which is a fact about
+// the runner rather than about the watcher. workspace-watch.test.ts settles the batching on its own clock.
+test("createWorkspaceWatch emits visible root-relative paths and never announces node_modules", async () => {
     const root = await mkdtemp(join(tmpdir(), "ws-watch-"));
     await mkdir(join(root, "app", "node_modules", "dep"), { recursive: true });
     const watch = createWorkspaceWatch(root);
@@ -56,17 +60,14 @@ test("createWorkspaceWatch emits visible root-relative paths, skips node_modules
 
         // A change under node_modules must never be announced (it's a descent-ignored dir).
         await writeFile(join(root, "app", "node_modules", "dep", "index.js"), "x");
-        // Two visible writes in the same debounce window should coalesce into ONE batch.
         await Promise.all([writeFile(join(root, "a.txt"), "1"), writeFile(join(root, "b.txt"), "2")]);
 
-        await waitFor(() => batches.length > 0, 3000);
-        await delay(400); // let any trailing batch land before asserting coalescing
+        await waitFor(() => batches.flat().length >= 2, 5000);
 
         const all = batches.flat();
         expect(all).toContain("a.txt");
         expect(all).toContain("b.txt");
         expect(all.some((path) => path.includes("node_modules"))).toBe(false);
-        expect(batches.length).toBe(1);
     } finally {
         await watch.close();
         await rm(root, { recursive: true, force: true });

@@ -58,11 +58,44 @@ export const isWatchIgnored = (root: string, abs: string): boolean => {
 
 // One batch fires 250ms after the FIRST change of a window (not reset per event), so latency is bounded to
 // ~250ms even while the agent edits continuously, and everything inside the window coalesces into one frame.
-const DEBOUNCE_MS = 250;
+export const DEBOUNCE_MS = 250;
 // A change touching more than this many visible files (branch switch, codegen, mass rename) sends an empty batch
 // — "just refetch the tree" — instead of a giant path list. The tree refetch covers it; per-file re-read/highlight
 // isn't worth the frame size at that scale.
-const MAX_PATHS = 200;
+export const MAX_PATHS = 200;
+
+export interface PathBatcher {
+    readonly add: (path: string) => void;
+}
+
+// The coalescing rule itself, apart from the watcher that feeds it: paths accumulate into a set (so a file
+// touched twice in a window is announced once) and go out as one batch when the window closes.
+//
+// It is a separate factory because it is the only part of this file a test can pin down. Asserting the batch
+// count against a real filesystem measures how fast a loaded machine delivers inotify events, not what this
+// code does — the same "green on a box, red on a busy runner" trap _tools/testing/src/vitest.ts describes.
+// Reached without a watcher in front of it, the rule answers to timers the test owns.
+export const createPathBatcher = (emit: (paths: string[]) => void): PathBatcher => {
+    const pending = new Set<string>();
+    let timer: ReturnType<typeof setTimeout> | undefined;
+
+    const flush = (): void => {
+        timer = undefined;
+        if (pending.size === 0) {
+            return;
+        }
+        const paths = pending.size > MAX_PATHS ? [] : [...pending];
+        pending.clear();
+        emit(paths);
+    };
+
+    return {
+        add(path) {
+            pending.add(path);
+            timer ??= setTimeout(flush, DEBOUNCE_MS);
+        },
+    };
+};
 
 export interface WorkspaceWatch {
     subscribe(listener: (paths: string[]) => void): () => void;
@@ -110,26 +143,14 @@ export const createIsolatedWorkspaceWatch = (root: string, logger: Logger): Work
 
 export const createWorkspaceWatch = (root: string, logger?: Logger): WorkspaceWatch => {
     const listeners = new Set<(paths: string[]) => void>();
-    const pending = new Set<string>();
-    let timer: ReturnType<typeof setTimeout> | undefined;
-
-    const flush = (): void => {
-        timer = undefined;
-        if (pending.size === 0) {
-            return;
-        }
-        const paths = pending.size > MAX_PATHS ? [] : [...pending];
-        pending.clear();
+    const batcher = createPathBatcher((paths) => {
         for (const listener of listeners) {
             listener(paths);
         }
-    };
+    });
 
     const watcher = watch(root, { ignoreInitial: true, followSymlinks: false, ignored: (path) => isWatchIgnored(root, path) });
-    watcher.on("all", (_event, abs) => {
-        pending.add(toRelPath(root, abs));
-        timer ??= setTimeout(flush, DEBOUNCE_MS);
-    });
+    watcher.on("all", (_event, abs) => batcher.add(toRelPath(root, abs)));
     // A watch hiccup (inotify limit, transient EACCES) must not take the daemon down — the manual Refresh still
     // works, so degrade rather than crash on an unhandled 'error' event. Logged, not swallowed: a dead watcher
     // means live refresh silently stops, and the log line is the only trace of why.
