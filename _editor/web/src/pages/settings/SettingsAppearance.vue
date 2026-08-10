@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Row, RowGroup, Segmented, useExplorerStyle, useTextSize, useTheme } from "@intentic/ui";
+import { ColorPicker, Row, RowGroup, Segmented, useExplorerStyle, useTextSize, useTheme } from "@intentic/ui";
 import { explorerTreatment } from "@intentic/ui";
 import ToggleSwitch from "primevue/toggleswitch";
 import { computed, ref } from "vue";
@@ -10,14 +10,14 @@ import { useFileNesting } from "../../composables/workspace/useFileNesting";
 import { useImportedTheme } from "../../composables/theme/useImportedTheme";
 import { useIconRailSize } from "../../composables/useIconRailSize";
 
-/* Appearance: how the workspace looks for this account — color scheme (data-mode), brand style (data-theme),
- * file-tree treatment, which tabs the terminal strip carries, and an imported VSCode/OpenVSX theme.
- * Each recolors/re-renders the whole UI
+/* Appearance: how the workspace looks for this account — color scheme (data-mode), the one colour the whole app
+ * is built out of, file-tree treatment, which tabs the terminal strip carries, and an imported VSCode/OpenVSX
+ * theme. Each recolors/re-renders the whole UI
  * live, so most of the app is the preview; the Explorer gets a small inline sample because its tree isn't on
  * this page. Laid out as grouped rows (RowGroup/Row) rather than a card per option, with the borderless
  * Segmented control and the Explorer preview flush in the row's #below. */
 
-const { scheme, set: setScheme, theme, setTheme, themes } = useTheme();
+const { scheme, set: setScheme, accent, setAccent } = useTheme();
 const { textSize, setTextSize } = useTextSize();
 const { explorerStyle, explorerStyles } = useExplorerStyle();
 const { iconRailSize } = useIconRailSize();
@@ -50,7 +50,6 @@ const schemeOptions = [
     { label: `Light`, value: `light` as const },
     { label: `Dark`, value: `dark` as const },
 ];
-const themeOptions = computed(() => themes.map((value) => ({ label: cap(value), value })));
 const explorerOptions = computed(() => explorerStyles.map((value) => ({ label: cap(value), value })));
 const iconRailOptions = [
     { label: `Compact`, value: `compact` as const },
@@ -84,8 +83,17 @@ const treatPreview = (entry: { name: string; type: "file" | "dir" }) =>
             <Row :icon="scheme === `dark` ? `moon` : `sun`" title="Theme" description="Light or dark appearance for the workspace.">
                 <template #control><Segmented :model-value="scheme" :options="schemeOptions" @update:model-value="setScheme" /></template>
             </Row>
-            <Row icon="palette" title="Style" description="Colors, type and shape of the workspace.">
-                <template #control><Segmented :model-value="theme" :options="themeOptions" @update:model-value="setTheme" /></template>
+            <!-- The colour the rest of the workspace is built out of. In #below rather than #control because it
+                 is two rails and a row of swatches, and because the app around it repaints as they move — a
+                 control this wide beside a title would push the description into a column. -->
+            <Row
+                icon="palette"
+                title="Colour"
+                description="The accent everything is built from — links, buttons, highlights and the tint of every surface."
+            >
+                <template #below>
+                    <ColorPicker :model-value="accent" @update:model-value="setAccent" />
+                </template>
             </Row>
             <!-- Above the rail row on purpose: this one moves the whole workspace, that one moves a column of it. -->
             <Row icon="expand" title="Text size" description="How large everything reads — text, spacing and controls together.">

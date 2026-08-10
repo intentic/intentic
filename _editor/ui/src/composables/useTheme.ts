@@ -1,19 +1,25 @@
 import { ref, type Ref } from "vue";
+import { DEFAULT_ACCENT, normalizeAccent, themeCss, themeVars } from "../themeColor.js";
 
 export type ColorScheme = "light" | "dark";
-export type BrandTheme = "ember" | "carbon" | "meadow" | "honey";
 
 const STORAGE_KEY = `ui-color-scheme`;
 const DARK_ATTRIBUTE = `data-mode`;
-const THEME_STORAGE_KEY = `ui-theme`;
-const THEME_ATTRIBUTE = `data-theme`;
+const ACCENT_STORAGE_KEY = `ui-accent`;
+/* The accent's ramps, pre-serialized. Written here purely so index.html's anti-flash script can restore them
+ * before the first paint without shipping the colour maths twice — see themeCss. This file stays the source of
+ * truth; the string is a cache of what the hex above implies, rewritten on every change. */
+const ACCENT_VARS_KEY = `ui-accent-vars`;
 
-const themes: BrandTheme[] = [`ember`, `carbon`, `meadow`, `honey`];
-
-/* Owns the active color scheme and brand theme as module-level singletons. The scheme flips the
- * `data-mode` attribute on <html>, which is the selector both the PrimeVue dark preset and the role
- * tokens key off, so a single write recolors PrimeVue components and Tailwind surfaces together.
- * The brand theme flips `data-theme` (absent = ember), which themes.css keys off for token overrides. */
+/* Owns the active color scheme and accent colour as module-level singletons. The scheme flips the `data-mode`
+ * attribute on <html>, which is the selector both the PrimeVue dark preset and the role tokens key off, so a
+ * single write recolors PrimeVue components and Tailwind surfaces together.
+ *
+ * The accent is a colour rather than one of a handful of named themes, so it cannot be an attribute with a
+ * stylesheet block behind it: it is written as inline custom properties on <html>, which beat the ramps
+ * declared in primitive-colors.css and re-resolve every semantic scale, role token and Tailwind utility built
+ * on them. (The same mechanism an imported VSCode theme already uses, one tier further down: this sets the
+ * primitive RAMPS, an import overrides the chrome tokens on top and still wins.) */
 
 const read = (): ColorScheme => {
     try {
@@ -52,42 +58,44 @@ const toggle = (): void => {
     set(scheme.value === `dark` ? `light` : `dark`);
 };
 
-const isBrandTheme = (value: unknown): value is BrandTheme => themes.includes(value as BrandTheme);
-
-const readTheme = (): BrandTheme => {
+const readAccentSetting = (): string => {
     try {
-        const stored = localStorage.getItem(THEME_STORAGE_KEY);
-        if (isBrandTheme(stored)) {
+        const stored = localStorage.getItem(ACCENT_STORAGE_KEY);
+        // Anything that isn't a colour — a hand-edited value, a leftover from another app — reads as the default.
+        if (stored !== null && /^#[0-9a-fA-F]{6}$/.test(stored)) {
             return stored;
         }
     } catch {
-        // Storage may be unavailable (private mode); fall back to the attribute.
+        // Storage may be unavailable (private mode); the default accent stands.
     }
-    const attribute = document.documentElement.getAttribute(THEME_ATTRIBUTE);
-    return isBrandTheme(attribute) ? attribute : `ember`;
+    return DEFAULT_ACCENT;
 };
 
-const applyTheme = (value: BrandTheme): void => {
-    if (value === `ember`) {
-        document.documentElement.removeAttribute(THEME_ATTRIBUTE);
-    } else {
-        document.documentElement.setAttribute(THEME_ATTRIBUTE, value);
+const applyAccent = (value: string): void => {
+    const style = document.documentElement.style;
+    // Property by property rather than a cssText assignment: an imported VSCode theme writes its own overrides
+    // onto this same element, and replacing the whole declaration would drop them.
+    for (const [name, colour] of Object.entries(themeVars(value))) {
+        style.setProperty(name, colour);
     }
 };
 
-const theme: Ref<BrandTheme> = ref(readTheme());
-applyTheme(theme.value);
+const accent: Ref<string> = ref(readAccentSetting());
+applyAccent(accent.value);
 
-const setTheme = (value: BrandTheme): void => {
-    theme.value = value;
-    applyTheme(value);
+/** Repaint the app in `hex` (`#rrggbb`), snapped to the accent's own lightness, and remember it. */
+const setAccent = (hex: string): void => {
+    const value = normalizeAccent(hex);
+    accent.value = value;
+    applyAccent(value);
     try {
-        localStorage.setItem(THEME_STORAGE_KEY, value);
+        localStorage.setItem(ACCENT_STORAGE_KEY, value);
+        localStorage.setItem(ACCENT_VARS_KEY, themeCss(value));
     } catch {
         // Storage may be unavailable (private mode); the in-memory ref still holds.
     }
 };
 
 export function useTheme() {
-    return { scheme, set, toggle, theme, setTheme, themes };
+    return { scheme, set, toggle, accent, setAccent };
 }

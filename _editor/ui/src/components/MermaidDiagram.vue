@@ -23,7 +23,7 @@ import { useTheme } from "../composables/useTheme.js";
 
 const { code } = defineProps<{ code: string }>();
 
-const { scheme, theme } = useTheme();
+const { scheme, accent } = useTheme();
 
 const host = ref<HTMLElement>();
 const drawn = ref<string>();
@@ -81,8 +81,8 @@ const floorWidth = (): void => {
     }
 };
 
-// The brand theme is watched beside the scheme because it moves the same tokens the diagram was painted from.
-watch(() => [code, scheme.value, theme.value], draw, { immediate: true });
+// The accent is watched beside the scheme because it moves the same tokens the diagram was painted from.
+watch(() => [code, scheme.value, accent.value], draw, { immediate: true });
 watch(drawn, () => void nextTick(floorWidth));
 </script>
 

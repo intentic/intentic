@@ -59,7 +59,7 @@ const channel = (n: number): string => n.toString(16).padStart(2, `0`);
 // browsers now serialize a computed color back as oklch()/color() rather than rgb(). Resolve --color-canvas
 // through a color-property probe (a custom property would serialize back unresolved), then rasterize that
 // value on a 1×1 canvas and read the sRGB bytes — format-agnostic, so it survives whatever string the
-// browser hands back. Read live, so it reflects the active data-mode + data-theme.
+// browser hands back. Read live, so it reflects the active scheme and the accent the reader picked.
 const resolveEditorBg = (): string => {
     const probe = document.createElement(`span`);
     probe.style.color = `var(--color-canvas)`;
@@ -115,11 +115,11 @@ const init = async (): Promise<typeof Monaco> => {
     // Load a restored imported theme before the first bridge, so a reload lands straight on the imported syntax.
     await ensureImportedTheme(core);
     applyBridge(monaco, core);
-    // One active theme at a time. Re-run the bridge (not a bare setTheme) on a scheme OR brand-theme change,
-    // so the editor background is re-resolved from --color-canvas and re-baked into the now-active theme —
-    // keeping the editor on the canvas token across light/dark and brand switches (module-lifetime watcher).
-    const { scheme, theme } = useTheme();
-    watch([scheme, theme], () => applyBridge(monaco, core));
+    // One active theme at a time. Re-run the bridge (not a bare setTheme) on a scheme OR accent change, so the
+    // editor background is re-resolved from --color-canvas and re-baked into the now-active theme — keeping the
+    // editor on the canvas token across light/dark and colour changes (module-lifetime watcher).
+    const { scheme, accent } = useTheme();
+    watch([scheme, accent], () => applyBridge(monaco, core));
     /* Importing / removing a VSCode theme re-themes the editor's syntax too: load the new theme (if any), then
      * re-run the bridge so Monaco switches onto it (or falls back to the stock theme when the import is removed).
      *

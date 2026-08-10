@@ -6,7 +6,7 @@
  * These are their own OKLch ramps (not the primitive amber/blue/green/red) so the category
  * palette is tunable in one place and can carry hues the primitives don't (pink, violet, cyan).
  * Light values sit ~600 (contrast on light canvas); dark values ~400 (contrast on dark canvas).
- * `folder` tracks the brand accent so folders adopt the active theme (ember/carbon/meadow/honey).
+ * `folder` tracks the brand accent, so folders are painted in whatever colour the reader picked.
  * Categories that read as "quiet" (lock, generic) intentionally have no token — the tree maps them
  * to the existing muted role. */
 

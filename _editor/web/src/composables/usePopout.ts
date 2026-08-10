@@ -115,18 +115,23 @@ const RECLAIM_GRACE_MS = 2500;
 // under it being torn down.
 const HANDBACK_GRACE_MS = 2500;
 
-// What the design system keys off <html>: the color scheme (the PrimeVue dark preset and the role tokens), the
-// brand theme (themes.css token overrides), and the base text size (tokens.css's root font-size, which every
-// rem in the window is a multiple of). The pop-out page ships a static guess at the first two for its first
-// paint and nothing else, so all three are mirrored from the live root here and re-mirrored on every change.
+// What the design system keys off <html>: the color scheme (the PrimeVue dark preset and the role tokens) and
+// the base text size (tokens.css's root font-size, which every rem in the window is a multiple of). The pop-out
+// page ships a static guess at the scheme for its first paint and nothing else, so both are mirrored from the
+// live root here and re-mirrored on every change.
 //
 // The size has to be on THIS list rather than left to the pop-out page's own restore script: that script runs
 // once, at load, so a window opened before the reader changed the setting would sit at the old size for as long
 // as it stayed open — the whole panel, a size out of step with the app it was torn off.
-const ROOT_ATTRIBUTES = [`data-mode`, `data-theme`, `data-text-size`];
+const ROOT_ATTRIBUTES = [`data-mode`, `data-text-size`];
 
 const mirrorRoot = (doc: Document): void => {
     doc.documentElement.className = document.documentElement.className;
+    /* The COLOUR is not an attribute — the accent's ramps (and an imported VSCode theme's tokens layered over
+     * them) are inline custom properties on the root element, so the window takes that declaration block
+     * wholesale. Copied as text rather than property by property, which means a window keeps up with anything
+     * written there later without this file having to keep a list of what that might be. */
+    doc.documentElement.style.cssText = document.documentElement.style.cssText;
     for (const attribute of ROOT_ATTRIBUTES) {
         const value = document.documentElement.getAttribute(attribute);
         if (value === null) {
@@ -530,7 +535,9 @@ export const createPopout = (name: string, title: string, size: () => { width: n
         win.addEventListener(`beforeunload`, released);
         win.addEventListener(`pagehide`, released);
         rootObserver = new MutationObserver(() => mirrorRoot(win.document));
-        rootObserver.observe(document.documentElement, { attributes: true, attributeFilter: [...ROOT_ATTRIBUTES, `class`] });
+        // `style` rides the same filter as the attributes: repainting the app in a new accent writes custom
+        // properties there, and a popped-out panel left on the old colour is the most visible way to be stale.
+        rootObserver.observe(document.documentElement, { attributes: true, attributeFilter: [...ROOT_ATTRIBUTES, `class`, `style`] });
     };
 
     /* What this store tells a window it owns. `live` is the panel being DRAWN out there and nothing else — a

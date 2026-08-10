@@ -42,6 +42,8 @@
  * mark is painted from CSS custom properties that the mode flips, so switching theme repaints without re-running
  * any of this and without a second fetch. */
 
+import { clamp01, clampBetween, hexToRgb, type Oklch, oklchToHex, rgbToOklch, srgbToLinear } from "./oklch.js";
+
 /** A brand's four resolved colours — the mark and its plate, in each scheme. */
 export interface BrandPalette {
     readonly markLight: string;
@@ -78,93 +80,11 @@ interface Scheme {
 const DARK: Scheme = { direction: 1, separation: 0.45, plateLightness: 0.27, plateLimit: 0.16, plateChroma: 0.04, inkLightness: 0.97 };
 const LIGHT: Scheme = { direction: -1, separation: 0.42, plateLightness: 0.955, plateLimit: 0.985, plateChroma: 0.03, inkLightness: 0.15 };
 
-interface Lch {
-    readonly L: number;
-    readonly C: number;
-    readonly h: number;
-}
-
-const srgbToLinear = (c: number): number => (c <= 0.04045 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4));
-const linearToSrgb = (c: number): number => (c <= 0.0031308 ? c * 12.92 : 1.055 * Math.pow(c, 1 / 2.4) - 0.055);
-const clamp01 = (c: number): number => Math.min(1, Math.max(0, c));
-const clampBetween = (value: number, a: number, b: number): number => Math.min(Math.max(a, b), Math.max(Math.min(a, b), value));
-
-const hexToRgb = (hex: string): readonly [number, number, number] | undefined => {
-    const raw = hex.trim().replace(/^#/, ``);
-    // Both forms the wild serves: #rgb and #rrggbb.
-    const full = raw.length === 3 ? [...raw].map((c) => `${c}${c}`).join(``) : raw;
-    if (!/^[0-9a-fA-F]{6}$/.test(full)) {
-        return undefined;
-    }
-    return [parseInt(full.slice(0, 2), 16) / 255, parseInt(full.slice(2, 4), 16) / 255, parseInt(full.slice(4, 6), 16) / 255] as const;
-};
-
-const rgbToHex = (rgb: readonly [number, number, number]): string =>
-    `#${rgb
-        .map((c) =>
-            Math.round(clamp01(c) * 255)
-                .toString(16)
-                .padStart(2, `0`),
-        )
-        .join(``)}`;
-
-// --- sRGB ⇄ OKLab. The matrices are Björn Ottosson's published constants; OKLab is used rather than HSL
-// because lightness there is perceptual, so moving L leaves the hue where the brand put it — and so that a
-// distance in L means the same thing on a near-black plate as on a near-white one. HSL's `l` does neither:
-// raising it on a saturated blue swings the hue visibly toward cyan.
-const rgbToOklch = (rgb: readonly [number, number, number]): Lch => {
-    const [R, G, B] = [srgbToLinear(rgb[0]), srgbToLinear(rgb[1]), srgbToLinear(rgb[2])];
-    const l = Math.cbrt(0.4122214708 * R + 0.5363325363 * G + 0.0514459929 * B);
-    const m = Math.cbrt(0.2119034982 * R + 0.6806995451 * G + 0.1073969566 * B);
-    const s = Math.cbrt(0.0883024619 * R + 0.2817188376 * G + 0.6299787005 * B);
-    const L = 0.2104542553 * l + 0.793617785 * m - 0.0040720468 * s;
-    const a = 1.9779984951 * l - 2.428592205 * m + 0.4505937099 * s;
-    const b = 0.0259040371 * l + 0.7827717662 * m - 0.808675766 * s;
-    return { L, C: Math.hypot(a, b), h: Math.atan2(b, a) };
-};
-
-const oklchToRgb = ({ L, C, h }: Lch): readonly [number, number, number] => {
-    const a = Math.cos(h) * C;
-    const b = Math.sin(h) * C;
-    const l = (L + 0.3963377774 * a + 0.2158037573 * b) ** 3;
-    const m = (L - 0.1055613458 * a - 0.0638541728 * b) ** 3;
-    const s = (L - 0.0894841775 * a - 1.291485548 * b) ** 3;
-    return [
-        linearToSrgb(4.0767416621 * l - 3.3077115913 * m + 0.2309699292 * s),
-        linearToSrgb(-1.2684380046 * l + 2.6097574011 * m - 0.3413193965 * s),
-        linearToSrgb(-0.004196086 * l - 0.7034186147 * m + 1.707614701 * s),
-    ] as const;
-};
-
-// A hair of slack, so a colour that lands on the edge of the gamut by float error is not treated as outside it
-// and mapped for nothing.
-const inGamut = (rgb: readonly [number, number, number]): boolean => rgb.every((c) => c >= -1e-4 && c <= 1.0001);
-// Twenty halvings of the chroma range resolve far finer than the 8-bit channel this lands in.
-const GAMUT_STEPS = 20;
-
-/* Out of gamut, CHROMA is what gives way — never lightness, never hue. This is the other half of "guaranteed by
- * construction": the placement below asks for a lightness, and sRGB has no bright saturated red or deep vivid
- * yellow to answer with, so something has to yield. Clipping each channel at 0 and 1 (which is what this did
- * first) yields LIGHTNESS, quietly — the colour lands somewhere near the requested one, a little off the
- * requested hue, and a little short of the separation that was the entire point. Holding L and h and searching
- * for the chroma that fits keeps the promise and spends the brand's saturation to do it, which is CSS Color 4's
- * gamut mapping and the same trade every browser makes for an out-of-gamut oklch(). */
-const oklchToHex = (colour: Lch): string => {
-    if (inGamut(oklchToRgb(colour))) {
-        return rgbToHex(oklchToRgb(colour));
-    }
-    let fits = 0;
-    let over = colour.C;
-    for (let i = 0; i < GAMUT_STEPS; i += 1) {
-        const mid = (fits + over) / 2;
-        if (inGamut(oklchToRgb({ ...colour, C: mid }))) {
-            fits = mid;
-        } else {
-            over = mid;
-        }
-    }
-    return rgbToHex(oklchToRgb({ ...colour, C: fits }));
-};
+/* The sRGB ⇄ OKLCH conversions, the gamut mapping and the small clamps all live in oklch.ts — the placement
+ * below is this file's own, the colour space is not. Out of gamut, that module holds L and h and spends
+ * CHROMA, which is what keeps the promise made here: the placement asks for a lightness, sRGB has no bright
+ * saturated red to answer with, and clipping channels instead would yield the lightness quietly and leave the
+ * mark short of the separation that was the entire point. */
 
 const lightnessOf = (hex: string): number => rgbToOklch(hexToRgb(hex) ?? ([0, 0, 0] as const)).L;
 
@@ -191,7 +111,7 @@ export const contrastRatio = (a: string, b: string): number => {
 };
 
 /** One scheme's mark and plate for a brand: the plate slides for what it can, the mark covers the rest. */
-const resolve = (brand: Lch, scheme: Scheme): { readonly mark: string; readonly plate: string } => {
+const resolve = (brand: Oklch, scheme: Scheme): { readonly mark: string; readonly plate: string } => {
     // A hueless brand has nothing to protect at its own lightness, so it starts from the scheme's ink and
     // everything below treats THAT as the lightness worth keeping.
     const wanted = brand.C < ACHROMATIC ? scheme.inkLightness : brand.L;

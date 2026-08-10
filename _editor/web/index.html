@@ -8,7 +8,8 @@
              registered lazily, only when the user enables push notifications, and handles push alone — it
              deliberately caches nothing, since the app is a live daemon client. -->
         <link rel="manifest" href="/manifest.webmanifest" />
-        <!-- ponytail: approximates the dark canvas token oklch(16% 0.007 65); regenerate if themes.css changes. -->
+        <!-- ponytail: approximates the dark canvas token oklch(16% 0.007 65) at the default accent; the picked
+             colour retints it, but this is only the chrome around the first paint. -->
         <meta name="theme-color" content="#141210" />
         <meta name="mobile-web-app-capable" content="yes" />
         <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
@@ -33,15 +34,20 @@
                 }
             }
         </script>
-        <!-- Anti-flash: restore the saved brand theme and text size before first paint (same idea as the static
+        <!-- Anti-flash: restore the saved accent colour and text size before first paint (same idea as the static
              data-mode above, but a per-user choice can't be static). A text size arriving late is worse than a
              late colour — the whole layout reflows — so it is restored here rather than only in useTextSize.ts,
-             which stays the source of truth for both. The default size carries no attribute. -->
+             which stays the source of truth for both. The default size carries no attribute.
+
+             The accent is written as the ramp declarations themselves, which useTheme.ts keeps serialized in
+             `ui-accent-vars` for exactly this: the colour maths that expands one hex into two twelve-step ramps
+             lives in themeColor.ts, and a copy of it inlined here to survive one frame would be a second one to
+             keep in step. Assigning `style` outright is safe only because nothing else has written to the root
+             element this early — from here on useTheme sets the properties one at a time. -->
         <script>
             try {
-                var uiTheme = localStorage.getItem("ui-theme");
-                if (["carbon", "meadow", "honey"].indexOf(uiTheme) !== -1)
-                    document.documentElement.setAttribute("data-theme", uiTheme);
+                var accentVars = localStorage.getItem("ui-accent-vars");
+                if (accentVars) document.documentElement.setAttribute("style", accentVars);
                 var uiTextSize = localStorage.getItem("ui-text-size");
                 if (["compact", "large"].indexOf(uiTextSize) !== -1)
                     document.documentElement.setAttribute("data-text-size", uiTextSize);
@@ -53,10 +59,11 @@
         <link rel="icon" type="image/png" href="/assets/intentic-logo-sized.png" />
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-        <!-- All theme fonts load upfront (Inter=ember, Space Grotesk=carbon, DM Sans=meadow) plus
-             JetBrains Mono for --font-mono; display=swap keeps it non-blocking. -->
+        <!-- The app's two faces: Inter for --font-sans, JetBrains Mono for --font-mono. display=swap keeps it
+             non-blocking. (Space Grotesk and DM Sans were loaded here for two of the brand themes; the accent
+             picker that replaced them changes colour, never type.) -->
         <link
-            href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Space+Grotesk:wght@400;500;600;700&family=DM+Sans:wght@400;500;700&family=JetBrains+Mono:wght@400;500;600&display=swap"
+            href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap"
             rel="stylesheet"
         />
     </head>

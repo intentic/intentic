@@ -38,8 +38,8 @@ const read = (): TextSize => {
 };
 
 const apply = (value: TextSize): void => {
-    // `default` is the stylesheet's own value, so it is the ABSENCE of the attribute — same shape as the ember
-    // theme in useTheme, and it keeps the markup quiet for the size almost everyone runs.
+    // `default` is the stylesheet's own value, so it is the ABSENCE of the attribute — which keeps the markup
+    // quiet for the size almost everyone runs.
     if (value === `default`) {
         document.documentElement.removeAttribute(ATTRIBUTE);
     } else {

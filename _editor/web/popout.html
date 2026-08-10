@@ -44,6 +44,10 @@
         <script>
             try {
                 if (localStorage.getItem("ui-color-scheme") === "light") document.documentElement.removeAttribute("data-mode");
+                // The accent's ramps, as index.html restores them — the opener mirrors this element the moment
+                // it adopts the window, so this only covers the frames before that.
+                var accentVars = localStorage.getItem("ui-accent-vars");
+                if (accentVars) document.documentElement.setAttribute("style", accentVars);
                 var uiTextSize = localStorage.getItem("ui-text-size");
                 if (["compact", "large"].indexOf(uiTextSize) !== -1) document.documentElement.setAttribute("data-text-size", uiTextSize);
             } catch (e) {}

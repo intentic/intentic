@@ -4,8 +4,8 @@
  * natively — so THIS module does the hard, valuable half: mapping the ~13 workbench colors that carry a theme's
  * visual identity onto the app's semantic CSS variables (`--color-canvas`, `--color-content`, `--color-line`, …).
  *
- * Everything here is pure and unit-tested; wiring the result into the live theme switch (registering it as a
- * `data-theme` brand + feeding `tokenColors` to Shiki/Monaco) is the follow-on. The one piece of real rigor is
+ * Everything here is pure and unit-tested; wiring the result into the live app (writing the tokens over the
+ * picked accent's ramps + feeding `tokenColors` to Shiki/Monaco) is the follow-on. The one piece of real rigor is
  * color handling: VSCode colors are `#RGB[A]` / `#RRGGBB[AA]`, and borders/hovers are frequently ALPHA'd
  * (`#ffffff0a`), so a naive alpha-strip yields the wrong solid — we composite over the resolved canvas instead. */
 
