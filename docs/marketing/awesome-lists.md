@@ -173,6 +173,12 @@ moved.
 | RoggeOhta/awesome-codex-cli | [#186](https://github.com/RoggeOhta/awesome-codex-cli/pull/186) | GUI & Desktop Apps | open, clean |
 | andyrewlee/awesome-agent-orchestrators | [#148](https://github.com/andyrewlee/awesome-agent-orchestrators/pull/148) | Parallel Coding Agents — Desktop & Web, alphabetical | open, clean (added 2026-08-10) |
 
+**The last row is the best-fitting list on this page, and it was found late.** Its taxonomy is ours exactly —
+the Desktop & Web section is browser and mobile agent workspaces with diff review, Garcon and IM.codes sit two
+lines from our entry — and unlike the bigger lists it actually merges: 89 merged PRs against 33 open, last push
+two days before we submitted. Ranked by fit times liveness it beats every Tier 1 entry above, which is the
+argument for weighting *whether a list merges* as heavily as its star count when hunting for the next one.
+
 ## The 2026-08-10 incident, and the four rules that come out of it
 
 A second round of work on 2026-08-10 re-pushed the jamesmurdza branch and opened a duplicate PR
@@ -236,6 +242,9 @@ Codex list a legitimate target rather than a stretch.
 3. **At 1k stars** — promote the steven2358 entry from Discoveries to the main list.
 4. **At 50 stars** — kyrolabs/awesome-ade.
 5. **2026-12-05** — awesome-selfhosted, with the YAML above.
+
+The directories, launch platforms and community posts that are not GitHub lists live in
+[directories.md](directories.md).
 
 The canonical one-line description for standard awesome format, reused everywhere so the wording compounds:
 
