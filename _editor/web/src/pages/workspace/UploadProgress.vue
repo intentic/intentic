@@ -26,7 +26,7 @@ const {
     setupProjects,
     installAfterUpload,
     setInstallAfterUpload,
-    installStarted,
+    installQueued,
     installError,
     installSettled,
     dismiss,
@@ -74,7 +74,7 @@ watch(
         // Hold the panel until the install request has settled, so a clean finish can't vanish before saying
         // what it kicked off. Longer once something started — that line is news, not just an acknowledgement.
         if (isFinished && failedCount.value === 0 && isSettled && installError.value === undefined) {
-            timer = setTimeout(dismiss, installStarted.value.length > 0 ? 6000 : 3000);
+            timer = setTimeout(dismiss, installQueued.value.length > 0 ? 6000 : 3000);
         }
     },
     { immediate: true },
@@ -236,20 +236,22 @@ onBeforeUnmount(() => {
                 <span class="flex-1 font-medium">Starting install…</span>
             </div>
 
-            <!-- Running. The tmux panel owns the real output, so point there rather than mirroring it here. -->
-            <template v-else-if="installStarted.length > 0">
+            <!-- Queued through the workspace lease. It may start immediately, or after active turns drain. -->
+            <template v-else-if="installQueued.length > 0">
                 <div class="flex items-center gap-2">
-                    <Icon name="spinner" class="text-sm text-muted" spin />
-                    <span class="flex-1 font-medium">Installing dependencies…</span>
+                    <Icon name="clock" class="text-sm text-muted" />
+                    <span class="flex-1 font-medium">Dependency install queued</span>
                 </div>
-                <p class="mt-0.5 text-2xs text-subtle">Running in the terminal panel — you can watch, cancel or re-run it there.</p>
+                <p class="mt-0.5 text-2xs text-subtle">
+                    It starts after active agent turns finish, then appears in Work terminals; checks and the outcome appear in Activity.
+                </p>
             </template>
 
-            <!-- Asked, nothing to do: the daemon found every project already installed. Said out loud because
-                 silence here reads as "it ignored me", which is what sends people to re-drop the folder. -->
+            <!-- Asked, but no project was installable: usually already ready, possibly unsupported. Keep the
+                 answer neutral rather than claiming success the daemon did not report. -->
             <div v-else-if="installAfterUpload" class="flex items-center gap-2 text-2xs text-subtle">
-                <Icon name="check-circle" class="text-sm text-success" />
-                <span class="flex-1">Dependencies already installed</span>
+                <Icon name="info-circle" class="text-sm text-muted" />
+                <span class="flex-1">No dependency install queued</span>
             </div>
         </div>
     </div>

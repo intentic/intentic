@@ -43,8 +43,8 @@ const servicesWith = (overrides: Partial<Services> = {}): Services =>
     unstubbed<Services>("services", {
         tools: [],
         workspace: unstubbed<Services["workspace"]>("workspace", { root: ROOT }),
-        // The dependency probe runs for every runtime now, so every arm reaches it — see honoured().
         processes: unstubbed<Services["processes"]>("processes", { running: () => false }),
+        dependencies: unstubbed<Services["dependencies"]>("dependencies", { status: async () => [], issueAt: async () => undefined }),
         capabilities: unstubbed<Services["capabilities"]>("capabilities", { list: async () => [] }),
         // Read on every turn, not only a pinned one: an unattended wake that named no persona is exactly the
         // case whose answer must be "no accounts", so the read cannot be conditional on there being one.

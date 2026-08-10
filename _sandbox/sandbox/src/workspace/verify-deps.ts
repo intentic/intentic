@@ -4,6 +4,8 @@ import type { WorkspaceEvent } from "@intentic/sandbox-contract";
 import type { Logger } from "pino";
 import type { ActivityStore } from "../activity/activity-store.js";
 import type { ManagedProcesses } from "../processes/managed-processes.js";
+import type { DependencyOrigin } from "./dependency-origin.js";
+import type { WorkspaceMaintenanceGate } from "./maintenance-gate.js";
 import { statePath } from "./state-paths.js";
 import type { VerifyStore } from "./verify-store.js";
 import { installPanelKey, workspaceSetup } from "./workspace-setup.js";
@@ -18,16 +20,20 @@ import { installPanelKey, workspaceSetup } from "./workspace-setup.js";
  * install runs in `<project>--install`, and every verdict lands in the activity feed. The chain's design rule
  * is NO HIDDEN MAGIC: each step leaves a trace the owner can open.
  *
+ * Which is why it also runs for the installs the reconciler starts BY ITSELF, off a pull or a hand-edited
+ * manifest rather than off a land. A land announces itself in the conversation that caused it — a line in the
+ * transcript and a button onto the terminal; a pull announces itself nowhere, so without this chain the whole
+ * visible trace of a background install would be a terminal row appearing in a list. Those runs have no cause to
+ * attribute, which changes exactly one thing: they record and they do not wake.
+ *
  * WHAT COUNTS AS THE CHECKS. The project's own word for it: a `verify` script first (this repo's convention
  * for "the gate CI decides on"), else `test`. No script ⇒ the project has no checks to run, and the honest
  * answer is an activity entry saying so, not a guessed command. Scripts are a node-manifest concept, so a
  * python project reads as check-less for now — same honest entry.
  *
- * SCHEDULING RULES, inherited from the reconciler and for the same reasons: never while a turn is live (the
- * check reads the very node_modules a turn's overlay has as its lowerdir, and it would race the CPU the
- * owner is watching), defer-and-retry rather than queue, latest cause wins. One chain at a time across the
- * daemon — checks are minutes, and two verifies interleaving their panels would tell the user less than one
- * telling the truth slowly.
+ * SCHEDULING RULES, inherited from the coordinator and for the same reasons: verification holds the maintenance
+ * writer lease, queued behind the install and ahead of turns that arrived meanwhile. Origins stay attached to
+ * their own batches. One chain runs at a time across the daemon, so panels and Activity tell one ordered story.
  *
  * THE EXIT CODE comes out of the panel by wrapping the command: tmux reports a pane's foreground command,
  * never an exit status, so the wrapped line tees output to a log (for the event's bounded tail) and drops
@@ -44,48 +50,35 @@ const LOG_TAIL = 2_000;
 // Polls of the panel sweep while an install or a check runs. Nothing here is latency-sensitive; the sweep
 // itself only samples every 2s.
 const POLL_MS = 2_000;
-// How long the verifier watches a run before giving up on OBSERVING it (the panel itself is left alone — the
-// owner may be watching a legitimately slow suite). Giving up is recorded honestly in the activity feed.
+// How long the verifier watches a run before stopping it. Releasing maintenance while the process still reads
+// the tree would break the lease's promise, so a timeout is visible in Activity and terminal output, then ends.
 const WATCH_MAX_MS = 30 * 60_000;
-// A deferred chain retries on the reconciler's own cadence, and for the same reason: nothing is lost by
-// waiting — the verdict is about the tree, and the tree will still be there.
-const RETRY_MS = 30_000;
-
-// The land that set this chain off — what the emitted event names as its cause. Threaded through rather than
-// re-derived because by the time a check finishes, the fleet has moved: the triggering land is the one fact
-// the event must carry that the tree can no longer answer.
-export interface LandContext {
-    readonly agentId: string;
-    readonly title?: string;
-    readonly branch: string;
-    readonly repos: WorkspaceEvent["repos"];
-}
 
 export interface VerifyDeps {
     readonly workspace: { readonly root: string };
     readonly processes: ManagedProcesses;
-    readonly agents: { readonly liveSessionIds: () => readonly string[] };
+    readonly maintenance: WorkspaceMaintenanceGate;
     readonly logger: Logger;
     readonly verifyStore: VerifyStore;
     readonly activity: Pick<ActivityStore, "append">;
-    // Bound to emitWorkspaceEvent by the land path — an injected sink here so the chain neither needs the
-    // whole services object nor a wake fn, and a test reads announcements off an array.
-    readonly emit: (event: WorkspaceEvent) => void;
+    /* Bound to emitWorkspaceEvent by the land path — an injected sink here so the chain neither needs the whole
+     * services object nor a wake fn, and a test reads announcements off an array.
+     *
+     * Optional because a chain with no cause provably never reaches it (see verifyProject): the reconciler's own
+     * installs have no land to name, so the caller that starts them has no wake to bind and is not asked for one. */
+    readonly emit?: (event: WorkspaceEvent) => void;
     // Test dials; the daemon takes the defaults.
     readonly pollMs?: number;
-    readonly retryMs?: number;
     readonly watchMaxMs?: number;
 }
 
 interface PendingVerify {
     readonly deps: VerifyDeps;
-    readonly context: LandContext;
+    readonly origin: DependencyOrigin;
     readonly dirs: readonly string[];
 }
 
-// One armed retry and one live chain for the whole daemon — the reconciler's shape, chained one stage later.
-let retry: ReturnType<typeof setTimeout> | undefined;
-let pending: PendingVerify | undefined;
+const pending: PendingVerify[] = [];
 let running = false;
 
 const sleep = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms));
@@ -102,15 +95,20 @@ const watchPanel = async (deps: VerifyDeps, key: string): Promise<boolean> => {
     return false;
 };
 
-const activity = (deps: VerifyDeps, type: string, content: string, outcome: "ok" | "error", context: LandContext): void => {
+// A causeless run files under no conversation, which the feed already has a shape for — both fields are
+// optional on an activity row, and a row with neither reads as the daemon acting on its own, which is what
+// happened. Filing it under an unrelated conversation to avoid an empty column would be worse than a blank.
+const activity = (deps: VerifyDeps, type: string, content: string, outcome: "ok" | "error", origin: DependencyOrigin): void => {
+    const conversationId = origin.kind === "land" ? origin.agentId : origin.kind === "request" ? origin.conversationId : undefined;
+    const title = origin.kind === "land" || origin.kind === "request" ? origin.title : undefined;
     void deps.activity
         .append({
             direction: "system",
             type,
             content,
             outcome,
-            conversationId: context.agentId,
-            ...(context.title !== undefined ? { title: context.title } : {}),
+            ...(conversationId === undefined ? {} : { conversationId }),
+            ...(title === undefined ? {} : { title }),
         })
         .catch((error: unknown) => deps.logger.warn({ err: error, type }, "dependency verify: activity append failed"));
 };
@@ -139,7 +137,7 @@ export const checkCommandFor = async (root: string, dir: string, manager: string
 /* Run one project's check to a verdict: panel up, exit code out, store updated, edge announced. The wrapped
  * command is one zsh line; `pipestatus[1]` is the check's own exit, not tee's. */
 const verifyProject = async (verify: PendingVerify, dir: string, command: string): Promise<void> => {
-    const { deps, context } = verify;
+    const { deps, origin } = verify;
     const key = verifyPanelKey(dir);
     // Under .intentic (the daemon's own state dir, outside every repo) so a running check never dirties the
     // tree it is checking; named through statePath so the state table and this writer cannot drift.
@@ -152,12 +150,13 @@ const verifyProject = async (verify: PendingVerify, dir: string, command: string
         oneShot: true,
     });
     if (!(await watchPanel(deps, key))) {
+        await deps.processes.stop(key);
         activity(
             deps,
             "deps.verify_lost",
             `Checks for ${whereOf(dir)} (${command}) outran the daemon's watch window — verdict not recorded; see the ${key} terminal.`,
             "error",
-            context,
+            origin,
         );
         return;
     }
@@ -176,24 +175,29 @@ const verifyProject = async (verify: PendingVerify, dir: string, command: string
     }
     const verdict = await deps.verifyStore.record(dir, exitCode === 0 ? "green" : "red", Date.now());
     if (exitCode === 0) {
-        activity(deps, "deps.verify_green", `Checks green for ${whereOf(dir)} (${command}).`, "ok", context);
+        activity(deps, "deps.verify_green", `Checks green for ${whereOf(dir)} (${command}).`, "ok", origin);
     } else {
         activity(
             deps,
             "deps.verify_red",
             `Checks failed for ${whereOf(dir)} (${command}, exit ${exitCode}, attempt ${verdict.attempt}) — full output in the ${key} terminal.`,
             "error",
-            context,
+            origin,
         );
     }
-    if (verdict.edge !== undefined) {
-        deps.emit({
+    /* The EDGE is announced only when something can be pointed at as its cause. A wake payload is not a
+     * notification — a chore reads `repos` as a git span and works the change it names — so a causeless run has
+     * nothing to hand one, and an empty span sends the fix automation to look at a diff that does not exist.
+     * The verdict is still recorded and still visible in Activity; what a background install cannot do is start
+     * somebody else's work on a premise it made up. */
+    if (verdict.edge !== undefined && origin.kind === "land") {
+        deps.emit?.({
             event: verdict.edge === "broken" ? "deps.broken" : "deps.fixed",
-            agentId: context.agentId,
-            ...(context.title !== undefined ? { title: context.title } : {}),
-            branch: context.branch,
+            agentId: origin.agentId,
+            ...(origin.title !== undefined ? { title: origin.title } : {}),
+            branch: origin.branch,
             outcome: "landed",
-            repos: context.repos,
+            repos: origin.repos,
             deps: { project: dir, command, exitCode, attempt: verdict.attempt, logTail },
         });
     }
@@ -202,15 +206,16 @@ const verifyProject = async (verify: PendingVerify, dir: string, command: string
 /* One pass over the pending request. Installs first: a check against a half-installed tree would report the
  * install's absence as the code's failure, which is the exact misreading this whole chain exists to prevent. */
 const runChain = async (verify: PendingVerify): Promise<void> => {
-    const { deps, context } = verify;
+    const { deps, origin } = verify;
     for (const dir of verify.dirs) {
         if (deps.processes.running(installPanelKey(dir)) && !(await watchPanel(deps, installPanelKey(dir)))) {
+            await deps.processes.stop(installPanelKey(dir));
             activity(
                 deps,
                 "deps.install_lost",
                 `Install for ${whereOf(dir)} outran the daemon's watch window — checks not run; see the ${installPanelKey(dir)} terminal.`,
                 "error",
-                context,
+                origin,
             );
             return;
         }
@@ -229,7 +234,7 @@ const runChain = async (verify: PendingVerify): Promise<void> => {
                 "deps.install_failed",
                 `Install for ${whereOf(dir)} finished but the project is still ${status.state} — checks not run; see the ${installPanelKey(dir)} terminal.`,
                 "error",
-                context,
+                origin,
             );
             continue;
         }
@@ -240,7 +245,7 @@ const runChain = async (verify: PendingVerify): Promise<void> => {
                 "deps.verify_skipped",
                 `Dependencies installed for ${whereOf(dir)}, but it defines no verify or test script — nothing to check.`,
                 "ok",
-                context,
+                origin,
             );
             continue;
         }
@@ -248,41 +253,29 @@ const runChain = async (verify: PendingVerify): Promise<void> => {
     }
 };
 
-/* Ask for the projects in `dirs` to be checked once their installs settle. The public face of this module:
- * the reconciler's caller queues it as installs start, the land path queues red projects a land touched.
- * Defers while turns are live; the newest cause wins, exactly as the reconciler's own retry does. */
-export const queueVerify = (deps: VerifyDeps, context: LandContext, dirs: readonly string[]): void => {
+/* Verification is maintenance too. It queues behind the install that prompted it and ahead of turns that
+ * arrived while that install was running, so neither the check nor a new turn sees a half-settled tree. Origins
+ * stay attached to their own batches instead of a process-wide "latest cause wins" slot: a watcher observation
+ * can no longer erase a land and prevent its failed check waking the fix automation. */
+export const queueVerify = (deps: VerifyDeps, origin: DependencyOrigin, dirs: readonly string[]): void => {
     if (dirs.length === 0) {
         return;
     }
-    // Merge into whatever is waiting: two lands in a burst want the union checked, under the newest cause.
-    const merged = pending === undefined ? dirs : [...new Set([...pending.dirs, ...dirs])];
-    pending = { deps, context, dirs: merged };
-    if (retry !== undefined || running) {
+    pending.push({ deps, origin, dirs: [...new Set(dirs)] });
+    if (running) {
         return;
     }
     const attempt = (): void => {
-        const next = pending;
-        if (next === undefined || running) {
+        const next = pending.shift();
+        if (next === undefined) {
+            running = false;
             return;
         }
-        if (next.deps.agents.liveSessionIds().length > 0) {
-            retry = setTimeout(() => {
-                retry = undefined;
-                attempt();
-            }, next.deps.retryMs ?? RETRY_MS);
-            retry.unref();
-            return;
-        }
-        pending = undefined;
         running = true;
-        void runChain(next)
+        void next.deps.maintenance
+            .runMaintenance(() => runChain(next))
             .catch((error: unknown) => next.deps.logger.warn({ err: error }, "dependency verify: chain failed"))
-            .finally(() => {
-                running = false;
-                // Work queued while the chain ran starts its own pass, against the tree as it stands now.
-                attempt();
-            });
+            .finally(attempt);
     };
     attempt();
 };

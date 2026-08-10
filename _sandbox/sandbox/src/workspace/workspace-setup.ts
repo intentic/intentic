@@ -11,8 +11,9 @@ import { unresolvedDependencies, unresolvedSummary, type UnresolvedPackage } fro
 // drop omits it — it would be slow to upload and wrong to reuse, having been built against the laptop's
 // libc), so "the files are here" and "this workspace works" are different states. Everything that would
 // otherwise mislead reads this: the import UI offers the install, the agent's post-edit type-check stays
-// silent rather than reporting every import as broken (agent-diagnostics.ts), and the agent's turn is told
-// once, plainly, instead of rediscovering it through a failed `pnpm test`.
+// silent rather than reporting every import as broken (agent-diagnostics.ts), a failed `pnpm test` is answered
+// with the reason instead of leaving the model to guess one (agent/agent-deps.ts), and an agent that wants to
+// ask outright has tools that answer from here (deps-tools.ts).
 
 // Bound the scan the same way repo-discovery does: a project deeper than this isn't found, and a pathological
 // tree stops rather than stalling the daemon. Shallower than repo discovery's 4 — a manifest that deep is a
@@ -172,6 +173,11 @@ export const startInstall = async (root: string, project: WorkspaceProject, proc
  * package script, an `npx` that hits the registry for a binary that was never a package, and a file of
  * type-check errors that are all false.
  *
+ * WHO STILL READS IT: the native runtimes only. A turn on the Claude Code loop has tools that answer this on
+ * demand and hooks that answer it at the moment something fails, and pushing the paragraph as well charged
+ * every turn in the conversation for facts most of them never needed (turn-plan's `honoured` makes the call).
+ * The runtimes with no seam for either have nothing else, so for them this is still the whole defence.
+ *
  * A STALE project is told about differently, and the difference is the point. It is not asked to install
  * anything: the daemon reconciles a stale tree by itself (agent.routes.ts), and an install inside an isolated
  * turn would write into an overlay that dies with the conversation anyway. What the turn is given is the one
@@ -222,7 +228,7 @@ export const setupNoticeFor = (statuses: readonly ProjectSetupStatus[]): string 
     const lines = pending.map((status) =>
         status.state === "unsupported"
             ? `- ${where(status)}: needs \`${status.recipe.manager}\`, which is not installed in this sandbox. Do not attempt the install; say so if it blocks the task.`
-            : `- ${where(status)}: run \`${status.recipe.command}\` there first.`,
+            : `- ${where(status)}: has never been set up and needs \`${status.recipe.command}\`. Do not run it inside this turn; ask the owner to install it.`,
     );
     const staleLines = stale.map(
         (status) =>

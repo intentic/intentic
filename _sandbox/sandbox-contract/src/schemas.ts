@@ -2557,8 +2557,8 @@ export const WorkspaceSetupSchema = z.object({ projects: z.array(ProjectSetupSch
 export type WorkspaceSetup = z.infer<typeof WorkspaceSetupSchema>;
 // Install these projects' dependencies. Dirs already ready, already installing, or whose manager is missing are
 // skipped server-side, so a stale client list can't spawn redundant installs — `started` is what actually ran.
-export const WorkspaceInstallSchema = z.object({ dirs: z.array(z.string()).min(1) });
-export const WorkspaceInstallResultSchema = z.object({ started: z.array(z.string()) });
+export const WorkspaceInstallSchema = z.object({ dirs: z.array(z.string().max(500)).min(1).max(50) });
+export const WorkspaceInstallResultSchema = z.object({ queued: z.array(z.string()) });
 
 // ---- workspace repos ----
 

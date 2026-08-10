@@ -47,6 +47,9 @@ export const HISTORY_STATE_FILES: readonly StateFile[] = [
     { path: "usage.jsonl", portability: "carry" },
     { path: "account-usage.json", portability: "carry" },
     { path: "provider-refusals.json", portability: "carry" },
+    // Explicit first-time dependency setup requests. Carrying the worklist preserves the owner's decision when
+    // an export interrupts the queue before its terminal starts; fulfilled entries remove themselves.
+    { path: "dependency-requests.json", portability: "carry" },
     // The deploy engine's own ledgers — a run's events and the check results the Pipelines view reads back.
     { path: "apply-events.ndjson", portability: "carry" },
     { path: "check-events/", portability: "carry" },

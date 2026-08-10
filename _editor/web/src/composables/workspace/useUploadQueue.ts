@@ -99,11 +99,10 @@ const setInstallAfterUpload = (enabled: boolean): void => {
     }
 };
 
-// What the daemon actually started. The client's list is only a pre-upload GUESS (the browser can't see what is
-// already installed on the sandbox), so the daemon re-resolves it and installs only what genuinely needs it —
-// which is what makes a re-drop of a ready project a silent no-op. `installSettled` gates the panel's dismiss
-// so a clean finish can't disappear before saying what it kicked off.
-const installStarted = ref<readonly string[]>([]);
+// What the daemon actually queued. The client's list is only a pre-upload GUESS (the browser can't see what is
+// already installed), so the daemon re-resolves it and queues only what genuinely needs work. `installSettled`
+// gates dismissal so a clean finish cannot disappear before saying what it handed off.
+const installQueued = ref<readonly string[]>([]);
 const installError = ref<string | undefined>(undefined);
 const installSettled = ref(false);
 
@@ -139,12 +138,12 @@ const runInstall = async (): Promise<void> => {
         return;
     }
     try {
-        const { started } = await sandboxJson<{ started: string[] }>(`/workspace/setup/install`, {
+        const { queued } = await sandboxJson<{ queued: string[] }>(`/workspace/setup/install`, {
             method: `POST`,
             headers: { "content-type": `application/json` },
             body: JSON.stringify({ dirs: projects.map((project) => project.dir) }),
         });
-        installStarted.value = started;
+        installQueued.value = queued;
     } catch (error) {
         installError.value = errorMessage(error, `Couldn't start the install.`);
     } finally {
@@ -180,7 +179,7 @@ export const resetUploadQueue = (): void => {
     skippedNotice.value = undefined;
     skippedUnchanged.value = 0;
     setupProjects.value = [];
-    installStarted.value = [];
+    installQueued.value = [];
     installError.value = undefined;
     installSettled.value = false;
     pending.length = 0;
@@ -572,7 +571,7 @@ export function useUploadQueue() {
         setupProjects,
         installAfterUpload,
         setInstallAfterUpload,
-        installStarted,
+        installQueued,
         installError,
         installSettled,
         enqueue,

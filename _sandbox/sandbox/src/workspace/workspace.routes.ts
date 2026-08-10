@@ -14,7 +14,7 @@ import { readModules } from "./modules.js";
 import { readPackageGraph } from "./package-graph.js";
 import { discoverRepos, isValidRepoId, isValidRepoName } from "./repo-discovery.js";
 import { resolveReference } from "./resolve-reference.js";
-import { INSTALLABLE, missingCount, startInstall, workspaceSetup } from "./workspace-setup.js";
+import { missingCount } from "./workspace-setup.js";
 import { syncWorkspaceRepos } from "./sync-repos.js";
 import { listTemplates, loadManifest, readTemplatesConfig } from "../scaffold/templates-config.js";
 import { isControlPlanePath, resolveWithin } from "./workspace-files.js";
@@ -223,7 +223,7 @@ export const createWorkspaceRoutes = (services: Services) => {
         // A stale project carries HOW MANY names cannot resolve rather than which: the panel's sentence needs a
         // number, and the list is long exactly when it is least worth sending.
         setup: i.setup.handler(async () => ({
-            projects: (await workspaceSetup(services.workspace.root, services.processes)).map((project) =>
+            projects: (await services.dependencies.status()).map((project) =>
                 Object.assign(
                     {
                         dir: project.dir,
@@ -237,19 +237,13 @@ export const createWorkspaceRoutes = (services: Services) => {
                 ),
             ),
         })),
-        // Install the named projects. The CLIENT's list is a request, not an instruction: it comes from a
-        // pre-upload guess made in the browser (which cannot see what's already on disk), so every dir is
-        // re-resolved against the real workspace and only projects an install would actually help run. That is
-        // what makes a re-drop of an already-installed repo a silent no-op instead of a redundant reinstall.
-        // `stale` is installable for the same reason `needs-setup` is — one command fixes both, and refusing
-        // here would leave the only surface that can repair a drifted tree unable to.
+        // Install the named projects. This UI request joins the same durable coordinator queue as an agent's
+        // request; starting a panel directly here would bypass the workspace maintenance lease and could
+        // rewrite the dependency tree under an active turn. The client list is still only a pre-upload guess,
+        // so the coordinator re-resolves it and an already-ready project remains a silent no-op.
         install: i.install.handler(async ({ input }) => {
-            const requested = new Set(input.dirs);
-            const projects = (await workspaceSetup(services.workspace.root, services.processes)).filter(
-                (project) => requested.has(project.dir) && INSTALLABLE.has(project.state),
-            );
-            await Promise.all(projects.map((project) => startInstall(services.workspace.root, project, services.processes)));
-            return { started: projects.map((project) => project.dir) };
+            const result = await services.dependencies.requestInstall(input.dirs, { kind: "request", title: "Workspace import" });
+            return { queued: [...result.queued] };
         }),
         repos: i.repos.handler(async () => ({ repos: await discoverRepos(services.workspace.root) })),
         // Every repo's modules, in one read — "root" (the /work repo, whose dir IS the workspace root) plus each

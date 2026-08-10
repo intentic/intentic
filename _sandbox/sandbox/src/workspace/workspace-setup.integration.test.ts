@@ -149,7 +149,8 @@ const status = (over: Partial<ProjectSetupStatus>): ProjectSetupStatus =>
 
 test("the agent notice names the exact command, so the model doesn't rediscover it through failing tools", () => {
     const notice = setupNoticeFor([status({})]);
-    expect(notice).toContain("app: run `pnpm install` there first.");
+    expect(notice).toContain("app: has never been set up and needs `pnpm install`");
+    expect(notice).toContain("ask the owner to install it");
 });
 
 test("an unsupported project tells the agent NOT to try, and names the missing binary", () => {
@@ -185,10 +186,10 @@ test("a stale project tells the turn why an import fails, and asks it to do noth
 
 test("stale and never-installed projects can both be true at once, and each gets its own paragraph", () => {
     const notice = setupNoticeFor([status({ dir: "fresh" }), status({ dir: "drifted", state: "stale", unresolved: [{ dir: "", names: ["vue"] }] })]);
-    expect(notice).toContain("fresh: run `pnpm install` there first.");
+    expect(notice).toContain("fresh: has never been set up and needs `pnpm install`");
     expect(notice).toContain("drifted: 1 declared dependencies are not installed (vue)");
 });
 
 test("the workspace root owning the manifest reads as the root, not an empty name", () => {
-    expect(setupNoticeFor([status({ dir: "" })])).toContain("the workspace root: run");
+    expect(setupNoticeFor([status({ dir: "" })])).toContain("the workspace root: has never been set up");
 });

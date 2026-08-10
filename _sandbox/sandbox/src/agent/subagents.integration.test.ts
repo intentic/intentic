@@ -23,6 +23,9 @@ import {
     type SubagentTaskMessage,
     type SubagentTurn,
 } from "./subagents.js";
+import { unstubbed } from "@intentic/testing";
+import type { Services } from "../composition.js";
+import { turnQuiet } from "./turn-plan.js";
 
 const turn = (): SubagentTurn => ({ conversationId: "conv-1", cwd: WORKSPACE_ROOT, sessionId: "sess-1", subagentsDir: undefined });
 
@@ -510,5 +513,35 @@ describe("waitForSubagent", () => {
     it("a target the roster does not know answers unknown-target instead of hanging", async () => {
         const result = await waitForSubagent("conv-1", { target: "never-was", until: ["finished"], timeoutMs: 5_000 });
         expect(result).toMatchObject({ outcome: "unknown-target" });
+    });
+});
+
+/* WHETHER A PARKED TURN MAY GIVE THE WORKSPACE BACK — the safety half of the wait (turn-plan.ts turnQuiet).
+ * Handing a dependency install the tree while something of this turn's is still writing to it is precisely
+ * what the maintenance gate exists to prevent, and the model going to sleep does not stop a child. */
+describe("a parked turn's own live writers", () => {
+    const services = (sessionId: string | undefined): Services =>
+        unstubbed<Services>("services", { agents: unstubbed<Services["agents"]>("agents", { sessionIdOf: () => sessionId }) });
+
+    // Foreground, so its own tool_result is what settles it — the shape settleDelegation answers to.
+    const spawn = (id: string): void => {
+        noteDelegation(turn(), { id, command: "codex exec --sandbox danger-full-access 'do the thing'", background: false });
+    };
+
+    it("a turn with a child still running is not quiet, so it keeps the workspace while it waits", async () => {
+        spawn("bash-1");
+        expect(subagentCountsOf("conv-1").running).toBe(1);
+        expect(await turnQuiet(services(undefined), "conv-1")).toBe(false);
+    });
+
+    it("a turn whose children have all settled is quiet again", async () => {
+        spawn("bash-1");
+        settleDelegation("bash-1", { failed: false, output: "done" });
+        expect(subagentCountsOf("conv-1").running).toBe(0);
+        expect(await turnQuiet(services(undefined), "conv-1")).toBe(true);
+    });
+
+    it("a turn with no conversation behind it has no children to speak of", async () => {
+        expect(await turnQuiet(services(undefined), undefined)).toBe(true);
     });
 });

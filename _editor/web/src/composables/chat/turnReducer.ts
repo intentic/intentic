@@ -139,7 +139,7 @@ const dependencyLine = (deps: { missing: number; started: string[]; deferred: bo
     }
     const what = `${deps.missing} new ${deps.missing === 1 ? `dependency` : `dependencies`}`;
     return deps.deferred
-        ? ` ${what} still need installing — that runs as soon as your other agents finish, then the project's checks run; the outcome lands in Activity.`
+        ? ` ${what} are queued — installation starts after this turn and any other active agents finish, appears in Work terminals, then its checks and outcome land in Activity.`
         : ` Installing ${what} it added; the project's checks run when that finishes, and the outcome lands in Activity.`;
 };
 
@@ -155,14 +155,14 @@ const dependencyLine = (deps: { missing: number; started: string[]; deferred: bo
  *  Anchored on the open bubble, not on the user's message: a resumed turn (Conversation.reuseUserBubble without
  *  truncation) leaves the dead run's output and its interruption notice between the two, and this line belongs
  *  to the answer that is about to be written, not above the one that died. */
-const prependTurnNotice = (state: TurnState, text: string): TurnState => {
+const prependTurnNotice = (state: TurnState, text: string, extra?: Pick<ChatMessage, "noticeAction" | "noticeWait" | "notes">): TurnState => {
     const at = state.messages.findIndex((message) => message.id === state.bubbleId);
     if (at === -1) {
-        return appendNotice(state, text);
+        return appendNotice(state, text, extra);
     }
     return {
         ...state,
-        messages: [...state.messages.slice(0, at), { id: state.nextId, role: `notice`, text }, ...state.messages.slice(at)],
+        messages: [...state.messages.slice(0, at), { id: state.nextId, role: `notice`, text, ...extra }, ...state.messages.slice(at)],
         nextId: state.nextId + 1,
     };
 };
@@ -509,6 +509,25 @@ export const applyTurnFrame = (state: TurnState, event: AgentEvent, context: Tur
             // nothing holds any more. (The daemon's fleet registry reads the same frame for how long the turn
             // was parked; see agents-registry.ts.)
             return step(resolveCard(state, event));
+        case `waiting`:
+            /* THE TURN HAS NOT STARTED — it is queued behind a dependency repair, which holds every turn out
+             * while the tree is rewritten and its checks run.
+             *
+             * Prepended, like the rebase line above it and for the same reason: this describes the ground the
+             * turn starts from, so it belongs above the bubble the answer will be written into rather than
+             * appended under it. The offer is the same one the landed notice uses — it finds the running
+             * install among the live work terminals and retires itself when that ends, so a transcript
+             * replayed later reads as a plain sentence about a wait that is over.
+             *
+             * No "still waiting" upkeep: the line is true once and stays true, and the turn's own first frame
+             * is what tells anyone watching that the wait ended. */
+            return step(
+                prependTurnNotice(
+                    state,
+                    `Waiting for dependency setup to finish — this message starts on its own as soon as the workspace is ready.`,
+                    { noticeAction: `depsInstall` },
+                ),
+            );
         case `preamble`:
             /* WHAT THE DAEMON PUT IN FRONT OF THE MODEL, as one collapsed row carrying the exact words.
              *

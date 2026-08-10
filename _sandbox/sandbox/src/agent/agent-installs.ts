@@ -10,25 +10,127 @@ import type { HookCallbackMatcher, HookEvent } from "@anthropic-ai/claude-agent-
  * on the next recreate. The moment the agent reaches for the install IS the moment it can be told, so this
  * rides in as PreToolUse context rather than as more standing prose in the system prompt.
  *
- * It STEERS, it does not block. A project-local `pnpm add`, a throwaway venv, a one-off experiment are all
- * legitimate and none of them want an image rebuild; only the agent knows which case it is in. Told once per
- * turn, for the same reason the missing-dependency notice is: the model needs the rule, not a nag. */
-
-// Commands that install into the IMAGE's filesystem — the ones a container recreate silently undoes. Anything
-// scoped to a project (`pnpm add`, `npm install` with no -g) is deliberately absent: node_modules lives under
-// /work and survives, so steering those would be wrong.
-const PERSISTENT_INSTALL = [
-    /\bapt(-get)?\s+install\b/,
-    /\bpip3?\s+install\b/,
-    /\b(npm|pnpm|yarn)\s+(i|install|add)\s+(-g|--global)\b/,
-    /\bplaywright\s+install\b/,
-    /\brustup\b/,
-    /\bnvm\s+install\b/,
-];
+ * Image-scoped installs are steered, because a one-off experiment can be legitimate even though it will not
+ * survive a recreate. Project dependency mutations are different: they are denied inside a turn and handed to
+ * the workspace coordinator, because an isolated result is discarded and a shared-tree result races every
+ * other mounted turn. */
 
 // A venv is the sanctioned way to use pip here (Debian marks the system interpreter externally-managed), and
 // it lands wherever the agent puts it — so a pip install INSIDE one is project scope, not image scope.
 const VENV_SCOPED = /(\bsource\s+\S*\/activate\b|\bpython3?\s+-m\s+venv\b|\/venv\/bin\/pip\b|\.venv\/bin\/pip\b)/;
+const NODE_MANAGERS = new Set(["npm", "pnpm", "yarn", "bun"]);
+const NODE_INSTALL_VERBS = new Set(["i", "install", "add", "ci", "update", "up", "upgrade", "remove", "rm", "uninstall", "prune", "dedupe"]);
+const OPTION_WITH_VALUE = new Set(["--cwd", "--dir", "--filter", "--prefix", "-C"]);
+
+const shellWords = (command: string): string[] => {
+    const words: string[] = [];
+    let word = "";
+    let quote: "'" | '"' | undefined;
+    let escaped = false;
+    for (const character of command) {
+        if (escaped) {
+            word += character;
+            escaped = false;
+        } else if (character === "\\" && quote !== "'") {
+            escaped = true;
+        } else if (quote !== undefined) {
+            if (character === quote) {
+                quote = undefined;
+            } else {
+                word += character;
+            }
+        } else if (character === "'" || character === '"') {
+            quote = character;
+        } else if (/\s/.test(character)) {
+            if (word !== "") {
+                words.push(word);
+                word = "";
+            }
+        } else {
+            word += character;
+        }
+    }
+    if (word !== "") {
+        words.push(word);
+    }
+    return words;
+};
+
+export const agentCommand = (command: string): string => {
+    const words = shellWords(command);
+    const wrapper = words.findIndex((word) => word.split("/").at(-1) === "tmux-run");
+    if (wrapper === -1) {
+        return command;
+    }
+    const carried = words.indexOf("-c", wrapper + 1);
+    if (carried !== -1 && words[carried + 1] !== undefined) {
+        return words[carried + 1] as string;
+    }
+    const session = words.findIndex((word, index) => index > wrapper && word.startsWith("agent-"));
+    return session !== -1 && words[session + 1] !== undefined ? (words[session + 1] as string) : command;
+};
+
+// Read command INVOCATIONS, not arbitrary substrings. The previous unanchored expressions denied harmless
+// commands such as `rg 'pnpm install' docs` merely because the words appeared in a quoted search. Splitting at
+// shell control operators is deliberately modest rather than pretending to be a shell parser; each candidate
+// still has to begin with the package manager after ordinary env/sudo prefixes.
+export const commandInvocations = (command: string): string[] =>
+    command
+        .split(/(?:&&|\|\||[;|\n])/)
+        .map((part) => part.trim().replace(/^(?:(?:then|do)\s+)?(?:(?:[A-Za-z_][A-Za-z0-9_]*=\S+|env|sudo)\s+)*/, ""))
+        .filter((part) => part !== "");
+
+const nodeInstall = (command: string): { project: boolean; global: boolean } => {
+    for (const invocation of commandInvocations(command)) {
+        const words = invocation.split(/\s+/);
+        if (words[0] === "corepack") {
+            words.shift();
+        }
+        const executable = words.shift()?.split("/").at(-1);
+        if (executable === undefined || !NODE_MANAGERS.has(executable)) {
+            continue;
+        }
+        const global = words.some((word) => word === "-g" || word === "--global");
+        for (let index = 0; index < words.length; index += 1) {
+            const word = words[index];
+            if (word === undefined) {
+                break;
+            }
+            if (OPTION_WITH_VALUE.has(word)) {
+                index += 1;
+                continue;
+            }
+            if (word.startsWith("-")) {
+                continue;
+            }
+            return { project: NODE_INSTALL_VERBS.has(word) && !global, global: NODE_INSTALL_VERBS.has(word) && global };
+        }
+    }
+    return { project: false, global: false };
+};
+
+const installScope = (command: string): { image: boolean; project: boolean } => {
+    const effective = agentCommand(command);
+    const node = nodeInstall(effective);
+    const venv = VENV_SCOPED.test(effective);
+    const image =
+        node.global ||
+        commandInvocations(effective).some(
+            (part) =>
+                /^apt(?:-get)?\s+install\b/.test(part) ||
+                (!venv && /^pip3?\s+install\b/.test(part)) ||
+                /^(?:npx\s+)?playwright\s+install\b/.test(part) ||
+                /^rustup\b/.test(part) ||
+                /^nvm\s+install\b/.test(part),
+        );
+    const project =
+        node.project ||
+        (venv && commandInvocations(effective).some((part) => /^(?:\S*\/)?pip3?\s+(?:install|uninstall)\b/.test(part))) ||
+        commandInvocations(effective).some((part) =>
+            /^(?:uv\s+sync|poetry\s+(?:install|add|remove|update|sync)|pipenv\s+(?:install|uninstall|sync|update))\b/.test(part),
+        );
+    return { image, project };
+};
 
 const BROWSER_ALREADY_BAKED =
     "This sandbox already ships Chromium and browser tools — load them with ToolSearch (`mcp__web__browser_navigate`, " +
@@ -83,8 +185,10 @@ const missingBinary = (output: string, command: string): string | undefined => {
 };
 
 // Bash results arrive as a plain string from some harness versions and as a stdout/stderr record from others;
-// the SDK's own content array is the third shape. Read all three rather than bet on one.
-const resultText = (response: unknown): string => {
+// the SDK's own content array is the third shape. Read all three rather than bet on one. Exported because the
+// dependency notice reads the same results looking for a different failure (agent-deps.ts), and two copies of
+// this would be two chances to learn about a fourth shape separately.
+export const toolResultText = (response: unknown): string => {
     if (typeof response === "string") {
         return response;
     }
@@ -99,7 +203,7 @@ const resultText = (response: unknown): string => {
     return parts.join("\n");
 };
 
-export const installSteeringHooks = (): Partial<Record<HookEvent, HookCallbackMatcher[]>> => {
+export const installSteeringHooks = (canRequestProjectInstall = true): Partial<Record<HookEvent, HookCallbackMatcher[]>> => {
     let told = false;
     let missingTold = false;
     return {
@@ -115,7 +219,7 @@ export const installSteeringHooks = (): Partial<Record<HookEvent, HookCallbackMa
                         if (typeof command !== "string") {
                             return {};
                         }
-                        const missing = missingBinary(resultText(input.tool_response), command);
+                        const missing = missingBinary(toolResultText(input.tool_response), command);
                         if (missing === undefined) {
                             return {};
                         }
@@ -135,13 +239,29 @@ export const installSteeringHooks = (): Partial<Record<HookEvent, HookCallbackMa
                 matcher: "Bash",
                 hooks: [
                     async (input) => {
-                        if (input.hook_event_name !== "PreToolUse" || told) {
+                        if (input.hook_event_name !== "PreToolUse") {
                             return {};
                         }
-                        // The tmux hook may already have rewrapped this command, so match on the whole string
-                        // rather than its head — the inner command survives verbatim inside the wrapper.
+                        // The tmux hook may already have rewrapped this command; installScope reads the original
+                        // command carried in its `-c` field before classifying actual invocations.
                         const command = (input.tool_input as { command?: unknown }).command;
-                        if (typeof command !== "string" || VENV_SCOPED.test(command) || !PERSISTENT_INSTALL.some((rule) => rule.test(command))) {
+                        if (typeof command !== "string") {
+                            return {};
+                        }
+                        const { image: imageInstall, project: projectInstall } = installScope(command);
+                        if (projectInstall) {
+                            const route = canRequestProjectInstall
+                                ? "Edit the manifest if the task needs a new dependency, then call `mcp__deps__install`; the daemon queues the real install for after this turn."
+                                : "This persona cannot change the workspace; ask the owner to install it.";
+                            return {
+                                hookSpecificOutput: {
+                                    hookEventName: "PreToolUse",
+                                    permissionDecision: "deny",
+                                    permissionDecisionReason: `A dependency install cannot run inside a turn: its scratch result is discarded and a shared-tree install would race other turns. ${route}`,
+                                },
+                            };
+                        }
+                        if (told || !imageInstall) {
                             return {};
                         }
                         told = true;

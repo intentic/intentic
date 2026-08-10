@@ -33,11 +33,15 @@ import type { SteeringQueue } from "./agent-steering.js";
 import { withAttachmentNote } from "./attachment-note.js";
 import { delegationNote } from "./delegation.js";
 import { subagentWaitServer } from "./subagent-wait.js";
+import { subagentCountsOf } from "./subagents.js";
+import { agentShellBusy } from "./agent-terminals.js";
 import { resolveHarnessCredentials } from "./harness-credentials.js";
 import { turnPromptPlacement } from "./system-prompt.js";
 import { retrieveTurnContext } from "./turn-context.js";
 import { LITERAL_SLASH_NOTE, withTurnPreamble, worktreeNote } from "./turn-preamble.js";
-import { setupNoticeFor, workspaceSetup } from "../workspace/workspace-setup.js";
+import { createDepsServer } from "../workspace/deps-tools.js";
+import { dependencyDirForCommand } from "./agent-deps.js";
+import { setupNoticeFor } from "../workspace/workspace-setup.js";
 
 /* WHICH RUNTIME SERVES A TURN, AND WHAT IT IS HANDED — the one question every turn has to answer before it can
  * stream anything, and the one the turn route used to answer inline as a four-arm if/else chain wrapped around
@@ -107,6 +111,11 @@ export interface TurnContext {
     // Mid-turn steering, present only where the runtime declares it (capabilitiesOf().steering — the Claude
     // Code loop's streaming input, and Pi's own steer queue).
     readonly steering: SteeringQueue | undefined;
+    /* Hands the workspace back for the length of a park, and takes it again before the turn resumes — for the
+     * tools that sleep the turn on something outside the tree (workspace/maintenance-gate.ts). Optional for the
+     * one caller that plans a turn with no lease behind it (the bench), where nothing is holding the workspace
+     * to give back and running inline is the whole of it. */
+    readonly park?: <T>(run: () => Promise<T>) => Promise<T>;
     /* Who the turn is and what it may do, resolved once by planTurn and handed down (personas/personas.ts).
      * Set only on the context the arms receive — the route builds this object before a card has been read, so
      * it is absent there and present everywhere it is used. */
@@ -156,7 +165,12 @@ export const planTurn = async (services: Services, input: AgentTurn, context: Tu
          * install is behind. None of it was true, and it was stapled to the front of every isolated turn.
          *
          * Resolved HERE, ahead of the dispatch, because it is true of every runtime — see `honoured`. */
-        services.perf.track("turn.plan.deps", {}, () => workspaceSetup(services.workspace.root, services.processes)),
+        // Full runtimes ask through the dependency server, and a native runtime needs the fallback notice only
+        // when its provider session opens. Re-scanning the whole workspace for every follow-up merely to throw
+        // the answer away was the CPU version of the context bloat this change removes.
+        capabilities.mcp === "full" || context.base.sessionId !== undefined
+            ? Promise.resolve([])
+            : services.perf.track("turn.plan.deps", {}, () => services.dependencies.status()),
         // The cards themselves — one small JSON file, read unconditionally. Making the read conditional on
         // `actsAs` being set would skip exactly the case that matters most: an unattended wake that named
         // nothing, whose correct answer is "no accounts" and which must not reach one by saying nothing at all.
@@ -237,7 +251,19 @@ const honoured = (
     const notes = [
         ...(isolated && capabilities.isolation === "cwd" ? [worktreeNote(context.localCwd, services.workspace.root)] : []),
         ...(isolated && context.syncNote !== undefined ? [context.syncNote] : []),
-        ...(setupNotice !== undefined ? [setupNotice] : []),
+        /* THE DEPENDENCY NOTICE IS NOW THE FALLBACK RATHER THAN THE MECHANISM, and only for the runtimes that
+         * have no mechanism to fall back FROM.
+         *
+         * A `full` runtime is handed the readiness tools and the two notices that fire on a real failure — a
+         * post-edit type-check and a post-command miss (agent-deps.ts) — and every one of those addresses the
+         * turn that actually went near a drifted project. Pushing the paragraph as well would be paying for the
+         * same three facts on every turn in the conversation, whether or not it ever touched one; it is the
+         * repetition, not the wording, that made a sentence written to be read once into context bloat.
+         *
+         * The other runtimes get neither tools nor hooks — there is no seam in them to put either through — so
+         * for those the paragraph is still the only thing standing between a model and a wall of true-looking
+         * unresolved-import errors. It stays where it is, unchanged, for exactly as long as that is true. */
+        ...(setupNotice !== undefined && capabilities.mcp !== "full" ? [setupNotice] : []),
     ];
     // The connectors this card did not grant, taken out of the shell's environment rather than left in it with
     // an instruction not to look. The manifest is read from the context's own base, which is the unfiltered
@@ -255,6 +281,8 @@ const honoured = (
      * work was never going to touch that folder anyway. */
     const startIn = persona.workspace?.startIn;
     const startPath = startIn === undefined || startIn === "" ? undefined : resolveWithin(context.effectiveCwd, startIn);
+    const dependencyDir = startIn ?? "";
+    const dependencyInstallAllowed = persona.powers.files === "write" && persona.powers.shell;
     /* The folder limit and the sandbox switch, carried on the request for the runtime that can enforce them.
      * The folders resolve against the workspace root rather than `startPath` — the card spells them
      * workspace-relative, and a persona that starts in one repo while being allowed to read a sibling is an
@@ -263,6 +291,12 @@ const honoured = (
     return {
         ...rest,
         prompt: withTurnPreamble(notes, context.base.prompt),
+        // Set HERE because this is the one point every runtime passes through, and because it is the only place
+        // that can still tell the workspace root from the turn's cwd — below this, a persona's start folder and
+        // an isolated worktree have already overwritten it.
+        workspaceRoot: services.workspace.root,
+        dependencyIssue: (command) => services.dependencies.issueAt(dependencyDirForCommand(dependencyDir, services.workspace.root, command)),
+        dependencyInstallAllowed,
         ...(startPath !== undefined ? { cwd: startPath } : {}),
         ...(scope !== undefined ? { personaScope: scope } : {}),
         ...(shellEnv !== undefined && Object.keys(shellEnv).length > 0 ? { cliEnv: shellEnv } : {}),
@@ -397,6 +431,24 @@ const SETTINGS_DEFAULTS = SandboxSettingsSchema.parse({});
 // purpose: this one goes into a turn that is still running and still holds its whole transcript, so it needs
 // enough to act on rather than the whole suite a push dialog quotes into a fresh session.
 const TURN_RULE_OUTPUT_BYTES = 4_000;
+
+/* IS THIS TURN ACTUALLY IDLE — asked before a parked turn is allowed to give the workspace back to a
+ * dependency repair (workspace/maintenance-gate.ts, and subagent-wait.ts's `quiet`).
+ *
+ * The model being asleep says nothing about the tree: the same two writers agent.ts refuses to rebase under
+ * can outlive the moment the model stops, and they are exactly the two an install must not run beneath. A
+ * child on the roster covers both Agent-tool subagents and delegated CLI runs, which is also why a turn
+ * waiting on its OWN child answers false here without the caller having to special-case it. */
+export const turnQuiet = async (services: Services, conversationId: string | undefined): Promise<boolean> => {
+    if (conversationId === undefined) {
+        return true;
+    }
+    if (subagentCountsOf(conversationId).running > 0) {
+        return false;
+    }
+    const sessionId = services.agents.sessionIdOf(conversationId);
+    return sessionId === undefined || !(await agentShellBusy(sessionId));
+};
 
 /* The Claude Code harness — a native Claude turn's subscription OAuth (with its mid-turn refresh callback), or
  * the translator endpoint a routed provider rides. Credentials are resolved by harness-credentials.ts,
@@ -547,6 +599,7 @@ export const planHarnessTurn = async (
     // Turn-scoped roots follow the effective cwd: hashline edits must anchor in the worktree an isolated turn
     // edits. Browser profiles, plugin checkouts, and attachments stay on /work — absolute-path inputs, not edit
     // targets.
+    const dependencyTitle = input.conversationId === undefined ? input.title : services.agents.entry(input.conversationId)?.title;
     const sdkServers = {
         ...browser.servers,
         // hashlineEdits: swap the native Edit/Write (disabled below) for hash-anchored file tools.
@@ -558,6 +611,21 @@ export const planHarnessTurn = async (
             conversationId: context.base.conversationId,
             registry: services.agents,
             signal: context.base.signal,
+            // No lease behind this plan (the bench) ⇒ nothing to give back, so the wait simply runs.
+            park: context.park ?? ((run) => run()),
+            quiet: () => turnQuiet(services, context.base.conversationId),
+        }),
+        /* Dependency readiness, asked rather than announced — and asked of the MAIN checkout, for the reason
+         * planTurn sets out above: an isolated turn's dependencies live in /work and are only mounted into its
+         * namespace, so /work's answer is the turn's answer and the worktree's would be an empty directory. */
+        deps: createDepsServer({
+            dependencies: services.dependencies,
+            canInstall: persona.powers.files === "write" && persona.powers.shell,
+            origin: {
+                kind: "request",
+                ...(input.conversationId === undefined ? {} : { conversationId: input.conversationId }),
+                ...(dependencyTitle === undefined ? {} : { title: dependencyTitle }),
+            },
         }),
     };
     const shellEnv = { ...context.cliEnv, ...delegation.env };

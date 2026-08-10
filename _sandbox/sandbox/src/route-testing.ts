@@ -321,6 +321,19 @@ export const services = (overrides: ServiceOverrides = {}): Services => {
         announcer: createAnnouncer(testConfig, createLogger(testConfig)),
         workspace,
         processes: fakeProcesses(),
+        workspaceMaintenance: {
+            enterTurn: async () => ({ release: () => {}, park: (run) => run() }),
+            runMaintenance: (run) => run(),
+        },
+        dependencies: unstubbed<Services["dependencies"]>("dependencies", {
+            status: async () => [],
+            issueAt: async () => undefined,
+            requestInstall: async () => ({ projects: [], queued: [] }),
+            reconcileLand: async () => undefined,
+            watch: () => () => {},
+            subscribe: () => () => {},
+            subscribeFailures: () => () => {},
+        }),
         // The real slot table with a no-dial probe; `scanPorts` is empty so tests opt into listeners explicitly.
         portForwards: createPortForwards(portSlotsFromToken("tok"), async () => "http"),
         scanPorts: async () => [],

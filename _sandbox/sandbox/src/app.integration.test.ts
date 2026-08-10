@@ -11,6 +11,7 @@ import { sandboxIdFromToken, sha256Hex } from "@intentic/sandbox-contract/tunnel
 import { expect, test, vi } from "vitest";
 
 import { createApp } from "./app.js";
+import { createWorkspaceMaintenanceGate } from "./workspace/maintenance-gate.js";
 import { createAuthConnections } from "./auth/connections.js";
 
 import { createLogger } from "./logger.js";
@@ -554,6 +555,51 @@ test("agent.run streams the agent events, fenced by a user snapshot before and a
     expect(frames.filter((frame) => frame.kind !== "preamble")).toEqual(events);
     // Attribution: pending user changes are captured BEFORE the agent runs, so the turn snapshot is agent-only.
     expect(triggers).toEqual(["user", "turn"]);
+});
+
+test("a turn queued behind a dependency repair says so, then runs itself when the workspace frees up", async () => {
+    const gate = createWorkspaceMaintenanceGate();
+    let finishRepair: (() => void) | undefined;
+    const repair = gate.runMaintenance(() => new Promise<void>((resolve) => (finishRepair = resolve)));
+    // The repair is holding the workspace before the turn is ever sent, which is the case the notice exists for.
+    await vi.waitFor(() => expect(finishRepair).toBeDefined());
+
+    const client = clientFor(
+        createApp(
+            services({
+                workspaceMaintenance: gate,
+                agent: async function* () {
+                    yield { kind: "delta", text: "hi" };
+                    yield { kind: "done" };
+                },
+            }),
+        ),
+    );
+    const turn = runAgentTurn(client, { prompt: "do it" });
+    // Nothing releases the gate but this: the turn cannot have finished on its own.
+    await new Promise((resolve) => setTimeout(resolve, 900));
+    finishRepair?.();
+    await repair;
+
+    const frames = (await turn).filter((frame) => frame.kind !== "preamble");
+    expect(frames[0]).toEqual({ kind: "waiting", on: "dependencies" });
+    // The wait is a delay, not a failure: the turn it was holding runs in full afterwards.
+    expect(frames.slice(1)).toEqual([{ kind: "delta", text: "hi" }, { kind: "done" }]);
+});
+
+test("an uncontended turn opens on its own first frame rather than announcing a wait nobody had", async () => {
+    const client = clientFor(
+        createApp(
+            services({
+                workspaceMaintenance: createWorkspaceMaintenanceGate(),
+                agent: async function* () {
+                    yield { kind: "done" };
+                },
+            }),
+        ),
+    );
+    const frames = await runAgentTurn(client, { prompt: "do it" });
+    expect(frames.some((frame) => frame.kind === "waiting")).toBe(false);
 });
 
 test("agent.run resolves the oauth token from the sandbox store (not the body) and forwards model/session", async () => {

@@ -15,6 +15,7 @@ import { DEFAULT_TEMPLATE_REF, DEFAULT_TEMPLATE_SOURCE } from "@intentic/scaffol
 import { expect, test } from "vitest";
 
 import { createApp } from "../app.js";
+import type { Services } from "../composition.js";
 
 import type { ManagedProcesses, ProcessSpec } from "../processes/managed-processes.js";
 
@@ -30,6 +31,25 @@ import { testConfig } from "../testing.js";
  * Split out of app.integration.test.ts, which had grown to 116 tests across every route in the daemon —
  * one file that two agents working on unrelated features collided in every time. The fakes and the client
  * are shared (route-testing.ts); what lives here is what these routes do. */
+
+test("workspace dependency installs join the coordinator queue instead of starting a panel directly", async () => {
+    const requested: string[][] = [];
+    const client = clientFor(
+        createApp(
+            services({
+                dependencies: unstubbed<Services["dependencies"]>("dependencies", {
+                    requestInstall: async (dirs) => {
+                        requested.push([...dirs]);
+                        return { projects: [], queued: ["app"] };
+                    },
+                }),
+            }),
+        ),
+    );
+
+    expect(await client.workspace.install({ dirs: ["app"] })).toEqual({ queued: ["app"] });
+    expect(requested).toEqual([["app"]]);
+});
 
 test("workspace.search runs the resident engine in-process, mapping the wire query to a QueryRequest", async () => {
     const requests: QueryRequest[] = [];

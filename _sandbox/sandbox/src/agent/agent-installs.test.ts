@@ -12,6 +12,9 @@ const fire = async (hooks: ReturnType<typeof installSteeringHooks>, command: str
 const context = (result: Awaited<ReturnType<typeof fire>>): string | undefined =>
     (syncHookOutput(result).hookSpecificOutput as { additionalContext?: string } | undefined)?.additionalContext;
 
+const decision = (result: Awaited<ReturnType<typeof fire>>): { permissionDecision?: string; permissionDecisionReason?: string } | undefined =>
+    syncHookOutput(result).hookSpecificOutput as { permissionDecision?: string; permissionDecisionReason?: string } | undefined;
+
 test.each([
     "apt-get install -y imagemagick",
     "sudo apt install ffmpeg",
@@ -28,12 +31,39 @@ test.each([
 test.each([
     "pnpm install",
     "npm install --save-dev vitest",
+    "npm ci",
     "pnpm add zod",
+    "pnpm --filter app update",
+    "yarn remove zod",
+    "bun install",
+    "uv sync",
+    "poetry install",
     "python3 -m venv .venv && .venv/bin/pip install pillow",
     "source .venv/bin/activate && pip install requests",
-    "ls node_modules",
-])("project-scoped work is left alone: %s", async (command) => {
-    expect(await fire(installSteeringHooks(), command)).toEqual({});
+])("a project dependency mutation is handed to the coordinator: %s", async (command) => {
+    const result = decision(await fire(installSteeringHooks(), command));
+    expect(result?.permissionDecision).toBe("deny");
+    expect(result?.permissionDecisionReason).toContain("mcp__deps__install");
+});
+
+test.each(["ls node_modules", "pnpm test", "rg 'pnpm install' docs", "echo 'npm ci is the documented command'"])(
+    "ordinary work and quoted install text are left alone: %s",
+    async (command) => {
+        expect(await fire(installSteeringHooks(), command)).toEqual({});
+    },
+);
+
+test("a persona without write and shell authority is denied without being offered a mutation tool", async () => {
+    const result = decision(await fire(installSteeringHooks(false), "pnpm install"));
+    expect(result?.permissionDecision).toBe("deny");
+    expect(result?.permissionDecisionReason).toContain("ask the owner");
+    expect(result?.permissionDecisionReason).not.toContain("mcp__deps__install");
+});
+
+test("a global flag after the package name remains image-scoped, not a project mutation", async () => {
+    const result = await fire(installSteeringHooks(), "npm install typescript --global");
+    expect(decision(result)?.permissionDecision).toBeUndefined();
+    expect(context(result)).toContain("environment.d");
 });
 
 // The specific 114 MiB detour that motivated this: the browser is already in the image.
@@ -57,6 +87,11 @@ test("the rule is told once per turn, not stapled to every install", async () =>
 test("a command already wrapped by tmux-run still matches", async () => {
     const wrapped = "/usr/local/bin/tmux-run agent-abc 'apt-get install -y ffmpeg' install-ffmpeg";
     expect(context(await fire(installSteeringHooks(), wrapped))).toContain("environment.d");
+});
+
+test("a project install carried in the current tmux wrapper is still denied", async () => {
+    const wrapped = "/usr/local/bin/tmux-run -c 'pnpm install' agent-abc 'nice bash -c pnpm-install' install";
+    expect(decision(await fire(installSteeringHooks(), wrapped))?.permissionDecision).toBe("deny");
 });
 
 const firePost = async (hooks: ReturnType<typeof installSteeringHooks>, command: string, response: unknown) => {

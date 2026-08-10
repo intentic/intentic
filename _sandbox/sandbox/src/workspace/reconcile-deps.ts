@@ -1,124 +1,351 @@
+import { basename, join } from "node:path";
+import { isManifest } from "@intentic/workspace-setup";
 import type { Logger } from "pino";
+import { z } from "zod";
 import type { ManagedProcesses } from "../processes/managed-processes.js";
-import { missingCount, type ProjectSetupStatus, startInstall, workspaceSetup } from "./workspace-setup.js";
+import { jsonFile } from "../store/json-file.js";
+import { unresolvedDependencies } from "./dependency-drift.js";
+import { type DependencyOrigin, type DependencyRequestOrigin, originPriority } from "./dependency-origin.js";
+import type { WorkspaceMaintenanceGate } from "./maintenance-gate.js";
+import { INSTALLABLE, installPanelKey, missingCount, type ProjectSetupStatus, startInstall, workspaceSetup } from "./workspace-setup.js";
 
-/* THE RECONCILER — the daemon installing what a landed change made necessary, so that nobody has to be asked to.
+/* Dependency maintenance has one owner. Every path that discovers drift or requests first-time setup feeds this
+ * coordinator; none starts a package manager itself. The coordinator reserves the workspace-wide maintenance
+ * lease, waits until manifest writes have actually gone quiet, starts each visible install panel once, and
+ * keeps the lease until those panels settle. New turns therefore cannot mount a dependency tree mid-rewrite.
  *
- * A turn's delta reaches the main tree through `land` (agents/land.ts), and a delta that touched a package.json
- * leaves the tree declaring dependencies that are not installed. The agent cannot fix this from inside its own
- * turn — its node_modules is an overlay whose writes die with the conversation, and pnpm's injected-deps syncer
- * throws EXDEV across that boundary anyway (agents/isolation.ts) — and asking the user to notice is asking them
- * to watch for something the machine already knows. So the machine does it.
- *
- * ONLY WHAT DRIFTED. `stale` is reconciled; `needs-setup` is not, though the same command would serve both. A
- * never-installed project is a decision the user has not made yet — the import flow offers them the install and
- * they may have declined, or dropped a reference repo they only mean to read. Installing it anyway would be this
- * surface overruling a choice. A STALE project is different in kind: nobody chose it, it is the residue of a
- * change that already landed, and putting it back is restoration rather than initiative.
- *
- * NEVER WHILE A TURN IS LIVE, and here that is a correctness rule rather than the courtesy it is for the chores
- * probe runner. Every isolated turn mounts the MAIN checkout's node_modules as the lowerdir of its own overlay,
- * and modifying a lowerdir underneath a mounted overlay is undefined behaviour in the kernel: the turn sees a
- * mixture of the old tree and the new one, with stale caches and ESTALE where files moved. An install is exactly
- * that modification, at its most violent. So a busy workspace defers, and the deferral is a retry rather than a
- * queue of what to install — by the time it fires, the tree will be re-read and whatever is true then is what
- * gets installed.
- */
+ * Explicit setup requests are durable until the project is ready. Drift needs no durable queue — it is a fact
+ * on disk and the startup scan rediscovers it — but its in-memory origin is retained so a land remains the
+ * cause even when the filesystem watcher observes the same manifest a moment later. */
 
-// How long a deferred reconcile waits before looking again. Short enough that the install follows the last turn
-// closely; long enough that a fleet finishing one turn after another does not spin. Nothing is lost by waiting —
-// the drift is already in the tree and the next read finds it.
-const RETRY_MS = 30_000;
+const DEFAULT_SETTLE_MS = 2_000;
+const DEFAULT_POLL_MS = 2_000;
+const DEFAULT_INSTALL_MAX_MS = 30 * 60_000;
 
-export interface ReconcileDeps {
-    readonly workspace: { readonly root: string };
-    readonly processes: ManagedProcesses;
-    readonly agents: { readonly liveSessionIds: () => readonly string[] };
-    readonly logger: Logger;
-    // How long a deferral waits before re-reading the tree. Policy rather than a constant because it is the one
-    // number here anybody would want to move — the daemon takes the default, and a case that needs to watch the
-    // retry actually happen does not have to wait half a minute to see it.
-    readonly retryMs?: number;
-    /* The dirs whose installs this reconcile just started — the dependency verifier's cue (verify-deps.ts).
-     * A callback rather than a return-value read at the call site because of the DEFERRED path: the installs
-     * a busy workspace puts off start from the retry timer, minutes after the land's own frame settled, and
-     * only this module knows that moment. Carried in `pending` like everything else here, so the latest
-     * caller's verifier — with the latest land as its cause — is the one told. */
-    readonly onInstalled?: (dirs: string[]) => void;
+const RequestOriginSchema = z.object({
+    kind: z.literal("request"),
+    conversationId: z.string().optional(),
+    title: z.string().optional(),
+});
+const RequestStateSchema = z.object({ projects: z.record(z.string(), RequestOriginSchema) });
+interface RequestState {
+    readonly projects: Record<string, DependencyRequestOrigin>;
 }
 
-// What one reconcile decided, for the surface that reports it. `deferred` and an empty `started` is the busy
-// answer — something is drifted and the install is waiting for the workspace to go quiet — which is a different
-// thing to say than "nothing needed doing".
+const requestState = (raw: unknown): RequestState | undefined => {
+    const parsed = RequestStateSchema.safeParse(raw);
+    if (!parsed.success) {
+        return undefined;
+    }
+    return {
+        projects: Object.fromEntries(
+            Object.entries(parsed.data.projects).map(([dir, origin]) => [
+                dir,
+                {
+                    kind: "request" as const,
+                    ...(origin.conversationId === undefined ? {} : { conversationId: origin.conversationId }),
+                    ...(origin.title === undefined ? {} : { title: origin.title }),
+                },
+            ]),
+        ),
+    };
+};
+
 export interface ReconcileOutcome {
     readonly missing: number;
-    // Mutable, because this value IS the wire frame's `deps` (events.ts infers a plain array from zod) and a
-    // readonly copy would only exist to be copied back.
     readonly started: string[];
     readonly deferred: boolean;
 }
 
-const staleProjects = async (deps: ReconcileDeps): Promise<ProjectSetupStatus[]> =>
-    (await workspaceSetup(deps.workspace.root, deps.processes)).filter((project) => project.state === "stale");
+export interface DependencyIssue {
+    readonly dir: string;
+    readonly state: "stale" | "needs-setup";
+    readonly names: readonly string[];
+}
 
-/* One armed retry for the whole daemon, not one per land. Ten agents landing into a busy workspace all want the
- * same thing to happen once, after the last of them.
- *
- * The LATEST caller's dependencies are what it fires with, not the first's. Arming captures a workspace root, a
- * process manager and a logger, and re-arming would otherwise be skipped while a timer from ten minutes ago
- * still held a closure over whatever the first deferral happened to be given. There is one workspace here so the
- * values rarely differ — but "rarely differs" is exactly the kind of thing that stops being true quietly. */
-let retry: ReturnType<typeof setTimeout> | undefined;
-let pending: ReconcileDeps | undefined;
+export interface DependencyInstallStarted {
+    readonly dir: string;
+    readonly origin: DependencyOrigin;
+}
 
-/* Bring the main tree's installs back in line with its manifests. Returns what it decided, or undefined when
- * there was nothing to decide — the overwhelmingly common case, and the one that must cost nothing to ask about.
- *
- * Never throws: this runs at the tail of a turn that has already succeeded, and a failure to start an install is
- * not a reason to fail the turn that prompted it. The install itself reports through its own panel. */
-export const reconcileDependencies = async (deps: ReconcileDeps): Promise<ReconcileOutcome | undefined> => {
-    const stale = await staleProjects(deps).catch((error: unknown) => {
-        deps.logger.warn({ err: error }, "dependency reconcile: could not read workspace setup");
-        return [];
+export interface DependencyInstallStartFailed {
+    readonly dir: string;
+    readonly origin: DependencyOrigin;
+}
+
+export interface DependencyRequestResult {
+    readonly projects: readonly ProjectSetupStatus[];
+    readonly queued: readonly string[];
+}
+
+export interface DependencyCoordinator {
+    readonly status: () => Promise<ProjectSetupStatus[]>;
+    readonly issueAt: (dir: string) => Promise<DependencyIssue | undefined>;
+    readonly requestInstall: (dirs: readonly string[], origin: DependencyRequestOrigin) => Promise<DependencyRequestResult>;
+    readonly reconcileLand: (origin: Extract<DependencyOrigin, { kind: "land" }>) => Promise<ReconcileOutcome | undefined>;
+    readonly watch: (subscribe: (listener: (paths: string[]) => void) => () => void) => () => void;
+    readonly subscribe: (listener: (event: DependencyInstallStarted) => void) => () => void;
+    readonly subscribeFailures: (listener: (event: DependencyInstallStartFailed) => void) => () => void;
+}
+
+export interface DependencyCoordinatorDeps {
+    readonly workspace: { readonly root: string };
+    readonly processes: ManagedProcesses;
+    readonly maintenance: WorkspaceMaintenanceGate;
+    readonly logger: Logger;
+    readonly requestsPath: string;
+    readonly settleMs?: number;
+    readonly pollMs?: number;
+    readonly installMaxMs?: number;
+}
+
+const sleep = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms));
+
+const isInside = (project: string, dir: string): boolean => project === "" || dir === project || dir.startsWith(`${project}/`);
+
+const belongsToLand = (dir: string, origin: Extract<DependencyOrigin, { kind: "land" }>): boolean =>
+    origin.repos.some(({ repo }) => (dir === "" ? repo === "root" : dir === repo || dir.startsWith(`${repo}/`)));
+
+export const createDependencyCoordinator = (deps: DependencyCoordinatorDeps): DependencyCoordinator => {
+    const requests = jsonFile<RequestState>(deps.requestsPath, {
+        parse: requestState,
+        fallback: () => ({ projects: {} }),
     });
-    if (stale.length === 0) {
-        return undefined;
-    }
-    const missing = stale.reduce((total, project) => total + missingCount(project), 0);
-    if (deps.agents.liveSessionIds().length > 0) {
-        pending = deps;
-        if (retry === undefined) {
-            retry = setTimeout(() => {
-                retry = undefined;
-                const next = pending;
-                pending = undefined;
-                if (next !== undefined) {
-                    void reconcileDependencies(next);
+    const causes = new Map<string, DependencyOrigin>();
+    const listeners = new Set<(event: DependencyInstallStarted) => void>();
+    const failureListeners = new Set<(event: DependencyInstallStartFailed) => void>();
+    // Only background observations may be a pass-wide default. A request or land is remembered per project;
+    // letting either become the fallback would attribute unrelated stale projects to whichever conversation
+    // happened to wake the coordinator at the same time.
+    let backgroundOrigin: Extract<DependencyOrigin, { kind: "external" | "startup" }> = { kind: "startup" };
+    let quietAfter = 0;
+    let settlingWorkspaceBurst = false;
+    let dirty = false;
+    let scheduled = false;
+    let stopped = false;
+
+    const remember = (dir: string, origin: DependencyOrigin): void => {
+        const current = causes.get(dir);
+        // Lower-priority observations cannot erase an attributed cause, but a newer cause at the same priority
+        // must replace the old one (two lands in the same project belong to the later land, not the first one
+        // that happened to find it stale).
+        if (current === undefined || originPriority(origin) >= originPriority(current)) {
+            causes.set(dir, origin);
+        }
+    };
+
+    const waitForQuiet = async (): Promise<void> => {
+        while (quietAfter > Date.now()) {
+            await sleep(quietAfter - Date.now());
+        }
+        settlingWorkspaceBurst = false;
+    };
+
+    const waitForInstalls = async (keys: readonly string[]): Promise<void> => {
+        const deadline = Date.now() + (deps.installMaxMs ?? DEFAULT_INSTALL_MAX_MS);
+        while (keys.some((key) => deps.processes.running(key)) && Date.now() < deadline) {
+            await sleep(deps.pollMs ?? DEFAULT_POLL_MS);
+        }
+        const timedOut = keys.filter((key) => deps.processes.running(key));
+        for (const key of timedOut) {
+            deps.logger.warn({ key }, "dependency install exceeded its watch window — stopping it before turns resume");
+            await deps.processes.stop(key);
+        }
+    };
+
+    const removeRequests = async (dirs: readonly string[]): Promise<void> => {
+        if (dirs.length === 0) {
+            return;
+        }
+        const removed = new Set(dirs);
+        await requests.update((current) => ({
+            projects: Object.fromEntries(Object.entries(current.projects).filter(([dir]) => !removed.has(dir))),
+        }));
+    };
+
+    const pass = async (): Promise<void> => {
+        const [projects, requested] = await Promise.all([workspaceSetup(deps.workspace.root, deps.processes), requests.read()]);
+        const known = new Map(projects.map((project) => [project.dir, project]));
+        // A ready project has fulfilled its request, including the crash window after an install finished but
+        // before this daemon could record that fact. A removed project cannot ever fulfil one. Clearing both
+        // here keeps the durable file a worklist rather than a history of old requests.
+        await removeRequests(
+            Object.keys(requested.projects).filter((dir) => {
+                const project = known.get(dir);
+                return project === undefined || project.state === "ready";
+            }),
+        );
+        for (const dir of causes.keys()) {
+            const project = known.get(dir);
+            if (project === undefined || (!INSTALLABLE.has(project.state) && project.state !== "installing")) {
+                causes.delete(dir);
+            }
+        }
+        const due = projects.filter(
+            (project) => project.state === "stale" || (requested.projects[project.dir] !== undefined && INSTALLABLE.has(project.state)),
+        );
+        const started: Array<{ dir: string; key: string; requested: boolean }> = [];
+        for (const project of due) {
+            const requestedOrigin = requested.projects[project.dir];
+            const origin = causes.get(project.dir) ?? requestedOrigin ?? backgroundOrigin;
+            try {
+                await startInstall(deps.workspace.root, project, deps.processes);
+            } catch (error) {
+                deps.logger.warn({ err: error, dir: project.dir }, "dependency coordinator: install would not start");
+                for (const listener of failureListeners) {
+                    try {
+                        listener({ dir: project.dir, origin });
+                    } catch (listenerError) {
+                        deps.logger.warn({ err: listenerError, dir: project.dir }, "dependency coordinator: failure listener threw");
+                    }
                 }
-            }, deps.retryMs ?? RETRY_MS);
-            retry.unref();
+                continue;
+            }
+            started.push({ dir: project.dir, key: installPanelKey(project.dir), requested: requestedOrigin !== undefined });
+            for (const listener of listeners) {
+                try {
+                    listener({ dir: project.dir, origin });
+                } catch (error) {
+                    deps.logger.warn({ err: error, dir: project.dir }, "dependency coordinator: install listener threw");
+                }
+            }
         }
-        deps.logger.info({ projects: stale.map((project) => project.dir), missing }, "dependency reconcile deferred — a turn is live");
-        return { missing, started: [], deferred: true };
-    }
-    // Reaching the install means the workspace went quiet, so an armed retry has nothing left to find.
-    if (retry !== undefined) {
-        clearTimeout(retry);
-        retry = undefined;
-        pending = undefined;
-    }
-    const started: string[] = [];
-    for (const project of stale) {
-        try {
-            await startInstall(deps.workspace.root, project, deps.processes);
-            started.push(project.dir);
-        } catch (error) {
-            deps.logger.warn({ err: error, dir: project.dir }, "dependency reconcile: install would not start");
+        if (started.length > 0) {
+            deps.logger.info({ projects: started.map(({ dir }) => dir) }, "dependency coordinator: installs started");
+            await waitForInstalls(started.map(({ key }) => key));
+            const settled = new Map((await workspaceSetup(deps.workspace.root, deps.processes)).map((project) => [project.dir, project]));
+            const fulfilled = started
+                .filter(({ dir, requested: explicitlyRequested }) => explicitlyRequested && settled.get(dir)?.state === "ready")
+                .map(({ dir }) => dir);
+            await removeRequests(fulfilled);
+            for (const { dir } of started) {
+                if (settled.get(dir)?.state === "ready") {
+                    causes.delete(dir);
+                }
+            }
         }
-    }
-    deps.logger.info({ projects: started, missing }, "dependency reconcile started");
-    if (started.length > 0) {
-        deps.onInstalled?.(started);
-    }
-    return { missing, started, deferred: false };
+    };
+
+    const schedule = (origin: DependencyOrigin): void => {
+        if (origin.kind === "external") {
+            backgroundOrigin = origin;
+        }
+        dirty = true;
+        if (scheduled || stopped) {
+            return;
+        }
+        scheduled = true;
+        void deps.maintenance
+            .runMaintenance(async () => {
+                while (dirty) {
+                    if (stopped) {
+                        break;
+                    }
+                    dirty = false;
+                    await waitForQuiet();
+                    await pass();
+                }
+            })
+            .catch((error: unknown) => deps.logger.warn({ err: error }, "dependency coordinator: maintenance pass failed"))
+            .finally(() => {
+                scheduled = false;
+                backgroundOrigin = { kind: "external" };
+                if (dirty && !stopped) {
+                    schedule({ kind: "external" });
+                }
+            });
+    };
+
+    const status = async (): Promise<ProjectSetupStatus[]> => {
+        const [projects, requested] = await Promise.all([workspaceSetup(deps.workspace.root, deps.processes), requests.read()]);
+        const stale = projects.filter((project) => project.state === "stale");
+        for (const project of stale) {
+            remember(project.dir, { kind: "external" });
+        }
+        const requestedDue = projects.filter((project) => requested.projects[project.dir] !== undefined && INSTALLABLE.has(project.state));
+        for (const project of requestedDue) {
+            remember(project.dir, requested.projects[project.dir] as DependencyRequestOrigin);
+        }
+        if (stale.length > 0 || requestedDue.length > 0) {
+            schedule({ kind: "external" });
+        }
+        return projects;
+    };
+
+    return {
+        status,
+        issueAt: async (dir) => {
+            const projects = await status();
+            const project = projects
+                .filter((candidate) => isInside(candidate.dir, dir))
+                .toSorted((left, right) => right.dir.length - left.dir.length)[0];
+            if (project === undefined || (project.state !== "stale" && project.state !== "needs-setup")) {
+                return undefined;
+            }
+            const unresolved =
+                project.state === "stale" ? (project.unresolved ?? []) : await unresolvedDependencies(join(deps.workspace.root, project.dir));
+            return { dir: project.dir, state: project.state, names: unresolved.flatMap((entry) => entry.names) };
+        },
+        requestInstall: async (dirs, origin) => {
+            const projects = await workspaceSetup(deps.workspace.root, deps.processes);
+            const wanted = new Set(dirs);
+            const queued = projects.filter((project) => wanted.has(project.dir) && INSTALLABLE.has(project.state)).map((project) => project.dir);
+            if (queued.length > 0) {
+                await requests.update((current) => ({
+                    projects: { ...current.projects, ...Object.fromEntries(queued.map((dir) => [dir, origin])) },
+                }));
+                for (const dir of queued) {
+                    remember(dir, origin);
+                }
+                schedule(origin);
+            }
+            return { projects, queued };
+        },
+        reconcileLand: async (origin) => {
+            const projects = await workspaceSetup(deps.workspace.root, deps.processes);
+            const stale = projects.filter((project) => project.state === "stale");
+            if (stale.length === 0) {
+                return undefined;
+            }
+            for (const project of stale) {
+                remember(project.dir, belongsToLand(project.dir, origin) ? origin : { kind: "external" });
+            }
+            schedule({ kind: "external" });
+            const caused = stale.filter((project) => belongsToLand(project.dir, origin));
+            return caused.length === 0
+                ? undefined
+                : { missing: caused.reduce((total, project) => total + missingCount(project), 0), started: [], deferred: true };
+        },
+        watch: (subscribe) => {
+            stopped = false;
+            const unsubscribe = subscribe((paths) => {
+                const manifestChanged = paths.length === 0 || paths.some((path) => isManifest(basename(path)));
+                // A manifest is the event that reserves maintenance. Once it does, every later workspace batch
+                // extends the quiet window: a checkout often writes package.json early and source files for
+                // seconds afterwards, and installing two seconds after the manifest alone would still run in
+                // the middle of that checkout. Before a manifest, ordinary source edits remain free.
+                if (!manifestChanged && !settlingWorkspaceBurst) {
+                    return;
+                }
+                settlingWorkspaceBurst = true;
+                quietAfter = Date.now() + (deps.settleMs ?? DEFAULT_SETTLE_MS);
+                if (manifestChanged) {
+                    schedule({ kind: "external" });
+                }
+            });
+            schedule({ kind: "startup" });
+            return () => {
+                stopped = true;
+                unsubscribe();
+            };
+        },
+        subscribe: (listener) => {
+            listeners.add(listener);
+            return () => listeners.delete(listener);
+        },
+        subscribeFailures: (listener) => {
+            failureListeners.add(listener);
+            return () => failureListeners.delete(listener);
+        },
+    };
 };

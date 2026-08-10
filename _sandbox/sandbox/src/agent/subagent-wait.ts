@@ -105,6 +105,17 @@ export interface SubagentWaitDeps {
     readonly registry: AgentsRegistry;
     // The turn's own abort, so a parked wait settles when the turn is stopped under it.
     readonly signal: AbortSignal;
+    /* Hand the workspace back for the length of the park (workspace/maintenance-gate.ts explains why). A turn
+     * asleep on another agent is running nothing against the dependency tree, and holding it would stall the
+     * repair its own sibling's work is the likeliest cause of. */
+    readonly park: <T>(run: () => Promise<T>) => Promise<T>;
+    /* Whether THIS turn has anything of its own still writing — a subagent or delegated CLI on the roster, a
+     * command left running in its shell. The model being parked is not the same as the turn being parked
+     * (agent.ts's syncOnAnswer draws the same distinction, for the same tree), and giving the workspace back
+     * while a background build of ours is mid-run would hand an install exactly the live writer the gate
+     * exists to keep it away from. Checked once, on the way in: the model cannot start anything new while it
+     * sleeps, so what is running at that moment is all that can be. */
+    readonly quiet: () => Promise<boolean>;
 }
 
 const UNTIL = z.enum(["blocked", "finished"]);
@@ -138,10 +149,15 @@ export const subagentWaitServer = (deps: SubagentWaitDeps): McpSdkServerConfigWi
                 async (args) => {
                     const until: readonly SubagentWaitUntil[] = args.until ?? ["blocked", "finished"];
                     const timeoutMs = Math.round((args.timeoutSeconds ?? DEFAULT_TIMEOUT_S) * 1000);
+                    // Waiting on one of OUR OWN children answers `quiet` false by itself — that child is on the
+                    // roster and it is running, which is the whole reason there is something to wait for. So the
+                    // release lands where it is safe (a fleet sibling, which holds its own slot) without the
+                    // tool having to reason about which door it came in by.
+                    const parked = async <T>(run: () => Promise<T>): Promise<T> => ((await deps.quiet()) ? deps.park(run) : run());
                     // The fleet resolves first: registry ids are conversation ids the registry itself can
                     // confirm, while a child id's absence has two meanings (see unknown-target below).
                     if (args.target !== "any" && deps.registry.get(args.target) !== undefined) {
-                        const result = await waitForFleetAgent(deps.registry, args.target, until, timeoutMs, deps.signal);
+                        const result = await parked(() => waitForFleetAgent(deps.registry, args.target, until, timeoutMs, deps.signal));
                         return answer({
                             outcome: result.outcome,
                             ...(result.agent !== undefined ? { agent: fleetSnapshot(result.agent) } : {}),
@@ -150,12 +166,15 @@ export const subagentWaitServer = (deps: SubagentWaitDeps): McpSdkServerConfigWi
                     if (deps.conversationId === undefined) {
                         return answer({ outcome: "unknown-target", note: "This turn has no conversation, so it has no children to wait on." });
                     }
-                    const result = await waitForSubagent(deps.conversationId, {
-                        ...(args.target !== "any" ? { target: args.target } : {}),
-                        until,
-                        timeoutMs,
-                        signal: deps.signal,
-                    });
+                    const conversationId = deps.conversationId;
+                    const result = await parked(() =>
+                        waitForSubagent(conversationId, {
+                            ...(args.target !== "any" ? { target: args.target } : {}),
+                            until,
+                            timeoutMs,
+                            signal: deps.signal,
+                        }),
+                    );
                     return answer({
                         outcome: result.outcome,
                         ...(result.matched !== undefined ? { agent: result.matched } : {}),

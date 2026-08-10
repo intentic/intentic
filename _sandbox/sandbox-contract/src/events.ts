@@ -298,6 +298,16 @@ export const AgentEventSchema = z.discriminatedUnion("kind", [
      * waiting for an answer), so it reads where it happened, under the answer that triggered it, and is drawn by
      * the client alone like every other mid-turn notice. */
     z.object({ kind: z.literal("preamble"), notes: z.array(TurnNoteSchema), duringTurn: z.boolean().optional() }),
+    /* THIS TURN HAS NOT STARTED YET, and why — it is queued behind a dependency repair (the readers/writer
+     * lease in sandbox workspace/maintenance-gate.ts, which holds every turn out while the tree is rewritten
+     * and its checks run). Emitted only when the wait is long enough to notice, so an ordinary turn still opens
+     * on its first real frame.
+     *
+     * It exists because the wait is otherwise INVISIBLE: admission happens before any frame, so a message sent
+     * during a repair simply sat there, for the length of a settle window plus an install plus a project's
+     * checks, indistinguishable from a hang. The turn resumes by itself the moment the workspace frees up —
+     * this says so, and the client hangs its "watch the install" offer off the same line. */
+    z.object({ kind: z.literal("waiting"), on: z.literal("dependencies") }),
     // The SDK's init handshake; carries the model it actually resolved for the turn.
     z.object({ kind: z.literal("init"), model: z.string() }),
     // The pre-turn workspace snapshot's id (the attribution-fence "user" capture), emitted once before the
@@ -586,7 +596,8 @@ export type AttachFrame = z.infer<typeof AttachFrameSchema>;
 // `answered` deliberately does not carry it — what follows THAT note is not a repetition but the user's answer,
 // and telling the model to "continue from that point instead of starting over" about words it has never seen
 // is how a resume reads as the user contradicting themselves.
-const REPEATED = "The interrupted request is repeated below — where part of it was already completed in this session, continue from that point instead of starting over.";
+const REPEATED =
+    "The interrupted request is repeated below — where part of it was already completed in this session, continue from that point instead of starting over.";
 export const RESUME_NOTES = {
     auth: `The Claude credential that interrupted this conversation has been renewed, and this turn resumed automatically. ${REPEATED}`,
     outage: `The model provider was briefly unavailable and interrupted this conversation; this turn resumed automatically. ${REPEATED}`,
@@ -594,7 +605,8 @@ export const RESUME_NOTES = {
     // A turn that was PARKED on the user when the daemon died: nothing re-runs at boot — the card is restored
     // instead, and this is the turn their answer starts (turn-resume.ts). What rides below the note is the
     // answer itself, so the model picks the session back up at exactly the decision it had handed over.
-    answered: "The sandbox restarted while this conversation was waiting for the user to respond; it is back, and their response follows below — continue from where the session left off.",
+    answered:
+        "The sandbox restarted while this conversation was waiting for the user to respond; it is back, and their response follows below — continue from where the session left off.",
 } as const;
 
 // The prompt a resume actually sends: the note (each carries its own account of what the words below are),

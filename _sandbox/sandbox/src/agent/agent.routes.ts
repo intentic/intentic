@@ -17,8 +17,8 @@ import { extensionEnvOf } from "../extensions/extension-env.js";
 import { extensionBinDirsOf } from "../extensions/installed-extensions.js";
 import type { Services } from "../composition.js";
 import type { OrpcContext } from "../context.js";
-import { reconcileDependencies } from "../workspace/reconcile-deps.js";
-import { type LandContext, queueVerify, type VerifyDeps } from "../workspace/verify-deps.js";
+import type { DependencyLandOrigin } from "../workspace/dependency-origin.js";
+import { queueVerify, type VerifyDeps } from "../workspace/verify-deps.js";
 import { syncAdvisory, syncWorkspaceRepos } from "../workspace/sync-repos.js";
 import { resolveWithin } from "../workspace/workspace-files.js";
 import { startAnchor, type TurnPlacement } from "../agents/isolation.js";
@@ -78,6 +78,18 @@ const editorContextNote = (context: EditorContext): string => {
  * them would mean every outage failure immediately un-did itself. */
 const ANSWERED_FRAMES = new Set<AgentEvent["kind"]>(["delta", "thinking", "tool_call"]);
 
+/* How long a turn may sit in the workspace queue before it owes the user an explanation. Long enough that the
+ * uncontended case — which is nearly every turn, where admission resolves in the same tick — never draws a line
+ * about a wait that did not happen; short enough that a real repair is announced well before anyone starts
+ * wondering whether the send worked. `unref` so a daemon shutting down is not held open by a grace timer whose
+ * only remaining job is to lose a race. */
+const ADMISSION_NOTICE_MS = 750;
+
+const admissionGrace = (): Promise<undefined> =>
+    new Promise((resolve) => {
+        setTimeout(() => resolve(undefined), ADMISSION_NOTICE_MS).unref();
+    });
+
 // Run one agent turn, streaming typed AgentEvents. `input.agent` picks the provider adapter (absent =
 // claude); each provider's token is the sandbox's own credential, never held by the platform, with the
 // container env as fallback. A turn with no stored account and no env fallback surfaces an actionable error
@@ -94,19 +106,39 @@ export async function* streamAgent(services: Services, input: AgentTurn, signal:
     } else {
         signal?.addEventListener("abort", () => controller.abort(), { once: true });
     }
-    // Steering needs the SDK's streaming-input mode, so it exists only where the runtime declares it (see
-    // capabilitiesOf — which is NOT the same as the harness the client sent). A native codex/grok or an ACP turn
-    // registers abort alone — steering it reports NOT_FOUND and the client falls back.
-    const steering = capabilitiesOf(input.agent ?? "claude", input.harness ?? "native").steering ? new SteeringQueue() : undefined;
-    const unregister =
-        input.conversationId !== undefined
-            ? registerTurn(input.conversationId, { abort: () => controller.abort(), ...(steering !== undefined ? { steering } : {}) })
-            : undefined;
+    /* Turn admission and dependency maintenance are the two sides of one readers/writer lease. Acquiring it
+     * before the conversation registry is marked running closes both races: maintenance cannot start under a
+     * turn, and a turn cannot start after maintenance's last "is anyone live" check because there is no such
+     * check any more. A queued turn remains an ordinary pending request and can still be aborted.
+     *
+     * SAY SO IF IT IS SLOW. This await is ahead of every frame, so a turn queued behind a repair used to be a
+     * conversation that sat there — for a settle window, an install and the project's checks — looking exactly
+     * like a hang. The grace period is what keeps that honest without making an ordinary turn announce a wait
+     * nobody experienced: below it the queue is imperceptible, above it the user is owed a sentence. */
+    const admission = services.workspaceMaintenance.enterTurn(controller.signal);
+    const admitted = await Promise.race([admission, admissionGrace()]);
+    if (admitted === undefined) {
+        yield { kind: "waiting", on: "dependencies" };
+    }
+    const lease = admitted ?? (await admission);
+    let steering: SteeringQueue | undefined;
+    let unregister: (() => void) | undefined;
     try {
-        yield* runConversationTurn(services, input, controller.signal, steering);
+        // Steering needs the SDK's streaming-input mode, so it exists only where the runtime declares it (see
+        // capabilitiesOf — which is NOT the same as the harness the client sent). A native codex/grok or an ACP
+        // turn registers abort alone — steering it reports NOT_FOUND and the client falls back. These setup
+        // steps live inside the lease's try/finally too: an unexpected registration failure must not strand a
+        // reader forever and block every future dependency repair.
+        steering = capabilitiesOf(input.agent ?? "claude", input.harness ?? "native").steering ? new SteeringQueue() : undefined;
+        unregister =
+            input.conversationId !== undefined
+                ? registerTurn(input.conversationId, { abort: () => controller.abort(), ...(steering !== undefined ? { steering } : {}) })
+                : undefined;
+        yield* runConversationTurn(services, input, controller.signal, steering, lease.park);
     } finally {
         unregister?.();
         steering?.close();
+        lease.release();
     }
 }
 
@@ -118,9 +150,12 @@ async function* runConversationTurn(
     input: AgentTurn,
     signal: AbortSignal | undefined,
     steering: SteeringQueue | undefined,
+    // The turn's workspace lease, travelling beside `steering` for the same reason: only the tools that park a
+    // turn need it, and they are reached through the plan (workspace/maintenance-gate.ts).
+    park: <T>(run: () => Promise<T>) => Promise<T>,
 ): AsyncGenerator<AgentEvent> {
     if (input.conversationId === undefined) {
-        yield* runTurn(services, input, signal, undefined, steering);
+        yield* runTurn(services, input, signal, undefined, steering, park);
         return;
     }
     const conversationId = input.conversationId;
@@ -142,7 +177,8 @@ async function* runConversationTurn(
      * make the failure harder to read. */
     const card = input.actsAs === undefined || existing !== undefined ? undefined : await services.personas.get(input.actsAs);
     const wantsCopy = card?.workspace?.copy;
-    const isolated = existing === undefined ? (wantsCopy === undefined ? input.isolated === true : wantsCopy === "own") : existing.branch !== undefined;
+    const isolated =
+        existing === undefined ? (wantsCopy === undefined ? input.isolated === true : wantsCopy === "own") : existing.branch !== undefined;
     const began = await services.agents.begin(
         {
             conversationId,
@@ -194,7 +230,7 @@ async function* runConversationTurn(
     const turn: SnapshotTurn = { conversationId, index: await turnStartIndex(services, { ...input, conversationId }) };
     if (!isolated) {
         try {
-            for await (const event of runTurn(services, input, signal, undefined, steering, turn)) {
+            for await (const event of runTurn(services, input, signal, undefined, steering, park, turn)) {
                 services.agents.observe(conversationId, event);
                 yield event;
             }
@@ -386,7 +422,7 @@ async function* runConversationTurn(
             }
         };
         // Relay the turn while watching for error frames — a failed turn must not auto-land half-done work.
-        for await (const event of runTurn(services, input, signal, { id: conversationId, cwd: worktree.cwd, synced, resync }, steering, turn)) {
+        for await (const event of runTurn(services, input, signal, { id: conversationId, cwd: worktree.cwd, synced, resync }, steering, park, turn)) {
             services.agents.observe(conversationId, event);
             if (event.kind === "error") {
                 failed = true;
@@ -466,7 +502,8 @@ async function* runConversationTurn(
                  * The verifier is handed along (onInstalled): once the installs this land made necessary have
                  * run, the tree's own checks run and their edges wake the fix chore — with THIS land as the
                  * named cause (verify-deps.ts). */
-                const verifyContext: LandContext = {
+                const verifyContext: DependencyLandOrigin = {
+                    kind: "land",
                     agentId: conversationId,
                     ...(finished.title !== undefined ? { title: finished.title } : {}),
                     branch,
@@ -475,15 +512,13 @@ async function* runConversationTurn(
                 const verifier: VerifyDeps = {
                     workspace: services.workspace,
                     processes: services.processes,
-                    agents: services.agents,
+                    maintenance: services.workspaceMaintenance,
                     logger: services.logger,
                     verifyStore: services.verifyStore,
                     activity: services.activity,
                     emit: (event) => emitWorkspaceEvent(services, event, streamAgent),
                 };
-                const deps = landed.landed
-                    ? await reconcileDependencies({ ...services, onInstalled: (dirs) => queueVerify(verifier, verifyContext, dirs) })
-                    : undefined;
+                const deps = landed.landed ? await services.dependencies.reconcileLand(verifyContext) : undefined;
                 /* THE CLOSURE RE-CHECK: while a project's checks are red, any land that touches it re-runs
                  * them even with no dependency drift — a source-only fix can never turn the light green
                  * otherwise. Skipped when the reconcile deferred: its retry will run the checks with the
@@ -594,6 +629,9 @@ async function* runTurn(
         | { readonly id: string; readonly cwd: string; readonly synced: readonly RepoSync[]; readonly resync: () => Promise<ParkedSync | undefined> }
         | undefined,
     steering: SteeringQueue | undefined,
+    // Hands the workspace back while a tool parks this turn on something outside the tree (turn-plan.ts passes
+    // it to the `wait` tool; workspace/maintenance-gate.ts explains why it has to).
+    park: <T>(run: () => Promise<T>) => Promise<T>,
     // Which conversation message this turn answers, for its end-of-turn checkpoint. Undefined on a turn with no
     // conversation behind it (the bench, a one-shot) — there is no transcript for a rewind to address.
     turn?: SnapshotTurn,
@@ -748,6 +786,7 @@ async function* runTurn(
         cliEnv,
         syncNote: syncNote(worktree?.synced ?? [], "start"),
         steering,
+        park,
         ...(worktree !== undefined ? { resync: worktree.resync } : {}),
     });
     if (!plan.ok) {

@@ -16,6 +16,7 @@ import { resumeWorkflowExecution } from "./workflows/workflow-runner.js";
 import { seedDefaultAutomations } from "./automations/default-automations.js";
 import { seedDefaultPersonas } from "./personas/default-personas.js";
 import { createAutomationsScheduler } from "./automations/scheduler.js";
+import { emitWorkspaceEvent } from "./automations/workspace-events.js";
 import { statePath } from "./workspace/state-paths.js";
 import { capabilityCtx } from "./capabilities/capability.js";
 import { restoreConnectorHooks } from "./capabilities/cli/connector-hooks.js";
@@ -40,6 +41,7 @@ import { commitRootBaseline, ensureRootRepo } from "./git/root-repo.js";
 import { reconcileSkills } from "./settings/skills.js";
 import { composeEnvironment } from "./environment/environment.js";
 import { sweepStaleExports } from "./portability/exports.js";
+import { queueVerify, type VerifyDeps } from "./workspace/verify-deps.js";
 import { type Config, loadConfig } from "./env.config.js";
 import { createLogger } from "./logger.js";
 import { applyTmuxLogHooks, logsRoot, pruneLogFiles, terminalLogsDir } from "./logs/log-files.js";
@@ -508,6 +510,62 @@ const main = async (): Promise<void> => {
     await boot.step("agentToken", () =>
         writeAgentToken(services.agentToken).catch((error: unknown) => services.logger.warn({ err: error }, "agent token: could not write")),
     );
+
+    /* Reserve dependency maintenance before the data gate opens. The workspace watcher itself starts below,
+     * but its subscriber set is intentionally usable before then; registering now also starts the boot scan.
+     * A turn arriving the instant boot finishes therefore queues behind an already-reserved repair instead of
+     * becoming the race that discovers the stale tree. */
+    const dependencyChecks: VerifyDeps = {
+        workspace: services.workspace,
+        processes: services.processes,
+        maintenance: services.workspaceMaintenance,
+        logger: services.logger,
+        verifyStore: services.verifyStore,
+        activity: services.activity,
+        emit: (event) => emitWorkspaceEvent(services, event, streamAgent),
+    };
+    services.dependencies.subscribe(({ dir, origin }) => {
+        const named = dir === "" ? `the workspace root` : dir;
+        const conversationId = origin.kind === "land" ? origin.agentId : origin.kind === "request" ? origin.conversationId : undefined;
+        const title = origin.kind === "land" || origin.kind === "request" ? origin.title : undefined;
+        const reason =
+            origin.kind === "land"
+                ? "changes from this conversation left the installed tree behind"
+                : origin.kind === "request"
+                  ? origin.conversationId === undefined
+                      ? "setup was requested outside a conversation"
+                      : "setup was requested from this conversation"
+                  : origin.kind === "startup"
+                    ? "the daemon found the installed tree behind during startup"
+                    : "a workspace change left the installed tree behind";
+        void services.activity
+            .append({
+                direction: "system",
+                type: "deps.install_started",
+                content: `Installing dependencies for ${named} — ${reason}.`,
+                outcome: "ok",
+                ...(conversationId === undefined ? {} : { conversationId }),
+                ...(title === undefined ? {} : { title }),
+            })
+            .catch((error: unknown) => logger.warn({ err: error }, "dependency coordinator: activity append failed"));
+        queueVerify(dependencyChecks, origin, [dir]);
+    });
+    services.dependencies.subscribeFailures(({ dir, origin }) => {
+        const named = dir === "" ? `the workspace root` : dir;
+        const conversationId = origin.kind === "land" ? origin.agentId : origin.kind === "request" ? origin.conversationId : undefined;
+        const title = origin.kind === "land" || origin.kind === "request" ? origin.title : undefined;
+        void services.activity
+            .append({
+                direction: "system",
+                type: "deps.install_failed",
+                content: `Dependency installation for ${named} could not start. The project remains behind and will retry on the next readiness check.`,
+                outcome: "error",
+                ...(conversationId === undefined ? {} : { conversationId }),
+                ...(title === undefined ? {} : { title }),
+            })
+            .catch((error: unknown) => logger.warn({ err: error }, "dependency coordinator: failure activity append failed"));
+    });
+    services.dependencies.watch(subscribeWorkspaceChanges);
 
     // The state the data routes serve is converged — open the gate. Everything below is background machinery
     // that no queued request depends on.

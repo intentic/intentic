@@ -37,7 +37,7 @@ export const SHELL = "zsh";
 // foreground command (session name → pane_current_command) in one call; an absent session is a dead one.
 export interface ProcessRunner {
     readonly launch: (session: string, spec: ProcessSpec & { port: number }) => Promise<void>;
-    readonly kill: (session: string) => void;
+    readonly kill: (session: string) => void | Promise<void>;
     readonly states: () => Promise<Map<string, string>>;
 }
 
@@ -114,8 +114,8 @@ const defaultRunner: ProcessRunner = {
             "Enter",
         ]);
     },
-    kill: (session) => {
-        execFile("tmux", ["kill-session", "-t", `=${session}`], () => undefined);
+    kill: async (session) => {
+        await execFileAsync("tmux", ["kill-session", "-t", `=${session}`]).catch(() => undefined);
     },
     // One call for all sessions: pane_current_command is the pane's foreground process (the shell itself at a
     // prompt) — how the sweep sees a oneShot job finish. A shell exit destroys its single-pane session, which
@@ -167,7 +167,7 @@ export interface ManagedProcesses {
     // registers it so `running` reports it and the sweep watches it to completion. False when no such session.
     readonly adopt: (repo: string, spec: Pick<ProcessSpec, "oneShot">) => Promise<boolean>;
     // Kills the session (including a finished oneShot's lingering shell).
-    readonly stop: (repo: string) => void;
+    readonly stop: (repo: string) => void | Promise<void>;
     readonly running: (repo: string) => boolean;
     // The port the running panel was assigned (undefined when not running) — the preview proxy's forward target.
     readonly portOf: (repo: string) => number | undefined;
@@ -260,9 +260,10 @@ export const createManagedProcesses = (runner: ProcessRunner = defaultRunner): M
             }
             return true;
         },
-        stop: (key) => {
-            runner.kill(panelSession(key));
+        stop: async (key) => {
+            const stopped = runner.kill(panelSession(key));
             untrack(key);
+            await stopped;
         },
         running: (key) => current.has(key),
         portOf: (key) => current.get(key)?.port,

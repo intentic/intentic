@@ -96,8 +96,10 @@ test("a started turn records its settled transcript, whatever provider ran it", 
     });
     expect(started).toBeDefined();
     await vi.waitFor(async () => expect(await record.read("tr-record")).toHaveLength(2));
+    // The user row is stamped with when it was sent; this suite is about which rows a settled turn records, so
+    // it asserts the shape and lets the clock be a number.
     expect(await record.read("tr-record")).toEqual([
-        { role: "user", text: "ship it" },
+        { role: "user", text: "ship it", sentAt: expect.any(Number) },
         { role: "assistant", text: "shipped" },
     ]);
 });
@@ -701,7 +703,12 @@ const questionCard = (requestId: string): ParkedCard => ({
         },
     ],
 });
-const permissionCard = (requestId: string): ParkedCard => ({ kind: "permission", requestId, toolName: "Bash", title: "Claude wants to run pnpm deploy" });
+const permissionCard = (requestId: string): ParkedCard => ({
+    kind: "permission",
+    requestId,
+    toolName: "Bash",
+    title: "Claude wants to run pnpm deploy",
+});
 
 const parkedEntry = (conversationId: string, cards: ParkedCard[], extra: Partial<JournalledTurn> = {}): JournalledTurn =>
     journalled(conversationId, { sessionId: "s-parked", parked: cards, ...extra });

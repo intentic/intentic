@@ -167,9 +167,14 @@ test("an opencode delegation is stamped the same way", async () => {
 // The stamp rides INSIDE the pane's own shell line, so it must survive the namespace hop: env assignments are
 // shell constructs, and one placed after nsenter would be exec'd as a program name — the stamp must come first.
 test("under an anchored isolation, the stamp precedes the nsenter hop", async () => {
+    // One plan, on both the placement and the anchor it produced — which is what a real anchored turn carries.
+    const plan = { worktree: "/wt", root: WORKSPACE_ROOT, mirrors: [], overlays: "/ov" };
     const command = await rewritten(
         { command: "codex exec 'fix'", description: "Delegate" },
-        bashTmuxHooks([], { anchor: { pid: 4242, cwd: WORKSPACE_ROOT }, plan: { worktree: "/wt", root: WORKSPACE_ROOT, mirrors: [], overlays: "/ov" } }),
+        bashTmuxHooks([], {
+            anchor: { pid: 4242, cwd: WORKSPACE_ROOT, plan, dispose: () => {} },
+            plan,
+        }),
     );
     expect(command).toMatch(/INTENTIC_DELEGATION_ID=tu-1 nsenter/);
 });

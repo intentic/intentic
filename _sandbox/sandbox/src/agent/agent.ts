@@ -40,6 +40,8 @@ import type { AccountsServerFactory } from "../browser/accounts-tools.js";
 import { browserArtifactHooks, screenshotImage } from "../browser/browser-artifacts.js";
 import { browserServerOfTool, browserSessionHooks } from "../browser/browser-sessions.js";
 import { localCommandText, unknownCommandName } from "./agent-commands.js";
+import { depsNoticeHooks } from "./agent-deps.js";
+import type { DependencyIssue } from "../workspace/reconcile-deps.js";
 import { editDiagnosticsHooks } from "./agent-diagnostics.js";
 import { installSteeringHooks } from "./agent-installs.js";
 import { commandGateHooks } from "../guard/command-gate.js";
@@ -85,6 +87,18 @@ export interface AgentRequest {
     // The working dir the agent edits — the workspace root, so it can touch all three repos. Under `isolation`
     // this is the root as seen INSIDE the namespace, where it resolves to the conversation's worktree.
     readonly cwd: string;
+    // The MAIN checkout, as the DAEMON sees it — which `cwd` is not, for an isolated turn (it names the
+    // worktree) nor for a persona that starts in a subfolder. Carried for the daemon-side readers that must ask
+    // about the real workspace: the installed dependency tree an isolated turn merely mounts is the main one,
+    // so a question about it asked anywhere else finds empty directories and answers nonsense. Every planned
+    // turn sets it (turn-plan's `honoured`); absent only where a caller builds a request by hand, and `cwd` is
+    // the workspace root in every one of those.
+    readonly workspaceRoot?: string;
+    // A project-scoped dependency answer for the command-failure hook. It is bound while planning, where the
+    // persona's logical start directory and mutation authority are still known; the hook must not flatten the
+    // whole workspace and excuse one project's error with another project's missing package.
+    readonly dependencyIssue?: (command: string) => Promise<DependencyIssue | undefined>;
+    readonly dependencyInstallAllowed?: boolean;
     // Where this turn works, and how strongly that is enforced (agents/isolation.ts). With an anchor the turn
     // runs in its own mount namespace and its /work IS its worktree; without one the same mapping is applied
     // to tool inputs instead (agents/worktree-redirect.ts). Absent entirely ⇒ a main-tree turn, which means
@@ -1360,7 +1374,7 @@ const baseOptions = (
               })
             : {},
         tmuxEnabled ? bashTmuxHooks(Object.keys(request.cliEnv ?? {}), request.isolation) : {},
-        installSteeringHooks(),
+        installSteeringHooks(request.dependencyInstallAllowed === true),
         // The outbound sniffer's enforcing half: classified provider calls (a discord curl) are checked against
         // the owner's action rules BEFORE they run — and hooks fire even under bypassPermissions, which is what
         // makes this hold for unattended automation turns. No rules ⇒ no hook (turn-plan forwards none).
@@ -1398,6 +1412,10 @@ const baseOptions = (
         // and a fiction: an anchored turn's dependencies exist only inside its namespace, so the check is placed
         // in there and speaks the agent's own paths (agent-diagnostics.ts).
         editDiagnosticsHooks(request.cwd, request.isolation),
+        // The same misreading the diagnostics hook heads off after an edit, headed off after a COMMAND: a test
+        // or a build that failed on a package the tree is genuinely missing says so once, having checked first
+        // (agent-deps.ts). Asked of the main checkout, which is what an isolated turn's dependencies are.
+        depsNoticeHooks(request.dependencyIssue ?? (async () => undefined), request.dependencyInstallAllowed === true),
     ),
     // Enter the namespace by wrapping the CLI's own spawn: the agent process (and everything it forks) is born
     // inside it, so there is no window in which the turn can see the shared tree.

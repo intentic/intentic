@@ -6,7 +6,9 @@ import type { WorkspaceEvent } from "@intentic/sandbox-contract";
 import type { Logger } from "pino";
 import { expect, test, vi } from "vitest";
 import type { ManagedProcesses, ProcessSpec } from "../processes/managed-processes.js";
-import { checkCommandFor, type LandContext, type VerifyDeps } from "./verify-deps.js";
+import type { DependencyLandOrigin } from "./dependency-origin.js";
+import { createWorkspaceMaintenanceGate, type WorkspaceMaintenanceGate } from "./maintenance-gate.js";
+import { checkCommandFor, type VerifyDeps } from "./verify-deps.js";
 import { fileVerifyStore } from "./verify-store.js";
 
 const workspace = async (): Promise<string> => mkdtemp(join(tmpdir(), "verify-"));
@@ -19,7 +21,12 @@ const write = async (root: string, path: string, content = "{}"): Promise<void> 
 
 const silent = { info: () => undefined, warn: () => undefined } as unknown as Logger;
 
-const context: LandContext = { agentId: "agent-1", branch: "agent/agent-1", repos: [{ repo: "app", from: "abc", dir: "app" }] };
+const context: DependencyLandOrigin = {
+    kind: "land",
+    agentId: "agent-1",
+    branch: "agent/agent-1",
+    repos: [{ repo: "app", from: "abc", dir: "app" }],
+};
 
 // An installed project whose manifest declares the given scripts — the state the reconciler's install leaves
 // behind when it succeeds.
@@ -50,17 +57,23 @@ const fakeProcesses = (root: string, exitCode: number | undefined, started: stri
     } as unknown as ManagedProcesses;
 };
 
-// Module state (armed retry, single-flight chain) is per daemon on purpose; each case takes a fresh copy so
-// one test's deferral cannot leak into the next — the reconcile-deps tests' own pattern.
+// The single-flight queue is process-wide because there is one daemon; each case takes a fresh module so one
+// test's unfinished chain cannot leak into another.
 const freshQueue = async (): Promise<typeof import("./verify-deps.js")> => {
     vi.resetModules();
     return import("./verify-deps.js");
 };
 
-const deps = (root: string, processes: ManagedProcesses, events: WorkspaceEvent[], feed: string[], live: string[] = []): VerifyDeps => ({
+const deps = (
+    root: string,
+    processes: ManagedProcesses,
+    events: WorkspaceEvent[],
+    feed: string[],
+    maintenance: WorkspaceMaintenanceGate = createWorkspaceMaintenanceGate(),
+): VerifyDeps => ({
     workspace: { root },
     processes,
-    agents: { liveSessionIds: () => live },
+    maintenance,
     logger: silent,
     verifyStore: fileVerifyStore(join(root, `${STATE_DIR}/verify.json`)),
     activity: {
@@ -70,7 +83,6 @@ const deps = (root: string, processes: ManagedProcesses, events: WorkspaceEvent[
     },
     emit: (event) => void events.push(event),
     pollMs: 5,
-    retryMs: 5,
     watchMaxMs: 200,
 });
 
@@ -169,18 +181,19 @@ test("an install that left the project unready stops at telling the owner — no
     expect(feed).toEqual(["deps.install_failed"]);
 });
 
-test("a live turn defers the check — the tree it reads is the turn's lowerdir", async () => {
+test("a live turn holds the check until its workspace lease is released", async () => {
     const { queueVerify } = await freshQueue();
     const root = await workspace();
     await ready(root, { test: "vitest run" });
     const events: WorkspaceEvent[] = [];
     const feed: string[] = [];
     const started: string[] = [];
-    const live = ["turn-1"];
-    queueVerify(deps(root, fakeProcesses(root, 1, started), events, feed, live), context, ["app"]);
+    const maintenance = createWorkspaceMaintenanceGate();
+    const turnLease = await maintenance.enterTurn();
+    queueVerify(deps(root, fakeProcesses(root, 1, started), events, feed, maintenance), context, ["app"]);
+    await new Promise((resolve) => setTimeout(resolve, 20));
     expect(started).toEqual([]);
-    // The workspace goes quiet; the armed retry runs the deferred check.
-    live.length = 0;
+    turnLease.release();
     await settle(() => events.length > 0);
     expect(started).toEqual(["app--verify"]);
 });
@@ -195,6 +208,39 @@ test("a pane that dies before reporting reads as red, never green", async () => 
     await settle(() => events.length > 0);
     expect(events[0]?.event).toBe("deps.broken");
     expect(events[0]?.deps?.exitCode).toBe(-1);
+});
+
+/* THE CAUSELESS RUN — the reconciler's own install, off a pull or a hand-edited manifest rather than a land.
+ *
+ * It gets the same checks and the same feed rows, because the feed is the ONLY trace it has: nobody's
+ * conversation is going to mention it. What it does not get is the wake, and that is the point of the case — a
+ * chore reads the payload's `repos` as a git span to work, so firing one with a made-up agent and an empty span
+ * sends an automation to look at a change that never happened. */
+test("an install nobody caused records its verdict and wakes nobody", async () => {
+    const { queueVerify } = await freshQueue();
+    const root = await workspace();
+    await ready(root, { test: "vitest run" });
+    const events: WorkspaceEvent[] = [];
+    const feed: string[] = [];
+    const started: string[] = [];
+    queueVerify(deps(root, fakeProcesses(root, 1, started), events, feed), { kind: "external" }, ["app"]);
+    await settle(() => feed.length > 0);
+    expect(started).toEqual(["app--verify"]);
+    expect(feed).toEqual(["deps.verify_red"]);
+    expect(events).toEqual([]);
+});
+
+// The daemon has no wake to bind when nothing caused the install, so it is not asked for one — and a chain
+// without a sink must still be a chain that runs rather than one that throws on its way to the verdict.
+test("a chain with no event sink at all still checks and still records", async () => {
+    const { queueVerify } = await freshQueue();
+    const root = await workspace();
+    await ready(root, { test: "vitest run" });
+    const feed: string[] = [];
+    const { emit: _emit, ...sinkless } = deps(root, fakeProcesses(root, 0, []), [], feed);
+    queueVerify(sinkless, { kind: "external" }, ["app"]);
+    await settle(() => feed.length > 0);
+    expect(feed).toEqual(["deps.verify_green"]);
 });
 
 test("the check command is the project's own word for it: verify first, then test, then nothing", async () => {
