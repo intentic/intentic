@@ -343,12 +343,24 @@ export const createGitRoutes = (services: Services) => {
                     }),
                 ),
             );
-            const { text, choice } = await askQuickModel(services, commitMessagePrompt(diffs, input.intent), signal ?? new AbortController().signal);
+            const { text, choice, skipped } = await askQuickModel(
+                services,
+                commitMessagePrompt(diffs, input.intent),
+                signal ?? new AbortController().signal,
+            );
             const message = cleanCommitSubject(text);
             if (message === "") {
                 throw new ORPCError("BAD_GATEWAY", { message: `${choice.model} returned an empty commit message — try again.` });
             }
-            return { message, provider: choice.provider, model: choice.model };
+            // Whatever the chain stepped over on the way here travels with the answer: the panel names the model
+            // that wrote the line, and a user whose first choice was skipped should be told rather than left to
+            // notice that the name changed.
+            return {
+                message,
+                provider: choice.provider,
+                model: choice.model,
+                skipped: skipped.map((refusal) => ({ model: refusal.choice.model, reason: refusal.reason })),
+            };
         }),
         // One row's own diff. The side is the row's side, not a convenience: for a partially staged file
         // HEAD↔worktree matches neither list, so opening it from either row would show a diff the panel never

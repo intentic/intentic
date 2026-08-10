@@ -23,6 +23,9 @@ export interface CommitDraft {
     // Which model wrote it, for the "Drafted with …" readout. Named rather than "AI" so a user can tell that
     // their commit messages come from Haiku while their chat runs on Opus.
     readonly model: string;
+    // The models ahead of it that refused, when the daemon had to walk down the chain to reach this one. Empty
+    // on the ordinary path — a fallback the user is not told about is a bill they cannot see.
+    readonly skipped: readonly { readonly model: string; readonly reason: string }[];
 }
 
 export function useCommitDraft() {
@@ -73,7 +76,7 @@ export function useCommitDraft() {
                 signal: controller.signal,
             });
             previous.value = current;
-            drafted.value = { message: result.message, model: result.model };
+            drafted.value = { message: result.message, model: result.model, skipped: result.skipped };
             return result.message;
         } catch (caught) {
             // A cancel is the user's own doing, so it says nothing — the button simply goes idle again.

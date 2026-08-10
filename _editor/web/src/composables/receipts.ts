@@ -21,11 +21,25 @@ import { ref } from "vue";
  *
  * ONE AT A TIME, newest wins. Two receipts stacked is a notification centre, and the second one is always the
  * one the user is looking for — a queue would make them wait for the first to expire before being told what
- * just happened. */
+ * just happened.
+ *
+ * AND THE THIRD THING THAT CAN HAPPEN: not done, not alarming. A one-click helper that could not answer — the
+ * commit-message autofill with every connected model spent — belongs in neither of the two channels the app
+ * had. It is not a completion, and the red box is for a failure the user has to act on: nothing is broken, no
+ * work was lost, and there is nothing to fix but wait. Left with only those two, it went in the silent one, so
+ * clicking sparkle did nothing at all and looked like a dead button.
+ *
+ * So a receipt carries a TONE. Same pill, same dwell, same self-retiring contract — one glyph and one colour
+ * apart, because "it didn't work" said calmly is still the same KIND of message as "it worked": something
+ * happened, here it is, carry on. */
+
+export type ReceiptTone = "done" | "problem";
 
 export interface Receipt {
-    // What happened, in the past tense, from the user's side: "3 files deleted", not "Delete succeeded".
+    // What happened, in the past tense, from the user's side: "3 files deleted", not "Delete succeeded". For a
+    // `problem`, what could not happen and why in one sentence — this is the whole message, not a headline.
     readonly message: string;
+    readonly tone: ReceiptTone;
     // The way back, when there is one. A receipt whose action needs more than one word does not belong here.
     readonly undo?: () => void | Promise<void>;
 }
@@ -36,10 +50,16 @@ export const useReceipts = () => {
     /* Raising one REPLACES whatever is showing, which is also how the timer restarts: the host watches this
      * ref, so a second archive re-arms the full dwell rather than inheriting the tail of the first. */
     const say = (message: string, undo?: Receipt[`undo`]): void => {
-        current.value = { message, undo };
+        current.value = { message, tone: `done`, undo };
+    };
+    /* The same channel for the thing that did not work — no Undo, because there is nothing to take back. Use it
+     * where the alternative is silence: a click that produced no result and no explanation. A failure the user
+     * must ACT on is still a notice (ui/notice.ts), and putting one here would retire it before they read it. */
+    const warn = (message: string): void => {
+        current.value = { message, tone: `problem` };
     };
     const dismissReceipt = (): void => {
         current.value = undefined;
     };
-    return { receipt: current, say, dismissReceipt };
+    return { receipt: current, say, warn, dismissReceipt };
 };

@@ -14,6 +14,7 @@ import { useAgents } from "../../composables/agents/useAgents";
 import { useChat } from "../../composables/chat/useChat";
 import { useQuickModel } from "../../composables/chat/quickModel";
 import { useLayout } from "../../composables/useLayout";
+import { useReceipts } from "../../composables/receipts";
 import { clearFilledMessage, commitMessage, fillCommitMessage } from "../../composables/workspace/commitMessage";
 import { conventionalSubject } from "../../composables/workspace/commitSuggestion";
 import { useCommitDraft } from "../../composables/workspace/useCommitDraft";
@@ -648,12 +649,24 @@ const doCommit = async (): Promise<void> => {
  *
  * Everything it has to say goes in the READOUT SLOT the blocker notice already owns — "Drafted with X · Undo",
  * or why it failed. Same reasoning as blockerNotice: that line answers "what is this box about to do", a draft
- * is an answer to exactly that, and a two-line box cannot afford a row per state. */
+ * is an answer to exactly that, and a two-line box cannot afford a row per state.
+ *
+ * IT NEVER SITS THERE DEAD. The button used to be `disabled` whenever it could not run, which meant the two
+ * states it most needed to explain — nothing staged, and no account connected — reached the user as a click
+ * that did nothing at all, with the reason parked in a tooltip that touch never opens. So it stays live and
+ * ANSWERS: the readout takes the reason, and the app's quiet channel says it again where the user is actually
+ * looking (composables/receipts.ts), because a sidebar line under a sparkle they clicked in the corner of the
+ * screen is exactly the kind of feedback people miss. Same for a draft that FAILS: the whole chain being spent
+ * is a real afternoon-long state, and "nothing happened" is the one way of reporting it that teaches people the
+ * feature is broken. */
 const commitDraft = useCommitDraft();
 const quickModel = useQuickModel();
+const { warn } = useReceipts();
 // Off when there is nothing to describe or nothing to describe it with. `commitTarget` is empty in exactly the
 // cases the Commit button is also off, so the two never disagree about whether this commit exists.
 const autofillReady = computed(() => commitTarget.value.length > 0 && quickModel.choice.value !== undefined && !commitDraft.busy.value);
+// Why it cannot run, when it cannot — and what it is about to do when it can. One string, because the tooltip
+// and the refusal are the same sentence read at two different moments.
 const autofillHint = computed(() => {
     if (quickModel.choice.value === undefined) {
         return `Connect an AI account in Sandbox ▸ Agent to draft commit messages.`;
@@ -666,7 +679,11 @@ const autofillHint = computed(() => {
         : commitFiles.value > 0
           ? `the ${plural(commitFiles.value, `file`)} from ${filterLabel.value}`
           : `the staged changes`;
-    return `Draft a message from ${scope} using ${quickModel.label.value} — change the model in Sandbox ▸ Agent.`;
+    // The fallbacks are named too: which account a click spends is the point of naming any of it, and on the
+    // day the first one is out the second is the one that actually gets billed.
+    const fallbacks = quickModel.fallbackLabels.value;
+    const order = fallbacks.length === 0 ? `` : `, or ${fallbacks.join(`, then `)} if it is out`;
+    return `Draft a message from ${scope} using ${quickModel.label.value}${order} — change the order in Sandbox ▸ Agent.`;
 });
 const runAutofill = async (): Promise<void> => {
     // A click while it is running means stop, not "run it again" — the model call is already paid for either
@@ -677,14 +694,27 @@ const runAutofill = async (): Promise<void> => {
     }
     if (!autofillReady.value) {
         blockerNotice.value = autofillHint.value;
+        warn(autofillHint.value);
         return;
     }
     // What the filtered session was ASKED to do, sent alongside the diff so the line can say why as well as
     // what. Only for a commit narrowed to one session: "you", and an unfiltered commit, have no single ask.
     const intent = originFilter.value === undefined || originFilter.value === YOURS ? undefined : originTitle(originFilter.value);
     const message = await commitDraft.draft(commitGroups.value, commitAll.value, commitMessage.value, intent);
-    if (message !== undefined) {
-        commitMessage.value = message;
+    if (message === undefined) {
+        // Undefined is also the user's own cancel, which says nothing on purpose — `error` is only set for a
+        // failure they did not ask for.
+        if (commitDraft.error.value !== undefined) {
+            warn(commitDraft.error.value);
+        }
+        return;
+    }
+    commitMessage.value = message;
+    // It worked, but not on the model the tooltip promised. Said once, quietly, because the alternative is a
+    // user who notices weeks later that "Drafted with …" has been naming an account they never chose.
+    const skipped = commitDraft.drafted.value?.skipped ?? [];
+    if (skipped.length > 0) {
+        warn(`${skipped.map((refusal) => refusal.model).join(`, `)} couldn't answer — drafted with ${commitDraft.drafted.value?.model} instead.`);
     }
 };
 const undoAutofill = (): void => {
@@ -979,10 +1009,14 @@ const WARNING = `flex items-start gap-1.5 rounded-md border border-warning/40 bg
                     @keydown.ctrl.enter="doCommit"
                     @keydown.meta.enter="doCommit"
                 />
+                <!-- Never disabled, only dimmed: a button that cannot run still has the one thing the user
+                     wants, which is the reason it cannot. Clicking a dim sparkle says it out loud (runAutofill),
+                     where a `disabled` attribute swallows the click and leaves the reason in a tooltip touch
+                     never opens. -->
                 <button
                     type="button"
-                    class="absolute right-1 top-1/2 -translate-y-1/2 rounded p-1 text-subtle transition-colors hover:bg-overlay hover:text-content disabled:cursor-not-allowed disabled:opacity-40"
-                    :disabled="!autofillReady && !commitDraft.busy.value"
+                    class="absolute right-1 top-1/2 -translate-y-1/2 rounded p-1 text-subtle transition-colors hover:bg-overlay hover:text-content"
+                    :class="autofillReady || commitDraft.busy.value ? `` : `opacity-40`"
                     @click="runAutofill"
                     v-tooltip.right="commitDraft.busy.value ? 'Stop drafting' : autofillHint"
                     :aria-label="commitDraft.busy.value ? 'Stop drafting the commit message' : 'Draft the commit message with AI'"
@@ -1027,8 +1061,20 @@ const WARNING = `flex items-start gap-1.5 rounded-md border border-warning/40 bg
                      browser's own Ctrl+Z with nothing to restore; it is also what makes overwriting a typed
                      message safe enough to need no confirmation. -->
                 <span v-else-if="commitDraft.drafted.value" class="flex min-w-0 flex-1 items-center gap-1 text-2xs text-muted">
-                    <span class="min-w-0 truncate whitespace-nowrap" v-tooltip.right.overflow="`Drafted with ${commitDraft.drafted.value.model}`">
+                    <!-- The model that actually wrote it, plus what it stood in for. A fallback the user is not
+                         told about is an account they did not choose to spend, noticed weeks later. -->
+                    <span
+                        class="min-w-0 truncate whitespace-nowrap"
+                        v-tooltip.right.overflow="
+                            commitDraft.drafted.value.skipped.length === 0
+                                ? `Drafted with ${commitDraft.drafted.value.model}`
+                                : commitDraft.drafted.value.skipped.map((s) => `${s.model} — ${s.reason}`).join(`\n`)
+                        "
+                    >
                         Drafted with {{ commitDraft.drafted.value.model }}
+                        <template v-if="commitDraft.drafted.value.skipped.length > 0">
+                            (after {{ commitDraft.drafted.value.skipped.map((s) => s.model).join(`, `) }})
+                        </template>
                     </span>
                     <button
                         v-if="commitDraft.previous.value !== undefined"

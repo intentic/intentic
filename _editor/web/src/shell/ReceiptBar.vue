@@ -18,6 +18,10 @@ import { useReceipts } from "../composables/receipts";
 // Long enough to read a short sentence and reach for the Undo, short enough that it reads as "that just
 // happened" rather than as a new thing on screen. The board's figure, kept: it was arrived at honestly.
 const RECEIPT_MS = 7_000;
+// A problem gets longer, because its sentence is longer and it is doing more work: a completion confirms
+// something the user already expected, while this one is telling them why the thing they asked for did not
+// arrive — and if it expires unread they are back to a button that did nothing.
+const PROBLEM_MS = 12_000;
 
 const { receipt, dismissReceipt } = useReceipts();
 const hovered = ref(false);
@@ -31,7 +35,7 @@ watch([receipt, hovered], () => {
     }
     announcement.value = receipt.value.message;
     if (!hovered.value) {
-        timer = setTimeout(dismissReceipt, RECEIPT_MS);
+        timer = setTimeout(dismissReceipt, receipt.value.tone === `problem` ? PROBLEM_MS : RECEIPT_MS);
     }
 });
 
@@ -55,8 +59,16 @@ const undo = (): void => {
                 @mouseenter="hovered = true"
                 @mouseleave="hovered = false"
             >
-                <Icon name="check" class="shrink-0 text-2xs text-success" />
-                <span class="min-w-0 truncate">{{ receipt.message }}</span>
+                <!-- One glyph and one colour apart from a completion, which is the whole of the difference:
+                     the pill is the same object saying a different thing, not an alarm wearing its clothes. -->
+                <Icon
+                    :name="receipt.tone === `problem` ? `exclamation-circle` : `check`"
+                    class="shrink-0 text-2xs"
+                    :class="receipt.tone === `problem` ? `text-warning` : `text-success`"
+                />
+                <!-- A completion is three words and truncating it never bites; a problem has to say what and
+                     why, so it wraps to a second line instead of ending in an ellipsis mid-reason. -->
+                <span class="min-w-0" :class="receipt.tone === `problem` ? `line-clamp-2 max-w-[28rem]` : `truncate`">{{ receipt.message }}</span>
                 <button
                     v-if="receipt.undo !== undefined"
                     type="button"

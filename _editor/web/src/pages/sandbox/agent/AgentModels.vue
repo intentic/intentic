@@ -1,12 +1,12 @@
 <script setup lang="ts">
 import { type AgentProvider, parsePinned, quickModelKey } from "@intentic/sandbox-contract";
 import { Picker, type PickerOptions, Row, RowGroup, Segmented } from "@intentic/ui";
-import { computed } from "vue";
+import { computed, ref, watch } from "vue";
 import { providerReady } from "../../../composables/chat/access";
 import { effortsFor } from "../../../composables/chat/effortScale";
 import { pickerEntries } from "../../../composables/chat/modelPicker";
 import { providerDisplayLabel } from "../../../composables/chat/providerCatalog";
-import { quickModelGroups, useQuickModel } from "../../../composables/chat/quickModel";
+import { pinnedQuickModel, quickModelGroups, useQuickModel } from "../../../composables/chat/quickModel";
 import { useSandboxSettings } from "../../../composables/sandbox/useSandboxSettings";
 import ProviderLogo from "../../../chat/ProviderLogo.vue";
 
@@ -18,11 +18,14 @@ import ProviderLogo from "../../../chat/ProviderLogo.vue";
  * The tiers are split by what the model is asked to DO, not by which feature calls it, because that is the only
  * axis on which the right answer differs:
  *
- *   QUICK MODEL — no conversation, no tools, one string back (a commit message, a session title). Auto is the
- *   default and it is DERIVED, not stored: the empty string means "work it out from whatever is connected right
- *   now" (resolveQuickModel — cheapest tier first, free channel before a paid one), so connecting an account
- *   tomorrow improves the answer by itself. Cheapest wins BECAUSE the job is small; being frontier here is not
- *   generosity, it is the wrong tool.
+ *   QUICK MODEL — no conversation, no tools, one string back (a commit message, a session title). An ORDERED
+ *   LIST, walked top to bottom until one answers, because the failure this row actually has is a connected
+ *   model that will not answer today: the account's allowance went on the chat, and one spent provider takes
+ *   every sparkle in the app down for hours while the others sit idle. Auto is the default and it is DERIVED,
+ *   not stored: an empty list means "work it out from whatever is connected right now" (resolveQuickModels —
+ *   cheapest tier first, free channel before a paid one, every connected provider in that order), so connecting
+ *   an account tomorrow improves the answer by itself. Cheapest wins BECAUSE the job is small; being frontier
+ *   here is not generosity, it is the wrong tool.
  *
  *   AGENT RUNS — a full isolated session with tools and a worktree, started by a surface rather than by a person
  *   typing: Fix with agent on a pipeline or a deployment, a Maintenance chore, a Documentation or Acceptance
@@ -37,34 +40,62 @@ import ProviderLogo from "../../../chat/ProviderLogo.vue";
 const { settings, patch } = useSandboxSettings();
 const quickModel = useQuickModel();
 
-// The model Auto currently resolves to, by its SHORT label — the trigger is 14rem wide, and "Auto — Claude
-// Code · Claude Haiku 4.5" truncated to "Auto — Claude Code · Cla…" hid exactly the part worth showing. The
-// provider rides on the row's logo and the full resolution sits in the Auto row's description instead.
-const autoModelLabel = computed<string | undefined>(() => {
-    const choice = quickModel.choice.value;
-    if (choice === undefined) {
-        return undefined;
+/* THE LIST AS THE USER WROTE IT — not the resolved chain. A pin whose account was disconnected still belongs
+ * on screen, greyed, because it is a setting they made and a row that silently stopped drawing it would look
+ * like the app had eaten it. (The resolver drops it at run time, which is the right answer THERE: a helper must
+ * not fail on a credential the sandbox no longer has.) */
+const pinned = computed(() => quickModel.pinned.value.map((key, index) => ({ key, index, ...pinnedQuickModel(key) })));
+
+// Every write goes through one place, so add/remove/reorder cannot each invent their own idea of the order.
+const setChain = (keys: readonly string[]): void => patch({ quickModel: [...keys] });
+
+// Emptying the list is not a broken state — it is how you get back to Auto, which is why removing the last row
+// needs no confirmation and no separate "reset" control.
+const removeQuickModel = (index: number): void => setChain(quickModel.pinned.value.filter((_, at) => at !== index));
+
+// One step up the order. Only up, and only where there is a step to take: with a whole list on screen, "move
+// this one earlier" repeated is the entire vocabulary needed, and a second button per row in a 14rem column is
+// how a settings page turns into a control panel.
+const promoteQuickModel = (index: number): void => {
+    const keys = [...quickModel.pinned.value];
+    const [moved] = keys.splice(index, 1);
+    keys.splice(index - 1, 0, moved!);
+    setChain(keys);
+};
+
+/* The picker ADDS rather than selects, which is why it is bound to a scratch ref that empties itself again:
+ * the trigger has to keep saying "Add a model" instead of latching onto the last pick, since the list below is
+ * where a choice actually lands. A model already in the order is shown greyed rather than hidden — a picker
+ * whose contents change as you use it makes you hunt for a row that was there a moment ago. */
+const adding = ref<string | undefined>(undefined);
+watch(adding, (key) => {
+    if (key !== undefined && key !== `` && !quickModel.pinned.value.includes(key)) {
+        setChain([...quickModel.pinned.value, key]);
     }
-    const key = quickModelKey(choice);
-    return quickModelGroups.value.flatMap((group) => group.options).find((option) => option.key === key)?.label ?? choice.model;
+    adding.value = undefined;
 });
-// Auto leads as its own ungrouped row; the connected providers follow as labelled groups, so a model row can
-// drop the "Claude Code · " prefix that used to eat the width of every line.
-const quickModelPickerOptions = computed<PickerOptions>(() => [
-    {
-        options: [
-            {
-                value: ``,
-                label: autoModelLabel.value === undefined ? `Auto` : `Auto · ${autoModelLabel.value}`,
-                description: `Cheapest connected model`,
-            },
-        ],
-    },
-    ...quickModelGroups.value.map((group) => ({
+
+const quickModelPickerOptions = computed<PickerOptions>(() =>
+    quickModelGroups.value.map((group) => ({
         label: group.label,
-        options: group.options.map((option) => ({ value: option.key, label: option.label })),
+        options: group.options.map((option) => ({
+            value: option.key,
+            label: option.label,
+            ...(quickModel.pinned.value.includes(option.key) ? { disabled: true, description: `In the order` } : {}),
+        })),
     })),
-]);
+);
+
+/* WHAT AUTO WOULD DO, spelled out — the same ladder the daemon would walk, named in order. It is the row's
+ * whole discoverability story: a user who has never opened this page still sees which account their commit
+ * messages come from and which one catches them when it runs out, and the difference between "Auto" and a list
+ * they wrote themselves becomes a thing they can compare rather than a thing they have to imagine. */
+const autoOrder = computed(() =>
+    quickModel.chain.value.map(
+        (choice) =>
+            quickModelGroups.value.flatMap((group) => group.options).find((option) => option.key === quickModelKey(choice))?.label ?? choice.model,
+    ),
+);
 
 /* WHAT AN AGENT RUN OPENS ON. Every connected provider's full catalog in CATALOG order — pointedly not
  * cheapest-first like the quick model's list above, because these are opposite jobs: that one exists to keep a
@@ -118,34 +149,76 @@ const providerOfKey = (key: string): AgentProvider => key.slice(0, key.indexOf(`
 
 <template>
     <RowGroup label="Models">
-        <!-- Auto leads and states what it resolves to, because the useful thing to know here is not that a
-             default exists but WHICH model a click is about to bill. -->
+        <!-- The order is drawn IN FULL below the row, because the useful thing to know here is not that a
+             default exists but which model a click is about to bill — and, the day that one is spent, which
+             one catches it. A trigger 14rem wide can say one of those; the full-width area under the row can
+             say all of them, numbered, in the order they will actually be tried. -->
         <Row
             icon="sparkles"
             title="Quick model"
-            description="The cheap, fast model behind one-click helpers like the commit-message autofill — never the model your chat runs on."
+            description="The cheap, fast models behind one-click helpers like the commit-message autofill — tried in order, so a spent account doesn't take the feature down."
         >
             <template #control>
                 <Picker
-                    :model-value="quickModel.pinned.value"
+                    v-model="adding"
                     :options="quickModelPickerOptions"
-                    :disabled="settings === undefined"
+                    :disabled="settings === undefined || quickModelGroups.length === 0"
+                    placeholder="Add a model…"
                     class="w-56 py-1.5 text-xs"
-                    aria-label="Quick model"
-                    @update:model-value="(value: string | undefined) => patch({ quickModel: value ?? `` })"
-                >
-                    <!-- Auto keeps the sparkle the helpers themselves wear; a pinned model wears its provider's
-                         mark, so the trigger names the account a click will spend at a glance. -->
-                    <template #icon="{ option }">
-                        <Icon v-if="option.value === ``" name="sparkles" class="shrink-0 text-xs text-muted" aria-hidden="true" />
-                        <ProviderLogo v-else :provider="providerOfKey(option.value)" class="shrink-0 text-xs text-muted" />
-                    </template>
-                </Picker>
+                    aria-label="Add a quick model"
+                />
             </template>
-            <!-- Nothing connected: the helpers are inert and the dropdown has only Auto in it, which on its own
-                 reads as a broken control rather than a missing account. -->
-            <template v-if="quickModel.choice.value === undefined && settings !== undefined" #below>
-                <p class="text-2xs text-muted">Connect an AI account above to enable the one-click helpers.</p>
+            <!-- Four states, in the order they matter: the list the user wrote, the list the app would use,
+                 nothing to use one with, and settings still loading — which draws nothing rather than an
+                 "Auto — ." with an empty ladder behind it. -->
+            <template #below>
+                <ol v-if="pinned.length > 0" class="flex flex-col gap-1">
+                    <li
+                        v-for="entry in pinned"
+                        :key="entry.key"
+                        class="flex items-center gap-2 rounded-md border border-line bg-canvas px-2 py-1 text-xs"
+                        :class="entry.ready ? `text-content` : `text-subtle`"
+                    >
+                        <span class="w-3 shrink-0 text-2xs tabular-nums text-subtle">{{ entry.index + 1 }}</span>
+                        <ProviderLogo v-if="entry.choice" :provider="entry.choice.provider" class="shrink-0 text-xs text-muted" />
+                        <span class="min-w-0 flex-1 truncate" v-tooltip.top.overflow="entry.label">{{ entry.label }}</span>
+                        <!-- A pin whose account is gone stays on the list and says so. The resolver skips it at
+                             run time, so the helpers keep working — but silently dropping it from the screen
+                             would look like the app had eaten a setting the user made. -->
+                        <span v-if="!entry.ready" class="shrink-0 text-2xs text-warning">Not connected</span>
+                        <button
+                            type="button"
+                            class="shrink-0 rounded p-1 text-subtle transition-colors hover:bg-overlay hover:text-content disabled:cursor-not-allowed disabled:opacity-30"
+                            :disabled="entry.index === 0"
+                            @click="promoteQuickModel(entry.index)"
+                            v-tooltip.top="'Try this one earlier'"
+                            :aria-label="`Move ${entry.label} earlier`"
+                        >
+                            <Icon name="chevron-up" class="text-2xs" />
+                        </button>
+                        <button
+                            type="button"
+                            class="shrink-0 rounded p-1 text-subtle transition-colors hover:bg-overlay hover:text-danger"
+                            @click="removeQuickModel(entry.index)"
+                            v-tooltip.top="'Remove from the order'"
+                            :aria-label="`Remove ${entry.label}`"
+                        >
+                            <Icon name="times" class="text-2xs" />
+                        </button>
+                    </li>
+                    <!-- The way back to Auto, stated rather than implied: with a list on screen it is not
+                         obvious that emptying it hands the choice back to the app. -->
+                    <li class="text-2xs text-subtle">Remove them all to go back to Auto.</li>
+                </ol>
+                <!-- AUTO, SPELLED OUT. Naming the ladder rather than the word is what makes this row readable
+                     without opening anything: you can see which account your commit messages come from and
+                     which one catches it, and decide whether that order is the one you wanted. -->
+                <p v-else-if="autoOrder.length > 0" class="text-2xs text-muted">
+                    <span class="text-content">Auto</span> — {{ autoOrder.join(`, then `) }}. Add a model to choose the order yourself.
+                </p>
+                <!-- Nothing connected: the helpers are inert and the dropdown is empty, which on its own reads
+                     as a broken control rather than a missing account. -->
+                <p v-else-if="settings !== undefined" class="text-2xs text-muted">Connect an AI account above to enable the one-click helpers.</p>
             </template>
         </Row>
 

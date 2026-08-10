@@ -41,4 +41,22 @@ describe(`useReceipts`, () => {
         dismissReceipt();
         expect(receipt.value).toBeUndefined();
     });
+
+    // The third thing that can happen: not done, not alarming. It rides the same pill so that a helper which
+    // could not answer stops reaching the user as a click that did nothing at all.
+    it(`carries the calm failure on the same channel, and never an Undo`, () => {
+        const { receipt, warn, dismissReceipt } = useReceipts();
+        warn(`Every quick model is out of allowance — couldn't draft a commit message.`);
+        expect(receipt.value?.tone).toBe(`problem`);
+        expect(receipt.value?.undo).toBeUndefined();
+        dismissReceipt();
+    });
+
+    it(`lets a completion replace a problem, so the pill is never stale`, () => {
+        const { receipt, say, warn, dismissReceipt } = useReceipts();
+        warn(`Couldn't draft a commit message.`);
+        say(`Path copied`);
+        expect(receipt.value?.tone).toBe(`done`);
+        dismissReceipt();
+    });
 });

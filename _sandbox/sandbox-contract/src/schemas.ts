@@ -1418,12 +1418,20 @@ export const SandboxSettingsSchema = z.object({
     iqContextHoldout: z.number().min(0).max(1).default(0),
     outputCleaners: z.string().default("off"),
     outputHoldout: z.number().min(0).max(1).default(0),
-    /* The model behind the one-click helpers that are not a conversation — today the commit box's autofill.
-     * `${provider}:${modelId}`, or EMPTY for Auto, which is the default and the interesting case: Auto is
-     * resolved from whatever accounts are connected at the moment it is read (resolveQuickModel), so it can
-     * never name a provider this sandbox has no credential for and it improves by itself when one is added.
-     * Storing a resolved id here instead would go stale exactly like a pinned model does. */
-    quickModel: z.string().default(""),
+    /* The models behind the one-click helpers that are not a conversation — today the commit box's autofill.
+     * An ORDERED list of `${provider}:${modelId}`, tried top to bottom, or EMPTY for Auto.
+     *
+     * A LIST rather than a pick, because the single interesting failure of this feature is a model that is
+     * connected and simply will not answer today: the account's allowance went on the chat, and one spent
+     * provider then takes the sparkle down for hours while the others sit idle. Written in order, the daemon
+     * steps over the spent one and the click still lands (agent/quick-model.ts walks it).
+     *
+     * Empty is the default and still the interesting case: Auto is resolved from whatever accounts are
+     * connected at the moment it is read (resolveQuickModels), so it can never name a provider this sandbox has
+     * no credential for, it improves by itself when one is added, and it is a ladder too — the cheapest rung of
+     * every connected provider, best first. Storing resolved ids here instead would go stale exactly like a
+     * pinned model does. */
+    quickModel: z.array(z.string()).max(10).default([]),
     /* WHAT AN AGENT RUN OPENS ON — the tier above quickModel, and the answer for every turn a SURFACE starts
      * rather than a person at a composer: Fix with agent on a pipeline or a deployment, a Maintenance chore, a
      * Documentation or Acceptance run, the fix a failed pre-push check proposes. `${provider}:${model}`
@@ -1799,6 +1807,14 @@ export const CommitMessageSchema = z.object({
     message: z.string(),
     provider: z.string(),
     model: z.string(),
+    /* The models ahead of it in the chain that refused, in the order they were tried. Reported rather than
+     * swallowed because a silent fallback is a bill the user cannot see: the message arrives written by a model
+     * they did not expect, on an account they did not expect to spend, and nothing on screen says why their
+     * first choice was skipped. One line in the panel's readout closes that gap. */
+    skipped: z
+        .array(z.object({ model: z.string(), reason: z.string() }))
+        .max(10)
+        .default([]),
 });
 export type CommitMessageDraft = z.infer<typeof CommitMessageSchema>;
 // One change to a file — an uncommitted working-tree change (status vs HEAD, untracked included), an agent
