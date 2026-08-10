@@ -9,13 +9,18 @@
 // asking if the answer includes the things nobody remembers adding — a plugin's skills, a connection's cheatsheet,
 // a file the agent wrote itself, and a built-in that is currently switched OFF.
 //
+// The third is that reading one is the ROW'S OWN CLICK. It used to be a hamburger, a two-item menu, and a text
+// Close button at the foot of what opened; the menu items said nothing the row didn't imply, and nothing on a
+// closed row said which of them even had one. Pinned here because it is the kind of affordance that grows back.
+//
 // Mounted rather than projected because the controls ARE the subject, and the switch's write happens in the
 // component's own handler.
-import type { SandboxSettings, SkillSummary } from "@intentic-app/api-contract";
+import type { CapabilitySummary, SandboxSettings, SkillSummary } from "@intentic-app/api-contract";
 import { SandboxSettingsSchema } from "@intentic-app/api-contract";
+import type { ExtensionSummary } from "@intentic/sandbox-contract";
 import PrimeVue from "primevue/config";
 import { afterEach, expect, test, vi } from "vitest";
-import { type App, createApp, defineComponent, h, ref } from "vue";
+import { type App, createApp, defineComponent, h, nextTick, ref } from "vue";
 
 // These components' import chain pulls in app-wide singletons that read browser globals at import time
 // (@intentic/ui's useDevice reads window.matchMedia; environment.ts reads window.env).
@@ -31,10 +36,14 @@ vi.hoisted(() => {
     globalThis.window.env ??= {
         production: false,
         api: { url: `http://localhost` },
-        auth: { googleClientId: `` },
         analytics: { posthogKey: ``, posthogHost: `` },
+        auth: { googleClientId: `` },
     };
 });
+
+// A row's mark is fetched from an icon CDN (<BrandMark>), which a test has no business reaching. Answered as a
+// miss, which is the same path an offline sandbox takes — the glyph tier underneath.
+vi.stubGlobal(`fetch`, () => Promise.resolve({ ok: false, text: () => Promise.resolve(``) }));
 
 const skills = ref<SkillSummary[]>([]);
 const settings = ref<SandboxSettings>(SandboxSettingsSchema.parse({}));
@@ -50,9 +59,18 @@ vi.mock(`../../../composables/sandbox/useSkills`, () => ({
         save: { mutate: vi.fn() },
         remove: { mutate: removeMutate },
         setEnabled,
-        readBody: async () => ({ id: `x`, name: `x`, body: `Body.` }),
+        readBody: async () => ({ id: `x`, name: `x`, body: `## Body.` }),
         forgetBody: vi.fn(),
     }),
+}));
+
+// The two lists the marks are joined against. Empty here: what each tier does with them is skillVisual's own
+// test, and this file is about the controls.
+vi.mock(`../../../composables/extensions/useCapabilities`, () => ({
+    useCapabilities: () => ({ capabilities: ref<CapabilitySummary[]>([]) }),
+}));
+vi.mock(`../../../composables/extensions/useExtensions`, () => ({
+    useExtensions: () => ({ enabled: ref<ExtensionSummary[]>([]) }),
 }));
 
 const { default: AgentSkills } = await import("./AgentSkills.vue");
@@ -96,6 +114,15 @@ afterEach(() => {
 });
 
 const switches = (host: HTMLElement): HTMLElement[] => [...host.querySelectorAll(`[role="switch"], input[type="checkbox"]`)] as HTMLElement[];
+// The row's own header button — the one gesture that opens a skill.
+const rows = (host: HTMLElement): HTMLElement[] => [...host.querySelectorAll(`button[aria-expanded]`)] as HTMLElement[];
+const button = (host: HTMLElement, label: string): HTMLElement | undefined =>
+    [...host.querySelectorAll(`button`)].find((element) => element.textContent?.trim() === label);
+// The body arrives from a fetch, so opening a row settles a promise before it renders.
+const settle = async (): Promise<void> => {
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    await nextTick();
+};
 
 test(`the switch appears only on rows the daemon said are switchable, and writes the skill's name`, async () => {
     skills.value = [
@@ -116,13 +143,14 @@ test(`the switch appears only on rows the daemon said are switchable, and writes
 
 /* A BUILT-IN THAT IS OFF IS THE ONE ROW HERE THAT IS NOT LOADED, and it has to be drawn anyway: hiding it is
  * exactly what once made `lsp` undiscoverable — never declined, just never learned about. */
-test(`a switched-off skill still gets a row, dimmed and switchable`, () => {
+test(`a switched-off skill still gets a row, drained and switchable`, () => {
     skills.value = [skill({ id: `lsp`, name: `lsp`, origin: `builtin`, enabled: false, editable: false, removable: false })];
     const host = mount();
 
     expect(host.textContent).toContain(`lsp`);
     expect(switches(host)).toHaveLength(1);
-    expect(host.querySelector(`.opacity-60`)).not.toBeNull();
+    // <BrandMark idle> — the mark goes grey, which says the same thing to someone who cannot see the colour.
+    expect(host.querySelector(`.grayscale`)).not.toBeNull();
 });
 
 /* The provenance chip is the column the whole list is for: "Plugin · pack" tells the reader which of their plugins
@@ -153,4 +181,56 @@ test(`an empty list invites the first skill rather than reading as a failure`, (
     const host = mount();
     expect(host.textContent).toContain(`No skills yet`);
     expect(host.textContent).toContain(`Write a skill`);
+});
+
+/* ONE CLICK OPENS IT, THE SAME CLICK CLOSES IT, and there is no menu in between. The row is the control — which
+ * also means the reader's own skill lands straight in the editor, since for them reading and editing are one
+ * errand. */
+test(`a row opens itself and closes itself, with nothing to discover first`, async () => {
+    skills.value = [skill({})];
+    const host = mount();
+
+    expect(host.querySelector(`[aria-label="Skill actions"]`)).toBeNull();
+    expect(rows(host)[0]?.getAttribute(`aria-expanded`)).toBe(`false`);
+
+    rows(host)[0]?.click();
+    await settle();
+    expect(rows(host)[0]?.getAttribute(`aria-expanded`)).toBe(`true`);
+    expect(host.querySelector(`[aria-label="What this skill should do"]`)).not.toBeNull();
+
+    rows(host)[0]?.click();
+    await settle();
+    expect(rows(host)[0]?.getAttribute(`aria-expanded`)).toBe(`false`);
+    expect(host.querySelector(`[aria-label="What this skill should do"]`)).toBeNull();
+});
+
+/* SOMEBODY ELSE'S SKILL IS A DOCUMENT, not a grey monospace block — a skill is markdown, and rendering it as
+ * source said the opposite of what it is. The file itself stays one pill away. */
+test(`a skill the owner can't edit opens as its own prose, with the raw file one pill away`, async () => {
+    skills.value = [skill({ id: `scratch`, name: `scratch`, origin: `dropped`, switchable: false, editable: false })];
+    const host = mount();
+
+    rows(host)[0]?.click();
+    await settle();
+    expect(host.querySelector(`.md-prose`)?.innerHTML).toContain(`<h2`);
+    expect(button(host, `Source`)).not.toBeUndefined();
+});
+
+/* DELETE ASKS FIRST, AND ONLY WHERE THE ROW SAID IT COULD. It used to sit one keystroke deep in a menu on the
+ * closed row, where a mis-click cost whatever the reader had written; now it is beside the text it would remove. */
+test(`delete waits for a second press, under the fold`, async () => {
+    skills.value = [skill({ id: `scratch`, name: `scratch`, origin: `dropped`, switchable: false, editable: false })];
+    const host = mount();
+
+    expect(button(host, `Delete this skill`)).toBeUndefined();
+    rows(host)[0]?.click();
+    await settle();
+
+    button(host, `Delete this skill`)?.click();
+    await nextTick();
+    expect(removeMutate).not.toHaveBeenCalled();
+
+    button(host, `Delete`)?.click();
+    await nextTick();
+    expect(removeMutate).toHaveBeenCalledWith(`scratch`);
 });

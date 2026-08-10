@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { SkillDraft } from "@intentic-app/api-contract";
-import { cmp, ProseField } from "@intentic/ui";
+import { cmp, CodeField, Markdown, ProseField, Segmented } from "@intentic/ui";
 import Button from "primevue/button";
 import { computed, ref } from "vue";
 
@@ -17,9 +17,13 @@ import { computed, ref } from "vue";
  * also the identity a save upserts on, which is why an existing skill's name box is frozen: typing over it would
  * read as a rename and would in fact write a second skill beside the first.
  *
- * THE BODY IS THE SKILL, so it gets the room. A ProseField rather than an input for the reason the rule form's
- * instruction box is one — this is paragraphs, headings and example commands, and an <input> would scroll all of
- * it sideways out of sight. */
+ * THE BODY IS THE SKILL, so it gets the room — and it is MARKDOWN, which is what the third box is now written to
+ * be. It was a prose field: the right surface for a sentence, and the wrong one for a file with headings, fenced
+ * commands and lists in it, because it set all of that in one flat grey weight and left the author to keep the
+ * structure in their head. So it is <CodeField lang="markdown"> — a real caret over markdown's own colours, the
+ * same surface the memory notes are corrected in — with a Preview pill that renders exactly what the agent will
+ * read. Neither half is a fixed number of rows: the field grows with the file, so a skill is never written
+ * through an eight-line window. */
 
 const { skill, disabled = false } = defineProps<{
     /** The skill being rewritten, name and text as stored. Absent ⇒ writing a new one. */
@@ -32,6 +36,8 @@ const emit = defineEmits<{ save: [SkillDraft]; cancel: [] }>();
 const name = ref(skill?.name ?? ``);
 const description = ref(skill?.description ?? ``);
 const body = ref(skill?.body ?? ``);
+// Writing is where a form opens, always. Preview is a check on what was written, not a place to land.
+const view = ref<`write` | `preview`>(`write`);
 
 // The name is the directory the skill lives in, so the box refuses what the daemon would: anything a slug cannot
 // hold. Typed rather than validated on save, because a rejected save after writing three paragraphs is the worst
@@ -104,17 +110,35 @@ const save = (): void => {
                     class="min-h-8"
                 />
             </div>
-            <p class="text-2xs text-subtle">The agent reads this every turn to decide whether to open the skill. Name the words it should trigger on.</p>
+            <p class="text-2xs text-subtle">
+                The agent reads this every turn to decide whether to open the skill. Name the words it should trigger on.
+            </p>
         </div>
 
         <div class="flex flex-col gap-1.5">
-            <span :class="cmp.sectionLabel(`text-2xs`)">What it should do</span>
-            <div class="rounded-md border border-line bg-canvas px-0.5 py-1 focus-within:border-line-strong" :class="{ 'opacity-50': disabled }">
-                <ProseField
+            <div class="flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
+                <span :class="cmp.sectionLabel(`text-2xs`)">What it should do</span>
+                <!-- Offered only once there is something to render: an empty Preview is a blank panel where the
+                     placeholder that says what to write used to be. -->
+                <Segmented
+                    v-if="body.trim() !== ``"
+                    v-model="view"
+                    size="xs"
+                    :options="[
+                        { label: `Write`, value: `write` },
+                        { label: `Preview`, value: `preview`, title: `How the agent will read it` },
+                    ]"
+                />
+            </div>
+            <div class="rounded-md border border-line bg-canvas p-2 focus-within:border-line-strong" :class="{ 'opacity-50': disabled }">
+                <Markdown v-if="view === `preview`" :source="body" class="min-h-32" style="--prose-measure: 76ch" />
+                <CodeField
+                    v-else
                     v-model="body"
+                    lang="markdown"
                     placeholder="Markdown. Steps, commands, the format to follow, what to avoid."
                     aria-label="What this skill should do"
-                    :disabled="disabled"
+                    :readonly="disabled"
                     class="min-h-32"
                 />
             </div>

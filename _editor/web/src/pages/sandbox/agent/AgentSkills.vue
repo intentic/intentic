@@ -1,13 +1,14 @@
 <script setup lang="ts">
 import type { SkillDraft, SkillSummary } from "@intentic-app/api-contract";
-import { cmp, ContextMenu, Icon, Row, RowGroup } from "@intentic/ui";
-import type { MenuItem } from "primevue/menuitem";
-import ToggleSwitch from "primevue/toggleswitch";
+import { Icon, Row, RowGroup } from "@intentic/ui";
 import { computed, ref } from "vue";
+import { useCapabilities } from "../../../composables/extensions/useCapabilities";
+import { useExtensions } from "../../../composables/extensions/useExtensions";
 import { useSkills } from "../../../composables/sandbox/useSkills";
 import SkillForm from "./SkillForm.vue";
+import SkillRow from "./SkillRow.vue";
 import SkillsInfo from "./SkillsInfo.vue";
-import { originOf, provenanceOf } from "./skillWords";
+import type { SkillSources } from "./skillVisual";
 
 /* WHAT THE AGENT KNOWS — every skill it is carrying right now, where each one came from, and a switch on the ones
  * that are the owner's to switch.
@@ -24,17 +25,27 @@ import { originOf, provenanceOf } from "./skillWords";
  * INCLUDING the loose files nothing claims, and including a built-in that is currently switched off (an offer, not
  * an absence: an unlisted baked tool is one nobody ever learns exists).
  *
- * A ROW ONLY OFFERS WHAT IT CAN HONOUR. The switch and the menu render from what the daemon said about that row,
+ * A ROW ONLY OFFERS WHAT IT CAN HONOUR. The switch and the delete render from what the daemon said about that row,
  * never from a rule restated here — a control that appeared to work and was undone by the next reconcile would be
  * worse than no control. What a row shows instead of the missing control is its CHIP: "Plugin · team-pack" names
  * the thing that owns it, and the group's (i) says once what each kind lets you do, rather than every row paying
  * for a sentence that repeats down the list.
  *
- * READING HAPPENS IN PLACE, for any origin. A skill you did not write is the one you most want to read, because it
- * is the one you cannot remember agreeing to — so expanding a row is the same gesture whether it ends in a form
- * (yours) or in the text as its author shipped it. */
+ * READING HAPPENS IN PLACE, for any origin, and it is now the row's OWN click — see SkillRow, which is where the
+ * hamburger menu that used to guard it went.
+ *
+ * WHY THIS GROUP READS TWO OTHER LISTS. Almost every row here belongs to something the owner installed or
+ * connected, and that thing already has a mark: the extension's manifest, or the card its connection came from.
+ * Asking those (skillVisual) is what turns a column of thirteen identical chain links into Discord, GitHub and a
+ * Windows PC — and both reads are cached app-wide and warmed by the rail, so the marks cost this tab nothing. */
 
 const { skills, settings, error, save, remove, setEnabled, readBody, forgetBody } = useSkills();
+const { capabilities } = useCapabilities();
+const { enabled: enabledExtensions } = useExtensions();
+
+// Enabled, not installed: a switched-off extension contributes nothing, so a card claimed by one is not the card
+// this connection actually came from — the Capabilities view's own rule about the same join.
+const sources = computed<SkillSources>(() => ({ capabilities: capabilities.value, extensions: enabledExtensions.value }));
 
 // Which row is open, by id — one at a time, so the list never becomes a wall of expanded bodies. `adding` is its
 // own flag rather than a sentinel id, for the reason the rule list keeps one: a skill may be called anything.
@@ -44,15 +55,6 @@ const adding = ref(false);
 // few kilobytes and the row is already on screen, so the honest rendering is the row with a line under it.
 const openBody = ref<string | undefined>();
 const bodyError = ref<string | undefined>();
-
-const open = computed<SkillSummary | undefined>(() => skills.value.find((skill) => skill.id === openId.value));
-// The form edits a draft, not a row: the row carries provenance the form has no business in, and the body is not
-// on the row at all until it has been read.
-const editing = computed<SkillDraft | undefined>(() =>
-    open.value?.editable === true && openBody.value !== undefined
-        ? { name: open.value.name, description: open.value.description, body: openBody.value }
-        : undefined,
-);
 
 const close = (): void => {
     openId.value = undefined;
@@ -66,9 +68,13 @@ const startAdd = (): void => {
     adding.value = true;
 };
 
-// Open a row and fetch its text. The id is set BEFORE the await so the row shows it is opening rather than
-// appearing to ignore the click for a round-trip.
-const openSkill = async (skill: SkillSummary): Promise<void> => {
+// Open a row and fetch its text — or close it if it is the one already open. The id is set BEFORE the await so
+// the row shows it is opening rather than appearing to ignore the click for a round-trip.
+const toggle = async (skill: SkillSummary): Promise<void> => {
+    if (openId.value === skill.id) {
+        close();
+        return;
+    }
     adding.value = false;
     openId.value = skill.id;
     openBody.value = undefined;
@@ -87,96 +93,30 @@ const saveDraft = (draft: SkillDraft): void => {
     close();
 };
 
-// One menu for the list rather than one per row: they differ only in which skill they point at.
-const menu = ref<InstanceType<typeof ContextMenu>>();
-const menuFor = ref<SkillSummary | undefined>();
-
-const openMenu = (event: Event, skill: SkillSummary): void => {
-    menuFor.value = skill;
-    menu.value?.show(event);
+const removeSkill = (skill: SkillSummary): void => {
+    remove.mutate(skill.name);
+    close();
 };
-
-const menuModel = computed<MenuItem[]>(() => {
-    const skill = menuFor.value;
-    if (skill === undefined) {
-        return [];
-    }
-    return [
-        // "Read" and "Edit" are one action on the owner's own skills — the form IS how you read one — so only the
-        // label changes. Anything else opens to the text as its author wrote it.
-        { label: skill.editable ? `Edit` : `Read`, icon: skill.editable ? `pencil` : `eye`, command: () => void openSkill(skill) },
-        ...(skill.removable ? [{ separator: true }, { label: `Delete`, icon: `trash`, danger: true, command: () => remove.mutate(skill.name) }] : []),
-    ];
-});
 </script>
 
 <template>
-    <RowGroup label="Skills">
+    <RowGroup label="Skills" :count="skills.length > 0 ? skills.length : undefined">
         <template #info><SkillsInfo /></template>
 
-        <template v-for="skill in skills" :key="skill.id">
-            <!-- Open in the row's own place, so the list never loses the spot you were looking at. -->
-            <Row v-if="openId === skill.id" :icon="originOf(skill.origin).icon" density="compact" :title="skill.name">
-                <template #description>{{ provenanceOf(skill) }}</template>
-                <template #below>
-                    <p v-if="bodyError !== undefined" class="text-2xs text-danger">{{ bodyError }}</p>
-                    <p v-else-if="openBody === undefined" class="flex items-center gap-2 text-2xs text-subtle">
-                        <Icon name="spinner" class="animate-spin text-xs" />
-                        Reading…
-                    </p>
-                    <SkillForm
-                        v-else-if="editing !== undefined"
-                        :skill="editing"
-                        :disabled="settings === undefined"
-                        @save="saveDraft"
-                        @cancel="close"
-                    />
-                    <!-- Someone else's skill, as they wrote it. Monospace and pre-wrapped because it is a file:
-                         reflowing it would silently change what the indentation of a code block means. -->
-                    <div v-else class="flex flex-col gap-2">
-                        <p class="text-2xs text-muted">{{ skill.description }}</p>
-                        <!-- Bounded like the form's boxes are, because it is the same kind of object: without the
-                             border the text floats on a background a shade off the row's and stops reading as a
-                             file you are looking INTO. -->
-                        <pre
-                            class="max-h-96 overflow-auto whitespace-pre-wrap rounded-md border border-line bg-canvas p-2.5 font-mono text-2xs text-content"
-                            >{{ openBody }}</pre
-                        >
-                        <button type="button" :class="cmp.linkButton(`self-start text-2xs`)" @click="close">Close</button>
-                    </div>
-                </template>
-            </Row>
-
-            <Row v-else :icon="originOf(skill.origin).icon" :title="skill.name" density="compact" :class="{ 'opacity-60': !skill.enabled }">
-                <template #description>
-                    <span class="flex flex-wrap items-center gap-x-1.5 gap-y-1">
-                        <span class="shrink-0 rounded bg-overlay px-1.5 py-0.5 text-2xs text-muted">{{ provenanceOf(skill) }}</span>
-                        <span v-if="skill.description !== ``" class="min-w-0 max-w-full truncate">{{ skill.description }}</span>
-                        <span v-else class="min-w-0 truncate italic">No description — the agent rarely picks a skill without one.</span>
-                    </span>
-                </template>
-                <template #control>
-                    <div class="flex items-center gap-1">
-                        <button
-                            type="button"
-                            :class="cmp.iconButton()"
-                            v-tooltip.bottom="`Skill actions`"
-                            aria-label="Skill actions"
-                            @click="openMenu($event, skill)"
-                        >
-                            <Icon name="bars" class="text-xs" />
-                        </button>
-                        <ToggleSwitch
-                            v-if="skill.switchable"
-                            :model-value="skill.enabled"
-                            :disabled="settings === undefined"
-                            :aria-label="`Enable ${skill.name}`"
-                            @update:model-value="(value: boolean) => setEnabled(skill.name, value)"
-                        />
-                    </div>
-                </template>
-            </Row>
-        </template>
+        <SkillRow
+            v-for="skill in skills"
+            :key="skill.id"
+            :skill="skill"
+            :expanded="openId === skill.id"
+            :body="openId === skill.id ? openBody : undefined"
+            :body-error="openId === skill.id ? bodyError : undefined"
+            :sources="sources"
+            :disabled="settings === undefined"
+            @toggle="void toggle(skill)"
+            @enable="(value: boolean) => setEnabled(skill.name, value)"
+            @save="saveDraft"
+            @remove="removeSkill(skill)"
+        />
 
         <Row v-if="error !== undefined" icon="exclamation-triangle" density="compact" :description="error" />
         <Row
@@ -186,15 +126,19 @@ const menuModel = computed<MenuItem[]>(() => {
             description="No skills yet. Write one to teach the agent something it should do the same way every time."
         />
 
-        <Row v-if="adding" icon="plus" density="compact" title="New skill">
-            <template #below>
+        <!-- The new skill is written in the same place a written one is read, so the form is never a different
+             screen from the list it joins. -->
+        <div v-if="adding" class="bg-content/6">
+            <div class="flex items-center gap-2.5 py-2.5 pl-2.5 pr-3">
+                <Icon name="plus" class="shrink-0 text-2xs text-subtle" aria-hidden="true" />
+                <span class="text-sm font-medium text-content">New skill</span>
+            </div>
+            <div class="border-t border-line py-3 pl-9 pr-3">
                 <SkillForm :disabled="settings === undefined" @save="saveDraft" @cancel="close" />
-            </template>
-        </Row>
+            </div>
+        </div>
 
         <!-- Hidden while something is open, so there is only ever one skill being written or read at a time. -->
         <Row v-else-if="openId === undefined" as="button" icon="plus" density="compact" interactive title="Write a skill" @click="startAdd" />
     </RowGroup>
-
-    <ContextMenu ref="menu" :model="menuModel" :min-width="11" />
 </template>

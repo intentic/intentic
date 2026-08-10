@@ -1,7 +1,7 @@
 import type { SkillOrigin, SkillSummary } from "@intentic-app/api-contract";
-import type { IconName } from "@intentic/ui";
 
-/* WHERE A SKILL CAME FROM, IN WORDS — the one vocabulary the Skills list draws its rows and its chips from.
+/* WHERE A SKILL CAME FROM, IN WORDS — the one vocabulary the Skills list draws its chips from. What each origin
+ * LOOKS like is skillVisual.ts's business, so a mark and a word can never be argued about in two files.
  *
  * The whole value of the list is this column. A skill costs the agent attention on every turn whether or not
  * anyone remembers adding it, so "what is my agent carrying, and which of it did I choose" is the question the
@@ -15,28 +15,21 @@ import type { IconName } from "@intentic/ui";
  * paragraph to explain that the plugin owns it. What the reader genuinely cannot infer — what each kind lets them
  * DO — is one table in the group's (i), read once, instead of a line paid for on every row forever. */
 
-interface OriginWords {
-    readonly chip: string;
-    readonly icon: IconName;
-}
-
-const ORIGINS = {
-    own: { chip: `Yours`, icon: `user` },
-    builtin: { chip: `Built in`, icon: `box` },
-    capability: { chip: `Connection`, icon: `link` },
-    extension: { chip: `Extension`, icon: `sliders-h` },
-    plugin: { chip: `Plugin`, icon: `clone` },
-    dropped: { chip: `Loose file`, icon: `file` },
+const CHIPS = {
+    own: `Yours`,
+    builtin: `Built in`,
+    capability: `Connection`,
+    extension: `Extension`,
+    plugin: `Plugin`,
+    dropped: `Loose file`,
     // `satisfies` rather than an annotation: the daemon owns the origin list, and a kind added there has to be a
-    // build error here rather than a row drawn with no icon and no chip.
-} satisfies Record<SkillOrigin, OriginWords>;
-
-export const originOf = (origin: SkillOrigin): OriginWords => ORIGINS[origin];
+    // build error here rather than a row drawn with no chip.
+} satisfies Record<SkillOrigin, string>;
 
 /* The chip a row wears, assembled from what the daemon said about it. The owner's name follows the kind when there
  * is one — "Extension · knowledge" tells you which of six extensions to go and look at, and the kind alone does
  * not. This is the whole of what a row says about provenance, and it is enough. */
 export const provenanceOf = (skill: SkillSummary): string => {
-    const { chip } = originOf(skill.origin);
+    const chip = CHIPS[skill.origin];
     return skill.owner === undefined ? chip : `${chip} · ${skill.owner}`;
 };
