@@ -65,6 +65,8 @@ const { useSandbox } = await import("../sandbox/useSandbox");
 const { setDaemonRoutes } = await import("../sandbox/useDaemonRoutes");
 const { hydrateOnce, loadAccountStatus, openAgentConversation, resetChat, useChat } = await import("./useChat");
 const { usageStatusByAccount } = await import("./usageStatus");
+const { Conversation } = await import("./conversation");
+const { turnDefaults } = await import("./turnDefaults");
 
 beforeEach(() => {
     // A daemon with nothing to say, unless the test says otherwise. The singleton keeps background work in
@@ -135,6 +137,53 @@ describe(`useChat provider reconciliation`, () => {
         });
         await loadAccountStatus();
         expect(chat.connected.value).toBe(true);
+    });
+
+    /* The two halves of the connection picture land INDEPENDENTLY, and for a while the reconciliation above
+     * acted on whichever arrived first. A Claude user with a ChatGPT subscription therefore opened, at random,
+     * on GPT: the translator's list came back at once, Claude's account a round-trip later, and the chat was
+     * moved in between — then never moved back, because by then it sat on a provider that could send. */
+    it(`keeps a Claude user on Claude when the ChatGPT subscription answers first`, async () => {
+        storage.clear();
+        turnDefaults.provider.value = `claude`;
+        resetChat();
+        const chat = useChat();
+        chat.active.value.selectModel({ provider: `claude`, value: `claude-opus-5` });
+
+        // Both connections are real; only the ORDER they arrive in is unlucky.
+        sandboxJsonMock.mockImplementation((path: string) => {
+            if (path === `/translator/accounts`) {
+                return Promise.resolve({ codex: [{ name: `codex-user.json`, label: `user@example.com` }], grok: [], kimi: [], gemini: [] });
+            }
+            if (path.startsWith(`/claude/accounts`)) {
+                return new Promise((resolve) => setTimeout(() => resolve({ accounts: [{ id: `a1`, label: `Personal`, connectedAt: 0 }] }), 20));
+            }
+            return Promise.resolve({ accounts: [] });
+        });
+
+        await loadAccountStatus();
+        await nextTick();
+
+        expect(chat.provider.value).toBe(`claude`);
+        expect(chat.model.value).toBe(`claude-opus-5`);
+    });
+
+    // A fallback is the app coping with a provider it cannot reach, not the user choosing one — so it moves the
+    // chat and leaves the remembered pick alone, and a chat opened afterwards resolves the same way at read.
+    it(`moves a GPT-only user's chat to Codex without rewriting the provider they picked`, async () => {
+        storage.clear();
+        turnDefaults.provider.value = `claude`;
+        resetChat();
+        const chat = useChat();
+        mockConnections({ subscriptions: { codex: [{ name: `codex-user.json`, label: `user@example.com` }], grok: [], kimi: [], gemini: [] } });
+
+        await loadAccountStatus();
+        await nextTick();
+
+        expect(chat.provider.value).toBe(`codex`);
+        expect(chat.connected.value).toBe(true);
+        expect(turnDefaults.provider.value).toBe(`claude`);
+        expect(new Conversation().provider.value).toBe(`codex`);
     });
 });
 

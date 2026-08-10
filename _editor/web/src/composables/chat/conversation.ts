@@ -26,7 +26,7 @@ import { providerModels, providerTabs } from "./providerCatalog";
 import { type CardKind, type ChatAttachment, type ChatMessage, isAwaitingDecision, recordedRows, withCancelledCards } from "./transcript";
 import { readTranscript, saveTranscript } from "./transcriptCache";
 import { TranscriptClock } from "./transcriptClock";
-import { rememberedModelFor, startingMode, turnDefaults } from "./turnDefaults";
+import { rememberedModelFor, rememberedProviderFor, startingMode, turnDefaults } from "./turnDefaults";
 import { TurnFailures } from "./turnFailures";
 import type { TurnEffect } from "./turnReducer";
 import { type SessionRef, type TurnSettings, resumes, turnRequestBody } from "./turnRequest";
@@ -201,10 +201,12 @@ export class Conversation {
     // This conversation's turn selection, seeded from the module defaults at construction. All of it — provider
     // and account included — is switchable mid-chat (the composer binds them); send() decides whether the
     // session above still matches (resume) or a fresh one starts seeded with the transcript so far.
-    readonly provider = ref<AgentProvider>(turnDefaults.provider.value);
+    readonly provider = ref<AgentProvider>(rememberedProviderFor());
     readonly harness = ref<AgentHarness>(turnDefaults.harness.value);
-    readonly account = ref<string | undefined>(rememberedAccountFor(turnDefaults.provider.value));
-    readonly model = ref<string>(rememberedModelFor(turnDefaults.provider.value));
+    // Seeded from THIS conversation's provider rather than from the remembered pick again: the two differ
+    // exactly when the pick can't run, and reading the pick here would hand the chat another provider's account.
+    readonly account = ref<string | undefined>(rememberedAccountFor(this.provider.value));
+    readonly model = ref<string>(rememberedModelFor(this.provider.value));
     readonly thinking = ref<boolean>(turnDefaults.thinking.value);
     /* Ask for fast speed on this conversation's turns. Deliberately NOT seeded from turnDefaults, unlike every
      * other control on this line: fast mode costs roughly twice per token, and the sticky-default machinery
@@ -367,18 +369,36 @@ export class Conversation {
     // the switch takes effect at the next send — the current session is retired then and the new provider's
     // fresh session is seeded with the transcript so far (see send); browsing the picker never destroys it.
     selectProvider(next: AgentProvider): void {
-        if (this.streaming.value || next === this.provider.value) {
+        if (!this.pointAt(next)) {
             return;
+        }
+        turnDefaults.provider.value = next;
+    }
+
+    /* THE SAME SWITCH, MADE BY THE APP RATHER THAN BY THE USER — the connection safety net moving a chat off a
+     * provider it cannot send to (useChat). It re-scopes exactly as a pick does, and deliberately does NOT write
+     * the module default: a fallback is the app coping, not the user choosing, and persisting it turned one
+     * unlucky moment into every later chat's starting provider — the "my model keeps coming back as GPT" report.
+     * The user's remembered provider survives untouched, so the next reload opens on it again. */
+    repointProvider(next: AgentProvider): void {
+        this.pointAt(next);
+    }
+
+    // Point this conversation at a provider and re-scope everything that was scoped to the old one. False when
+    // the switch is refused (mid-stream, or already there), so only a switch that happened is remembered.
+    private pointAt(next: AgentProvider): boolean {
+        if (this.streaming.value || next === this.provider.value) {
+            return false;
         }
         this.provider.value = next;
         // Switching back to the session's own runtime restores its account, so the next send resumes it.
         this.account.value = next === this.session.value?.provider ? this.session.value.account : rememberedAccountFor(next);
         this.model.value = rememberedModelFor(next);
-        turnDefaults.provider.value = next;
         // The old segment's live model and context meter don't describe the next turn.
         this.activeModel.value = null;
         this.contextUsage.value = undefined;
         this.refreshSwitchNotice();
+        return true;
     }
 
     /* THE THREE TURN-SETTING WRITES, all shaped the same way: apply to THIS conversation, and remember the pick

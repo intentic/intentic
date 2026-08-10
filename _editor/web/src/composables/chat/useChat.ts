@@ -820,11 +820,25 @@ const chatReady = (target: AgentProvider, loop: AgentHarness): boolean => {
 };
 const claudeConnected = computed(() => hasAccount(`claude`));
 
-// Keep the composer usable whenever ANY provider has an account: when the connection state changes (initial
-// load, a connect/disconnect, a sandbox reset), point each untouched fresh conversation whose selection can't
-// send at a connected provider. Started conversations (a session or visible messages) are never auto-repointed —
-// that would retire their session and insert a switch notice the user didn't ask for.
-watch([providerAccounts, translatorAccounts], () => {
+/* Keep the composer usable whenever ANY provider has an account: when the connection state changes (initial
+ * load, a connect/disconnect, a sandbox reset), point each untouched fresh conversation whose selection can't
+ * send at a connected provider. Started conversations (a session or visible messages) are never auto-repointed —
+ * that would retire their session and insert a switch notice the user didn't ask for.
+ *
+ * IT WAITS FOR THE WHOLE CONNECTION PICTURE (accountsLoaded), and that guard is the point of this watch, not a
+ * detail of it. The two halves land INDEPENDENTLY — the translator's subscriptions come back off a local read
+ * while a provider's own accounts take a round-trip — so every load passes through a moment that reads as
+ * "ChatGPT connected, Claude not", which is not a fact about the user, it is a fact about which read finished
+ * first. Acting on it moved a Claude user's chat to Codex a beat before their Claude account arrived, and
+ * nothing moved it back: by then the chat sat on a provider that could send, so this watch had no reason to
+ * touch it again. `accountsLoaded` flips only once every read has settled, which is exactly the first moment an
+ * empty list means "you have nothing connected" rather than "we haven't heard yet" — the same distinction
+ * rememberedAccountFor draws for the account pick, for the same reason. It is a SOURCE as well as a guard so
+ * the pass runs again on the completed picture rather than being lost with the partial one. */
+watch([providerAccounts, translatorAccounts, accountsLoaded], () => {
+    if (!accountsLoaded.value) {
+        return;
+    }
     for (const conversation of conversations.value) {
         if (
             conversation.session.value !== undefined ||
@@ -835,7 +849,10 @@ watch([providerAccounts, translatorAccounts], () => {
         }
         const fallback = NATIVE_PROVIDERS.find((p) => providerReady(p));
         if (fallback) {
-            conversation.selectProvider(fallback);
+            // repointProvider, not selectProvider: this chat is being moved because its provider cannot serve
+            // it, which says nothing about what the user wants NEXT time. Writing it back as the remembered
+            // provider is what made a single unlucky load permanent.
+            conversation.repointProvider(fallback);
         }
     }
 });

@@ -1,5 +1,7 @@
 import { type AgentHarness, type AgentProvider, NATIVE_PROVIDERS, type NativeProvider, type PermissionMode } from "@intentic/sandbox-contract";
 import { ref, watch } from "vue";
+import { providerReady } from "./access";
+import { accountsLoaded } from "./providerAccounts";
 import { defaultModelFor, perProvider } from "./providerCatalog";
 
 /* WHAT A NEW CONVERSATION STARTS WITH — the turn prefs the last one left behind, persisted across reloads as one
@@ -79,6 +81,26 @@ watch(
         }
     },
 );
+
+/* THE PROVIDER A FRESH CONVERSATION STARTS ON: the user's remembered pick when it can actually run, else the
+ * first one that can — RESOLVED AT READ, never written back over the pick.
+ *
+ * The distinction is the whole point. Falling back used to happen by REWRITING this preference, so a user whose
+ * Claude account was merely slow to load one time opened every session afterwards on ChatGPT, with nothing left
+ * anywhere to say they had ever chosen otherwise. Resolving instead means a pick that cannot run today costs one
+ * substitution today and is honoured again the moment its provider is back — the same rule rememberedAccountFor
+ * follows for the account, and for the same reason.
+ *
+ * The unloaded case rides the pick untouched: before the connection lists have been READ, an empty list is
+ * "we haven't asked", not "you have nothing connected", and resolving against it would open every session on
+ * whichever provider's read happened to answer first. */
+export const rememberedProviderFor = (): AgentProvider => {
+    const picked = turnDefaults.provider.value;
+    if (!accountsLoaded.value || providerReady(picked)) {
+        return picked;
+    }
+    return NATIVE_PROVIDERS.find((provider) => providerReady(provider)) ?? picked;
+};
 
 // The model to restore for a provider: the one the user last picked for it (persisted), else the provider's
 // default. Harness-independent — the model survives a harness switch (the catalog is shared), so switching
