@@ -6,6 +6,7 @@ import {
     type UsageAccount,
     HostTunnelSchema,
     SANDBOX_ROUTE_NAMES,
+    SANDBOX_ROUTE_SHAPES,
     systemContract,
 } from "@intentic/sandbox-contract";
 import { AGENT_SESSION_PREFIX, agentSessionName, JOB_SESSION_PREFIX, WEB_SESSION_PREFIX } from "@intentic/sandbox-contract/session-names";
@@ -29,6 +30,7 @@ import { captureScrollback, isValidSessionName } from "../terminal/terminal-sess
 import { isNewer, latestVersion } from "../platform/version-check.js";
 import { runtimeHealth } from "../agent/adapter-health.js";
 import { buildId } from "../version.js";
+import { manifestProblems } from "../store/manifest-problems.js";
 import { workspaceIdentity } from "./workspace-identity.js";
 
 const execFileAsync = promisify(execFile);
@@ -100,6 +102,10 @@ async function* systemEvents(
      * THIS daemon build implements. A browser newer than the daemon reads the difference and explains the gap
      * instead of 404-ing blind; see the contract's routes.ts.
      *
+     * `shapes` is that same idea one level finer — a fingerprint per route, so a route both builds HAVE but
+     * shape differently is named too, instead of answering a payload the browser silently reads as empty.
+     * Both are module constants, computed once at load rather than per connection.
+     *
      * `build` is the cache guard on the other axis — a rebuilt daemon may shape its answers differently, so
      * the browser drops what it cached from the previous build rather than hydrating it (see version.ts).
      *
@@ -111,6 +117,7 @@ async function* systemEvents(
         kind: "hello",
         workspaceId: await workspaceIdentity(services),
         routes: [...SANDBOX_ROUTE_NAMES],
+        shapes: { ...SANDBOX_ROUTE_SHAPES },
         build: buildId(),
         boot: services.boot.progress(),
     };
@@ -243,6 +250,26 @@ export const createSystemRoutes = (services: Services) => {
                 ...(latest !== undefined ? { latest, updateAvailable: isNewer(latest, info.version) } : {}),
                 ...(runtimes !== undefined ? { runtimes } : {}),
             };
+        }),
+        /* What the daemon could not read in its own `.intentic/` manifests.
+         *
+         * The registry it reports from is written by the store substrate as a side effect of READING a file
+         * (store/manifest-problems.ts), which makes the freshness question real: a file edited by hand a second
+         * ago has a stale entry until something reads it again. So this route reads the three manifests a
+         * PERSON edits before answering, rather than trusting whatever the last unrelated read happened to
+         * leave behind. Three small files, on a route asked only when one of them changes or a browser
+         * connects — and the alternative is a notice that is right one refetch later, which for "did my typo
+         * get fixed?" is the same as being wrong.
+         *
+         * The other twenty-odd manifests are daemon-written and still fully covered: they report whenever
+         * anything reads them, which is what any feature touching them already does. What they do not get is
+         * this pre-emptive re-read, because nobody hand-edits them and the reads are not free.
+         *
+         * Paths come back workspace-relative, so the browser shows `.intentic/settings.json` rather than a
+         * container path nobody can act on. */
+        manifestProblems: i.manifestProblems.handler(async () => {
+            await Promise.all([services.sandboxSettings.get(), services.capabilities.list(), services.personas.list()]);
+            return manifestProblems(services.workspace.root);
         }),
         // Exchange the request's verified bearer for a daemon-minted session (the steady-state browser
         // credential — see auth/session.ts). The bearer middleware already verified WHO is asking (a Google ID

@@ -183,7 +183,11 @@ const { pin, follow } = useStickToBottom(scroller, content, poppedOut);
 
 // The window this pane's rows are painted in — the pop-out's whenever the panel has one. Asked of the scroller
 // afresh at each use, since a pop-out or a dock can land between two steps of the same pass.
-const transcriptWindow = (): Window & typeof globalThis => scroller.value?.ownerDocument.defaultView ?? window;
+// Undefined only when there is no window to be had at all — the pane's scroller is gone AND so is the global.
+// That is a torn-down document, which happens between a deferred callback being queued and it running (a
+// unit test's environment closing under an idle task; a pop-out closed mid-pass). `globalThis.window` rather
+// than a bare `window`, because the bare identifier THROWS where the property merely reads undefined.
+const transcriptWindow = (): (Window & typeof globalThis) | undefined => scroller.value?.ownerDocument.defaultView ?? globalThis.window;
 
 const activeError = computed(() => props.conversation.error.value);
 /* This conversation's transcript round-trip, still in flight with nothing painted yet — the empty state
@@ -1014,6 +1018,11 @@ let warmQueued = false;
 // chat window and getting no rendering steps at all: the pass never ran, and the latch below never lifted.
 const whenIdle = (task: () => void): void => {
     const view = transcriptWindow();
+    if (view === undefined) {
+        // Nothing left to schedule against. The work is a scroll warm-up, so dropping it costs a frame of
+        // layout on a pane that no longer exists.
+        return;
+    }
     if (view.requestIdleCallback === undefined) {
         view.setTimeout(task, 200);
         return;
@@ -1029,6 +1038,13 @@ const warmTranscript = (): void => {
         realizing.value = true;
         void nextTick(() => {
             const view = transcriptWindow();
+            if (view === undefined) {
+                // The document went away between the idle callback and this tick. Clear the latch by hand,
+                // since the frames that would have cleared it are never going to run.
+                realizing.value = false;
+                warmQueued = false;
+                return;
+            }
             view.requestAnimationFrame(() =>
                 view.requestAnimationFrame(() => {
                     realizing.value = false;

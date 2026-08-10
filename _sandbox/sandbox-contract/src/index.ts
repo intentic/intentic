@@ -1,5 +1,5 @@
 import type { ContractRoute } from "./routes.js";
-import { contractRoutes, requestPathFor, routeForProcedure, routeNameForRequest } from "./routes.js";
+import { contractRoutes, requestPathFor, routeForProcedure, routeNameForRequest, routeShapes } from "./routes.js";
 import { activityContract } from "./contracts/activity.contract.js";
 import { agentContract } from "./contracts/agent.contract.js";
 import { agentsContract } from "./contracts/agents.contract.js";
@@ -153,6 +153,12 @@ export const sandboxContract = {
 // daemon advertises its route surface at all.
 export const SANDBOX_ROUTES: readonly ContractRoute[] = contractRoutes(sandboxContract);
 export const SANDBOX_ROUTE_NAMES: readonly string[] = SANDBOX_ROUTES.map((route) => route.name);
+
+/* And the SHAPE of each of those routes, advertised beside the names for the failure the names cannot describe:
+ * a route both builds have, answering a payload only one of them expects. Computed once at module load — it
+ * walks every contract schema through `z.toJSONSchema`, which is far too much work to repeat per connection and
+ * exactly the kind of thing that never changes for the life of a process. See routes.ts. */
+export const SANDBOX_ROUTE_SHAPES: Readonly<Record<string, string>> = routeShapes(sandboxContract);
 
 // The contract route a concrete browser request belongs to, bound to this build's route table.
 export const sandboxRouteName = (method: string, pathWithQuery: string): string | undefined =>

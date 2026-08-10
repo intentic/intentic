@@ -788,6 +788,7 @@ test("agent.run sends a Grok turn an explicit live-valid model, replacing an inv
                 services({
                     openCode: {
                         client: async () => ({}) as never,
+                        url: async () => "http://127.0.0.1:4096",
                         connected: async () => true,
                         sessionExists: async () => true,
                         xaiModels: async () => ({

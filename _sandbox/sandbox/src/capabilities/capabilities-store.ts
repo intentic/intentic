@@ -28,22 +28,46 @@ const rawId = (entry: unknown): string | undefined => {
     return typeof id === "string" ? id : undefined;
 };
 
-// A JSON file store, used in production at <workspace>/.intentic/capabilities.json. `onInvalid` reports an
-// entry that could not be read, so a capability disappearing from the UI is never silent.
+// A JSON file store, used in production at <workspace>/.intentic/capabilities.json. A skipped entry is
+// reported twice over, because the two audiences are in different places: `onInvalid` puts it in the daemon
+// log for whoever is reading logs, and the manifest-problem registry puts it on the screen where the
+// capability went missing. Until the second one existed, "never silent" was only true of the log.
 export const fileCapabilitiesStore = (path: string, onInvalid?: (id: string, reason: string) => void): CapabilitiesStore => {
     // Typed as the RAW array the writes preserve, not as Capability[] — per-entry validation happens in `read`
     // below so one unreadable entry costs itself and not the manifest. The schema check here is only "is this
     // a JSON array at all"; anything else reads as empty, which is also what a torn file used to read as
     // before jsonFile made torn files unobservable.
-    const file = jsonFile<unknown[]>(path, { parse: (raw) => (Array.isArray(raw) ? raw : undefined), fallback: () => [] });
+    /* Entries are checked HERE, inside `parse`, rather than in `read` below — because this is the only point
+     * with a `report` channel, and a skipped capability has to reach the browser and not just the log. The
+     * value still comes back RAW: a write must preserve an entry this build cannot read (see above), which a
+     * validated array could not express.
+     *
+     * `read` then validates a second time to produce the typed list. That is one extra pass over a manifest
+     * that has already been read off disk and JSON-parsed, and it buys a single obvious validation site per
+     * concern instead of a shared one that has to smuggle its findings between the two. */
+    const file = jsonFile<unknown[]>(path, {
+        parse: (raw, report) => {
+            if (!Array.isArray(raw)) {
+                return undefined;
+            }
+            for (const entry of raw) {
+                const parsed = CapabilitySchema.safeParse(entry);
+                if (parsed.success) {
+                    continue;
+                }
+                const id = rawId(entry) ?? "<unnamed>";
+                const reason = parsed.error.issues.map((issue) => `${issue.path.join(".")}: ${issue.message}`).join("; ");
+                onInvalid?.(id, reason);
+                report({ kind: "invalidEntry", detail: `${id} — ${reason}` });
+            }
+            return raw;
+        },
+        fallback: () => [],
+    });
     const read = async (): Promise<Capability[]> =>
         (await file.read()).flatMap((entry) => {
             const parsed = CapabilitySchema.safeParse(entry);
-            if (parsed.success) {
-                return [parsed.data];
-            }
-            onInvalid?.(rawId(entry) ?? "<unnamed>", parsed.error.issues.map((issue) => `${issue.path.join(".")}: ${issue.message}`).join("; "));
-            return [];
+            return parsed.success ? [parsed.data] : [];
         });
     return {
         list: read,

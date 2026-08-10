@@ -195,6 +195,8 @@ const normalizeItem = (value: unknown): CodexItem | undefined => {
         if (!Array.isArray(rawChanges)) {
             throw new Error("Codex app-server sent invalid fileChange.changes");
         }
+        // Annotated because the `kind` guard below narrows a `string` to the three literals, and an object
+        // literal with no contextual type widens it straight back — the element type has to come from here.
         const changes = rawChanges.map((value, index): { readonly path: string; readonly kind: "add" | "delete" | "update" } => {
             const change = object(value, `fileChange.changes[${index}]`);
             const kind = string(object(change["kind"], `fileChange.changes[${index}].kind`), "type", `fileChange.changes[${index}].kind`);

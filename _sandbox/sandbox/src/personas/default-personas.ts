@@ -1,6 +1,7 @@
 import type { Persona } from "@intentic/sandbox-contract";
 import { z } from "zod";
 import { jsonFile } from "../store/json-file.js";
+import { objectParse } from "../store/unknown-keys.js";
 import type { PersonasStore } from "./personas-store.js";
 
 /* THE PERSONAS A WORKSPACE STARTS WITH — three answers to "what may this session do", written down so the
@@ -94,7 +95,7 @@ const DEFAULT_PERSONAS: readonly Persona[] = [
 
 export const seedDefaultPersonas = async (personas: PersonasStore, ledgerPath: string): Promise<void> => {
     const ledger = jsonFile<z.infer<typeof SeededSchema>>(ledgerPath, {
-        parse: (raw) => SeededSchema.safeParse(raw).data,
+        parse: objectParse(SeededSchema),
         fallback: () => ({ seeded: [] }),
     });
     const record = await ledger.read();

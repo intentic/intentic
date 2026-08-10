@@ -8,6 +8,7 @@ import { useSandboxVersion } from "../../composables/sandbox/useSandboxVersion";
 import { useSandbox } from "../../composables/sandbox/useSandbox";
 import { errorMessage } from "../../composables/useAsyncAction";
 import SandboxBehindCard from "./SandboxBehindCard.vue";
+import SandboxManifestCard from "./SandboxManifestCard.vue";
 import SandboxUpdateCard from "./SandboxUpdateCard.vue";
 
 /* The Sandbox hub's "Overview" tab — WHAT THIS BOX IS. Sandbox identity (the name, inline-editable by the
@@ -331,5 +332,6 @@ const save = async (): Promise<void> => {
         <!-- This daemon predates routes the app knows: names the gap instead of letting them 404 unexplained.
              Version-independent, so it also fires in local dev where every package is 0.0.0. Self-hides. -->
         <SandboxBehindCard />
+        <SandboxManifestCard />
     </div>
 </template>

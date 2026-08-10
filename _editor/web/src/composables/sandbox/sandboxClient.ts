@@ -1,4 +1,4 @@
-import { staleDaemonReason } from "./useDaemonRoutes";
+import { driftedRouteReason, staleDaemonReason } from "./useDaemonRoutes";
 import { trackPerf } from "../perf";
 import { CHUNK_BYTES } from "../workspace/uploadChunking";
 import { sandboxAuthenticatedFetch } from "./sandboxAuthFetch";
@@ -43,16 +43,28 @@ export class SandboxHttpError extends Error {
 // The daemon's user-facing failure, from a non-2xx response body: oRPC handlers put the text on `message`, the
 // hand-written daemon routes on `error`; fall back to the status when the body carries neither (or isn't JSON).
 //
-// A 404 gets one extra check first. The browser is often newer than the daemon (see useDaemonRoutes), so a
-// route this app knows and the daemon never advertised answers 404 — identical on the wire to "that file isn't
+// Two statuses get an extra check first, for the two ways a browser newer than its daemon fails (see
+// useDaemonRoutes).
+//
+// A 404 is a route this app knows and the daemon never advertised — identical on the wire to "that file isn't
 // there", and the single most expensive ambiguity in the product: it reads as a broken feature, and the only
 // way to tell used to be rebuilding the image to see if it changed. When the daemon has positively told us it
 // lacks the route, say so instead of passing the daemon's generic text through.
+//
+// A 400 on a route both sides HAVE but shape differently is the same ambiguity one step in: the daemon's own
+// validation rejected a field this app sent, and its message describes the field rather than the reason the
+// field is unexpected. Only claimed when the fingerprints positively disagree — an ordinary bad request on an
+// agreed route keeps the daemon's text, which is the more useful of the two.
 export async function sandboxError(response: Response, request?: { method: string; path: string }): Promise<SandboxHttpError> {
-    if (response.status === 404 && request !== undefined) {
-        const reason = staleDaemonReason(request.method, request.path);
+    if (request !== undefined) {
+        const reason =
+            response.status === 404
+                ? staleDaemonReason(request.method, request.path)
+                : response.status === 400
+                  ? driftedRouteReason(request.method, request.path)
+                  : undefined;
         if (reason !== undefined) {
-            return new SandboxHttpError(404, reason);
+            return new SandboxHttpError(response.status, reason);
         }
     }
     const detail = (await response.json().catch(() => null)) as { message?: string; error?: string } | null;

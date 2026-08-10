@@ -8,6 +8,7 @@ import {
     HostTunnelInputSchema,
     HostTunnelSchema,
     InfoSchema,
+    ManifestProblemsSchema,
     MachineFlowLineSchema,
     MachineSandboxFlowInputSchema,
     OkSchema,
@@ -28,6 +29,10 @@ import {
 // connection simply never joins the roster.
 export const systemContract = {
     info: oc.route({ method: "GET", path: "/info" }).output(InfoSchema),
+    // What the daemon could not read in its own `.intentic/` manifests — a file it fell back on, a key it did
+    // not recognise, an entry it skipped. Its own route rather than a field on /info because it is invalidated
+    // by a different thing: a manifest changing on disk, which the workspace-state table already broadcasts.
+    manifestProblems: oc.route({ method: "GET", path: "/system/manifest-problems" }).output(ManifestProblemsSchema),
     // Exchange the request's verified bearer (a Google ID token — or a still-valid session, which makes this
     // route sliding renewal) for a daemon-minted session, the credential every steady-state call presents.
     session: oc.route({ method: "POST", path: "/system/session" }).output(DaemonSessionSchema),

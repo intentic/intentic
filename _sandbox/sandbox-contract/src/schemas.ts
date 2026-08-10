@@ -5137,6 +5137,34 @@ export const InfoSchema = z.object({
 });
 export type Info = z.infer<typeof InfoSchema>;
 
+/* WHAT THE DAEMON COULD NOT READ IN ITS OWN STATE FILES.
+ *
+ * Every manifest under `.intentic/` is read through a schema and falls back when that schema says no, which
+ * keeps the daemon up and — until this route — ended there. A settings file with one bad character read as
+ * every setting at its default, a misspelled flag was stripped in silence, and a skipped capability said so
+ * only in the daemon log. All three look identical from a browser: the feature is simply off.
+ *
+ * `kind` is what to do about it, which is why it is not just a message:
+ *   unreadable   — the whole file is being ignored. Everything in it is at its default.
+ *   unknownKey   — one key this build does not know. Only that key is ignored, and `suggestion` carries the
+ *                  name it was probably meant to be, when one is close enough to guess honestly.
+ *   invalidEntry — one entry of a list was skipped. The rest of the file is unaffected.
+ *
+ * Reported per file rather than as one flat list because the file is the unit a person fixes. */
+export const ManifestProblemSchema = z.object({
+    kind: z.enum(["unreadable", "unknownKey", "invalidEntry"]),
+    detail: z.string(),
+    suggestion: z.string().optional(),
+});
+export type ManifestProblem = z.infer<typeof ManifestProblemSchema>;
+
+// Workspace-relative path (`.intentic/settings.json`) and everything currently wrong with that file. A file
+// with nothing wrong is absent from the list rather than present and empty.
+export const ManifestProblemReportSchema = z.object({ path: z.string(), problems: z.array(ManifestProblemSchema) });
+export type ManifestProblemReport = z.infer<typeof ManifestProblemReportSchema>;
+
+export const ManifestProblemsSchema = z.array(ManifestProblemReportSchema);
+
 // A daemon-minted session (system.session): the steady-state browser credential, exchanged for a verified
 // Google ID token so Google UI is a sign-in moment instead of an hourly renewal. `expiresAt` is epoch ms —
 // the browser renews ahead of it without parsing the token; `email` is who the daemon verified.

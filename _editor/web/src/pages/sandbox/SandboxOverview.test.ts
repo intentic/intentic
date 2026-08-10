@@ -34,6 +34,7 @@ vi.mock(`../../composables/sandbox/useSandboxVersion`, () => ({
 }));
 vi.mock(`./SandboxUpdateCard.vue`, () => ({ default: defineComponent({ render: () => null }) }));
 vi.mock(`./SandboxBehindCard.vue`, () => ({ default: defineComponent({ render: () => null }) }));
+vi.mock(`./SandboxManifestCard.vue`, () => ({ default: defineComponent({ render: () => null }) }));
 // The canvas downscale needs a real 2d context, which jsdom has not got. What matters here is not the pixels but
 // WHICH fit was asked for: a logo has to be contained, because a centre crop of a wordmark loses the name.
 const fileToSquareDataUrl = vi.fn<(file: File, fit: `cover` | `contain`) => Promise<string>>().mockResolvedValue(`data:image/webp;base64,NEW`);

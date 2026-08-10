@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { Card, Code, StatusBadge } from "@intentic/ui";
 import { computed } from "vue";
-import { daemonBehind, missingRoutes } from "../../composables/sandbox/useDaemonRoutes";
+import { daemonBehind, daemonDrifted, driftedRoutes, missingRoutes } from "../../composables/sandbox/useDaemonRoutes";
 import { useEnvironment } from "../../composables/sandbox/useEnvironment";
 
 /* "This sandbox predates some features" — the specific companion to SandboxUpdateCard.
@@ -16,10 +16,19 @@ import { useEnvironment } from "../../composables/sandbox/useEnvironment";
  *     their working tree, and exactly the confusion this whole mechanism was built to end.
  *   - A version being newer does not tell you whether anything you care about changed. A named route gap does.
  *
+ * It reports the two ways that surface can disagree, because they read differently to whoever hit them: a
+ * feature the sandbox does not HAVE fails loudly and is merely unexplained, while one it has under a different
+ * shape fails QUIETLY — the screen loads, a value is blank, and nothing anywhere says why. Same remedy, so one
+ * card, but the second gap is worth its own sentence.
+ *
  * Non-blocking on purpose. An older sandbox is a fully supported thing to be running — everything it does
  * implement keeps working, and nothing here forces an update. It only stops the gap being invisible. */
 
-const groups = computed(() => [...new Set(missingRoutes.value.map((name) => name.split(`.`)[0]))].toSorted());
+// The group half of a `<group>.<route>` name — a route name with no dot in it is its own area rather than a
+// hole in the list.
+const areas = (names: readonly string[]): string[] => [...new Set(names.map((name) => name.split(`.`)[0] ?? name))].toSorted();
+const groups = computed(() => areas(missingRoutes.value));
+const driftedGroups = computed(() => areas(driftedRoutes.value));
 // The developer's remedy is the one the dev loop already documents; a user's is the update card's path.
 const isDev = import.meta.env.DEV;
 const { slug } = useEnvironment();
@@ -33,23 +42,32 @@ const rebuildCommand = computed(
 </script>
 
 <template>
-    <Card v-if="daemonBehind" class="flex flex-col gap-4">
+    <Card v-if="daemonBehind || daemonDrifted" class="flex flex-col gap-4">
         <div class="flex items-start gap-2.5">
             <Icon name="info-circle" class="mt-0.5 text-lg text-muted" />
             <div class="min-w-0 flex-1">
                 <div class="flex items-center justify-between gap-3">
                     <h2 class="font-semibold leading-tight">This sandbox is behind the app</h2>
-                    <StatusBadge variant="warning" :label="`${missingRoutes.length} missing`" dot />
+                    <StatusBadge
+                        variant="warning"
+                        :label="daemonBehind ? `${missingRoutes.length} missing` : `${driftedRoutes.length} changed`"
+                        dot
+                    />
                 </div>
                 <p class="text-2xs text-subtle">
-                    Its daemon was built before some features this app knows about, so those will report that the route is unavailable rather than
-                    working. Everything else is unaffected.
+                    Its daemon was built before some of what this app knows about. Everything else is unaffected.
                 </p>
             </div>
         </div>
 
-        <p class="text-2xs text-subtle">
-            Affected area<span v-if="groups.length !== 1">s</span>: <span class="font-mono">{{ groups.join(`, `) }}</span>
+        <p v-if="daemonBehind" class="text-2xs text-subtle">
+            Missing — these will report that the feature is unavailable rather than working. Affected area<span v-if="groups.length !== 1">s</span>:
+            <span class="font-mono">{{ groups.join(`, `) }}</span>
+        </p>
+
+        <p v-if="daemonDrifted" class="text-2xs text-subtle">
+            Changed — these still answer, but exchange different fields than this app expects, so something may look blank or fail to save. Affected
+            area<span v-if="driftedGroups.length !== 1">s</span>: <span class="font-mono">{{ driftedGroups.join(`, `) }}</span>
         </p>
 
         <template v-if="isDev">

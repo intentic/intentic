@@ -14,7 +14,15 @@ const AUTOMATIONS: readonly FileContribution[] = [
 
 describe(`staleQueryKeys`, () => {
     it(`maps a manifest write to the queries it makes stale`, () => {
-        expect(staleQueryKeys([`.intentic/capabilities.json`], [])).toEqual([`capabilities`, `environment`, `panels`]);
+        expect(staleQueryKeys([`.intentic/capabilities.json`], [])).toEqual([`capabilities`, `environment`, `panels`, `manifests`]);
+    });
+
+    it(`refreshes the unreadable-manifest notice for the three files a person hand-edits`, () => {
+        // Only these three. Every manifest reports what the daemon could not read in it, but a write to one of
+        // the twenty-odd DAEMON-written ones cannot introduce a typo, and billing every browser a refetch for
+        // each of them is the amplification this table exists to avoid.
+        const carries = WORKSPACE_STATE_FILES.filter((file) => file.invalidates.includes(`manifests`)).map((file) => file.path);
+        expect(carries.toSorted()).toEqual([`.intentic/capabilities.json`, `.intentic/personas.json`, `.intentic/settings.json`]);
     });
 
     it(`matches a name family and a one-file-per-entry directory through one prefix each`, () => {
@@ -40,7 +48,7 @@ describe(`staleQueryKeys`, () => {
         // jsonFile writes `.<name>.<pid>.tmp` beside the target precisely so the atomic rename can't be read as
         // a write to the target itself. A trailing-tag temp would prefix-match and bill an extra refetch.
         expect(staleQueryKeys([`.intentic/.settings.json.42.tmp`], [])).toEqual([]);
-        expect(staleQueryKeys([`.intentic/settings.json`], [])).toEqual([`settings`]);
+        expect(staleQueryKeys([`.intentic/settings.json`], [])).toEqual([`settings`, `manifests`]);
     });
 
     it(`ignores ordinary workspace edits`, () => {
@@ -53,6 +61,7 @@ describe(`staleQueryKeys`, () => {
             `capabilities`,
             `environment`,
             `panels`,
+            `manifests`,
         ]);
     });
 

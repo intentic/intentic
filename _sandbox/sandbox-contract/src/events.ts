@@ -671,12 +671,22 @@ export type Boot = z.infer<typeof BootSchema>;
 // the last `pnpm build:sandbox`), and that stays fully supported — the browser just compares the two sets so a
 // route the daemon predates surfaces as a named, explained gap instead of a bare 404 nobody can attribute.
 //
+// `shapes` answers the half `routes` structurally cannot: a route BOTH builds have, whose payload changed
+// between them. Names match, so nothing 404s — the call goes out and a field the browser expects is simply
+// missing from the answer. It is a map of route name → a fingerprint of that route's input and output schema
+// (see routes.ts), so a difference is a named route rather than "something, somewhere, moved". Beside `routes`
+// rather than folded into it: existence covers every route, shape covers only the ones that can be expressed.
+//
 // Every added field is optional: a daemon built before one simply says nothing, and the browser's fallback is
-// the pre-existing behaviour — routes all assumed present, the daemon assumed ready, the cache left alone.
+// the pre-existing behaviour — routes all assumed present, shapes all assumed to agree, the daemon assumed
+// ready, the cache left alone. That is also why `routes` keeps its bare-string-array shape: an image already in
+// the wild sends exactly that, and a breaking change here would fail the hello frame's own parse and take the
+// whole event stream down for precisely the skew this frame exists to describe.
 export const HelloSchema = z.object({
     kind: z.literal("hello"),
     workspaceId: z.string(),
     routes: z.array(z.string()).optional(),
+    shapes: z.record(z.string(), z.string()).optional(),
     build: z.string().optional(),
     boot: BootProgressSchema.optional(),
 });

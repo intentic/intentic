@@ -2,6 +2,7 @@ import { randomBytes, randomUUID } from "node:crypto";
 import { sha256Hex } from "@intentic/sandbox-contract/tunnel-ids";
 import { z } from "zod";
 import { jsonFile } from "../store/json-file.js";
+import { objectParse } from "../store/unknown-keys.js";
 import { tokenEquals } from "./auth.js";
 
 /* Control tokens: the credential anything OUTSIDE the browser presents to drive this sandbox — the ACP
@@ -52,7 +53,7 @@ export interface ControlTokens {
 
 export const fileControlTokens = (path: string): ControlTokens => {
     const file = jsonFile<StoredTokens>(path, {
-        parse: (raw) => StoredTokensSchema.safeParse(raw).data,
+        parse: objectParse(StoredTokensSchema),
         fallback: () => ({ tokens: [] }),
     });
     return {

@@ -1,5 +1,6 @@
 import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import { basename, dirname, join } from "node:path";
+import { type ManifestProblem, recordManifestProblems } from "./manifest-problems.js";
 
 /* The substrate under every `*-store.ts` in the daemon: one JSON file on disk, read through a schema and
  * written whole. Each store used to hand-roll this cycle — try/readFile/JSON.parse/safeParse/fallback on the
@@ -26,6 +27,12 @@ import { basename, dirname, join } from "node:path";
  * about to replace content that EXISTS but could not be read sets the original aside first (<name>.corrupt,
  * the agents-store convention). Absent is not unreadable — a file that never existed has nothing to protect.
  *
+ * SILENCE. Falling back keeps the daemon up, and for a long time it also ended the story: a settings file with
+ * one bad character read as every setting at its default, and nothing said so. The fallback is still right —
+ * refusing to boot over a manifest would be worse — but it is now also REPORTED, on every read, to a registry a
+ * route hands to the browser (manifest-problems.ts). The read path is the only place that can do this: it is
+ * the one moment the difference between "absent" and "there but unreadable" exists.
+ *
  * ponytail: the queue is per file OBJECT, so it orders this daemon's own handlers and nothing else. The agent
  *           can write /work/.intentic files with its own tools, and a write of its that lands between our read
  *           and our rename is still lost. Atomicity means it loses a whole update rather than corrupting the
@@ -44,10 +51,14 @@ export interface JsonFile<T> {
 }
 
 export interface JsonFileOptions<T> {
-    // Whatever `JSON.parse` produced, or `undefined` when the file was absent or not JSON at all. Returning
-    // undefined selects the fallback. Typically a Zod `safeParse`, but a store that must keep unreadable
-    // entries rather than drop them (capabilities) validates per entry in here instead.
-    readonly parse: (raw: unknown) => T | undefined;
+    /* Whatever `JSON.parse` produced, or `undefined` when the file was absent or not JSON at all. Returning
+     * undefined selects the fallback. Typically a Zod `safeParse`, but a store that must keep unreadable
+     * entries rather than drop them (capabilities) validates per entry in here instead.
+     *
+     * `report` is for what a SUCCESSFUL parse still wants to say — a key the schema does not declare, an entry
+     * it had to skip. Optional to take, so the stores with nothing to add keep their one-liner unchanged; what
+     * is reported rides the same self-clearing channel as an unreadable file (manifest-problems.ts). */
+    readonly parse: (raw: unknown, report: (problem: ManifestProblem) => void) => T | undefined;
     // What an absent, unreadable or rejected file reads as. A function because the value may be mutable
     // (an array a caller then filters) and callers must never share one instance.
     readonly fallback: () => T;
@@ -80,6 +91,15 @@ export const jsonFile = <T>(path: string, { parse, fallback, mode }: JsonFileOpt
     // not be read (not JSON, or rejected by `parse`). Only `update` acts on the distinction; a read's answer
     // is the same either way.
     const readState = async (): Promise<{ value: T; unreadable: boolean }> => {
+        /* Recorded on EVERY read, including the healthy ones, which is what makes the registry self-clearing:
+         * a read that finds nothing wrong erases the last read's complaint. An ABSENT file records nothing at
+         * all and returns before this — there is no such file to complain about, and a workspace that has
+         * never written a manifest is the ordinary first-boot state, not a fault. */
+        const problems: ManifestProblem[] = [];
+        const done = <R extends { value: T; unreadable: boolean }>(state: R): R => {
+            recordManifestProblems(path, problems);
+            return state;
+        };
         let text: string;
         try {
             text = await readFile(path, "utf8");
@@ -90,10 +110,17 @@ export const jsonFile = <T>(path: string, { parse, fallback, mode }: JsonFileOpt
         try {
             raw = JSON.parse(text);
         } catch {
-            return { value: fallback(), unreadable: true };
+            problems.push({ kind: "unreadable", detail: "the file is not valid JSON" });
+            return done({ value: fallback(), unreadable: true });
         }
-        const parsed = parse(raw);
-        return parsed === undefined ? { value: fallback(), unreadable: true } : { value: parsed, unreadable: false };
+        const parsed = parse(raw, (problem) => problems.push(problem));
+        if (parsed === undefined) {
+            // The schema rejected it whole. Everything the file says is being ignored in favour of defaults,
+            // which is the one outcome a user has no other way to notice.
+            problems.push({ kind: "unreadable", detail: "the file does not match what this build expects" });
+            return done({ value: fallback(), unreadable: true });
+        }
+        return done({ value: parsed, unreadable: false });
     };
 
     // Chained rather than a lock object: `update` is the only writer, so the tail of this promise IS the queue.

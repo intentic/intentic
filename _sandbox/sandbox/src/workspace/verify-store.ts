@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { jsonFile } from "../store/json-file.js";
+import { objectParse } from "../store/unknown-keys.js";
 
 /* The dependency verifier's memory (<workspace>/.intentic/verify.json): the last check outcome per project,
  * and how many consecutive reds it is into. What this buys, across daemon restarts:
@@ -45,7 +46,7 @@ export interface VerifyStore {
 
 export const fileVerifyStore = (path: string): VerifyStore => {
     const file = jsonFile<VerifyState>(path, {
-        parse: (raw) => VerifyStateSchema.safeParse(raw).data,
+        parse: objectParse(VerifyStateSchema),
         fallback: () => ({ projects: {} }),
     });
     return {

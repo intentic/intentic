@@ -64,7 +64,7 @@ const STATE_FILES = [
      * fragments from, which makes this the entry where the owner's export choice has the most visible
      * consequence: a bundle exported WITHOUT secrets rebuilds a stock overlay, and the import report has to
      * name every capability the target needs re-added before its environment matches again. */
-    { path: ".intentic/capabilities.json", invalidates: ["capabilities", "environment", "panels"], portability: "secret" },
+    { path: ".intentic/capabilities.json", invalidates: ["capabilities", "environment", "panels", "manifests"], portability: "secret" },
 
     /* Which workspace-derived recommendations the owner has said "not needed" to, and the evidence each was
      * declined against. It rides the `capabilities` key because the catalog is what changes when one lands, and
@@ -83,7 +83,7 @@ const STATE_FILES = [
      * arrives is a workspace that already knows it has a work-reddit and a studio-x, both visibly unconnected,
      * each waiting for one sign-in. This is also the ONE file under .intentic that the root repo tracks (see
      * personas/personas-store.ts for the exclude carve-out and why it is safe here and nowhere else). */
-    { path: ".intentic/personas.json", invalidates: ["personas", "capabilities"], portability: "carry" },
+    { path: ".intentic/personas.json", invalidates: ["personas", "capabilities", "manifests"], portability: "carry" },
 
     {
         path: ".intentic/personas.seeded.json",
@@ -112,7 +112,7 @@ const STATE_FILES = [
         note: "The target composes its own overlay on first boot; rebuild it there to install the tools it names.",
     },
 
-    { path: ".intentic/settings.json", invalidates: ["settings"], portability: "carry" },
+    { path: ".intentic/settings.json", invalidates: ["settings", "manifests"], portability: "carry" },
     // The rule table's last-fired stamps, beside the rules themselves. `derived` rather than `carry`: it is a
     // record of what happened in THIS sandbox, and carrying it to a fresh one would date every rule to work
     // that machine never did.

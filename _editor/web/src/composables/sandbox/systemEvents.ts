@@ -53,8 +53,9 @@ export const applySystemEvent = (event: SystemEvent, sandboxId: string): void =>
              * the tunnel and reconnects, and that branch stands down without a word to the roster. Resetting
              * here instead of in each branch is what stops the next branch from forgetting. */
             desyncAgents();
-            // The advertised route surface first: it gates features for the rest of this connection.
-            setDaemonRoutes(event.routes);
+            // The advertised route surface first: it gates features for the rest of this connection. Shapes
+            // ride with it — same frame, same lifetime, and read by the same store.
+            setDaemonRoutes(event.routes, event.shapes);
             // Then where the daemon's boot is: `reachable` reads it, so learning this before anything else
             // decides whether a single daemon query is allowed to fire this tick.
             setDaemonBoot(event.boot);

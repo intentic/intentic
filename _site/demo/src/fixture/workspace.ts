@@ -82,11 +82,13 @@ const AGENT_DELTAS: Record<string, AgentRepoChanges[]> = {
                 { path: `src/db/migrations.ts`, status: `modified`, additions: 62, deletions: 0, landed: false },
                 { path: `src/routes/users.ts`, status: `modified`, additions: 96, deletions: 41, landed: false },
             ],
+            modules: [{ dir: ``, name: `@acme/api` }],
         },
         {
             repo: `web`,
             branch: `agent/soft-deletes`,
             changes: [{ path: `src/lib/api.ts`, status: `modified`, additions: 18, deletions: 6, landed: false }],
+            modules: [{ dir: ``, name: `@acme/web` }],
         },
     ],
     [CONFLICT_AGENT_ID]: [
@@ -98,6 +100,7 @@ const AGENT_DELTAS: Record<string, AgentRepoChanges[]> = {
                 { path: `src/server.ts`, status: `modified`, additions: 22, deletions: 31, landed: false },
                 { path: `src/db/schema.ts`, status: `modified`, additions: 9, deletions: 4, landed: false },
             ],
+            modules: [{ dir: ``, name: `@acme/api` }],
         },
     ],
 };

@@ -449,6 +449,7 @@ export const services = (overrides: ServiceOverrides = {}): Services => {
         },
         openCode: {
             client: async () => ({}) as never,
+            url: async () => "http://127.0.0.1:4096",
             connected: async () => false,
             sessionExists: async () => true,
             xaiModels: async () => ({ models: [{ id: "grok-4", label: "Grok 4" }], default: "grok-4" }),

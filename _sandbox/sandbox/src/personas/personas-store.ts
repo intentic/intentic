@@ -48,19 +48,36 @@ const rawId = (entry: unknown): string | undefined => {
 
 export const personasPath = (root: string): string => statePath(root, ".intentic/personas.json");
 
-// `onInvalid` reports a card that could not be read, so a persona disappearing from the picker is never silent.
+// A card that could not be read is reported to both places it has to reach: `onInvalid` to the daemon log, and
+// the manifest-problem registry to the screen the persona vanished from. Same split as the capability manifest.
 export const filePersonasStore = (path: string, onInvalid?: (id: string, reason: string) => void): PersonasStore => {
     // Typed as the RAW array so a write preserves entries this build could not read — a card written by a newer
-    // build survives a rollback instead of being quietly dropped by the next edit.
-    const file = jsonFile<unknown[]>(path, { parse: (raw) => (Array.isArray(raw) ? raw : undefined), fallback: () => [] });
+    // build survives a rollback instead of being quietly dropped by the next edit. Cards are checked inside
+    // `parse` because that is where the report channel is; `read` validates again for its typed result, which
+    // is one extra pass over an already-parsed file (see capabilities-store for the same trade).
+    const file = jsonFile<unknown[]>(path, {
+        parse: (raw, report) => {
+            if (!Array.isArray(raw)) {
+                return undefined;
+            }
+            for (const entry of raw) {
+                const parsed = PersonaSchema.safeParse(entry);
+                if (parsed.success) {
+                    continue;
+                }
+                const id = rawId(entry) ?? "<unnamed>";
+                const reason = parsed.error.issues.map((issue) => `${issue.path.join(".")}: ${issue.message}`).join("; ");
+                onInvalid?.(id, reason);
+                report({ kind: "invalidEntry", detail: `${id} — ${reason}` });
+            }
+            return raw;
+        },
+        fallback: () => [],
+    });
     const read = async (): Promise<Persona[]> =>
         (await file.read()).flatMap((entry) => {
             const parsed = PersonaSchema.safeParse(entry);
-            if (parsed.success) {
-                return [parsed.data];
-            }
-            onInvalid?.(rawId(entry) ?? "<unnamed>", parsed.error.issues.map((issue) => `${issue.path.join(".")}: ${issue.message}`).join("; "));
-            return [];
+            return parsed.success ? [parsed.data] : [];
         });
     return {
         list: read,

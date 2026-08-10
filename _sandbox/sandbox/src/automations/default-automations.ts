@@ -2,6 +2,7 @@ import type { Automation } from "@intentic/sandbox-contract";
 import { FIX_DEPS_AUTOMATION } from "@intentic/sandbox-contract/chores";
 import { z } from "zod";
 import { jsonFile } from "../store/json-file.js";
+import { objectParse } from "../store/unknown-keys.js";
 import type { AutomationsStore } from "./automations-store.js";
 
 /* SEEDING — the automations a workspace starts with, and the ledger that makes each a one-time offer.
@@ -42,7 +43,7 @@ const DEFAULT_AUTOMATIONS: readonly Automation[] = [
 
 export const seedDefaultAutomations = async (automations: AutomationsStore, ledgerPath: string): Promise<void> => {
     const ledger = jsonFile<z.infer<typeof SeededSchema>>(ledgerPath, {
-        parse: (raw) => SeededSchema.safeParse(raw).data,
+        parse: objectParse(SeededSchema),
         fallback: () => ({ seeded: [] }),
     });
     const record = await ledger.read();

@@ -1,6 +1,7 @@
 import { randomBytes } from "node:crypto";
 import { z } from "zod";
 import { jsonFile } from "../store/json-file.js";
+import { objectParse } from "../store/unknown-keys.js";
 
 // The CI module's daemon-recorded state (<workspace>/.intentic/ci.json): the per-sandbox webhook secret, the
 // last TERMINAL conclusion per repo+branch — what makes a success after a failure read as `pipeline_fixed`, and
@@ -66,7 +67,7 @@ const minted = (state: CiState): CiState => (state.secret === "" ? { ...state, s
 
 export const fileCiStore = (path: string): CiStore => {
     const file = jsonFile<CiState>(path, {
-        parse: (raw) => CiStateSchema.safeParse(raw).data,
+        parse: objectParse(CiStateSchema),
         // An EMPTY secret is the in-memory marker for "no file yet" — the schema requires a non-empty one, so
         // this shape is never written. `minted` below fills it inside the update queue, which is what stops two
         // concurrent first callers from minting two different secrets; hook registrations and the signature
