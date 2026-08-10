@@ -2,7 +2,7 @@ import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { compareUnrankedModelIds } from "@intentic/sandbox-contract";
 import { createOpencodeClient, createOpencodeServer, type Event as OpenCodeEvent, type OpencodeClient } from "@opencode-ai/sdk";
-import { bindDelegationThread, noteDelegationSignal } from "../agent/subagents.js";
+import { noteDelegationSignal } from "../agent/subagents.js";
 import { discoverXaiModels, humanizeModelId, isChatModel, SEED_XAI_MODELS } from "./grok-models.js";
 
 /* The shared OpenCode runtime for the Grok provider: one warm `opencode serve` per container plus its client.
@@ -66,13 +66,23 @@ const BOOT_TIMEOUT_MS = 60_000;
 export const OPENCODE_BINARY_MISSING =
     "This sandbox's image doesn't include the OpenCode CLI yet — rebuild it from the Environment card in Sandbox ▸ Environment to run Grok here.";
 
-/* The title a delegated session announces itself under (the delegation note's command template carries
- * `--title` with this prefix). It is what tells a delegation apart from the OTHER sessions on the same warm
- * server — the Grok provider adapter's own turns — because `opencode run` forwards no environment to the
- * server, so the id stamp that binds a codex delegation (agent-terminals.ts) has no road here. A session
- * without the prefix is simply never bound, which fails toward the old blindness instead of toward binding a
- * primary turn's session to somebody's child. */
+/* THE TITLE IS THE DELEGATION'S NAME TAG — `intentic-delegation-<spawning tool call id>`.
+ *
+ * A delegated session has to be told apart from the OTHER sessions on the same warm server (the Grok provider
+ * adapter's own turns), AND paired with the exact Bash call that started it. `opencode run` forwards no
+ * environment to the server, so the id stamp that binds a codex delegation has no road here — but the title
+ * does, and the same PreToolUse rewrite that stamps the environment stamps the id into this flag on its way
+ * past (agent/agent-terminals.ts).
+ *
+ * It replaced a guess: the session used to be paired with the youngest grok delegation that did not have one
+ * yet, which two concurrent runs could cross. A session whose title carries no id is simply never bound, which
+ * fails toward the old blindness rather than toward binding one child's session to another's record. */
 export const DELEGATION_SESSION_TITLE = "intentic-delegation";
+
+// The id out of a delegated session's title, or undefined for every other session on the server. Anchored and
+// charset-bounded (the SDK's own tool-call charset), so a title the CLI decorated after the id still pairs.
+export const delegationIdOfTitle = (title: string): string | undefined =>
+    new RegExp(`^${DELEGATION_SESSION_TITLE}-([A-Za-z0-9_-]+)`, "u").exec(title)?.[1];
 
 // A session-error's human sentence, out of whichever member of OpenCode's error union carried one.
 const errorText = (error: unknown): string | undefined => {
@@ -80,18 +90,19 @@ const errorText = (error: unknown): string | undefined => {
     return typeof data?.message === "string" && data.message !== "" ? data.message : undefined;
 };
 
-/* The warm server's news, folded into the subagent roster. Sessions bind by the title prefix above (created →
- * bindDelegationThread pairs it with the youngest thread-less grok delegation); everything after that is a
- * status move keyed by session id, and noteDelegationSignal drops ids that belong to no delegation — which is
- * every primary Grok turn. `busy`/`retry` say working; `idle` is the turn's end (report — a backgrounded
- * record completes on it, a foreground one is settled by its own tool_result); a pending permission is the
- * `blocked` a waiting parent is woken for, though the warm server's allow-all config makes it rare. */
+/* The warm server's news, folded into the subagent roster. A session binds on `created`, by the id its title
+ * carries; everything after that is a status move keyed by session id, and noteDelegationSignal drops ids that
+ * belong to no delegation — which is every primary Grok turn. `busy`/`retry` say working; `idle` is the turn's
+ * end (report — a backgrounded record completes on it, a foreground one is settled by its own tool_result); a
+ * pending permission is the `blocked` a waiting parent is woken for, though the warm server's allow-all config
+ * makes it rare. */
 const foldSessionEvent = (event: OpenCodeEvent): void => {
     switch (event.type) {
         case "session.created": {
             const info = event.properties.info;
-            if (info.parentID === undefined && info.title.startsWith(DELEGATION_SESSION_TITLE)) {
-                bindDelegationThread("grok", info.id);
+            const delegationId = info.parentID === undefined ? delegationIdOfTitle(info.title) : undefined;
+            if (delegationId !== undefined) {
+                noteDelegationSignal({ delegationId, thread: info.id, event: "session" });
             }
             return;
         }

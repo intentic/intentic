@@ -134,7 +134,7 @@ export async function* streamAgent(services: Services, input: AgentTurn, signal:
             input.conversationId !== undefined
                 ? registerTurn(input.conversationId, { abort: () => controller.abort(), ...(steering !== undefined ? { steering } : {}) })
                 : undefined;
-        yield* runConversationTurn(services, input, controller.signal, steering, lease.park);
+        yield* runConversationTurn(services, input, controller.signal, steering);
     } finally {
         unregister?.();
         steering?.close();
@@ -150,12 +150,9 @@ async function* runConversationTurn(
     input: AgentTurn,
     signal: AbortSignal | undefined,
     steering: SteeringQueue | undefined,
-    // The turn's workspace lease, travelling beside `steering` for the same reason: only the tools that park a
-    // turn need it, and they are reached through the plan (workspace/maintenance-gate.ts).
-    park: <T>(run: () => Promise<T>) => Promise<T>,
 ): AsyncGenerator<AgentEvent> {
     if (input.conversationId === undefined) {
-        yield* runTurn(services, input, signal, undefined, steering, park);
+        yield* runTurn(services, input, signal, undefined, steering);
         return;
     }
     const conversationId = input.conversationId;
@@ -230,7 +227,7 @@ async function* runConversationTurn(
     const turn: SnapshotTurn = { conversationId, index: await turnStartIndex(services, { ...input, conversationId }) };
     if (!isolated) {
         try {
-            for await (const event of runTurn(services, input, signal, undefined, steering, park, turn)) {
+            for await (const event of runTurn(services, input, signal, undefined, steering, turn)) {
                 services.agents.observe(conversationId, event);
                 yield event;
             }
@@ -422,7 +419,7 @@ async function* runConversationTurn(
             }
         };
         // Relay the turn while watching for error frames — a failed turn must not auto-land half-done work.
-        for await (const event of runTurn(services, input, signal, { id: conversationId, cwd: worktree.cwd, synced, resync }, steering, park, turn)) {
+        for await (const event of runTurn(services, input, signal, { id: conversationId, cwd: worktree.cwd, synced, resync }, steering, turn)) {
             services.agents.observe(conversationId, event);
             if (event.kind === "error") {
                 failed = true;
@@ -629,9 +626,6 @@ async function* runTurn(
         | { readonly id: string; readonly cwd: string; readonly synced: readonly RepoSync[]; readonly resync: () => Promise<ParkedSync | undefined> }
         | undefined,
     steering: SteeringQueue | undefined,
-    // Hands the workspace back while a tool parks this turn on something outside the tree (turn-plan.ts passes
-    // it to the `wait` tool; workspace/maintenance-gate.ts explains why it has to).
-    park: <T>(run: () => Promise<T>) => Promise<T>,
     // Which conversation message this turn answers, for its end-of-turn checkpoint. Undefined on a turn with no
     // conversation behind it (the bench, a one-shot) — there is no transcript for a rewind to address.
     turn?: SnapshotTurn,
@@ -786,7 +780,6 @@ async function* runTurn(
         cliEnv,
         syncNote: syncNote(worktree?.synced ?? [], "start"),
         steering,
-        park,
         ...(worktree !== undefined ? { resync: worktree.resync } : {}),
     });
     if (!plan.ok) {

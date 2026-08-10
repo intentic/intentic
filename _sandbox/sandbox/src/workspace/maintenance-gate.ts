@@ -9,20 +9,13 @@
  * waiting forever; with it, turns already running finish normally and later turns wait for the visible
  * maintenance job to settle.
  *
- * A READER THAT IS NOT READING GIVES THE TREE BACK (`park`). The gate's premise is that a turn holds its slot
- * only as long as it might run something against the tree — and one turn breaks that on its own: a supervising
- * turn parked on `wait` (agent/subagent-wait.ts) executes nothing for up to half an hour while it sleeps on
- * another agent. Holding through that would let one parked turn stall every dependency repair, and — because
- * writers have priority once queued — every turn that arrived after the repair did. Worse, the agent it sleeps
- * on is the likeliest cause of the repair, so the wait would routinely block the very work it waits for.
- * Parking returns the slot and takes it again before the turn resumes, which is also the honest contract: what
- * a parked turn wakes to is a tree its sibling may have changed. */
+ * A TURN HOLDS ITS SLOT FOR ITS WHOLE LENGTH, including the parts where the model is asleep — parked on a
+ * question, on a plan approval, or on `wait` (agent/subagent-wait.ts). This looked worth an exception once, and
+ * it is not: what a sleeping turn leaves running against the tree is exactly the thing an install must not run
+ * beneath, and `wait` in particular sleeps only while a child of that turn is still working. A turn with
+ * nothing of its own left running is a turn that is about to end, and its slot comes back on its own. */
 
 export interface TurnLease {
-    /* Give the workspace back for the duration of `run` — for a turn parked on something outside the tree —
-     * and take it again before returning. A turn stopped while parked comes back holding nothing, so its
-     * `release` becomes a no-op rather than dropping a slot it no longer owns. */
-    readonly park: <T>(run: () => Promise<T>) => Promise<T>;
     readonly release: () => void;
 }
 
@@ -57,9 +50,8 @@ export const createWorkspaceMaintenanceGate = (): WorkspaceMaintenanceGate => {
         waiter.resolve();
     };
 
-    /* Take a reader slot: immediately when no writer is waiting or running, otherwise queued behind it. Split
-     * out from `enterTurn` because a park has to take the slot back on exactly these terms — the same
-     * writer-priority rule, and the same abort. */
+    // Take a reader slot: immediately when no writer is waiting or running, otherwise queued behind it — and
+    // abandoned if the turn is stopped before it is admitted.
     const acquire = (signal?: AbortSignal): Promise<void> => {
         if (signal?.aborted === true) {
             return Promise.reject(abortError());
@@ -115,26 +107,6 @@ export const createWorkspaceMaintenanceGate = (): WorkspaceMaintenanceGate => {
                     }
                     held = false;
                     releaseTurn();
-                },
-                park: async (run) => {
-                    if (!held) {
-                        return run();
-                    }
-                    held = false;
-                    releaseTurn();
-                    try {
-                        return await run();
-                    } finally {
-                        // Re-take on the way out, so the turn resumes owning the tree again. A turn stopped
-                        // under the park cannot take it back and does not need to: it holds nothing, and the
-                        // release in its own finally knows that.
-                        await acquire(signal).then(
-                            () => {
-                                held = true;
-                            },
-                            () => {},
-                        );
-                    }
                 },
             };
         },

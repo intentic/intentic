@@ -33,8 +33,6 @@ import type { SteeringQueue } from "./agent-steering.js";
 import { withAttachmentNote } from "./attachment-note.js";
 import { delegationNote } from "./delegation.js";
 import { subagentWaitServer } from "./subagent-wait.js";
-import { subagentCountsOf } from "./subagents.js";
-import { agentShellBusy } from "./agent-terminals.js";
 import { resolveHarnessCredentials } from "./harness-credentials.js";
 import { turnPromptPlacement } from "./system-prompt.js";
 import { retrieveTurnContext } from "./turn-context.js";
@@ -111,11 +109,6 @@ export interface TurnContext {
     // Mid-turn steering, present only where the runtime declares it (capabilitiesOf().steering — the Claude
     // Code loop's streaming input, and Pi's own steer queue).
     readonly steering: SteeringQueue | undefined;
-    /* Hands the workspace back for the length of a park, and takes it again before the turn resumes — for the
-     * tools that sleep the turn on something outside the tree (workspace/maintenance-gate.ts). Optional for the
-     * one caller that plans a turn with no lease behind it (the bench), where nothing is holding the workspace
-     * to give back and running inline is the whole of it. */
-    readonly park?: <T>(run: () => Promise<T>) => Promise<T>;
     /* Who the turn is and what it may do, resolved once by planTurn and handed down (personas/personas.ts).
      * Set only on the context the arms receive — the route builds this object before a card has been read, so
      * it is absent there and present everywhere it is used. */
@@ -432,24 +425,6 @@ const SETTINGS_DEFAULTS = SandboxSettingsSchema.parse({});
 // enough to act on rather than the whole suite a push dialog quotes into a fresh session.
 const TURN_RULE_OUTPUT_BYTES = 4_000;
 
-/* IS THIS TURN ACTUALLY IDLE — asked before a parked turn is allowed to give the workspace back to a
- * dependency repair (workspace/maintenance-gate.ts, and subagent-wait.ts's `quiet`).
- *
- * The model being asleep says nothing about the tree: the same two writers agent.ts refuses to rebase under
- * can outlive the moment the model stops, and they are exactly the two an install must not run beneath. A
- * child on the roster covers both Agent-tool subagents and delegated CLI runs, which is also why a turn
- * waiting on its OWN child answers false here without the caller having to special-case it. */
-export const turnQuiet = async (services: Services, conversationId: string | undefined): Promise<boolean> => {
-    if (conversationId === undefined) {
-        return true;
-    }
-    if (subagentCountsOf(conversationId).running > 0) {
-        return false;
-    }
-    const sessionId = services.agents.sessionIdOf(conversationId);
-    return sessionId === undefined || !(await agentShellBusy(sessionId));
-};
-
 /* The Claude Code harness — a native Claude turn's subscription OAuth (with its mid-turn refresh callback), or
  * the translator endpoint a routed provider rides. Credentials are resolved by harness-credentials.ts,
  * which the quick-model one-shot behind the commit box's autofill reads too, so both authenticate identically;
@@ -604,16 +579,12 @@ export const planHarnessTurn = async (
         ...browser.servers,
         // hashlineEdits: swap the native Edit/Write (disabled below) for hash-anchored file tools.
         ...(hashlineEdits ? { hashline: createHashlineServer(context.localCwd) } : {}),
-        // The `wait` tool: park until a child (a delegated CLI, an Agent-tool subagent) or another fleet agent
-        // is blocked on input or finished (subagent-wait.ts). Always offered — a turn that spawns nothing
-        // simply never calls it — and settled by the turn's own signal when the user stops the turn under it.
+        // The `wait` tool: park until a child of this turn — a delegated CLI, an Agent-tool subagent — is
+        // blocked on input or finished (subagent-wait.ts). Always offered — a turn that spawns nothing simply
+        // never calls it — and settled by the turn's own signal when the user stops the turn under it.
         subagents: subagentWaitServer({
             conversationId: context.base.conversationId,
-            registry: services.agents,
             signal: context.base.signal,
-            // No lease behind this plan (the bench) ⇒ nothing to give back, so the wait simply runs.
-            park: context.park ?? ((run) => run()),
-            quiet: () => turnQuiet(services, context.base.conversationId),
         }),
         /* Dependency readiness, asked rather than announced — and asked of the MAIN checkout, for the reason
          * planTurn sets out above: an isolated turn's dependencies live in /work and are only mounted into its

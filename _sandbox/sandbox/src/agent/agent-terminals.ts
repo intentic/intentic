@@ -7,6 +7,7 @@ import { redirectCommand } from "../agents/worktree-redirect.js";
 import { agentSessionName } from "@intentic/sandbox-contract/session-names";
 import { TMUX_RUN_BIN } from "../terminal/terminal-run.js";
 import { shellQuote } from "@intentic/sandbox-run/quote";
+import { DELEGATION_SESSION_TITLE } from "../grok/opencode.js";
 import { isDelegationCommand } from "./subagents.js";
 
 // Rewrites every Bash tool command through bin/tmux-run (baked into the image), so the agent's shell
@@ -84,6 +85,17 @@ const envKeyFlags = (envKeys: readonly string[]): string =>
  * not a shell keyword. */
 const POLITE_PREFIX = "nice -n 10 ionice -c 2 -n 7 ";
 
+/* Name this delegation's opencode session after the tool call that started it: `--title intentic-delegation`
+ * (what the note's template carries, with or without a suffix of its own) becomes `--title
+ * intentic-delegation-<id>`, which is the only thing that reaches the warm server saying whose session this is.
+ *
+ * A REPLACEMENT, not an insertion. The flag is in the template the agent copies, so an agent that kept it gets
+ * an exactly-paired session and one that dropped it gets an unbound one — the same "no title, no binding" floor
+ * grok/opencode.ts already fails to. Inserting the flag instead would mean guessing where in somebody's command
+ * line it may legally go, which is how a rewrite breaks a command it was only supposed to annotate. */
+const stampDelegationTitle = (command: string, delegationId: string): string =>
+    command.replaceAll(new RegExp(`(--title[\\s=])${DELEGATION_SESSION_TITLE}[A-Za-z0-9_-]*`, "gu"), `$1${DELEGATION_SESSION_TITLE}-${delegationId}`);
+
 export const bashTmuxHooks = (
     envKeys: readonly string[] = [],
     /* An isolated turn's Bash must land in the same tree as its Edit/Write, or the two tools disagree about
@@ -120,19 +132,24 @@ export const bashTmuxHooks = (
                         // The path rewrite goes FIRST, on the agent's own words: everything added below is the
                         // daemon's (tmux-run, the namespace hop, the pane name) and names no workspace path of
                         // its own, so rewriting after would scan text that can only produce false matches.
-                        const command =
+                        const redirected =
                             isolation !== undefined && isolation.anchor === undefined ? redirectCommand(tool.command, isolation.plan) : tool.command;
-                        /* A delegation gets its spawning tool call's id stamped into the pane environment, so
-                         * the delegate's own hooks can say WHICH child they speak for: codex hands the stamp
-                         * back through the signal spool, and the roster folds status/session-id/report onto the
-                         * record this very id keys (subagents.ts, delegation-signals.ts). An env prefix rather
-                         * than a tmux `-e` flag because it must ride INSIDE the namespace hop, on the command's
-                         * own process tree — and only for commands whose id charset is the SDK's (defensive: the
-                         * value lands unquoted in the shell line every Bash command flows through). */
-                        const stamp =
-                            isDelegationCommand(command) && /^[A-Za-z0-9_-]+$/u.test(input.tool_use_id)
-                                ? `INTENTIC_DELEGATION_ID=${input.tool_use_id} `
-                                : "";
+                        /* A DELEGATION IS STAMPED WITH ITS SPAWNING TOOL CALL'S ID, so the delegate's own runtime
+                         * can say WHICH child it speaks for and the roster folds status/session-id/report onto
+                         * the record that id keys (subagents.ts). Two roads, because the two CLIs hand it back by
+                         * different doors and neither would take the other's:
+                         *
+                         *  - codex reads the pane ENVIRONMENT from its hooks (delegation-signals.ts). An env
+                         *    prefix rather than a tmux `-e` flag because it must ride INSIDE the namespace hop,
+                         *    on the command's own process tree.
+                         *  - `opencode run` forwards no environment to the warm server it attaches to, so the id
+                         *    rides in the session TITLE the note's template already carries (grok/opencode.ts).
+                         *
+                         * Both only for commands whose id charset is the SDK's — defensive, because the value
+                         * lands unquoted in the shell line every Bash command flows through. */
+                        const delegation = isDelegationCommand(redirected) && /^[A-Za-z0-9_-]+$/u.test(input.tool_use_id);
+                        const command = delegation ? stampDelegationTitle(redirected, input.tool_use_id) : redirected;
+                        const stamp = delegation ? `INTENTIC_DELEGATION_ID=${input.tool_use_id} ` : "";
                         // The namespace hop goes inside the tmux wrapper: tmux-run itself must stay out here
                         // where the server and the pane logs are. The polite prefix goes with the command
                         // (inside the hop), so the whole build/test tree it forks inherits the demotion.

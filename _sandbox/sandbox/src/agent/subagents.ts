@@ -74,13 +74,15 @@ interface SubagentRecord {
     // subagentAgentId for when that happens and why it cannot happen sooner.
     agentId: string | undefined;
     /* A delegated thread/session id. Named by the command when it resumed one (`codex exec resume <id>`,
-     * `opencode run --session <id>`); a FRESH delegation's id arrives by signal instead — the codex hook's
-     * SessionStart carries it (delegation-signals.ts), and an opencode session created on the warm server is
-     * bound by bindDelegationThread. Still daemon-side only; stdout is never parsed for it. */
+     * `opencode run --session <id>`); a FRESH delegation's id arrives by signal instead, and either way the
+     * signal that carries it also carries the delegation id it belongs to — the codex hook reads that from the
+     * pane environment, the opencode session from its own title (grok/opencode.ts). Nothing is inferred from
+     * timing, and stdout is never parsed for it. Daemon-side only. */
     thread: string | undefined;
-    // The delegate reported its own last words (a Stop signal's last_assistant_message) — better than any
-    // stdout tail, so the settle paths keep it rather than overwrite it (settleDelegation, task_notification).
-    reported: boolean | undefined;
+    // WHERE the current summary came from, so a weaker source arriving later cannot overwrite a stronger one
+    // (see `ending`). Undefined ⇒ nothing final has spoken yet: a progress digest or a blocked reason, both of
+    // which anything may replace.
+    summarySource: SummarySource | undefined;
 }
 
 const records = new Map<string, SubagentRecord>();
@@ -246,7 +248,7 @@ const open = (turn: SubagentTurn, id: string, kind: SubagentKind, fields: Partia
         turn,
         agentId: undefined,
         thread: undefined,
-        reported: undefined,
+        summarySource: undefined,
         ...fields,
     };
     records.set(id, record);
@@ -301,6 +303,42 @@ const patch = (id: string, fields: Partial<SubagentRecord>): AgentEvent | undefi
         ...(fields.lastTool !== undefined ? { lastTool: record.lastTool } : {}),
         ...(fields.summary !== undefined ? { summary: record.summary } : {}),
         ...(fields.error !== undefined ? { error: record.error } : {}),
+    };
+};
+
+/* ---- HOW A SUBAGENT ENDS, decided in one place ---------------------------------------------------------------
+ *
+ * Three arrivals can each be the first to know a child is over, and for any given child only some of them ever
+ * come: a foreground delegation's own tool_result, the delegate's `report` signal (the only news a BACKGROUNDED
+ * run gives while its process is still alive), and the SDK's task notification when that process finally exits.
+ * They race, and they carry last words of very different worth — the child's own sign-off, a tail of stdout, the
+ * SDK's progress digest.
+ *
+ * One rule here rather than a guard at each door, because a guard per door is what the first version had and a
+ * guard is only as wide as the door it is on: the one protecting a delegate's report from the SDK's digest knew
+ * nothing about SDK children, so for those the digest went on overwriting the child's own sign-off. So instead:
+ *
+ *   - the FIRST arrival ends it, and a later one may only turn a finished child into a FAILED one — an exit code
+ *     landing after the delegate's own sign-off knows the half of the story the sign-off did not;
+ *   - the summary is kept by SOURCE, not by arrival order.
+ *
+ * The text is bounded by the CALLER, because where to cut differs by source and the difference is meaningful: a
+ * report is cut at its head (it opens with the answer), a stdout tail at its end (it closes with one). */
+
+type SummarySource = "notification" | "exit" | "report";
+const SUMMARY_RANK: Record<SummarySource, number> = { notification: 1, exit: 2, report: 3 };
+
+const ending = (
+    record: SubagentRecord,
+    end: { readonly status?: SubagentStatus; readonly summary?: string; readonly error?: string; readonly source: SummarySource },
+): Partial<SubagentRecord> => {
+    const keepsSummary =
+        end.summary !== undefined && end.summary !== "" && SUMMARY_RANK[end.source] >= SUMMARY_RANK[record.summarySource ?? "notification"];
+    const endsIt = end.status !== undefined && (subagentRunning(record) || (end.status === "failed" && record.status !== "failed"));
+    return {
+        ...(endsIt ? { status: end.status } : {}),
+        ...(keepsSummary ? { summary: end.summary, summarySource: end.source } : {}),
+        ...(end.error !== undefined && end.error !== "" ? { error: end.error } : {}),
     };
 };
 
@@ -402,13 +440,17 @@ export const noteSubagentTask = (turn: SubagentTurn, message: SubagentTaskMessag
     }
     if (message.subtype === "task_notification") {
         const id = message.tool_use_id ?? (message.task_id !== undefined ? tasks.get(message.task_id) : undefined);
-        return id === undefined
+        const record = id !== undefined ? records.get(id) : undefined;
+        // The weakest of the three endings — a digest of whatever the command printed — so it says its piece
+        // through `ending` and loses to a report the delegate or the stop hook already delivered.
+        return record === undefined
             ? undefined
-            : patch(id, {
-                  ...(message.status !== undefined && NOTIFIED[message.status] !== undefined ? { status: NOTIFIED[message.status] } : {}),
-                  // Unless the delegate already reported its own last words (noteDelegationSignal) — the SDK's
-                  // digest of a backgrounded command's stdout must not overwrite the better summary.
-                  ...(message.summary !== undefined && records.get(id)?.reported !== true ? { summary: message.summary } : {}),
+            : patch(record.id, {
+                  ...ending(record, {
+                      source: "notification",
+                      ...(message.status !== undefined && NOTIFIED[message.status] !== undefined ? { status: NOTIFIED[message.status] } : {}),
+                      ...(message.summary !== undefined ? { summary: message.summary } : {}),
+                  }),
                   ...(message.usage?.total_tokens !== undefined ? { tokens: message.usage.total_tokens } : {}),
                   ...(message.usage?.tool_uses !== undefined ? { toolUses: message.usage.tool_uses } : {}),
               });
@@ -540,14 +582,14 @@ export const subagentHooks = (turn: SubagentTurn): Partial<Record<HookEvent, Hoo
                     }
                     adopt(turn, meta, input.agent_id);
                     /* The child's own last words, which is the one thing about a finished subagent a person
-                     * actually reads. It beats the task stream's `summary` (a progress digest) and it beats
-                     * parsing the transcript, so it is written even when task_notification has already said
-                     * something — a report the child wrote itself is the better answer to "what did it find?".
+                     * actually reads — so it goes in as a `report`, the strongest source, and the task stream's
+                     * digest can no longer land on top of it whichever way round the two arrive.
                      *
                      * Status is NOT set here: a stop hook fires for every way a child can end, and the task
                      * stream is what distinguishes finishing from failing from being cut short. */
-                    if (meta.toolUseId !== undefined && input.last_assistant_message !== undefined) {
-                        patch(meta.toolUseId, { summary: input.last_assistant_message });
+                    const child = meta.toolUseId !== undefined ? records.get(meta.toolUseId) : undefined;
+                    if (child !== undefined && input.last_assistant_message !== undefined) {
+                        patch(child.id, ending(child, { summary: input.last_assistant_message, source: "report" }));
                     }
                     return { continue: true };
                 },
@@ -622,13 +664,17 @@ export const settleDelegation = (id: string, outcome: { readonly failed: boolean
         return undefined;
     }
     const tail = outcome.output.trim().slice(-REPORT_TAIL).trim();
-    return patch(id, {
-        status: outcome.failed ? "failed" : "completed",
-        // The delegate's own report (a Stop signal) beats the stdout tail; a failure's tail is kept regardless,
-        // because the error is usually in what was printed after the last assistant message.
-        ...(tail !== "" && record.reported !== true ? { summary: tail } : {}),
-        ...(outcome.failed && tail !== "" ? { error: tail } : {}),
-    });
+    return patch(
+        id,
+        ending(record, {
+            status: outcome.failed ? "failed" : "completed",
+            source: "exit",
+            ...(tail !== "" ? { summary: tail } : {}),
+            // A failure's tail is kept whatever the delegate said about itself, because the error is usually in
+            // what was printed AFTER its last message.
+            ...(outcome.failed && tail !== "" ? { error: tail } : {}),
+        }),
+    );
 };
 
 /* ---- delegation signals: what the delegate itself says, folded into the same records ------------------------
@@ -638,8 +684,9 @@ export const settleDelegation = (id: string, outcome: { readonly failed: boolean
  * the codex hook spool (delegation-signals.ts) and the warm OpenCode server's event stream (grok/opencode.ts) —
  * which is where `blocked`, the real session id, and the child's own last words come from.
  *
- * Status moves are gated on the record still being LIVE: signals arrive on their own clock (a hook process, an
- * SSE stream), and a `working` that lands after the settle must not reopen a finished child. */
+ * A signal arrives on its own clock — a hook process, an SSE stream — so it may well land after the record it
+ * names has finished. The mid-run moves below are therefore gated on the record still being LIVE, and the two
+ * that END one go through `ending`, which owns that rule for all three of the endings at once. */
 
 export interface DelegationSignal {
     // The spawning Bash tool call's id, when the transport carries it (the codex hook inherits it from the pane
@@ -657,23 +704,6 @@ export interface DelegationSignal {
 }
 
 const findByThread = (thread: string): SubagentRecord | undefined => [...records.values()].find((record) => record.thread === thread);
-
-/* Bind a freshly created provider session to the delegation that started it, when nothing carried the pairing.
- * The youngest live record of that kind still waiting for a thread is the one: delegations are rare (a human
- * decision away), the bind window is the seconds between spawn and the provider's session-create, and a wrong
- * guess self-corrects on the next signal that DOES carry both ids. Used by the opencode event stream, whose
- * events name only their session. */
-export const bindDelegationThread = (kind: SubagentKind, thread: string): void => {
-    if (findByThread(thread) !== undefined) {
-        return;
-    }
-    const candidate = [...records.values()]
-        .filter((record) => record.kind === kind && record.thread === undefined && subagentRunning(record))
-        .toSorted((left, right) => right.startedAt - left.startedAt)[0];
-    if (candidate !== undefined) {
-        patch(candidate.id, { thread });
-    }
-};
 
 /** One signal from the delegate's own runtime, folded into its record. Unknown ids are dropped without a trace:
  *  the spool hears every hook-carrying codex run and the event stream every warm-server session, and the ones
@@ -700,28 +730,39 @@ export const noteDelegationSignal = (signal: DelegationSignal): void => {
             break;
         case "blocked":
             if (live) {
-                // The reason rides in `summary` — transient on purpose: the delegate's report (or the settle
-                // tail) replaces it the moment the wait is over, and `reported` stays unset so they may.
+                // The reason rides in `summary` — transient on purpose, so it goes in RAW rather than through
+                // `ending`: it is not an ending, and leaving the source unset is what lets the delegate's real
+                // report (or the settle tail) replace it the moment the wait is over.
                 frames.push(patch(record.id, { status: "blocked", ...(summary !== undefined ? { summary } : {}) }));
             }
             break;
         case "report":
-            if (summary !== undefined) {
-                record.reported = true;
-                frames.push(patch(record.id, { summary }));
-            }
-            // The delegate's turn is over. That ends a BACKGROUNDED record here and now — the alternative is
-            // waiting for the SDK's exit notification, minutes of "running" on a child that already reported.
-            // A foreground one is settled by its own tool_result seconds later (settleDelegation), and a
-            // blocked flicker between the two would only be noise.
-            if (live && record.background === true) {
-                frames.push(patch(record.id, { status: "completed" }));
-            }
+            frames.push(
+                patch(
+                    record.id,
+                    ending(record, {
+                        source: "report",
+                        ...(summary !== undefined ? { summary } : {}),
+                        /* The delegate's turn is over, which ends a BACKGROUNDED record here and now — the
+                         * alternative is waiting for the SDK's exit notification, minutes of "running" on a
+                         * child that already reported. A foreground one is left for its own tool_result seconds
+                         * later (settleDelegation), which is also the only one of the two that knows whether it
+                         * failed; a blocked flicker in between would be noise. */
+                        ...(record.background === true ? { status: "completed" as const } : {}),
+                    }),
+                ),
+            );
             break;
         case "failed":
-            if (live && record.background === true) {
-                frames.push(patch(record.id, { status: "failed", ...(summary !== undefined ? { error: summary } : {}) }));
-            }
+            frames.push(
+                patch(
+                    record.id,
+                    ending(record, {
+                        source: "report",
+                        ...(record.background === true ? { status: "failed" as const, ...(summary !== undefined ? { error: summary } : {}) } : {}),
+                    }),
+                ),
+            );
             break;
     }
     /* The same update, into the spawning conversation's live frame log — the roster push above moves the
@@ -789,18 +830,20 @@ export const waitForSubagent = (conversationId: string, options: SubagentWaitOpt
         const onAbort = (): void => settle({ outcome: "aborted" });
         const evaluate = (): void => {
             const found = candidates();
-            // A named target that is not on the roster: never started, or finished long enough ago that
-            // retention swept it — both answers the caller can act on immediately, neither worth a timeout.
-            if (options.target !== undefined && found.length === 0) {
-                settle({ outcome: "unknown-target" });
-                return;
-            }
             for (const record of found) {
                 const matched = waitMatch(record, options.until);
                 if (matched !== undefined) {
                     settle({ outcome: matched, matched: wire(record) });
                     return;
                 }
+            }
+            /* NOTHING MATCHED AND NOTHING CAN — answer now rather than sleep out the timeout. A terminal record
+             * never moves again, and the candidate set cannot GROW during the wait: the only thing that opens a
+             * child of this conversation is its own turn, and that turn is the one parked in here. So a set with
+             * no live member is a wait that would end in nothing but a timeout, whether the target was never on
+             * the roster, has already finished, or aged out of retention — one answer, said straight away. */
+            if (!found.some(subagentRunning)) {
+                settle({ outcome: "unknown-target", ...(found.length === 1 ? { matched: wire(found[0]!) } : {}) });
             }
         };
         if (options.signal?.aborted === true) {

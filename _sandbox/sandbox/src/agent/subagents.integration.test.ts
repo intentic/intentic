@@ -6,7 +6,6 @@ import type { HookInput } from "@anthropic-ai/claude-agent-sdk";
 import type { AgentEvent } from "@intentic/sandbox-contract";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
-    bindDelegationThread,
     closeSubagents,
     listSubagentSessions,
     noteDelegation,
@@ -23,9 +22,7 @@ import {
     type SubagentTaskMessage,
     type SubagentTurn,
 } from "./subagents.js";
-import { unstubbed } from "@intentic/testing";
-import type { Services } from "../composition.js";
-import { turnQuiet } from "./turn-plan.js";
+import { delegationIdOfTitle } from "../grok/opencode.js";
 
 const turn = (): SubagentTurn => ({ conversationId: "conv-1", cwd: WORKSPACE_ROOT, sessionId: "sess-1", subagentsDir: undefined });
 
@@ -435,17 +432,32 @@ describe("delegation signals", () => {
         expect(listSubagentSessions()).toMatchObject([{ id: "bash-1", status: "failed", summary: "Looks good.", error: "ERROR: session expired" }]);
     });
 
-    it("bindDelegationThread pairs a new session with the youngest thread-less grok delegation, exactly once", () => {
-        noteDelegation(turn(), { id: "grok-1", command: "opencode run --attach http://127.0.0.1:4096 'task'", background: true });
-        bindDelegationThread("grok", "ses_new");
-        expect(subagentSource("grok-1")).toMatchObject({ thread: "ses_new" });
-        // A second created-event for the same session re-binds nothing, and a session with no candidate is dropped.
-        bindDelegationThread("grok", "ses_new");
-        expect(() => bindDelegationThread("grok", "ses_other")).not.toThrow();
-        expect(subagentSource("grok-1")).toMatchObject({ thread: "ses_new" });
-        // Later events reach the record through the thread it bound.
-        noteDelegationSignal({ thread: "ses_new", event: "blocked" });
-        expect(listSubagentSessions()).toMatchObject([{ id: "grok-1", status: "blocked" }]);
+    /* THE OPENCODE SESSION IS PAIRED BY NAME, NOT BY TIMING. This replaced a guess — the youngest grok
+     * delegation that did not have a session yet — which two concurrent runs could cross. The title the
+     * PreToolUse rewrite stamps (agent-terminals.ts) carries the spawning call's own id, so it cannot. */
+    it("pairs an opencode session with the delegation its title names, even with two running at once", () => {
+        noteDelegation(turn(), { id: "grok-1", command: "opencode run --attach http://127.0.0.1:4096 'first'", background: true });
+        noteDelegation(turn(), { id: "grok-2", command: "opencode run --attach http://127.0.0.1:4096 'second'", background: true });
+        // Both sessions land, youngest-first — the order that used to hand grok-1's session to grok-2.
+        noteDelegationSignal({ delegationId: delegationIdOfTitle("intentic-delegation-grok-1")!, thread: "ses_one", event: "session" });
+        noteDelegationSignal({ delegationId: delegationIdOfTitle("intentic-delegation-grok-2")!, thread: "ses_two", event: "session" });
+        expect(subagentSource("grok-1")).toMatchObject({ thread: "ses_one" });
+        expect(subagentSource("grok-2")).toMatchObject({ thread: "ses_two" });
+        // And later events reach each record through the thread it bound.
+        noteDelegationSignal({ thread: "ses_two", event: "blocked" });
+        expect(
+            listSubagentSessions()
+                .filter((session) => session.status === "blocked")
+                .map((session) => session.id),
+        ).toEqual(["grok-2"]);
+    });
+
+    // A session belonging to nothing this daemon started — the Grok adapter's own turns — carries no id, and
+    // an unnamed session is left alone rather than pinned on whichever delegation happens to be youngest.
+    it("reads no delegation out of a title that does not carry one", () => {
+        expect(delegationIdOfTitle("some other session")).toBeUndefined();
+        expect(delegationIdOfTitle("intentic-delegation")).toBeUndefined();
+        expect(delegationIdOfTitle("intentic-delegation-toolu_01ABC def")).toBe("toolu_01ABC");
     });
 });
 
@@ -514,34 +526,65 @@ describe("waitForSubagent", () => {
         const result = await waitForSubagent("conv-1", { target: "never-was", until: ["finished"], timeoutMs: 5_000 });
         expect(result).toMatchObject({ outcome: "unknown-target" });
     });
+
+    /* A WAIT THAT CANNOT BE SATISFIED ANSWERS NOW, rather than sleeping out its ten minutes. The candidate set
+     * cannot grow while the wait runs — the only thing that opens a child of this conversation is the turn
+     * parked inside this call — so a set with no live member is already the final answer. Both of these used to
+     * hold the turn for the full timeout and then say nothing more than they can say here. */
+    it("answers immediately when nothing live could ever satisfy the wait", async () => {
+        // "any", with no children at all.
+        expect(await waitForSubagent("conv-1", { until: ["blocked"], timeoutMs: 5_000 })).toMatchObject({ outcome: "unknown-target" });
+        // A named child that has finished, waited on for a state only a live one can reach.
+        spawn("bash-1");
+        noteDelegationSignal({ delegationId: "bash-1", event: "report", summary: "done" });
+        expect(await waitForSubagent("conv-1", { target: "bash-1", until: ["blocked"], timeoutMs: 5_000 })).toMatchObject({
+            outcome: "unknown-target",
+            matched: { id: "bash-1", status: "completed" },
+        });
+    });
+
+    // And the same check does not fire early: a live child is a wait worth having, even before it moves.
+    it("still waits while the child is live", async () => {
+        spawn("bash-1");
+        const wait = waitForSubagent("conv-1", { target: "bash-1", until: ["finished"], timeoutMs: 5_000 });
+        noteDelegationSignal({ delegationId: "bash-1", event: "report", summary: "done" });
+        expect(await wait).toMatchObject({ outcome: "finished" });
+    });
 });
 
-/* WHETHER A PARKED TURN MAY GIVE THE WORKSPACE BACK — the safety half of the wait (turn-plan.ts turnQuiet).
- * Handing a dependency install the tree while something of this turn's is still writing to it is precisely
- * what the maintenance gate exists to prevent, and the model going to sleep does not stop a child. */
-describe("a parked turn's own live writers", () => {
-    const services = (sessionId: string | undefined): Services =>
-        unstubbed<Services>("services", { agents: unstubbed<Services["agents"]>("agents", { sessionIdOf: () => sessionId }) });
-
-    // Foreground, so its own tool_result is what settles it — the shape settleDelegation answers to.
-    const spawn = (id: string): void => {
-        noteDelegation(turn(), { id, command: "codex exec --sandbox danger-full-access 'do the thing'", background: false });
-    };
-
-    it("a turn with a child still running is not quiet, so it keeps the workspace while it waits", async () => {
-        spawn("bash-1");
-        expect(subagentCountsOf("conv-1").running).toBe(1);
-        expect(await turnQuiet(services(undefined), "conv-1")).toBe(false);
+/* THE ONE ENDING RULE (`ending` in subagents.ts). Three arrivals can each be the first to know a child is over
+ * and they carry last words of very different worth, so: first arrival ends it, later ones may only make a
+ * finished child failed, and the summary is kept by SOURCE rather than by who spoke last. */
+describe("how a subagent ends", () => {
+    it("keeps an SDK child's own last words over the task stream's later digest", async () => {
+        const dir = await mkdtemp(join(tmpdir(), "subagents-ending-"));
+        await writeFile(join(dir, "agent-xyz.meta.json"), JSON.stringify({ toolUseId: "call-1", agentType: "Explore" }));
+        noteSubagentTask(turn(), started());
+        // The stop hook hands over the child's own sign-off, which is what a person actually reads.
+        await subagentHooks(turn()).SubagentStop?.[0]?.hooks[0]?.(
+            {
+                hook_event_name: "SubagentStop",
+                agent_transcript_path: join(dir, "agent-xyz.jsonl"),
+                agent_id: "xyz",
+                last_assistant_message: "Found it in the reducer.",
+            } as unknown as HookInput,
+            "t1",
+            { signal: new AbortController().signal },
+        );
+        // The SDK's exit notification lands afterwards with its own digest of the run — the child's words stand.
+        noteSubagentTask(turn(), { subtype: "task_notification", tool_use_id: "call-1", status: "completed", summary: "ran 12 tools" });
+        expect(listSubagentSessions()).toMatchObject([{ id: "call-1", status: "completed", summary: "Found it in the reducer." }]);
     });
 
-    it("a turn whose children have all settled is quiet again", async () => {
-        spawn("bash-1");
-        settleDelegation("bash-1", { failed: false, output: "done" });
-        expect(subagentCountsOf("conv-1").running).toBe(0);
-        expect(await turnQuiet(services(undefined), "conv-1")).toBe(true);
-    });
-
-    it("a turn with no conversation behind it has no children to speak of", async () => {
-        expect(await turnQuiet(services(undefined), undefined)).toBe(true);
+    it("does not re-end a finished child, but does let a late failure through", () => {
+        noteDelegation(turn(), { id: "bash-1", command: "codex exec 'go'", background: true });
+        noteDelegationSignal({ delegationId: "bash-1", event: "report", summary: "All done." });
+        expect(listSubagentSessions()).toMatchObject([{ id: "bash-1", status: "completed" }]);
+        // A second "completed" changes nothing; the exit code that follows the sign-off still gets to say it
+        // failed, because that is the half of the story the sign-off did not have.
+        noteSubagentTask(turn(), { subtype: "task_notification", tool_use_id: "bash-1", status: "completed" });
+        expect(listSubagentSessions()).toMatchObject([{ id: "bash-1", status: "completed" }]);
+        noteSubagentTask(turn(), { subtype: "task_notification", tool_use_id: "bash-1", status: "failed" });
+        expect(listSubagentSessions()).toMatchObject([{ id: "bash-1", status: "failed", summary: "All done." }]);
     });
 });

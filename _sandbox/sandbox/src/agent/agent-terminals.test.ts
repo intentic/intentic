@@ -159,9 +159,29 @@ test("a delegation gets its tool call id stamped into the pane environment; ordi
     expect(await rewritten({ command: grep })).toBe(wrap(grep, demoted(grep), "run"));
 });
 
-test("an opencode delegation is stamped the same way", async () => {
-    const command = await rewritten({ command: "opencode run --attach http://x --title t 'summarize'", description: "Delegate to grok" });
+/* An opencode delegation is stamped twice over, because the two halves reach the delegate by different doors:
+ * the environment its own process reads, and the session TITLE — the only thing that travels to the warm server
+ * `--attach` points at, and therefore the only thing that can say whose session it is. Naming it exactly is what
+ * replaced pairing a new session with the youngest delegation that lacked one, which two at once could cross. */
+test("an opencode delegation is stamped in the environment AND named in its session title", async () => {
+    const command = await rewritten({
+        command: "opencode run --attach http://x --title intentic-delegation --model xai/grok-4 'summarize'",
+        description: "Delegate to grok",
+    });
     expect(command).toContain("INTENTIC_DELEGATION_ID=tu-1 ");
+    expect(command).toContain("--title intentic-delegation-tu-1 ");
+});
+
+// The agent copies the template, so it may arrive already carrying a suffix — that is replaced, not appended
+// to. A command with no title flag at all is left exactly as written: an unnamed session simply never binds,
+// which is the honest floor, and guessing where a flag may legally go is how a rewrite breaks a command.
+test("the title stamp replaces whatever suffix the template arrived with, and adds nothing when there is no title", async () => {
+    const suffixed = await rewritten({ command: "opencode run --title intentic-delegation-stale 'go'" });
+    expect(suffixed).toContain("--title intentic-delegation-tu-1 ");
+    expect(suffixed).not.toContain("intentic-delegation-stale");
+    const untitled = await rewritten({ command: "opencode run --attach http://x 'go'" });
+    expect(untitled).toContain("INTENTIC_DELEGATION_ID=tu-1 ");
+    expect(untitled).not.toContain("--title");
 });
 
 // The stamp rides INSIDE the pane's own shell line, so it must survive the namespace hop: env assignments are

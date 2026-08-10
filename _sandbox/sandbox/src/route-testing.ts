@@ -322,7 +322,7 @@ export const services = (overrides: ServiceOverrides = {}): Services => {
         workspace,
         processes: fakeProcesses(),
         workspaceMaintenance: {
-            enterTurn: async () => ({ release: () => {}, park: (run) => run() }),
+            enterTurn: async () => ({ release: () => {} }),
             runMaintenance: (run) => run(),
         },
         dependencies: unstubbed<Services["dependencies"]>("dependencies", {
