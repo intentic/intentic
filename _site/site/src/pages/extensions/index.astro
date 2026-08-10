@@ -44,11 +44,11 @@ const scannedNote =
               stale ? ", from a vendored snapshot, because the registry was unreachable at build time" : ""
           }.`;
 
-/* The lead figure: "a small core, everything else plugs in", drawn as a hub-and-spoke system rather than a
- * stack of cards. The core is one glowing hub with its five always-there primitives ringed inside it; the four
- * building blocks are satellites wired into it on the same public interface the built-ins use — the claim this
- * whole page rests on. Geometry is computed so the spokes meet the hub cleanly; raw glyph paths are shared and
- * positioned by gGlyph (a nested <svg> so the 24-unit art scales and keeps palette + stroke). */
+/* The lead figure: what an extension actually is, and how it meets the core. Drawn as a vertical architecture
+ * — one extension is a container that bundles any of four contribution surfaces (Capabilities, UI, Automations,
+ * Backend) and plugs, through one public interface, into the kernel every sandbox already has (Files, Events,
+ * Agents, Secrets, Processes). A deliberately different visual language from the revenue cycle below: solid
+ * panels and an edge-connector, not an orbit. Glyph paths are shared and positioned by gGlyph. */
 const gGlyph = (paths: string, x: number, y: number, size = 18) =>
     `<svg x="${(x - size / 2).toFixed(1)}" y="${(y - size / 2).toFixed(1)}" width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">${paths}</svg>`;
 
@@ -67,29 +67,16 @@ const buildingBlocks = [
     { name: "Backend", d: '<rect x="3" y="4" width="18" height="7" rx="1.5"/><rect x="3" y="13" width="18" height="7" rx="1.5"/><path d="M7 7.5h.01M7 16.5h.01"/>' },
 ];
 
-const HUB = { cx: 260, cy: 200, r: 78 };
-const TILE = { w: 132, h: 66 };
-// the five primitives ringed inside the hub, around a "CORE" label
-const hubIcons = corePrimitives.map((p, i) => {
-    const a = ([-90, -18, 54, 126, 198][i] * Math.PI) / 180;
-    return { ...p, x: HUB.cx + 37 * Math.cos(a), y: HUB.cy + 37 * Math.sin(a) };
-});
-// the four building blocks as satellites, each wired to the nearest point on the hub's rim
-const satellites = [
-    { ...buildingBlocks[0], x: HUB.cx, y: HUB.cy - 150, edge: [HUB.cx, HUB.cy - HUB.r] },
-    { ...buildingBlocks[1], x: HUB.cx + 172, y: HUB.cy, edge: [HUB.cx + HUB.r, HUB.cy] },
-    { ...buildingBlocks[2], x: HUB.cx, y: HUB.cy + 150, edge: [HUB.cx, HUB.cy + HUB.r] },
-    { ...buildingBlocks[3], x: HUB.cx - 172, y: HUB.cy, edge: [HUB.cx - HUB.r, HUB.cy] },
-];
-const spokes = satellites.map((s) => {
-    const [ex, ey] = s.edge;
-    return {
-        x1: s.x + (ex === s.x ? 0 : Math.sign(ex - s.x) * (TILE.w / 2)),
-        y1: s.y + (ey === s.y ? 0 : Math.sign(ey - s.y) * (TILE.h / 2)),
-        x2: ex,
-        y2: ey,
-    };
-});
+// vertical architecture: an extension (top) bundles its four surfaces and plugs into the core (bottom)
+const CORE = { x: 40, y: 250, w: 480, h: 120 };
+const coreChips = corePrimitives.map((p, i) => ({ ...p, x: CORE.x + 48 + i * 96, y: CORE.y + 82 }));
+const EXT = { x: 150, y: 40, w: 260, h: 168 };
+const surfaceChips = buildingBlocks.map((b, i) => ({
+    ...b,
+    x: EXT.x + 18 + (i % 2) * 120,
+    y: EXT.y + 60 + Math.floor(i / 2) * 56,
+}));
+const pinXs = [240, 260, 280, 300, 320];
 
 /* The lifecycle diagram that replaces the old prose — deliberately NOT the card figure up top. Delivery is a
  * light one-way flow of chips; the half that matters, how a premium extension pays, is a drawn revenue cycle.
@@ -141,57 +128,83 @@ const revArcs = [315, 45, 135, 225].map((m) => `M ${ringStr(m - 3)} A ${ring.r} 
 
         <section class="border-b border-line">
             <div class="mx-auto max-w-7xl px-6 pt-12 pb-16 lg:pt-14 lg:pb-20">
-                <div class="relative overflow-hidden rounded-2xl border border-line bg-canvas/60">
-                    <div class="grid-overlay"></div>
-                    <div
-                        class="pointer-events-none absolute top-1/2 left-1/2 h-96 w-96 -translate-x-1/2 -translate-y-1/2 rounded-full"
-                        style="background: radial-gradient(circle, color-mix(in srgb, var(--color-primary-500) 15%, transparent), transparent 70%)"
-                        aria-hidden="true"
-                    >
-                    </div>
-                    <figure class="relative flex flex-col items-center px-5 py-9 text-center">
+                <div class="rounded-2xl border border-line bg-card/30">
+                    <figure class="flex flex-col items-center px-4 py-9 text-center sm:px-8">
                         <div class="eyebrow text-link">The shape of it</div>
                         <svg
-                            viewBox="0 0 520 400"
-                            class="mt-4 h-auto w-full max-w-[620px] text-link"
+                            viewBox="0 0 560 400"
+                            class="mt-4 h-auto w-full max-w-[680px] text-link"
                             role="img"
-                            aria-label="The core at the center — Files, Events, Agents, Secrets and Processes — with four building blocks wired into it: Capabilities, UI, Automations and Backend."
+                            aria-label="An extension is one container bundling any of four surfaces — Capabilities, UI, Automations and Backend — that plugs, through one public interface, into the core every sandbox already has: Files, Events, Agents, Secrets and Processes."
                         >
-                            <defs>
-                                <radialGradient id="hub-fill" cx="50%" cy="45%" r="60%">
-                                    <stop offset="0%" stop-color="color-mix(in srgb, var(--color-primary-500) 26%, transparent)" />
-                                    <stop offset="100%" stop-color="color-mix(in srgb, var(--color-primary-500) 7%, transparent)" />
-                                </radialGradient>
-                            </defs>
-
-                            {/* spokes from each block into the core, ending in a socket on the rim */}
-                            {spokes.map((s) => <line x1={s.x1} y1={s.y1} x2={s.x2} y2={s.y2} stroke="currentColor" stroke-opacity="0.4" stroke-width="1.5" />)}
-                            {satellites.map((s) => <circle cx={s.edge[0]} cy={s.edge[1]} r="3.5" fill="currentColor" />)}
-
-                            {/* the core hub: its five primitives ring a CORE label */}
-                            <circle cx={HUB.cx} cy={HUB.cy} r={HUB.r} fill="url(#hub-fill)" stroke="currentColor" stroke-opacity="0.5" stroke-width="1.5" />
-                            <g style="color: var(--color-muted)">{hubIcons.map((p) => <Fragment set:html={gGlyph(p.d, p.x, p.y, 17)} />)}</g>
-                            <text x={HUB.cx} y={HUB.cy} text-anchor="middle" dominant-baseline="central" font-size="12.5" font-weight="700" letter-spacing="1" style="fill: var(--color-link)">
+                            {/* ===== the core: the kernel every sandbox has ===== */}
+                            <rect
+                                x={CORE.x}
+                                y={CORE.y}
+                                width={CORE.w}
+                                height={CORE.h}
+                                rx="18"
+                                fill="color-mix(in srgb, var(--color-content) 4%, transparent)"
+                                stroke="var(--color-line-strong)"
+                                stroke-width="1.5"
+                            />
+                            <text x={CORE.x + 24} y={CORE.y + 27} text-anchor="start" dominant-baseline="central" font-size="12" font-weight="700" letter-spacing="1" style="fill: var(--color-content)">
                                 CORE
                             </text>
+                            <text x={CORE.x + 74} y={CORE.y + 27} text-anchor="start" dominant-baseline="central" font-size="10.5" style="fill: var(--color-subtle)">
+                                in every sandbox, always
+                            </text>
+                            <g style="color: var(--color-muted)">
+                                {
+                                    coreChips.map((p) => (
+                                        <Fragment>
+                                            <Fragment set:html={gGlyph(p.d, p.x, p.y - 8, 18)} />
+                                            <text x={p.x} y={p.y + 16} text-anchor="middle" dominant-baseline="central" font-size="11.5" font-weight="500" style="fill: var(--color-muted)">
+                                                {p.name}
+                                            </text>
+                                        </Fragment>
+                                    ))
+                                }
+                            </g>
 
-                            {/* the building blocks that plug in */}
+                            {/* ===== edge connector: the one public interface it plugs into ===== */}
+                            <rect x="232" y="200" width="96" height="9" rx="3" fill="color-mix(in srgb, var(--color-primary-500) 34%, transparent)" />
+                            {pinXs.map((px) => <rect x={px - 3} y="207" width="6" height="45" rx="1.5" fill="color-mix(in srgb, var(--color-primary-500) 55%, transparent)" />)}
+                            {pinXs.map((px) => <rect x={px - 5} y="246" width="10" height="6" rx="1" fill="var(--color-canvas)" stroke="var(--color-line-strong)" stroke-width="1" />)}
+
+                            {/* ===== the extension: one container, four surfaces inside ===== */}
+                            <rect x={EXT.x + 9} y={EXT.y - 9} width={EXT.w} height={EXT.h} rx="16" fill="none" stroke="color-mix(in srgb, var(--color-primary-500) 17%, transparent)" stroke-width="1.5" />
+                            <rect
+                                x={EXT.x}
+                                y={EXT.y}
+                                width={EXT.w}
+                                height={EXT.h}
+                                rx="16"
+                                fill="color-mix(in srgb, var(--color-primary-500) 9%, transparent)"
+                                stroke="color-mix(in srgb, var(--color-primary-500) 48%, transparent)"
+                                stroke-width="1.5"
+                            />
+                            <text x={EXT.x + EXT.w / 2} y={EXT.y + 24} text-anchor="middle" dominant-baseline="central" font-size="11.5" font-weight="700" letter-spacing="1.3" style="fill: var(--color-link)">
+                                EXTENSION
+                            </text>
+                            <text x={EXT.x + EXT.w / 2} y={EXT.y + 42} text-anchor="middle" dominant-baseline="central" font-size="9.5" style="fill: var(--color-subtle)">
+                                bundles any of these four
+                            </text>
                             {
-                                satellites.map((s) => (
+                                surfaceChips.map((s) => (
                                     <g>
                                         <rect
-                                            x={s.x - TILE.w / 2}
-                                            y={s.y - TILE.h / 2}
-                                            width={TILE.w}
-                                            height={TILE.h}
-                                            rx="14"
-                                            fill="color-mix(in srgb, var(--color-primary-500) 9%, transparent)"
-                                            stroke="currentColor"
-                                            stroke-opacity="0.42"
-                                            stroke-width="1.5"
+                                            x={s.x}
+                                            y={s.y}
+                                            width="104"
+                                            height="44"
+                                            rx="10"
+                                            fill="color-mix(in srgb, var(--color-primary-500) 13%, transparent)"
+                                            stroke="color-mix(in srgb, var(--color-primary-500) 32%, transparent)"
+                                            stroke-width="1.25"
                                         />
-                                        <Fragment set:html={gGlyph(s.d, s.x, s.y - 9, 22)} />
-                                        <text x={s.x} y={s.y + 18} text-anchor="middle" dominant-baseline="central" font-size="14" font-weight="600" style="fill: var(--color-content)">
+                                        <Fragment set:html={gGlyph(s.d, s.x + 52, s.y + 15, 18)} />
+                                        <text x={s.x + 52} y={s.y + 32} text-anchor="middle" dominant-baseline="central" font-size="12" font-weight="600" style="fill: var(--color-content)">
                                             {s.name}
                                         </text>
                                     </g>
@@ -199,9 +212,9 @@ const revArcs = [315, 45, 135, 225].map((m) => `M ${ringStr(m - 3)} A ${ring.r} 
                             }
                         </svg>
 
-                        <figcaption class="mt-3 max-w-lg space-y-1">
-                            <p class="text-2xs text-subtle">Inside the core: Files · Events · Agents · Secrets · Processes</p>
-                            <p class="text-2xs text-subtle">The four around it plug in on the same public interface the built-ins use — the gallery below is them, published.</p>
+                        <figcaption class="mt-4 max-w-xl space-y-1">
+                            <p class="text-2xs text-subtle">One extension bundles any of the four and plugs into the core on the same public interface the built-ins use.</p>
+                            <p class="text-2xs text-subtle">Even the built-ins are extensions — the gallery below is them, published.</p>
                         </figcaption>
                     </figure>
                 </div>
