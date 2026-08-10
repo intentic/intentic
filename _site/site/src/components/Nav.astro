@@ -243,8 +243,7 @@ const isCurrentPage = (href: string): boolean => bare(href) === bare(currentPath
         margin-top: 1px;
     }
 
-    .has-menu:hover .chevron,
-    .has-menu:focus-within .chevron {
+    .has-menu.open .chevron {
         transform: rotate(180deg);
     }
 
@@ -291,11 +290,20 @@ const isCurrentPage = (href: string): boolean => bare(href) === bare(currentPath
         gap: 4px 18px;
     }
 
-    .has-menu:hover .menu-panel,
-    .has-menu:focus-within .menu-panel {
+    /* Open is a class, never `:hover` or `:focus-within`. Two panels could be up at once while CSS decided
+       this on its own: a click left the trigger focused, :focus-within pinned that panel, and the next
+       hover opened its neighbour's. One class, set in one place, cannot say yes twice. */
+    .has-menu.open .menu-panel {
         opacity: 1;
         visibility: visible;
         transform: translateX(-50%) translateY(0);
+    }
+
+    /* The open trigger keeps the hover look while the pointer is down inside the panel, so the menu on
+       screen always has exactly one lit label it belongs to. */
+    .has-menu.open > .nav-link {
+        color: var(--color-content);
+        background: var(--color-overlay);
     }
 
     .menu-sections {
@@ -432,6 +440,62 @@ const isCurrentPage = (href: string): boolean => bare(href) === bare(currentPath
             toggle.classList.toggle("active", isOpen);
             toggle.setAttribute("aria-expanded", String(!!isOpen));
             document.body.style.overflow = isOpen ? "hidden" : "";
+        });
+
+        // ── Mega-menus: one open, ever ─────────────────────
+        // Hover, click, keyboard and every way of dismissing all go through openMenu, which closes the
+        // others as it opens one. CSS deciding this by itself is what allowed two at a time.
+        const menuItems = [...document.querySelectorAll(".nav-item.has-menu")];
+
+        const openMenu = (item) => {
+            menuItems.forEach((menuItem) => {
+                const isOpen = menuItem === item;
+                menuItem.classList.toggle("open", isOpen);
+                menuItem.querySelector(".nav-link")?.setAttribute("aria-expanded", String(isOpen));
+            });
+        };
+
+        menuItems.forEach((item) => {
+            const trigger = item.querySelector(".nav-link");
+
+            // Touch has no hovering: a tap fires pointerenter and click together, which would open the
+            // panel and shut it again in one gesture. There the click below is the whole interaction.
+            item.addEventListener("pointerenter", (event) => {
+                if (event.pointerType !== "touch") openMenu(item);
+            });
+
+            // Leaving closes — unless the keyboard is inside the panel, in which case a stray mouse
+            // movement must not yank the rows out from under whoever is tabbing through them.
+            item.addEventListener("pointerleave", (event) => {
+                const keyboardInside = item.contains(document.activeElement) && document.activeElement !== trigger;
+                if (event.pointerType !== "touch" && !keyboardInside) openMenu(null);
+            });
+
+            // The trigger is a disclosure button: pressing it opens what is closed and closes what is open,
+            // which is also how a touch device gets rid of a panel it opened.
+            trigger?.addEventListener("click", () => {
+                openMenu(item.classList.contains("open") ? null : item);
+            });
+
+            // Tabbing past the last row closes the panel; moving between its own rows does not. Only an
+            // item that is itself open may close on this: pressing a trigger pulls focus off its
+            // neighbour, and a neighbour that closed the menu there would blink it shut under the press.
+            item.addEventListener("focusout", (event) => {
+                if (item.classList.contains("open") && !item.contains(event.relatedTarget)) openMenu(null);
+            });
+        });
+
+        document.addEventListener("keydown", (event) => {
+            if (event.key !== "Escape") return;
+            const open = menuItems.find((item) => item.classList.contains("open"));
+            if (!open) return;
+            openMenu(null);
+            open.querySelector(".nav-link")?.focus();
+        });
+
+        // Anything pressed outside the menus — the page, a plain nav link — is a dismissal.
+        document.addEventListener("pointerdown", (event) => {
+            if (!event.target?.closest?.(".nav-item.has-menu")) openMenu(null);
         });
 
         // The preview rail follows the hovered row. Pointer only: on a touch screen the panel opens on tap
