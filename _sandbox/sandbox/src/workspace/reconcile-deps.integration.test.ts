@@ -183,22 +183,26 @@ test("an install that outruns its watch window is stopped rather than left going
     expect(running).toBe(false);
 });
 
-// A panel that refuses to open once: the install is still owed afterwards, which is what leaves a cause on the
-// books long enough for a later observation to try to overwrite it.
-const startsOnSecondTry = (): { processes: ManagedProcesses; attempts: () => number } => {
+/* A panel that refuses to open once and then does what an install does: the refusal leaves the install owed,
+ * which is what keeps a cause on the books long enough for a later observation to try to overwrite it, and the
+ * attempt that succeeds puts the missing dependency on disk so the project reads `ready` afterwards.
+ *
+ * The repair is the part that makes the case honest. A fake that only reported success left the project as
+ * stale as it found it, so every later pass rediscovered the same drift and announced the same install again —
+ * and a case that asserted one announcement was really asserting that it got its assertion in before the second
+ * pass, which is a race it loses on a loaded machine. */
+const startsOnSecondTry = (root: string, dir = "app", name = "left-pad"): ManagedProcesses => {
     let attempts = 0;
     return {
-        processes: {
-            start: async () => {
-                attempts += 1;
-                if (attempts === 1) {
-                    throw new Error("tmux unavailable");
-                }
-            },
-            running: () => false,
-        } as unknown as ManagedProcesses,
-        attempts: () => attempts,
-    };
+        start: async () => {
+            attempts += 1;
+            if (attempts === 1) {
+                throw new Error("tmux unavailable");
+            }
+            await mkdir(join(root, dir, "node_modules", name), { recursive: true });
+        },
+        running: () => false,
+    } as unknown as ManagedProcesses;
 };
 
 test("the watcher cannot erase the land that caused a deferred install", async () => {
@@ -207,7 +211,7 @@ test("the watcher cannot erase the land that caused a deferred install", async (
     const changes = watch();
     const deps = createDependencyCoordinator({
         workspace: { root },
-        processes: startsOnSecondTry().processes,
+        processes: startsOnSecondTry(root),
         logger: silent,
         requestsPath: join(root, "requests.json"),
         settleMs: 5,
@@ -239,7 +243,7 @@ test("a newer land in the same project replaces the older cause", async () => {
     await drifted(root);
     const deps = createDependencyCoordinator({
         workspace: { root },
-        processes: startsOnSecondTry().processes,
+        processes: startsOnSecondTry(root),
         logger: silent,
         requestsPath: join(root, "requests.json"),
         pollMs: 1,
