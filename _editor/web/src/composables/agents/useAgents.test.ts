@@ -349,6 +349,34 @@ describe("draft cards", () => {
         expect(useAgents().lanes.value.active.map((card) => card.waitingFor)).toEqual([`dependencies`]);
     });
 
+    /* A FOLLOW-UP QUEUED ON A REGISTERED AGENT — the same wait, seen from a card the roster DOES know. The
+     * registry files a turn only once it clears workspace admission, so a message sent into a dependency
+     * repair left the entry wearing the LAST turn's ending: the reported card sat in Attention as "Error" for
+     * the length of an install, its send invisible. The conversation's `waiting` frame is the proof a turn is
+     * live, and for as long as it stands the card reads as a just-admitted one — running, in Active, with the
+     * reason on it — then hands back to the roster's own account the moment the wait ends. */
+    it("moves a registered card whose follow-up is queued into Active, saying what it waits for", () => {
+        const conversation = new Conversation(`a1`);
+        useChat().conversations.value = [...useChat().conversations.value, conversation];
+        setAgents([{ ...registered(`a1`), status: `error` }], 1);
+        conversation.turnStartedAt.value = 4_000;
+        conversation.waitingFor.value = `dependencies`;
+
+        expect(useAgents().lanes.value.attention).toEqual([]);
+        expect(
+            useAgents().lanes.value.active.map((card) => ({
+                id: card.id,
+                status: card.status,
+                waitingFor: card.waitingFor,
+                startedAt: card.startedAt,
+            })),
+        ).toEqual([{ id: `a1`, status: `running`, waitingFor: `dependencies`, startedAt: 4_000 }]);
+
+        conversation.waitingFor.value = undefined;
+
+        expect(useAgents().lanes.value.attention.map((card) => ({ id: card.id, status: card.status }))).toEqual([{ id: `a1`, status: `error` }]);
+    });
+
     /* CLICKING ONE MUST NOT TAKE IT OFF THE BOARD — the reported bug, in one case.
      *
      * `open` latches the tab as registered for a card the fleet DOES know, which is right for every registry card

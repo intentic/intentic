@@ -112,9 +112,10 @@ export async function* streamAgent(services: Services, input: AgentTurn, signal:
      * check any more. A queued turn remains an ordinary pending request and can still be aborted.
      *
      * SAY SO IF IT IS SLOW. This await is ahead of every frame, so a turn queued behind a repair used to be a
-     * conversation that sat there — for a settle window, an install and the project's checks — looking exactly
-     * like a hang. The grace period is what keeps that honest without making an ordinary turn announce a wait
-     * nobody experienced: below it the queue is imperceptible, above it the user is owed a sentence. */
+     * conversation that sat there — for a settle window and an install (the post-install checks no longer hold
+     * turns out; see maintenance-gate.ts) — looking exactly like a hang. The grace period is what keeps that
+     * honest without making an ordinary turn announce a wait nobody experienced: below it the queue is
+     * imperceptible, above it the user is owed a sentence. */
     const admission = services.workspaceMaintenance.enterTurn(controller.signal);
     const admitted = await Promise.race([admission, admissionGrace()]);
     if (admitted === undefined) {

@@ -511,7 +511,7 @@ export const applyTurnFrame = (state: TurnState, event: AgentEvent, context: Tur
             return step(resolveCard(state, event));
         case `waiting`:
             /* THE TURN HAS NOT STARTED — it is queued behind a dependency repair, which holds every turn out
-             * while the tree is rewritten and its checks run.
+             * while the tree is rewritten (only the install itself; the checks that follow run beside turns).
              *
              * Prepended, like the rebase line above it and for the same reason: this describes the ground the
              * turn starts from, so it belongs above the bubble the answer will be written into rather than

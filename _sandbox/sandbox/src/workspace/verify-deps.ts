@@ -31,9 +31,13 @@ import { installPanelKey, workspaceSetup } from "./workspace-setup.js";
  * answer is an activity entry saying so, not a guessed command. Scripts are a node-manifest concept, so a
  * python project reads as check-less for now — same honest entry.
  *
- * SCHEDULING RULES, inherited from the coordinator and for the same reasons: verification holds the maintenance
- * writer lease, queued behind the install and ahead of turns that arrived meanwhile. Origins stay attached to
- * their own batches. One chain runs at a time across the daemon, so panels and Activity tell one ordered story.
+ * SCHEDULING RULES: verification runs under the gate's CHECKS mode (maintenance-gate.ts), never as a writer.
+ * It starts only when the workspace is quiet — after the install that prompted it, and never over a live
+ * turn's half-written edits — but once running it holds a reader slot, so a new turn walks straight in
+ * instead of waiting minutes for a test suite it never asked for. The tree cannot be rewritten beneath the
+ * check (installs are writers and queue), and a turn that lands mid-check can at worst stale an advisory
+ * verdict. Origins stay attached to their own batches. One chain runs at a time across the daemon, so panels
+ * and Activity tell one ordered story.
  *
  * THE EXIT CODE comes out of the panel by wrapping the command: tmux reports a pane's foreground command,
  * never an exit status, so the wrapped line tees output to a log (for the event's bounded tail) and drops
@@ -253,9 +257,9 @@ const runChain = async (verify: PendingVerify): Promise<void> => {
     }
 };
 
-/* Verification is maintenance too. It queues behind the install that prompted it and ahead of turns that
- * arrived while that install was running, so neither the check nor a new turn sees a half-settled tree. Origins
- * stay attached to their own batches instead of a process-wide "latest cause wins" slot: a watcher observation
+/* Verification queues behind the install that prompted it and starts into a quiet workspace, but it never
+ * holds a new turn out — the checks lease (maintenance-gate.ts) is what encodes that trade. Origins stay
+ * attached to their own batches instead of a process-wide "latest cause wins" slot: a watcher observation
  * can no longer erase a land and prevent its failed check waking the fix automation. */
 export const queueVerify = (deps: VerifyDeps, origin: DependencyOrigin, dirs: readonly string[]): void => {
     if (dirs.length === 0) {
@@ -273,7 +277,7 @@ export const queueVerify = (deps: VerifyDeps, origin: DependencyOrigin, dirs: re
         }
         running = true;
         void next.deps.maintenance
-            .runMaintenance(() => runChain(next))
+            .runChecks(() => runChain(next))
             .catch((error: unknown) => next.deps.logger.warn({ err: error }, "dependency verify: chain failed"))
             .finally(attempt);
     };

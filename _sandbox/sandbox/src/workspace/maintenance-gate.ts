@@ -1,13 +1,23 @@
 /* A workspace-wide readers/writer gate.
  *
- * Agent turns are readers: many may work at once. Dependency installation and the checks that follow are
- * writers: they rewrite or rely on the dependency tree every isolated turn mounts. A last-second
- * `liveSessionIds()` check cannot enforce that boundary because a turn may start immediately after the check.
- * This gate makes admission and maintenance one atomic decision instead.
+ * Agent turns are readers: many may work at once. Dependency installation is the writer: it rewrites the
+ * dependency tree every isolated turn mounts. A last-second `liveSessionIds()` check cannot enforce that
+ * boundary because a turn may start immediately after the check. This gate makes admission and maintenance
+ * one atomic decision instead.
  *
  * Writers have priority once queued. Without that, a steady stream of turns could keep a dependency install
  * waiting forever; with it, turns already running finish normally and later turns wait for the visible
  * maintenance job to settle.
+ *
+ * CHECKS are the third mode, and they are neither. The post-install verification (verify-deps.ts) runs the
+ * project's own test suite — minutes on a real repo — and it used to run as a writer, which held every new
+ * message out of the workspace for its whole length: a user watched their turn sit "waiting for dependency
+ * setup" while the daemon ran typecheck-and-test. A check only READS the tree, so what it needs is exactly a
+ * reader's guarantee (no install rewrites the tree beneath it) plus a quiet start (a verdict taken over
+ * somebody's half-written edit would be noise announced as fact). So a check STARTS only when the gate is
+ * fully idle — no turn running, none waiting — and then holds an ordinary reader slot: installs queue behind
+ * it, and a turn arriving mid-check walks straight in. The turn may make the verdict stale; a stale advisory
+ * verdict costs a re-run, where the old arrangement cost every user minutes of their turn.
  *
  * A TURN HOLDS ITS SLOT FOR ITS WHOLE LENGTH, including the parts where the model is asleep — parked on a
  * question, on a plan approval, or on `wait` (agent/subagent-wait.ts). This looked worth an exception once, and
@@ -22,6 +32,7 @@ export interface TurnLease {
 export interface WorkspaceMaintenanceGate {
     readonly enterTurn: (signal?: AbortSignal) => Promise<TurnLease>;
     readonly runMaintenance: <T>(run: () => Promise<T>) => Promise<T>;
+    readonly runChecks: <T>(run: () => Promise<T>) => Promise<T>;
 }
 
 interface TurnWaiter {
@@ -38,6 +49,7 @@ export const createWorkspaceMaintenanceGate = (): WorkspaceMaintenanceGate => {
     let maintaining = false;
     const maintenance: Array<() => void> = [];
     const waitingTurns: TurnWaiter[] = [];
+    const checks: Array<() => void> = [];
 
     const releaseTurn = (): void => {
         turns = Math.max(0, turns - 1);
@@ -94,6 +106,17 @@ export const createWorkspaceMaintenanceGate = (): WorkspaceMaintenanceGate => {
                 admitTurn(waiter);
             }
         }
+        // A check starts only into full quiet — turns that were waiting above have just been admitted, so
+        // `turns` being zero here means nobody was running AND nobody was queued. It then occupies an ordinary
+        // reader slot: a later install queues behind it, and a later turn is admitted beside it (acquire's
+        // fast path — no writer is waiting). One check at a time falls out of the same arithmetic.
+        if (turns === 0) {
+            const check = checks.shift();
+            if (check !== undefined) {
+                turns += 1;
+                check();
+            }
+        }
     };
 
     return {
@@ -120,6 +143,17 @@ export const createWorkspaceMaintenanceGate = (): WorkspaceMaintenanceGate => {
             } finally {
                 maintaining = false;
                 drain();
+            }
+        },
+        runChecks: async (run) => {
+            await new Promise<void>((resolve) => {
+                checks.push(resolve);
+                drain();
+            });
+            try {
+                return await run();
+            } finally {
+                releaseTurn();
             }
         },
     };
