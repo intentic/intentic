@@ -367,6 +367,31 @@ export const WORKSPACE_STATE_FILES: readonly WorkspaceStateFile[] = STATE_FILES;
  * the entire change — the exclude list follows on the next boot, in both places it is written. */
 export const VERSIONED_STATE_PATHS: readonly string[] = WORKSPACE_STATE_FILES.filter((file) => file.versioned).map((file) => file.path);
 
+/* The manifests whose problems the unreadable-manifest notice SHOWS — the handful a person hand-edits — and the
+ * one fact that decides it is already in the table above.
+ *
+ * Every store reads through the same `jsonFile`, so every store reports what it could not make sense of, and for
+ * a long time the notice showed all of them. That is wrong twice over. Its advice — fix the file and this clears
+ * on its own — is addressed to somebody holding an editor, which is true of `settings.json` and false of a
+ * daemon-written LEDGER nobody opens: a run history that stopped matching a schema the build tightened is not a
+ * mistake the owner made, and the card asked them to repair sixty kilobytes of machine JSON by hand. Worse, a
+ * file that reports into the notice without feeding the notice's QUERY leaves a complaint no write can refresh,
+ * so it sits on screen until the daemon restarts — which is exactly how the workflow ledger's entry became
+ * permanent furniture.
+ *
+ * Both follow from one rule, which is why this derives rather than lists: a file's problems are shown IFF a write
+ * to that file refreshes the notice. Declaring `manifests` in `invalidates` is the entire opt-in, so the edit
+ * that puts a file on the card is the same edit that keeps it current, and neither can be done without the
+ * other. A ledger that breaks still falls back and still sets its unreadable bytes aside on the next write
+ * (store/json-file.ts) — it just stops asking the owner to fix it. */
+export const REPORTED_MANIFEST_PATHS: readonly string[] = WORKSPACE_STATE_FILES.filter((file) => file.invalidates.includes("manifests")).map(
+    (file) => file.path,
+);
+
+// Accepts either separator, like isLockedWorkspacePath below: the daemon holds these as platform paths and makes
+// them relative at the last moment, and normalizing at each call site is the one that eventually gets forgotten.
+export const isReportedManifest = (relPath: string): boolean => REPORTED_MANIFEST_PATHS.includes(relPath.replaceAll("\\", "/"));
+
 /* Old directory names are never read or migrated, but persistent workspaces can retain them until an owner
  * removes them manually. Keep that finite set in one quarantine record so access, export, and search cannot
  * reinterpret abandoned machine state as ordinary workspace content after a rename. `artifacts` still carry;

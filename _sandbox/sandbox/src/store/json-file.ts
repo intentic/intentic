@@ -91,10 +91,14 @@ export const jsonFile = <T>(path: string, { parse, fallback, mode }: JsonFileOpt
     // not be read (not JSON, or rejected by `parse`). Only `update` acts on the distinction; a read's answer
     // is the same either way.
     const readState = async (): Promise<{ value: T; unreadable: boolean }> => {
-        /* Recorded on EVERY read, including the healthy ones, which is what makes the registry self-clearing:
-         * a read that finds nothing wrong erases the last read's complaint. An ABSENT file records nothing at
-         * all and returns before this — there is no such file to complain about, and a workspace that has
-         * never written a manifest is the ordinary first-boot state, not a fault. */
+        /* Recorded on EVERY read, including the healthy ones and the ABSENT ones, which is what makes the
+         * registry self-clearing: a read that finds nothing wrong erases the last read's complaint.
+         *
+         * Absent counts as nothing wrong — a workspace that has never written a manifest is the ordinary
+         * first-boot state, not a fault — and it has to go through the same recording step rather than return
+         * early, which is the bug that used to make DELETING a broken file the one repair that did not work. The
+         * complaint outlived the file it was about and sat on screen until the daemon restarted, which is the
+         * exact outcome the replace-per-file design was chosen to rule out. */
         const problems: ManifestProblem[] = [];
         const done = <R extends { value: T; unreadable: boolean }>(state: R): R => {
             recordManifestProblems(path, problems);
@@ -104,7 +108,7 @@ export const jsonFile = <T>(path: string, { parse, fallback, mode }: JsonFileOpt
         try {
             text = await readFile(path, "utf8");
         } catch {
-            return { value: fallback(), unreadable: false };
+            return done({ value: fallback(), unreadable: false });
         }
         let raw: unknown;
         try {

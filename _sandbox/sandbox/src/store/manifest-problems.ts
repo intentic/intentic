@@ -1,5 +1,5 @@
 import { relative } from "node:path";
-import type { ManifestProblem, ManifestProblemReport } from "@intentic/sandbox-contract";
+import { isReportedManifest, type ManifestProblem, type ManifestProblemReport } from "@intentic/sandbox-contract";
 
 /* WHAT THE DAEMON COULD NOT READ IN ITS OWN STATE FILES, kept where a browser can ask for it.
  *
@@ -21,6 +21,10 @@ import type { ManifestProblem, ManifestProblemReport } from "@intentic/sandbox-c
  * per file rather than an accumulating log: a manifest's problems are whatever its last read said, so fixing
  * the file on disk and letting anything read it again is what clears the notice. Nothing to expire, nothing to
  * dismiss, no way for a stale complaint to outlive the thing it was complaining about.
+ *
+ * WHAT IS SHOWN IS NARROWER THAN WHAT IS RECORDED, and the split is at `manifestProblems` below rather than
+ * here: every store reports, only the files a person hand-edits are surfaced. The reasoning belongs to the
+ * table that decides it, in the contract (REPORTED_MANIFEST_PATHS).
  *
  * Module-level, like the daemon's other cross-cutting registries: the reporting side is `jsonFile`, which is
  * constructed per store all over composition.ts and has no service object to hang this on. */
@@ -45,17 +49,24 @@ export const recordManifestProblems = (path: string, problems: readonly Manifest
     byPath.set(path, problems);
 };
 
-// Every manifest currently reporting a problem, sorted by path so the list is stable between polls. Files
-// outside the workspace root (the daemon keeps a few under /history) are reported by absolute path rather than
-// a `../../` relative one, which would be worse than useless on screen.
+/* Every manifest currently reporting a problem THAT A PERSON CAN ACT ON, sorted by path so the list is stable
+ * between polls.
+ *
+ * Recording is indiscriminate on purpose — `jsonFile` knows the file it was handed and nothing about the
+ * workspace around it — so the audience test happens here, where the path is workspace-relative and the contract
+ * can answer it (isReportedManifest, and the reasoning with it). Everything else still falls back and still sets
+ * its unreadable bytes aside before overwriting them, so a daemon-written file recovers on its own next write;
+ * what it no longer does is put a repair job for machine state on the owner's screen.
+ *
+ * Files outside the workspace root fail that test too, which costs nothing: the notice never had a sensible way
+ * to name them anyway. */
 export const manifestProblems = (root: string): ManifestProblemReport[] =>
     [...byPath.entries()]
-        .map(([path, problems]) => {
-            const rel = relative(root, path);
-            // Copied, not handed out by reference: this is the registry's own array, and a caller that sorted
-            // or spliced the value it got back would be editing what the next reader sees.
-            return { path: rel === "" || rel.startsWith("..") ? path : rel, problems: [...problems] };
-        })
+        .map(([path, problems]) => ({ rel: relative(root, path), problems }))
+        .filter(({ rel }) => isReportedManifest(rel))
+        // Copied, not handed out by reference: this is the registry's own array, and a caller that sorted or
+        // spliced the value it got back would be editing what the next reader sees.
+        .map(({ rel, problems }) => ({ path: rel, problems: [...problems] }))
         .toSorted((a, b) => a.path.localeCompare(b.path));
 
 // Test seam: the registry is module-level, so a suite that records has to be able to put it back.

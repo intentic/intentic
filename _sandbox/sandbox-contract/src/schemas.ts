@@ -5383,7 +5383,9 @@ export type Info = z.infer<typeof InfoSchema>;
  *                  name it was probably meant to be, when one is close enough to guess honestly.
  *   invalidEntry — one entry of a list was skipped. The rest of the file is unaffected.
  *
- * Reported per file rather than as one flat list because the file is the unit a person fixes. */
+ * Reported per file rather than as one flat list because the file is the unit a person fixes — and only for the
+ * files a person CAN fix (REPORTED_MANIFEST_PATHS in workspace-state.ts). A daemon-written ledger that stops
+ * matching a tightened schema is not a repair job to hand the owner; it recovers on its own next write. */
 export const ManifestProblemSchema = z.object({
     kind: z.enum(["unreadable", "unknownKey", "invalidEntry"]),
     detail: z.string(),

@@ -27,10 +27,15 @@ afterEach(async () => {
 });
 
 const Settings = z.object({ terseOutput: z.boolean().default(false), skills: z.array(z.string()).default([]) });
-const settingsFile = (root: string) => {
-    const path = join(root, STATE_DIR, "settings.json");
+/* Both of these are files a PERSON hand-edits, which is what puts them on the notice at all — the shape is a
+ * stand-in, the name is the part under test. `manifestProblems` reports only the paths the contract's table says
+ * a write refreshes, so a helper pointed at an invented name would assert nothing. */
+const manifestAt = (root: string, name: string) => {
+    const path = join(root, STATE_DIR, name);
     return { path, file: jsonFile(path, { parse: objectParse(Settings), fallback: () => Settings.parse({}) }) };
 };
+const settingsFile = (root: string) => manifestAt(root, "settings.json");
+const personasFile = (root: string) => manifestAt(root, "personas.json");
 const write = async (path: string, text: string): Promise<void> => {
     await mkdir(dirname(path), { recursive: true });
     await writeFile(path, text);
@@ -93,16 +98,51 @@ test("fixing the file clears the complaint on the next read, with nothing to dis
     expect(manifestProblems(root)).toEqual([]);
 });
 
+test("deleting a broken manifest clears it too, not just fixing it", async () => {
+    const root = await workspace();
+    const { path, file } = settingsFile(root);
+    await write(path, `{"terseOutput": tru`);
+    await file.read();
+    expect(manifestProblems(root)).toHaveLength(1);
+
+    // Absent is "nothing wrong", so it must erase the last read's complaint rather than leave it standing. It
+    // used to return before the recording step, which made removing the file the one repair that did nothing —
+    // the notice outlived the file and only a daemon restart took it down.
+    await rm(path);
+    expect(await file.read()).toEqual({ terseOutput: false, skills: [] });
+    expect(manifestProblems(root)).toEqual([]);
+});
+
 test("one broken manifest does not implicate the others", async () => {
     const root = await workspace();
     const broken = settingsFile(root);
-    const otherPath = join(root, STATE_DIR, "other.json");
-    const other = jsonFile(otherPath, { parse: objectParse(Settings), fallback: () => Settings.parse({}) });
+    const healthy = personasFile(root);
 
     await write(broken.path, `{"skils": []}`);
-    await write(otherPath, `{"terseOutput": true}`);
+    await write(healthy.path, `{"terseOutput": true}`);
     await broken.file.read();
-    await other.read();
+    await healthy.file.read();
+
+    expect(manifestProblems(root).map((report) => report.path)).toEqual([`${STATE_DIR}/settings.json`]);
+});
+
+test("a broken DAEMON-WRITTEN file is not put in front of the owner", async () => {
+    const root = await workspace();
+    const hand = settingsFile(root);
+    // The ledger the daemon rewrites several times per workflow step. Nobody opens it, so "fix the file and this
+    // clears on its own" is advice addressed to no one — and it feeds no query, so no write would refresh the
+    // notice even if they did. It recovers by being written, which is what the next run does.
+    const ledgerPath = join(root, STATE_DIR, "workflow-runs.json");
+    const ledger = jsonFile<z.infer<typeof Settings>[]>(ledgerPath, {
+        parse: (raw) => z.array(Settings).safeParse(raw).data,
+        fallback: () => [],
+    });
+
+    await write(hand.path, `{"skils": []}`);
+    await write(ledgerPath, `[{"terseOutput": "not a boolean"}]`);
+    // Both fall back — the daemon boots either way; only the audience differs.
+    expect(await ledger.read()).toEqual([]);
+    await hand.file.read();
 
     expect(manifestProblems(root).map((report) => report.path)).toEqual([`${STATE_DIR}/settings.json`]);
 });

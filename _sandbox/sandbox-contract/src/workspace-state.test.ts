@@ -1,7 +1,14 @@
 import { STATE_DIR } from "@intentic/constants";
 import type { FileContribution } from "@intentic/extension-manifest";
 import { describe, expect, it } from "vitest";
-import { isLockedWorkspacePath, staleQueryKeys, VERSIONED_STATE_PATHS, WORKSPACE_STATE_FILES } from "./workspace-state.js";
+import {
+    isLockedWorkspacePath,
+    isReportedManifest,
+    REPORTED_MANIFEST_PATHS,
+    staleQueryKeys,
+    VERSIONED_STATE_PATHS,
+    WORKSPACE_STATE_FILES,
+} from "./workspace-state.js";
 
 // What the automations extension declares in its manifest, and what the memory extension WOULD declare if the
 // watcher reported its files. Literals rather than the real manifests: an extension package importing this one is
@@ -93,6 +100,38 @@ describe(`staleQueryKeys`, () => {
             { path: `${STATE_DIR}/automations.json`, invalidates: [`automations`] },
         ];
         expect(staleQueryKeys([`.intentic/automations.json`], twice)).toEqual([`automations`]);
+    });
+});
+
+/* Which broken manifests the owner is actually told about. The pair below is the whole invariant: a file is on
+ * the card iff a write to it refreshes the card. */
+describe(`isReportedManifest`, () => {
+    it(`shows exactly the files whose writes refresh the notice`, () => {
+        expect(REPORTED_MANIFEST_PATHS.toSorted()).toEqual(
+            WORKSPACE_STATE_FILES.filter((file) => file.invalidates.includes(`manifests`))
+                .map((file) => file.path)
+                .toSorted(),
+        );
+        expect(isReportedManifest(`.intentic/settings.json`)).toBe(true);
+    });
+
+    it(`stays quiet about daemon-written state the owner cannot repair`, () => {
+        // The regression this exists for: the workflow ledger's records predated a schema that gained a required
+        // field, so every read reported the whole file ignored — advice ("fix the file") addressed to nobody,
+        // about sixty kilobytes of machine JSON, and refreshed by no write because the ledger feeds no query, so
+        // it sat on the card until the daemon restarted. A ledger recovers on its own next write instead.
+        expect(isReportedManifest(`.intentic/workflow-runs.json`)).toBe(false);
+        expect(isReportedManifest(`.intentic/loops.json`)).toBe(false);
+        expect(isReportedManifest(`.intentic/thread-sessions.json`)).toBe(false);
+    });
+
+    it(`reads a platform path with either separator`, () => {
+        expect(isReportedManifest(`.intentic\\settings.json`)).toBe(true);
+    });
+
+    it(`does not report a file outside the workspace`, () => {
+        // What `relative` hands the daemon for the manifests it keeps under /history — never nameable on screen.
+        expect(isReportedManifest(`../../history/settings.json`)).toBe(false);
     });
 });
 
