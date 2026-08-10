@@ -407,8 +407,11 @@ const hasSpend = computed(() => current.value.length > 0);
                                 <p class="text-xs text-muted">
                                     Needs the switch on and a turn holdout set — with no control arm there is nothing to compare against.
                                 </p>
+                                <!-- The category holding the switch, named: the Agent tab shows one group of
+                                     settings at a time, so a link that only names the tab lands somewhere this
+                                     row's own switch isn't. -->
                                 <RouterLink
-                                    :to="{ name: `sandbox`, params: { tab: `agent` } }"
+                                    :to="{ name: `sandbox`, params: { tab: `agent` }, query: { section: `instructions` } }"
                                     class="flex items-center gap-1 self-start text-xs text-link hover:underline"
                                 >
                                     Terse responses<Icon name="chevron-right" />
@@ -459,7 +462,7 @@ const hasSpend = computed(() => current.value.length > 0);
                                     Needs the switch on and a turn holdout set — with no control arm there is nothing to compare against.
                                 </p>
                                 <RouterLink
-                                    :to="{ name: `sandbox`, params: { tab: `agent` } }"
+                                    :to="{ name: `sandbox`, params: { tab: `agent` }, query: { section: `running` } }"
                                     class="flex items-center gap-1 self-start text-xs text-link hover:underline"
                                 >
                                     Retrieve before the turn<Icon name="chevron-right" />
